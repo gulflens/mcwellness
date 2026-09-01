@@ -1,0 +1,230 @@
+# 00 — Data Model
+
+*The canonical entity map. Every other spec references this one. If a module needs an entity that isn't here, the change goes here first.*
+
+Status: **v1 — owner decisions resolved. Ready to derive the trunk schema.**
+
+---
+
+## 1. Conventions (apply to every table)
+
+| Rule | Detail |
+|---|---|
+| Primary key | `id uuid` — never sequential integers on PHI-bearing tables |
+| Tenancy | `tenant_id uuid not null` on every table. One tenant today. Row-level security filters on it from day one. |
+| Timestamps | `created_at`, `updated_at` (timestamptz). No soft-delete flag: PHI is never deleted, it's superseded or archived (see §7). |
+| Provenance | `created_by uuid` referencing `user`. Audit log carries the rest (see AUDIT-SPEC). |
+| Money | Integer fils (AED × 100). Never floats. Currency column present, always `AED` for now. |
+| Coding | Clinical values are coded (ICD-10-CM, SNOMED, LOINC where applicable). Free text may sit beside a code, never replace it. |
+| Identifiers | Emirates ID stored field-level encrypted, plus a stable hash column for lookup. Phone stored E.164. |
+| Enumerations | Small closed sets (status fields) are Postgres enums. Open sets (service types, diagnosis codes) are reference tables. |
+| Naming | `snake_case` tables and columns, singular table names. |
+
+---
+
+## 2. Identity, tenancy and access
+
+### `tenant`
+The clinic. One row. Legal name, DHA facility licence number, TRN (VAT), default emirate, timezone, clinic `location_id`.
+
+### `user`
+Anyone who logs in — staff or client contact. Auth record lives in Supabase Auth; this table holds the profile. `auth_id`, `display_name`, `email`, `phone`, `preferred_locale` (`en`/`ar`), `status` (`active`/`suspended`/`archived`).
+
+Roles are not on the user row — they're on `user_role`. One user may be several things at once.
+
+### `user_role`
+`user_id`, `role` (`owner`, `admin`, `clinical_lead`, `practitioner`, `finance`, `client_contact`), `granted_at`, `granted_by`.
+
+### `practitioner`
+A person who delivers or supervises clinical work. `user_id`, `display_name_ar`, `dha_professional_licence_no`, `home_base_location_id` (where their day starts), `vehicle` (`personal` — reimbursed mileage and Salik; see FINANCE), `status`.
+
+### `credential` — the authorisation table
+```
+practitioner_id × jurisdiction × service_type_id
+  licence_type          'dha_psychologist' | 'dha_technician' | ...
+  licence_number
+  certification         'bcia_bcn' | 'vendor_qeeg' | ... | null
+  valid_from, valid_to
+  can_author_protocol   bool
+  can_execute_session   bool
+  can_sign_report       bool
+  evidence_document_id
+```
+What a user may *do* is resolved from `user_role` + `credential`, never from role alone. A practitioner with an expired credential can log in and see their schedule but cannot be assigned a session. Expiry dates feed the compliance board.
+
+### `service_type`
+The catalogue. `code` (`nf-session`, `brain-map`, `consultation`, `cpt-test`, `progress-report`, …), `name`, `name_ar`, `duration_minutes`, `is_clinical` (drives VAT), `requires_certification`, `delivery_modes` (subset of `home`, `clinic`, `remote`), `status`. **Never hardcode "neurofeedback."**
+
+### `location`
+Any place: a client's home, the clinic, a practitioner's home base.
+```
+owner_type          'client' | 'tenant' | 'practitioner'
+owner_id
+label               'home' | 'work' | 'school' | 'clinic' | 'base' | 'other'
+emirate             'DXB' | 'AUH' | 'SHJ' | 'AJM' | 'UAQ' | 'RAK' | 'FUJ'   -- required
+makani_number       text null                                                  -- Dubai only
+entrance_point      geography(point) not null                                  -- verified coordinate, required
+parking_point       geography(point) null
+community_gate      geography(point) null
+display_address     text
+access_notes        text            -- arrival intelligence; structured in Phase 2
+is_primary          bool
+```
+Makani optional, verified coordinate mandatory. See NAVIGATION-SPEC §2.
+
+---
+
+## 3. Client and household
+
+### `client`
+The person receiving care. `mrn` (human-readable medical record number, tenant-unique), `given_name`, `family_name`, `given_name_ar`, `family_name_ar`, `date_of_birth`, `sex_at_birth`, `nationality`, `emirates_id_encrypted`, `emirates_id_hash`, `emirates_id_expiry`, `preferred_locale`, `primary_contact_id`, `primary_location_id`, `referral_source`, `status` (`lead`, `active`, `paused`, `discharged`, `locked`), `nabidh_opt_out` bool.
+
+Minors are the common case. A client is *not* necessarily a user.
+
+### `contact`
+Parent, guardian, spouse, or the client themself. `client_id`, `user_id` (nullable — only if they log in), `relationship` (`self`, `mother`, `father`, `guardian`, `spouse`, `other`), `is_legal_guardian`, `can_consent`, `can_receive_clinical_info`, `can_pay`, `phone`, `email`, `whatsapp_opt_in`.
+
+### `consent`
+First-class, versioned, purpose-scoped, withdrawable.
+```
+client_id, given_by_contact_id
+purpose        'treatment' | 'home_visit' | 'minor_treatment' | 'data_sharing_hie' |
+               'photo_video' | 'research' | 'marketing'
+version        int                        -- of the consent wording
+text_document_id                          -- the exact wording shown
+status         'active' | 'withdrawn' | 'expired' | 'superseded'
+given_at, withdrawn_at, expires_at
+method         'app_signature' | 'paper_scan' | 'verbal_witnessed'
+signature_document_id
+```
+Every session start and every HIE submission checks the relevant active consent at that moment. No active `treatment` consent → session cannot start.
+
+### `document`
+Anything filed against a client: ID scans, referral letters, signed consents, reports, setup photos. `client_id`, `kind`, `storage_key` (S3, versioned bucket), `mime_type`, `sha256`, `uploaded_by`, `retention_until` (computed: 25 years from client's last clinical activity), `is_immutable`.
+
+---
+
+## 4. Clinical
+
+### `diagnosis`
+`client_id`, `icd10_code`, `description`, `onset_date`, `diagnosed_by_practitioner_id` or `external_source` (referring doctor), `status` (`active`, `resolved`, `ruled_out`), `is_primary`. Drives VAT: a session under an active clinical diagnosis is zero-rated; wellness with no diagnosis is standard-rated.
+
+### `assessment`
+Any measurement: qEEG brain map, CPT, questionnaire. `client_id`, `performed_at`, `performed_by_practitioner_id`, `instrument` (`qeeg`, `cpt`, `conners`, `vanderbilt`, `asrs`, `gad7`, `phq9`, `isi`, …), `instrument_version`, `raw_document_id`, `derived jsonb` (scores), `version`, `supersedes_id`. Versioned so pre/post comparison is exact.
+
+### `protocol_template`
+The clinical IP, authored by a clinical lead. `service_type_id`, `name`, `indication`, `sites` (electrode placements), `reward_bands`, `inhibit_bands`, `thresholds`, `session_minutes`, `version`, `authored_by`, `status`.
+
+### `client_protocol`
+A template instantiated for one client. `client_id`, `template_id`, `version`, `supersedes_id`, `change_reason` (required when version > 1), `authored_by_practitioner_id` (must hold `can_author_protocol`), `effective_from`, `status`. Sessions pin a specific version.
+
+### `session`
+One delivery of one service to one client.
+```
+client_id, practitioner_id, service_type_id, client_protocol_id (version-pinned)
+appointment_id                                   -- the slot it fulfils
+delivery_mode       'home' | 'clinic' | 'remote'
+location_id
+entitlement_id                                   -- the credit it consumes (FINANCE §1)
+kit_id
+status              'scheduled' | 'in_progress' | 'completed' | 'no_show' |
+                    'cancelled_late' | 'cancelled' | 'aborted'
+checked_in_at, checked_in_point, checked_out_at, checked_out_point
+started_at, ended_at
+pre_rating jsonb, post_rating jsonb              -- client subjective
+telemetry jsonb                                  -- band amplitudes, thresholds, artefact %, per-minute
+observations jsonb                               -- structured prompts + free text
+signal_quality_score numeric                     -- feeds the ribbon
+setup_photo_document_id                          -- requires active photo_video consent
+closed_at, closed_by                             -- after which the record is immutable
+version, supersedes_id, amendment_reason
+```
+"Session 12 of 30" is derived from history, never stored.
+
+### `report`
+A signed clinical document. `client_id`, `kind` (`baseline`, `progress`, `completion`, `medical`, `school`), `covers_from`, `covers_to`, `authored_by`, `reviewed_by`, `signed_by` (must hold `can_sign_report`), `signed_at`, `document_id` (the PDF), `locale`, `version`, `supersedes_id`, `amendment_reason`, `delivered_to_contact_ids`, `delivered_at`. Once signed, immutable. Corrections are a new version.
+
+---
+
+## 5. Operations
+
+### `appointment`
+A promise of a session at a time and place. `client_id`, `practitioner_id`, `service_type_id`, `location_id`, `delivery_mode`, `window_start`, `window_end` (45-minute arrival window), `planned_arrival`, `travel_buffer_minutes`, `status`, `cancellation_reason`, `cancelled_at`, `created_by`. A session is created from an appointment at check-in. Conflict detection: `practitioner × time`, `client × time`, clinical spacing rules, credential validity.
+
+### `kit`
+Serial-level equipment registry. `serial`, `model`, `kind` (`amplifier`, `laptop`, `electrode_set`), `status`, `assigned_practitioner_id`, `last_calibrated_at`, `calibration_due_at`. Session start blocks if calibration is overdue. Chain of custody, consumables and hygiene logs are Phase 2 tables hanging off this.
+
+### `visit_actuals`
+Per completed home session: `actual_drive_seconds`, `actual_walk_seconds`, `salik_cost_fils`, `parking_cost_fils`, `access_issues`. Feeds contribution margin and arrival intelligence. See NAVIGATION-SPEC §8.
+
+---
+
+## 6. Commercial
+
+Summarised here; FINANCE-SPEC is authoritative.
+
+- **`price`** — resolved per `(service_type_id, jurisdiction, recipient_type)`, never constants in code. `unit_price_fils`, `vat_treatment`, `valid_from`, `valid_to`.
+- **`package`** — a sellable bundle. `code`, `name`, `price_fils`, `components` (service_type × qty), `expiry_months`, `status`.
+- **`client_package`** — a purchase. `client_id`, `package_id`, `purchased_at`, `paid_by_contact_id`, `invoice_id`, `expires_at`, `status`.
+- **`entitlement`** — the ledger; one row per credit. `client_id`, `service_type_id`, `source_type`, `source_id`, `allocated_value_fils`, `vat_treatment`, `status`, `consumed_by_session_id`, `expires_at`. Completing a session flips exactly one entitlement to `consumed` and recognises its allocated value.
+- **`invoice`, `invoice_line`, `payment`, `credit_note`, `journal_entry`** — FINANCE-SPEC §4–7. Issued invoices are immutable; corrections are credit notes.
+
+---
+
+## 7. Cross-cutting rules
+
+**Append-only clinical records.** `session` (once closed), `report` (once signed), `client_protocol`, `assessment`, `invoice` are never updated in place. Each carries `version`, `supersedes_id`, `amendment_reason`. The current version is the one with no successor. Full snapshots, not diffs.
+
+**Consent gates execution.** Starting a session, submitting to an HIE, sending a report to a contact, storing a photo — each checks a specific consent purpose at that moment.
+
+**Credential gates authorship.** Writing a `protocol_template` or `client_protocol`, signing a `report`, being assigned an `appointment` — each checks a specific capability on `credential` and re-checks validity dates.
+
+**Retention and erasure.** 25 years from last clinical activity, computed onto `document.retention_until` and the client record. On an erasure request: non-clinical data is erased; the clinical record is locked (see §9.3). An `erasure_request` row records who asked, when, what was erased, what was locked, and the confirmation sent.
+
+**Audit.** Every table in §3–§6 carries `client_id` directly or resolvably, so the audit trigger can denormalise it. See AUDIT-SPEC §3.
+
+**Health information exchange.** No table references NABIDH by name. A Phase 2 `hie_submission` table records `client_id`, `session_id`, `jurisdiction`, `adapter`, `payload_hash`, `status`, `response`. The adapter interface is jurisdiction-aware from day one.
+
+---
+
+## 8. Relationship map
+
+```
+tenant ─┬─ location (clinic)
+        ├─ user ─┬─ user_role
+        │        └─ practitioner ─┬─ credential ─── service_type
+        │                         └─ location (home base)
+        │
+        ├─ client ─┬─ contact
+        │          ├─ location (home, school…)
+        │          ├─ consent
+        │          ├─ document
+        │          ├─ diagnosis
+        │          ├─ assessment (versioned)
+        │          ├─ client_protocol (versioned) ─── protocol_template
+        │          ├─ appointment ─── session (versioned) ─┬─ visit_actuals
+        │          │                      │                └─ kit
+        │          ├─ entitlement ◄───────┘ (consumed_by)
+        │          ├─ client_package ─── package
+        │          ├─ invoice ─── invoice_line / payment / credit_note
+        │          └─ report (versioned) ─── document
+        │
+        ├─ price
+        └─ audit_log  (every row above, denormalised client_id)
+```
+
+---
+
+## 9. Owner decisions before the trunk schema is written
+
+1. ✅ **Vehicles** — personal cars. Salik and mileage are reimbursed expenses per practitioner, recorded on `visit_actuals`.
+2. ✅ **Appointment window** — 45 minutes. Client-facing copy promises the window, never a clock time.
+3. ✅ **Erasure vs. 25-year retention** — client may request erasure. Non-clinical data (marketing, messaging opt-ins, portal account, photos, non-essential contact details) is erased. The clinical record is **locked**, not erased: `client.status = 'locked'`, visible only to `clinical_lead`, excluded from every list and search, released only under legal obligation. Client receives written confirmation of both. Lawyer to confirm wording.
+4. ✅ **Phase 1 questionnaires** — all seven: Conners, Vanderbilt, ASRS, GAD-7, PHQ-9, ISI, PSQI. Each is a form + scoring function in `domain/assessment`.
+5. ✅ **Setup photo** — yes. `photo_video` consent is captured at intake; `session.setup_photo_document_id` added.
+
+---
+
+## 10. Deliberately excluded from Phase 1
+
+Route legs and tariff calendars (Phase 2 solver), kit chain-of-custody, consumables, hygiene logs, insurance/payer, pre-authorisation, HIE submission, corporate accounts, home-practice content. All have a clear place to attach; none block the first 20 sessions.

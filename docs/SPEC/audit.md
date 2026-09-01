@@ -1,0 +1,290 @@
+# Audit Log & Change History — Spec
+
+*Who did what, to what, when, and why. Non-negotiable in a licensed clinical system.*
+
+---
+
+## 1. Three different things, often confused
+
+Build all three. They answer different questions and they have different shapes.
+
+| | Question it answers | Shape | Retention |
+|---|---|---|---|
+| **Audit log** | "Who accessed or changed patient data?" | Append-only, immutable, one row per action | 25 years (clinical), 5 years (financial) |
+| **Version history** | "What did this record look like before?" | Full snapshots per version of an entity | Same as the entity |
+| **Domain events** | "What happened in the business?" | Semantic events feeding analytics and workflow | Indefinite, aggregatable |
+
+The audit log is a compliance artefact — you write it, you almost never read it, and the day you do read it matters enormously. Version history is an operational tool. Domain events drive dashboards.
+
+**The audit log is not an undo mechanism.** Reverting a change is a function of version history. Conflating them produces an audit log that people are tempted to mutate, which destroys the only property that makes it valuable.
+
+---
+
+## 2. What the regulator actually requires
+
+From Federal Law No. 2 of 2019 and DHA's policies on Health Data Protection, Information Sharing, and Consent & Access Control:
+
+- Health data stored inside UAE borders — **including the audit log**, which contains PHI by definition.
+- Digital records retained **25 years** after the last patient visit.
+- Unauthorised use — research, third-party sharing — prohibited, which means you must be able to *demonstrate* who accessed what.
+- Consent and access control are auditable.
+
+**The consequence most systems get wrong: you must log reads, not just writes.** "Who opened Layla's file on 14 October?" is the classic audit question in healthcare, and a write-only audit log cannot answer it. A curious receptionist looking up a neighbour's child leaves no trace unless you log the view.
+
+---
+
+## 3. Schema
+
+```sql
+create table audit_log (
+  id              bigserial primary key,
+  occurred_at     timestamptz not null default now(),
+
+  -- actor
+  actor_id        uuid,                    -- null for system actions
+  actor_type      text not null,           -- user | system | integration | anonymous
+  actor_role      text,                    -- role at time of action, denormalised
+  on_behalf_of    uuid,                    -- support impersonation
+
+  -- action
+  action          text not null,           -- read | create | update | delete
+                                           -- sign | export | login | permission_change
+  entity_type     text not null,           -- client | session | report | invoice
+  entity_id       uuid not null,
+  client_id       uuid,                    -- the patient this touches, if any
+
+  -- change
+  changed_fields  text[],                  -- column names only
+  old_values      jsonb,                   -- null for reads
+  new_values      jsonb,
+
+  -- context
+  reason          text,                    -- required for sensitive actions
+  request_id      uuid,                    -- ties a whole request together
+  session_id      uuid,
+  ip_address      inet,
+  user_agent      text,
+  app_version     text,
+
+  -- integrity
+  prev_hash       bytea,
+  row_hash        bytea not null
+);
+
+create index on audit_log (client_id, occurred_at desc);
+create index on audit_log (actor_id, occurred_at desc);
+create index on audit_log (entity_type, entity_id, occurred_at desc);
+create index on audit_log (occurred_at desc);
+```
+
+`client_id` denormalised onto every row is the single most useful index you'll have. "Show me everything that has ever touched this patient" must be one fast query, not a join across fourteen tables.
+
+---
+
+## 4. Immutability
+
+An audit log the application can edit is not an audit log.
+
+```sql
+-- the app role can insert and read. Nothing else.
+revoke update, delete, truncate on audit_log from app_role;
+grant insert, select on audit_log to app_role;
+
+-- belt and braces at the row level
+create rule audit_no_update as on update to audit_log do instead nothing;
+create rule audit_no_delete as on delete to audit_log do instead nothing;
+```
+
+**Hash chaining makes tampering detectable** even by someone with database superuser access:
+
+```
+row_hash = sha256(prev_hash || id || occurred_at || actor_id || action
+                  || entity_type || entity_id || old_values || new_values)
+```
+
+Anyone deleting or altering a row breaks the chain from that point forward. A nightly verification job walks the chain and alerts on a break. Publish the daily terminal hash somewhere outside the database — an S3 object with Object Lock, or an email to yourself — and you have a timestamped anchor.
+
+This is ten lines of code and it converts "we have logs" into "we can prove the logs are intact." Worth it.
+
+---
+
+## 5. How to capture it — two layers, both needed
+
+### Layer 1: Postgres triggers (writes)
+
+Cannot be bypassed. Catches the migration script, the manual `psql` fix, the ORM path someone forgot to instrument.
+
+```sql
+create or replace function audit_trigger() returns trigger as $$
+declare
+  v_actor uuid := nullif(current_setting('app.actor_id', true), '')::uuid;
+  v_reason text := nullif(current_setting('app.reason', true), '');
+  v_request uuid := nullif(current_setting('app.request_id', true), '')::uuid;
+begin
+  insert into audit_log (
+    actor_id, actor_type, action, entity_type, entity_id, client_id,
+    changed_fields, old_values, new_values, reason, request_id, row_hash
+  ) values (
+    coalesce(v_actor, auth.uid()),
+    case when v_actor is null then 'system' else 'user' end,
+    lower(tg_op),
+    tg_table_name,
+    coalesce(new.id, old.id),
+    coalesce(new.client_id, old.client_id),
+    case when tg_op = 'UPDATE' then akeys(hstore(new) - hstore(old)) end,
+    case when tg_op <> 'INSERT' then to_jsonb(old) end,
+    case when tg_op <> 'DELETE' then to_jsonb(new) end,
+    v_reason, v_request,
+    compute_row_hash(...)
+  );
+  return coalesce(new, old);
+end $$ language plpgsql security definer;
+```
+
+**The session-context pattern is what makes this work.** With a pooled connection the database sees one user for everyone, so every request must stamp its identity before touching data:
+
+```ts
+await db.query(`
+  select set_config('app.actor_id',   $1, true),
+         set_config('app.request_id', $2, true),
+         set_config('app.reason',     $3, true)
+`, [actorId, requestId, reason ?? '']);
+```
+
+`true` makes it transaction-local, so it can't leak between requests sharing a connection. Put this in one middleware. A request that fails to set it should be rejected, not logged as anonymous.
+
+Supabase makes this easier — `auth.uid()` is available inside Postgres, so the trigger has a fallback even if middleware is missed.
+
+### Layer 2: Application layer (reads, intent, semantics)
+
+Triggers can't see a `SELECT`, and they can't know *why*. The application logs:
+
+- **Reads of PHI** — every client record, session, report or document opened. Log the access, not the payload.
+- **Semantic actions** the schema doesn't express: report signed, protocol changed, VAT treatment overridden, refund issued, entitlement adjusted, consent withdrawn, data exported.
+- **Reasons** for anything sensitive.
+
+Read logging is cheap if you write it asynchronously to a queue rather than inline. It should never slow a page load.
+
+---
+
+## 6. The actions that deserve extra ceremony
+
+Some changes should be hard, deliberate, and loudly logged. For each, require a typed reason before the action commits:
+
+| Action | Why it matters |
+|---|---|
+| Signing a clinical report | Legal attestation by a licensed clinician |
+| Amending a signed report | Must create a new version, never edit — see §7 |
+| Changing a treatment protocol | Clinical decision, must be attributable and reversible |
+| Overriding a VAT classification | FTA audit exposure |
+| Issuing a refund or credit note | Financial control |
+| Adjusting an entitlement balance | Direct revenue impact |
+| Changing a user's role or credentials | Privilege escalation path |
+| Exporting client data in bulk | Exfiltration path |
+| Break-glass access to a record | See below |
+| Deleting anything | Should be near-impossible |
+
+**Break-glass.** Occasionally someone needs a record they're not normally authorised for — a clinical emergency, a support escalation. Don't block it; make it expensive. Full-screen warning, mandatory reason, immediate notification to you, and a permanent highlighted entry in the log. Used correctly it's fine. Used casually, you'll see it in the log the same day.
+
+---
+
+## 7. Clinical records are append-only
+
+This is a design rule, not just an audit rule.
+
+A signed report is immutable. A correction issues **version 2** with a visible amendment note explaining what changed and why, and version 1 remains retrievable forever. Same for session records once the visit is closed, and for issued invoices — which get credit notes, never edits.
+
+The regulatory logic: a record that can be silently changed after the fact has no evidentiary value. The practical logic: a parent, a school or an insurer may be holding version 1, and you need to know exactly what they're holding.
+
+```ts
+type Versioned<T> = {
+  entityId: string
+  version: number
+  supersedes: number | null
+  supersededBy: number | null
+  amendmentReason: string | null   // required when version > 1
+  signedBy: string | null
+  signedAt: Date | null
+  payload: T                       // full snapshot, not a diff
+}
+```
+
+Store full snapshots, not diffs. Storage is cheap; reconstructing a document from a diff chain in a legal dispute eleven years from now is not.
+
+---
+
+## 8. What the log must never contain
+
+The audit log is PHI. It lives in UAE region, encrypted, with the same access controls as clinical data — and it needs its own discipline about what goes in it.
+
+- **No passwords, tokens, API keys or card numbers.** Redact by field name at write time, with a denylist.
+- **No raw clinical free text in `new_values`** for large text fields. Log that the field changed and its length; the content lives in version history where it belongs.
+- **Never log PHI to your application logs, error tracker, or APM.** Sentry and equivalents are almost certainly not UAE-hosted. This is one of the top three ways health data leaves the country by accident — the other two are analytics SDKs and AI API calls containing patient text.
+
+Add a hook that fails the build on any `console.log`, `logger.info` or error-reporter call whose argument can contain a client entity. Enforce it mechanically.
+
+---
+
+## 9. The UI — your "overview of every change"
+
+Four views. Build the first two in Phase 1.
+
+**1. Record timeline.** On every client, session, report and invoice: a chronological feed of everything that touched it. Plain language, not JSON. *"Sara Mahmoud changed the training protocol from SMR-C3 to Alpha-Theta — reason: poor tolerance reported at session 9."*
+
+**2. Activity feed.** A global reverse-chronological stream, filterable by actor, entity type, action, date range, and client. This is your daily glance.
+
+**3. Sensitive-action digest.** A weekly email listing only the §6 actions. Solo, this is how you stay across your own system without reading logs. When you have staff, it's how you supervise.
+
+**4. Access report per client.** "Everyone who has viewed this record, ever." Generate on demand. You will need this the first time a client asks who has seen their child's data, and having it ready in one click is a genuinely good moment.
+
+**Rendering rule:** the log stores structured data; the UI renders it into sentences using a message catalogue keyed by `(entity_type, action)`. Never show a user a raw JSON diff. And translate the catalogue for Arabic alongside everything else.
+
+---
+
+## 10. Alerts worth having
+
+Cheap queries over the log, run nightly:
+
+- Bulk read — one actor accessing more than N client records in an hour
+- Export of more than N records at once
+- Access to a client the actor has no scheduled appointment with
+- Access outside working hours by a field therapist
+- Repeated failed authorisation on the same record
+- Any break-glass event — immediate, not nightly
+- Hash chain verification failure — immediate, treat as an incident
+
+Start with the last two. The others become useful when you have staff.
+
+---
+
+## 11. Volume and cost
+
+A solo practice at 25 sessions a week generates roughly 300–600 audit rows a day, most of them reads. That's a few million rows a year — trivial for Postgres.
+
+**Partition by month** from day one. Twenty-five years of retention is 300 partitions, and you'll want to move anything older than two years to cheaper storage without a painful migration.
+
+```sql
+create table audit_log (...) partition by range (occurred_at);
+```
+
+Archive old partitions to S3 in UAE region with Object Lock in compliance mode, which makes them undeletable for the retention period — including by you, including by a compromised root account. That last property is the point.
+
+---
+
+## 12. Build order
+
+**Phase 1** — schema with partitioning, triggers on every PHI-bearing table, session-context middleware, read logging on client and report access, hash chaining with nightly verification, record timeline UI, immutability grants.
+
+**Phase 2** — activity feed with filters, reason prompts on sensitive actions, break-glass workflow, weekly digest, per-client access report.
+
+**Phase 3** — anomaly alerting, archival to S3 Object Lock, exportable audit packs for DHA inspection.
+
+---
+
+## 13. The test that proves it works
+
+Before you call this done, run this drill:
+
+> Pick a client at random. In under two minutes, produce a complete list of every person who has viewed or modified any part of their record, what they changed, and why — and demonstrate that the list cannot have been altered.
+
+If you can do that, you're ready for an inspection. If you can't, the gap you find is the thing to fix.

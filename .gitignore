@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+.claude/worktrees/
+.claude/settings.local.json
+*.log
+.terraform/
+*.tfstate*
+.DS_Store
