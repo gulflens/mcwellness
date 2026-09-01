@@ -1,18 +1,19 @@
 import { connect, describeDatabase, requireDatabaseUrl, runMigrations } from './runner/apply';
+import { isLocalDatabaseUrl } from './runner/plan';
 
 // pnpm db:reset — wipes the LOCAL database and rebuilds it from the migrations.
 // It refuses to run against anything that is not on this computer.
 
 try {
   const url = requireDatabaseUrl();
-  const { hostname } = new URL(url);
-  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+  if (!isLocalDatabaseUrl(url)) {
     throw new Error(
       `db:reset only runs against a local database, not the ${describeDatabase(url)}.`,
     );
   }
-  if (process.env.APP_ENV === 'production') {
-    throw new Error('db:reset never runs with APP_ENV=production.');
+  const appEnv = process.env.APP_ENV ?? 'development';
+  if (appEnv !== 'development') {
+    throw new Error(`db:reset only runs with APP_ENV=development, not "${appEnv}".`);
   }
 
   const client = await connect(url);

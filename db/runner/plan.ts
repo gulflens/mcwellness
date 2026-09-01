@@ -88,3 +88,24 @@ export function planMigrations(
 
   return pending;
 }
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * True only for a connection string that can reach nothing but this machine.
+ * The query string is checked as well as the host, because the Postgres
+ * driver lets `?host=` (and `?hostaddr=`) override the host in the URL.
+ */
+export function isLocalDatabaseUrl(url: string): boolean {
+  const parsed = new URL(url);
+  if (!LOCAL_HOSTS.has(parsed.hostname)) {
+    return false;
+  }
+  for (const key of parsed.searchParams.keys()) {
+    const lowered = key.toLowerCase();
+    if (lowered === 'host' || lowered === 'hostaddr') {
+      return false;
+    }
+  }
+  return true;
+}

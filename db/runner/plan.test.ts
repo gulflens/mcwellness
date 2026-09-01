@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasRollbackBlock, listMigrationFiles, planMigrations } from './plan';
+import { hasRollbackBlock, isLocalDatabaseUrl, listMigrationFiles, planMigrations } from './plan';
 
 describe('listMigrationFiles', () => {
   it('orders files by their number, not by name', () => {
@@ -72,5 +72,40 @@ describe('planMigrations', () => {
     expect(() => planMigrations(available, ['002_user.sql'])).toThrow(
       'numbered below the highest applied migration (2)',
     );
+  });
+});
+
+describe('isLocalDatabaseUrl', () => {
+  it('accepts the loopback hosts', () => {
+    expect(isLocalDatabaseUrl('postgresql://postgres:postgres@localhost:5432/mcwellness')).toBe(
+      true,
+    );
+    expect(isLocalDatabaseUrl('postgresql://postgres:postgres@127.0.0.1:5433/mcwellness')).toBe(
+      true,
+    );
+    expect(isLocalDatabaseUrl('postgresql://postgres:postgres@[::1]:5432/mcwellness')).toBe(true);
+  });
+
+  it('refuses any other host', () => {
+    expect(isLocalDatabaseUrl('postgresql://postgres:postgres@db.example.internal:5432/x')).toBe(
+      false,
+    );
+  });
+
+  it('refuses a host override hidden in the query string', () => {
+    expect(
+      isLocalDatabaseUrl(
+        'postgresql://postgres:postgres@localhost:5432/x?host=db.example.internal',
+      ),
+    ).toBe(false);
+    expect(
+      isLocalDatabaseUrl('postgresql://postgres:postgres@localhost:5432/x?HostAddr=10.0.0.5'),
+    ).toBe(false);
+  });
+
+  it('allows other query parameters', () => {
+    expect(
+      isLocalDatabaseUrl('postgresql://postgres:postgres@localhost:5432/x?sslmode=disable'),
+    ).toBe(true);
   });
 });
