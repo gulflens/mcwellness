@@ -394,7 +394,7 @@ A record's detail opens beside the ledger, not over a dimmed page.
 
 ### The Record Timeline (signature)
 A client's history as sentences on rules: the ledger's vocabulary turned to time.
-- **Structure:** newest first, grouped by day in the practice's time zone. Each day heading (an `h3` set at small, medium, second ink) is sticky at the top of the drawer body on the surface, so it holds while its events scroll under it, with 16px above and 8px of block padding.
+- **Structure:** newest first, grouped by day in the practice's time zone. Each day heading (an `h4` set at small, medium, second ink) is sticky at the top of the drawer body on the surface, so it holds while its events scroll under it, with 16px above and 8px of block padding.
 - **Events:** an ordered list; each event pads 12px block and closes with a hairline. The sentence is body text: a change or a creation is medium in ink, a read or a system row is regular in second ink (The Kind-by-Weight Rule). No icon, no dot, no card, no colour.
 - **Meta:** 4px beneath the sentence, a micro line in second ink: the actor's roles ("Owner, Admin, Lead practitioner, Finance") and the time in tabular figures, on a 12px gap. Roles show once per run of the same actor and roles, not on every line; the time shows on every line.
 - **Reason:** 4px beneath the meta, when one was given: small second ink with a colon label ("Reason: synthetic seed").
