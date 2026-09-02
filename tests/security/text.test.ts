@@ -11,9 +11,12 @@ describe('cleanText', () => {
     expect(cleanText(`${cp(0x2066)}isolated${cp(0x2069)}`, 100)).toBe('isolated');
   });
 
-  it('collapses whitespace, trims and caps', () => {
+  it('collapses whitespace, trims and caps by code point', () => {
     expect(cleanText('  too   many\n\nlines\t here  ', 100)).toBe('too many lines here');
     expect(cleanText('x'.repeat(50), 10)).toBe('x'.repeat(10));
+    const astral = cp(0x1f600);
+    expect(cleanText(astral.repeat(5), 3)).toBe(astral.repeat(3));
+    expect(cleanText(`a${cp(0x200c)}b`, 10)).toBe(`a${cp(0x200c)}b`);
   });
 
   it('normalises composed and decomposed forms to one', () => {

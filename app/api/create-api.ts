@@ -39,6 +39,8 @@ export type ApiOptions = RequestContextDeps & {
   devSession?: DevSessionOptions;
   now?: () => Date;
   appEnv?: string;
+  /** The Supabase project the browser signs in against; named in the content security policy. */
+  supabaseUrl?: string;
   limits?: Partial<RateLimits>;
   /** How many proxies in front of the API are trusted for X-Forwarded-For (0: none). */
   trustedProxyHops?: number;
@@ -63,7 +65,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     return c.json({ error: 'internal', requestId }, 500);
   });
 
-  api.use('*', securityHeaders(deps.appEnv));
+  api.use('*', securityHeaders(deps.appEnv, { supabaseUrl: deps.supabaseUrl }));
   api.use('/api/*', noStore);
   api.use('/api/*', bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge }));
   api.use('/api/*', timeout(REQUEST_TIMEOUT_MS, timedOut));

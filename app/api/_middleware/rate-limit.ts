@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono';
+import { isIP } from 'node:net';
 import { getConnInfo } from '@hono/node-server/conninfo';
 
 /**
@@ -7,8 +8,14 @@ import { getConnInfo } from '@hono/node-server/conninfo';
  * need a shared store (docs/SECURITY.md). Budgets come from the environment.
  *
  * Two modes: 'request' counts every request before it runs; 'failure' counts
- * only 401 and 403 answers after they happen, so a caller guessing tokens is
- * cut off while an honest caller with the same address is not.
+ * only 401 answers after they happen, so a caller guessing tokens is cut off
+ * without every honest request from that address counting against them (once
+ * the failure budget is spent, that address waits like any other).
+ *
+ * The map of keys is bounded: past MAX_KEYS a sweep runs at once and, if it is
+ * still over, new keys are refused rather than stored (fail closed, memory
+ * safe). Behind a proxy the forwarded address is accepted only when it is a
+ * well-formed IP; anything else falls back to the socket's address.
  */
 
 export type RateLimitOptions = {
@@ -20,6 +27,8 @@ export type RateLimitOptions = {
   mode?: 'request' | 'failure';
   now?: () => number;
 };
+
+export const MAX_KEYS = 50_000;
 
 export class SlidingWindow {
   private readonly hits = new Map<string, number[]>();
@@ -41,6 +50,13 @@ export class SlidingWindow {
     return stamps.length;
   }
 
+  /** True when a new key cannot be stored because the map is full even after a sweep. */
+  full(key: string, now: number): boolean {
+    if (this.hits.has(key) || this.hits.size < MAX_KEYS) return false;
+    this.sweep(now);
+    return this.hits.size >= MAX_KEYS;
+  }
+
   hit(key: string, now: number): number {
     const stamps = this.hits.get(key) ?? [];
     stamps.push(now);
@@ -58,7 +74,7 @@ export class SlidingWindow {
     return this.count(key, now) >= this.max;
   }
 
-  /** Drops every key with nothing left in its window; called on a timer. */
+  /** Drops every key with nothing left in its window; runs on request arrival, once per window. */
   sweep(now: number): number {
     let removed = 0;
     for (const key of [...this.hits.keys()]) {
@@ -97,8 +113,8 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
       window.sweep(at);
       lastSweep = at;
     }
-    if (window.isLimited(key, at)) {
-      return tooMany(c, options, window.retryAfterMs(key, at));
+    if (window.isLimited(key, at) || window.full(key, at)) {
+      return tooMany(c, options, window.retryAfterMs(key, at) || options.windowMs);
     }
     if (mode === 'request') {
       const used = window.hit(key, at);
@@ -108,7 +124,7 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
       return;
     }
     await next();
-    if (c.res.status === 401 || c.res.status === 403) {
+    if (c.res.status === 401) {
       window.hit(key, at);
     }
   };
@@ -119,7 +135,7 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
  * of X-Forwarded-For is trusted (the one the proxy itself appended); with 0,
  * only the socket's address counts and the header is ignored.
  */
-export function addressKey(trustedProxyHops: number): (c: Context) => string {
+export function addressKey(trustedProxyHops: number): (c: Context) => string | null {
   return (c) => {
     if (trustedProxyHops > 0) {
       const forwarded = (c.req.header('x-forwarded-for') ?? '')
@@ -127,13 +143,15 @@ export function addressKey(trustedProxyHops: number): (c: Context) => string {
         .map((s) => s.trim())
         .filter(Boolean);
       const chosen = forwarded[forwarded.length - trustedProxyHops];
-      if (chosen) return `ip:${chosen}`;
+      if (chosen && chosen.length <= 45 && isIP(chosen) !== 0) return `ip:${chosen}`;
     }
     try {
       const address = getConnInfo(c).remote.address;
-      return `ip:${address ?? 'unknown'}`;
+      // No address means no bucket: a shared "unknown" bucket would let one
+      // caller spend everyone's budget.
+      return address ? `ip:${address}` : null;
     } catch {
-      return 'ip:unknown';
+      return null;
     }
   };
 }

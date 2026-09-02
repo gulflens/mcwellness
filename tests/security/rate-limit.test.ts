@@ -5,6 +5,7 @@ import {
   addressKey,
   limitsFromEnv,
   rateLimit,
+  MAX_KEYS,
   SlidingWindow,
 } from '../../app/api/_middleware/rate-limit';
 
@@ -23,6 +24,14 @@ describe('SlidingWindow', () => {
     expect(w.isLimited('a', 1001)).toBe(false);
     expect(w.count('a', 1600)).toBe(0);
     expect(w.size).toBe(0);
+  });
+
+  it('refuses a new key once the map is full, even after a sweep', () => {
+    const w = new SlidingWindow(60_000, 5);
+    for (let i = 0; i < MAX_KEYS; i++) w.hit(`k${i}`, 1000);
+    expect(w.full('another', 1001)).toBe(true);
+    expect(w.full('k1', 1001)).toBe(false);
+    expect(w.full('another', 70_000)).toBe(false);
   });
 
   it('sweeps keys that have gone quiet', () => {
@@ -122,15 +131,15 @@ describe('the API budgets', () => {
 
   it('trusts X-Forwarded-For only for the configured number of proxies', async () => {
     const app = new Hono();
-    app.get('/', (ctx) => ctx.text(addressKey(1)(ctx)));
+    app.get('/', (ctx) => ctx.text(String(addressKey(1)(ctx))));
     const res = await app.request('/', {
       headers: { 'x-forwarded-for': '203.0.113.9, 198.51.100.7' },
     });
     expect(await res.text()).toBe('ip:198.51.100.7');
     const none = new Hono();
-    none.get('/', (ctx) => ctx.text(addressKey(0)(ctx)));
+    none.get('/', (ctx) => ctx.text(String(addressKey(0)(ctx))));
     expect(
       await (await none.request('/', { headers: { 'x-forwarded-for': '203.0.113.9' } })).text(),
-    ).toBe('ip:unknown');
+    ).toBe('null');
   });
 });

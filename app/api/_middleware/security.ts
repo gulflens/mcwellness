@@ -9,7 +9,20 @@ import { secureHeaders } from 'hono/secure-headers';
  * frame the app; nothing is sniffed; referrers stay home; HTTPS is pinned in
  * production only, where it exists.
  */
-export function securityHeaders(appEnv: string | undefined): MiddlewareHandler {
+export function securityHeaders(
+  appEnv: string | undefined,
+  options: { supabaseUrl?: string | undefined } = {},
+): MiddlewareHandler {
+  // The browser signs in against the Supabase project directly (a vendor in the
+  // register), so its origin is the one connection allowed beyond the app's own.
+  const connectSrc = ["'self'"];
+  if (options.supabaseUrl) {
+    try {
+      connectSrc.push(new URL(options.supabaseUrl).origin);
+    } catch {
+      // An unparseable URL adds nothing; sign-in then fails visibly, never silently.
+    }
+  }
   return secureHeaders({
     contentSecurityPolicy: {
       defaultSrc: ["'self'"],
@@ -17,7 +30,7 @@ export function securityHeaders(appEnv: string | undefined): MiddlewareHandler {
       styleSrc: ["'self'"],
       imgSrc: ["'self'", 'data:'],
       fontSrc: ["'self'"],
-      connectSrc: ["'self'"],
+      connectSrc,
       frameAncestors: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],

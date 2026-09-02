@@ -41,15 +41,17 @@ describe('serving the built app', () => {
     }
   });
 
-  it('serves hashed assets as immutable and lists no directory', async () => {
+  it('serves hashed assets as immutable, and a missing asset as a refusal, never the page', async () => {
     const api = createApi(deps);
     mountApp(api, build());
     const asset = await api.request('/assets/app-abc123.js');
     expect(asset.status).toBe(200);
     expect(asset.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
-    const listing = await api.request('/assets/');
-    expect(listing.status).toBe(200);
-    expect(await listing.text()).toContain('id="root"');
+    for (const path of ['/assets/', '/assets/missing.js', '/assets/..%2findex.html']) {
+      const res = await api.request(path);
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get('cache-control') ?? '', path).not.toContain('immutable');
+    }
   });
 
   it('keeps unknown API paths as API refusals, not the page', async () => {

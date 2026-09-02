@@ -1,6 +1,8 @@
 // Fails when a tracked file holds something that looks like a secret. Runs in
-// pnpm verify and in CI. Placeholders documented in .env.example, CI and the
-// tests are allowed by exact value; everything else that matches is a failure.
+// pnpm verify and in CI. It reads the tracked files as they are, not the
+// history. The only allowances: local-host connection strings, documented
+// <slot> shapes, the placeholders in .env.example and CI, and the tests' own
+// fakes by exact value. A word on a line allows nothing.
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
@@ -8,12 +10,15 @@ const ALLOWED_VALUES = [
   'local-development-only-not-a-real-secret-0123456789',
   '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   'test-secret-that-unlocks-nothing-0123456789',
+  'another-test-secret-that-unlocks-nothing-9876543210',
+  'test-secret-not-real-0123456789abcdef',
+  'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJlLXNpZ25hdHVyZQ',
   'postgresql://postgres:postgres@localhost:5432/postgres',
   'postgresql://mcwellness_api:mcwellness_api@localhost:5432/postgres',
 ];
+// Test connection strings use these two passwords and nothing else.
+const TEST_PASSWORDS = new Set(['x', 'postgres']);
 const TEST_FILE = /\.test\.tsx?$/;
-const PLACEHOLDER =
-  /test|synthetic|example|not-a-real|unlocks-nothing|local-development|placeholder|scrub|fake/i;
 const LOCAL_HOST = /@(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\//;
 const SKIP = [
   /^pnpm-lock\.yaml$/,
@@ -34,6 +39,8 @@ const PATTERNS = [
   { name: 'Slack token', re: /\bxox[abpr]-[A-Za-z0-9-]{10,}/ },
   { name: 'Google API key', re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
   { name: 'Supabase service key', re: /service_role[^\n]{0,40}eyJ/ },
+  { name: 'Supabase key', re: /\bsb_(?:secret|publishable)_[A-Za-z0-9_-]{16,}/ },
+  { name: 'Supabase access token', re: /\bsbp_[A-Za-z0-9]{20,}/ },
   {
     name: 'connection string with a password',
     re: /postgres(?:ql)?:\/\/[^:\s/]+:[^@\s/]+@[^\s'"]+/,
@@ -43,6 +50,10 @@ const PATTERNS = [
     re: /(?:secret|password|passwd|api[_-]?key|token)\s*[:=]\s*['"][^'"\s]{12,}['"]/i,
   },
 ];
+
+function passwordOf(connectionString) {
+  return connectionString.replace(/^[a-z]+:\/\/[^:]+:/, '').replace(/@[\s\S]*$/, '');
+}
 
 const files = execSync('git ls-files', { encoding: 'utf8' }).split('\n').filter(Boolean);
 const findings = [];
@@ -60,21 +71,10 @@ for (const file of files) {
       if (!match) continue;
       if (ALLOWED_VALUES.some((v) => line.includes(v))) continue;
       if (name === 'connection string with a password') {
-        // Local databases, documented shapes with <slots>, and short test placeholders are not secrets.
-        const password = match[0].replace(/^[a-z]+:\/\/[^:]+:/, '').replace(/@.*$/, '');
-        if (
-          LOCAL_HOST.test(match[0]) ||
-          match[0].includes('<') ||
-          (TEST_FILE.test(file) && password.length <= 8)
-        )
-          continue;
+        const value = match[0];
+        if (LOCAL_HOST.test(value) || value.includes('<')) continue;
+        if (TEST_FILE.test(file) && TEST_PASSWORDS.has(passwordOf(value))) continue;
       }
-      if (
-        TEST_FILE.test(file) &&
-        ['assigned secret', 'JSON web token'].includes(name) &&
-        PLACEHOLDER.test(line)
-      )
-        continue;
       findings.push(`${file}:${i + 1}: ${name}`);
     }
   });
