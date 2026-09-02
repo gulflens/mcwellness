@@ -79,6 +79,10 @@ component import and path once `BillingPage.tsx` exists):
 
 ## 3. Four trunk-owned `pnpm test:db` assertions assume no stream has migrated yet
 
+**Update:** the coordinator confirms this is already being loosened on
+another branch. Left here as the record of what billing found and why; not
+blocking this pull request, and not this worktree's to fix.
+
 **What.** `tests/db/schema.test.ts` (three assertions) and `tests/db/audit.test.ts`
 (one assertion) assert, with exact-equality, that the public schema contains
 *only* the trunk's own core tables, that the audit trigger is attached to

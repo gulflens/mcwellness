@@ -93,7 +93,19 @@ begin
 end
 $$;
 
+-- Data step: every tenant that already exists the moment this migration runs
+-- gets a first VAT rate, so it never sits without one — a fresh local
+-- database with a tenant already seeded, and a real practice already live on
+-- staging or production, both pick this up the instant the table exists,
+-- and POST /api/billing/prices works with no separate setting endpoint. The
+-- rate (500 basis points, 5%) and its effective_from (2018-01-01, the day UAE
+-- VAT began) match docs/SPEC/billing.md section 5.1; the owner's screen to
+-- change it is the second pull request's, not this migration's.
+insert into vat_setting (tenant_id, version, rate_basis_points, effective_from)
+select id, 1, 500, date '2018-01-01' from tenant;
+
 -- rollback:
+--   delete from vat_setting where version = 1 and effective_from = date '2018-01-01';
 --   revoke select, insert on public.price from app_role;
 --   revoke select, insert on public.vat_setting from app_role;
 --   drop trigger if exists audit_row on public.price;
