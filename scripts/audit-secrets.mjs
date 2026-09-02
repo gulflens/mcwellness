@@ -19,7 +19,8 @@ const ALLOWED_VALUES = [
 // Test connection strings use these two passwords and nothing else.
 const TEST_PASSWORDS = new Set(['x', 'postgres']);
 const TEST_FILE = /\.test\.tsx?$/;
-const LOCAL_HOST = /@(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?\//;
+// A local host, with a numeric port or a template one such as ${ports.db}.
+const LOCAL_HOST = /@(?:localhost|127\.0\.0\.1|\[::1\])(?::(?:\d+|\$\{[^}]*\}))?\//;
 const SKIP = [
   /^pnpm-lock\.yaml$/,
   /^\.impeccable\//,
@@ -55,7 +56,10 @@ function passwordOf(connectionString) {
   return connectionString.replace(/^[a-z]+:\/\/[^:]+:/, '').replace(/@[\s\S]*$/, '');
 }
 
-const files = execSync('git ls-files', { encoding: 'utf8' }).split('\n').filter(Boolean);
+// Tracked and untracked alike, so a file fails here before it is ever committed.
+const files = execSync('git ls-files --cached --others --exclude-standard', { encoding: 'utf8' })
+  .split('\n')
+  .filter(Boolean);
 const findings = [];
 for (const file of files) {
   if (SKIP.some((re) => re.test(file))) continue;
