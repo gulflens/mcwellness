@@ -192,7 +192,7 @@ This is a design rule, not just an audit rule.
 
 A signed report is immutable. A correction issues **version 2** with a visible amendment note explaining what changed and why, and version 1 remains retrievable for the retention period. Same for session records once the visit is closed, and for issued invoices — which get credit notes, never edits.
 
-The regulatory logic: a record that can be silently changed after the fact has no evidentiary value. The practical logic: a parent, a school or an insurer may be holding version 1, and you need to know exactly what they're holding.
+The regulatory logic: a record that can be silently changed after the fact has no evidentiary value. The practical logic: a parent, a school or a coach may be holding version 1, and you need to know exactly what they're holding.
 
 ```ts
 type Versioned<T> = {

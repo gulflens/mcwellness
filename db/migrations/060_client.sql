@@ -1,8 +1,9 @@
 -- 060_client.sql
 -- The person receiving sessions, the people around them, their consents and their
 -- documents (00-data-model.md section 3). Minors are the common case; a client
--- is not necessarily a user. The Emirates ID exists only encrypted plus a hash
--- for lookup: no column anywhere holds it in plain text.
+-- is not necessarily a user. The Emirates ID, when the practice needs it at all, is
+-- the adult contact's, and exists only encrypted plus a keyed hash for lookup: no
+-- column anywhere holds it in plain text.
 
 create type client_status as enum ('lead', 'active', 'paused', 'closed', 'erased');
 create type sex_at_birth as enum ('female', 'male', 'unknown');
@@ -23,11 +24,6 @@ create table client (
   family_name_ar         text,
   date_of_birth          date,                   -- required at activation (client-record.md section 3)
   sex_at_birth           sex_at_birth,           -- optional; the qEEG normative comparison uses age and sex
-  -- Emirates ID, optional and never required to enrol: collected only when the practice must
-  -- verify the identity of the adult who consents for a minor or who is refunded. Never plain
-  -- text: ciphertext plus a keyed HMAC-SHA256 (server-held key) for lookup.
-  emirates_id_encrypted  bytea,
-  emirates_id_hash       bytea check (emirates_id_hash is null or octet_length(emirates_id_hash) = 32),
   preferred_locale       locale not null default 'en',
   primary_contact_id     uuid,                   -- references contact(id), added below
   primary_location_id    uuid references location (id),
@@ -36,9 +32,7 @@ create table client (
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now(),
   created_by             uuid references app_user (id),
-  unique (tenant_id, mrn),
-  unique (tenant_id, emirates_id_hash),
-  constraint client_emirates_id_pair check ((emirates_id_encrypted is null) = (emirates_id_hash is null))
+  unique (tenant_id, mrn)
 );
 create index client_tenant_idx on client (tenant_id);
 create index client_primary_location_idx on client (primary_location_id);
@@ -60,9 +54,16 @@ create table contact (
   phone                      text check (phone is null or phone ~ '^\+[1-9][0-9]{6,14}$'),  -- E.164
   email                      text,
   whatsapp_opt_in            boolean not null default false,
+  -- Emirates ID of the adult, optional and never required to enrol: collected only when the
+  -- practice must verify the identity of the adult who consents for a minor or who is refunded.
+  -- Never plain text: ciphertext plus a keyed HMAC-SHA256 (server-held key) for lookup.
+  emirates_id_encrypted      bytea,
+  emirates_id_hash           bytea check (emirates_id_hash is null or octet_length(emirates_id_hash) = 32),
   created_at                 timestamptz not null default now(),
   updated_at                 timestamptz not null default now(),
-  created_by                 uuid references app_user (id)
+  created_by                 uuid references app_user (id),
+  unique (tenant_id, emirates_id_hash),
+  constraint contact_emirates_id_pair check ((emirates_id_encrypted is null) = (emirates_id_hash is null))
 );
 create index contact_tenant_idx on contact (tenant_id);
 create index contact_client_idx on contact (client_id, created_at);
@@ -84,7 +85,7 @@ create table document (
   mime_type        text not null,
   sha256           bytea not null check (octet_length(sha256) = 32),
   uploaded_by      uuid references app_user (id),
-  retention_until  timestamptz,             -- 5 years from the last activity, computed by the application
+  retention_until  timestamptz,             -- 5 years from the client's last activity, or from upload for a practice document; computed by the application
   is_immutable     boolean not null default false,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now(),

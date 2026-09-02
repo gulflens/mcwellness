@@ -23,6 +23,7 @@ export const IDS = {
   clientB: '00000000-0000-4000-8000-0000000000c2',
   locationA: '00000000-0000-4000-8000-0000000000d1',
   locationB: '00000000-0000-4000-8000-0000000000d2',
+  contactA: '00000000-0000-4000-8000-0000000000e1',
   request: '00000000-0000-4000-8000-0000000000ee',
 } as const;
 
@@ -134,7 +135,7 @@ export async function seedTenant(
   );
 }
 
-/** A lead client with a synthetic identity hash (never an identity number). */
+/** A lead client. */
 export async function seedClient(
   client: pg.Client,
   tenantId: string,
@@ -143,10 +144,25 @@ export async function seedClient(
   familyName: string,
 ): Promise<void> {
   await client.query(
-    'insert into client (id, tenant_id, mrn, given_name, family_name, ' +
-      'emirates_id_encrypted, emirates_id_hash, created_by) ' +
-      "values ($1, $2, $3, 'Synthetic', $4, 'ciphertext'::bytea, sha256(($5)::bytea), $6)",
-    [clientId, tenantId, `MW-${clientId.slice(-6)}`, familyName, `identity-${clientId}`, ownerId],
+    'insert into client (id, tenant_id, mrn, given_name, family_name, created_by) ' +
+      "values ($1, $2, $3, 'Synthetic', $4, $5)",
+    [clientId, tenantId, `MW-${clientId.slice(-6)}`, familyName, ownerId],
+  );
+}
+
+/** An adult contact with a synthetic identity hash (never an identity number). */
+export async function seedContact(
+  client: pg.Client,
+  tenantId: string,
+  contactId: string,
+  clientId: string,
+  identity: string,
+): Promise<void> {
+  await client.query(
+    'insert into contact (id, tenant_id, client_id, relationship, can_consent, phone, ' +
+      'emirates_id_encrypted, emirates_id_hash) ' +
+      "values ($1, $2, $3, 'mother', true, $4, 'ciphertext'::bytea, sha256(($5)::bytea))",
+    [contactId, tenantId, clientId, PHONES.second, identity],
   );
 }
 

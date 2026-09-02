@@ -7,6 +7,7 @@ import {
   rejectsWith,
   rolledBack,
   seedClient,
+  seedContact,
   seedLocation,
   seedTenant,
   setAuditContext,
@@ -244,6 +245,34 @@ describe('erasure mode', () => {
       expect(erasure?.new_values?.family_name).toBe('[withheld: erasure]');
       expect(JSON.stringify(erasure?.old_values)).not.toContain('Alpha');
       expect(erasure?.hash_ok).toBe(true);
+    });
+  });
+});
+
+describe('identity columns', () => {
+  it("strips the Emirates ID columns from a contact's audit row", async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+      await seedContact(client, IDS.tenantA, IDS.contactA, IDS.clientA, 'identity-one');
+      const [row] = await rowsFor(IDS.contactA);
+      expect(row).toMatchObject({ entity_type: 'contact', client_id: IDS.clientA, hash_ok: true });
+      expect(row?.new_values).toHaveProperty('phone');
+      expect(row?.new_values).not.toHaveProperty('emirates_id_hash');
+      expect(row?.new_values).not.toHaveProperty('emirates_id_encrypted');
+    });
+  });
+
+  it('ignores erasure mode when the API role is in effect', async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+      await asApiRole(client, IDS.tenantA, async () => {
+        await client.query("select set_config('app.erasure', 'true', true)");
+        await client.query("update client set family_name = 'Hidden' where id = $1", [IDS.clientA]);
+        const rows = await rowsFor(IDS.clientA);
+        expect(rows[1]?.new_values?.family_name).toBe('Hidden');
+      });
     });
   });
 });

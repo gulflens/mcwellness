@@ -11,12 +11,14 @@
 ------------------------------------------------------------------------------
 -- Erasure mode: when the erasing transaction sets app.erasure = 'true', every value
 -- is withheld and only the keys are kept, so an erasure never re-records the
--- identity it removes (client-record.md section 8).
+-- identity it removes (client-record.md section 8). Honoured only when no role has
+-- been assumed (set role), so the API role cannot use it to hide a write.
 create function app.audit_redact(p_row jsonb) returns jsonb
 language sql stable strict
 set search_path = pg_catalog, pg_temp
 as $$
   select case when current_setting('app.erasure', true) = 'true'
+              and coalesce(nullif(current_setting('role', true), ''), 'none') = 'none'
     then (select coalesce(jsonb_object_agg(e.key, to_jsonb('[withheld: erasure]'::text)), '{}'::jsonb) from jsonb_each(p_row) as e)
     else coalesce(
     (select jsonb_object_agg(

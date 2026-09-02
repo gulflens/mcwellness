@@ -7,6 +7,7 @@ import {
   rejectsWith,
   rolledBack,
   seedClient,
+  seedContact,
   seedTenant,
 } from './helpers';
 
@@ -21,6 +22,8 @@ beforeAll(async () => {
   await seedTenant(client, IDS.tenantA, IDS.ownerA, 'Synthetic Studio A');
   await seedTenant(client, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
   await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+  await seedClient(client, IDS.tenantB, IDS.clientB, IDS.ownerB, 'Beta');
+  await seedContact(client, IDS.tenantA, IDS.contactA, IDS.clientA, 'identity-one');
 });
 
 afterAll(async () => {
@@ -90,36 +93,30 @@ describe('locations', () => {
 });
 
 describe('clients', () => {
-  it('requires the Emirates ID hash to be a sha256 and to travel with the ciphertext', async () => {
+  it("requires an adult contact's Emirates ID hash to be 32 bytes and to travel with the ciphertext", async () => {
     await rolledBack(client, async () => {
       await rejectsWith(
         client,
         CHECK_VIOLATION,
-        'insert into client (tenant_id, mrn, given_name, family_name, emirates_id_encrypted) ' +
-          "values ($1, 'MW-900001', 'Synthetic', 'Beta', 'ciphertext'::bytea)",
-        [IDS.tenantA],
+        "insert into contact (tenant_id, client_id, relationship, emirates_id_encrypted) values ($1, $2, 'father', 'ciphertext'::bytea)",
+        [IDS.tenantA, IDS.clientA],
       );
       await rejectsWith(
         client,
         CHECK_VIOLATION,
-        'insert into client (tenant_id, mrn, given_name, family_name, emirates_id_encrypted, emirates_id_hash) ' +
-          "values ($1, 'MW-900002', 'Synthetic', 'Beta', 'ciphertext'::bytea, 'short'::bytea)",
-        [IDS.tenantA],
+        "insert into contact (tenant_id, client_id, relationship, emirates_id_encrypted, emirates_id_hash) values ($1, $2, 'father', 'ciphertext'::bytea, 'short'::bytea)",
+        [IDS.tenantA, IDS.clientA],
       );
     });
   });
 
-  it('keeps the Emirates ID hash unique within a tenant but not across tenants', async () => {
+  it("keeps a contact's Emirates ID hash unique within a tenant but not across tenants", async () => {
     await rolledBack(client, async () => {
       const sameHash =
-        'insert into client (tenant_id, mrn, given_name, family_name, emirates_id_encrypted, emirates_id_hash) ' +
-        "values ($1, $2, 'Synthetic', 'Gamma', 'ciphertext'::bytea, sha256(($3)::bytea))";
-      await rejectsWith(client, UNIQUE_VIOLATION, sameHash, [
-        IDS.tenantA,
-        'MW-900003',
-        `identity-${IDS.clientA}`,
-      ]);
-      await client.query(sameHash, [IDS.tenantB, 'MW-900003', `identity-${IDS.clientA}`]);
+        'insert into contact (tenant_id, client_id, relationship, emirates_id_encrypted, emirates_id_hash) ' +
+        "values ($1, $2, 'father', 'ciphertext'::bytea, sha256(('identity-one')::bytea))";
+      await rejectsWith(client, UNIQUE_VIOLATION, sameHash, [IDS.tenantA, IDS.clientA]);
+      await client.query(sameHash, [IDS.tenantB, IDS.clientB]);
     });
   });
 

@@ -77,12 +77,12 @@ Makani optional, verified coordinate mandatory. See NAVIGATION-SPEC §2.
 ## 3. Client and household
 
 ### `client`
-The person receiving sessions. `mrn` (human-readable record number, tenant-unique), `given_name`, `family_name`, `given_name_ar`, `family_name_ar`, `date_of_birth`, `sex_at_birth` (optional; the qEEG normative comparison uses age and sex), `emirates_id_encrypted`, `emirates_id_hash`, `preferred_locale`, `primary_contact_id`, `primary_location_id`, `referral_source`, `status` (`lead`, `active`, `paused`, `closed`, `erased`).
+The person receiving sessions. `mrn` (human-readable record number, tenant-unique), `given_name`, `family_name`, `given_name_ar`, `family_name_ar`, `date_of_birth`, `sex_at_birth` (optional; the qEEG normative comparison uses age and sex), `preferred_locale`, `primary_contact_id`, `primary_location_id`, `referral_source`, `status` (`lead`, `active`, `paused`, `closed`, `erased`).
 
 Minors are the common case. A client is *not* necessarily a user.
 
 ### `contact`
-Parent, guardian, spouse, or the client themself. `client_id`, `user_id` (nullable — only if they log in), `relationship` (`self`, `mother`, `father`, `guardian`, `spouse`, `other`), `is_legal_guardian`, `can_consent`, `can_receive_reports`, `can_pay`, `phone`, `email`, `whatsapp_opt_in`.
+Parent, guardian, spouse, or the client themself. `client_id`, `user_id` (nullable — only if they log in), `relationship` (`self`, `mother`, `father`, `guardian`, `spouse`, `other`), `is_legal_guardian`, `can_consent`, `can_receive_reports`, `can_pay`, `phone`, `email`, `whatsapp_opt_in`, and, only when the practice must verify the adult who consents for a minor or who is refunded, `emirates_id_encrypted` and `emirates_id_hash` (keyed HMAC, unique per tenant, never plain text, never an image).
 
 ### `consent`
 First-class, versioned, purpose-scoped, withdrawable.
@@ -100,7 +100,7 @@ signature_document_id
 Every session start checks the relevant active consent at that moment. No active `participation` consent → session cannot start.
 
 ### `document`
-Anything filed against a client, or a practice document such as a practitioner's certificate (`client_id` null): referral letters, signed consents, reports, setup photos, certificates. Never an image of an identity document. `client_id`, `kind`, `storage_key` (Supabase Storage, versioned bucket), `mime_type`, `sha256`, `uploaded_by`, `retention_until` (computed: 5 years from the client's last activity), `is_immutable`.
+Anything filed against a client, or a practice document such as a practitioner's certificate (`client_id` null): referral letters, signed consents, reports, setup photos, certificates. Never an image of an identity document. `client_id`, `kind`, `storage_key` (Supabase Storage, versioned bucket), `mime_type`, `sha256`, `uploaded_by`, `retention_until` (computed: 5 years from the client's last activity, or from upload for a practice document), `is_immutable`.
 
 ---
 
@@ -163,10 +163,10 @@ Per completed home session: `actual_drive_seconds`, `actual_walk_seconds`, `sali
 
 Summarised here; FINANCE-SPEC is authoritative.
 
-- **`price`** — resolved per `(service_type_id, jurisdiction, recipient_type)`, never constants in code. `unit_price_fils`, `vat_treatment`, `valid_from`, `valid_to`.
+- **`price`** — resolved per `(service_type_id, jurisdiction, recipient_type)`, never constants in code. `unit_price_fils`, `vat_treatment` (computed snapshot, billing.md section 5), `valid_from`, `valid_to`.
 - **`package`** — a sellable bundle. `code`, `name`, `price_fils`, `components` (service_type × qty), `expiry_months`, `status`.
 - **`client_package`** — a purchase. `client_id`, `package_id`, `purchased_at`, `paid_by_contact_id`, `invoice_id`, `expires_at`, `status`.
-- **`entitlement`** — the ledger; one row per credit. `client_id`, `service_type_id`, `source_type`, `source_id`, `allocated_value_fils`, `vat_treatment`, `status`, `consumed_by_session_id`, `expires_at`. Completing a session flips exactly one entitlement to `consumed` and recognises its allocated value.
+- **`entitlement`** — the ledger; one row per credit. `client_id`, `service_type_id`, `source_type`, `source_id`, `allocated_value_fils`, `vat_treatment` (computed snapshot), `status`, `consumed_by_session_id`, `expires_at`. Completing a session flips exactly one entitlement to `consumed` and recognises its allocated value.
 - **`invoice`, `invoice_line`, `payment`, `credit_note`, `journal_entry`** — FINANCE-SPEC §4–7. Issued invoices are immutable; corrections are credit notes.
 
 ---
@@ -236,9 +236,10 @@ Recorded here so no later reader mistakes them for the spec's intent.
 - **Physical names.** The `user` entity is the table `app_user`, because `user` is reserved in SQL. Nothing else is renamed.
 - **Exemptions from the section 1 conventions.** `tenant` carries no `tenant_id` (it is the tenant). `audit_log` keeps a bigint id assigned by the hash chain, uses `occurred_at` as its creation time, and has no `updated_at`, `created_by` or foreign keys (append-only, and a log row outlives what it describes); its `tenant_id` is not null, and for the `tenant` table itself the audit row carries the tenant's own id. Every section 2 and 3 table, `tenant` included, has the audit trigger. `app.audit_chain` and `schema_migration` are bookkeeping tables. See `.claude/rules/data-model.md`.
 - **Values the model left open.** `practitioner.status` and `service_type.status` use the enum `active_status (active, inactive)`. `client.sex_at_birth` is the enum `(female, male, unknown)`. `document.kind`, `credential.certification`, `credential.certifying_body` and `practitioner.vehicle` are open sets and stay `text`.
-- **Checks.** `location.makani_number` is ten digits and Dubai only; `app_user.phone` and `contact.phone` are E.164; `client.nationality` is an upper-case ISO 3166-1 alpha-3 code; `service_type.delivery_modes` is a non-empty `delivery_mode[]`; `credential.valid_to` is after `valid_from` when present (null means it does not expire); `client.emirates_id_hash` is 32 bytes and travels with `emirates_id_encrypted`, unique per tenant.
+- **Checks.** `location.makani_number` is ten digits and Dubai only; `app_user.phone` and `contact.phone` are E.164; `service_type.delivery_modes` is a non-empty `delivery_mode[]`; `credential.valid_to` is after `valid_from` when present (null means it does not expire); `contact.emirates_id_hash` is 32 bytes and travels with `emirates_id_encrypted`, unique per tenant.
 - **Circular references** are added after the referenced table exists: `tenant.location_id`, `practitioner.home_base_location_id`, `client.primary_contact_id`, `credential.evidence_document_id`. All nullable.
 - **Extensions** (`pgcrypto`, `postgis`) live in the `extensions` schema, as on Supabase; helper functions live in schema `app`; the public schema holds only tables.
 - **Row level security** is enabled on every table and every policy is written `to app_role`, the API role that stands in until PR 3 chooses the API identity. `app.current_tenant_id()` reads the `app.tenant_id` setting the middleware will stamp per request; unset, every tenant-scoped row is invisible.
 - **Re-baselined 2026-09-02 as a wellness business.** Removed: `tenant.dha_facility_licence_no`, `practitioner.dha_professional_licence_no`, `client.nabidh_opt_out`, `service_type.is_clinical`, and the `jurisdiction`, `licence_type` and `licence_number` columns of `credential` (now `certification`, `certifying_body`, `certificate_number`). Renamed values: `role_kind.clinical_lead` to `lead_practitioner`; `location_label.clinic` and `delivery_mode.clinic` to `studio`; `client_status.discharged` and `locked` to `closed` and `erased`; `consent_purpose.treatment` and `minor_treatment` to `participation` and `minor_participation`, with `data_sharing_hie` removed. `document.retention_until` is 5 years from the last activity.
 - **After the compliance review of 2026-09-02:** `client.nationality` and `client.emirates_id_expiry` are dropped (no stated need); the Emirates ID columns and `sex_at_birth` carry their need in the schema comments; `document.client_id` is nullable so a practitioner's certificate can be filed without a client; `audit_redact` withholds every value when the transaction sets `app.erasure`; no image of an identity document is ever stored.
+- **Emirates ID lives on `contact`, not `client`** (compliance re-review, 2026-09-02): the stated need is to verify the adult who consents for a minor or who is refunded, and that adult is a contact (`relationship = 'self'` for an adult client). The audit trigger's erasure mode is honoured only when no role has been assumed, so the API role cannot use it to hide a write.
