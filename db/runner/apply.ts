@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
 import {
+  assertKnownMigrationFile,
   checkNeeds,
   checksumOf,
   hasRollbackBlock,
@@ -107,9 +108,15 @@ export async function runMigrations(client: pg.Client): Promise<number> {
 
     // Every already-applied file's current text, read once and cached: the
     // checksum verification below needs it for every row, and the apply
-    // loop further down needs pending files' text again anyway.
+    // loop further down needs pending files' text again anyway. textOf never
+    // resolves a filename that is not exactly one of the files `available`
+    // just listed from disk — a schema_migration row's filename is data the
+    // database holds, not a trusted filesystem path (round 5 security
+    // review) — so a tampered or stale row can never make this read outside
+    // db/migrations.
     const textCache = new Map<string, string>();
     async function textOf(filename: string): Promise<string> {
+      assertKnownMigrationFile(filename, available);
       const cached = textCache.get(filename);
       if (cached !== undefined) {
         return cached;
@@ -125,7 +132,23 @@ export async function runMigrations(client: pg.Client): Promise<number> {
     for (const row of recorded) {
       await textOf(row.filename);
     }
-    const checksumPlan = planChecksums(recorded, (filename) => textCache.get(filename) ?? '');
+    // Every recorded filename was just read into textCache above, with
+    // nothing skipped and nothing swallowed: a missing entry here would mean
+    // that loop did not actually run for this row, which is a bug in the
+    // runner rather than something a fallback value should paper over by
+    // quietly hashing an empty string into a checksum that matches nothing
+    // real.
+    function requireCachedText(filename: string): string {
+      const cached = textCache.get(filename);
+      if (cached === undefined) {
+        throw new Error(
+          `Internal error: no cached text for "${filename}" when computing its checksum. ` +
+            'Every recorded filename should have been read into the cache just above.',
+        );
+      }
+      return cached;
+    }
+    const checksumPlan = planChecksums(recorded, requireCachedText);
     if (checksumPlan.mismatched.length > 0) {
       throw new Error(
         `${checksumPlan.mismatched.join(', ')} no longer matches the checksum recorded when ` +
@@ -138,6 +161,7 @@ export async function runMigrations(client: pg.Client): Promise<number> {
         checksum,
         filename,
       ]);
+      console.log(`backfilled checksum for ${filename}`);
     }
 
     for (const file of pending) {
@@ -168,6 +192,16 @@ export async function runMigrations(client: pg.Client): Promise<number> {
       }
       console.log(`applied ${file.filename}`);
     }
+
+    // Every row now carries a non-null checksum: an already-applied file
+    // either matched above or was just backfilled, and every file the loop
+    // above just applied was inserted with one. Once that holds, NOT NULL is
+    // safe to set — and on every later run, where it already holds, this is
+    // a no-op (round 5 security review): without it, a single row's
+    // checksum could revert to null by some other route and quietly disarm
+    // the guard for that one file, rather than the column itself refusing
+    // the possibility outright.
+    await client.query('alter table schema_migration alter column checksum set not null');
 
     return pending.length;
   } finally {

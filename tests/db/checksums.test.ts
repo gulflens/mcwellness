@@ -40,6 +40,14 @@ describe('migration checksums', () => {
     }
   });
 
+  it('sets the checksum column NOT NULL once every row has one, so a later null cannot disarm the check', async () => {
+    const { rows } = await client.query<{ is_nullable: string }>(
+      'select is_nullable from information_schema.columns ' +
+        "where table_name = 'schema_migration' and column_name = 'checksum'",
+    );
+    expect(rows[0]?.is_nullable).toBe('NO');
+  });
+
   it('leaves every checksum exactly as it was on a second migrate with nothing pending', async () => {
     const before = await checksumsByFilename();
     expect(await runMigrations(client)).toBe(0);
@@ -64,6 +72,12 @@ describe('migration checksums', () => {
   });
 
   it('backfills a null recorded checksum from the current file text, instead of refusing', async () => {
+    // A genuinely legacy database only ever has a null checksum before its
+    // first run past this migration, when the column is still nullable (the
+    // NOT NULL constraint the runner now sets is itself a product of every
+    // row already having one). Dropping it here reproduces that legacy
+    // state well enough to set a row back to null at all.
+    await client.query('alter table schema_migration alter column checksum drop not null');
     await client.query(
       "update schema_migration set checksum = null where filename in ('010_tenant.sql', '040_service_type.sql')",
     );
@@ -76,6 +90,13 @@ describe('migration checksums', () => {
     const afterRun = await checksumsByFilename();
     expect(afterRun.get('010_tenant.sql')).toMatch(/^[0-9a-f]{64}$/);
     expect(afterRun.get('040_service_type.sql')).toMatch(/^[0-9a-f]{64}$/);
+    // The backfill also reinstates NOT NULL, now that every row has one
+    // again: a later null cannot disarm the check from here.
+    const { rows } = await client.query<{ is_nullable: string }>(
+      'select is_nullable from information_schema.columns ' +
+        "where table_name = 'schema_migration' and column_name = 'checksum'",
+    );
+    expect(rows[0]?.is_nullable).toBe('NO');
     // A further migrate is clean again: the backfilled checksums match the
     // files' real, unedited text, so nothing refuses and nothing changes.
     expect(await runMigrations(client)).toBe(0);

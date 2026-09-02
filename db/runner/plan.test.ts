@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertKnownMigrationFile,
   checkNeeds,
   checksumOf,
   hasRollbackBlock,
@@ -197,6 +198,54 @@ describe('parseNeeds', () => {
 
   it('is case-insensitive on the marker and de-duplicates repeated numbers', () => {
     expect(parseNeeds('-- needs: 010, 010, 020\n')).toEqual([10, 20]);
+  });
+
+  it('reads the real 400_billing_catalogue.sql Needs comment correctly, including its own trap', () => {
+    // The real file's parenthetical says "generalised in 097 to look for
+    // that column rather than name tables" — 097 is prose, not a
+    // dependency, and must never be read as one just because it sits inside
+    // the same contiguous "--" block as the genuine list.
+    const sql =
+      '-- Needs: 000 (schema app, role app_role, app.set_updated_at, app.current_tenant_id),\n' +
+      '-- 010 (tenant), 020 (app_user, for created_by), 040 (service_type), 080\n' +
+      '-- (app.audit_row, reused as-is: neither table carries a client_id, so\n' +
+      '-- app.audit_client_id — generalised in 097 to look for that column rather\n' +
+      '-- than name tables — correctly denormalises null, exactly as it already does\n' +
+      '-- for tenant and service_type).\n';
+    expect(parseNeeds(sql)).toEqual([0, 10, 20, 40, 80]);
+  });
+
+  it('stops at the first non-numeric token on a Needs line with trailing words', () => {
+    const sql = '-- Needs: 010, 040, and 060 once that lands\n';
+    // "060" sits right after "and", not as its own segment's leading token,
+    // so reading stops at "and" and 060 is never read.
+    expect(parseNeeds(sql)).toEqual([10, 40]);
+  });
+
+  it('never reads a number from prose elsewhere in the Needs comment, such as "500 basis points"', () => {
+    const sql =
+      '-- Needs: 010, 040\n' + '-- By the way, rates rose 500 basis points that quarter.\n';
+    expect(parseNeeds(sql)).toEqual([10, 40]);
+  });
+});
+
+describe('assertKnownMigrationFile', () => {
+  const available = listMigrationFiles(['001_tenant.sql', '002_user.sql']);
+
+  it('passes a filename that is exactly one of the files on disk', () => {
+    expect(() => assertKnownMigrationFile('001_tenant.sql', available)).not.toThrow();
+  });
+
+  it('refuses a filename absent from the on-disk listing, as if taken straight from a database row', () => {
+    expect(() => assertKnownMigrationFile('../../etc/passwd', available)).toThrow(
+      'not one of the migration files currently on disk',
+    );
+  });
+
+  it('refuses a well-formed but simply nonexistent filename', () => {
+    expect(() => assertKnownMigrationFile('099_ghost.sql', available)).toThrow(
+      'not one of the migration files currently on disk',
+    );
   });
 });
 

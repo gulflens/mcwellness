@@ -67,8 +67,21 @@ export function checksumOf(sql: string): string {
  * carries one (db/migrations/099_tenant_scoped_keys.sql and
  * 400_billing_catalogue.sql are the existing examples). The comment may wrap
  * onto further "--" lines immediately below the first, as both of those do;
- * reading stops at the first line that is not itself a "--" comment. Absent
- * entirely, this is `[]` — nothing to check, not a refusal in itself.
+ * collecting those lines stops at the first one that is not itself a "--"
+ * comment. Absent entirely, this is `[]` — nothing to check, not a refusal
+ * in itself.
+ *
+ * Within that collected text, only the comma-separated run of three-digit
+ * numbers immediately after "Needs:" is ever read: each comma-delimited
+ * segment (commas inside a parenthetical aside, such as
+ * "(practitioner, credential)", do not count) must itself begin with a
+ * three-digit number — a wrapped continuation line's own "--" marker is
+ * allowed first — and reading stops for good at the first segment that does
+ * not. 400_billing_catalogue.sql's own Needs comment is the reason this
+ * matters for real: its parenthetical mentions "generalised in 097", and a
+ * number appearing later in a segment's own prose, not as that segment's
+ * leading token, is never read as a dependency — 097 there, or "500" in a
+ * stray "500 basis points" aside, are exactly this.
  */
 export function parseNeeds(sql: string): number[] {
   const lines = sql.split(/\r?\n/);
@@ -84,8 +97,39 @@ export function parseNeeds(sql: string): number[] {
     }
     block.push(line);
   }
-  const numbers = block.join(' ').match(/\b\d{3}\b/g) ?? [];
-  return [...new Set(numbers.map(Number))].sort((a, b) => a - b);
+  block[0] = (block[0] ?? '').replace(/^--\s*Needs:\s*/i, '');
+  const afterMarker = block.join(' ');
+
+  // Splits on commas at bracket depth zero only, so a parenthetical aside
+  // never breaks a single dependency's own comma-separated notes in two.
+  const segments: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of afterMarker) {
+    if (char === '(') {
+      depth += 1;
+    } else if (char === ')') {
+      depth = Math.max(0, depth - 1);
+    }
+    if (char === ',' && depth === 0) {
+      segments.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  segments.push(current);
+
+  const numbers: number[] = [];
+  const LEADING_NUMBER = /^\s*(?:--\s*)?(\d{3})\b/;
+  for (const segment of segments) {
+    const match = LEADING_NUMBER.exec(segment);
+    if (!match?.[1]) {
+      break;
+    }
+    numbers.push(Number(match[1]));
+  }
+  return [...new Set(numbers)].sort((a, b) => a - b);
 }
 
 /**
@@ -183,6 +227,27 @@ export function planMigrations(
 
   const appliedSet = new Set(applied);
   return available.filter((file) => !appliedSet.has(file.filename));
+}
+
+/**
+ * Refuses a filename that is not exactly one of the files currently on disk
+ * (`available`, from listMigrationFiles). A filename read back from
+ * schema_migration is data the database holds, not a trusted filesystem
+ * path: db/runner/apply.ts's textOf calls this before ever resolving a
+ * recorded filename against the migrations directory, so a database row is
+ * never taken on its own word for where to read from (round 5 security
+ * review).
+ */
+export function assertKnownMigrationFile(
+  filename: string,
+  available: readonly MigrationFile[],
+): void {
+  if (!available.some((file) => file.filename === filename)) {
+    throw new Error(
+      `"${filename}" is not one of the migration files currently on disk. Refusing to read it: ` +
+        'a filename recorded in schema_migration is never trusted for a filesystem path on its own.',
+    );
+  }
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
