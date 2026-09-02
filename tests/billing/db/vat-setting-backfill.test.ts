@@ -2,7 +2,6 @@ import { readdir, readFile } from 'node:fs/promises';
 import { SignJWT } from 'jose';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mountBilling } from '../../../app/api/billing/routes';
 import type { CreatePriceResponse } from '../../../app/api/billing/schema';
 import { createPool } from '../../../app/api/_middleware/db';
 import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
@@ -150,8 +149,16 @@ beforeAll(async () => {
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   await syncLocalApiRolePassword(owner, apiUrl);
   pool = createPool(apiUrl);
-  api = createApi({ pool, verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }) });
-  mountBilling(api, NOW);
+  // createApi's own `now` option reaches mountBilling from inside createApi
+  // itself now that round 5 (docs/CHANGE-REQUESTS/billing-01.md) mounts it
+  // there: a second, manual mountBilling call on the same Hono instance
+  // would only add a second, shadowed handler for the same path (Hono
+  // answers from whichever handler was registered first).
+  api = createApi({
+    pool,
+    verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }),
+    now: NOW,
+  });
 });
 
 afterAll(async () => {
