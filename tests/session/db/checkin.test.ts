@@ -13,12 +13,13 @@ import {
   freshDatabase,
   seedClient,
   seedCredential,
+  seedLocation,
   seedPractitioner,
   seedServiceType,
   seedTenant,
   seedUser,
 } from '../../db/helpers';
-import { seedConsent, seedConsentDocument } from './helpers';
+import { seedAppointment, seedConsent, seedConsentDocument } from './helpers';
 
 // Everything here is synthetic and stays inside the reserved ranges
 // (.claude/rules/testing.md): fixed ids of the shape
@@ -74,6 +75,24 @@ const LEAD_USER = '00000000-0000-4000-8000-000000007001';
 const LEAD_PRACTITIONER = '00000000-0000-4000-8000-000000007002';
 const LEAD_AUTH = '00000000-0000-4000-8000-000000007003';
 
+// A client checked in by record number rather than id (schema.ts's
+// clientMrn). Ends in six digits so seedClient's auto-derived mrn
+// (`MW-${id.slice(-6)}`) matches app/api/sessions/schema.ts's ClientMrn
+// pattern.
+const CLIENT_BY_MRN = '00000000-0000-4000-8000-000000900001';
+const CONTACT_BY_MRN = '00000000-0000-4000-8000-000000900002';
+const SESSION_BY_MRN = '00000000-0000-4000-8000-000000900003';
+const EVENT_BY_MRN = '00000000-0000-4000-8000-000000900004';
+const APPOINTMENT_BY_MRN = '00000000-0000-4000-8000-000000900005';
+// A practitioner of its own for the record-number check-in, rather than
+// practitionerA: practitionerA's own one-open-visit slot is already spent by
+// SESSION_HAPPY for the rest of this file (checking a visit out is out of
+// scope for this pull request, same as the "allows a minor..." case below),
+// so reusing it here would prove nothing beyond already_checked_in again.
+const MRN_PRACTITIONER_USER = '00000000-0000-4000-8000-000000900101';
+const MRN_PRACTITIONER = '00000000-0000-4000-8000-000000900102';
+const MRN_PRACTITIONER_AUTH = '00000000-0000-4000-8000-000000900103';
+
 let owner: pg.Client;
 let pool: ReturnType<typeof createPool>;
 let api: ReturnType<typeof createApi>;
@@ -94,7 +113,11 @@ async function postCheckIn(
   authSub: string,
   event: {
     id: string;
-    clientId: string;
+    // Exactly one of these two is set by every call site below, matching
+    // schema.ts's CheckInRequest, which refuses a body carrying both or
+    // neither.
+    clientId?: string;
+    clientMrn?: string;
     deliveryMode?: 'home' | 'studio' | 'remote';
     point?: { lat: number; lng: number } | null;
     deviceAt?: string;
@@ -108,7 +131,8 @@ async function postCheckIn(
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      clientId: event.clientId,
+      ...(event.clientId === undefined ? {} : { clientId: event.clientId }),
+      ...(event.clientMrn === undefined ? {} : { clientMrn: event.clientMrn }),
       point: event.point === undefined ? { lat: 25.2, lng: 55.27 } : event.point,
       events: [
         {
@@ -270,6 +294,90 @@ beforeAll(async () => {
     'home_visit',
   );
 
+  // app.checkin_context (db/migrations/301_checkin_context.sql) now finds a
+  // client only when the caller's own practitioner row holds a booked
+  // appointment with them today (Asia/Dubai) — session-capture.md section
+  // 3.1's "blocks if appointment not today". Every client this suite checks
+  // in successfully, or expects to reach the consent gate at all, needs one:
+  // without it every case below would fail earlier, on client_not_found,
+  // never reaching the reason under test.
+  await seedLocation(owner, IDS.tenantA, IDS.locationA, CLIENT_ADULT, IDS.ownerA);
+  const dates = await owner.query<{ today: string }>(
+    "select (now() at time zone 'Asia/Dubai')::date::text as today",
+  );
+  const today = dates.rows[0]!.today;
+  // An explicit +04:00 offset, and an hour apart per client: the exclusion
+  // constraint's busy window is 45 minutes plus the default 15-minute
+  // travel buffer, exactly an hour, so practitionerA's own five same-day
+  // appointments below never collide with one another.
+  const at = (hour: string) => `${today}T${hour}:00:00+04:00`;
+  const bookToday = (
+    id: string,
+    appointmentClientId: string,
+    hour: string,
+    practitionerId: string = MORE_IDS.practitionerA,
+  ) =>
+    seedAppointment(owner, {
+      id,
+      tenantId: IDS.tenantA,
+      clientId: appointmentClientId,
+      practitionerId,
+      serviceTypeId: SERVICE_TYPE,
+      locationId: IDS.locationA,
+      windowStart: at(hour),
+    });
+  await bookToday('00000000-0000-4000-8000-000000008001', CLIENT_ADULT, '08');
+  await bookToday('00000000-0000-4000-8000-000000008002', CLIENT_NO_PARTICIPATION, '09');
+  await bookToday('00000000-0000-4000-8000-000000008003', CLIENT_MINOR_NO_GUARDIAN, '10');
+  await bookToday('00000000-0000-4000-8000-000000008004', CLIENT_MINOR_WITH_GUARDIAN, '11');
+  await bookToday('00000000-0000-4000-8000-000000008005', CLIENT_NULL_DOB, '12');
+
+  // A practitioner of its own for the record-number check-in (see
+  // MRN_PRACTITIONER_USER's own comment above), credentialed exactly as
+  // practitionerA is.
+  await seedUser(owner, {
+    id: MRN_PRACTITIONER_USER,
+    tenantId: IDS.tenantA,
+    authId: MRN_PRACTITIONER_AUTH,
+    displayName: 'Synthetic Mrn Practitioner',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, MRN_PRACTITIONER, MRN_PRACTITIONER_USER);
+  await seedCredential(owner, {
+    tenantId: IDS.tenantA,
+    practitionerId: MRN_PRACTITIONER,
+    serviceTypeId: SERVICE_TYPE,
+    certification: 'bcia_bcn',
+    validFrom: '2020-01-01',
+    validTo: null,
+    canExecuteSession: true,
+  });
+
+  // A clean client, checked in by record number instead of an id.
+  await seedClient(owner, IDS.tenantA, CLIENT_BY_MRN, IDS.ownerA, 'ByMrn');
+  await owner.query('update client set date_of_birth = $1 where id = $2', [
+    '1990-01-01',
+    CLIENT_BY_MRN,
+  ]);
+  await owner.query(
+    'insert into contact (id, tenant_id, client_id, relationship, can_consent) ' +
+      "values ($1, $2, $3, 'mother', true)",
+    [CONTACT_BY_MRN, IDS.tenantA, CLIENT_BY_MRN],
+  );
+  await consent(
+    '00000000-0000-4000-8000-00000000400b',
+    CLIENT_BY_MRN,
+    CONTACT_BY_MRN,
+    'participation',
+  );
+  await consent(
+    '00000000-0000-4000-8000-00000000400c',
+    CLIENT_BY_MRN,
+    CONTACT_BY_MRN,
+    'home_visit',
+  );
+  await bookToday(APPOINTMENT_BY_MRN, CLIENT_BY_MRN, '13', MRN_PRACTITIONER);
+
   // A client belonging to a different tenant, to prove the route's own tenant re-check.
   await seedClient(owner, IDS.tenantB, IDS.clientB, IDS.ownerB, 'Foreign');
 
@@ -349,6 +457,80 @@ describe('POST /api/sessions/:id/events', () => {
       { entity_type: 'session', client_id: CLIENT_ADULT },
       { entity_type: 'session_event', client_id: CLIENT_ADULT },
     ]);
+  });
+
+  it('checks a practitioner in by record number, writing the resolved client id, not the mrn', async () => {
+    const res = await postCheckIn(SESSION_BY_MRN, MRN_PRACTITIONER_AUTH, {
+      id: EVENT_BY_MRN,
+      clientMrn: `MW-${CLIENT_BY_MRN.slice(-6)}`,
+    });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({
+      status: 'checked_in',
+      sessionId: SESSION_BY_MRN,
+      checkedInAt: FIXED_NOW,
+    });
+
+    const session = await owner.query<{ client_id: string; practitioner_id: string }>(
+      'select client_id, practitioner_id from session where id = $1',
+      [SESSION_BY_MRN],
+    );
+    expect(session.rows[0]).toEqual({
+      client_id: CLIENT_BY_MRN,
+      practitioner_id: MRN_PRACTITIONER,
+    });
+  });
+
+  it('refuses a body naming both clientId and clientMrn', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000900006';
+    const res = await api.request(`/api/sessions/${sessionId}/events`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await mint(AUTH.practitionerA)}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        clientId: CLIENT_ADULT,
+        clientMrn: `MW-${CLIENT_BY_MRN.slice(-6)}`,
+        point: { lat: 25.2, lng: 55.27 },
+        events: [
+          {
+            id: '00000000-0000-4000-8000-000000900007',
+            seq: 1,
+            kind: 'session_started',
+            deviceAt: FIXED_NOW,
+            payload: { serviceTypeId: SERVICE_TYPE, deliveryMode: 'home', locationId: null },
+          },
+        ],
+      }),
+    });
+    expect(res.status).toBe(400);
+    const rows = await owner.query('select 1 from session where id = $1', [sessionId]);
+    expect(rows.rowCount).toBe(0);
+  });
+
+  it('refuses a body naming neither clientId nor clientMrn', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000900008';
+    const res = await api.request(`/api/sessions/${sessionId}/events`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await mint(AUTH.practitionerA)}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        point: { lat: 25.2, lng: 55.27 },
+        events: [
+          {
+            id: '00000000-0000-4000-8000-000000900009',
+            seq: 1,
+            kind: 'session_started',
+            deviceAt: FIXED_NOW,
+            payload: { serviceTypeId: SERVICE_TYPE, deliveryMode: 'home', locationId: null },
+          },
+        ],
+      }),
+    });
+    expect(res.status).toBe(400);
   });
 
   it('is idempotent: resending the same event returns the same result and writes nothing twice', async () => {

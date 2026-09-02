@@ -32,15 +32,31 @@ export const SessionEventInput = z.object({
 });
 export type SessionEventInput = z.infer<typeof SessionEventInput>;
 
-export const CheckInRequest = z.object({
-  // The client and the door coordinate: session-level, carried once here
-  // rather than inside each event's payload.
-  clientId: z.uuid(),
-  point: GeoPoint.nullable(),
-  // A batch, matching the outbox's own shape, even though this pull request
-  // only ever expects one event in it.
-  events: z.array(SessionEventInput).min(1).max(20),
-});
+// A client record number (docs/SPEC/00-data-model.md: "MW-000001, allocated
+// by domain/client"), typed by a practitioner who does not already have the
+// client's id to hand — the walk-up case the check-in screen (pull request
+// 24) adds alongside picking a client from a list.
+export const ClientMrn = z.string().regex(/^MW-\d{6,}$/, 'Not a valid record number');
+
+export const CheckInRequest = z
+  .object({
+    // The client and the door coordinate: session-level, carried once here
+    // rather than inside each event's payload. Exactly one of clientId and
+    // clientMrn is given — never both, never neither — and
+    // app.checkin_context (db/migrations/301_checkin_context.sql) resolves
+    // whichever the caller sent; the refine below is the edge that catches a
+    // caller mixing or omitting both before either reaches the database.
+    clientId: z.uuid().optional(),
+    clientMrn: ClientMrn.optional(),
+    point: GeoPoint.nullable(),
+    // A batch, matching the outbox's own shape, even though this pull request
+    // only ever expects one event in it.
+    events: z.array(SessionEventInput).min(1).max(20),
+  })
+  .refine((value) => (value.clientId === undefined) !== (value.clientMrn === undefined), {
+    message: 'Provide exactly one of clientId or clientMrn.',
+    path: ['clientId'],
+  });
 export type CheckInRequest = z.infer<typeof CheckInRequest>;
 
 // The domain's CheckInBlockReason plus reasons only the route can discover:

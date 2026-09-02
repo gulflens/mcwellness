@@ -46,9 +46,12 @@ type PractitionerRow = { id: string };
 type ServiceTypeRow = { id: string };
 // Mirrors app.checkin_context's return row (db/migrations/301_checkin_context.sql):
 // deliberately narrower than the client table itself — no name, no contact
-// detail, nothing beyond what canCheckIn's gate reads.
+// detail, nothing beyond what canCheckIn's gate reads. client_id is the
+// function's own resolution of whichever of clientId/clientMrn the caller
+// sent — null whenever found is false, never trusted from the request body.
 type CheckinContextRow = {
   found: boolean;
+  client_id: string | null;
   status: string;
   has_date_of_birth: boolean;
   is_minor: boolean;
@@ -157,25 +160,34 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // straight through that gate, and narrow — status, whether a date of
     // birth is on file, whether the client counts as a minor today, and the
     // consent purposes canCheckIn's gate actually reads. Never a name, never
-    // a contact detail. found = false is this function's own tenant check: it
-    // covers both "no such client" and "a client belonging to another
-    // tenant", exactly as the old direct select's empty result did.
+    // a contact detail. It resolves the client by clientId or clientMrn,
+    // whichever the request carried (schema.ts's CheckInRequest already
+    // guarantees exactly one), and found = false covers "no such client", "a
+    // client belonging to another tenant" and, as of this pull request, "this
+    // client has no appointment with this practitioner today" — the same
+    // generic client_not_found refusal for all three, exactly as the old
+    // direct select's empty result was for the first two.
     const context = await db.query<CheckinContextRow>(
-      'select found, status, has_date_of_birth, is_minor, active_consent_purposes ' +
-        'from app.checkin_context($1)',
-      [parsed.data.clientId],
+      'select found, client_id, status, has_date_of_birth, is_minor, active_consent_purposes ' +
+        'from app.checkin_context($1, $2)',
+      [parsed.data.clientId ?? null, parsed.data.clientMrn ?? null],
     );
     const contextRow = context.rows[0];
-    if (!contextRow?.found) {
+    if (!contextRow?.found || !contextRow.client_id) {
       await logRefusal(db, 'session', sessionId, null, ['client_not_found']);
       return c.json({ error: 'bad_request', requestId, detail: 'client_not_found' }, 400);
     }
+    // The function's own resolution, never the caller's raw clientId: when
+    // the request named the client by clientMrn, this is the only place the
+    // route ever learns the id, and every write and refusal from here on
+    // uses it.
+    const clientId = contextRow.client_id;
     const serviceType = await db.query<ServiceTypeRow>(
       "select id from service_type where id = $1 and tenant_id = app.current_tenant_id() and status = 'active'",
       [started.payload.serviceTypeId],
     );
     if (!serviceType.rows[0]) {
-      await logRefusal(db, 'session', sessionId, parsed.data.clientId, ['service_type_not_found']);
+      await logRefusal(db, 'session', sessionId, clientId, ['service_type_not_found']);
       return c.json({ error: 'bad_request', requestId, detail: 'service_type_not_found' }, 400);
     }
 
@@ -207,7 +219,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       // the refusal itself is audited (session-capture.md section 8: "every
       // block reason"). The route's own transaction commits normally on a
       // 4xx, so this row is not undone by the refusal it records.
-      await logRefusal(db, 'session', sessionId, parsed.data.clientId, gate.reasons);
+      await logRefusal(db, 'session', sessionId, clientId, gate.reasons);
       return c.json(CheckInResponse.parse({ status: 'blocked', reasons: gate.reasons }), 422);
     }
 
@@ -247,7 +259,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
           "'SRID=4326;POINT(' || $8::float8 || ' ' || $9::float8 || ')') end, $10)",
         [
           sessionId,
-          parsed.data.clientId,
+          clientId,
           projection.practitionerId,
           projection.serviceTypeId,
           projection.deliveryMode,
@@ -271,7 +283,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         [
           event.id,
           sessionId,
-          parsed.data.clientId,
+          clientId,
           projection.practitionerId,
           event.seq,
           event.kind,
@@ -313,7 +325,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         // Any other unique violation — a genuine second open visit
         // elsewhere, or a colliding id that turned out not to be this
         // practitioner's own — is a refusal, not a success.
-        await logRefusal(db, 'session', sessionId, parsed.data.clientId, ['already_checked_in']);
+        await logRefusal(db, 'session', sessionId, clientId, ['already_checked_in']);
         return c.json(
           CheckInResponse.parse({ status: 'blocked', reasons: ['already_checked_in'] }),
           422,
