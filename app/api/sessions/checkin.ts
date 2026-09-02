@@ -7,6 +7,7 @@ import {
   type SessionEvent,
 } from '@domain/session';
 import { hasRole } from '@domain/shared';
+import { logRefusal } from './audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { CheckInRequest, CheckInResponse } from './schema';
 
@@ -137,8 +138,12 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       now(),
     );
     if (!gate.ok) {
-      // Nothing is written for a blocked attempt: the gate runs before any row exists.
-      return c.json(CheckInResponse.parse({ status: 'blocked', reasons: gate.reasons }), 200);
+      // No session or session_event row exists for a refused check-in, but
+      // the refusal itself is audited (session-capture.md section 8: "every
+      // block reason"). The route's own transaction commits normally on a
+      // 4xx, so this row is not undone by the refusal it records.
+      await logRefusal(db, 'session', sessionId, started.payload.clientId, gate.reasons);
+      return c.json(CheckInResponse.parse({ status: 'blocked', reasons: gate.reasons }), 422);
     }
 
     const event: SessionEvent = {

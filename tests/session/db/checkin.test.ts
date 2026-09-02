@@ -341,12 +341,12 @@ describe('POST /api/sessions/:id/events', () => {
     expect(rows.rowCount).toBe(0);
   });
 
-  it('blocks and writes nothing when participation consent is missing', async () => {
+  it("blocks and writes nothing when participation consent is missing, leaving exactly one 'refused' audit row", async () => {
     const res = await postCheckIn(SESSION_NO_PARTICIPATION, AUTH.practitionerA, {
       id: EVENT_NO_PARTICIPATION,
       clientId: CLIENT_NO_PARTICIPATION,
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     expect(await res.json()).toEqual({
       status: 'blocked',
       reasons: ['consent_missing_participation'],
@@ -355,6 +355,27 @@ describe('POST /api/sessions/:id/events', () => {
       SESSION_NO_PARTICIPATION,
     ]);
     expect(rows.rowCount).toBe(0);
+
+    const audit = await owner.query<{
+      action: string;
+      entity_type: string;
+      entity_id: string;
+      client_id: string;
+      reason: string;
+    }>(
+      'select action, entity_type, entity_id, client_id, reason from audit_log ' +
+        "where action = 'refused' and entity_id = $1",
+      [SESSION_NO_PARTICIPATION],
+    );
+    expect(audit.rows).toEqual([
+      {
+        action: 'refused',
+        entity_type: 'session',
+        entity_id: SESSION_NO_PARTICIPATION,
+        client_id: CLIENT_NO_PARTICIPATION,
+        reason: 'consent_missing_participation',
+      },
+    ]);
   });
 
   it('blocks a minor without an active guardian consent', async () => {
@@ -362,7 +383,7 @@ describe('POST /api/sessions/:id/events', () => {
       id: EVENT_MINOR_NO_GUARDIAN,
       clientId: CLIENT_MINOR_NO_GUARDIAN,
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     expect(await res.json()).toEqual({
       status: 'blocked',
       reasons: ['consent_missing_minor_participation'],
@@ -386,7 +407,7 @@ describe('POST /api/sessions/:id/events', () => {
       id: EVENT_NULL_DOB,
       clientId: CLIENT_NULL_DOB,
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     expect(await res.json()).toEqual({ status: 'blocked', reasons: ['date_of_birth_unknown'] });
   });
 
