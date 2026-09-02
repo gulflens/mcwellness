@@ -48,9 +48,10 @@ const INT4_MAX = 2_147_483_647;
 /**
  * YYYY-MM-DD, and a real calendar date: 2026-13-45 matches the shape but
  * names no day that exists, so it fails here — a 400, not a database error
- * surfacing as a 500.
+ * surfacing as a 500. Exported: the VAT-rate route's `date` query parameter
+ * (below) is the same shape as `validFrom`, and shares this one check.
  */
-const IsoDate = z
+export const IsoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Dates are YYYY-MM-DD.')
   .refine((value) => {
@@ -82,3 +83,14 @@ export const CreatePriceResponse = z.object({
   price: PriceRow,
 });
 export type CreatePriceResponse = z.infer<typeof CreatePriceResponse>;
+
+/**
+ * GET /api/billing/prices/../vat-rate's answer: the VAT setting in force on
+ * the requested date, never a price row's already-stamped one (a saved
+ * price predates the rate a later amendment might carry).
+ */
+export const VatRateResponse = z.object({
+  rateBasisPoints: z.number().int().min(0).max(10_000),
+  effectiveFrom: IsoDate,
+});
+export type VatRateResponse = z.infer<typeof VatRateResponse>;
