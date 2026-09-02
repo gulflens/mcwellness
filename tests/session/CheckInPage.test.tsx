@@ -150,7 +150,7 @@ describe('CheckInPage', () => {
     enterRecordNumber('mw-000123');
     clickCheckIn();
     await waitFor(() => expect(calls.length).toBe(1));
-    expect(calls[0]?.body.clientId).toBe('MW-000123');
+    expect(calls[0]?.body.clientMrn).toBe('MW-000123');
   });
 
   it('lists the caller’s certified services, and explains an empty list', async () => {
@@ -273,20 +273,23 @@ describe('CheckInPage', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
-  it('reads a record number that is not booked for this practitioner today as its own plain sentence', async () => {
-    mount({
-      onPost: () => json({ error: 'bad_request', requestId: 'r', detail: 'client_not_found' }, 400),
-    });
-    await ready();
-    enterRecordNumber('MW-000999');
-    clickCheckIn();
-    expect(
-      await screen.findByText(
-        'This visit is not booked for you today. Check the record number, or ask the practice.',
-      ),
-    ).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
-  });
+  it.each(['not_booked_today', 'client_not_found'])(
+    'reads a record number that is not booked for this practitioner today as its own plain sentence (detail: %s)',
+    async (detail) => {
+      mount({
+        onPost: () => json({ error: 'bad_request', requestId: 'r', detail }, 400),
+      });
+      await ready();
+      enterRecordNumber('MW-000999');
+      clickCheckIn();
+      expect(
+        await screen.findByText(
+          'This visit is not booked for you today. Check the record number, or ask the practice.',
+        ),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    },
+  );
 
   it('falls back to the generic failure, naming what to check, for any other server error', async () => {
     mount({ onPost: () => json({ error: 'internal', requestId: 'r' }, 500) });
@@ -341,7 +344,7 @@ describe('CheckInPage', () => {
     await waitFor(() => expect(calls.length).toBe(2));
 
     expect(calls[1]?.url).not.toBe(calls[0]?.url);
-    expect(calls[1]?.body.clientId).toBe('MW-000456');
+    expect(calls[1]?.body.clientMrn).toBe('MW-000456');
     const firstEvents = calls[0]?.body.events as Array<{ id: string }>;
     const secondEvents = calls[1]?.body.events as Array<{ id: string }>;
     expect(secondEvents[0]?.id).not.toBe(firstEvents[0]?.id);

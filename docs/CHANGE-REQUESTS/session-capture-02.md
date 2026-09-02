@@ -96,6 +96,12 @@ that covers `session.execute` and valid today — the same test
 `domain/session/canCheckIn.ts`'s `canActor(..., 'session.execute', ...)`
 already runs per service type, just listed instead of checked one at a time.
 
+**Closed by pull request 23.** `GET /api/sessions/service-types`
+(`app/api/sessions/service-types.ts`) now exists and is mounted, merged into
+this branch: the caller's own credentialed, in-date service types, exactly
+the `{ serviceTypes: { id, code, name, nameAr }[] }` shape this screen
+already expected.
+
 ---
 
 ## 3. `CheckInRequest.clientId` is a uuid; the screen sends a record number
@@ -125,9 +131,20 @@ trunk's): widen `CheckInRequest.clientId` to accept either shape, and in
 `tenant_id`, as every other lookup here already is) before falling back to
 `client.id`.
 
+**Closed by pull request 23.** `CheckInRequest` now takes `clientMrn`
+(`app/api/sessions/schema.ts`'s `ClientMrn`, `MW-` followed by six or more
+digits) as an alternative to `clientId` — exactly one of the two, enforced
+by the schema's own refine — and `app.checkin_context`
+(`db/migrations/301_checkin_context.sql`) resolves whichever the caller
+sent, also tying the resolved client to today's booked appointment with
+this practitioner. Merged into this branch; `CheckInPage.tsx` now sends
+`{ clientMrn: <normalised record number> }` instead of overloading
+`clientId`.
+
 ---
 
-Nothing above blocks this pull request's own tests or `pnpm verify`, both
-green on this branch; it blocks the screen actually completing a check-in
-against a real practitioner's real data, which is why it is recorded rather
-than left implicit.
+Both gaps recorded above are closed by pull request 23 (merged into this
+branch): the services endpoint exists, and the screen sends the record
+number as `clientMrn`, its own field, rather than through `clientId`. Item
+1 (routing and linking the screen from the shell) remains open — still the
+trunk's call, not this stream's.

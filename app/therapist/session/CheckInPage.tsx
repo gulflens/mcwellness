@@ -12,17 +12,6 @@ import { ServiceTypeOptionsResponse, SessionErrorBody, type ServiceTypeOption } 
  * 3.1): a record number, the caller's own certified service, a delivery
  * mode and an optional location, then one button. Dark ground, single
  * column, the primary action in the thumb zone (.claude/rules/ui.md).
- *
- * Two gaps against `app/api/sessions/**`, both outside this pull request's
- * paths — see the pull request body's "Builder notes":
- * 1. `GET /api/sessions/service-types` is not mounted yet; the services
- *    list below will show its "could not be loaded" note until it is.
- * 2. `POST /api/sessions/:id/events`'s `CheckInRequest.clientId` is typed
- *    `z.uuid()` today. This screen sends the record number the
- *    practitioner enters, exactly as this pull request's brief specifies
- *    ("clientId by record number or id"); until the schema (and the
- *    route's lookup) accept a record number too, a real check-in will
- *    come back as the generic "Something went wrong" failure below.
  */
 
 type DeliveryMode = 'home' | 'studio' | 'remote';
@@ -90,6 +79,12 @@ const FORBIDDEN_MESSAGE =
   'You do not have access to check in a visit. Ask the practice to check your account.';
 const NOT_BOOKED_MESSAGE =
   'This visit is not booked for you today. Check the record number, or ask the practice.';
+// The route's own detail code for this 400 is being renamed to
+// not_booked_today; client_not_found stays mapped to the same sentence for
+// one release so a device on the old code, or a server not yet redeployed,
+// never regresses to the generic failure. Drop client_not_found once that
+// release has passed.
+const NOT_BOOKED_DETAILS = new Set(['not_booked_today', 'client_not_found']);
 const CONFLICT_MESSAGE = 'That check-in could not be completed. Try again.';
 const FAILED_MESSAGE = 'Something went wrong. Check your connection, then try again.';
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -257,9 +252,10 @@ export function CheckInPage() {
     setAttempt(ids);
 
     const body: CheckInRequest = {
-      // See this file's header comment and the pull request body: the
-      // record number, not yet the uuid app/api/sessions/schema.ts expects.
-      clientId: normalizedRecordNumber,
+      // The record number as its own field (app/api/sessions/schema.ts's
+      // ClientMrn, pull request 23) — never clientId, which is reserved for
+      // a caller who already has the client's uuid to hand.
+      clientMrn: normalizedRecordNumber,
       point: submittedPoint,
       events: [
         {
@@ -288,7 +284,7 @@ export function CheckInPage() {
       }
       if (res.status === 400) {
         const parsedError = SessionErrorBody.safeParse(await res.json().catch(() => null));
-        if (parsedError.success && parsedError.data.detail === 'client_not_found') {
+        if (parsedError.success && NOT_BOOKED_DETAILS.has(parsedError.data.detail ?? '')) {
           setOutcome({ kind: 'not-booked' });
           return;
         }
