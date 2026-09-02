@@ -8,7 +8,7 @@ import type { AppointmentListResponse } from '../../app/api/appointments/schema'
 import type { PricesResponse } from '../../app/api/billing/schema';
 import { applySeed } from '../../db/seed/apply';
 import { generateSeed, SEED_TODAY } from '../../db/seed/generate';
-import { deriveIdentityKeys } from '../../domain/shared';
+import { deriveIdentityKeys } from '../../domain/shared/identity';
 import { freshDatabase } from './helpers';
 
 /**

@@ -7,7 +7,7 @@ import type { TimelineResponse } from '../../app/api/audit/schema';
 import { createApi } from '../../app/api/create-api';
 import { applySeed } from '../../db/seed/apply';
 import { generateSeed, SEED_TENANT_ID } from '../../db/seed/generate';
-import { deriveIdentityKeys } from '../../domain/shared';
+import { deriveIdentityKeys } from '../../domain/shared/identity';
 import { asApiRole, freshDatabase, rolledBack } from './helpers';
 
 // Everything synthetic: the seeded practice, a test secret that unlocks nothing,

@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory';
-import type { IdentityKeys } from '@domain/shared';
+import type { IdentityKeys } from '@domain/shared/identity';
 import type { ApiEnv } from './request-context';
 
 /**

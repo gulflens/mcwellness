@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import { timeout } from 'hono/timeout';
-import type { IdentityKeys } from '@domain/shared';
+import type { IdentityKeys } from '@domain/shared/identity';
 import { MeResponse } from './_middleware/actor-schema';
 import { withIdentityKeys } from './_middleware/identity-context';
 import { addressKey, DEFAULT_LIMITS, rateLimit, type RateLimits } from './_middleware/rate-limit';

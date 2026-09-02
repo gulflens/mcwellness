@@ -39,7 +39,7 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 |---|---|
 | `CLAUDE.md`, `.claude/**` | Rules apply to everyone |
 | `docs/SPEC/00-data-model.md`, `docs/SPEC/OWNERSHIP.md` | The contract |
-| `domain/shared/**` | Types every module imports |
+| `domain/shared/**` | Types every module imports. The barrel (`domain/shared/index.ts`) is browser-safe; `domain/shared/identity.ts` is server-only and is imported by its own path, never through the barrel. |
 | `db/migrations/000–099 and 900–999` | Core schema: tenant, user, role, practitioner, credential, service_type, location, client, contact, consent, document, audit_log. The core range is exhausted at 099, so the trunk's own migrations continue at 900. |
 | `db/policies/core/**` | RLS on core tables |
 | `db/seed/**` | Synthetic generators |
