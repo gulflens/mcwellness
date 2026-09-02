@@ -68,6 +68,33 @@ create policy client_record_readers on public.consent as restrictive for select 
   )
 );
 
+-- Documents: the same scope as consent — owner, admin and the lead
+-- practitioner all; finance none (section 2 gives finance demographics and
+-- contacts only); a practitioner through the scheduling door; a client
+-- contact their own. client_id is nullable here (a practice document, such as
+-- a practitioner's certificate or a purpose's consent wording, files against
+-- no client at all): app.client_status_for(null) finds no client row and
+-- returns null, and null <> 'erased' is null, not true, so
+-- app.client_erasure_gate would silently exclude every role but owner and
+-- lead_practitioner from a document that was never client-sensitive in the
+-- first place. A practice document is instead the same not-client-sensitive
+-- case location.sql already has for a tenant- or practitioner-owned location:
+-- visible to the same four staff roles who work from it, never finance, never
+-- a client contact reading someone else's practice, whether erased or not.
+drop policy if exists client_record_readers on public.document;
+create policy client_record_readers on public.document as restrictive for select to app_role using (
+  case when client_id is null then
+    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+    or app.actor_has_role('practitioner')
+  else
+    app.client_erasure_gate(app.client_status_for(client_id)) and (
+      app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+      or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
+      or (app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id))
+    )
+  end
+);
+
 -- Goals: admin may view all (section 2) even though only the owner and the
 -- lead practitioner may set or close one (writers.sql); finance and a client
 -- contact see neither — a goal is practice-side, not portal-visible.
