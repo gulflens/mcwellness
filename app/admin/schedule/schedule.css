@@ -1,0 +1,93 @@
+/*
+  The schedule module's own rules. Tokens only, logical properties only
+  (.claude/rules/ui.md, DESIGN.md). Everything else the screen needs — the
+  page, the toolbar, the ledger table, the drawer shell, fields, buttons,
+  notes — already lives in app/shell/shell.css and is reused as-is.
+*/
+
+/* The day field takes the toolbar's usual search width; the button sits at the far end. */
+.schedule__toolbar-end {
+  margin-inline-start: auto;
+}
+
+/* Appointment status: local to this module (the shared StatusChip is typed to ClientStatus). */
+.appt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.appt-status__dot {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--slate);
+}
+
+.appt-status--ok .appt-status__dot {
+  background: var(--ok);
+}
+
+.appt-status--attention .appt-status__dot {
+  background: var(--attention);
+}
+
+.appt-status--critical .appt-status__dot {
+  background: var(--critical);
+}
+
+/* The new-appointment drawer's steps: the ledger's rhythm, one section per decision. */
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.stepper__step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.stepper__chosen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--paper);
+}
+
+.stepper__results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  max-block-size: 12rem;
+  overflow-y: auto;
+}
+
+.stepper__results .link {
+  display: block;
+  padding-block: var(--s-2);
+}
+
+.stepper__submit {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding-block-start: var(--s-2);
+}
+
+/* A 409 or a 400's issues, each a plain-language line in the critical tone. */
+.issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.issues__item {
+  color: var(--critical);
+}

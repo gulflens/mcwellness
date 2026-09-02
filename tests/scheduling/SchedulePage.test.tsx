@@ -1,0 +1,84 @@
+// @vitest-environment jsdom
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SchedulePage } from '../../app/admin/schedule/SchedulePage';
+import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
+import type { AuthProvider } from '../../app/shell/auth/types';
+
+afterEach(cleanup);
+
+const provider: AuthProvider = {
+  kind: 'development',
+  signIn: async () => undefined,
+  signOut: async () => undefined,
+  getAccessToken: async () => null,
+  onChange: () => () => undefined,
+};
+
+const appointment = {
+  id: '00000008-0000-4000-8000-000000000101',
+  windowStart: '2026-09-10T05:00:00.000Z',
+  windowEnd: '2026-09-10T05:45:00.000Z',
+  status: 'confirmed' as const,
+  deliveryMode: 'home' as const,
+  client: { id: '00000008-0000-4000-8000-000000000001', givenName: 'Iris', familyName: 'Cliff' },
+  practitioner: { id: '00000008-0000-4000-8000-000000000002', displayName: 'Cedar Ridge' },
+  serviceType: { id: '00000008-0000-4000-8000-000000000003', name: 'Standard session' },
+  location: { id: '00000008-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
+};
+
+function renderPage(fetchImpl: typeof fetch) {
+  return render(
+    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+      <SchedulePage />
+    </AuthProviderBoundary>,
+  );
+}
+
+describe('SchedulePage', () => {
+  it("renders the day's appointments as rows with their window, client, practitioner, service, delivery and status", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: [appointment] }), { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    await waitFor(() => expect(screen.getByRole('cell', { name: /Iris Cliff/ })).toBeTruthy());
+    expect(screen.getByRole('cell', { name: 'Cedar Ridge' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Standard session' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: 'Home' })).toBeTruthy();
+    expect(screen.getByText('Confirmed')).toBeTruthy();
+    expect(screen.getByText('09:00–09:45')).toBeTruthy();
+    expect(screen.getByText('1 appointment')).toBeTruthy();
+  });
+
+  it('shows the empty line in plain words when no appointments are booked', async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ appointments: [] }), { status: 200 }),
+    ) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    await waitFor(() =>
+      expect(screen.getByText('No appointments are booked for this day.')).toBeTruthy(),
+    );
+  });
+
+  it('answers a failed load with a plain-words error, not a blank table', async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response('nope', { status: 500 }),
+    ) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("The day's appointments could not be loaded. Try again."),
+      ).toBeTruthy(),
+    );
+  });
+});
