@@ -165,6 +165,22 @@ beforeAll(async () => {
       ]);
       return c.json({ promote, takeover: takeover.rowCount });
     })
+    .post('/probe/relink', async (c) => {
+      // The identity-link route to ownership: free my own auth id, then write it
+      // onto the owner's row. Rolled back to the savepoint so nothing persists.
+      const db = c.get('db');
+      const { authId } = (await c.req.json()) as { authId: string };
+      await db.query('savepoint relink');
+      const freed = await db.query('update app_user set auth_id = null where id = $1', [
+        c.get('actor').userId,
+      ]);
+      const relinked = await db.query(
+        "update app_user set auth_id = $1 where id in (select user_id from user_role where role = 'owner')",
+        [authId],
+      );
+      await db.query('rollback to savepoint relink');
+      return c.json({ freed: freed.rowCount, relinked: relinked.rowCount });
+    })
     .post('/probe/swallow', async (c) => {
       // A route that hides a database error must not be told it committed.
       try {
@@ -385,6 +401,24 @@ describe('the request context', () => {
     const after = await owner.query("select user_id from user_role where role = 'owner'");
     expect(after.rows).toEqual(before.rows);
     expect(after.rows).toHaveLength(1);
+  });
+
+  it("lets no admin move the owner's sign-in link onto themselves", async () => {
+    const before = await owner.query(
+      "select u.auth_id from app_user u join user_role r on r.user_id = u.id where r.role = 'owner'",
+    );
+    const res = await probe.request('/probe/relink', {
+      method: 'POST',
+      headers: { ...bearer(tokens.admin).headers, 'content-type': 'application/json' },
+      body: JSON.stringify({ authId: AUTH.adminA }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ freed: 1, relinked: 0 });
+    const after = await owner.query(
+      "select u.auth_id from app_user u join user_role r on r.user_id = u.id where r.role = 'owner'",
+    );
+    expect(after.rows).toEqual(before.rows);
+    expect(after.rows).toEqual([{ auth_id: AUTH.ownerA }]);
   });
 
   it('answers 500 and saves nothing when a route swallows a database error', async () => {

@@ -31,3 +31,19 @@ drop policy if exists owner_keeps_owner on public.user_role;
 create policy owner_keeps_owner on public.user_role as restrictive for update to app_role
   using (role <> 'owner' or app.actor_has_role('owner'))
   with check (role <> 'owner' or app.actor_has_role('owner'));
+
+-- The row that holds ownership is the owner's alone: no admin may edit it, so
+-- the identity link cannot be moved onto someone else and the owner cannot be
+-- suspended or renamed by anyone but themselves.
+drop policy if exists owner_keeps_identity on public.app_user;
+create policy owner_keeps_identity on public.app_user as restrictive for update to app_role
+  using (app.actor_has_role('owner')
+         or not exists (select 1 from public.user_role r
+                         where r.user_id = app_user.id
+                           and r.tenant_id = app_user.tenant_id
+                           and r.role = 'owner'))
+  with check (app.actor_has_role('owner')
+         or not exists (select 1 from public.user_role r
+                         where r.user_id = app_user.id
+                           and r.tenant_id = app_user.tenant_id
+                           and r.role = 'owner'));

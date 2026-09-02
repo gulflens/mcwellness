@@ -112,6 +112,7 @@ revoke execute on function app.audit_row() from public;
 --   -- every policy file on each migrate, and those policies depend on actor_has_role.
 --   drop policy if exists admin_inserts_only on public.app_user;
 --   drop policy if exists admin_updates_only on public.app_user;
+--   drop policy if exists owner_keeps_identity on public.app_user;
 --   drop policy if exists admin_inserts_only on public.user_role;
 --   drop policy if exists admin_updates_only on public.user_role;
 --   drop policy if exists owner_grants_owner on public.user_role;
