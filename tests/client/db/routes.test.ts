@@ -213,4 +213,27 @@ describe('GET /api/clients/:id — whole record', () => {
     const other = await request(HOUSEHOLD_AUTH, `/api/clients/${someoneElses.id}`);
     expect(other.status).toBe(403);
   });
+
+  it('opens an erased record only with a reason, even for the owner', async () => {
+    const created = (await (
+      await request(AUTH.ownerA, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Rowan',
+          familyName: 'Erased',
+          contact: { relationship: 'self', phone: '+971500001193' },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+    await owner.query("update client set status = 'erased' where id = $1", [created.id]);
+
+    const withoutReason = await request(AUTH.ownerA, `/api/clients/${created.id}`);
+    expect(withoutReason.status).toBe(400);
+    expect(((await withoutReason.json()) as { error: string }).error).toBe('reason_required');
+
+    const withReason = await request(AUTH.ownerA, `/api/clients/${created.id}`, {
+      headers: { 'x-reason': 'Confirming the erasure for a compliance check' },
+    });
+    expect(withReason.status).toBe(200);
+  });
 });
