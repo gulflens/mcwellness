@@ -101,6 +101,10 @@ export default defineConfig([
   globalIgnores(['node_modules/', 'dist/', 'coverage/', '.claude/', 'docs/']),
   js.configs.recommended,
   tseslint.configs.recommended,
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
+  },
   { files: ['app/**/*.{ts,tsx}'], ...reactHooks.configs.flat.recommended },
   {
     files: ['app/**/*.{ts,tsx}'],

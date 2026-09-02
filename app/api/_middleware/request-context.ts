@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import type pg from 'pg';
 import { z } from 'zod';
+import { cleanText } from './text';
 import type { Actor } from '@domain/shared';
 import { ResolvedActorRow } from './actor-schema';
 import type { TokenVerifier } from './token-verifier';
@@ -35,7 +36,7 @@ export type PoolLike = { connect(): Promise<PoolClientLike> };
 export type RequestContextDeps = { pool: PoolLike; verifier: TokenVerifier };
 
 const RequestId = z.uuid();
-const Reason = z.string().trim().max(500);
+const Reason = z.string().transform((value) => cleanText(value, 500));
 
 // A pasted token or key must never reach the trail (audit.md section 8): a JWT, or any
 // run of 32 or more key-looking characters, is replaced before the reason is stamped.

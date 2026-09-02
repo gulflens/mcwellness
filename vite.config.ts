@@ -21,7 +21,8 @@ export default defineConfig({
       '/api': { target: 'http://127.0.0.1:3000', changeOrigin: false },
     },
   },
-  build: { outDir: 'dist', emptyOutDir: true },
+  // Nothing is inlined as a data: URI: the content security policy allows only the app's own files.
+  build: { outDir: 'dist', emptyOutDir: true, assetsInlineLimit: 0 },
   test: {
     environment: 'node',
     // Database tests live under tests/db and run through vitest.db.config.ts.

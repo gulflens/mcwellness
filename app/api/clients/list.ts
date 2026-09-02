@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 import { ageOn, canActor, hasRole, isoDateIn } from '../../../domain/shared';
 import { logReads } from '../_middleware/audit';
+import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
 
 /**
@@ -18,7 +19,10 @@ const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
 const Query = z.object({
   status: z.enum(STATUSES).optional(),
-  q: z.string().trim().max(80).optional(),
+  q: z
+    .string()
+    .transform((value) => cleanText(value, 80))
+    .optional(),
 });
 
 type Row = {
