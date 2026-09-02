@@ -29,8 +29,14 @@ import {
 const PORTAL_USER = '00000000-0000-4000-8000-0000000000f9';
 const DOCUMENT = '00000000-0000-4000-8000-0000000000fa';
 const ERASURE_REQUEST = '00000000-0000-4000-8000-0000000000fb';
+const PRACTICE_DOCUMENT = '00000000-0000-4000-8000-0000000000fc';
+const SIGNATURE_DOCUMENT = '00000000-0000-4000-8000-0000000000fd';
+const CONSENT = '00000000-0000-4000-8000-0000000000fe';
+const GOAL = '00000000-0000-4000-8000-000000000100';
+const MISMATCHED_ERASURE_REQUEST = '00000000-0000-4000-8000-000000000101';
 
 let owner: pg.Client;
+let goalCategoryId: string;
 
 beforeAll(async () => {
   owner = await freshDatabase();
@@ -69,6 +75,41 @@ beforeAll(async () => {
       "values ($1, $2, $3, 'setup_photo', 'erase-test/photo.jpg', 'image/jpeg', sha256('x'::bytea))",
     [DOCUMENT, IDS.tenantA, IDS.clientA],
   );
+
+  // A practice document (client_id null) for a consent's text_document_id — the wording
+  // shown, never deleted by an erasure that is never about it — and a client-owned
+  // document for the signature itself (method app_signature), which the delete in step 6
+  // would otherwise abort on: consent.signature_document_id still names it (issue 1).
+  await owner.query(
+    'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256) ' +
+      "values ($1, $2, null, 'consent_wording', 'erase-test/wording.pdf', 'application/pdf', sha256('w'::bytea))",
+    [PRACTICE_DOCUMENT, IDS.tenantA],
+  );
+  await owner.query(
+    'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256) ' +
+      "values ($1, $2, $3, 'signed_consent', 'erase-test/signature.png', 'image/png', sha256('s'::bytea))",
+    [SIGNATURE_DOCUMENT, IDS.tenantA, IDS.clientA],
+  );
+  await owner.query(
+    'insert into consent (id, tenant_id, client_id, given_by_contact_id, purpose, version, ' +
+      'text_document_id, method, signature_document_id) ' +
+      "values ($1, $2, $3, $4, 'participation', 1, $5, 'app_signature', $6)",
+    [CONSENT, IDS.tenantA, IDS.clientA, IDS.contactA, PRACTICE_DOCUMENT, SIGNATURE_DOCUMENT],
+  );
+
+  // A goal (client-record.md section 4.2; issue 3): description is free text and must be
+  // cleared; status and category are structured, not personal data on their own, and stay.
+  const focus = await owner.query<{ id: string }>(
+    "select id from goal_category where tenant_id = $1 and code = 'focus'",
+    [IDS.tenantA],
+  );
+  goalCategoryId = focus.rows[0]?.id ?? '';
+  if (!goalCategoryId) throw new Error('seedTenant did not seed the "focus" goal category.');
+  await owner.query(
+    'insert into goal (id, tenant_id, client_id, category_id, description, status, is_primary) ' +
+      "values ($1, $2, $3, $4, $5, 'active', true)",
+    [GOAL, IDS.tenantA, IDS.clientA, goalCategoryId, 'Feels overwhelmed before school'],
+  );
 });
 
 afterAll(async () => {
@@ -105,8 +146,17 @@ describe('app.erase_client', () => {
         contactsAnonymised: 1,
         portalAccountsArchived: 1,
         locationsReduced: 1,
-        documentsDeleted: 1,
+        goalsCleared: 1,
+        consentsUnlinked: 1,
+        // DOCUMENT and SIGNATURE_DOCUMENT, both client_id = clientA; PRACTICE_DOCUMENT
+        // (client_id null, the consent wording) is never touched (issue 1, issue 2).
+        documentsDeleted: 2,
       });
+      const storageKeysToDelete = summary.storage_keys_to_delete as { id: string }[];
+      expect(storageKeysToDelete).toHaveLength(2);
+      expect(new Set(storageKeysToDelete.map((d) => d.id))).toEqual(
+        new Set([DOCUMENT, SIGNATURE_DOCUMENT]),
+      );
 
       const client = await owner.query(
         'select given_name, family_name, given_name_ar, family_name_ar, date_of_birth, ' +
@@ -138,10 +188,17 @@ describe('app.erase_client', () => {
         user_id: null,
       });
 
-      const portalUser = await owner.query('select status from app_user where id = $1', [
-        PORTAL_USER,
-      ]);
-      expect(portalUser.rows[0]?.status).toBe('archived');
+      const portalUser = await owner.query(
+        'select display_name, email, phone, auth_id, status from app_user where id = $1',
+        [PORTAL_USER],
+      );
+      expect(portalUser.rows[0]).toMatchObject({
+        display_name: 'Erased user',
+        email: null,
+        phone: null,
+        auth_id: null,
+        status: 'archived',
+      });
 
       const location = await owner.query(
         'select makani_number, display_address, access_notes, parking_point, community_gate, ' +
@@ -162,6 +219,35 @@ describe('app.erase_client', () => {
 
       const document = await owner.query('select id from document where id = $1', [DOCUMENT]);
       expect(document.rowCount).toBe(0);
+      const signatureDocument = await owner.query('select id from document where id = $1', [
+        SIGNATURE_DOCUMENT,
+      ]);
+      expect(signatureDocument.rowCount).toBe(0);
+      // Never touched: client_id is null, the practice's own consent wording (issue 1).
+      const practiceDocument = await owner.query('select id from document where id = $1', [
+        PRACTICE_DOCUMENT,
+      ]);
+      expect(practiceDocument.rowCount).toBe(1);
+
+      const consent = await owner.query(
+        'select text_document_id, signature_document_id from consent where id = $1',
+        [CONSENT],
+      );
+      expect(consent.rows[0]).toMatchObject({
+        text_document_id: PRACTICE_DOCUMENT,
+        signature_document_id: null,
+      });
+
+      const goal = await owner.query(
+        'select description, status, category_id, is_primary from goal where id = $1',
+        [GOAL],
+      );
+      expect(goal.rows[0]).toMatchObject({
+        description: '',
+        status: 'active',
+        category_id: goalCategoryId,
+        is_primary: true,
+      });
 
       const request = await owner.query(
         'select performed_at, summary from erasure_request where id = $1',
@@ -181,6 +267,31 @@ describe('app.erase_client', () => {
       await expect(
         owner.query('select app.erase_client($1, $2)', [IDS.clientA, ERASURE_REQUEST]),
       ).rejects.toThrow(/already erased/);
+    });
+  });
+
+  it('raises when the erasure request does not name this client, and erases nothing', async () => {
+    await rolledBack(owner, async () => {
+      // MISMATCHED_ERASURE_REQUEST names no row at all, so the final update inside
+      // app.erase_client matches nothing; it raises rather than returning quietly, and
+      // Postgres rolls the whole statement back with it — client, contacts, locations,
+      // goals, consents and documents all as they were (issue 5).
+      await setAuditContext(owner, IDS.ownerA);
+      await actAs('owner');
+      await rejectsWith(owner, 'P0002', 'select app.erase_client($1, $2)', [
+        IDS.clientA,
+        MISMATCHED_ERASURE_REQUEST,
+      ]);
+
+      const client = await owner.query<{ status: string; given_name: string }>(
+        'select status, given_name from client where id = $1',
+        [IDS.clientA],
+      );
+      expect(client.rows[0]?.status).not.toBe('erased');
+      expect(client.rows[0]?.given_name).not.toBe('Erased client');
+
+      const document = await owner.query('select id from document where id = $1', [DOCUMENT]);
+      expect(document.rowCount).toBe(1);
     });
   });
 

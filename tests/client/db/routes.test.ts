@@ -16,8 +16,10 @@ import { IDS, AUTH, freshDatabase, seedTenant, seedUser } from '../../db/helpers
  * docs/CHANGE-REQUESTS/client-record-01.md's app/api/create-api.ts change
  * lands: this test mounts them itself on the api createApi returns
  * (docs/SPEC/OWNERSHIP.md; "Client Record Plan" PR 2). Covers what the plan
- * names specifically: MRN allocation gapless under two concurrent inserts,
- * and the refused audit row for a 404 on a role-plausible attempt.
+ * names specifically: MRN allocation gapless under two concurrent inserts and
+ * still correct once the highest-MRN client is erased, and which refused
+ * attempts are audited and which are not (third review round, issues 12
+ * and 13).
  */
 
 const SECRET = 'test-secret-that-unlocks-nothing-0123456789';
@@ -27,6 +29,8 @@ const PRACTITIONER_ID = '00000000-0000-4000-8000-0000000000e5';
 const PRACTITIONER_AUTH = '00000000-0000-4000-8000-0000000000e6';
 const HOUSEHOLD_ID = '00000000-0000-4000-8000-0000000000e7';
 const HOUSEHOLD_AUTH = '00000000-0000-4000-8000-0000000000e8';
+const ADMIN_ID = '00000000-0000-4000-8000-0000000000f1';
+const ADMIN_AUTH = '00000000-0000-4000-8000-0000000000f2';
 
 let owner: pg.Client;
 let pool: pg.Pool;
@@ -67,6 +71,13 @@ beforeAll(async () => {
     authId: HOUSEHOLD_AUTH,
     displayName: 'Synthetic Household',
     roles: ['client_contact'],
+  });
+  await seedUser(owner, {
+    id: ADMIN_ID,
+    tenantId: IDS.tenantA,
+    authId: ADMIN_AUTH,
+    displayName: 'Synthetic Admin',
+    roles: ['admin'],
   });
 
   const apiUrl = process.env.API_DATABASE_URL;
@@ -123,25 +134,61 @@ describe('POST /api/clients — MRN allocation', () => {
       expect(numbers[i]).toBe((numbers[i - 1] ?? 0) + 1);
     }
   });
+
+  it('still allocates the next number after the highest-MRN client is erased', async () => {
+    const highest = (await (
+      await request(AUTH.ownerA, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Juniper',
+          familyName: 'Highest',
+          contact: { relationship: 'self', phone: '+971500001196' },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+    const expectedNext = highest.mrn.replace(/(\d+)$/, (digits) =>
+      String(Number(digits) + 1).padStart(digits.length, '0'),
+    );
+
+    const erased = await request(AUTH.ownerA, `/api/clients/${highest.id}/erasure-requests`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Household asked to be forgotten' }),
+    });
+    expect(erased.status).toBe(201);
+
+    // As admin, not owner: db/policies/client/readers.sql hides an erased row from
+    // admin, so this is the case app.next_mrn (db/migrations/100_client_record.sql)
+    // exists for — an owner-only request would never have exercised the bug.
+    const next = (await (
+      await request(ADMIN_AUTH, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Sequoia',
+          familyName: 'NextInLine',
+          contact: { relationship: 'self', phone: '+971500001197' },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+    expect(next.mrn).toBe(expectedNext);
+  });
 });
 
 describe('a refused attempt is audited', () => {
-  it('writes a refused row and a 404 when a role-plausible actor targets a client that is not there', async () => {
-    const missingId = '00000000-0000-4000-8000-0000000000e9';
-    const requestId = '00000000-0000-4000-8000-0000000000ea';
+  it('writes nothing for a 404 on an id that was never a client — nothing to name', async () => {
+    const missingId = '00000000-0000-4000-8000-0000000000fc';
+    const requestId = '00000000-0000-4000-8000-0000000000fd';
     const res = await request(AUTH.ownerA, `/api/clients/${missingId}`, {
       headers: { 'x-request-id': requestId },
     });
     expect(res.status).toBe(404);
     const { rows } = await owner.query<{ n: string }>(
-      "select count(*)::text as n from audit_log where action = 'refused' and entity_type = 'client' " +
-        'and entity_id = $1 and request_id = $2',
-      [missingId, requestId],
+      "select count(*)::text as n from audit_log where action = 'refused' and request_id = $1",
+      [requestId],
     );
-    expect(rows[0]?.n).toBe('1');
+    expect(rows[0]?.n).toBe('0');
   });
 
-  it('never writes a refused row for a plain role mismatch — the practitioner has no schedule to check', async () => {
+  it('writes a refused row for a role refusal on a collection — POST /api/clients names no row', async () => {
     const requestId = '00000000-0000-4000-8000-0000000000ec';
     const res = await request(PRACTITIONER_AUTH, '/api/clients', {
       method: 'POST',
@@ -154,10 +201,39 @@ describe('a refused attempt is audited', () => {
     });
     expect(res.status).toBe(403);
     const { rows } = await owner.query<{ n: string }>(
-      "select count(*)::text as n from audit_log where action = 'refused' and request_id = $1",
+      "select count(*)::text as n from audit_log where action = 'refused' and entity_type = 'client' " +
+        'and entity_id = $1 and client_id is null and request_id = $1',
       [requestId],
     );
-    expect(rows[0]?.n).toBe('0');
+    expect(rows[0]?.n).toBe('1');
+  });
+
+  it('writes a refused row for a 403 that names a row which exists — a practitioner reading any client', async () => {
+    const created = (await (
+      await request(AUTH.ownerA, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Clove',
+          familyName: 'NamedRow',
+          contact: { relationship: 'self', phone: '+971500001198' },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+    const requestId = '00000000-0000-4000-8000-0000000000fe';
+
+    // The scheduling door is shut (app.client_visible_to_practitioner always answers
+    // false, db/migrations/100_client_record.sql), so a practitioner is refused every
+    // client, this real one included — a 403, not a 404, and logged as one.
+    const res = await request(PRACTITIONER_AUTH, `/api/clients/${created.id}`, {
+      headers: { 'x-request-id': requestId },
+    });
+    expect(res.status).toBe(403);
+    const { rows } = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'refused' and entity_type = 'client' " +
+        'and entity_id = $1 and client_id = $1 and request_id = $2',
+      [created.id, requestId],
+    );
+    expect(rows[0]?.n).toBe('1');
   });
 });
 

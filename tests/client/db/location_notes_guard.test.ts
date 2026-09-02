@@ -94,4 +94,43 @@ describe('app.guard_location_notes', () => {
       expect(rows[0]?.display_address).toBe('Villa 12, Street 4');
     });
   });
+
+  it('refuses a practitioner changing a column the old enumerated check never named', async () => {
+    // created_by was never in the guard's original column-by-column list — the exact gap
+    // a structural to_jsonb(new) minus to_jsonb(old) comparison closes, so a column added
+    // to location tomorrow is covered without anyone remembering to add it here (issue 9).
+    await rolledBack(owner, async () => {
+      await asPractitioner(async () => {
+        // seedLocation already set created_by to IDS.ownerA (tests/db/helpers.ts), so the
+        // change under test has to be to something else — null is a genuine change and a
+        // valid one, since the column is nullable.
+        await rejectsWith(
+          owner,
+          INSUFFICIENT_PRIVILEGE,
+          'update location set created_by = null where id = $1',
+          [IDS.locationA],
+        );
+      });
+    });
+  });
+
+  it("does nothing when app.actor_roles is unset — the owner's own maintenance, never a request", async () => {
+    // set_config(..., true) is transaction-local (tests/db/helpers.ts's rolledBack begins a
+    // fresh transaction per test), so app.actor_roles starts unset here: no asPractitioner,
+    // no owner role, nothing at all. A seed script or a console session in this shape must
+    // still be able to write a location; only a request through the API ever stamps a role
+    // (096_api_role.sql), so this is never a practitioner's write slipping past the guard.
+    await rolledBack(owner, async () => {
+      await owner.query(
+        'update location set display_address = $1, is_primary = true where id = $2',
+        ['No role assumed at all', IDS.locationA],
+      );
+      const { rows } = await owner.query<{ display_address: string; is_primary: boolean }>(
+        'select display_address, is_primary from location where id = $1',
+        [IDS.locationA],
+      );
+      expect(rows[0]?.display_address).toBe('No role assumed at all');
+      expect(rows[0]?.is_primary).toBe(true);
+    });
+  });
 });
