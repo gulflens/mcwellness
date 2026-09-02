@@ -32,6 +32,7 @@ create table session (
   updated_at        timestamptz not null default now(),
   created_by        uuid references app_user (id)
 );
+comment on table session is 'audited: client';
 create index session_tenant_idx on session (tenant_id);
 create index session_client_idx on session (client_id, created_at);
 create index session_practitioner_idx on session (practitioner_id, created_at);
@@ -61,6 +62,7 @@ create table session_event (
   received_at      timestamptz not null default now(),
   unique (session_id, seq)
 );
+comment on table session_event is 'audited: client';
 create index session_event_session_idx on session_event (session_id, seq);
 create index session_event_tenant_idx on session_event (tenant_id);
 create index session_event_client_idx on session_event (client_id);

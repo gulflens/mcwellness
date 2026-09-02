@@ -74,11 +74,19 @@ brief; this is the shape of the change, not the final wording.)
 
 ---
 
-## 3. `tests/db/schema.test.ts` asserts an exact, trunk-only schema
+## 3. `tests/db/schema.test.ts` still asserts an exact, trunk-only schema
 
-**What.** Three assertions in this trunk-owned file compare a live query
-against a hardcoded list or count that only accounts for the trunk's own 11
-core tables and 3 core policy files:
+Not a request against `tests/db/audit.test.ts` any more: its `'every audited
+table is classified'` test is being moved, on the coordinator's direction,
+to read a table comment instead of three hardcoded lists, and migration 300
+already carries `comment on table session is 'audited: client';` and the
+same for `session_event` — both hold a uuid `client_id`. Until that move
+merges, `tests/db/audit.test.ts` still fails against this branch on the old,
+hardcoded lists; once it does, this branch needs no further change.
+
+**What remains.** Three assertions in `tests/db/schema.test.ts` compare a
+live query against a hardcoded list or count that only accounts for the
+trunk's own 11 core tables and 3 core policy files:
 
 - `'has exactly the section 2 and 3 tables plus audit_log and the bookkeeping
   tables'` — `expect(rows...).toEqual([...CORE_TABLES, 'audit_log',
@@ -95,23 +103,23 @@ data — CLAUDE.md rule 5, `.claude/rules/compliance.md`), and
 `db/policies/session/` adds two more policy files. That is exactly what a
 stream's own migration is supposed to do (00-data-model.md section 1: every
 table gets the trigger; OWNERSHIP.md: a stream owns its own
-`db/policies/<module>/`), yet it makes these three trunk assertions fail —
-not because anything is wrong, but because the test enumerates "every table"
-and "every policy file" instead of scoping itself to the trunk's own. The
-same three assertions will break again the moment `scheduling`, `billing` or
-any later stream adds its first migration. It is the same shape of problem
-`app.audit_client_id` and `vitest.db.config.ts` already had fixed in
-`shared-zone-round-1` (a trunk artifact hardcoded against "today's tables"
-rather than "the trunk's own tables") — this is the one instance from that
-same sweep that wasn't caught yet, because no stream had added a table
-before now.
+`db/policies/<module>/`), yet it makes these three assertions fail — not
+because anything is wrong, but because each enumerates "every table" or
+"every policy file" instead of scoping itself to the trunk's own. The same
+assertions will break again the moment `scheduling`, `billing` or any later
+stream adds its first migration. It is the same shape of problem
+`app.audit_client_id`, `vitest.db.config.ts` and (once the comment
+convention lands) `audit.test.ts`'s classification test already had fixed —
+a trunk artifact hardcoded against "today's tables" rather than "the
+trunk's own tables". This file is the one that sweep hasn't reached yet.
 
 Locally, restricted to `tests/session/db/**`, `pnpm test:db` is fully green
-(17 of 17). The three failures above are the only failures in a full
-`pnpm test:db` run and are reproducible on `origin/shared-zone-round-1`
-alone, with no session-capture migration applied — they are pre-existing,
-not introduced by this pull request; migration 300 only makes them visible
-for the first time.
+(17 of 17). These three, plus `audit.test.ts`'s classification test until
+its own fix lands, are the only failures in a full `pnpm test:db` run and
+are reproducible on `origin/main` alone, with no session-capture migration
+applied — pre-existing, not introduced by this pull request; migration 300
+only makes them visible for the first time, the same way `client-record`'s
+own first migration will when it lands one.
 
 **Proposed diff** (illustrative — the exact rewrite is the trunk's call):
 
