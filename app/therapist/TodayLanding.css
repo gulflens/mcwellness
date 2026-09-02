@@ -1,0 +1,12 @@
+/*
+  This screen's own layout. The single value here is a token from
+  app/shell/tokens.css; no hardcoded sizes or colours (.claude/rules/ui.md).
+*/
+
+/* The one primary action on this face, sized to the practitioner-app tap
+   floor (docs/DESIGN-BRIEF.md section 4.3: minimum tap target 48px) and set
+   full width so it is easy to reach with a thumb rather than a precise tap. */
+.today__primary {
+  inline-size: 100%;
+  min-block-size: var(--tap);
+}
