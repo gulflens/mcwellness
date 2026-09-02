@@ -6,7 +6,7 @@ import {
   type CheckInConsentPurpose,
   type SessionEvent,
 } from '@domain/session';
-import { hasRole } from '@domain/shared';
+import { hasRole, isoDateIn, type IsoDate } from '@domain/shared';
 import { logRefusal } from './audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { CheckInRequest, CheckInResponse } from './schema';
@@ -43,9 +43,17 @@ const DEVICE_CLOCK_WINDOW_MS = 15 * 60 * 1000;
 
 type ExistingSessionRow = { id: string; checked_in_at: Date; practitioner_id: string };
 type PractitionerRow = { id: string };
-type ClientRow = { date_of_birth: string | null };
 type ServiceTypeRow = { id: string };
-type ConsentRow = { purpose: string };
+// Mirrors app.checkin_context's return row (db/migrations/301_checkin_context.sql):
+// deliberately narrower than the client table itself — no name, no contact
+// detail, nothing beyond what canCheckIn's gate reads.
+type CheckinContextRow = {
+  found: boolean;
+  status: string;
+  has_date_of_birth: boolean;
+  is_minor: boolean;
+  active_consent_purposes: string[];
+};
 
 export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.post('/api/sessions/:id/events', async (c) => {
@@ -138,12 +146,27 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // Defensive re-check: a foreign key alone does not stop a caller naming
     // another tenant's real client or service type. Row security governs
     // what a query can see, not what a literal id can reference on insert.
-    const client = await db.query<ClientRow>(
-      'select date_of_birth from client where id = $1 and tenant_id = app.current_tenant_id()',
+    //
+    // The client-record stream (pull request 21, not yet merged into this
+    // worktree) adds restrictive read policies under which a practitioner
+    // sees a client only when app.client_visible_to_practitioner() says so —
+    // and today it always says no, because the scheduling stream that fills
+    // it in has not landed either. A direct select here would see nothing the
+    // moment that stream merges. app.checkin_context (301_checkin_context.sql)
+    // is the door this route uses instead: security definer, so it reads
+    // straight through that gate, and narrow — status, whether a date of
+    // birth is on file, whether the client counts as a minor today, and the
+    // consent purposes canCheckIn's gate actually reads. Never a name, never
+    // a contact detail. found = false is this function's own tenant check: it
+    // covers both "no such client" and "a client belonging to another
+    // tenant", exactly as the old direct select's empty result did.
+    const context = await db.query<CheckinContextRow>(
+      'select found, status, has_date_of_birth, is_minor, active_consent_purposes ' +
+        'from app.checkin_context($1)',
       [parsed.data.clientId],
     );
-    const clientRow = client.rows[0];
-    if (!clientRow) {
+    const contextRow = context.rows[0];
+    if (!contextRow?.found) {
       await logRefusal(db, 'session', sessionId, null, ['client_not_found']);
       return c.json({ error: 'bad_request', requestId, detail: 'client_not_found' }, 400);
     }
@@ -156,21 +179,39 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', requestId, detail: 'service_type_not_found' }, 400);
     }
 
-    // Consent as of this moment (00-data-model.md section 3: every session
-    // start checks it fresh, never a cached flag).
-    const consents = await db.query<ConsentRow>(
-      'select purpose from consent where client_id = $1 and tenant_id = app.current_tenant_id() ' +
-        "and status = 'active' and (expires_at is null or expires_at > now())",
-      [parsed.data.clientId],
-    );
-    const activeConsentPurposes = consents.rows.map((row) => row.purpose).filter(isConsentPurpose);
+    // app.checkin_context already scoped this to consent as of now (00-data-
+    // model.md section 3: every session start checks it fresh, never a cached
+    // flag) and to the three purposes canCheckIn reads; this filter is the
+    // same type narrowing isConsentPurpose always did, now over a shorter list.
+    const activeConsentPurposes = contextRow.active_consent_purposes.filter(isConsentPurpose);
+
+    // canCheckIn (domain/session/canCheckIn.ts) takes one actual date of
+    // birth and works out both "is one on file" and "is it a minor's" from
+    // that single value — but app.checkin_context deliberately hands back
+    // only the two booleans, never the date itself (comment above). This
+    // proxy feeds canCheckIn a date that lands on the correct side of every
+    // branch it takes without ever being the client's real date of birth:
+    // null when none is on file (canCheckIn's own "unknown" branch); today,
+    // in the practice's zone, when the client is a minor (age zero is always
+    // under 18); today less a century when the client is not (always 18 or
+    // over, for any date this app will ever run on). canCheckIn's own
+    // PRACTICE_TIME_ZONE constant is 'Asia/Dubai' — the same zone
+    // app.checkin_context judges is_minor in and the same one used here — so
+    // the two can never disagree about which side of midnight "today" is on.
+    const today = isoDateIn(now(), 'Asia/Dubai');
+    const [todayYear, todayMonth, todayDay] = today.split('-');
+    const clientDateOfBirth: IsoDate | null = !contextRow.has_date_of_birth
+      ? null
+      : contextRow.is_minor
+        ? today
+        : `${Number(todayYear) - 100}-${todayMonth}-${todayDay}`;
 
     const gate = canCheckIn(
       {
         actor,
         serviceTypeId: started.payload.serviceTypeId,
         deliveryMode: started.payload.deliveryMode,
-        clientDateOfBirth: clientRow.date_of_birth,
+        clientDateOfBirth,
         activeConsentPurposes,
       },
       now(),
