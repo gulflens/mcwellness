@@ -54,7 +54,7 @@ describe('canActor', () => {
       const a = actor([role]);
       expect(canActor(a, { type: 'client.read', clientId: CLIENT }, {}, NOW)).toBe(true);
       expect(canActor(a, { type: 'client.write', clientId: CLIENT }, {}, NOW)).toBe(true);
-      expect(canActor(a, { type: 'user_role.grant' }, {}, NOW)).toBe(true);
+      expect(canActor(a, { type: 'user_role.grant', role: 'finance' }, {}, NOW)).toBe(true);
     }
   });
 
@@ -63,8 +63,20 @@ describe('canActor', () => {
       const a = actor([role]);
       expect(canActor(a, { type: 'client.read', clientId: CLIENT }, {}, NOW)).toBe(true);
       expect(canActor(a, { type: 'client.write', clientId: CLIENT }, {}, NOW)).toBe(false);
-      expect(canActor(a, { type: 'user_role.grant' }, {}, NOW)).toBe(false);
+      expect(canActor(a, { type: 'user_role.grant', role: 'finance' }, {}, NOW)).toBe(false);
     }
+  });
+
+  it('lets only the owner hand out ownership', () => {
+    expect(canActor(actor(['admin']), { type: 'user_role.grant', role: 'owner' }, {}, NOW)).toBe(
+      false,
+    );
+    expect(canActor(actor(['admin']), { type: 'user_role.grant', role: 'finance' }, {}, NOW)).toBe(
+      true,
+    );
+    expect(canActor(actor(['owner']), { type: 'user_role.grant', role: 'owner' }, {}, NOW)).toBe(
+      true,
+    );
   });
 
   it('lets finance read a client but never write one, execute a session or read the audit trail', () => {

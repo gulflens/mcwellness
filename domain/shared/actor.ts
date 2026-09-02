@@ -41,7 +41,7 @@ export type Actor = {
 export type Action =
   | { type: 'client.read'; clientId: string }
   | { type: 'client.write'; clientId: string }
-  | { type: 'user_role.grant' }
+  | { type: 'user_role.grant'; role: Role }
   | { type: 'session.execute'; serviceTypeId: string; on: IsoDate }
   | { type: 'report.sign'; serviceTypeId?: string }
   | { type: 'audit.read'; clientId: string };
@@ -87,6 +87,10 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'client.write':
       return hasRole(actor, 'owner', 'admin');
     case 'user_role.grant':
+      // Ownership is handed out by the owner alone; RLS says the same.
+      if (action.role === 'owner') {
+        return hasRole(actor, 'owner');
+      }
       return hasRole(actor, 'owner', 'admin');
     case 'session.execute':
       return (

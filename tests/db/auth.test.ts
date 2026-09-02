@@ -145,6 +145,26 @@ beforeAll(async () => {
         return c.json({ code: (error as { code?: string }).code }, 409);
       }
     })
+    .post('/probe/escalate', async (c) => {
+      // The two ways an admin might reach ownership through an update.
+      const db = c.get('db');
+      const me = c.get('actor').userId;
+      await db.query('savepoint escalate');
+      let promote: string | undefined;
+      try {
+        await db.query(
+          "update user_role set role = 'owner' where user_id = $1 and role = 'admin'",
+          [me],
+        );
+      } catch (error) {
+        promote = (error as { code?: string }).code;
+        await db.query('rollback to savepoint escalate');
+      }
+      const takeover = await db.query("update user_role set user_id = $1 where role = 'owner'", [
+        me,
+      ]);
+      return c.json({ promote, takeover: takeover.rowCount });
+    })
     .post('/probe/swallow', async (c) => {
       // A route that hides a database error must not be told it committed.
       try {
@@ -355,6 +375,16 @@ describe('the request context', () => {
       ...bearer(tokens.admin),
     });
     expect(asAdminOther.status).toBe(200);
+  });
+
+  it("lets no admin edit their way into ownership or take the owner's row", async () => {
+    const before = await owner.query("select user_id from user_role where role = 'owner'");
+    const res = await probe.request('/probe/escalate', { method: 'POST', ...bearer(tokens.admin) });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ promote: '42501', takeover: 0 });
+    const after = await owner.query("select user_id from user_role where role = 'owner'");
+    expect(after.rows).toEqual(before.rows);
+    expect(after.rows).toHaveLength(1);
   });
 
   it('answers 500 and saves nothing when a route swallows a database error', async () => {

@@ -22,7 +22,12 @@ begin
 end
 $$;
 
--- Only the owner hands out ownership. An admin may grant every other role.
+-- Only the owner hands out or keeps ownership. An admin may grant every other
+-- role, but can neither turn a row into an owner row nor touch an owner row.
 drop policy if exists owner_grants_owner on public.user_role;
 create policy owner_grants_owner on public.user_role as restrictive for insert to app_role
+  with check (role <> 'owner' or app.actor_has_role('owner'));
+drop policy if exists owner_keeps_owner on public.user_role;
+create policy owner_keeps_owner on public.user_role as restrictive for update to app_role
+  using (role <> 'owner' or app.actor_has_role('owner'))
   with check (role <> 'owner' or app.actor_has_role('owner'));

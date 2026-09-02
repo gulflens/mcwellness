@@ -115,6 +115,7 @@ revoke execute on function app.audit_row() from public;
 --   drop policy if exists admin_inserts_only on public.user_role;
 --   drop policy if exists admin_updates_only on public.user_role;
 --   drop policy if exists owner_grants_owner on public.user_role;
+--   drop policy if exists owner_keeps_owner on public.user_role;
 --   drop policy if exists admin_inserts_only on public.credential;
 --   drop policy if exists admin_updates_only on public.credential;
 --   -- restore app.audit_row() from 080_audit_triggers.sql (the version without actor_role)
