@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { canActivate, canTransition, nextMrn } from '../../../domain/client';
-import { canActor } from '../../../domain/shared';
+import { canActor, hasRole } from '../../../domain/shared';
 import { logRead } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -196,7 +196,18 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
     const clientId = params.data.id;
 
-    if (!canActor(actor, { type: 'client.read', clientId }, {}, now())) {
+    // canActor's client_contact branch checks ctx.clientIds, which only this route
+    // knows how to resolve: the clients their own contact rows point at. Read under
+    // row security as the caller, so this never sees another practice's contacts.
+    const clientIds = hasRole(actor, 'client_contact')
+      ? (
+          await db.query<{ client_id: string }>(
+            'select client_id from contact where user_id = $1',
+            [actor.userId],
+          )
+        ).rows.map((r) => r.client_id)
+      : [];
+    if (!canActor(actor, { type: 'client.read', clientId }, { clientIds }, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const record = await loadRecord(db, clientId);

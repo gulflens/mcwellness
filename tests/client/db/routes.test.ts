@@ -25,6 +25,8 @@ const ISSUER = 'http://localhost:54321/auth/v1';
 const KEY = new TextEncoder().encode(SECRET);
 const PRACTITIONER_ID = '00000000-0000-4000-8000-0000000000e5';
 const PRACTITIONER_AUTH = '00000000-0000-4000-8000-0000000000e6';
+const HOUSEHOLD_ID = '00000000-0000-4000-8000-0000000000e7';
+const HOUSEHOLD_AUTH = '00000000-0000-4000-8000-0000000000e8';
 
 let owner: pg.Client;
 let pool: pg.Pool;
@@ -58,6 +60,13 @@ beforeAll(async () => {
     authId: PRACTITIONER_AUTH,
     displayName: 'Synthetic Practitioner',
     roles: ['practitioner'],
+  });
+  await seedUser(owner, {
+    id: HOUSEHOLD_ID,
+    tenantId: IDS.tenantA,
+    authId: HOUSEHOLD_AUTH,
+    displayName: 'Synthetic Household',
+    roles: ['client_contact'],
   });
 
   const apiUrl = process.env.API_DATABASE_URL;
@@ -170,5 +179,38 @@ describe('GET /api/clients/:id — whole record', () => {
     expect(body.contacts).toHaveLength(1);
     expect(body.contacts[0]).not.toHaveProperty('emiratesId');
     expect(body.contacts[0]?.hasEmiratesId).toBe(false);
+  });
+
+  it("lets a client contact read their own client and no one else's", async () => {
+    const mine = (await (
+      await request(AUTH.ownerA, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Iris',
+          familyName: 'Household',
+          contact: { relationship: 'self', phone: '+971500001191' },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+    const someoneElses = (await (
+      await request(AUTH.ownerA, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Hazel',
+          familyName: 'NotMine',
+          contact: { relationship: 'self', phone: '+971500001192' },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+    const mineDetail = (await (
+      await request(AUTH.ownerA, `/api/clients/${mine.id}`)
+    ).json()) as ClientRecordResponse;
+    const myContactId = mineDetail.contacts[0]?.id;
+    await owner.query('update contact set user_id = $1 where id = $2', [HOUSEHOLD_ID, myContactId]);
+
+    const own = await request(HOUSEHOLD_AUTH, `/api/clients/${mine.id}`);
+    expect(own.status).toBe(200);
+    const other = await request(HOUSEHOLD_AUTH, `/api/clients/${someoneElses.id}`);
+    expect(other.status).toBe(403);
   });
 });
