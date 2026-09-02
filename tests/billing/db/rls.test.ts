@@ -100,9 +100,9 @@ describe('who may write the catalogue', () => {
         await rejectsWith(
           client,
           RLS_VIOLATION,
-          'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from) ' +
-            "values ($1, 2, 600, '2027-01-01')",
-          [IDS.tenantA],
+          'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, ' +
+            'amendment_reason) values ($1, 2, 600, $2, $3)',
+          [IDS.tenantA, '2027-01-01', 'Attempted rate change'],
         );
       },
       'practitioner',
@@ -125,9 +125,9 @@ describe('who may write the catalogue', () => {
         await rejectsWith(
           client,
           RLS_VIOLATION,
-          'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from) ' +
-            "values ($1, 2, 600, '2027-01-01')",
-          [IDS.tenantA],
+          'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, ' +
+            'amendment_reason) values ($1, 2, 600, $2, $3)',
+          [IDS.tenantA, '2027-01-01', 'Attempted rate change'],
         );
       },
       'client_contact',
@@ -166,9 +166,9 @@ describe('who may write the catalogue', () => {
         await rejectsWith(
           client,
           RLS_VIOLATION,
-          'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from) ' +
-            "values ($1, 3, 600, '2028-01-01')",
-          [IDS.tenantA],
+          'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, ' +
+            'amendment_reason) values ($1, 3, 600, $2, $3)',
+          [IDS.tenantA, '2028-01-01', 'Attempted rate change by finance'],
         );
       },
       'finance',

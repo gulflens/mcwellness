@@ -165,8 +165,11 @@ describe("migration 400's vat_setting backfill", () => {
       version: number;
       rate_basis_points: number;
       effective_from: string;
+      supersedes_id: string | null;
+      amendment_reason: string;
     }>(
-      'select version, rate_basis_points, effective_from::text from vat_setting where tenant_id = $1',
+      'select version, rate_basis_points, effective_from::text, supersedes_id, amendment_reason ' +
+        'from vat_setting where tenant_id = $1',
       [TENANT_ID],
     );
     expect(rows).toHaveLength(1);
@@ -174,6 +177,8 @@ describe("migration 400's vat_setting backfill", () => {
       version: 1,
       rate_basis_points: 500,
       effective_from: '2018-01-01',
+      supersedes_id: null,
+      amendment_reason: 'standard rate at go-live',
     });
   });
 

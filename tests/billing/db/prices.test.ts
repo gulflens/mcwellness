@@ -246,10 +246,24 @@ describe('POST /api/billing/prices', () => {
   it("uses the VAT rate in force on the price's own valid_from, not a later scheduled one", async () => {
     // A rate change the practice has already scheduled for the new year.
     await owner.query(
-      'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, created_by) ' +
-        'values ($1, 2, 700, $2, $3)',
-      [SEED_TENANT_ID, '2027-01-01', SEED_OWNER_USER_ID],
+      'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, ' +
+        'supersedes_id, amendment_reason, created_by) ' +
+        'values ($1, 2, 700, $2, (select id from vat_setting where tenant_id = $1 and version = 1), ' +
+        '$3, $4)',
+      [SEED_TENANT_ID, '2027-01-01', 'Rate increase announced by the FTA.', SEED_OWNER_USER_ID],
     );
+    const { rows: settingRows } = await owner.query<{
+      id: string;
+      version: number;
+      supersedes_id: string | null;
+    }>('select id, version, supersedes_id from vat_setting where tenant_id = $1 order by version', [
+      SEED_TENANT_ID,
+    ]);
+    const first = settingRows.find((r) => r.version === 1);
+    const second = settingRows.find((r) => r.version === 2);
+    // The later version names the one it replaces; the first names nothing.
+    expect(first?.supersedes_id).toBeNull();
+    expect(second?.supersedes_id).toBe(first?.id);
 
     const beforeChange = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: serviceTypeId('consultation'),

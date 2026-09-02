@@ -5,16 +5,18 @@
 -- Both are strictly append-only (the operator's ruling on this pull request,
 -- reinforced by the schema review: update and delete are never granted to
 -- app_role on either table, so both are refused at SQLSTATE 42501, not by
--- policy). A new price is an amendment (.claude/rules/data-model.md): it
--- carries supersedes_id (the price it replaces, null for a service's first
--- price) and a required amendment_reason. The price in force on a date is
--- the row with the greatest valid_from on or before that date, among rows
--- for the same service, jurisdiction and recipient type
--- (domain/billing/price.ts: currentPriceFor). VAT is resolved once per
--- price, from the setting in force on the price's own valid_from — not
--- "today" and not simply the newest setting — and stamped onto the row at
--- insert (domain/billing/vat.ts: resolveVat) — never typed by hand
--- (CLAUDE.md rule 6).
+-- policy). A price and a VAT setting are both amendments
+-- (.claude/rules/data-model.md): each carries supersedes_id (the row it
+-- replaces, null for a service's first price or a tenant's first setting)
+-- and a required amendment_reason, bound to the tenant by a composite
+-- foreign key so a row can only supersede one of its own tenant's. The
+-- price in force on a date is the row with the greatest valid_from on or
+-- before that date, among rows for the same service, jurisdiction and
+-- recipient type (domain/billing/price.ts: currentPriceFor). VAT is
+-- resolved once per price, from the setting in force on the price's own
+-- valid_from — not "today" and not simply the newest setting — and
+-- stamped onto the row at insert (domain/billing/vat.ts: resolveVat) —
+-- never typed by hand (CLAUDE.md rule 6).
 --
 -- Every tenant has a VAT rate the moment it exists: app.default_vat_setting()
 -- gives a newly inserted tenant its first rate (500 basis points, effective
@@ -36,11 +38,19 @@ create table vat_setting (
   version             integer not null check (version >= 1),
   rate_basis_points   integer not null check (rate_basis_points between 0 and 10000),  -- 500 = 5%
   effective_from      date not null,
+  -- Amendment lineage (.claude/rules/data-model.md), the same rule price
+  -- carries: the setting this one replaces (null only for a tenant's first,
+  -- version 1) and why. Bound to the tenant, not merely to a row: a setting
+  -- can only supersede one of its own tenant's.
+  supersedes_id       uuid,
+  amendment_reason    text not null,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
   created_by          uuid references app_user (id),
   unique (tenant_id, version),
-  unique (tenant_id, effective_from)
+  unique (tenant_id, effective_from),
+  unique (tenant_id, id),
+  foreign key (tenant_id, supersedes_id) references vat_setting (tenant_id, id)
 );
 create index vat_setting_tenant_idx on vat_setting (tenant_id);
 create index vat_setting_created_by_idx on vat_setting (created_by);
@@ -64,14 +74,18 @@ create table price (
   vat_setting_version    integer not null,
   valid_from             date not null,
   -- Amendment lineage (.claude/rules/data-model.md): the price this one
-  -- replaces (null only for a service's first price) and why.
-  supersedes_id          uuid references price (id),
+  -- replaces (null only for a service's first price) and why. Bound to the
+  -- tenant, not merely to a row: a price can only supersede one of its own
+  -- tenant's, the same discipline vat_setting's own lineage now carries.
+  supersedes_id          uuid,
   amendment_reason       text not null,
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now(),
   created_by             uuid references app_user (id),
   unique (tenant_id, service_type_id, jurisdiction, recipient_type, valid_from),
-  foreign key (tenant_id, vat_setting_version) references vat_setting (tenant_id, version)
+  unique (tenant_id, id),
+  foreign key (tenant_id, vat_setting_version) references vat_setting (tenant_id, version),
+  foreign key (tenant_id, supersedes_id) references price (tenant_id, id)
 );
 create index price_tenant_idx on price (tenant_id);
 create index price_service_type_idx
@@ -129,8 +143,8 @@ language plpgsql security definer
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  insert into public.vat_setting (tenant_id, version, rate_basis_points, effective_from)
-  values (new.id, 1, 500, date '2018-01-01');
+  insert into public.vat_setting (tenant_id, version, rate_basis_points, effective_from, amendment_reason)
+  values (new.id, 1, 500, date '2018-01-01', 'standard rate at go-live');
   return new;
 end
 $$;
@@ -144,8 +158,8 @@ create trigger default_vat_setting after insert on public.tenant
 -- the trigger only fires from here on, so this is what covers a real practice
 -- already live on staging or production, or a local database seeded before
 -- this migration landed.
-insert into vat_setting (tenant_id, version, rate_basis_points, effective_from)
-select id, 1, 500, date '2018-01-01' from tenant;
+insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, amendment_reason)
+select id, 1, 500, date '2018-01-01', 'standard rate at go-live' from tenant;
 
 -- rollback:
 --   drop trigger if exists default_vat_setting on public.tenant;
