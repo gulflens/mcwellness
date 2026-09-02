@@ -69,7 +69,8 @@ begin
     tenant_id, actor_id, actor_type, action, entity_type, entity_id, client_id,
     changed_fields, old_values, new_values, reason, request_id
   ) values (
-    (v_row ->> 'tenant_id')::uuid,
+    -- The tenant table is its own tenant; every other audited table carries tenant_id.
+    coalesce((v_row ->> 'tenant_id')::uuid, case when tg_table_name = 'tenant' then (v_row ->> 'id')::uuid end),
     v_actor,
     case when v_actor is null then 'system' else 'user' end,
     lower(tg_op),                                   -- insert | update | delete
@@ -150,7 +151,7 @@ revoke execute on function app.verify_audit_chain(bigint) from public;
 grant  execute on function app.verify_audit_chain(bigint) to app_role;   -- the nightly job
 
 ------------------------------------------------------------------------------
--- 5. Attach to every core table. After, so the audited write has passed its own
+-- 5. Attach to every core table, tenant included (data model section 8: every row). After, so the audited write has passed its own
 --    constraints; for each row, so a bulk statement yields one audit row per row;
 --    enable always, so replica mode cannot switch auditing off.
 ------------------------------------------------------------------------------
@@ -158,8 +159,9 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['app_user', 'user_role', 'practitioner', 'credential', 'service_type',
-                           'location', 'client', 'contact', 'consent', 'document'] loop
+  foreach t in array array['tenant', 'app_user', 'user_role', 'practitioner', 'credential',
+                           'service_type', 'location', 'client', 'contact', 'consent',
+                           'document'] loop
     execute format('create trigger audit_row after insert or update or delete on public.%I '
                    'for each row execute function app.audit_row()', t);
     execute format('alter table public.%I enable always trigger audit_row', t);
@@ -168,6 +170,7 @@ end
 $$;
 
 -- rollback:
+--   drop trigger if exists audit_row on public.tenant;
 --   drop trigger if exists audit_row on public.app_user;
 --   drop trigger if exists audit_row on public.user_role;
 --   drop trigger if exists audit_row on public.practitioner;

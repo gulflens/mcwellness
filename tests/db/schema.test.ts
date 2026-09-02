@@ -15,7 +15,6 @@ const CORE_TABLES = [
   'consent',
   'document',
 ];
-const AUDITED_TABLES = CORE_TABLES.filter((table) => table !== 'tenant');
 const STANDARD_COLUMNS = ['id', 'tenant_id', 'created_at', 'updated_at', 'created_by'];
 
 let client: pg.Client;
@@ -140,12 +139,12 @@ describe('core schema', () => {
     ]);
   });
 
-  it('attaches the audit trigger, set to fire always, to every section 2 and 3 table except tenant', async () => {
+  it('attaches the audit trigger, set to fire always, to every section 2 and 3 table', async () => {
     const { rows } = await client.query<{ table: string; enabled: string }>(
       'select c.relname as table, t.tgenabled as enabled from pg_trigger t ' +
         "join pg_class c on c.oid = t.tgrelid where t.tgname = 'audit_row' order by 1",
     );
-    expect(rows.map((row) => row.table).sort()).toEqual([...AUDITED_TABLES].sort());
+    expect(rows.map((row) => row.table).sort()).toEqual([...CORE_TABLES].sort());
     expect(rows.every((row) => row.enabled === 'A')).toBe(true);
   });
 

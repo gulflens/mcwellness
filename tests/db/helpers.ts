@@ -37,6 +37,10 @@ export async function freshDatabase(): Promise<pg.Client> {
   if (!isLocalDatabaseUrl(url)) {
     throw new Error('Database tests only run against a local database.');
   }
+  const appEnv = process.env.APP_ENV ?? 'development';
+  if (appEnv !== 'development') {
+    throw new Error(`Database tests only run with APP_ENV=development, not "".`);
+  }
   const client = await connect(url);
   await resetDatabase(client);
   await runMigrations(client);

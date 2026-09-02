@@ -39,7 +39,7 @@ create table public.audit_log (
   occurred_at     timestamptz not null default now(),   -- partition key
 
   -- actor
-  tenant_id       uuid,                   -- null only for system actions outside any tenant
+  tenant_id       uuid        not null,   -- every audited row belongs to a tenant; the tenant table is its own
   actor_id        uuid,                   -- null for system actions
   actor_type      text        not null check (actor_type in ('user', 'system', 'integration', 'anonymous')),
   actor_role      text,                   -- set by the middleware in PR 3
@@ -191,6 +191,7 @@ create trigger audit_no_delete before delete on public.audit_log
 
 -- enable always: still fires under session_replication_role = replica.
 -- Partitions created later inherit this state with the cloned trigger.
+alter table public.audit_log enable always trigger audit_chain_link;
 alter table public.audit_log enable always trigger audit_no_update;
 alter table public.audit_log enable always trigger audit_no_delete;
 
@@ -239,6 +240,9 @@ declare
   v_from  date;
   v_name  text;
 begin
+  if months_ahead < 0 or months_ahead > 60 then
+    raise exception 'months_ahead must be between 0 and 60, received %', months_ahead;
+  end if;
   for i in 0 .. months_ahead loop
     v_from := (v_first + make_interval(months => i))::date;
     v_name := 'audit_log_' || to_char(v_from, 'YYYY_MM');
