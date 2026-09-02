@@ -517,7 +517,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
         phone: phone(100 + contactCount),
         email: email(`${family.en}.${given.en}.${parent}`),
         whatsappOptIn: rng.chance(0.7),
-        emiratesId: emiratesId(++guardianCount),
+        emiratesId: status === 'lead' ? null : emiratesId(++guardianCount),
       });
       if (SECOND_PARENT.has(n)) {
         const other: Relationship = parent === 'mother' ? 'father' : 'mother';

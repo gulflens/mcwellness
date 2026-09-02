@@ -8,7 +8,7 @@ import {
   syncLocalApiRolePassword,
 } from '../runner/apply';
 import { isLocalDatabaseUrl } from '../runner/plan';
-import { applySeed, describeSeed, isSeeded } from './apply';
+import { applySeed, describeSeed, isSeeded, seedTargetError } from './apply';
 import { generateSeed } from './generate';
 
 // pnpm seed — fills an empty database with the synthetic practice and says what
@@ -20,18 +20,14 @@ const fresh = process.argv.includes('--fresh');
 
 try {
   const url = requireDatabaseUrl();
-  const appEnv = process.env.APP_ENV ?? 'development';
+  const appEnv = process.env.APP_ENV;
   const local = isLocalDatabaseUrl(url);
-  if (appEnv === 'production') {
-    throw new Error('The seed never runs against production.');
+  const refusal = seedTargetError(local ? 'localhost' : new URL(url).hostname, appEnv);
+  if (refusal !== null) {
+    throw new Error(refusal);
   }
-  if (!local && appEnv !== 'staging') {
-    throw new Error(
-      'The seed runs against a local database, or a staging project only when APP_ENV=staging.',
-    );
-  }
-  if (fresh && !local) {
-    throw new Error('--fresh wipes a database and is local only.');
+  if (fresh && (!local || appEnv !== 'development')) {
+    throw new Error('--fresh wipes a database: local only, with APP_ENV=development.');
   }
   const keys = identityKeysFromEnv(process.env);
   const client = await connect(url);

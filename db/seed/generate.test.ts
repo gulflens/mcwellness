@@ -71,17 +71,18 @@ describe('generateSeed', () => {
     }
   });
 
-  it('gives every minor a consenting legal guardian and an Emirates ID to nobody else', () => {
+  it('gives every minor a consenting legal guardian, with an Emirates ID only once they have consented', () => {
     for (const minor of minors) {
       const guardians = data.contacts.filter(
         (c) => c.clientId === minor.id && c.isLegalGuardian && c.canConsent,
       );
       expect(guardians).toHaveLength(1);
-      expect(guardians[0]?.emiratesId).not.toBeNull();
+      if (minor.status === 'lead') expect(guardians[0]?.emiratesId).toBeNull();
+      else expect(guardians[0]?.emiratesId).not.toBeNull();
       expect(minor.primaryContactId).toBe(guardians[0]?.id);
     }
     const holders = data.contacts.filter((c) => c.emiratesId !== null);
-    expect(holders).toHaveLength(minors.length);
+    expect(holders).toHaveLength(minors.filter((m) => m.status !== 'lead').length);
     for (const holder of holders) {
       expect(holder.isLegalGuardian && holder.canConsent).toBe(true);
       expect(minors.some((m) => m.id === holder.clientId)).toBe(true);

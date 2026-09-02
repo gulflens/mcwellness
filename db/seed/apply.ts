@@ -27,6 +27,22 @@ function nonceFor(contactId: string): Buffer {
   return createHash('sha256').update(`mcwellness-seed-nonce:${contactId}`).digest().subarray(0, 12);
 }
 
+/**
+ * Where the seed may write: a local database always, a Supabase project only when
+ * APP_ENV says staging, production never. Returns the refusal, or null.
+ */
+export function seedTargetError(
+  host: string | undefined,
+  appEnv: string | undefined,
+): string | null {
+  const local = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (appEnv === 'production') return 'The seed never runs against production.';
+  if (!local && appEnv !== 'staging') {
+    return 'The seed runs against a local database, or a staging project only when APP_ENV=staging.';
+  }
+  return null;
+}
+
 export async function isSeeded(client: pg.Client): Promise<boolean> {
   const { rows } = await client.query('select 1 from tenant where id = $1', [SEED_TENANT_ID]);
   return rows.length > 0;
@@ -37,6 +53,11 @@ export async function applySeed(
   data: SeedData,
   keys: IdentityKeys,
 ): Promise<SeedCounts> {
+  // The guard travels with the write, not only with the command that calls it.
+  const refusal = seedTargetError(client.host, process.env.APP_ENV);
+  if (refusal !== null) {
+    throw new Error(refusal);
+  }
   if (await isSeeded(client)) {
     throw new Error('The synthetic practice is already seeded; nothing added.');
   }
@@ -80,7 +101,11 @@ export async function applySeed(
         created_by: u.id === owner ? null : owner,
       });
       if (u.id === owner) {
-        await client.query("select set_config('app.actor_id', $1, true)", [owner]);
+        // From here on the owner is the actor, with the roles they hold, as a request would stamp them.
+        await client.query(
+          "select set_config('app.actor_id', $1, true), set_config('app.actor_roles', $2, true)",
+          [owner, ownerRoles(data)],
+        );
       }
     }
 
@@ -201,7 +226,7 @@ export async function applySeed(
     }
     for (const c of data.contacts) {
       const sealed =
-        c.emiratesId === null ? null : sealEmiratesId(c.emiratesId, keys, nonceFor(c.id));
+        c.emiratesId === null ? null : sealEmiratesId(c.emiratesId, keys, nonceFor(c.id), c.id);
       const hash = c.emiratesId === null ? null : emiratesIdHash(c.emiratesId, keys);
       await insert('contact', {
         id: c.id,
@@ -268,4 +293,13 @@ export function describeSeed(counts: SeedCounts): string {
   ];
   const parts = order.filter((table) => counts[table]).map((table) => `${counts[table]} ${table}`);
   return `Seeded the synthetic practice: ${parts.join(', ')}.`;
+}
+
+const ROLE_ORDER = ['owner', 'admin', 'lead_practitioner', 'practitioner', 'finance'] as const;
+
+/** The owner's roles in the order the resolver returns them, comma-joined as the middleware stamps them. */
+function ownerRoles(data: SeedData): string {
+  return ROLE_ORDER.filter((role) =>
+    data.roles.some((r) => r.userId === SEED_OWNER_USER_ID && r.role === role),
+  ).join(',');
 }

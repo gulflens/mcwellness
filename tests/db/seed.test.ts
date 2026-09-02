@@ -81,6 +81,11 @@ describe('the synthetic seed', () => {
     expect(insertRows.find((r) => r.actor_id === null)?.n).toBe(2);
     expect(insertRows.find((r) => r.actor_id === SEED_OWNER_USER_ID)?.n).toBe(inserted - 2);
     expect(rows.find((r) => r.action === 'update')?.n).toBe(20);
+    const { rows: roled } = await owner.query<{ n: number }>(
+      'select count(*)::int as n from audit_log where reason = $1 and actor_id = $2 and actor_role = $3',
+      [SEED_REASON, SEED_OWNER_USER_ID, 'owner,admin,lead_practitioner,finance'],
+    );
+    expect(roled[0]?.n).toBe(inserted - 2 + 20);
   });
 
   it('seals every Emirates ID with a lookup fingerprint and stores no digits in the clear', async () => {
@@ -95,7 +100,7 @@ describe('the synthetic seed', () => {
     for (const row of rows) {
       const contact = data.contacts.find((c) => c.id === row.id);
       expect(contact?.emiratesId).toBeDefined();
-      expect(openEmiratesId(row.emirates_id_encrypted, KEYS)).toBe(
+      expect(openEmiratesId(row.emirates_id_encrypted, KEYS, row.id)).toBe(
         normaliseEmiratesId(contact?.emiratesId ?? ''),
       );
       expect(row.emirates_id_hash).toHaveLength(32);

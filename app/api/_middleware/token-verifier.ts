@@ -92,10 +92,10 @@ export function verifierFromEnv(env: NodeJS.ProcessEnv): TokenVerifier {
   if (!supabaseUrl) {
     throw new Error('SUPABASE_URL is not set. Copy .env.example to .env.');
   }
-  const appEnv = env.APP_ENV ?? 'development';
-  if (appEnv !== 'development' && env.SUPABASE_JWT_SECRET === LOCAL_PLACEHOLDER_SECRET) {
+  // Explicit, never assumed: a deployment that forgets APP_ENV is not a laptop.
+  if (env.APP_ENV !== 'development' && env.SUPABASE_JWT_SECRET === LOCAL_PLACEHOLDER_SECRET) {
     throw new Error(
-      'SUPABASE_JWT_SECRET is the local placeholder. Set SUPABASE_JWKS_URL for this environment.',
+      'SUPABASE_JWT_SECRET is the local placeholder. Set APP_ENV=development locally, or SUPABASE_JWKS_URL for this environment.',
     );
   }
   return createTokenVerifier({

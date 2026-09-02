@@ -55,12 +55,24 @@ export function emiratesIdHash(id: string, keys: IdentityKeys): Buffer {
   return createHmac('sha256', keys.hashKey).update(normaliseEmiratesId(id)).digest();
 }
 
-/** nonce || tag || ciphertext. A nonce must never repeat under one key; the caller supplies it. */
-export function sealEmiratesId(id: string, keys: IdentityKeys, nonce: Buffer): Buffer {
+/**
+ * nonce || tag || ciphertext. A nonce must never repeat under one key; the caller
+ * supplies it, fresh and random for every write. `boundTo` (the contact id) is
+ * authenticated with the seal, so a sealed value moved onto another row will not open.
+ */
+export function sealEmiratesId(
+  id: string,
+  keys: IdentityKeys,
+  nonce: Buffer,
+  boundTo?: string,
+): Buffer {
   if (nonce.length !== NONCE_BYTES) {
     throw new Error('The nonce is 12 bytes.');
   }
   const cipher = createCipheriv('aes-256-gcm', keys.sealKey, nonce);
+  if (boundTo !== undefined) {
+    cipher.setAAD(Buffer.from(boundTo, 'utf8'));
+  }
   const ciphertext = Buffer.concat([
     cipher.update(normaliseEmiratesId(id), 'utf8'),
     cipher.final(),
@@ -69,7 +81,7 @@ export function sealEmiratesId(id: string, keys: IdentityKeys, nonce: Buffer): B
 }
 
 /** The digits back, or a throw when the key is wrong or a byte was altered. */
-export function openEmiratesId(sealed: Buffer, keys: IdentityKeys): string {
+export function openEmiratesId(sealed: Buffer, keys: IdentityKeys, boundTo?: string): string {
   if (sealed.length <= NONCE_BYTES + TAG_BYTES) {
     throw new Error('Not a sealed Emirates ID.');
   }
@@ -77,6 +89,9 @@ export function openEmiratesId(sealed: Buffer, keys: IdentityKeys): string {
   const tag = sealed.subarray(NONCE_BYTES, NONCE_BYTES + TAG_BYTES);
   const ciphertext = sealed.subarray(NONCE_BYTES + TAG_BYTES);
   const decipher = createDecipheriv('aes-256-gcm', keys.sealKey, nonce);
+  if (boundTo !== undefined) {
+    decipher.setAAD(Buffer.from(boundTo, 'utf8'));
+  }
   decipher.setAuthTag(tag);
   const digits = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
   return normaliseEmiratesId(digits);

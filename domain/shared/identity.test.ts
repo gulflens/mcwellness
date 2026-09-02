@@ -64,6 +64,13 @@ describe('sealEmiratesId and openEmiratesId', () => {
     expect(sealed.subarray(0, 12).equals(NONCE)).toBe(true);
   });
 
+  it('opens only on the row it was bound to', () => {
+    const sealed = sealEmiratesId(ID, KEYS, NONCE, 'contact-1');
+    expect(openEmiratesId(sealed, KEYS, 'contact-1')).toBe('784190000000017');
+    expect(() => openEmiratesId(sealed, KEYS, 'contact-2')).toThrow();
+    expect(() => openEmiratesId(sealed, KEYS)).toThrow();
+  });
+
   it('refuses the wrong key, an altered byte, and a nonce of the wrong size', () => {
     const sealed = sealEmiratesId(ID, KEYS, NONCE);
     expect(() => openEmiratesId(sealed, OTHER_KEYS)).toThrow();
