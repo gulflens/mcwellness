@@ -227,7 +227,18 @@ VITE_SUPABASE_ANON_KEY=<the project's anon / publishable key>
 
 `VITE_SUPABASE_URL` must name the same project as `SUPABASE_URL`: the API
 trusts that project's tokens and names its origin in the content security
-policy. Then `pnpm build` and `pnpm start`.
+policy. Build with the staging file named as the mode, because a plain
+`pnpm build` reads `.env`, not `.env.staging`, and the sign-in page then
+falls back to the laptop door with "Email sign-in is not configured on this
+laptop" (found on 2026-09-03):
+
+```bash
+pnpm exec vite build --mode staging
+```
+
+Then serve it with the staging settings: `SERVE_APP=true node --env-file=.env.staging --import tsx app/api/server.ts`
+(add `HOST=0.0.0.0 PORT=3100` to reach it from another device on the same
+network while the laptop demo keeps port 3000).
 
 ## 7. The exit test
 
