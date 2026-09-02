@@ -1,3 +1,6 @@
+import { resolveVat, type VatSetting } from '@domain/billing';
+import { fils } from '@domain/shared';
+
 /**
  * Money is displayed and parsed in exactly one place (CLAUDE.md's "Money"
  * rule: doubles are banned for money everywhere; there is one formatter).
@@ -28,23 +31,23 @@ export function formatFils(amountFils: number): string {
 
 /**
  * A live estimate of VAT and the gross total for the "add a price" drawer,
- * matching `domain/billing/vat.ts`'s `resolveVat` formula exactly — VAT is
- * the net amount times the rate in basis points, rounded half up to the
- * nearest fils (docs/SPEC/billing.md section 5.1) — but kept local rather
- * than imported. `domain/billing/vat.ts` reaches `domain/shared` through its
- * barrel (`../shared`), and that barrel also re-exports
- * `domain/shared/identity.ts`, which imports `node:crypto` at module scope;
- * a browser bundle cannot load that. The server's own `resolveVat` remains
- * the one place a saved price's VAT is actually computed and stamped
- * (`app/api/billing/prices.ts`); this only estimates the number shown
+ * computed by the same `resolveVat` (`domain/billing/vat.ts`) the server
+ * calls to stamp a saved price — the browser and the server run one
+ * arithmetic, not two that happen to agree. The `version` on the setting
+ * passed here is a placeholder: nothing has been saved yet, so there is no
+ * real `vat_setting` row to cite, and the caller only reads `vatFils` and
+ * `grossFils` back out. The server's own call
+ * (`app/api/billing/prices.ts`) remains the one place a saved price's VAT
+ * is actually computed and stamped; this only estimates the number shown
  * before that request is made.
  */
 export function previewVat(
   netFils: number,
   vatRateBasisPoints: number,
 ): { vatFils: number; grossFils: number } {
-  const vatFils = Math.round((netFils * vatRateBasisPoints) / 10_000);
-  return { vatFils, grossFils: netFils + vatFils };
+  const setting: VatSetting = { rateBasisPoints: vatRateBasisPoints, version: 0 };
+  const resolution = resolveVat(fils(netFils), setting);
+  return { vatFils: resolution.vatFils, grossFils: resolution.grossFils };
 }
 
 /**

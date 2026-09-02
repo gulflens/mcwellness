@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-// Direct submodule import, not the '@domain/shared' barrel: see
-// PriceDrawer.tsx's own note (that barrel re-exports a Node-only module a
-// browser bundle cannot load).
 import { canActor } from '@domain/shared/actor';
 import { PricesResponse, type PriceRow } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';

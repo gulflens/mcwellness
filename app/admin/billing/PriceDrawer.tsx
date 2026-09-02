@@ -1,8 +1,4 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-// Direct submodule import, not the '@domain/shared' barrel: the barrel also
-// re-exports domain/shared/identity.ts, which imports node:crypto at module
-// scope and crashes a browser bundle the moment anything reaches it (see
-// money.ts's previewVat for the same reasoning on the VAT side).
 import { isoDateIn } from '@domain/shared/actor';
 import {
   CreatePriceResponse,
