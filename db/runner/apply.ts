@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
-import { hasRollbackBlock, listMigrationFiles, listPolicyFiles, planMigrations } from './plan';
+import {
+  hasRollbackBlock,
+  isLocalDatabaseUrl,
+  listMigrationFiles,
+  listPolicyFiles,
+  planMigrations,
+} from './plan';
 
 /** The I/O half of the migration runner. The rules live in ./plan.ts. */
 
@@ -166,4 +172,34 @@ export function describeApplied(migrations: number, policies: number): string {
 
 function plural(count: number): string {
   return count === 1 ? '' : 's';
+}
+
+/**
+ * Sets the API role's password from API_DATABASE_URL, local databases only.
+ * The URL is the single source of truth, so the role and the connection string
+ * cannot drift. On any other host it does nothing: on Supabase the owner sets
+ * the password once in the SQL editor. Returns true when a password was set.
+ */
+export async function syncLocalApiRolePassword(
+  client: pg.Client,
+  apiUrl: string | undefined,
+): Promise<boolean> {
+  if (!apiUrl || !isLocalDatabaseUrl(apiUrl)) {
+    return false;
+  }
+  const parsed = new URL(apiUrl);
+  const user = decodeURIComponent(parsed.username);
+  const password = decodeURIComponent(parsed.password);
+  const overridden = [...parsed.searchParams.keys()].some((key) =>
+    ['user', 'password'].includes(key.toLowerCase()),
+  );
+  if (user !== 'mcwellness_api' || password === '' || overridden) {
+    return false;
+  }
+  const { rows } = await client.query("select 1 from pg_roles where rolname = 'mcwellness_api'");
+  if (rows.length === 0) {
+    return false;
+  }
+  await client.query(`alter role mcwellness_api password ${client.escapeLiteral(password)}`);
+  return true;
 }

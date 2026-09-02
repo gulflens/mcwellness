@@ -46,6 +46,7 @@ jobs:
           --health-retries 30
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      API_DATABASE_URL: postgresql://mcwellness_api:mcwellness_api@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

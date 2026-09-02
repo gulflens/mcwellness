@@ -4,6 +4,7 @@ import {
   describeApplied,
   requireDatabaseUrl,
   runMigrations,
+  syncLocalApiRolePassword,
 } from './runner/apply';
 
 // pnpm db:migrate — applies the migrations in db/migrations that this database
@@ -16,6 +17,9 @@ try {
     const migrations = await runMigrations(client);
     const policies = await applyPolicies(client);
     console.log(describeApplied(migrations, policies));
+    if (await syncLocalApiRolePassword(client, process.env.API_DATABASE_URL)) {
+      console.log('API role password set for local development from API_DATABASE_URL');
+    }
   } finally {
     await client.end();
   }
