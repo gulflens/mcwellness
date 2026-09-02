@@ -36,20 +36,23 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
       return c.json({ error: 'bad_request', requestId }, 400);
     }
 
-    if (!canWriteClientRecord(actor, clientId, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const client = await db.query<{ id: string; status: string }>(
-      'select id, status from client where id = $1',
+    // app.client_status_for bypasses row level security: see contacts.ts for why this must
+    // come before the role check (issue 13, third review round).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
       [clientId],
     );
-    if (client.rowCount === 0) {
-      await logRefused(db, 'client', clientId, clientId);
+    const clientStatus = statusRow.rows[0]?.status ?? null;
+    if (clientStatus === null) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
     }
     // Erased is read-only (client-record.md section 3): writers.sql would refuse the
     // insert outright; this gives the caller a clean reason rather than a raw RLS error.
-    if (client.rows[0]?.status === 'erased') {
+    if (clientStatus === 'erased') {
       return c.json({ error: 'erased', requestId }, 400);
     }
 
@@ -85,20 +88,41 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
     const body = UpdateLocationBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
-    if (!canWriteClientRecord(actor, clientId, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const existing = await db.query<{ id: string; status: string }>(
-      'select l.id, c.status from location l join client c on c.id = l.owner_id ' +
-        "where l.id = $1 and l.owner_type = 'client' and l.owner_id = $2",
-      [locationId, clientId],
+    // Client existence (bypassing row level security) before role, then the location
+    // itself: the same ordering as contacts.ts, for the same reason (issue 13, third
+    // review round).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
     );
-    if (existing.rowCount === 0) {
-      await logRefused(db, 'location', locationId, clientId);
+    const clientStatus = statusRow.rows[0]?.status ?? null;
+    if (clientStatus === null) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
-    if (existing.rows[0]?.status === 'erased') {
+    if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    if (clientStatus === 'erased') {
       return c.json({ error: 'erased', requestId }, 400);
+    }
+    const existing = await db.query<{ id: string; emirate: string }>(
+      "select id, emirate from location where id = $1 and owner_type = 'client' and owner_id = $2",
+      [locationId, clientId],
+    );
+    const existingRow = existing.rows[0];
+    if (!existingRow) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    // The Dubai-only Makani rule (client-record.md; db/migrations/030_location.sql), applied
+    // here as POST already applies it: a location's emirate is not itself editable through
+    // this route, so the check reads the row's own emirate rather than the request body.
+    if (
+      body.data.makaniNumber !== undefined &&
+      body.data.makaniNumber !== null &&
+      existingRow.emirate !== 'DXB'
+    ) {
+      return c.json({ error: 'bad_request', requestId }, 400);
     }
 
     const sets: string[] = [];
@@ -135,20 +159,27 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
     const body = VerifyPinBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
+    );
+    const clientStatus = statusRow.rows[0]?.status ?? null;
+    if (clientStatus === null) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
     if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const existing = await db.query<{ id: string; status: string }>(
-      'select l.id, c.status from location l join client c on c.id = l.owner_id ' +
-        "where l.id = $1 and l.owner_type = 'client' and l.owner_id = $2",
+    if (clientStatus === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
+    }
+    const existing = await db.query<{ id: string }>(
+      "select id from location where id = $1 and owner_type = 'client' and owner_id = $2",
       [locationId, clientId],
     );
     if (existing.rowCount === 0) {
-      await logRefused(db, 'location', locationId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
-    }
-    if (existing.rows[0]?.status === 'erased') {
-      return c.json({ error: 'erased', requestId }, 400);
     }
     await db.query(
       'update location set entrance_point = extensions.st_geogfromtext($1) where id = $2',

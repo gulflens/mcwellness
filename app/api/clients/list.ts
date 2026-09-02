@@ -4,6 +4,7 @@ import { ageOn, canActor, hasRole, isoDateIn } from '../../../domain/shared';
 import { logReads } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
+import { logRefused } from './refused';
 
 /**
  * GET /api/clients: the admin console's client table. The rule is checked here
@@ -63,6 +64,10 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     const actor = c.get('actor');
     const requestId = c.get('requestId');
     if (!canActor(actor, { type: 'client.list' }, {}, now())) {
+      // A collection action: nothing here names a specific row (client-record.md
+      // section 9), so the request id stands in as the entity, the same convention
+      // POST /api/clients uses (issue 13, third review round).
+      await logRefused(c.get('db'), 'client', requestId, null);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const query = Query.safeParse(c.req.query());

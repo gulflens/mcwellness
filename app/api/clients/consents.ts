@@ -33,23 +33,42 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', requestId }, 400);
     }
 
-    if (!canWriteClientRecord(actor, clientId, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const contact = await db.query<{ id: string; client_status: string }>(
-      'select ct.id, c.status as client_status from contact ct ' +
-        'join client c on c.id = ct.client_id where ct.id = $1 and ct.client_id = $2',
-      [body.data.givenByContactId, clientId],
+    // app.client_status_for bypasses row level security: see app/api/clients/contacts.ts
+    // for why this must come before the role check (issue 13, third review round).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
     );
-    const contactRow = contact.rows[0];
-    if (!contactRow) {
-      await logRefused(db, 'client', clientId, clientId);
+    const clientStatus = statusRow.rows[0]?.status ?? null;
+    if (clientStatus === null) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
     }
     // Erased is read-only (client-record.md section 3): writers.sql would refuse the
     // insert outright; this gives the caller a clean reason rather than a raw RLS error.
-    if (contactRow.client_status === 'erased') {
+    if (clientStatus === 'erased') {
       return c.json({ error: 'erased', requestId }, 400);
+    }
+    // text_document_id must name the practice's own wording for this purpose — a document
+    // with client_id null (00-data-model.md section 3) — never a document filed against a
+    // client, signed consent included: this is the exact wording shown, not a copy of what
+    // someone else once signed (issue 16).
+    const textDocument = await db.query<{ id: string }>(
+      'select id from document where id = $1 and client_id is null',
+      [body.data.textDocumentId],
+    );
+    if (textDocument.rowCount === 0) {
+      return c.json({ error: 'bad_request', requestId }, 400);
+    }
+    const contact = await db.query<{ id: string }>(
+      'select id from contact where id = $1 and client_id = $2',
+      [body.data.givenByContactId, clientId],
+    );
+    if (contact.rowCount === 0) {
+      return c.json({ error: 'not_found', requestId }, 404);
     }
 
     const consentId = randomUUID();
@@ -78,25 +97,35 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
     const { id: clientId, consentId } = params.data;
 
+    // Client existence (bypassing row level security) before role, then the reason
+    // prompt, then the consent itself — the same ordering as the record route above
+    // (issue 13, third review round).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
+    );
+    const clientStatus = statusRow.rows[0]?.status ?? null;
+    if (clientStatus === null) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
     if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     // Withdrawal is a sensitive action and always needs a reason (section 9).
     if (!(c.req.header('x-reason') ?? '').trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
-    const existing = await db.query<{ id: string; status: string; client_status: string }>(
-      'select cs.id, cs.status, c.status as client_status from consent cs ' +
-        'join client c on c.id = cs.client_id where cs.id = $1 and cs.client_id = $2',
+    if (clientStatus === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
+    }
+    const existing = await db.query<{ id: string; status: string }>(
+      'select id, status from consent where id = $1 and client_id = $2',
       [consentId, clientId],
     );
     const row = existing.rows[0];
     if (!row) {
-      await logRefused(db, 'consent', consentId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
-    }
-    if (row.client_status === 'erased') {
-      return c.json({ error: 'erased', requestId }, 400);
     }
     if (row.status !== 'active') {
       return c.json({ error: 'bad_request', requestId }, 400);

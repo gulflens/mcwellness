@@ -29,20 +29,26 @@ export function mountContacts(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const body = CreateContactBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
-    if (!canWriteClientRecord(actor, clientId, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const client = await db.query<{ id: string; status: string }>(
-      'select id, status from client where id = $1',
+    // app.client_status_for bypasses row level security, so it tells "no such client"
+    // (404, never logged) apart from "a row this role cannot write, or cannot even read"
+    // (403, logged) — a plain select gated by readers.sql would collapse the second case
+    // into a false not_found for a role with no read access here either (client-record.md
+    // section 9, third review round issue 13).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
       [clientId],
     );
-    if (client.rowCount === 0) {
-      await logRefused(db, 'client', clientId, clientId);
+    const status = statusRow.rows[0]?.status ?? null;
+    if (status === null) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
     }
     // Erased is read-only (client-record.md section 3): writers.sql would refuse the
     // insert outright; this gives the caller a clean reason rather than a raw RLS error.
-    if (client.rows[0]?.status === 'erased') {
+    if (status === 'erased') {
       return c.json({ error: 'erased', requestId }, 400);
     }
 
@@ -79,20 +85,32 @@ export function mountContacts(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const body = UpdateContactBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
+    // Client existence first (bypassing row level security, for the reason the POST route
+    // above does), then role, then the contact itself: only once the actor is confirmed to
+    // hold a write role here is a plain select safe to use for the sub-resource, since
+    // every role that passes canWriteClientRecord can also read a live client's contacts
+    // (db/policies/client/readers.sql).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
+    );
+    const status = statusRow.rows[0]?.status ?? null;
+    if (status === null) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
     if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const existing = await db.query<{ id: string; status: string }>(
-      'select ct.id, c.status from contact ct join client c on c.id = ct.client_id ' +
-        'where ct.id = $1 and ct.client_id = $2',
+    if (status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
+    }
+    const existing = await db.query<{ id: string }>(
+      'select id from contact where id = $1 and client_id = $2',
       [contactId, clientId],
     );
     if (existing.rowCount === 0) {
-      await logRefused(db, 'contact', contactId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
-    }
-    if (existing.rows[0]?.status === 'erased') {
-      return c.json({ error: 'erased', requestId }, 400);
     }
 
     const sets: string[] = [];

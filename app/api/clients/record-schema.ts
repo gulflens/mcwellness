@@ -224,7 +224,9 @@ export const RecordConsentBody = z.object({
 export type RecordConsentBody = z.infer<typeof RecordConsentBody>;
 
 export const ErasureRequestBody = z.object({
-  reason: z.string().min(1).max(1000),
+  // 200 characters, matching erasure_request.reason's own retention boundary
+  // (db/migrations/100_client_record.sql), not the general free-text ceiling.
+  reason: z.string().min(1).max(200),
   requestedByContactId: z.uuid().optional(),
 });
 export type ErasureRequestBody = z.infer<typeof ErasureRequestBody>;

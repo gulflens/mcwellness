@@ -28,20 +28,33 @@ export function mountErasureRequests(api: Hono<ApiEnv>): void {
     const body = ErasureRequestBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
-    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const client = await db.query<{ id: string; status: string }>(
-      'select id, status from client where id = $1',
+    // app.client_status_for bypasses row level security: see app/api/clients/contacts.ts
+    // for why this must come before the role check (issue 13, third review round).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
       [clientId],
     );
-    const row = client.rows[0];
-    if (!row) {
-      await logRefused(db, 'client', clientId, clientId);
+    const status = statusRow.rows[0]?.status ?? null;
+    if (status === null) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
-    if (row.status === 'erased') {
+    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    if (status === 'erased') {
       return c.json({ error: 'erased', requestId }, 400);
+    }
+    // requestedByContactId, when given, must be one of this client's own contacts — never
+    // someone else's household standing in as the requester (issue 16).
+    if (body.data.requestedByContactId) {
+      const contact = await db.query<{ id: string }>(
+        'select id from contact where id = $1 and client_id = $2',
+        [body.data.requestedByContactId, clientId],
+      );
+      if (contact.rowCount === 0) {
+        return c.json({ error: 'bad_request', requestId }, 400);
+      }
     }
 
     const erasureId = randomUUID();
@@ -53,7 +66,9 @@ export function mountErasureRequests(api: Hono<ApiEnv>): void {
         actor.tenantId,
         clientId,
         body.data.requestedByContactId ?? null,
-        cleanText(body.data.reason, 1000),
+        // erasure_request.reason follows the request's own retention, tighter than the
+        // general free-text ceiling elsewhere in this file (db/migrations/100_client_record.sql).
+        cleanText(body.data.reason, 200),
       ],
     );
     await db.query('select app.erase_client($1, $2)', [clientId, erasureId]);

@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { canActivate, canTransition, nextMrn } from '../../../domain/client';
-import { canActor, hasRole } from '../../../domain/shared';
+import {
+  canActivate,
+  canTransition,
+  canViewClient,
+  type ClientStatus,
+} from '../../../domain/client';
+import { hasRole } from '../../../domain/shared';
 import { logRead } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -196,10 +201,30 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
     const clientId = params.data.id;
 
-    // canActor's client_contact branch checks ctx.clientIds, which only this route
-    // knows how to resolve: the clients their own contact rows point at. Read under
+    // app.client_status_for (db/migrations/100_client_record.sql) is security definer,
+    // so it answers regardless of row level security: this is what lets canViewClient's
+    // erased-record door (client-record.md sections 2 and 8) tell "no such client" (404,
+    // unlogged) apart from "a client row security would otherwise hide from this role"
+    // (403, logged) — a plain select under RLS collapses both into an empty result, which
+    // is exactly the bug this route had (issue 13/14 of the third review round). Tenant
+    // scoped inside the function itself, so a status coming back at all means it is this
+    // actor's own tenant.
+    const statusRow = await db.query<{ status: ClientStatus | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
+    );
+    const status = statusRow.rows[0]?.status ?? null;
+    if (status === null) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+
+    // canViewClient's client_contact branch checks ctx.contactClientIds, which only this
+    // route knows how to resolve: the clients their own contact rows point at. Read under
     // row security as the caller, so this never sees another practice's contacts.
-    const clientIds = hasRole(actor, 'client_contact')
+    // scheduledClientIds is always empty: app.client_visible_to_practitioner
+    // (100_client_record.sql) has no schedule to consult yet, and this context mirrors
+    // that honestly rather than guessing.
+    const contactClientIds = hasRole(actor, 'client_contact')
       ? (
           await db.query<{ client_id: string }>(
             'select client_id from contact where user_id = $1',
@@ -207,18 +232,32 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
           )
         ).rows.map((r) => r.client_id)
       : [];
-    if (!canActor(actor, { type: 'client.read', clientId }, { clientIds }, now())) {
+    const view = canViewClient(
+      actor,
+      { id: clientId, tenantId: actor.tenantId, status },
+      { scheduledClientIds: [], contactClientIds },
+      now(),
+    );
+    if (!view.ok) {
+      // The status lookup above already proved this row exists, so a refusal here always
+      // names a real row (client-record.md section 9; the third review round's fix).
+      await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    // Opening an erased record is a sensitive action (client-record.md section 8), the
+    // same gate as the timeline (app/api/audit/timeline.ts): checked before any read of
+    // the record's own contents, not after loading it.
+    if (view.needsReason && !(c.req.header('x-reason') ?? '').trim()) {
+      return c.json({ error: 'reason_required', requestId }, 400);
     }
     const record = await loadRecord(db, clientId);
     if (!record) {
-      await logRefused(db, 'client', clientId, clientId);
+      // canViewClient already said yes for a row app.client_status_for just confirmed
+      // exists; row security reading the same row the same way should never disagree.
+      // If it ever does, that is the row vanishing between the two reads, not a refusal
+      // to report — clients are never deleted, only erased, so this is unreached in
+      // practice and stays a plain, unlogged not-found rather than a claim about access.
       return c.json({ error: 'not_found', requestId }, 404);
-    }
-    // Opening an erased record is a sensitive action (client-record.md section 8),
-    // the same gate as the timeline (app/api/audit/timeline.ts).
-    if (record.status === 'erased' && !(c.req.header('x-reason') ?? '').trim()) {
-      return c.json({ error: 'reason_required', requestId }, 400);
     }
     await logRead(db, 'client', clientId, clientId);
     return c.json(record);
@@ -229,6 +268,10 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     const db = c.get('db');
     const requestId = c.get('requestId');
     if (!canWriteClientRecord(actor, '', now())) {
+      // A collection action, not a specific row: nothing here can name what was refused
+      // (client-record.md section 9), so the request id itself stands in as the entity —
+      // still a real, non-null value a later audit read can point at.
+      await logRefused(db, 'client', requestId, null);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const bodyJson = await c.req.json().catch(() => null);
@@ -236,14 +279,19 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
     const tenantId = actor.tenantId;
-    // Serialised per tenant: two concurrent creates never compute the same next
-    // MRN. The lock is released automatically when this request's transaction ends.
-    await db.query("select pg_advisory_xact_lock(hashtext('mrn:' || $1::text))", [tenantId]);
-    const last = await db.query<{ mrn: string }>(
-      'select mrn from client where tenant_id = $1 order by length(mrn) desc, mrn desc limit 1',
-      [tenantId],
-    );
-    const mrn = nextMrn(last.rows[0]?.mrn ?? null);
+    // app.next_mrn (db/migrations/100_client_record.sql) takes its own advisory lock,
+    // scoped to this tenant, and reads every client regardless of row level security —
+    // including one this actor's role cannot see because it is erased — so the practice's
+    // highest MRN is never missed just because the client who held it was later erased
+    // (issue 12 of the third review round). The unique constraint on (tenant_id, mrn)
+    // stays the backstop it always was.
+    const nextMrnRow = await db.query<{ next_mrn: string }>('select app.next_mrn($1) as next_mrn', [
+      tenantId,
+    ]);
+    const mrn = nextMrnRow.rows[0]?.next_mrn;
+    if (!mrn) {
+      throw new Error('app.next_mrn returned no value.');
+    }
 
     const clientId = randomUUID();
     await db.query(
@@ -299,20 +347,29 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     const body = UpdateClientBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
-    if (!canWriteClientRecord(actor, clientId, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const existing = await db.query<{ id: string; status: ClientRow['status'] }>(
-      'select id, status from client where id = $1',
+    // Existence first, role second, and existence goes through
+    // app.client_status_for (security definer) rather than a plain select: a plain
+    // select is gated by db/policies/client/readers.sql, which a role with no write
+    // access here may also lack read access to (a practitioner reads no client at all
+    // while the scheduling door is shut) — that would turn an existing row into a false
+    // not_found rather than the forbidden it should be. A 404 here therefore always means
+    // no such row and is never logged; a 403 that follows always names a row confirmed to
+    // exist (client-record.md section 9, third review round issue 13).
+    const statusRow = await db.query<{ status: ClientRow['status'] | null }>(
+      'select app.client_status_for($1) as status',
       [clientId],
     );
-    if (existing.rowCount === 0) {
-      await logRefused(db, 'client', clientId, clientId);
+    const status = statusRow.rows[0]?.status ?? null;
+    if (status === null) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
     }
     // Erased is read-only (client-record.md section 3): writers.sql would silently
     // update nothing, since RLS filters the row out of an UPDATE rather than raising.
-    if (existing.rows[0]?.status === 'erased') {
+    if (status === 'erased') {
       return c.json({ error: 'erased', requestId }, 400);
     }
 
@@ -351,18 +408,23 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     const body = StatusChangeBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
-    if (!canWriteClientRecord(actor, clientId, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const existing = await db.query<{ status: ClientRow['status'] }>(
-      'select status from client where id = $1',
+    // Existence (via app.client_status_for, which bypasses row level security) before
+    // role, for the same reason record.ts's PATCH route does it this way: a plain select
+    // could turn an existing row into a false not_found for a role that cannot read it
+    // either, which would wrongly skip the audit row a real refusal owes (issue 13).
+    const statusRow = await db.query<{ status: ClientRow['status'] | null }>(
+      'select app.client_status_for($1) as status',
       [clientId],
     );
-    const current = existing.rows[0];
-    if (!current) {
-      await logRefused(db, 'client', clientId, clientId);
+    const currentStatus = statusRow.rows[0]?.status ?? null;
+    if (currentStatus === null) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
+    if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const current = { status: currentStatus };
     if (!canTransition(current.status, body.data.to)) {
       return c.json({ error: 'invalid_transition', requestId }, 400);
     }
@@ -373,7 +435,8 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     if (body.data.to === 'active') {
       const record = await loadRecord(db, clientId);
       if (!record) {
-        await logRefused(db, 'client', clientId, clientId);
+        // Already confirmed to exist above; row security reading it the ordinary way
+        // should never disagree. See the same fallback on GET /api/clients/:id.
         return c.json({ error: 'not_found', requestId }, 404);
       }
       const gate = canActivate(

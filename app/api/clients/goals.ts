@@ -28,20 +28,23 @@ export function mountGoals(api: Hono<ApiEnv>): void {
     const body = CreateGoalBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
-    if (!canWriteGoal(actor)) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const client = await db.query<{ id: string; status: string }>(
-      'select id, status from client where id = $1',
+    // app.client_status_for bypasses row level security: see app/api/clients/contacts.ts
+    // for why this must come before the role check (issue 13, third review round).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
       [clientId],
     );
-    if (client.rowCount === 0) {
-      await logRefused(db, 'client', clientId, clientId);
+    const clientStatus = statusRow.rows[0]?.status ?? null;
+    if (clientStatus === null) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (!canWriteGoal(actor)) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
     }
     // Erased is read-only (client-record.md section 3): writers.sql would refuse the
     // insert outright; this gives the caller a clean reason rather than a raw RLS error.
-    if (client.rows[0]?.status === 'erased') {
+    if (clientStatus === 'erased') {
       return c.json({ error: 'erased', requestId }, 400);
     }
     const category = await db.query<{ id: string }>('select id from goal_category where id = $1', [
@@ -52,6 +55,15 @@ export function mountGoals(api: Hono<ApiEnv>): void {
     }
 
     const goalId = randomUUID();
+    if (body.data.isPrimary) {
+      // The one-primary-goal index (db/migrations/100_client_record.sql) is scoped to
+      // active goals, so the swap belongs here, in the same transaction as the insert,
+      // rather than in a 23505 the caller has to interpret and retry (issue 8).
+      await db.query(
+        "update goal set is_primary = false where client_id = $1 and is_primary and status = 'active'",
+        [clientId],
+      );
+    }
     await db.query(
       'insert into goal (id, tenant_id, client_id, category_id, description, is_primary) ' +
         'values ($1, $2, $3, $4, $5, $6)',
@@ -78,21 +90,30 @@ export function mountGoals(api: Hono<ApiEnv>): void {
     const body = UpdateGoalBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
+    // Client existence (bypassing row level security) before role, then the goal itself:
+    // the same ordering as the create route above (issue 13, third review round).
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
+    );
+    const clientStatus = statusRow.rows[0]?.status ?? null;
+    if (clientStatus === null) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
     if (!canWriteGoal(actor)) {
+      await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const existing = await db.query<{ id: string; status: string; client_status: string }>(
-      'select g.id, g.status, c.status as client_status from goal g ' +
-        'join client c on c.id = g.client_id where g.id = $1 and g.client_id = $2',
+    if (clientStatus === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
+    }
+    const existing = await db.query<{ id: string; status: string }>(
+      'select id, status from goal where id = $1 and client_id = $2',
       [goalId, clientId],
     );
     const row = existing.rows[0];
     if (!row) {
-      await logRefused(db, 'goal', goalId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
-    }
-    if (row.client_status === 'erased') {
-      return c.json({ error: 'erased', requestId }, 400);
     }
     // Removing a goal — dropping it — is a sensitive action (section 9).
     if (
@@ -123,6 +144,14 @@ export function mountGoals(api: Hono<ApiEnv>): void {
     if (d.isPrimary !== undefined) push('is_primary', d.isPrimary);
     if (sets.length === 0) return c.json({ error: 'bad_request', requestId }, 400);
 
+    if (d.isPrimary) {
+      // Same swap as the create route: clear the client's current active primary, in the
+      // same transaction, before this goal claims the flag (issue 8).
+      await db.query(
+        "update goal set is_primary = false where client_id = $1 and is_primary and status = 'active' and id <> $2",
+        [clientId, goalId],
+      );
+    }
     values.push(goalId);
     await db.query(`update goal set ${sets.join(', ')} where id = $${values.length}`, values);
     return c.json(IdResponse.parse({ id: goalId }));
