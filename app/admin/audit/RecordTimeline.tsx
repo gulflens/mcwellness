@@ -110,6 +110,18 @@ export function RecordTimeline({ clientId }: { clientId: string }) {
   };
 
   const groups = useMemo(() => (state.kind === 'ready' ? groupByDay(state.events) : []), [state]);
+  // The roles line is metadata about the actor, not the event: it shows once per run of
+  // the same actor and roles, not on every line.
+  const rolesShown = useMemo(() => {
+    const shown = new Set<string>();
+    let previous = '';
+    for (const event of state.kind === 'ready' ? state.events : []) {
+      const key = event.actor ? `${event.actor.name ?? ''}|${event.actor.roles.join(',')}` : '';
+      if (event.actor && event.actor.roles.length > 0 && key !== previous) shown.add(event.id);
+      previous = key;
+    }
+    return shown;
+  }, [state]);
 
   if (state.kind === 'loading') return <Note>Loading the timeline.</Note>;
   if (state.kind === 'error')
@@ -126,7 +138,7 @@ export function RecordTimeline({ clientId }: { clientId: string }) {
               <li key={event.id} className={`timeline__event timeline__event--${event.kind}`}>
                 <p className="timeline__sentence">{event.sentence}</p>
                 <p className="timeline__meta micro">
-                  {event.actor && event.actor.roles.length > 0 ? (
+                  {rolesShown.has(event.id) && event.actor ? (
                     <span>{describeRoles(event.actor.roles)}</span>
                   ) : null}
                   <time className="numeric" dateTime={event.occurredAt}>

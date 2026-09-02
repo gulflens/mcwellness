@@ -28,7 +28,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
   return (
     <aside className="drawer" role="dialog" aria-labelledby="drawer-title">
       <header className="drawer__header">
-        <div>
+        <div className="drawer__title">
           <h2 id="drawer-title">
             {client.givenName} {client.familyName}
           </h2>
