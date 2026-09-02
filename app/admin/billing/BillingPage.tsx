@@ -118,7 +118,8 @@ export function BillingPage() {
         key: 'validFrom',
         header: 'Effective from',
         numeric: true,
-        render: (row) => dateFormat.format(new Date(row.validFrom)),
+        // A date-only value is read at the practice's midnight, not UTC's.
+        render: (row) => dateFormat.format(new Date(`${row.validFrom}T00:00:00+04:00`)),
       },
     ],
     [],
@@ -152,7 +153,11 @@ export function BillingPage() {
           ) : null
         }
       />
-      {successNote ? <Note>{successNote}</Note> : null}
+      {successNote ? (
+        <div role="status">
+          <Note>{successNote}</Note>
+        </div>
+      ) : null}
       {state.kind === 'loading' ? <Note>Loading the price list.</Note> : null}
       {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
       {state.kind === 'ready' ? (
