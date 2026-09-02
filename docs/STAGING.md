@@ -19,8 +19,9 @@ project and is blocked by name in this repository's hooks.
 - Direct database host: `db.ajjkvjtqxktkgrvcrzkh.supabase.co`, port 5432
 - Pooler: `aws-0-ap-south-1.pooler.supabase.com`, port 6543, role
   `mcwellness_api.ajjkvjtqxktkgrvcrzkh`
-- Publishable key (public by design, safe in the browser):
-  `sb_publishable_8koGsPToZGStQKHYgdZHpA_wwcMlVqG`
+- Publishable key: public by design and safe in the browser, but it lives in
+  `.env.staging` and the build settings, never in this repository; the
+  dashboard's API settings show it.
 
 The database password and the API role's password never appear in this
 repository; on the laptop they live in the ignored `.env.staging`.
