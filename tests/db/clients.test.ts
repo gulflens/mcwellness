@@ -88,7 +88,7 @@ describe('GET /api/clients', () => {
     expect(typeof first?.age).toBe('number');
     expect(first?.emirate).toBe('DXB');
     const { rows } = await owner.query<{ n: number }>(
-      "select count(*)::int as n from audit_log where action = 'read' and entity_type = 'client' " +
+      "select count(*)::int as n from audit_log where action = 'list' and entity_type = 'client' " +
         'and request_id = $1 and actor_id = $2 and client_id = entity_id',
       [requestId, SEED_OWNER_USER_ID],
     );
@@ -101,7 +101,7 @@ describe('GET /api/clients', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ clients: [], note: 'schedule' });
     const { rows } = await owner.query<{ n: number }>(
-      "select count(*)::int as n from audit_log where action = 'read' and request_id = $1",
+      "select count(*)::int as n from audit_log where action in ('read', 'list') and request_id = $1",
       [requestId],
     );
     expect(rows[0]?.n).toBe(0);
