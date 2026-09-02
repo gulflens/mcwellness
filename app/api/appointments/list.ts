@@ -33,6 +33,8 @@ type Row = {
   client_id: string;
   client_given_name: string;
   client_family_name: string;
+  client_given_name_ar: string | null;
+  client_family_name_ar: string | null;
   practitioner_id: string;
   practitioner_display_name: string;
   service_type_id: string;
@@ -42,9 +44,15 @@ type Row = {
   location_emirate: string;
 };
 
+// Every joined table repeats the tenant_id predicate, not only the driving
+// appointment row: a join condition alone (c.id = a.client_id) trusts that
+// a.client_id can never point outside the tenant, which is exactly the kind
+// of assumption row security is the backstop for, not the only line of
+// defence (this route's own docstring, and billing/prices.ts's precedent).
 const SQL =
   'select a.id, a.window_start, a.window_end, a.status, a.delivery_mode, ' +
   'c.id as client_id, c.given_name as client_given_name, c.family_name as client_family_name, ' +
+  'c.given_name_ar as client_given_name_ar, c.family_name_ar as client_family_name_ar, ' +
   'p.id as practitioner_id, u.display_name as practitioner_display_name, ' +
   'st.id as service_type_id, st.name as service_type_name, ' +
   'l.id as location_id, l.label::text as location_label, l.emirate::text as location_emirate ' +
@@ -54,7 +62,10 @@ const SQL =
   'join app_user u on u.id = p.user_id ' +
   'join service_type st on st.id = a.service_type_id ' +
   'join location l on l.id = a.location_id ' +
-  'where a.tenant_id = app.current_tenant_id() and a.window_start >= $1 and a.window_start < $2 ' +
+  'where a.tenant_id = app.current_tenant_id() and c.tenant_id = app.current_tenant_id() ' +
+  'and p.tenant_id = app.current_tenant_id() and u.tenant_id = app.current_tenant_id() ' +
+  'and st.tenant_id = app.current_tenant_id() and l.tenant_id = app.current_tenant_id() ' +
+  'and a.window_start >= $1 and a.window_start < $2 ' +
   'order by a.window_start';
 
 function dayRange(date: string): [Date, Date] {
@@ -89,7 +100,13 @@ export function mountAppointmentList(api: Hono<ApiEnv>): void {
       windowEnd: r.window_end.toISOString(),
       status: r.status,
       deliveryMode: r.delivery_mode,
-      client: { id: r.client_id, givenName: r.client_given_name, familyName: r.client_family_name },
+      client: {
+        id: r.client_id,
+        givenName: r.client_given_name,
+        familyName: r.client_family_name,
+        givenNameAr: r.client_given_name_ar,
+        familyNameAr: r.client_family_name_ar,
+      },
       practitioner: { id: r.practitioner_id, displayName: r.practitioner_display_name },
       serviceType: { id: r.service_type_id, name: r.service_type_name },
       location: { id: r.location_id, label: r.location_label, emirate: r.location_emirate },

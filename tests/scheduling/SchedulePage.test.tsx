@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SchedulePage } from '../../app/admin/schedule/SchedulePage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
@@ -21,7 +21,13 @@ const appointment = {
   windowEnd: '2026-09-10T05:45:00.000Z',
   status: 'confirmed' as const,
   deliveryMode: 'home' as const,
-  client: { id: '00000008-0000-4000-8000-000000000001', givenName: 'Iris', familyName: 'Cliff' },
+  client: {
+    id: '00000008-0000-4000-8000-000000000001',
+    givenName: 'Iris',
+    familyName: 'Cliff',
+    givenNameAr: 'إيريس',
+    familyNameAr: 'كليف',
+  },
   practitioner: { id: '00000008-0000-4000-8000-000000000002', displayName: 'Cedar Ridge' },
   serviceType: { id: '00000008-0000-4000-8000-000000000003', name: 'Standard session' },
   location: { id: '00000008-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
@@ -47,13 +53,49 @@ describe('SchedulePage', () => {
 
     renderPage(fetchImpl);
 
-    await waitFor(() => expect(screen.getByRole('cell', { name: /Iris Cliff/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());
+    // The Arabic name sits beneath the Latin one, exactly as the clients table renders it.
+    expect(screen.getByText('إيريس كليف')).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'Cedar Ridge' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'Standard session' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'Home' })).toBeTruthy();
     expect(screen.getByText('Confirmed')).toBeTruthy();
     expect(screen.getByText('09:00–09:45')).toBeTruthy();
     expect(screen.getByText('1 appointment')).toBeTruthy();
+  });
+
+  it("opens the client's own drawer from the client link, beside the ledger", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: [appointment] }), { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Cliff' }));
+
+    const drawer = await screen.findByRole('dialog');
+    expect(within(drawer).getByRole('heading', { name: 'Iris Cliff' })).toBeTruthy();
+    expect(within(drawer).getByText('إيريس كليف')).toBeTruthy();
+  });
+
+  it('Add appointment is a secondary action beside the heading, not a second primary button', async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ appointments: [] }), { status: 200 }),
+    ) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Add appointment' })).toBeTruthy(),
+    );
+    expect(screen.getByRole('button', { name: 'Add appointment' }).className).not.toContain(
+      'button--primary',
+    );
   });
 
   it('shows the empty line in plain words when no appointments are booked', async () => {

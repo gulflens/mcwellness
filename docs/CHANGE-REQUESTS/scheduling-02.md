@@ -84,6 +84,44 @@ shared-zone (`docs/SPEC/OWNERSHIP.md`); this pull request's hard constraint
 was `app/admin/schedule/**` and `tests/scheduling/**` only, so the barrel
 itself was left alone.
 
+**Correction (pull request 26's review round, 2026-09-02): this claim is now
+stale.** `domain/shared/index.ts`'s barrel was made browser-safe in a later
+shared-zone round (commit `42b60ff`, "domain/shared's barrel is browser-safe"),
+and once it was, `NewAppointmentDrawer.tsx` was updated to import `windowFor`
+from `@domain/scheduling` in place of the local `WINDOW_MINUTES` literal
+(commit `109a209`). The screen does import from `@domain/*` today — this is
+no longer the first browser-side file in the repository to do so, and the gap
+this section describes is closed, not open. The section above is left as
+written, as the record of what pull request 26 found and worked around at
+the time; this correction is the only part of it still current.
+
+## 4. The consent-missing sentence names the purpose, on purpose
+
+**What.** `checkConflicts` (`domain/scheduling/conflicts.ts`) can refuse a
+booking with `consent_missing` once per required purpose — `participation`,
+`minor_participation` (an under-18 client's own guardian consent) or
+`home_visit` — and its message names which one:
+`` `The required consent (${purpose}) is not active for this client.` ``.
+Every other conflict code the drawer can receive on a 409 now gets this
+screen's own fixed local sentence instead of the server's wording (round 7a's
+review found the drawer rendering `issue.message` verbatim, the server's own
+copy, for every code); `consent_missing` is the one exception, and it stays
+one on purpose.
+
+**Why.** A missing consent is not actionable on its own — "consent is
+missing" tells the coordinator there is a problem but not which document to
+go and get from the family. The purpose is the one piece of the server's
+message this screen still needs, because without it the coordinator cannot
+act on the refusal at all. `NewAppointmentDrawer.tsx`'s `localConflictMessage`
+reads the purpose out of the server's message (a small, tightly-scoped regular
+expression against the three known purposes) and renders this screen's own
+sentence built from it — "The client's *label* consent is missing. Ask the
+family for it before booking." — never the server's sentence itself. The
+purpose is still local copy, not server copy: `CONSENT_PURPOSE_LABELS` names
+each purpose the way a coordinator asking a family for consent would say it
+(`participation`, `guardian`, `home visit`), not the database's own purpose
+codes.
+
 **Why this is worth the integrator's attention.** The Emirates ID
 encryption `identity.ts` carries is legitimately server-only
 (`domain/shared/identity.ts`'s own docstring: the master key it derives from

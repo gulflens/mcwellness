@@ -6,6 +6,7 @@ import {
   AppointmentRow,
   ConflictResponse,
   type BadRequestCode,
+  type ConflictIssue,
   type DeliveryMode,
 } from '../../api/appointments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
@@ -63,21 +64,59 @@ function composeWindowStart(date: string, time: string): string {
   return new Date(`${date}T${time}:00${PRACTICE_UTC_OFFSET}`).toISOString();
 }
 
-/** `POST /api/appointments` sends a ready-made sentence per issue on a 409
- * (`domain/scheduling/conflicts.ts`); a 400 sends only a `code`, so that path
- * needs its own plain-language line. Kept together so every inline issue,
- * whichever status carried it, is rendered the same way. */
+/** A 400 sends only a `code`; this is this screen's own plain-language line
+ * for each one, naming the problem and the way out (craft-floor's "errors
+ * name the problem and the recovery"), not just the problem alone. */
 const BAD_REQUEST_MESSAGES: Partial<Record<BadRequestCode, string>> = {
-  location_mismatch: "This location isn't the client's own address or the studio.",
-  client_not_found: 'This client could not be found.',
-  practitioner_not_found: 'This practitioner could not be found.',
-  practitioner_inactive: 'This practitioner is no longer active.',
-  service_type_not_found: 'This service could not be found.',
-  service_type_inactive: 'This service is no longer offered.',
-  delivery_mode_unavailable: 'This service is not offered at that location.',
-  location_not_found: 'This location could not be found.',
-  invalid_request: 'Something on the form is missing or invalid.',
+  location_mismatch:
+    "This location isn't the client's own address or the studio. Choose one of those.",
+  client_not_found: 'This client could not be found. Search again.',
+  practitioner_not_found: 'This practitioner could not be found. Choose a different one.',
+  practitioner_inactive: 'This practitioner is no longer active. Choose a different one.',
+  service_type_not_found: 'This service could not be found. Choose a different one.',
+  service_type_inactive: 'This service is no longer offered. Choose a different one.',
+  delivery_mode_unavailable:
+    'This service is not offered at that location. Choose a different location.',
+  location_not_found: 'This location could not be found. Choose a different one.',
+  invalid_request: 'Something on the form is missing or invalid. Check each step and try again.',
 };
+
+/** `POST /api/appointments` sends a ready-made sentence per issue on a 409
+ * (`domain/scheduling/conflicts.ts`), but that sentence is the server's own
+ * wording and is never rendered directly here: every code below gets this
+ * screen's own local sentence, naming the problem and the way out, the same
+ * as the 400 codes above. `consent_missing` is the one exception that still
+ * reads something out of the server's message — the purpose the consent is
+ * for — because the coordinator needs to know which consent to go and
+ * obtain, not just that one is missing (docs/CHANGE-REQUESTS/scheduling-02.md
+ * section 4). */
+const CONFLICT_MESSAGES: Record<Exclude<ConflictIssue['code'], 'consent_missing'>, string> = {
+  practitioner_overlap:
+    'This practitioner is already booked close to this time. Choose a different time or practitioner.',
+  client_overlap: 'This client already has an appointment at this time. Choose a different time.',
+  credential_invalid:
+    'This practitioner is not certified for this service on this date. Choose a different practitioner.',
+  client_inactive:
+    "This client's record is not active. Reactivate the client's record before booking.",
+};
+
+/** The three purposes `requiredConsentPurposes` (create.ts) can ask for,
+ * named the way a coordinator asking a family for consent would say them,
+ * not the database's own purpose codes. */
+const CONSENT_PURPOSE_LABELS: Record<string, string> = {
+  participation: 'participation',
+  minor_participation: 'guardian',
+  home_visit: 'home visit',
+};
+
+function localConflictMessage(issue: ConflictIssue): string {
+  if (issue.code === 'consent_missing') {
+    const purpose = /\(([a-z_]+)\)/i.exec(issue.message)?.[1] ?? null;
+    const label = (purpose && CONSENT_PURPOSE_LABELS[purpose]) || 'required';
+    return `The client's ${label} consent is missing. Ask the family for it before booking.`;
+  }
+  return CONFLICT_MESSAGES[issue.code];
+}
 
 type Issue = { code: string; message: string };
 
@@ -136,7 +175,10 @@ export function NewAppointmentDrawer({
   useEffect(() => {
     if (selectedClient) return;
     const query = clientQuery.trim();
-    if (!query) return;
+    // Below two characters, a search is mostly noise (near-every client
+    // matches) and near-every keystroke would send one; the render below
+    // shows a "keep typing" line instead rather than staying silent.
+    if (query.length < 2) return;
     let live = true;
     const timer = setTimeout(() => {
       setClientSearchState('loading');
@@ -218,6 +260,14 @@ export function NewAppointmentDrawer({
     setSelectedPractitionerId(null);
     setStartTime('');
     setSubmitError(null);
+    // The practitioner list is filtered by service + date server-side, so the
+    // options effect below re-fetches it the moment selectedServiceTypeId
+    // changes — but until that fetch resolves, options.practitioners still
+    // holds whoever was credentialed for the OLD service. Cleared here so the
+    // now-enabled practitioner select never offers that stale list, even for
+    // one render (serviceTypes and locations are untouched: neither depends
+    // on which service is chosen, so neither one goes stale).
+    setOptions((previous) => (previous ? { ...previous, practitioners: [] } : previous));
   }
 
   const serviceType = options?.serviceTypes.find((s) => s.id === selectedServiceTypeId) ?? null;
@@ -263,7 +313,13 @@ export function NewAppointmentDrawer({
       }
       if (res.status === 409) {
         const parsed = ConflictResponse.parse(await res.json());
-        setSubmitError({ kind: 'issues', issues: parsed.issues });
+        setSubmitError({
+          kind: 'issues',
+          issues: parsed.issues.map((issue) => ({
+            code: issue.code,
+            message: localConflictMessage(issue),
+          })),
+        });
         return;
       }
       if (res.status === 403) {
@@ -319,7 +375,12 @@ export function NewAppointmentDrawer({
       <div className="drawer__body">
         <div className="stepper">
           <div className="stepper__step">
-            <h3 className="drawer__section">Client</h3>
+            {/* A plain label, not a heading: the other four steps carry no
+                heading of their own either (each is named by its own Field
+                or Select label instead), and a single h3 here with none
+                beside it would be a lone heading with no sibling level to
+                sit inside (DESIGN.md's heading hierarchy). */}
+            <span className="field__label">Client</span>
             {selectedClient ? (
               <p className="stepper__chosen">
                 <span>
@@ -341,14 +402,24 @@ export function NewAppointmentDrawer({
                 />
                 {clientQuery.trim() ? (
                   <>
-                    {clientSearchState === 'loading' ? <Note>Searching.</Note> : null}
-                    {clientSearchState === 'error' ? (
+                    {clientQuery.trim().length < 2 ? (
+                      <Note>Keep typing: search starts at two characters.</Note>
+                    ) : null}
+                    {clientQuery.trim().length >= 2 && clientSearchState === 'loading' ? (
+                      <Note>Searching.</Note>
+                    ) : null}
+                    {clientQuery.trim().length >= 2 && clientSearchState === 'error' ? (
                       <Note tone="critical">The client list could not be searched. Try again.</Note>
                     ) : null}
-                    {clientSearchState === 'ready' && (clientResults ?? []).length === 0 ? (
+                    {clientQuery.trim().length >= 2 &&
+                    clientSearchState === 'ready' &&
+                    (clientResults ?? []).length === 0 ? (
                       <Note>No client matches.</Note>
                     ) : null}
-                    {clientSearchState === 'ready' && clientResults && clientResults.length > 0 ? (
+                    {clientQuery.trim().length >= 2 &&
+                    clientSearchState === 'ready' &&
+                    clientResults &&
+                    clientResults.length > 0 ? (
                       <ul className="stepper__results">
                         {clientResults.map((client) => (
                           <li key={client.id}>
@@ -374,6 +445,7 @@ export function NewAppointmentDrawer({
               id="appt-service"
               label="Service"
               disabled={!selectedClient}
+              hint={selectedClient ? undefined : 'Choose a client first'}
               value={selectedServiceTypeId ?? ''}
               onChange={(e) => selectService(e.target.value)}
             >
@@ -394,6 +466,7 @@ export function NewAppointmentDrawer({
               id="appt-location"
               label="Location"
               disabled={!serviceType}
+              hint={serviceType ? undefined : 'Choose a service first'}
               value={selectedLocationId ?? ''}
               onChange={(e) => {
                 setSelectedLocationId(e.target.value || null);
@@ -417,6 +490,7 @@ export function NewAppointmentDrawer({
               id="appt-practitioner"
               label="Practitioner"
               disabled={!practitionerStepEnabled}
+              hint={practitionerStepEnabled ? undefined : 'Choose a service first'}
               value={selectedPractitionerId ?? ''}
               onChange={(e) => {
                 setSelectedPractitionerId(e.target.value || null);
@@ -431,7 +505,10 @@ export function NewAppointmentDrawer({
               ))}
             </Select>
             {serviceType && (options?.practitioners ?? []).length === 0 ? (
-              <Note>No practitioner is credentialed for this service on this date.</Note>
+              <Note>
+                No practitioner is certified for this service on this date. Choose a different
+                service, or ask the practice to certify one for it.
+              </Note>
             ) : null}
           </div>
 
@@ -446,28 +523,36 @@ export function NewAppointmentDrawer({
                 setStartTime(e.target.value);
                 setSubmitError(null);
               }}
-              hint={startTime ? `Arrival window ${startTime}–${addMinutes(startTime)}` : undefined}
+              hint={
+                !timeStepEnabled
+                  ? 'Choose a location and a practitioner first'
+                  : startTime
+                    ? `Arrival window ${startTime}–${addMinutes(startTime)}`
+                    : undefined
+              }
             />
           </div>
 
           {submitError ? (
-            <div className="drawer__issues" role="alert">
-              {submitError.kind === 'forbidden' ? (
-                <Note tone="critical">
-                  Only the owner, an admin or a lead practitioner can book an appointment.
-                </Note>
-              ) : submitError.kind === 'generic' ? (
-                <Note tone="critical">{submitError.message}</Note>
-              ) : (
-                <ul className="issues">
-                  {submitError.issues.map((issue, index) => (
-                    <li key={`${issue.code}-${index}`} className="issues__item">
-                      {issue.message}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            submitError.kind === 'forbidden' ? (
+              <Note tone="critical">
+                Only the owner, an admin or a lead practitioner can book an appointment.
+              </Note>
+            ) : submitError.kind === 'generic' ? (
+              <Note tone="critical">{submitError.message}</Note>
+            ) : (
+              // Each issue is its own Note, which already announces (role="alert"
+              // on the critical tone): no wrapper role="alert" nesting one
+              // alert region inside another, and no bespoke .issues list that
+              // could not announce anything at all on its own.
+              <div className="stepper__issues">
+                {submitError.issues.map((issue, index) => (
+                  <Note key={`${issue.code}-${index}`} tone="critical">
+                    {issue.message}
+                  </Note>
+                ))}
+              </div>
+            )
           ) : null}
 
           <div className="stepper__submit">

@@ -2,38 +2,26 @@
   The schedule module's own rules. Tokens only, logical properties only
   (.claude/rules/ui.md, DESIGN.md). Everything else the screen needs — the
   page, the toolbar, the ledger table, the drawer shell, fields, buttons,
-  notes — already lives in app/shell/shell.css and is reused as-is.
+  notes, the shared status chip — already lives in app/shell/shell.css and is
+  reused as-is; nothing here forks it.
 */
 
-/* The day field takes the toolbar's usual search width; the button sits at the far end. */
-.schedule__toolbar-end {
-  margin-inline-start: auto;
+/* The date field's own fixed width. shell.css sizes a toolbar's search field
+   wide (`.field--search`, `flex: 1 1 24rem`) and gives every other field a
+   12rem *minimum* (`.toolbar .field:not(.field--search)`); a date field is
+   neither — it never grows, and it isn't the toolbar's search — so it takes
+   a fixed width instead. 12rem has no token of its own in
+   app/shell/tokens.css (out of this module's edit paths), so it is named
+   once here, as a documented local size constant, rather than repeated as a
+   bare literal.
+*/
+:root {
+  --schedule-date-width: 12rem;
 }
 
-/* Appointment status: local to this module (the shared StatusChip is typed to ClientStatus). */
-.appt-status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-2);
-}
-
-.appt-status__dot {
-  inline-size: 6px;
-  block-size: 6px;
-  border-radius: 50%;
-  background: var(--slate);
-}
-
-.appt-status--ok .appt-status__dot {
-  background: var(--ok);
-}
-
-.appt-status--attention .appt-status__dot {
-  background: var(--attention);
-}
-
-.appt-status--critical .appt-status__dot {
-  background: var(--critical);
+.schedule__date {
+  flex: 0 0 var(--schedule-date-width);
+  max-inline-size: var(--schedule-date-width);
 }
 
 /* The new-appointment drawer's steps: the ledger's rhythm, one section per decision. */
@@ -81,13 +69,22 @@
   padding-block-start: var(--s-2);
 }
 
-/* A 409 or a 400's issues, each a plain-language line in the critical tone. */
-.issues {
+/* A 409 or a 400's issues: each its own Note (critical tone), stacked with
+   the same gap the stepper's own steps use. */
+.stepper__issues {
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
 }
 
-.issues__item {
-  color: var(--critical);
+/* The arrival-window hint is the one time shown outside the table
+   (DESIGN.md's tabular-figures rule applies everywhere a time renders, not
+   only inside the ledger); Field has no slot for a class on its own hint, so
+   this reaches the hint by the id Field derives for it (Controls.tsx:
+   `${id}-message`). */
+#appt-start-time-message {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
 }

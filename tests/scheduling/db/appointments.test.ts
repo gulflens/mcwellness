@@ -87,6 +87,8 @@ const LOCATION_MINOR = '00000000-0000-4000-8000-000000005035';
 const LOCATION_NULL_DOB = '00000000-0000-4000-8000-000000005036';
 const LOCATION_RACE_1 = '00000000-0000-4000-8000-000000005037';
 const LOCATION_RACE_2 = '00000000-0000-4000-8000-000000005038';
+// A well-formed id that names no client at all, in any tenant.
+const CLIENT_NONEXISTENT = '00000000-0000-4000-8000-000000005039';
 
 function at(iso: string): Date {
   return new Date(iso);
@@ -286,6 +288,13 @@ beforeAll(async () => {
     'participation',
     'home_visit',
   ]);
+  // Arabic name: proves the appointment list route surfaces it, the way the
+  // clients table's own route already does (PR 26 fix round, item 6).
+  await owner.query('update client set given_name_ar = $1, family_name_ar = $2 where id = $3', [
+    'أيريس',
+    'ألفا',
+    IDS.clientA,
+  ]);
   await seedConsentingClient(owner, IDS.clientB, 'Beta', CONTACT_B, LOCATION_B, [
     'participation',
     'home_visit',
@@ -393,7 +402,7 @@ describe('POST /api/appointments', () => {
       deliveryMode: 'home',
       windowStart: '2026-09-10T05:00:00.000Z',
       windowEnd: '2026-09-10T05:45:00.000Z',
-      client: { id: IDS.clientA },
+      client: { id: IDS.clientA, givenNameAr: 'أيريس', familyNameAr: 'ألفا' },
       practitioner: { id: MORE_IDS.practitionerA },
       serviceType: { id: MORE_IDS.serviceTypeA },
       location: { id: IDS.locationA },
@@ -705,7 +714,7 @@ describe('GET /api/appointments', () => {
     const first = body.appointments.find((a) => a.id === firstAppointmentId);
     expect(first).toMatchObject({
       status: 'proposed',
-      client: { id: IDS.clientA },
+      client: { id: IDS.clientA, givenNameAr: 'أيريس', familyNameAr: 'ألفا' },
       practitioner: { id: MORE_IDS.practitionerA },
     });
   });
@@ -754,6 +763,30 @@ describe('GET /api/appointments/options', () => {
     expect(body.serviceTypes.some((s) => s.id === MORE_IDS.serviceTypeA)).toBe(false);
     expect(body.practitioners.some((p) => p.id === MORE_IDS.practitionerA)).toBe(false);
     expect(body.locations.some((l) => l.id === IDS.locationA)).toBe(false);
+  });
+
+  it('answers a client id that names nobody with empty locations, and logs no client read for it', async () => {
+    const readCount = async (): Promise<number> => {
+      const { rows } = await owner.query<{ n: string }>(
+        "select count(*)::text as n from audit_log where entity_type = 'client' and action = 'read' " +
+          'and entity_id = $1',
+        [CLIENT_NONEXISTENT],
+      );
+      return Number(rows[0]?.n ?? 0);
+    };
+    const before = await readCount();
+    const res = await call(
+      AUTH.ownerA,
+      'GET',
+      `/api/appointments/options?clientId=${CLIENT_NONEXISTENT}`,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as AppointmentOptionsResponse;
+    expect(body.locations).toEqual([]);
+    // Proven in the practice before it is logged as read (options.ts): a
+    // client id that names nobody at all must never write an audit row
+    // claiming a client was read.
+    expect(await readCount()).toBe(before);
   });
 });
 

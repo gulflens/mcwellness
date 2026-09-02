@@ -6,9 +6,11 @@ import {
 } from '../../api/appointments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader } from '../../shell/components/Controls';
+import { StatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
-import { AppointmentStatusChip } from './AppointmentStatusChip';
+import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from './appointmentStatus';
 import { NewAppointmentDrawer } from './NewAppointmentDrawer';
+import { ScheduleClientDrawer } from './ScheduleClientDrawer';
 import './schedule.css';
 
 /**
@@ -52,6 +54,7 @@ export function SchedulePage() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [selectedClient, setSelectedClient] = useState<AppointmentRow['client'] | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -97,12 +100,25 @@ export function SchedulePage() {
       {
         key: 'client',
         header: 'Client',
-        // The Arabic name is not on this row yet: AppointmentRow.client
-        // carries only givenName/familyName, unlike the client table's own
-        // ClientRow. Left for the appointment route to add.
+        // The same cell pattern the clients table uses for a name (ClientsPage.tsx):
+        // a link that opens the record, the Arabic name beneath it.
         render: (row) => (
-          <span>
-            {row.client.givenName} {row.client.familyName}
+          <span className="name">
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setDrawerOpen(false);
+                setSelectedClient(row.client);
+              }}
+            >
+              {row.client.givenName} {row.client.familyName}
+            </button>
+            {row.client.givenNameAr ? (
+              <span className="name__ar small muted" lang="ar" dir="rtl">
+                {row.client.givenNameAr} {row.client.familyNameAr}
+              </span>
+            ) : null}
           </span>
         ),
       },
@@ -120,7 +136,12 @@ export function SchedulePage() {
       {
         key: 'status',
         header: 'Status',
-        render: (row) => <AppointmentStatusChip status={row.status} />,
+        render: (row) => (
+          <StatusChip
+            label={APPOINTMENT_STATUS_LABELS[row.status]}
+            tone={APPOINTMENT_STATUS_TONES[row.status]}
+          />
+        ),
       },
     ],
     [],
@@ -139,23 +160,30 @@ export function SchedulePage() {
             </span>
           )
         }
+        // Secondary, not primary: the drawer's own "Book appointment" submit
+        // is the one primary action on screen once it opens (DESIGN.md's
+        // "at most one primary button" rule).
+        action={
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setSelectedClient(null);
+              setDrawerOpen(true);
+            }}
+          >
+            Add appointment
+          </Button>
+        }
       />
       <div className="toolbar">
         <Field
           id="schedule-date"
-          className="field--search"
+          className="schedule__date"
           label="Date"
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
-        <Button
-          variant="primary"
-          className="schedule__toolbar-end"
-          onClick={() => setDrawerOpen(true)}
-        >
-          Add appointment
-        </Button>
       </div>
       {state.kind === 'loading' ? <Note>Loading the day's appointments.</Note> : null}
       {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
@@ -174,6 +202,9 @@ export function SchedulePage() {
           onClose={() => setDrawerOpen(false)}
           onCreated={handleCreated}
         />
+      ) : null}
+      {selectedClient ? (
+        <ScheduleClientDrawer client={selectedClient} onClose={() => setSelectedClient(null)} />
       ) : null}
     </section>
   );
