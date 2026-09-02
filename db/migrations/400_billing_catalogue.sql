@@ -161,6 +161,9 @@ create trigger default_vat_setting after insert on public.tenant
 insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, amendment_reason)
 select id, 1, 500, date '2018-01-01', 'standard rate at go-live' from tenant;
 
+-- How each table is audited (trunk convention, docs/SPEC/audit.md section 14): neither carries a client.
+comment on table public.vat_setting is 'audited: no client - a practice-wide tax setting';
+comment on table public.price is 'audited: no client - the practice''s price list';
 -- rollback:
 --   drop trigger if exists default_vat_setting on public.tenant;
 --   drop function if exists app.default_vat_setting();
@@ -170,3 +173,5 @@ select id, 1, 500, date '2018-01-01', 'standard rate at go-live' from tenant;
 --   drop trigger if exists audit_row on public.vat_setting;
 --   drop table if exists price;
 --   drop table if exists vat_setting;
+--   comment on table public.vat_setting is null;
+--   comment on table public.price is null;
