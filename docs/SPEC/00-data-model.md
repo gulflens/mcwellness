@@ -221,7 +221,7 @@ tenant ─┬─ location (studio)
 2. ✅ **Appointment window** — 45 minutes. Client-facing copy promises the window, never a clock time.
 3. ✅ **Erasure vs. retention** (re-baselined 2026-09-02) — retention is 5 years after the last activity. A client may request erasure at any time: a server-side function running as the owner anonymises the personal fields (locations keep only their emirate's centroid), deletes documents from storage, removes contacts and the portal account; invoices keep what tax law requires for 5 years; the client row stays as `client.status = 'erased'`, visible only to `lead_practitioner`, excluded from every list and search, so ledgers and audit history reconcile; audit rows keep their own 5 years. Client receives written confirmation. Lawyer to confirm wording.
 4. ✅ **Phase 1 questionnaires** — all seven: Conners, Vanderbilt, ASRS, GAD-7, PHQ-9, ISI, PSQI. Each is a form + scoring function in `domain/assessment`.
-5. ✅ **Setup photo** — yes. `photo_video` consent is captured at intake; `session.setup_photo_document_id` added.
+5. ✅ **Setup photo** — yes. `photo_video` consent is captured at enrolment; `session.setup_photo_document_id` added.
 
 ---
 

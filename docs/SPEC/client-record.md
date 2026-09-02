@@ -45,7 +45,7 @@ any ──► erased   (erasure request)
 - **Documents** — upload, preview, kind, retention date shown
 - **Timeline** — the audit record for this client in plain language (AUDIT-SPEC §9.1)
 
-**4.3 Intake wizard.** Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → goals (goals and concerns, referral) → consent capture → summary. Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
+**4.3 Enrolment.** The wizard that enrols a new client (the operator's word, 2026-09-03: enrolment, never intake). Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → goals (goals and concerns, referral) → consent capture → summary. Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
 
 ## 5. Rules (each is a pure function in `domain/client`, each has tests)
 
