@@ -1,8 +1,9 @@
 import type { ClientStatus } from '../../api/clients/schema';
 
 /** The four tones any part of the app may use. Ok, attention and critical
- * colour the dot from their tokens; neutral is ink-2 and carries no
- * colour-only meaning (DESIGN.md's Do's and Don'ts: never colour the word). */
+ * colour the dot from their tokens; neutral is the documented default
+ * slate dot and carries no colour-only meaning (DESIGN.md's Do's and
+ * Don'ts: never colour the word). */
 export type StatusTone = 'ok' | 'attention' | 'critical' | 'neutral';
 
 /** A status any screen can render: a word in ink, a 6px dot beside it. */

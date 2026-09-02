@@ -98,8 +98,10 @@
 /* Page furniture */
 .page__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--s-4);
+  row-gap: var(--s-2);
   margin-block-end: var(--s-6);
 }
 
@@ -744,7 +746,9 @@ a.rail__item:active,
   font-weight: var(--w-medium);
 }
 
-/* Round 7a: a locked field explains itself instead of just going quiet. */
+/* Round 7a: a locked field explains itself instead of just going quiet, and
+   reads as more than an enabled empty field: the fill drops from surface
+   to the paper ground rather than staying white. */
 .field__input:disabled {
   color: var(--ink-2);
   background: var(--paper);
@@ -752,9 +756,15 @@ a.rail__item:active,
   cursor: default;
 }
 
+.field__input:disabled ~ .select__chevron {
+  color: var(--ink-2);
+}
+
 /* Round 7a: the general-purpose status chip's own tones, alongside the
    client record's status--active/paused/erased/lead vocabulary above. Ok,
-   attention and critical colour the dot; neutral carries none. */
+   attention and critical colour the dot; neutral is the documented default
+   slate dot (Status Chip section: "closed the default slate dot"), not a
+   second colour of its own. */
 .status--ok .status__dot {
   background: var(--ok);
 }
@@ -768,5 +778,5 @@ a.rail__item:active,
 }
 
 .status--neutral .status__dot {
-  background: var(--ink-2);
+  background: var(--slate);
 }

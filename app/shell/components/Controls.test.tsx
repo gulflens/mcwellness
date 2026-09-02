@@ -48,6 +48,13 @@ describe('Field', () => {
     expect(screen.queryByText('Name is required')).toBeNull();
     expect(input.getAttribute('aria-invalid')).toBeNull();
   });
+
+  it('lets the hint return when a cleared error is passed as an empty string', () => {
+    render(<Field id="name" label="Name" hint="As it appears on the record" error="" />);
+    const input = screen.getByLabelText('Name');
+    expect(screen.getByText('As it appears on the record')).toBeTruthy();
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+  });
 });
 
 describe('Select', () => {
@@ -79,6 +86,17 @@ describe('Select', () => {
     );
     expect(screen.getByText('Filters the table below')).toBeTruthy();
     expect(screen.queryByText('Choose a status')).toBeNull();
+    expect(select.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('lets the hint return when a cleared error is passed as an empty string', () => {
+    render(
+      <Select id="status" label="Status" hint="Filters the table below" error="">
+        <option value="">Any status</option>
+      </Select>,
+    );
+    const select = screen.getByLabelText('Status');
+    expect(screen.getByText('Filters the table below')).toBeTruthy();
     expect(select.getAttribute('aria-invalid')).toBeNull();
   });
 });

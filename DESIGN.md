@@ -351,8 +351,8 @@ A label above, a box below, both in the ledger's vocabulary.
 - **Style:** the label is small (14px) in second ink with a 4px gap; the input is 44px tall, surface fill, a 1px Rule border, 4px radius, 12px horizontal padding, ink text, placeholder in second ink. Browser chrome is removed (`appearance: none`, search decorations hidden).
 - **Select:** the same box, with a 20px chevron in second ink absolutely placed 12px from the inline end and 40px of end padding so the value never runs under it.
 - **Search:** the primary action on the clients page; it takes the toolbar's width and autofocuses at 720px and above.
-- **Focus:** the shared ring. **Error:** there is no red border; errors are a critical Note beneath the form.
-- **Disabled:** ink-2 text on the paper ground, the same hairline border in Rule, a default cursor and no hover change; the hint still renders beneath so a locked step can say what it is waiting for.
+- **Focus:** the shared ring. **Error:** there is no red border; the message takes over the hint's own slot in critical ink, wired to the control by `aria-invalid`/`aria-describedby`. A field's error sits with its field; a Note is for an outcome (loading, empty, a submission failing), never for a field's own validation.
+- **Disabled:** ink-2 text on the paper ground (a visible drop from the enabled field's white), the same hairline border in Rule, a default cursor and no hover change, its select chevron dimmed to ink-2 alongside it; the hint still renders beneath so a locked step can say what it is waiting for.
 
 ### Navigation
 The rail: the console's fixed inline-start column, icon and label, no collapse toggle.
@@ -365,7 +365,7 @@ The rail: the console's fixed inline-start column, icon and label, no collapse t
 ### Status Chip
 - **Style:** a word in ink, preceded by a 6px dot with an 8px gap; no background, no border, no pill.
 - **State:** active takes the ok dot, paused the attention dot, erased the critical dot, closed the default slate dot; lead is a hollow ring (transparent fill, 1px inset ring in second ink).
-- **General purpose:** any screen can render `StatusChip` directly with a `label` and one of four tones — ok, attention and critical colour the dot, neutral sits in ink-2 with no colour-only meaning — while the client record keeps its own five-status vocabulary above through the thin `ClientStatusChip` wrapper.
+- **General purpose:** any screen can render `StatusChip` directly with a `label` and one of four tones — ok, attention and critical colour the dot, neutral sits in the documented default slate with no colour-only meaning — while the client record keeps its own five-status vocabulary above through the thin `ClientStatusChip` wrapper.
 
 ### Note
 A quiet line of text that answers a state. Loading, empty and error states are a sentence, never a banner or a skeleton.

@@ -35,7 +35,7 @@ export function Field({
   hint?: string;
   error?: string;
 }) {
-  const message = error ?? hint;
+  const message = error || hint;
   const messageId = message ? `${id}-message` : undefined;
   return (
     <div className={['field', className].filter(Boolean).join(' ')}>
@@ -75,7 +75,7 @@ export function Select({
   error?: string;
   children: ReactNode;
 }) {
-  const message = error ?? hint;
+  const message = error || hint;
   const messageId = message ? `${id}-message` : undefined;
   return (
     <div className="field">
