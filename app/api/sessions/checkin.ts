@@ -10,8 +10,13 @@ import { hasRole } from '@domain/shared';
 import { logRefusal } from './audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { CheckInRequest, CheckInResponse } from './schema';
+import { mountServiceTypes } from './service-types';
 
 /**
+ * mountSessions mounts every route this stream owns: POST
+ * /api/sessions/:id/events below, and GET /api/sessions/service-types
+ * (./service-types.ts).
+ *
  * POST /api/sessions/:id/events — the offline outbox's server side
  * (docs/SPEC/session-capture.md sections 2 and 4): the device flushes its
  * queued events here, keyed by their own client-generated ids, and the
@@ -59,6 +64,8 @@ type CheckinContextRow = {
 };
 
 export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  mountServiceTypes(api, now);
+
   api.post('/api/sessions/:id/events', async (c) => {
     const actor = c.get('actor');
     const requestId = c.get('requestId');

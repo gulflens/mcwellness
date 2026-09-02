@@ -84,3 +84,24 @@ export const CheckInResponse = z.discriminatedUnion('status', [
   }),
 ]);
 export type CheckInResponse = z.infer<typeof CheckInResponse>;
+
+// GET /api/sessions/service-types (app/api/sessions/service-types.ts): the
+// service types the caller may run a session for today, driving the check-in
+// screen's own picker. Same shape as app/api/billing/service-types.ts's
+// ServiceTypeOption — a different door reading the same table for a
+// different audience (every active service in the catalogue there; only the
+// caller's own credentialed ones here) — kept as its own type in this
+// module's own schema file rather than a shared import, matching how this
+// stream keeps to app/api/sessions/**.
+export const ServiceTypeOption = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  name: z.string(),
+  nameAr: z.string().nullable(),
+});
+export type ServiceTypeOption = z.infer<typeof ServiceTypeOption>;
+
+export const ServiceTypesResponse = z.object({
+  serviceTypes: z.array(ServiceTypeOption),
+});
+export type ServiceTypesResponse = z.infer<typeof ServiceTypesResponse>;
