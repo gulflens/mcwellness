@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { hasRole } from '@domain/shared';
+import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
+import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { PortalLanding } from '../client/PortalLanding';
 import { CheckInPage } from '../therapist/session/CheckInPage';
 import { TodayLanding } from '../therapist/TodayLanding';
@@ -45,6 +47,34 @@ export function App() {
       >
         <Route index element={<Navigate to="/admin/clients" replace />} />
         <Route path="clients" element={<ClientsPage />} />
+        <Route
+          path="billing"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance') ? (
+                  <BillingPage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="schedule"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                hasRole(actor, 'owner', 'admin', 'lead_practitioner') ? (
+                  <SchedulePage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
       </Route>
       <Route path="/today" element={<RequireAuth>{() => <TodayLanding />}</RequireAuth>} />
       <Route

@@ -1,3 +1,13 @@
+**Applied in round 7b part 2, 2026-09-03, pull request 30:** items 1 and 2
+below — the `/admin/schedule` route and the rail's `schedule` destination —
+are live on `main`. The route also gained a role gate not shown in the
+diffs (an account holding only the `practitioner` role is sent home
+instead of reaching the screen), mirroring `/today/check-in`'s own pattern
+from round 7b, so the screen's reach matches `appointment.list`'s practice
+scope in `domain/shared/actor.ts` — owner, admin and lead practitioner, not
+finance. Section 3's `domain/shared` finding was already closed by round 6
+(see the correction within); section 4 is unaffected by this change.
+
 # scheduling-02: the Day schedule screen's route and rail link
 
 This pull request builds `app/admin/schedule/SchedulePage.tsx`, so the second
