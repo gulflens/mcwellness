@@ -8,6 +8,10 @@
 -- reaches 'in_progress': the rest of session_status and session_event_kind
 -- are declared now so the vocabulary is stable, and implemented one screen
 -- at a time.
+--
+-- Needs: 000 (schema extensions/postgis, app.set_updated_at), 010 (tenant),
+-- 020 (app_user, for created_by), 030 (location), 040 (service_type, the
+-- delivery_mode type), 050 (practitioner), 060 (client), 080 (app.audit_row).
 
 create type session_status as enum (
   'scheduled', 'in_progress', 'completed', 'no_show', 'cancelled_late', 'cancelled', 'aborted'

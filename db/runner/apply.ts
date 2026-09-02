@@ -2,11 +2,15 @@ import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
 import {
+  checkNeeds,
+  checksumOf,
   hasRollbackBlock,
   isLocalDatabaseUrl,
   listMigrationFiles,
   listPolicyFiles,
+  planChecksums,
   planMigrations,
+  type RecordedMigration,
 } from './plan';
 
 /** The I/O half of the migration runner. The rules live in ./plan.ts. */
@@ -64,6 +68,14 @@ async function setAuditContext(client: pg.Client, reason: string): Promise<void>
 /**
  * Applies every pending migration, each inside its own transaction, and
  * records it in schema_migration. Returns how many were applied.
+ *
+ * Every run also re-verifies every already-applied file's checksum
+ * (db/migrations/900_migration_checksums.sql, .claude/rules/data-model.md's
+ * "never edit a merged migration" enforced rather than merely stated): a
+ * file whose recorded checksum no longer matches its current text refuses
+ * the whole run before anything pending is touched. A null recorded
+ * checksum — a file applied before this column existed — is backfilled from
+ * its current text instead, once, on whichever run first has the column.
  */
 export async function runMigrations(client: pg.Client): Promise<number> {
   await client.query(`select pg_advisory_lock(${LOCK_KEY})`);
@@ -71,32 +83,79 @@ export async function runMigrations(client: pg.Client): Promise<number> {
     await client.query(
       'create table if not exists schema_migration (' +
         'filename text primary key, ' +
+        'checksum text, ' +
         'applied_at timestamptz not null default now())',
     );
+    // Belt and braces for a database whose schema_migration predates the
+    // checksum column: `create table if not exists` above does nothing to an
+    // existing table missing it. db/migrations/900_migration_checksums.sql
+    // carries the same alteration as a tracked migration, for the historical
+    // record; this line is what actually makes the column present before the
+    // select just below ever runs, on every database, in every order.
+    await client.query('alter table schema_migration add column if not exists checksum text');
     // No policies on purpose: the bookkeeping table is invisible to API roles.
     await client.query('alter table schema_migration enable row level security');
 
     const available = listMigrationFiles(await readdir(MIGRATIONS_DIR));
-    const { rows } = await client.query<{ filename: string }>(
-      'select filename from schema_migration',
+    const { rows } = await client.query<{ filename: string; checksum: string | null }>(
+      'select filename, checksum from schema_migration',
     );
     const pending = planMigrations(
       available,
       rows.map((row) => row.filename),
     );
 
+    // Every already-applied file's current text, read once and cached: the
+    // checksum verification below needs it for every row, and the apply
+    // loop further down needs pending files' text again anyway.
+    const textCache = new Map<string, string>();
+    async function textOf(filename: string): Promise<string> {
+      const cached = textCache.get(filename);
+      if (cached !== undefined) {
+        return cached;
+      }
+      const text = await readFile(new URL(filename, MIGRATIONS_DIR), 'utf8');
+      textCache.set(filename, text);
+      return text;
+    }
+    const recorded: RecordedMigration[] = rows.map((row) => ({
+      filename: row.filename,
+      checksum: row.checksum,
+    }));
+    for (const row of recorded) {
+      await textOf(row.filename);
+    }
+    const checksumPlan = planChecksums(recorded, (filename) => textCache.get(filename) ?? '');
+    if (checksumPlan.mismatched.length > 0) {
+      throw new Error(
+        `${checksumPlan.mismatched.join(', ')} no longer matches the checksum recorded when ` +
+          'it was applied. A merged migration is never edited (.claude/rules/data-model.md); ' +
+          'a deliberate change needs a new migration instead.',
+      );
+    }
+    for (const { filename, checksum } of checksumPlan.toBackfill) {
+      await client.query('update schema_migration set checksum = $1 where filename = $2', [
+        checksum,
+        filename,
+      ]);
+    }
+
     for (const file of pending) {
-      const sql = await readFile(new URL(file.filename, MIGRATIONS_DIR), 'utf8');
+      const sql = await textOf(file.filename);
       if (!hasRollbackBlock(sql)) {
         throw new Error(
           `${file.filename} has no "-- rollback:" block. Add one before applying it.`,
         );
       }
+      checkNeeds(file, sql);
       await client.query('begin');
       try {
         await setAuditContext(client, `migration ${file.filename}`);
         await client.query(sql);
-        await client.query('insert into schema_migration (filename) values ($1)', [file.filename]);
+        await client.query('insert into schema_migration (filename, checksum) values ($1, $2)', [
+          file.filename,
+          checksumOf(sql),
+        ]);
         await client.query('commit');
       } catch (error) {
         await client.query('rollback');

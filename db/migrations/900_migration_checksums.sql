@@ -1,0 +1,41 @@
+-- 900_migration_checksums.sql
+-- The first migration in the trunk's 900-999 range (docs/SPEC/OWNERSHIP.md,
+-- round 4's note: "099 is also the core range's last free number ... the
+-- trunk gives itself 900-999 to continue its own migrations in").
+--
+-- A round 4 review finding: ".claude/rules/data-model.md" already says "never
+-- edit a merged migration", but nothing enforced it — a file's text could
+-- change after it was applied and every database that already ran the old
+-- text would simply diverge from one that runs the new text next, silently.
+-- schema_migration (bootstrapped directly by db/runner/apply.ts, never
+-- itself the subject of a migration before this one — there is no earlier
+-- database for a first migration to alter) gains a nullable `checksum`
+-- column: the sha256 of a migration file's own text, in hex
+-- (db/runner/plan.ts's checksumOf). From here, runMigrations records the
+-- checksum of every file it applies, and refuses on any run where an
+-- already-applied file's current text no longer matches what was recorded
+-- when it ran; a null checksum — a file applied before this column existed
+-- — is backfilled from its current text instead of refused, once, the first
+-- time a database old enough to have one reaches this migration.
+--
+-- This alteration is also carried directly in db/runner/apply.ts's own
+-- bootstrap (`alter table schema_migration add column if not exists
+-- checksum text`, immediately after the `create table if not exists`):
+-- schema_migration must exist, checksum column included, before this very
+-- migration file — or any other — can be listed and compared, so the
+-- runner cannot wait for a migration to add a column it already needs to
+-- read. This file exists anyway, nullable and idempotent
+-- (`add column if not exists`), so the change still has the same tracked
+-- historical record every other schema change gets, and so a database
+-- whose copy of the runner has not yet picked up that bootstrap change
+-- still gains the column through the ordinary migration path.
+
+alter table schema_migration add column if not exists checksum text;
+
+-- rollback:
+--   alter table schema_migration drop column if exists checksum;
+--   -- db/runner/apply.ts's own bootstrap re-adds the column on its very next
+--   -- run regardless (the belt-and-braces line above, in that file); reverting
+--   -- this migration without also reverting that line leaves the column in
+--   -- place, which is intended — schema_migration is bootstrapped by the
+--   -- runner, not solely by its migration history.

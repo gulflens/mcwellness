@@ -1,13 +1,22 @@
+import { createHash } from 'node:crypto';
+
 /**
  * The pure half of the migration runner: which files exist, in what order,
  * and which of them still need applying. No I/O here, so it is tested without
- * a database.
+ * a database. `createHash` is used only for its own deterministic arithmetic
+ * (a text in, a hex digest out), never to read anything, so it stays here
+ * alongside the rest.
  *
  * Conventions (docs/SPEC/OWNERSHIP.md and .claude/rules/data-model.md):
  * - files are named NNN_description.sql and live in db/migrations;
  * - each worktree uses its own numeric range and never renumbers;
  * - migrations are forward-only, and every file carries a "-- rollback:"
- *   comment block describing the manual reversal.
+ *   comment block describing the manual reversal;
+ * - a migration may name earlier numbers it depends on in a "-- Needs:"
+ *   comment (db/migrations/099_tenant_scoped_keys.sql, 400_billing_catalogue.sql);
+ * - a merged migration is never edited (.claude/rules/data-model.md) —
+ *   db/migrations/900_migration_checksums.sql and the checksum functions
+ *   below are that rule enforced by the runner, not merely stated in prose.
  */
 
 export type MigrationFile = { filename: string; number: number };
@@ -46,6 +55,95 @@ export function listMigrationFiles(names: readonly string[]): MigrationFile[] {
 /** True when the SQL carries a "-- rollback:" marker (case-insensitive). */
 export function hasRollbackBlock(sql: string): boolean {
   return /^--\s*rollback:/im.test(sql);
+}
+
+/** The sha256 of a migration file's own text, as lowercase hex (schema_migration.checksum). */
+export function checksumOf(sql: string): string {
+  return createHash('sha256').update(sql, 'utf8').digest('hex');
+}
+
+/**
+ * The migration numbers a file's own "-- Needs:" comment names, when it
+ * carries one (db/migrations/099_tenant_scoped_keys.sql and
+ * 400_billing_catalogue.sql are the existing examples). The comment may wrap
+ * onto further "--" lines immediately below the first, as both of those do;
+ * reading stops at the first line that is not itself a "--" comment. Absent
+ * entirely, this is `[]` — nothing to check, not a refusal in itself.
+ */
+export function parseNeeds(sql: string): number[] {
+  const lines = sql.split(/\r?\n/);
+  const startIndex = lines.findIndex((line) => /^--\s*Needs:/i.test(line));
+  if (startIndex === -1) {
+    return [];
+  }
+  const block: string[] = [];
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (!line.startsWith('--')) {
+      break;
+    }
+    block.push(line);
+  }
+  const numbers = block.join(' ').match(/\b\d{3}\b/g) ?? [];
+  return [...new Set(numbers.map(Number))].sort((a, b) => a - b);
+}
+
+/**
+ * Refuses a migration whose own "-- Needs:" comment names a number that is
+ * not earlier than its own (docs/SPEC/OWNERSHIP.md: "a migration's only
+ * real dependency is what it declares in its own 'Needs' comment"). A
+ * migration may depend only on earlier numbers, in its own range or the
+ * core range — never on itself, and never on a number that might name a
+ * file not yet written, since a later number is no proof a later stream's
+ * migration has even landed on this database (see planMigrations above).
+ */
+export function checkNeeds(file: MigrationFile, sql: string): void {
+  for (const need of parseNeeds(sql)) {
+    if (need >= file.number) {
+      const needed = String(need).padStart(3, '0');
+      const own = String(file.number).padStart(3, '0');
+      throw new Error(
+        `${file.filename} names ${needed} in its "-- Needs:" comment, which is not earlier ` +
+          `than its own number (${own}). A migration may depend only on earlier numbers.`,
+      );
+    }
+  }
+}
+
+export type RecordedMigration = { filename: string; checksum: string | null };
+export type ChecksumPlan = {
+  /** Already-applied files whose current text no longer matches what was recorded when applied. */
+  mismatched: readonly string[];
+  /** Already-applied files recorded before the checksum column existed, to backfill now. */
+  toBackfill: readonly { filename: string; checksum: string }[];
+};
+
+/**
+ * Decides, for every already-applied migration, whether its current text
+ * still matches what was recorded when it was applied
+ * (db/migrations/900_migration_checksums.sql; .claude/rules/data-model.md's
+ * "never edit a merged migration", enforced here rather than merely stated).
+ * A null recorded checksum predates the column and is backfilled from the
+ * file's current text, not refused — round 5 introduces the column onto
+ * databases with migrations already applied under the old, checksum-less
+ * runner. A non-null checksum that no longer matches means the file's text
+ * changed after it was applied.
+ */
+export function planChecksums(
+  recorded: readonly RecordedMigration[],
+  currentTextOf: (filename: string) => string,
+): ChecksumPlan {
+  const mismatched: string[] = [];
+  const toBackfill: { filename: string; checksum: string }[] = [];
+  for (const row of recorded) {
+    const checksum = checksumOf(currentTextOf(row.filename));
+    if (row.checksum === null) {
+      toBackfill.push({ filename: row.filename, checksum });
+    } else if (row.checksum !== checksum) {
+      mismatched.push(row.filename);
+    }
+  }
+  return { mismatched, toBackfill };
 }
 
 /**
