@@ -97,6 +97,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
       c.get('db'),
       'client',
       clients.map((client) => ({ id: client.id, clientId: client.id })),
+      'list',
     );
     return c.json(ClientListResponse.parse({ clients, note: null }));
   });

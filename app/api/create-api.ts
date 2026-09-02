@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { MeResponse } from './_middleware/actor-schema';
+import { mountTimeline } from './audit/timeline';
 import { mountClients } from './clients/list';
 import { mountDevSession, type DevSessionOptions } from './dev-session';
 import {
@@ -65,6 +66,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   });
 
   mountClients(api, deps.now);
+  mountTimeline(api, deps.now);
 
   return api;
 }

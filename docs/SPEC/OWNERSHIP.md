@@ -55,6 +55,8 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `client-record` | `domain/client/**`, `app/admin/clients/**`, `app/api/clients/**`, `db/policies/client/**`, `tests/client/**` | `100–199` | `SPEC/client-record.md` |
 
 > Seeded by the trunk in PR 5 (2026-09-02): `app/admin/clients/ClientsPage.tsx`, `app/api/clients/list.ts` and `app/api/clients/schema.ts` carry the first client table so the shell has a real screen. The client-record worktree owns them from here; the trunk does not touch them again without a change request.
+>
+> Seeded by the trunk in PR 6 (2026-09-02): `app/admin/clients/ClientDrawer.tsx` (client-record owns it from here) and `app/admin/audit/RecordTimeline.tsx`, `app/api/audit/timeline.ts`, `app/api/audit/schema.ts` (audit-ui owns them from here). The sentence catalogue `domain/shared/audit-narrative.ts` stays with the trunk.
 | `scheduling` | `domain/scheduling/**`, `app/admin/schedule/**`, `app/therapist/today/**`, `app/api/appointments/**`, `db/policies/scheduling/**`, `tests/scheduling/**` | `200–299` | `SPEC/scheduling-manual.md` |
 | `session-capture` | `domain/session/**`, `app/therapist/session/**`, `app/api/sessions/**`, `db/policies/session/**`, `tests/session/**` | `300–399` | `SPEC/session-capture.md` |
 | `billing` | `domain/billing/**`, `app/admin/billing/**`, `app/api/billing/**`, `db/policies/billing/**`, `jobs/billing/**`, `tests/billing/**` | `400–499` | `FINANCE-SPEC.md` |

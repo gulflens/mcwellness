@@ -141,3 +141,18 @@ describe('withRequestContext', () => {
     expect(res.headers.get('X-Request-Id')).not.toBe('not-a-uuid');
   });
 });
+
+describe('scrubReason', () => {
+  it('replaces a pasted token or key and leaves an ordinary reason alone', async () => {
+    const { scrubReason } = await import('./request-context');
+    expect(scrubReason('Asked by the parent at the door.')).toBe(
+      'Asked by the parent at the door.',
+    );
+    expect(
+      scrubReason('see eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJlLXNpZ25hdHVyZQ then'),
+    ).toBe('see [redacted] then');
+    expect(scrubReason('key 0123456789abcdef0123456789abcdef0123456789abcdef here')).toBe(
+      'key [redacted] here',
+    );
+  });
+});

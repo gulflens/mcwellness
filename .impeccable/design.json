@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-02T00:00:00.000Z",
+  "generatedAt": "2026-09-02T11:00:40.866Z",
   "title": "Design System: McWellness",
   "extensions": {
     "colorMeta": {
@@ -402,27 +402,27 @@
       },
       "h2": {
         "displayName": "H2",
-        "purpose": "Section headings within a page. On the dark ground 31px/38px."
+        "purpose": "Section headings within a page, and the drawer's title. On the dark ground 31px/38px."
       },
       "h3": {
         "displayName": "H3",
-        "purpose": "The wordmark in the rail and sub-section headings. On the dark ground 25px/32px."
+        "purpose": "The wordmark in the rail, sub-section headings, and the drawer's section heading. On the dark ground 25px/32px."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Running text, table cells, field values; buttons take it at weight 500. On the dark ground 17px/27px."
+        "purpose": "Running text, table cells, field values, the link, timeline sentences; buttons and a change or creation sentence take it at weight 500. On the dark ground 17px/27px."
       },
       "small": {
         "displayName": "Small",
-        "purpose": "Field labels, table headers (at 500), the count beside a heading, the Arabic name under a Latin one. On the dark ground 16px/24px."
+        "purpose": "Field labels, table headers (at 500), the count beside a heading, the Arabic name under a Latin one, the timeline's day headings (at 500) and reason lines. On the dark ground 16px/24px."
       },
       "micro": {
         "displayName": "Micro",
-        "purpose": "Metadata in second ink: roles, the Arriving mark. Sentence case, never all-caps. On the dark ground 14px/20px."
+        "purpose": "Metadata in second ink: roles, the Arriving mark, the roles-and-time line under a timeline sentence. Sentence case, never all-caps. On the dark ground 14px/20px."
       },
       "numeric": {
         "displayName": "Numeric",
-        "purpose": "Tabular lining figures on every numeral that could sit in a column; never monospace."
+        "purpose": "Tabular lining figures on every numeral that could sit in a column, times included; never monospace."
       }
     },
     "shadows": [
@@ -434,14 +434,14 @@
       {
         "name": "shadow",
         "value": "0 8px 24px rgba(22, 36, 42, 0.14)",
-        "purpose": "Reserved for the detail drawer and menus, which are not yet built. Nothing in the shipped app references it. On the dark ground: 0 8px 24px rgba(0, 0, 0, 0.4)."
+        "purpose": "The drawer's lift: the one surface that sits over the ledger takes it, paired with a hairline at the drawer's inline-start edge. Menus take the same when they arrive; nothing on the ledger itself carries it, and nothing gains it on hover. On the dark ground: 0 8px 24px rgba(0, 0, 0, 0.4)."
       }
     ],
     "motion": [
       {
         "name": "motion",
         "value": "160ms",
-        "purpose": "Reserved: motion answers an action (a drawer opening, a value changing). Nothing in the shipped shell transitions; hover feedback is instant."
+        "purpose": "The drawer's entrance, the only transition in the shipped shell: translate 24px in from its own edge and opacity from 0, through @starting-style, mirrored for RTL with :dir(rtl). Hover feedback stays instant. 0ms under prefers-reduced-motion."
       },
       {
         "name": "motion-ribbon",
@@ -451,20 +451,24 @@
       {
         "name": "ease",
         "value": "cubic-bezier(0.2, 0, 0, 1)",
-        "purpose": "The ease-out for any motion that does occur. Both durations drop to 0ms under prefers-reduced-motion."
+        "purpose": "The ease-out for any motion that does occur; today, the drawer's entrance. Both durations drop to 0ms under prefers-reduced-motion."
       }
     ],
     "breakpoints": [
       {
         "name": "fold",
         "value": "720px",
-        "purpose": "Below it the rail becomes a band, the grid goes to one column, fields go full width and the first two table columns pin."
+        "purpose": "Below it the rail becomes a band, the grid goes to one column, fields go full width, the drawer takes the full width and drops its edge hairline, and the first two table columns pin."
       }
     ],
     "structure": [
       {
         "name": "rail",
         "value": "220px"
+      },
+      {
+        "name": "drawer",
+        "value": "480px"
       },
       {
         "name": "row",
@@ -514,6 +518,14 @@
       "css": ".ds-btn-quiet { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0; border: 0; background: none; color: var(--ink-2, #3e5058); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); cursor: pointer; } .ds-btn-quiet:hover { color: var(--ink, #16242a); } .ds-btn-quiet:focus-visible { box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); outline: none; border-radius: 4px; }"
     },
     {
+      "name": "Link",
+      "kind": "button",
+      "refersTo": "link",
+      "description": "A button that reads as a link: the client's name in the ledger opens the drawer. Ink, a hairline underline, 2px on hover, no transition.",
+      "html": "<p class=\"ds-link-row\"><span class=\"ds-numeric\">MW-000005</span><button type=\"button\" class=\"ds-link\">Dahlia Bay</button></p>",
+      "css": ".ds-link-row { display: flex; align-items: baseline; gap: 24px; margin: 0; font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); color: var(--ink, #16242a); } .ds-numeric { font-variant-numeric: tabular-nums lining-nums; } .ds-link { padding: 0; border: 0; background: none; font: inherit; color: var(--ink, #16242a); text-align: start; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.18em; cursor: pointer; } .ds-link:hover { text-decoration-thickness: 2px; } .ds-link:focus-visible { border-radius: 4px; outline: none; box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); }"
+    },
+    {
       "name": "Search Field",
       "kind": "input",
       "refersTo": "field-input",
@@ -560,19 +572,36 @@
       "description": "A quiet line that answers a state (loading, empty, error). Never a banner, never a skeleton.",
       "html": "<p class=\"ds-note\">Loading the client list.</p><p class=\"ds-note ds-note--critical\" role=\"alert\">The client list could not be loaded. Try again.</p>",
       "css": ".ds-note { margin: 0 0 8px; max-width: 68ch; color: var(--ink-2, #3e5058); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); } .ds-note--critical { color: var(--critical, #94382e); }"
+    },
+    {
+      "name": "Drawer",
+      "kind": "custom",
+      "refersTo": "drawer",
+      "description": "A record's detail beside the ledger: 480px at the inline end on surface, a hairline edge and the one soft shadow, no scrim; enters in 160ms, the shell's only motion.",
+      "html": "<aside class=\"ds-drawer\" role=\"dialog\" aria-labelledby=\"ds-drawer-title\"><header class=\"ds-drawer__header\"><div class=\"ds-drawer__title\"><h2 id=\"ds-drawer-title\">Dahlia Bay</h2><p class=\"ds-drawer__ar\" lang=\"ar\" dir=\"rtl\">داليا خليج</p><p class=\"ds-drawer__fact ds-numeric\">MW-000005</p><p class=\"ds-drawer__fact\"><span class=\"ds-drawer__dot\"></span>Active</p></div><button type=\"button\" class=\"ds-drawer__close\" aria-label=\"Close\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M5 5l10 10M15 5L5 15\"/></svg></button></header><div class=\"ds-drawer__body\"><h3 class=\"ds-drawer__section\">Timeline</h3><p class=\"ds-drawer__note\">Loading the timeline.</p></div></aside>",
+      "css": ".ds-drawer { position: relative; inline-size: 480px; max-inline-size: 100%; min-block-size: 320px; display: flex; flex-direction: column; background: var(--surface, #ffffff); border-inline-start: 1px solid var(--rule, #cbd5d6); box-shadow: var(--shadow, 0 8px 24px rgba(22, 36, 42, 0.14)); color: var(--ink, #16242a); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); transition: translate 160ms cubic-bezier(0.2, 0, 0, 1), opacity 160ms cubic-bezier(0.2, 0, 0, 1); } @starting-style { .ds-drawer { translate: 24px 0; opacity: 0; } :dir(rtl) .ds-drawer { translate: -24px 0; } } @media (prefers-reduced-motion: reduce) { .ds-drawer { transition: none; } } .ds-drawer__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px; border-block-end: 1px solid var(--rule, #cbd5d6); } .ds-drawer__title { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; } .ds-drawer__title h2 { margin: 0; font-size: 25px; line-height: 32px; font-weight: 500; text-wrap: balance; } .ds-drawer__ar, .ds-drawer__fact { margin: 0; font-size: 14px; line-height: 22px; } .ds-drawer__ar { color: var(--ink-2, #3e5058); } .ds-drawer__fact { display: inline-flex; align-items: center; gap: 8px; } .ds-numeric { font-variant-numeric: tabular-nums lining-nums; } .ds-drawer__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok, #2f6b4f); } .ds-drawer__close { flex: none; display: inline-flex; align-items: center; justify-content: center; inline-size: 48px; block-size: 48px; margin: -8px; border: 0; border-radius: 4px; background: none; color: var(--ink-2, #3e5058); cursor: pointer; } .ds-drawer__close:hover { color: var(--ink, #16242a); background: var(--paper, #eef2f1); } .ds-drawer__close:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); } .ds-drawer__body { flex: 1; padding: 24px; } .ds-drawer__section { margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; } .ds-drawer__note { margin: 8px 0 0; max-width: 68ch; color: var(--ink-2, #3e5058); }"
+    },
+    {
+      "name": "Record Timeline",
+      "kind": "custom",
+      "refersTo": "timeline-event",
+      "description": "A client's history as sentences on hairline rules at a 12px block step: change or creation in medium ink, read or system in regular second ink, roles and a tabular time beneath, sticky day headings.",
+      "html": "<section class=\"ds-timeline\" aria-label=\"Timeline\"><h4 class=\"ds-timeline__day\">Wednesday, 2 September 2026</h4><ol class=\"ds-timeline__list\"><li class=\"ds-timeline__event ds-timeline__event--read\"><p class=\"ds-timeline__sentence\">Hazel Harbour viewed this record</p><p class=\"ds-timeline__meta\"><span>Owner, Admin, Lead practitioner, Finance</span><time class=\"ds-numeric\" datetime=\"2026-09-02T10:48:00Z\">14:48</time></p></li><li class=\"ds-timeline__event ds-timeline__event--read\"><p class=\"ds-timeline__sentence\">Hazel Harbour saw this record in a list</p><p class=\"ds-timeline__meta\"><time class=\"ds-numeric\" datetime=\"2026-09-02T10:48:00Z\">14:48</time></p></li><li class=\"ds-timeline__event ds-timeline__event--change\"><p class=\"ds-timeline__sentence\">Hazel Harbour recorded home visit consent, version 1, by signature in the app</p><p class=\"ds-timeline__meta\"><time class=\"ds-numeric\" datetime=\"2026-09-02T10:48:00Z\">14:48</time></p><p class=\"ds-timeline__reason\">Reason: synthetic seed</p></li><li class=\"ds-timeline__event ds-timeline__event--change\"><p class=\"ds-timeline__sentence\">Hazel Harbour set the primary contact</p><p class=\"ds-timeline__meta\"><time class=\"ds-numeric\" datetime=\"2026-09-02T10:48:00Z\">14:48</time></p><p class=\"ds-timeline__reason\">Reason: synthetic seed</p></li></ol><div class=\"ds-timeline__more\"><button type=\"button\" class=\"ds-timeline__button\">Show earlier</button></div></section>",
+      "css": ".ds-timeline { max-width: 432px; background: var(--surface, #ffffff); color: var(--ink, #16242a); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); } .ds-timeline__day { position: sticky; inset-block-start: 0; margin: 16px 0 0; padding-block: 8px; background: var(--surface, #ffffff); font-size: 14px; line-height: 22px; font-weight: 500; color: var(--ink-2, #3e5058); } .ds-timeline__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; } .ds-timeline__event { padding-block: 12px; border-block-end: 1px solid var(--rule, #cbd5d6); } .ds-timeline__event p { margin: 0; } .ds-timeline__event--change .ds-timeline__sentence, .ds-timeline__event--create .ds-timeline__sentence { font-weight: 500; } .ds-timeline__event--read .ds-timeline__sentence, .ds-timeline__event--system .ds-timeline__sentence { color: var(--ink-2, #3e5058); } .ds-timeline__meta { display: flex; gap: 12px; margin-block-start: 4px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-2, #3e5058); } .ds-timeline__reason { margin-block-start: 4px; font-size: 14px; line-height: 22px; color: var(--ink-2, #3e5058); } .ds-numeric { font-variant-numeric: tabular-nums lining-nums; } .ds-timeline__more { padding-block: 24px; } .ds-timeline__button { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 20px; border: 1px solid var(--ink, #16242a); border-radius: 4px; background: var(--surface, #ffffff); color: var(--ink, #16242a); font: 500 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); cursor: pointer; } .ds-timeline__button:hover { background: var(--surface-hover, #f1f2f2); } .ds-timeline__button:active { background: var(--surface-pressed, #e8e9ea); } .ds-timeline__button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); }"
     }
   ],
   "narrative": {
     "northStar": "The Silent Ledger",
-    "overview": "McWellness is a wellness practice whose product must read as measurement, closer to a good laboratory instrument than to a spa, and its console is a ledger, not a dashboard. Rows, hairline rules and figures carry the practice. The category default of cards, hero metrics and an accent button is refused: a client is a row, a count is a number beside the heading, and the primary action on the first viewport is a search field. The coordinator sees the practice's people at a glance and finds one in seconds.\n\nThe chrome is silent. Every interface surface is achromatic: hue-bearing mineral ink on cool mineral paper, structure drawn in hairline rules, one typeface family (IBM Plex Sans with its matched Arabic) at two weights, tabular figures wherever a numeral appears. Colour is signal: it is reserved for the five EEG bands and the three status states, and it appears only where it carries meaning from the data. There is no accent colour. Emphasis comes from weight, size and space. The inherited McWellness violet lives in the logo image and nowhere in the interface (owner's decision, 2026-09-02).\n\nThe system has three grounds that share one token set. The ledger (light, dense, the admin console) is the reference surface and the only one fully built. The instrument (dark, `[data-ground='dark']`, the practitioner's phone) inverts ink and paper, lifts the band and status hues, and steps every type size up one so it reads at arm's length in a dim room. The record (light, calm, the client portal) uses the same tokens at a 68-character measure and low density. Sampled at the finish review on 2026-09-02: paper #EEF2F1, ink #16242A, hairline #CBD5D6 rules, 44px rows, tabular figures, status in words with a 6px dot, and an ink-on-paper primary button; no hue, no cards, no accent.",
+    "overview": "McWellness is a wellness practice whose product must read as measurement, closer to a good laboratory instrument than to a spa, and its console is a ledger, not a dashboard. Rows, hairline rules and figures carry the practice. The category default of cards, hero metrics and an accent button is refused: a client is a row, a count is a number beside the heading, and the primary action on the first viewport is a search field. The coordinator sees the practice's people at a glance and finds one in seconds.\n\nThe chrome is silent. Every interface surface is achromatic: hue-bearing mineral ink on cool mineral paper, structure drawn in hairline rules, one typeface family (IBM Plex Sans with its matched Arabic) at two weights, tabular figures wherever a numeral appears. Colour is signal: it is reserved for the five EEG bands and the three status states, and it appears only where it carries meaning from the data. There is no accent colour. Emphasis comes from weight, size and space. The inherited McWellness violet lives in the logo image and nowhere in the interface (owner's decision, 2026-09-02).\n\nThe system has three grounds that share one token set. The ledger (light, dense, the admin console) is the reference surface and the only one fully built. The instrument (dark, `[data-ground='dark']`, the practitioner's phone) inverts ink and paper, lifts the band and status hues, and steps every type size up one so it reads at arm's length in a dim room. The record (light, calm, the client portal) uses the same tokens at a 68-character measure and low density. Sampled at the finish review on 2026-09-02: paper #EEF2F1, ink #16242A, hairline #CBD5D6 rules, 44px rows, tabular figures, status in words with a 6px dot, and an ink-on-paper primary button; no hue, no cards, no accent. Sampled again after PR 6: a record's detail opens in a 480px drawer at the inline end, surface white on a hairline edge with the one soft shadow and no scrim, and its history is a list of sentences on 12px-stepped hairline rules; the ledger stays readable beside it.",
     "keyCharacteristics": [
       "Achromatic chrome: mineral ink on cool paper, structure in hairline rules, no accent colour anywhere.",
       "Hue is signal: five band colours reserved for band data, three desaturated status colours carried by a 6px dot beside a word.",
       "One family, two weights: IBM Plex Sans and IBM Plex Sans Arabic at 400 and 500, self-hosted; tabular lining figures on every numeral.",
       "Tables, not cards: homogeneous data sits in 44px rows on hairline rules, with sticky headers and no zebra striping.",
+      "Detail beside the ledger: a record opens in a drawer at the inline end, over the list without a scrim, never in a modal dialog.",
       "Three grounds, one token set: the ledger (light), the instrument (dark, type up one step) and the record (light, 68ch measure).",
       "Logical properties only, so every layout mirrors for Arabic.",
-      "Almost no motion: feedback is instant; nothing in the shell transitions."
+      "Almost no motion: feedback is instant, and the drawer's 160ms entrance is the one transition in the shell."
     ],
     "rules": [
       {
@@ -602,7 +631,7 @@
       },
       {
         "name": "The Tabular Figures Rule",
-        "body": "Every numeral that could sit in a column takes `font-variant-numeric: tabular-nums lining-nums`. Record numbers, ages, counts and phone numbers align because of the figures, not because of a monospace fallback.",
+        "body": "Every numeral that could sit in a column takes `font-variant-numeric: tabular-nums lining-nums`. Record numbers, ages, counts, phone numbers and times align because of the figures, not because of a monospace fallback.",
         "section": "typography"
       },
       {
@@ -611,8 +640,13 @@
         "section": "typography"
       },
       {
+        "name": "The Kind-by-Weight Rule",
+        "body": "In a list of events, what kind of event a row is shows in its weight and tone alone: a change or a creation is medium in ink, a read or a system row is regular in second ink. No icon, no badge, no dot and no coloured word marks the kind.",
+        "section": "typography"
+      },
+      {
         "name": "The 44 Rule",
-        "body": "Rows, inputs, buttons and rail items are 44px tall. One height sets the ledger's rhythm; the sign-out control and the instrument's controls take 48px.",
+        "body": "Rows, inputs, buttons and rail items are 44px tall. One height sets the ledger's rhythm; the sign-out control, the drawer's close control and the instrument's controls take 48px.",
         "section": "layout"
       },
       {
@@ -622,12 +656,17 @@
       },
       {
         "name": "The Hairline Rule",
-        "body": "Structure is drawn with 1px rules in Rule (#cbd5d6): table rows, the rail's edge, field borders. No zebra striping, no card borders, no boxes around groups.",
+        "body": "Structure is drawn with 1px rules in Rule (#cbd5d6): table rows, the rail's edge, field borders, the drawer's edge, the rule under each event. No zebra striping, no card borders, no boxes around groups.",
+        "section": "layout"
+      },
+      {
+        "name": "The Beside Rule",
+        "body": "A record's detail opens in the drawer at the inline end, 480px wide, over the ledger with no scrim, so the list stays readable beside it; below 720px the drawer takes the full width. Detail is never a modal dialog.",
         "section": "layout"
       },
       {
         "name": "The Flat Ledger Rule",
-        "body": "Surfaces are flat. Depth is tone and rule, never a drop shadow. The one shadow token exists for the drawer and menus and is not used until they arrive.",
+        "body": "Surfaces are flat. Depth is tone and rule, never a drop shadow, with one exception: a surface that sits over the ledger (the drawer; menus when they arrive) takes the one soft offset shadow and a hairline at its edge. Nothing on the ledger itself carries a shadow, and nothing gains one on hover.",
         "section": "elevation"
       }
     ],
@@ -641,7 +680,10 @@
       "Do give a screen at most one primary button, ink on paper, and prefer a search field as the first action on a list.",
       "Do answer loading, empty and error states with a Note line in second ink or critical, capped at 68ch.",
       "Do put the dark ground on a surface with `data-ground='dark'` and let the tokens swap; never restyle a component for dark.",
-      "Do keep the Latin wordmark \"McWellness\" in every locale."
+      "Do keep the Latin wordmark \"McWellness\" in every locale.",
+      "Do open a record's detail in the drawer: 480px at the inline end on surface, a hairline edge and the one soft shadow, no scrim, full width below 720px.",
+      "Do make an in-page control that reads as a link a `button.link` in ink with a hairline underline that thickens to 2px on hover.",
+      "Do write history as sentences on hairline rules at a 12px block step: a change or creation in medium ink, a read or system row in regular second ink, roles and a tabular time in micro beneath."
     ],
     "donts": [
       "Don't add an accent colour. There is no brand blue or violet in the interface; the inherited violet lives in the logo image only.",
@@ -649,11 +691,13 @@
       "Don't put homogeneous data in cards, hero metrics or tiles; it is a table.",
       "Don't set labels, headers or micro text in all-caps, or add an eyebrow or kicker above a heading.",
       "Don't use a monospace face for numbers, a second display face, or Inter.",
-      "Don't add hover transitions, entrance animations, skeleton shimmer or page-load orchestration; feedback is instant and nothing in the shell transitions.",
+      "Don't add hover transitions, skeleton shimmer or page-load orchestration; feedback is instant, and the drawer's 160ms entrance is the only transition in the shell.",
       "Don't append an arrow to button or link text, or join metadata with middle dots.",
       "Don't colour, italicise or embolden a single word inside a heading.",
       "Don't use a physical `left`/`right` property or a neutral black (#111).",
-      "Don't colour a status word, add a pill behind it, or use slate for running text."
+      "Don't colour a status word, add a pill behind it, or use slate for running text.",
+      "Don't dim the ledger behind the drawer with a scrim, or open a record's detail in a modal dialog.",
+      "Don't mark a timeline event's kind with an icon, a badge, a dot or a coloured word; weight and ink tone carry it."
     ]
   }
 }

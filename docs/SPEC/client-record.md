@@ -76,7 +76,7 @@ any ──► erased   (erasure request)
 Admin action "Record erasure request" → reason, requested by (contact), date. System then:
 1. Runs `app.erase_client(client_id, request_id)` as the owner (the API role never deletes), inside one transaction that sets `app.erasure = 'true'` so every audit row it writes keeps field names and withholds values: names and Arabic names become "Erased client"; date of birth, sex, the Emirates ID columns and referral source are nulled; `contact.phone/email/whatsapp_opt_in` are nulled and the portal user account removed; each `location` keeps only its emirate and has its coordinates replaced by the emirate's centroid, with Makani, address, parking, gate and notes cleared.
 2. Deletes every `document` from storage except issued invoices, which keep what tax law requires for 5 years.
-3. Sets `client.status = 'erased'`. Excluded from all lists, searches, schedules and reports. The row stays so ledgers and audit history reconcile; only `lead_practitioner` may open it, with a reason prompt.
+3. Sets `client.status = 'erased'`. Excluded from all lists, searches, schedules and reports. The row stays so ledgers and audit history reconcile; only `lead_practitioner` may open it, with a reason prompt (and the owner, who holds every role: CLAUDE.md section 5; the API refuses an erased record's history without a reason, PR 6).
 4. Writes `erasure_request` with what was anonymised and what was deleted.
 5. Generates a confirmation letter (Stage 2 template) for the contact.
 

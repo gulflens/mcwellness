@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Field, Note, PageHeader, Select } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
+import { ClientDrawer } from './ClientDrawer';
 
 /**
  * The admin console's client table (docs/SPEC/client-record.md section 4.1),
@@ -40,6 +41,8 @@ export function ClientsPage() {
   const [status, setStatus] = useState<string>('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<State>({ kind: 'loading' });
+  const [selected, setSelected] = useState<ClientRow | null>(null);
+  const closeDrawer = useCallback(() => setSelected(null), []);
 
   useEffect(() => {
     let live = true;
@@ -76,9 +79,9 @@ export function ClientsPage() {
         header: 'Name',
         render: (row) => (
           <span className="name">
-            <span>
+            <button type="button" className="link" onClick={() => setSelected(row)}>
               {row.givenName} {row.familyName}
-            </span>
+            </button>
             {row.givenNameAr ? (
               <span className="name__ar small muted" lang="ar" dir="rtl">
                 {row.givenNameAr} {row.familyNameAr}
@@ -173,6 +176,7 @@ export function ClientsPage() {
           }
         />
       ) : null}
+      {selected ? <ClientDrawer client={selected} onClose={closeDrawer} /> : null}
     </section>
   );
 }

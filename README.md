@@ -75,6 +75,10 @@ Run `pnpm dev` and open http://localhost:5173. On a laptop the sign-in screen li
 
 Every colour, size and timing on screen comes from `app/shell/tokens.css`, following docs/DESIGN-BRIEF.md: no accent colour, one typeface family (IBM Plex Sans with its Arabic companion, bundled), tables not cards. Lint refuses a hex colour or one of the brief's tells in app code.
 
+## The record timeline
+
+Click a client's name in the table and a drawer opens on the right with the record's timeline: everything that has ever touched the record, newest first, grouped by day, in plain sentences. "Hazel Harbour created the record", "Rowan Meadow viewed this record", "Hazel Harbour withdrew marketing consent" with the reason beneath. The sentences are composed on the server from the audit trail; the browser never sees a raw audit row, a contact's phone or email is never repeated in a sentence, and an identity number never appears at all. The owner, an admin and the lead practitioner may read it; opening it is itself recorded. The same sentences exist in Arabic (`?locale=ar`) for the switch to come.
+
 ## Synthetic data
 
 No real person is ever written into this repository, so `pnpm seed` invents a whole practice to build and test with: one studio, four people with logins (an owner who is also the lead practitioner, two more practitioners, a coordinator), six services, and twenty clients with contacts, home locations and consents. The same data comes out every run. Every value sits in a range reserved for fakes: names from a fixed fictional list, phones in the `+971 50 000 xxxx` block, emails at `example.com`, Emirates IDs from `784-1900-*`, only on a parent who has consented, sealed with the key in `IDENTITY_KEY`. The two local placeholders (the sign-in secret and the identity key) are accepted only when `APP_ENV=development` is set explicitly. Running the command again adds nothing; `pnpm seed --fresh` wipes the local database and rebuilds it. The seed refuses production always, and a Supabase project unless `APP_ENV=staging`.
