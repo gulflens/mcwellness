@@ -14,6 +14,12 @@ import { AppointmentOptionsResponse, type DeliveryMode } from './schema';
  * nobody owns yet; scheduling already reads practitioner, credential, service_type
  * and location directly (scheduling-manual.md header). No screen calls this
  * yet — that is this stream's second pull request.
+ *
+ * Every query below carries an explicit tenant_id = app.current_tenant_id()
+ * predicate (the same defence-in-depth billing/prices.ts uses): row
+ * security already enforces this, but a mistaken query here should fail
+ * loudly in review and in tests/scheduling/db, not rely on RLS being the
+ * only thing standing between one practice's options and another's.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -34,23 +40,24 @@ type LocationRow = { id: string; label: string; emirate: string };
 // pg does parse into a real JS array.
 const SERVICE_TYPES_SQL =
   'select id, name, delivery_modes::text[] as delivery_modes from service_type ' +
-  "where status = 'active' order by name";
+  "where tenant_id = app.current_tenant_id() and status = 'active' order by name";
 
 const PRACTITIONERS_SQL =
   'select distinct p.id, u.display_name ' +
   'from practitioner p ' +
   'join app_user u on u.id = p.user_id ' +
   'join credential cr on cr.practitioner_id = p.id ' +
-  "where p.status = 'active' and cr.service_type_id = $1 and cr.can_execute_session " +
-  'and cr.valid_from <= $2 and (cr.valid_to is null or cr.valid_to >= $2) ' +
+  "where p.tenant_id = app.current_tenant_id() and p.status = 'active' and cr.service_type_id = $1 " +
+  'and cr.can_execute_session and cr.valid_from <= $2 and (cr.valid_to is null or cr.valid_to >= $2) ' +
   'order by u.display_name';
 
 const CLIENT_LOCATIONS_SQL =
   'select id, label::text as label, emirate::text as emirate from location ' +
-  "where owner_type = 'client' and owner_id = $1 " +
+  "where tenant_id = app.current_tenant_id() and owner_type = 'client' and owner_id = $1 " +
   'union all ' +
   'select l.id, l.label::text as label, l.emirate::text as emirate from location l ' +
   'join tenant t on t.location_id = l.id ' +
+  'where l.tenant_id = app.current_tenant_id() ' +
   'order by label';
 
 export function mountAppointmentOptions(api: Hono<ApiEnv>): void {

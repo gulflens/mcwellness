@@ -11,6 +11,12 @@ import { AppointmentListResponse, type AppointmentRow, type DeliveryMode } from 
  * calendar and the map are the second). One tenant-local calendar day,
  * across every practitioner. The practitioner's own day (scope 'own') is a
  * later pull request's door; this route only ever asks for 'practice'.
+ *
+ * The query below carries an explicit tenant_id = app.current_tenant_id()
+ * predicate (the same defence-in-depth billing/prices.ts uses): row
+ * security already enforces this, but a mistaken query here should fail
+ * loudly in review and in tests/scheduling/db, not rely on RLS being the
+ * only thing standing between one practice's day sheet and another's.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -48,7 +54,7 @@ const SQL =
   'join app_user u on u.id = p.user_id ' +
   'join service_type st on st.id = a.service_type_id ' +
   'join location l on l.id = a.location_id ' +
-  'where a.window_start >= $1 and a.window_start < $2 ' +
+  'where a.tenant_id = app.current_tenant_id() and a.window_start >= $1 and a.window_start < $2 ' +
   'order by a.window_start';
 
 function dayRange(date: string): [Date, Date] {
