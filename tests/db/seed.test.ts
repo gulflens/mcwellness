@@ -7,11 +7,8 @@ import {
   SEED_REASON,
   SEED_TENANT_ID,
 } from '../../db/seed/generate';
-import {
-  deriveIdentityKeys,
-  normaliseEmiratesId,
-  openEmiratesId,
-} from '../../domain/shared/identity';
+import { deriveIdentityKeys, openEmiratesId } from '../../domain/shared/identity';
+import { normaliseEmiratesId } from '../../domain/shared/emirates-id';
 import { asApiRole, freshDatabase, rolledBack } from './helpers';
 
 // A test key that unlocks nothing outside this file.

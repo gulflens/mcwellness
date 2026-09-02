@@ -5,6 +5,7 @@ import {
   hkdfSync,
   timingSafeEqual,
 } from 'node:crypto';
+import { normaliseEmiratesId } from './emirates-id';
 
 /**
  * The Emirates ID is the one identifier the practice may hold, and only on an
@@ -13,29 +14,22 @@ import {
  * itself is sealed (AES-256-GCM). Everything here is a pure function of its
  * arguments: the keys and the nonce come from the caller, so this file reads
  * neither the environment nor a random source.
+ *
+ * Server-only: it opens with `node:crypto` at module scope, so it is never
+ * imported through the `domain/shared` barrel and never by any file a
+ * browser bundle can reach — import it by its own path, always
+ * 'domain/shared/identity' (tests/lint/no-node-imports-in-browser-bundle.test.ts
+ * proves this for every stream barrel, not only the shared one). The pure
+ * parsing and formatting this file's callers also need — normalisation and
+ * display — lives in the browser-safe `./emirates-id` instead, which this
+ * file imports back for its own use.
  */
 
-export const EMIRATES_ID_DIGITS = 15;
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 const KEY_BYTES = 32;
 
 export type IdentityKeys = { hashKey: Buffer; sealKey: Buffer };
-
-/** Digits only, fifteen of them, starting 784: the canonical form that is hashed and sealed. */
-export function normaliseEmiratesId(input: string): string {
-  const digits = input.replace(/[^0-9]/g, '');
-  if (digits.length !== EMIRATES_ID_DIGITS || !digits.startsWith('784')) {
-    throw new Error('An Emirates ID is fifteen digits starting 784.');
-  }
-  return digits;
-}
-
-/** 784-1900-1234567-1: the display form. Never stored. */
-export function formatEmiratesId(input: string): string {
-  const d = normaliseEmiratesId(input);
-  return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 14)}-${d.slice(14)}`;
-}
 
 /** Two independent keys from one 32-byte master, so hashing and sealing never share one. */
 export function deriveIdentityKeys(master: Buffer): IdentityKeys {
