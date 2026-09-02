@@ -751,3 +751,22 @@ a.rail__item:active,
   border-color: var(--rule);
   cursor: default;
 }
+
+/* Round 7a: the general-purpose status chip's own tones, alongside the
+   client record's status--active/paused/erased/lead vocabulary above. Ok,
+   attention and critical colour the dot; neutral carries none. */
+.status--ok .status__dot {
+  background: var(--ok);
+}
+
+.status--attention .status__dot {
+  background: var(--attention);
+}
+
+.status--critical .status__dot {
+  background: var(--critical);
+}
+
+.status--neutral .status__dot {
+  background: var(--ink-2);
+}

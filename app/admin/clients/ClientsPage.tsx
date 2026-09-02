@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Field, Note, PageHeader, Select } from '../../shell/components/Controls';
-import { StatusChip } from '../../shell/components/StatusChip';
+import { ClientStatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
 import { ClientDrawer } from './ClientDrawer';
 
@@ -96,7 +96,11 @@ export function ClientsPage() {
         numeric: true,
         render: (row) => (row.age === null ? '' : String(row.age)),
       },
-      { key: 'status', header: 'Status', render: (row) => <StatusChip status={row.status} /> },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (row) => <ClientStatusChip status={row.status} />,
+      },
       {
         key: 'contact',
         header: 'Primary contact',

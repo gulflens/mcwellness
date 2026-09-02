@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { RecordTimeline } from '../audit/RecordTimeline';
 import type { ClientRow } from '../../api/clients/schema';
 import { CloseIcon } from '../../shell/components/Icons';
-import { StatusChip } from '../../shell/components/StatusChip';
+import { ClientStatusChip } from '../../shell/components/StatusChip';
 
 /**
  * The client's detail drawer (docs/DESIGN-BRIEF.md section 6.2: a right-side
@@ -39,7 +39,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
           ) : null}
           <p className="drawer__facts small">
             <span className="numeric">{client.mrn}</span>
-            <StatusChip status={client.status} />
+            <ClientStatusChip status={client.status} />
           </p>
         </div>
         <button
