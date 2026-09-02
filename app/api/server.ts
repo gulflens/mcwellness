@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 import { createPool } from './_middleware/db';
+import { identityKeysFromEnv } from './_middleware/identity-key';
 import { limitsFromEnv, trustedProxyHopsFromEnv } from './_middleware/rate-limit';
 import { issuerFor, verifierFromEnv } from './_middleware/token-verifier';
 import { createApi } from './create-api';
@@ -12,9 +13,10 @@ if (!apiDatabaseUrl) {
   process.exit(1);
 }
 
-// Both throw a plain-language message at startup rather than failing per request.
+// All three throw a plain-language message at startup rather than failing per request.
 const pool = createPool(apiDatabaseUrl);
 const verifier = verifierFromEnv(process.env);
+const identityKeys = identityKeysFromEnv(process.env);
 
 // The development sign-in door exists only on a laptop: APP_ENV=development, a
 // local database, a local Supabase URL and the local secret to sign with.
@@ -36,6 +38,7 @@ const api = createApi({
   supabaseUrl: process.env.SUPABASE_URL,
   limits: limitsFromEnv(process.env),
   trustedProxyHops: trustedProxyHopsFromEnv(process.env),
+  identityKeys,
 });
 
 // SERVE_APP=true: the built app (pnpm build) is served by this process too, so

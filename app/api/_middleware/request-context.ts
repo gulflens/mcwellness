@@ -4,7 +4,7 @@ import { createMiddleware } from 'hono/factory';
 import type pg from 'pg';
 import { z } from 'zod';
 import { cleanText } from './text';
-import type { Actor } from '@domain/shared';
+import type { Actor, IdentityKeys } from '@domain/shared';
 import { ResolvedActorRow } from './actor-schema';
 import type { TokenVerifier } from './token-verifier';
 
@@ -26,7 +26,12 @@ export type Db = {
   ): Promise<pg.QueryResult<R>>;
 };
 
-export type ApiEnv = { Variables: { actor: Actor; db: Db; requestId: string } };
+// identityKeys is set only when create-api.ts was given identityKeys (a route
+// reads it via the identity-context middleware, ./identity-context.ts); it is
+// never guaranteed the way actor, db and requestId are, so its type says so.
+export type ApiEnv = {
+  Variables: { actor: Actor; db: Db; requestId: string; identityKeys: IdentityKeys | undefined };
+};
 
 export type PoolClientLike = {
   query: Db['query'];

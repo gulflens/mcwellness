@@ -2,7 +2,9 @@ import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import { timeout } from 'hono/timeout';
+import type { IdentityKeys } from '@domain/shared';
 import { MeResponse } from './_middleware/actor-schema';
+import { withIdentityKeys } from './_middleware/identity-context';
 import { addressKey, DEFAULT_LIMITS, rateLimit, type RateLimits } from './_middleware/rate-limit';
 import {
   withRequestContext,
@@ -27,8 +29,10 @@ import { mountDevSession, type DevSessionOptions } from './dev-session';
  * per-address budget and the auth-failure budget (first, so a flood of
  * oversized or malformed bodies is limited too), a body cap, a timeout, JSON
  * only for bodies, the development door with its own budget, the request
- * context (one transaction, fenced to the API role, stamped with who is acting
- * and why), the per-person budget, and the routes.
+ * context (one transaction, fenced to the API role, stamped with who is
+ * acting and why), the identity keys context (when configured — after the
+ * fence, so no route ahead of authentication can ever see it), the
+ * per-person budget, and the routes.
  */
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
@@ -47,6 +51,8 @@ export type ApiOptions = RequestContextDeps & {
   trustedProxyHops?: number;
   /** Tests inject the bucket key; the server uses the caller's address. */
   keyOf?: (c: Context) => string | null;
+  /** The Emirates ID keys (domain/shared/identity). Absent: no route can read c.get('identityKeys'). */
+  identityKeys?: IdentityKeys;
 };
 
 export function createApi(deps: ApiOptions): Hono<ApiEnv> {
@@ -104,6 +110,11 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   }
 
   api.use('/api/*', withRequestContext(deps));
+  // After the fence, not before: no route ahead of authentication can ever
+  // read c.get('identityKeys'), even by accident (security review, round 3).
+  if (deps.identityKeys) {
+    api.use('/api/*', withIdentityKeys(deps.identityKeys));
+  }
   api.use(
     '/api/*',
     rateLimit({

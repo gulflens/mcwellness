@@ -14,6 +14,7 @@ import {
 } from './helpers';
 
 const APPEND_ONLY = '42501';
+const INSUFFICIENT_PRIVILEGE = '42501'; // same SQLSTATE, named for what this file uses it to prove
 
 type AuditRow = {
   id: string;
@@ -233,7 +234,9 @@ describe('erasure mode', () => {
     await rolledBack(client, async () => {
       await setAuditContext(client, IDS.ownerA, 'erasure request');
       await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
-      await client.query("select set_config('app.erasure', 'true', true)");
+      // The real entry point (098_erasure_guard.sql): the owner stands in for
+      // app.erase_client, which alone may reach app.begin_erasure().
+      await client.query('select app.begin_erasure()');
       await client.query(
         "update client set given_name = 'Erased', family_name = 'Erased', status = 'erased' where id = $1",
         [IDS.clientA],
@@ -246,6 +249,82 @@ describe('erasure mode', () => {
       expect(JSON.stringify(erasure?.old_values)).not.toContain('Alpha');
       expect(erasure?.hash_ok).toBe(true);
     });
+  });
+});
+
+describe('the erasure guard (098_erasure_guard.sql)', () => {
+  it('a forged app.erasure setting withholds nothing, under any role: audit_redact never reads it', async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+      await asApiRole(client, IDS.tenantA, async () => {
+        await client.query("select set_config('app.erasure', 'anything', true)");
+        await client.query("update client set family_name = 'Hidden' where id = $1", [IDS.clientA]);
+        const rows = await rowsFor(IDS.clientA);
+        expect(rows[1]?.new_values?.family_name).toBe('Hidden');
+      });
+    });
+  });
+
+  it('the production path: begin_erasure withholds a write, and end_erasure clears it for the rest of the transaction', async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+
+      // A stand-in for app.erase_client (client-record.md section 8): security
+      // definer and owned the same as app.begin_erasure()/app.end_erasure(), so it
+      // can call them without any grant of its own (098_erasure_guard.sql section
+      // 2). app_role needs an explicit grant on THIS function, the way the real
+      // app.erase_client's own migration grants app_role on it.
+      await client.query(`
+        create function public.__test_erase_client(p_client_id uuid) returns void
+        language plpgsql
+        security definer
+        set search_path = pg_catalog, public
+        as $fn$
+        begin
+          perform app.begin_erasure();
+          update client set family_name = 'Erased' where id = p_client_id;
+          perform app.end_erasure();
+        end
+        $fn$;
+      `);
+      await client.query('grant execute on function public.__test_erase_client(uuid) to app_role');
+
+      await asApiRole(client, IDS.tenantA, async () => {
+        await client.query('select public.__test_erase_client($1)', [IDS.clientA]);
+        const erased = await rowsFor(IDS.clientA);
+        const erasedRow = erased[erased.length - 1];
+        expect(erasedRow?.old_values?.family_name).toBe('[withheld: erasure]');
+        expect(erasedRow?.new_values?.family_name).toBe('[withheld: erasure]');
+
+        // end_erasure ran inside __test_erase_client, in the same transaction:
+        // a further app_role write after it returns is not withheld.
+        await client.query("update client set family_name = 'Kept' where id = $1", [IDS.clientA]);
+        const rows = await rowsFor(IDS.clientA);
+        expect(rows[rows.length - 1]?.new_values?.family_name).toBe('Kept');
+      });
+    });
+  });
+
+  it('refuses the API role every direct path into erasure mode, and a direct call to audit_redact', async () => {
+    await rolledBack(client, async () => {
+      await asApiRole(client, IDS.tenantA, async () => {
+        await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select txid from app.erasure_active');
+        await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select app.begin_erasure()');
+        await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select app.end_erasure()');
+        await rejectsWith(client, INSUFFICIENT_PRIVILEGE, "select app.audit_redact('{}'::jsonb)");
+      });
+    });
+  });
+});
+
+describe('app.audit_redact drops a fixed set of keys outright (audit.md section 8)', () => {
+  it('drops checked_in_point alongside the Emirates ID columns, keeping the rest', async () => {
+    const { rows } = await client.query<{ redacted: Record<string, unknown> }>(
+      'select app.audit_redact(\'{"checked_in_point": "POINT(1 1)", "note": "kept"}\'::jsonb) as redacted',
+    );
+    expect(rows[0]?.redacted).toEqual({ note: 'kept' });
   });
 });
 
@@ -317,8 +396,11 @@ describe('a client_id that is not a client', () => {
 });
 
 describe('every audited table is classified', () => {
-  // A new audited table must be added to one of these lists on purpose: either it
-  // carries a uuid client_id the audit trail attributes, or it deliberately has none.
+  // The trunk's own tables are classified directly: either they carry a uuid
+  // client_id the audit trail attributes, or they deliberately have none. A
+  // stream's own audited table is neither: it declares itself instead, with a
+  // `comment on table` in its own migration (audit.md section 14 item 13,
+  // .claude/rules/data-model.md), so parallel streams never fight over this list.
   const WITH_CLIENT = ['contact', 'consent', 'document'];
   const NAMES_ITSELF = ['client'];
   const WITHOUT_CLIENT = [
@@ -331,20 +413,96 @@ describe('every audited table is classified', () => {
     'location',
   ];
 
-  it('carries a uuid client_id, or deliberately none', async () => {
-    const { rows } = await client.query<{ table: string; client_id_type: string | null }>(
+  type AuditedTableRow = { table: string; client_id_type: string | null; comment: string | null };
+
+  async function auditedTables(): Promise<AuditedTableRow[]> {
+    const { rows } = await client.query<AuditedTableRow>(
       `select c.relname as table,
               (select a.atttypid::regtype::text from pg_attribute a
-                where a.attrelid = c.oid and a.attname = 'client_id' and not a.attisdropped) as client_id_type
+                where a.attrelid = c.oid and a.attname = 'client_id' and not a.attisdropped) as client_id_type,
+              obj_description(c.oid, 'pg_class') as comment
          from pg_trigger t join pg_class c on c.oid = t.tgrelid
         where t.tgname = 'audit_row' and not t.tgisinternal and c.relnamespace = 'public'::regnamespace
         order by c.relname`,
     );
-    const audited = rows.map((r) => r.table).sort();
-    expect(audited).toEqual([...WITH_CLIENT, ...NAMES_ITSELF, ...WITHOUT_CLIENT].sort());
-    for (const r of rows) {
-      if (WITH_CLIENT.includes(r.table)) expect(r.client_id_type, r.table).toBe('uuid');
-      else expect(r.client_id_type, r.table).toBeNull();
+    return rows;
+  }
+
+  /** Throws, naming the table and the comment to add, when neither classification applies. */
+  function classify(r: AuditedTableRow): void {
+    if (WITH_CLIENT.includes(r.table)) {
+      expect(r.client_id_type, r.table).toBe('uuid');
+      return;
     }
+    if (NAMES_ITSELF.includes(r.table) || WITHOUT_CLIENT.includes(r.table)) {
+      expect(r.client_id_type, r.table).toBeNull();
+      return;
+    }
+    if (r.comment?.startsWith('audited: client')) {
+      expect(r.client_id_type, r.table).toBe('uuid');
+      return;
+    }
+    if (r.comment?.startsWith('audited: no client')) {
+      expect(r.client_id_type, r.table).toBeNull();
+      return;
+    }
+    throw new Error(
+      `"${r.table}" carries the audit trigger but is neither one of the trunk's classified ` +
+        "tables nor carries a classification comment. In the stream's own migration, add " +
+        `comment on table public.${r.table} is 'audited: client - ...' (if it carries a uuid ` +
+        `client_id) or comment on table public.${r.table} is 'audited: no client - ...' ` +
+        '(if it deliberately has none).',
+    );
+  }
+
+  it('carries a uuid client_id, or deliberately none, per the trunk list or a stream comment', async () => {
+    const rows = await auditedTables();
+    const audited = rows.map((r) => r.table);
+    // Containment, not equality: a stream's migration may add its own audited
+    // table alongside the trunk's (tests/db/schema.test.ts does the same).
+    for (const table of [...WITH_CLIENT, ...NAMES_ITSELF, ...WITHOUT_CLIENT]) {
+      expect(audited, table).toContain(table);
+    }
+    for (const r of rows) {
+      classify(r);
+    }
+  });
+
+  it("classifies a stream's own audited table by its comment, and refuses one with none", async () => {
+    await rolledBack(client, async () => {
+      const withComment = 'zz_test_stream_with_client';
+      const noClientComment = 'zz_test_stream_no_client';
+      const uncommented = 'zz_test_stream_uncommented';
+
+      await client.query(
+        `create table ${withComment} (id uuid primary key, tenant_id uuid not null, client_id uuid)`,
+      );
+      await client.query(
+        `create table ${noClientComment} (id uuid primary key, tenant_id uuid not null)`,
+      );
+      await client.query(
+        `create table ${uncommented} (id uuid primary key, tenant_id uuid not null)`,
+      );
+      for (const table of [withComment, noClientComment, uncommented]) {
+        await client.query(
+          `create trigger audit_row after insert or update or delete on ${table} ` +
+            'for each row execute function app.audit_row()',
+        );
+      }
+      await client.query(
+        `comment on table ${withComment} is 'audited: client - proves the test reads a stream comment'`,
+      );
+      await client.query(
+        `comment on table ${noClientComment} is 'audited: no client - proves the test reads a stream comment'`,
+      );
+      // uncommented gets no comment at all: it must fail, naming itself.
+
+      const byName = new Map((await auditedTables()).map((r) => [r.table, r]));
+      expect(() => classify(byName.get(withComment)!)).not.toThrow();
+      expect(() => classify(byName.get(noClientComment)!)).not.toThrow();
+      expect(() => classify(byName.get(uncommented)!)).toThrow(uncommented);
+      // The transaction this all ran in is rolled back by the caller: nothing
+      // of these three tables, their triggers or their comments survives.
+    });
   });
 });

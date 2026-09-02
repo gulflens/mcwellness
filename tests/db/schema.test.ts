@@ -45,15 +45,18 @@ async function enumValues(name: string): Promise<string[]> {
 }
 
 describe('core schema', () => {
-  it('has exactly the section 2 and 3 tables plus audit_log and the bookkeeping tables', async () => {
+  it('has at least the section 2 and 3 tables plus audit_log and the bookkeeping tables', async () => {
+    // Containment, not equality: a stream's own migration (its own numeric
+    // range, docs/SPEC/OWNERSHIP.md) may add its own tables alongside these.
     const { rows } = await client.query<{ table_name: string }>(
       "select table_name from information_schema.tables where table_schema = 'public' " +
         "and table_type = 'BASE TABLE' and table_name not like 'audit_log_%' " +
         "and table_name not in ('spatial_ref_sys') order by 1",
     );
-    expect(rows.map((row) => row.table_name).sort()).toEqual(
-      [...CORE_TABLES, 'audit_log', 'schema_migration'].sort(),
-    );
+    const tables = rows.map((row) => row.table_name);
+    for (const table of [...CORE_TABLES, 'audit_log', 'schema_migration']) {
+      expect(tables, table).toContain(table);
+    }
   });
 
   it('gives every core table the standard columns, with the recorded exemption for tenant', async () => {
@@ -142,8 +145,33 @@ describe('core schema', () => {
       'select c.relname as table, t.tgenabled as enabled from pg_trigger t ' +
         "join pg_class c on c.oid = t.tgrelid where t.tgname = 'audit_row' order by 1",
     );
-    expect(rows.map((row) => row.table).sort()).toEqual([...CORE_TABLES].sort());
+    // Over the trunk's own tables only: a stream's own audited table (classified
+    // by its own comment, tests/db/audit.test.ts) is allowed alongside them.
+    const audited = rows.map((row) => row.table);
+    for (const table of CORE_TABLES) {
+      expect(audited, table).toContain(table);
+    }
     expect(rows.every((row) => row.enabled === 'A')).toBe(true);
+  });
+
+  it('audits every table in the public schema, so a stream table without the trigger fails here by name', async () => {
+    // The other direction from the test above: not "the trunk's tables are all
+    // audited" but "everything in public is audited", except the log itself (an
+    // audit_row trigger on audit_log would insert into audit_log, forever), its
+    // partitions, the PostGIS reference table, and the runner's own bookkeeping.
+    const { rows: tables } = await client.query<{ table_name: string }>(
+      "select table_name from information_schema.tables where table_schema = 'public' " +
+        "and table_type = 'BASE TABLE' and table_name not like 'audit_log_%' " +
+        "and table_name not in ('audit_log', 'schema_migration', 'spatial_ref_sys')",
+    );
+    const { rows: audited } = await client.query<{ table: string }>(
+      'select c.relname as table from pg_trigger t join pg_class c on c.oid = t.tgrelid ' +
+        "where t.tgname = 'audit_row' and not t.tgisinternal and c.relnamespace = 'public'::regnamespace",
+    );
+    const auditedNames = new Set(audited.map((row) => row.table));
+    for (const table of tables) {
+      expect(auditedNames.has(table.table_name), table.table_name).toBe(true);
+    }
   });
 
   it('has a tenant_isolation policy on every core table and two on the audit log', async () => {
@@ -171,6 +199,8 @@ describe('core schema', () => {
   it('is idempotent: a second migrate applies nothing and re-applies the policies cleanly', async () => {
     const { runMigrations, applyPolicies } = await import('../../db/runner/apply');
     expect(await runMigrations(client)).toBe(0);
-    expect(await applyPolicies(client)).toBe(3);
+    // At least the trunk's three (db/policies/core): a stream's own worktree
+    // adds a db/policies/<module> directory the runner re-applies alongside them.
+    expect(await applyPolicies(client)).toBeGreaterThanOrEqual(3);
   });
 });
