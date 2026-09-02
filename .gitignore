@@ -10,3 +10,7 @@ dist/
 .DS_Store
 coverage/
 *.tsbuildinfo
+
+# Design review evidence and browser scratch
+.impeccable/review/
+.playwright-mcp/

@@ -1,0 +1,116 @@
+/* The ground every screen stands on. Logical properties only: the layout mirrors for Arabic. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  scrollbar-color: var(--rule) transparent;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  caret-color: var(--ink);
+}
+
+::selection {
+  background: var(--selection);
+  color: var(--ink);
+}
+
+h1,
+h2,
+h3,
+p,
+figure,
+ul,
+ol {
+  margin: 0;
+}
+
+h1 {
+  font-size: var(--t-h1);
+  line-height: var(--lh-h1);
+  font-weight: var(--w-medium);
+  letter-spacing: var(--track-h1);
+  text-wrap: balance;
+}
+
+h2 {
+  font-size: var(--t-h2);
+  line-height: var(--lh-h2);
+  font-weight: var(--w-medium);
+  text-wrap: balance;
+}
+
+h3 {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--w-medium);
+}
+
+small,
+.small {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+}
+
+.micro {
+  font-size: var(--t-micro);
+  line-height: var(--lh-micro);
+  font-weight: var(--w-medium);
+  color: var(--slate);
+}
+
+.muted {
+  color: var(--ink-2);
+}
+
+/* Measurement and record numbers align on tabular lining figures. Never monospace. */
+.numeric {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
+}
+
+a {
+  color: inherit;
+  text-decoration-thickness: var(--hairline);
+  text-underline-offset: 0.18em;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: var(--r-2);
+}
+
+ul,
+ol {
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+[hidden] {
+  display: none !important;
+}

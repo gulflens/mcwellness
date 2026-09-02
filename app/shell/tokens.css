@@ -1,0 +1,140 @@
+/*
+  The only source of visual values (docs/DESIGN-BRIEF.md section 8). Every colour,
+  size, spacing step, radius and timing a screen needs is a variable here. No
+  component carries a literal; the lint rule refuses one.
+
+  Hue is reserved for the five EEG bands and three status states. There is no
+  accent colour (owner's decision, 2026-09-02): emphasis comes from weight,
+  size and space.
+*/
+
+:root {
+  /* Interface neutrals: a hue-bearing near-black on cool mineral paper. */
+  --ink: #16242a;
+  --ink-2: #3e5058;
+  --slate: #6b7c82;
+  --rule: #cbd5d6;
+  --paper: #eef2f1;
+  --surface: #ffffff;
+
+  /* The band spectrum, slow to fast, cool to warm. Charts, chips, ribbons, figures. Nowhere else. */
+  --delta-base: #3b4a87;
+  --theta-base: #2c7387;
+  --alpha-base: #3d8557;
+  --beta-base: #b8863a;
+  --gamma-base: #a8553f;
+  --delta: var(--delta-base);
+  --theta: var(--theta-base);
+  --alpha: var(--alpha-base);
+  --beta: var(--beta-base);
+  --gamma: var(--gamma-base);
+  --delta-tint: color-mix(in srgb, var(--delta) 12%, var(--paper));
+  --theta-tint: color-mix(in srgb, var(--theta) 12%, var(--paper));
+  --alpha-tint: color-mix(in srgb, var(--alpha) 12%, var(--paper));
+  --beta-tint: color-mix(in srgb, var(--beta) 12%, var(--paper));
+  --gamma-tint: color-mix(in srgb, var(--gamma) 12%, var(--paper));
+  --delta-deep: color-mix(in srgb, var(--delta) 80%, black);
+  --theta-deep: color-mix(in srgb, var(--theta) 80%, black);
+  --alpha-deep: color-mix(in srgb, var(--alpha) 80%, black);
+  --beta-deep: color-mix(in srgb, var(--beta) 80%, black);
+  --gamma-deep: color-mix(in srgb, var(--gamma) 80%, black);
+
+  /* Status: the only non-band hue, desaturated so it never competes with band data. */
+  --ok: #2f6b4f;
+  --attention: #8a6a1e;
+  --critical: #94382e;
+
+  /* One family, designed with Arabic from the start. Bundled; no outside server. */
+  --font: 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+
+  /* Type scale, 1.25 ratio, base 16 (section 4.3). Size / line height. */
+  --t-display: 40px;
+  --lh-display: 44px;
+  --t-h1: 31px;
+  --lh-h1: 38px;
+  --t-h2: 25px;
+  --lh-h2: 32px;
+  --t-h3: 20px;
+  --lh-h3: 28px;
+  --t-body: 16px;
+  --lh-body: 26px;
+  --t-small: 14px;
+  --lh-small: 22px;
+  --t-micro: 13px;
+  --lh-micro: 18px;
+  --w-regular: 400;
+  --w-medium: 500;
+  --track-display: -0.02em;
+  --track-h1: -0.015em;
+
+  /* Space, on a 4px step. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* Shape and structure. */
+  --r-1: 2px;
+  --r-2: 4px;
+  --r-3: 8px;
+  --hairline: 1px;
+  --row: 44px;
+  --rail: 220px;
+  --tap: 48px;
+  --measure: 68ch;
+  --content-max: 1200px;
+
+  /* Motion answers an action: 160ms, ease-out. Nothing else moves. */
+  --motion: 160ms;
+  --motion-ribbon: 400ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Depth: one soft, offset shadow for the drawer and menus. */
+  --shadow: 0 8px 24px color-mix(in srgb, var(--ink) 14%, transparent);
+  --focus: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink);
+  --selection: color-mix(in srgb, var(--ink) 16%, var(--paper));
+}
+
+/* The practitioner app: ink and paper invert, bands lift ~12% lightness, every type step up one. */
+[data-ground='dark'] {
+  --ink: #eef2f1;
+  --ink-2: #c6d1d4;
+  --slate: #8fa0a6;
+  --rule: #2b3b41;
+  --paper: #10191d;
+  --surface: #16242a;
+  --delta: color-mix(in srgb, var(--delta-base) 84%, white);
+  --theta: color-mix(in srgb, var(--theta-base) 84%, white);
+  --alpha: color-mix(in srgb, var(--alpha-base) 84%, white);
+  --beta: color-mix(in srgb, var(--beta-base) 84%, white);
+  --gamma: color-mix(in srgb, var(--gamma-base) 84%, white);
+  --ok: #5f9f83;
+  --attention: #c0a04e;
+  --critical: #c9705f;
+  --t-h1: 40px;
+  --lh-h1: 44px;
+  --t-h2: 31px;
+  --lh-h2: 38px;
+  --t-h3: 25px;
+  --lh-h3: 32px;
+  --t-body: 17px;
+  --lh-body: 27px;
+  --t-small: 16px;
+  --lh-small: 24px;
+  --t-micro: 14px;
+  --lh-micro: 20px;
+  --shadow: 0 8px 24px color-mix(in srgb, black 40%, transparent);
+  --selection: color-mix(in srgb, var(--ink) 22%, var(--paper));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion: 0ms;
+    --motion-ribbon: 0ms;
+  }
+}
