@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { checkConflicts, type ExistingAppointment, type SchedulingCandidate } from './conflicts';
+import {
+  checkConflicts,
+  CLIENT_OVERLAP_MESSAGE,
+  PRACTITIONER_OVERLAP_MESSAGE,
+  type ExistingAppointment,
+  type SchedulingCandidate,
+} from './conflicts';
 import { seededRandom } from '../../db/seed/random';
 import type { Capability } from '@domain/shared';
 
@@ -56,6 +62,8 @@ function baseContext() {
     clientAppointments: [] as ExistingAppointment[],
     practitionerCredentials: [validCredential()],
     clientActive: true,
+    requiredConsentPurposes: [] as string[],
+    activeConsentPurposes: [] as string[],
   };
 }
 
@@ -66,35 +74,64 @@ describe('checkConflicts', () => {
     expect(report.warnings).toEqual([]);
   });
 
-  it('blocks a practitioner double-booking once the travel buffer is counted in', () => {
-    // Existing 10:00-10:45 padded by 15 minutes both sides: busy 09:45-11:00.
-    // A candidate ending at 09:45 with no buffer of its own touches, but does not cross, that line.
-    const touching = checkConflicts(
+  it('blocks a practitioner double-booking, buffering only the time after each visit', () => {
+    // Existing is 10:00-10:45 with a 15-minute buffer: busy 10:00-11:00. The
+    // buffer is the drive to the NEXT stop, never before this one.
+
+    // Booking BEFORE the existing appointment: the CANDIDATE's own buffer is
+    // what has to clear the existing appointment's (unbuffered) start.
+    // 09:00-09:45 with a 15-minute buffer ends its busy time at exactly 10:00:
+    // touching, not overlapping.
+    const touchingBefore = checkConflicts(
       baseCandidate({
         windowStart: at('2026-09-10T09:00:00.000Z'),
         windowEnd: at('2026-09-10T09:45:00.000Z'),
-        travelBufferMinutes: 0,
+        travelBufferMinutes: 15,
       }),
       { ...baseContext(), practitionerAppointments: [existing()] },
     );
-    expect(touching.blocking).toEqual([]);
+    expect(touchingBefore.blocking).toEqual([]);
 
-    // One minute later, it crosses the line.
-    const overlapping = checkConflicts(
+    // A minute later, its buffer now reaches past 10:00: a clash.
+    const overlapBefore = checkConflicts(
       baseCandidate({
         windowStart: at('2026-09-10T09:01:00.000Z'),
         windowEnd: at('2026-09-10T09:46:00.000Z'),
+        travelBufferMinutes: 15,
+      }),
+      { ...baseContext(), practitionerAppointments: [existing()] },
+    );
+    expect(overlapBefore.blocking).toEqual([
+      {
+        code: 'practitioner_overlap',
+        message: PRACTITIONER_OVERLAP_MESSAGE,
+        conflictsWithAppointmentId: EXISTING_ID,
+      },
+    ]);
+
+    // Booking AFTER the existing appointment: the EXISTING appointment's own
+    // buffer is what the candidate's (unbuffered) start has to clear.
+    // Starting right at 11:00 — exactly when its buffer ends — does not clash.
+    const touchingAfter = checkConflicts(
+      baseCandidate({
+        windowStart: at('2026-09-10T11:00:00.000Z'),
+        windowEnd: at('2026-09-10T11:45:00.000Z'),
         travelBufferMinutes: 0,
       }),
       { ...baseContext(), practitionerAppointments: [existing()] },
     );
-    expect(overlapping.blocking).toEqual([
-      {
-        code: 'practitioner_overlap',
-        message: 'This practitioner is already booked close to this time.',
-        conflictsWithAppointmentId: EXISTING_ID,
-      },
-    ]);
+    expect(touchingAfter.blocking).toEqual([]);
+
+    // A minute earlier, it starts inside the existing appointment's own buffer.
+    const overlapAfter = checkConflicts(
+      baseCandidate({
+        windowStart: at('2026-09-10T10:59:00.000Z'),
+        windowEnd: at('2026-09-10T11:44:00.000Z'),
+        travelBufferMinutes: 0,
+      }),
+      { ...baseContext(), practitionerAppointments: [existing()] },
+    );
+    expect(overlapAfter.blocking.map((i) => i.code)).toContain('practitioner_overlap');
   });
 
   it('does not confuse a different practitioner (their calendar is irrelevant here)', () => {
@@ -122,7 +159,7 @@ describe('checkConflicts', () => {
     expect(report.blocking).toEqual([
       {
         code: 'client_overlap',
-        message: 'This client already has an appointment at this time.',
+        message: CLIENT_OVERLAP_MESSAGE,
         conflictsWithAppointmentId: EXISTING_ID,
       },
     ]);
@@ -226,8 +263,84 @@ describe('checkConflicts', () => {
   });
 });
 
-describe('checkConflicts (property): practitioner overlap matches a reference padded-interval check', () => {
+describe('checkConflicts: consent', () => {
+  it('passes when every required purpose is active', () => {
+    const report = checkConflicts(baseCandidate(), {
+      ...baseContext(),
+      requiredConsentPurposes: ['participation', 'home_visit'],
+      activeConsentPurposes: ['participation', 'home_visit', 'photo_video'],
+    });
+    expect(report.blocking).toEqual([]);
+  });
+
+  it('blocks when participation is required and not active', () => {
+    const report = checkConflicts(baseCandidate(), {
+      ...baseContext(),
+      requiredConsentPurposes: ['participation'],
+      activeConsentPurposes: [],
+    });
+    expect(report.blocking).toEqual([
+      {
+        code: 'consent_missing',
+        message: 'The required consent (participation) is not active for this client.',
+      },
+    ]);
+  });
+
+  it('blocks when minor_participation is required and not active, independently of participation', () => {
+    const report = checkConflicts(baseCandidate(), {
+      ...baseContext(),
+      requiredConsentPurposes: ['participation', 'minor_participation'],
+      activeConsentPurposes: ['participation'],
+    });
+    expect(report.blocking).toEqual([
+      {
+        code: 'consent_missing',
+        message: 'The required consent (minor_participation) is not active for this client.',
+      },
+    ]);
+  });
+
+  it('blocks when home_visit is required and not active', () => {
+    const report = checkConflicts(baseCandidate(), {
+      ...baseContext(),
+      requiredConsentPurposes: ['participation', 'home_visit'],
+      activeConsentPurposes: ['participation'],
+    });
+    expect(report.blocking).toEqual([
+      {
+        code: 'consent_missing',
+        message: 'The required consent (home_visit) is not active for this client.',
+      },
+    ]);
+  });
+
+  it('raises one issue per missing purpose', () => {
+    const report = checkConflicts(baseCandidate(), {
+      ...baseContext(),
+      requiredConsentPurposes: ['participation', 'minor_participation', 'home_visit'],
+      activeConsentPurposes: [],
+    });
+    expect(report.blocking.map((i) => i.code)).toEqual([
+      'consent_missing',
+      'consent_missing',
+      'consent_missing',
+    ]);
+  });
+
+  it('ignores a purpose that is active but was never required', () => {
+    const report = checkConflicts(baseCandidate(), {
+      ...baseContext(),
+      requiredConsentPurposes: ['participation'],
+      activeConsentPurposes: ['participation', 'marketing'],
+    });
+    expect(report.blocking).toEqual([]);
+  });
+});
+
+describe('checkConflicts (property): practitioner overlap matches a reference busy-interval check', () => {
   // A naive, obviously-correct reimplementation, independent of the one under test.
+  // The buffer pads only the end of each interval (the drive to the next stop).
   function referenceOverlap(
     aStart: number,
     aEnd: number,
@@ -236,11 +349,9 @@ describe('checkConflicts (property): practitioner overlap matches a reference pa
     bEnd: number,
     bBuffer: number,
   ): boolean {
-    const aPaddedStart = aStart - aBuffer * 60_000;
-    const aPaddedEnd = aEnd + aBuffer * 60_000;
-    const bPaddedStart = bStart - bBuffer * 60_000;
-    const bPaddedEnd = bEnd + bBuffer * 60_000;
-    return aPaddedStart < bPaddedEnd && bPaddedStart < aPaddedEnd;
+    const aBusyEnd = aEnd + aBuffer * 60_000;
+    const bBusyEnd = bEnd + bBuffer * 60_000;
+    return aStart < bBusyEnd && bStart < aBusyEnd;
   }
 
   it('agrees with the reference check across many random windows and buffers', () => {
