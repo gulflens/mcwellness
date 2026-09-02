@@ -42,7 +42,8 @@ pnpm verify
 ```
 
 It runs four checks in order: formatting, code rules, types, tests. If it prints
-errors, the work is not done. The same command runs on every pull request.
+errors, the work is not done. The same command runs on every pull request. The
+tests include the sign-in rules and the token checks, with no database needed.
 
 ```
 pnpm test:db
@@ -52,6 +53,21 @@ The database tests need the local database running (`pnpm db:up`). They wipe
 it and rebuild it from the migrations, then prove the schema, the constraints,
 the audit trail and the tenant isolation. They run on every pull request too,
 against a fresh database that only ever holds synthetic rows.
+
+## Signing in and the API
+
+Every request to the API carries the person's Supabase sign-in token. The API
+checks the token itself, works out who the person is and what they may do, and
+records who did what on every change. It talks to the database as its own
+limited user, `mcwellness_api`, never as the owner, so a mistake in the API can
+never bypass the access rules.
+
+- Locally, the API user's password is the one in `API_DATABASE_URL` in `.env`;
+  `pnpm db:reset` and `pnpm db:migrate` set it on the database for you.
+- On Supabase, the owner runs the migrations, then sets that user's password
+  once in the SQL editor: `alter role mcwellness_api password '...'` (a password
+  from the password manager, never written down in the repository), and fills
+  `SUPABASE_URL` and `SUPABASE_JWKS_URL` in the deployment's settings.
 
 ## Database commands
 
