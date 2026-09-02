@@ -16,7 +16,7 @@ import {
   SEED_TENANT_ID,
   SEED_TODAY,
 } from '../../../db/seed/generate';
-import { deriveIdentityKeys } from '../../../domain/shared';
+import { deriveIdentityKeys } from '../../../domain/shared/identity';
 import { freshDatabase } from '../../db/helpers';
 
 // Everything synthetic: the seeded practice, a test secret that unlocks

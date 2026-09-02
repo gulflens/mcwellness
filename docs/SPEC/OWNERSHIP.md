@@ -39,7 +39,7 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 |---|---|
 | `CLAUDE.md`, `.claude/**` | Rules apply to everyone |
 | `docs/SPEC/00-data-model.md`, `docs/SPEC/OWNERSHIP.md` | The contract |
-| `domain/shared/**` | Types every module imports |
+| `domain/shared/**` | Types every module imports. Every domain barrel (`domain/*/index.ts` — shared, client, scheduling, session, billing) is browser-safe; `domain/shared/identity.ts` is the one server-only exception, imported by its own path and never through any barrel, direct or transitive. `tests/lint/no-node-imports-in-browser-bundle.test.ts` walks the real import graph from each stream's own barrel and from the browser entry point and proves it, rather than leaving it to a comment. |
 | `db/migrations/000–099 and 900–999` | Core schema: tenant, user, role, practitioner, credential, service_type, location, client, contact, consent, document, audit_log. The core range is exhausted at 099, so the trunk's own migrations continue at 900. |
 | `db/policies/core/**` | RLS on core tables |
 | `db/seed/**` | Synthetic generators |

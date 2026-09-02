@@ -7,7 +7,7 @@ import { createApi } from '../../app/api/create-api';
 import type { ClientListResponse } from '../../app/api/clients/schema';
 import { applySeed } from '../../db/seed/apply';
 import { generateSeed, SEED_OWNER_USER_ID } from '../../db/seed/generate';
-import { deriveIdentityKeys } from '../../domain/shared';
+import { deriveIdentityKeys } from '../../domain/shared/identity';
 import { freshDatabase } from './helpers';
 
 // Everything synthetic: the seeded practice, a test secret that unlocks nothing,

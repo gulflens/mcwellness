@@ -1,4 +1,4 @@
-import { EMIRATES_ID_DIGITS, normaliseEmiratesId } from '../shared/identity';
+import { EMIRATES_ID_DIGITS, normaliseEmiratesId } from '../shared/emirates-id';
 
 export type EmiratesIdValidation =
   { ok: true; normalised: string } | { ok: false; reason: 'length' | 'prefix' | 'checksum' };

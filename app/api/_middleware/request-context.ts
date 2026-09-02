@@ -4,7 +4,8 @@ import { createMiddleware } from 'hono/factory';
 import type pg from 'pg';
 import { z } from 'zod';
 import { cleanText } from './text';
-import type { Actor, IdentityKeys } from '@domain/shared';
+import type { Actor } from '@domain/shared';
+import type { IdentityKeys } from '@domain/shared/identity';
 import { ResolvedActorRow } from './actor-schema';
 import type { TokenVerifier } from './token-verifier';
 
