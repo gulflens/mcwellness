@@ -31,10 +31,11 @@ import { seedAppointment, seedConsent, seedConsentDocument } from './helpers';
  * found is no longer just "this client is in my tenant": it is also "I have
  * a booked visit with this client today" — the caller's own practitioner row
  * (resolved from app.actor_id) must hold an appointment for the resolved
- * client whose window_start falls on today's date in Asia/Dubai and whose
- * status is proposed, confirmed or checked_in. There is no role exception:
- * a lead practitioner or owner acting through a practitioner row is bound by
- * exactly the same rule as an ordinary practitioner.
+ * client whose window overlaps today's half-open Dubai day [today 00:00,
+ * tomorrow 00:00) and whose status is proposed, confirmed or checked_in.
+ * There is no role exception: a lead practitioner or owner acting through a
+ * practitioner row is bound by exactly the same rule as an ordinary
+ * practitioner.
  */
 
 const DOCUMENT = '00000000-0000-4000-8000-000000103001';
@@ -47,6 +48,12 @@ const CLIENT_NO_APPOINTMENT = '00000000-0000-4000-8000-000000101005';
 const CLIENT_YESTERDAY = '00000000-0000-4000-8000-000000101006';
 const CLIENT_CANCELLED = '00000000-0000-4000-8000-000000101007';
 const CLIENT_OTHER_PRACTITIONER = '00000000-0000-4000-8000-000000101008';
+// The two midnight edges of the half-open Dubai-day range
+// (db/migrations/301_checkin_context.sql): booked exactly at today's own
+// midnight is the inclusive lower edge (found); booked exactly at
+// tomorrow's is the exclusive upper edge — tomorrow's own day, not found.
+const CLIENT_MIDNIGHT_START = '00000000-0000-4000-8000-000000101009';
+const CLIENT_MIDNIGHT_END = '00000000-0000-4000-8000-000000101010';
 const CLIENT_FOREIGN = IDS.clientB; // tenant B — never visible to a tenant A caller
 // Ends in six digits so its auto-derived mrn (seedClient: `MW-${id.slice(-6)}`)
 // satisfies app/api/sessions/schema.ts's ClientMrn pattern.
@@ -72,6 +79,8 @@ const APPT_BY_MRN = '00000000-0000-4000-8000-000000110005';
 const APPT_YESTERDAY = '00000000-0000-4000-8000-000000110006';
 const APPT_CANCELLED = '00000000-0000-4000-8000-000000110007';
 const APPT_OTHER_PRACTITIONER = '00000000-0000-4000-8000-000000110008';
+const APPT_MIDNIGHT_START = '00000000-0000-4000-8000-000000110009';
+const APPT_MIDNIGHT_END = '00000000-0000-4000-8000-000000110010';
 
 let client: pg.Client;
 
@@ -124,6 +133,8 @@ beforeAll(async () => {
   await seedClient(client, IDS.tenantA, CLIENT_YESTERDAY, IDS.ownerA, 'Yesterday');
   await seedClient(client, IDS.tenantA, CLIENT_CANCELLED, IDS.ownerA, 'Cancelled');
   await seedClient(client, IDS.tenantA, CLIENT_OTHER_PRACTITIONER, IDS.ownerA, 'OtherPractitioner');
+  await seedClient(client, IDS.tenantA, CLIENT_MIDNIGHT_START, IDS.ownerA, 'MidnightStart');
+  await seedClient(client, IDS.tenantA, CLIENT_MIDNIGHT_END, IDS.ownerA, 'MidnightEnd');
   await seedClient(client, IDS.tenantA, CLIENT_BY_MRN, IDS.ownerA, 'ByMrn');
 
   await seedClient(client, IDS.tenantB, CLIENT_FOREIGN, IDS.ownerB, 'Foreign');
@@ -132,12 +143,14 @@ beforeAll(async () => {
   // once here rather than assumed from this process's clock: app.checkin_context
   // compares against the same now() this query reads, so the fixtures below
   // can never land a calendar day off from what the function will see.
-  const dates = await client.query<{ today: string; yesterday: string }>(
+  const dates = await client.query<{ today: string; yesterday: string; tomorrow: string }>(
     "select (now() at time zone 'Asia/Dubai')::date::text as today, " +
-      "((now() at time zone 'Asia/Dubai')::date - 1)::text as yesterday",
+      "((now() at time zone 'Asia/Dubai')::date - 1)::text as yesterday, " +
+      "((now() at time zone 'Asia/Dubai')::date + 1)::text as tomorrow",
   );
   const today = dates.rows[0]!.today;
   const yesterday = dates.rows[0]!.yesterday;
+  const tomorrow = dates.rows[0]!.tomorrow;
   // An explicit +04:00 offset (Asia/Dubai has no daylight saving), so each
   // appointment's window_start is unambiguous regardless of the test
   // runner's own local time zone. Spaced an hour apart — the exclusion
@@ -225,6 +238,30 @@ beforeAll(async () => {
     serviceTypeId: MORE_IDS.serviceTypeA,
     locationId: IDS.locationA,
     windowStart: at(today, '08'),
+  });
+  // The inclusive lower edge: window_start exactly at today's own Dubai
+  // midnight (00:00:00+04:00) is still today, so this is found.
+  await seedAppointment(client, {
+    id: APPT_MIDNIGHT_START,
+    tenantId: IDS.tenantA,
+    clientId: CLIENT_MIDNIGHT_START,
+    practitionerId: CALLER_PRACTITIONER,
+    serviceTypeId: MORE_IDS.serviceTypeA,
+    locationId: IDS.locationA,
+    windowStart: at(today, '00'),
+  });
+  // The exclusive upper edge: window_start exactly at tomorrow's own
+  // Dubai midnight is tomorrow's day, not today's, so this is not found —
+  // even though it is the very next instant after APPT_MIDNIGHT_START's
+  // own busy window ends.
+  await seedAppointment(client, {
+    id: APPT_MIDNIGHT_END,
+    tenantId: IDS.tenantA,
+    clientId: CLIENT_MIDNIGHT_END,
+    practitionerId: CALLER_PRACTITIONER,
+    serviceTypeId: MORE_IDS.serviceTypeA,
+    locationId: IDS.locationA,
+    windowStart: at(tomorrow, '00'),
   });
 
   await seedConsentDocument(client, IDS.tenantA, DOCUMENT);
@@ -316,7 +353,6 @@ describe('app.checkin_context', () => {
       expect(row).toMatchObject({
         found: true,
         client_id: CLIENT_ADULT,
-        status: 'lead',
         has_date_of_birth: true,
         is_minor: false,
       });
@@ -404,6 +440,26 @@ describe('app.checkin_context', () => {
     });
   });
 
+  it("finds an appointment booked exactly at today's own Dubai midnight (the inclusive lower edge)", async () => {
+    await asCaller(async () => {
+      const { rows } = await client.query('select * from app.checkin_context($1, $2)', [
+        CLIENT_MIDNIGHT_START,
+        null,
+      ]);
+      expect(rows[0]).toMatchObject({ found: true, client_id: CLIENT_MIDNIGHT_START });
+    });
+  });
+
+  it("answers found = false for an appointment booked exactly at tomorrow's own Dubai midnight (the exclusive upper edge)", async () => {
+    await asCaller(async () => {
+      const { rows } = await client.query('select * from app.checkin_context($1, $2)', [
+        CLIENT_MIDNIGHT_END,
+        null,
+      ]);
+      expect(rows[0]).toMatchObject({ found: false, client_id: null });
+    });
+  });
+
   it('answers found = false for another tenant, and never returns a name', async () => {
     await asCaller(async () => {
       const result = await client.query('select * from app.checkin_context($1, $2)', [
@@ -414,7 +470,6 @@ describe('app.checkin_context', () => {
         {
           found: false,
           client_id: null,
-          status: null,
           has_date_of_birth: false,
           is_minor: false,
           active_consent_purposes: [],
@@ -424,14 +479,7 @@ describe('app.checkin_context', () => {
       // exist to withhold. A name or contact detail could never ride along
       // even by accident.
       expect(result.fields.map((f) => f.name).sort()).toEqual(
-        [
-          'active_consent_purposes',
-          'client_id',
-          'found',
-          'has_date_of_birth',
-          'is_minor',
-          'status',
-        ].sort(),
+        ['active_consent_purposes', 'client_id', 'found', 'has_date_of_birth', 'is_minor'].sort(),
       );
     });
   });

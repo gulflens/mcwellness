@@ -16,11 +16,12 @@
 -- is on file, whether the client is a minor as of today in the practice's own
 -- zone (matching canCheckIn's own PRACTICE_TIME_ZONE), and the active consent
 -- purposes canCheckIn actually branches on. No given_name, no family_name, no
--- phone, no email, no Emirates ID: the route has never needed a name to check
--- someone in, and this function makes that a property of what can be asked
--- for, not merely of what the route happens to select today. status rides
--- along for the caller to use later; this pull request adds no new refusal
--- reason from it; the route's rules are exactly as they were.
+-- phone, no email, no Emirates ID, no status: the route has never needed a
+-- name to check someone in, and this function makes that a property of what
+-- can be asked for, not merely of what the route happens to select today —
+-- status was dropped from the return row entirely once nothing downstream
+-- read it (a column the gate does not use is not this door's to hand out,
+-- the same reasoning that keeps a name off it).
 --
 -- Bound to the caller's own tenant, not the row's: a client id (or record
 -- number) belonging to another tenant is exactly as invisible to this
@@ -51,37 +52,44 @@
 -- resolved client, in the caller's own tenant, whose practitioner_id is the
 -- caller's own practitioner row (resolved from app.actor_id, the same
 -- lookup db/policies/scheduling/appointment_access.sql and
--- db/policies/session/practitioner_scope.sql use), whose window_start falls
--- on today's calendar date in Asia/Dubai (matching is_minor's own zone
--- above), and whose status is 'proposed', 'confirmed' or 'checked_in' — a
--- cancelled, no-show, rescheduled or already-completed appointment does not
--- open the door. There is no role exception here: the lead practitioner and
--- the owner check in against their own appointment exactly as an ordinary
--- practitioner does, unlike the broad "see everything in the tenant" role
--- carve-out db/policies/scheduling/appointment_access.sql grants those roles
--- for reading the calendar — a different question with a different answer.
--- The appointment check is an exists() rather than a join, so a client with
--- two non-overlapping visits today for the same practitioner still yields
+-- db/policies/session/practitioner_scope.sql use), whose window overlaps
+-- today — the half-open Dubai-day range [today 00:00, tomorrow 00:00),
+-- compared directly against window_start and window_end as plain
+-- timestamptz, never a per-row (window_start at time zone ...)::date cast —
+-- and whose status is 'proposed', 'confirmed' or 'checked_in'; a cancelled,
+-- no-show, rescheduled or already-completed appointment does not open the
+-- door. Comparing the raw columns keeps the check sargable against
+-- appointment_practitioner_window_idx (practitioner_id, window_start)
+-- (200_appointment.sql), and the overlap form (rather than testing
+-- window_start's calendar date alone) is what correctly finds a visit
+-- starting at 23:30 Dubai and ending after midnight, or, symmetrically, one
+-- that began just before midnight and is still running when the day turns
+-- over. There is no role exception here: the lead practitioner and the owner
+-- check in against their own appointment exactly as an ordinary practitioner
+-- does, unlike the broad "see everything in the tenant" role carve-out
+-- db/policies/scheduling/appointment_access.sql grants those roles for
+-- reading the calendar — a different question with a different answer. The
+-- appointment check is an exists() rather than a join, so a client with two
+-- non-overlapping visits today for the same practitioner still yields
 -- exactly one row, not two. Appointment is read only inside this function;
 -- nothing here imports from or defers to the scheduling domain. When found
 -- is false, every other column comes back null (or its empty value) rather
 -- than whatever the client row happened to hold: a same-tenant client with
 -- no qualifying appointment today must look identical to one that does not
 -- exist at all, so a caller can never probe an id and learn "this one is at
--- least in my tenant" from a status or a client_id riding along beside a
--- false found.
+-- least in my tenant" from a client_id riding along beside a false found —
+-- the route's own refusal for every found = false case is the same generic
+-- not_booked_today, for exactly this reason (app/api/sessions/checkin.ts).
 --
--- Needs 050 (practitioner, to resolve the caller's own row), 060 (client,
--- consent, contact — the tables this function reads), 200 (appointment) and
--- 300 (session, whose own tenant-bound, security-definer pattern this file
--- mirrors). Written to apply cleanly whether or not client-record's 100 is
--- present: nothing here reads a table or function that migration adds.
+-- Needs 050 (practitioner, to resolve the caller's own row), 060 (client and
+-- consent — the tables this function reads) and 200 (appointment). Written
+-- to apply cleanly whether or not client-record's 100 is present: nothing
+-- here reads a table or function that migration adds.
 
 create function app.checkin_context(p_client_id uuid, p_mrn text)
 returns table (
   found                    boolean,
   client_id                uuid,
-  status                   public.client_status,
   has_date_of_birth        boolean,
   is_minor                 boolean,
   active_consent_purposes  text[]
@@ -89,49 +97,88 @@ returns table (
 language sql stable security definer
 set search_path = pg_catalog, pg_temp
 as $$
-  -- found is computed once, in resolved, so the outer select can null out
-  -- every other column when it is false: a same-tenant client who merely has
-  -- no qualifying appointment must be indistinguishable from a client that
-  -- does not exist at all — otherwise a caller could probe arbitrary ids and
-  -- learn "this one exists in my tenant" from status or client_id riding
-  -- back out beside a false found. (A plain top-level "as found" alias
-  -- cannot be reread by its neighbouring select-list expressions in the same
-  -- query — SQL does not allow that — hence the subquery.)
+  with today_dubai as (
+    -- Local midnight today, and tomorrow's, as real instants (timestamptz),
+    -- computed once so every comparison below reads the same "today" rather
+    -- than each re-deriving it from a fresh now(). date_trunc('day', now()
+    -- at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' is the standard
+    -- idiom for "local midnight, as a timestamptz": the first "at time
+    -- zone" reads now() as Dubai wall-clock time (a plain timestamp),
+    -- date_trunc floors it to midnight, and the second "at time zone"
+    -- reinterprets that floored wall-clock value back as an instant in
+    -- Dubai — never the server's own zone.
+    select
+      (date_trunc('day', now() at time zone 'Asia/Dubai'))::date as today,
+      date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as day_start,
+      date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai'
+        + interval '1 day' as day_end
+  ),
+  caller as (
+    -- The caller's own practitioner row, resolved once: found never
+    -- substitutes a role for it (see the header above), so this is the one
+    -- row every appointment check below is bound to — or, for a caller with
+    -- no practitioner row at all, zero rows, so found stays false for every
+    -- client without the exists() below needing its own separate guard.
+    select pr.id
+      from public.practitioner pr
+     where pr.user_id = nullif(current_setting('app.actor_id', true), '')::uuid
+       and pr.tenant_id = app.current_tenant_id()
+  ),
+  resolved as (
+    select c.id, c.date_of_birth
+      from public.client c
+     where c.tenant_id = app.current_tenant_id()
+       and (
+         -- p_client_id wins when both are somehow supplied: a caller-typed
+         -- MRN is never used to override an id the route already trusts.
+         (p_client_id is not null and c.id = p_client_id)
+         or (p_client_id is null and p_mrn is not null and c.mrn = p_mrn)
+       )
+  )
+  -- found is computed once, in resolved_ctx below, so the outer select can
+  -- null out every other column when it is false: a same-tenant client who
+  -- merely has no qualifying appointment must be indistinguishable from a
+  -- client that does not exist at all — otherwise a caller could probe
+  -- arbitrary ids and learn "this one exists in my tenant" from client_id
+  -- riding back out beside a false found. (A plain top-level "as found"
+  -- alias cannot be reread by its neighbouring select-list expressions in
+  -- the same query — SQL does not allow that — hence the subquery.)
   select
-    resolved.found as found,
-    case when resolved.found then resolved.client_id end as client_id,
-    case when resolved.found then resolved.status end as status,
-    resolved.found and resolved.has_date_of_birth as has_date_of_birth,
-    resolved.found and resolved.is_minor as is_minor,
-    case when resolved.found then resolved.active_consent_purposes else '{}'::text[] end
+    resolved_ctx.found as found,
+    case when resolved_ctx.found then resolved_ctx.client_id end as client_id,
+    resolved_ctx.found and resolved_ctx.has_date_of_birth as has_date_of_birth,
+    resolved_ctx.found and resolved_ctx.is_minor as is_minor,
+    case when resolved_ctx.found then resolved_ctx.active_consent_purposes else '{}'::text[] end
       as active_consent_purposes
   from (
     select
-      c.id is not null and exists (
+      resolved.id is not null and exists (
         select 1
-          from public.appointment a
+          from public.appointment a, today_dubai t
          where a.tenant_id = app.current_tenant_id()
-           and a.client_id = c.id
+           and a.client_id = resolved.id
            and a.status in ('proposed', 'confirmed', 'checked_in')
-           and (a.window_start at time zone 'Asia/Dubai')::date
-               = (now() at time zone 'Asia/Dubai')::date
-           and a.practitioner_id in (
-             select pr.id from public.practitioner pr
-              where pr.user_id = nullif(current_setting('app.actor_id', true), '')::uuid
-                and pr.tenant_id = app.current_tenant_id()
-           )
+           and a.practitioner_id = (select id from caller)
+           -- Half-open overlap with today's Dubai day, against the plain
+           -- timestamptz columns (see the header above for why: sargable,
+           -- and correct at both midnight edges).
+           and a.window_start < t.day_end
+           and a.window_end > t.day_start
       ) as found,
-      c.id as client_id,
-      c.status,
-      c.date_of_birth is not null as has_date_of_birth,
-      -- "Minor" is judged on today's date in the practice's own zone (Asia/Dubai,
-      -- matching domain/session/canCheckIn.ts's PRACTICE_TIME_ZONE), never the
-      -- server's own timezone setting or the client's. extract(year from age(...))
-      -- counts whole years the same way a birthday does, the same rule
-      -- domain/shared/dates.ts's ageOn implements in application code.
+      resolved.id as client_id,
+      resolved.date_of_birth is not null as has_date_of_birth,
+      -- "Minor" is judged on today's date in the practice's own zone
+      -- (Asia/Dubai, matching domain/session/canCheckIn.ts's own
+      -- PRACTICE_TIME_ZONE), never the server's own timezone setting or the
+      -- client's. A direct date comparison against "18 years before today",
+      -- rather than age(): age() promotes both its arguments through
+      -- timestamp to build an interval this would then have to pull years
+      -- back out of, all to answer a question a single date comparison
+      -- already answers directly.
       coalesce(
-        c.date_of_birth is not null
-          and extract(year from age((now() at time zone 'Asia/Dubai')::date, c.date_of_birth)) < 18,
+        resolved.date_of_birth is not null
+          and resolved.date_of_birth
+              > ((select today from today_dubai) - interval '18 years')::date,
         false
       ) as is_minor,
       -- Filtered to the three purposes canCheckIn's gate actually reads
@@ -141,7 +188,7 @@ as $$
       coalesce(
         (select array_agg(distinct co.purpose::text)
            from public.consent co
-          where co.client_id = c.id
+          where co.client_id = resolved.id
             and co.tenant_id = app.current_tenant_id()
             and co.status = 'active'
             and (co.expires_at is null or co.expires_at > now())
@@ -149,15 +196,8 @@ as $$
         '{}'::text[]
       ) as active_consent_purposes
     from (select 1) as seed
-    left join public.client c
-      on c.tenant_id = app.current_tenant_id()
-     and (
-       -- p_client_id wins when both are somehow supplied: a caller-typed MRN
-       -- is never used to override an id the route already trusts.
-       (p_client_id is not null and c.id = p_client_id)
-       or (p_client_id is null and p_mrn is not null and c.mrn = p_mrn)
-     )
-  ) as resolved
+    left join resolved on true
+  ) as resolved_ctx
 $$;
 revoke execute on function app.checkin_context(uuid, text) from public;
 grant execute on function app.checkin_context(uuid, text) to app_role;

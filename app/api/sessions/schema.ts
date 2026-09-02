@@ -61,7 +61,13 @@ export type CheckInRequest = z.infer<typeof CheckInRequest>;
 
 // The domain's CheckInBlockReason plus reasons only the route can discover:
 // 'already_checked_in' comes from the one-open-visit constraint at insert
-// time, not from the pure gate.
+// time, not from the pure gate. 'not_booked_today' is the one generic reason
+// app.checkin_context's found = false stands for — an unknown client, a
+// foreign-tenant client, or a real client with no qualifying appointment
+// today, all indistinguishable on purpose (checkin.ts) — surfaced as a
+// 400 with this detail, not a 422 'blocked' response, but named here
+// alongside every other reason this module can cite rather than left as a
+// bare string literal.
 export const CHECK_IN_BLOCK_REASONS = [
   'not_authorised',
   'consent_missing_participation',
@@ -69,6 +75,7 @@ export const CHECK_IN_BLOCK_REASONS = [
   'consent_missing_home_visit',
   'date_of_birth_unknown',
   'already_checked_in',
+  'not_booked_today',
 ] as const;
 export type CheckInResponseReason = (typeof CHECK_IN_BLOCK_REASONS)[number];
 

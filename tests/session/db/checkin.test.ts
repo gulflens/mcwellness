@@ -299,7 +299,7 @@ beforeAll(async () => {
   // appointment with them today (Asia/Dubai) — session-capture.md section
   // 3.1's "blocks if appointment not today". Every client this suite checks
   // in successfully, or expects to reach the consent gate at all, needs one:
-  // without it every case below would fail earlier, on client_not_found,
+  // without it every case below would fail earlier, on not_booked_today,
   // never reaching the reason under test.
   await seedLocation(owner, IDS.tenantA, IDS.locationA, CLIENT_ADULT, IDS.ownerA);
   const dates = await owner.query<{ today: string }>(
@@ -698,7 +698,7 @@ describe('POST /api/sessions/:id/events', () => {
       clientId: IDS.clientB,
     });
     expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: 'bad_request', detail: 'client_not_found' });
+    expect(await res.json()).toMatchObject({ error: 'bad_request', detail: 'not_booked_today' });
     const rows = await owner.query('select 1 from session where id = $1', [SESSION_CROSS_TENANT]);
     expect(rows.rowCount).toBe(0);
     expect(await refusalsFor(SESSION_CROSS_TENANT)).toEqual([
@@ -707,7 +707,7 @@ describe('POST /api/sessions/:id/events', () => {
         entity_type: 'session',
         entity_id: SESSION_CROSS_TENANT,
         client_id: null,
-        reason: 'client_not_found',
+        reason: 'not_booked_today',
       },
     ]);
   });

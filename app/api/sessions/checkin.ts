@@ -57,7 +57,6 @@ type ServiceTypeRow = { id: string };
 type CheckinContextRow = {
   found: boolean;
   client_id: string | null;
-  status: string;
   has_date_of_birth: boolean;
   is_minor: boolean;
   active_consent_purposes: string[];
@@ -164,25 +163,27 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // it in has not landed either. A direct select here would see nothing the
     // moment that stream merges. app.checkin_context (301_checkin_context.sql)
     // is the door this route uses instead: security definer, so it reads
-    // straight through that gate, and narrow — status, whether a date of
-    // birth is on file, whether the client counts as a minor today, and the
-    // consent purposes canCheckIn's gate actually reads. Never a name, never
-    // a contact detail. It resolves the client by clientId or clientMrn,
+    // straight through that gate, and narrow — whether a date of birth is
+    // on file, whether the client counts as a minor today, and the consent
+    // purposes canCheckIn's gate actually reads. Never a name, never a
+    // contact detail. It resolves the client by clientId or clientMrn,
     // whichever the request carried (schema.ts's CheckInRequest already
     // guarantees exactly one), and found = false covers "no such client", "a
     // client belonging to another tenant" and, as of this pull request, "this
-    // client has no appointment with this practitioner today" — the same
-    // generic client_not_found refusal for all three, exactly as the old
-    // direct select's empty result was for the first two.
+    // client has no appointment with this practitioner today" — one generic
+    // not_booked_today refusal for all three (renamed from client_not_found):
+    // the practitioner is told the visit is not booked for them today, which
+    // is true in every one of those cases and reveals nothing about which it
+    // actually was.
     const context = await db.query<CheckinContextRow>(
-      'select found, client_id, status, has_date_of_birth, is_minor, active_consent_purposes ' +
+      'select found, client_id, has_date_of_birth, is_minor, active_consent_purposes ' +
         'from app.checkin_context($1, $2)',
       [parsed.data.clientId ?? null, parsed.data.clientMrn ?? null],
     );
     const contextRow = context.rows[0];
     if (!contextRow?.found || !contextRow.client_id) {
-      await logRefusal(db, 'session', sessionId, null, ['client_not_found']);
-      return c.json({ error: 'bad_request', requestId, detail: 'client_not_found' }, 400);
+      await logRefusal(db, 'session', sessionId, null, ['not_booked_today']);
+      return c.json({ error: 'bad_request', requestId, detail: 'not_booked_today' }, 400);
     }
     // The function's own resolution, never the caller's raw clientId: when
     // the request named the client by clientMrn, this is the only place the
