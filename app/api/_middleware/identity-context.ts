@@ -7,9 +7,10 @@ import type { ApiEnv } from './request-context';
  * identityKeysFromEnv) onto the request context, the way withRequestContext
  * publishes the actor and the database: a route reads `c.get('identityKeys')`
  * rather than the environment itself. create-api.ts mounts this only when it
- * is given identityKeys, so a deployment that has not set IDENTITY_KEY yet
- * still starts everything else; a route that needs the keys is responsible
- * for refusing cleanly when it finds none.
+ * is given identityKeys, and only after withRequestContext, so no route ahead
+ * of authentication can ever see it; a deployment that has not set
+ * IDENTITY_KEY yet still starts everything else, and a route that needs the
+ * keys is responsible for refusing cleanly when it finds none.
  */
 export function withIdentityKeys(keys: IdentityKeys) {
   return createMiddleware<ApiEnv>(async (c, next) => {

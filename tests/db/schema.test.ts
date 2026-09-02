@@ -154,6 +154,26 @@ describe('core schema', () => {
     expect(rows.every((row) => row.enabled === 'A')).toBe(true);
   });
 
+  it('audits every table in the public schema, so a stream table without the trigger fails here by name', async () => {
+    // The other direction from the test above: not "the trunk's tables are all
+    // audited" but "everything in public is audited", except the log itself (an
+    // audit_row trigger on audit_log would insert into audit_log, forever), its
+    // partitions, the PostGIS reference table, and the runner's own bookkeeping.
+    const { rows: tables } = await client.query<{ table_name: string }>(
+      "select table_name from information_schema.tables where table_schema = 'public' " +
+        "and table_type = 'BASE TABLE' and table_name not like 'audit_log_%' " +
+        "and table_name not in ('audit_log', 'schema_migration', 'spatial_ref_sys')",
+    );
+    const { rows: audited } = await client.query<{ table: string }>(
+      'select c.relname as table from pg_trigger t join pg_class c on c.oid = t.tgrelid ' +
+        "where t.tgname = 'audit_row' and not t.tgisinternal and c.relnamespace = 'public'::regnamespace",
+    );
+    const auditedNames = new Set(audited.map((row) => row.table));
+    for (const table of tables) {
+      expect(auditedNames.has(table.table_name), table.table_name).toBe(true);
+    }
+  });
+
   it('has a tenant_isolation policy on every core table and two on the audit log', async () => {
     const { rows } = await client.query<{ tablename: string; policyname: string }>(
       "select tablename, policyname from pg_policies where schemaname = 'public' order by 1, 2",

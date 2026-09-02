@@ -6,14 +6,15 @@ import type { IdentityKeys } from '../../domain/shared/identity';
 
 /**
  * create-api.ts mounts withIdentityKeys on /api/* only when it is given
- * identityKeys, ahead of the request-context fence (app/api/create-api.ts) —
- * so a route below the fence can read c.get('identityKeys') without ever
- * touching the database. A route added straight to createApi()'s own instance
- * cannot prove this in isolation, since every other /api/* route sits behind
- * that same fence and would need a working verifier and a database to pass
- * it; this exercises the middleware exactly as create-api.ts wires it, on a
- * plain Hono app of the app's own ApiEnv shape, the way rate-limit.test.ts
- * proves rateLimit.
+ * identityKeys, and only after withRequestContext (app/api/create-api.ts) —
+ * so no route ahead of authentication can ever read c.get('identityKeys'),
+ * and every route that can is already inside one database transaction as the
+ * signed-in actor. A route added straight to createApi()'s own instance
+ * cannot prove this in isolation, since every /api/* route past that same
+ * fence would need a working verifier and a database to reach; this
+ * exercises the middleware exactly as create-api.ts wires it, on a plain Hono
+ * app of the app's own ApiEnv shape, the way rate-limit.test.ts proves
+ * rateLimit.
  */
 
 const keys: IdentityKeys = {

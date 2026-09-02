@@ -253,12 +253,12 @@ describe('erasure mode', () => {
 });
 
 describe('the erasure guard (098_erasure_guard.sql)', () => {
-  it("does nothing for a forged flag: 'true' never matches the encoded key, under any role", async () => {
+  it('a forged app.erasure setting withholds nothing, under any role: audit_redact never reads it', async () => {
     await rolledBack(client, async () => {
       await setAuditContext(client, IDS.ownerA);
       await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
       await asApiRole(client, IDS.tenantA, async () => {
-        await client.query("select set_config('app.erasure', 'true', true)");
+        await client.query("select set_config('app.erasure', 'anything', true)");
         await client.query("update client set family_name = 'Hidden' where id = $1", [IDS.clientA]);
         const rows = await rowsFor(IDS.clientA);
         expect(rows[1]?.new_values?.family_name).toBe('Hidden');
@@ -266,22 +266,54 @@ describe('the erasure guard (098_erasure_guard.sql)', () => {
     });
   });
 
-  it('withholds every value once app.begin_erasure() has run, as the owner', async () => {
+  it('the production path: begin_erasure withholds a write, and end_erasure clears it for the rest of the transaction', async () => {
     await rolledBack(client, async () => {
       await setAuditContext(client, IDS.ownerA);
       await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
-      await client.query('select app.begin_erasure()');
-      await client.query("update client set family_name = 'Erased' where id = $1", [IDS.clientA]);
-      const rows = await rowsFor(IDS.clientA);
-      expect(rows[1]?.new_values?.family_name).toBe('[withheld: erasure]');
+
+      // A stand-in for app.erase_client (client-record.md section 8): security
+      // definer and owned the same as app.begin_erasure()/app.end_erasure(), so it
+      // can call them without any grant of its own (098_erasure_guard.sql section
+      // 2). app_role needs an explicit grant on THIS function, the way the real
+      // app.erase_client's own migration grants app_role on it.
+      await client.query(`
+        create function public.__test_erase_client(p_client_id uuid) returns void
+        language plpgsql
+        security definer
+        set search_path = pg_catalog, public
+        as $fn$
+        begin
+          perform app.begin_erasure();
+          update client set family_name = 'Erased' where id = p_client_id;
+          perform app.end_erasure();
+        end
+        $fn$;
+      `);
+      await client.query('grant execute on function public.__test_erase_client(uuid) to app_role');
+
+      await asApiRole(client, IDS.tenantA, async () => {
+        await client.query('select public.__test_erase_client($1)', [IDS.clientA]);
+        const erased = await rowsFor(IDS.clientA);
+        const erasedRow = erased[erased.length - 1];
+        expect(erasedRow?.old_values?.family_name).toBe('[withheld: erasure]');
+        expect(erasedRow?.new_values?.family_name).toBe('[withheld: erasure]');
+
+        // end_erasure ran inside __test_erase_client, in the same transaction:
+        // a further app_role write after it returns is not withheld.
+        await client.query("update client set family_name = 'Kept' where id = $1", [IDS.clientA]);
+        const rows = await rowsFor(IDS.clientA);
+        expect(rows[rows.length - 1]?.new_values?.family_name).toBe('Kept');
+      });
     });
   });
 
-  it('refuses the API role both a read of the key table and the right to call begin_erasure', async () => {
+  it('refuses the API role every direct path into erasure mode, and a direct call to audit_redact', async () => {
     await rolledBack(client, async () => {
       await asApiRole(client, IDS.tenantA, async () => {
-        await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select key from app.erasure_key');
+        await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select txid from app.erasure_active');
         await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select app.begin_erasure()');
+        await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select app.end_erasure()');
+        await rejectsWith(client, INSUFFICIENT_PRIVILEGE, "select app.audit_redact('{}'::jsonb)");
       });
     });
   });
