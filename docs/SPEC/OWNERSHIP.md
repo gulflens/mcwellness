@@ -40,7 +40,7 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `CLAUDE.md`, `.claude/**` | Rules apply to everyone |
 | `docs/SPEC/00-data-model.md`, `docs/SPEC/OWNERSHIP.md` | The contract |
 | `domain/shared/**` | Types every module imports |
-| `db/migrations/000–099` | Core schema: tenant, user, role, practitioner, credential, service_type, location, client, contact, consent, document, audit_log |
+| `db/migrations/000–099 and 900–999` | Core schema: tenant, user, role, practitioner, credential, service_type, location, client, contact, consent, document, audit_log. The core range is exhausted at 099, so the trunk's own migrations continue at 900. |
 | `db/policies/core/**` | RLS on core tables |
 | `db/seed/**` | Synthetic generators |
 | `app/shell/**`, `app/api/_middleware/**` | Auth, audit context, routing |
@@ -69,6 +69,8 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `reports` | `domain/reports/**`, `app/admin/reports/**`, `jobs/reports/**`, `app/api/reports/**`, `tests/reports/**` | `600–699` | `SPEC/reports-v1.md` |
 | `client-portal` | `app/client/**`, `app/api/portal/**`, `tests/portal/**` | `700–799` | `SPEC/client-portal.md` |
 | `audit-ui` | `app/admin/audit/**`, `app/api/audit/**`, `tests/audit/**` | `800–899` | `SPEC/audit.md` section 9 |
+
+**Apply order across these ranges is not fixed.** Every worktree runs its own local Postgres (see the ports below), and each one only ever applies the migrations it has: the trunk's, and its own. Which of another stream's migrations, if any, a given database has seen depends on integration order, not on the numbers themselves — a database can carry billing's `400` without ever having carried the trunk's `099`, or the reverse. `db/runner/plan.ts` reflects this: a pending migration numbered below the highest one already applied is planned, not refused (the missing-file and duplicate-number checks still catch genuinely edited history). A migration may therefore depend only on what it names in its own `Needs` comment at the top of the file; it must never assume another stream's range is present just because its own number is higher.
 
 ## Rules
 

@@ -14,6 +14,7 @@ import {
 const CHECK_VIOLATION = '23514';
 const UNIQUE_VIOLATION = '23505';
 const INVALID_ENUM = '22P02';
+const FOREIGN_KEY_VIOLATION = '23503';
 
 let client: pg.Client;
 
@@ -193,6 +194,81 @@ describe('service types and credentials', () => {
         CHECK_VIOLATION,
         "insert into credential (tenant_id, practitioner_id, service_type_id, certification, valid_from, valid_to) values ($1, $2, $3, 'bcia_bcn', '2026-01-01', '2026-01-01')",
         [IDS.tenantA, practitioner.rows[0]?.id, rows[0]?.id],
+      );
+    });
+  });
+});
+
+describe('tenant-scoped keys (099_tenant_scoped_keys.sql)', () => {
+  it('gives every tenant-scoped public table a unique (tenant_id, id) key, tenant and audit_log excepted', async () => {
+    // Coverage comes from the schema itself, not a hardcoded table list, so a
+    // core table that gains a tenant_id column later and forgets this key
+    // fails here by name rather than silently passing. `tenant` carries no
+    // tenant_id of its own (.claude/rules/data-model.md) and so never appears
+    // in this query. `audit_log` (and its month partitions, audit_log_2026_09
+    // and the like) does carry tenant_id but is structurally exempt: it is
+    // partitioned by occurred_at, Postgres refuses any unique key on a
+    // partitioned table that omits the partition column, so a bare
+    // (tenant_id, id) key can never exist on it - and nothing ever holds a
+    // composite foreign key into an audit row (docs/SPEC/audit.md).
+    const { rows: tables } = await client.query<{ table_name: string }>(
+      'select table_name from information_schema.columns ' +
+        "where table_schema = 'public' and column_name = 'tenant_id' " +
+        "and table_name <> 'tenant' and table_name <> 'audit_log' " +
+        "and table_name not like 'audit_log_%' " +
+        'order by table_name',
+    );
+    // A canary for the query itself: if this ever comes back empty, the
+    // assertion below would vacuously pass without checking anything.
+    expect(tables.length).toBeGreaterThanOrEqual(10);
+
+    for (const { table_name: table } of tables) {
+      const { rows: keyed } = await client.query<{ conname: string }>(
+        'select c.conname from pg_constraint c ' +
+          'where c.conrelid = $1::regclass ' +
+          "and c.contype = 'u' " +
+          'and (' +
+          '  select array_agg(a.attname::text order by a.attname) ' +
+          '    from pg_attribute a ' +
+          '   where a.attrelid = c.conrelid and a.attnum = any(c.conkey)' +
+          ") = array['id', 'tenant_id']",
+        [table],
+      );
+      expect(keyed.length, `${table} unique (tenant_id, id)`).toBeGreaterThan(0);
+    }
+  });
+
+  it("refuses a composite foreign key row naming another tenant's client, and accepts its own", async () => {
+    await rolledBack(client, async () => {
+      // A stream's own migration would write this against its own table, in
+      // its own numeric range; here it is a throwaway table demonstrating the
+      // shape 099 makes possible: (tenant_id, client_id) references
+      // client (tenant_id, id). A temporary table cannot carry a foreign key
+      // to a permanent one, so this is a plain table instead - harmless
+      // inside a transaction the rollback always undoes, creation included.
+      await client.query(
+        'create table stream_client_ref (' +
+          'id uuid primary key default gen_random_uuid(), ' +
+          'tenant_id uuid not null, ' +
+          'client_id uuid not null, ' +
+          'foreign key (tenant_id, client_id) references client (tenant_id, id)' +
+          ')',
+      );
+
+      // Tenant A naming its own client is accepted: the pairing matches.
+      await client.query('insert into stream_client_ref (tenant_id, client_id) values ($1, $2)', [
+        IDS.tenantA,
+        IDS.clientA,
+      ]);
+
+      // Tenant A naming tenant B's client is refused, even though clientB is a
+      // real row - the composite key demands the tenant_id agree too, which a
+      // plain foreign key on client_id alone would never have caught.
+      await rejectsWith(
+        client,
+        FOREIGN_KEY_VIOLATION,
+        'insert into stream_client_ref (tenant_id, client_id) values ($1, $2)',
+        [IDS.tenantA, IDS.clientB],
       );
     });
   });

@@ -75,6 +75,7 @@ Late edits after close are a new `session` version with `amendment_reason`, auth
 - Service worker: cache app shell and today's read data; background sync where available, foreground retry every 30s otherwise (iOS).
 - Storage: IndexedDB via a thin wrapper; request persistent storage on install; warn if the browser reports storage pressure.
 - Geolocation with graceful degradation: if denied, check-in still works and records `point = null` with an audit note.
+- The check-in point exists as proof of attendance at the door, not for tracking: the practitioner may decline it exactly as above, only the practitioner's own scope and the practice roles (owner, admin, lead practitioner, finance) may ever read it, it follows the session's own retention rather than a schedule of its own, and it is never copied into the audit trail — the trunk drops `checked_in_point` in redaction, unconditionally, alongside the Emirates ID columns (098_erasure_guard.sql; docs/SPEC/audit.md section 8).
 - Camera via `<input capture>`; photos compressed client-side to ≤ 1 MB before queueing.
 - Test on iOS Safari and Android Chrome. iOS is the risk: verify that a session survives the app being backgrounded for 45 minutes.
 

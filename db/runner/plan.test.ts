@@ -74,9 +74,32 @@ describe('planMigrations', () => {
     );
   });
 
-  it('refuses a new file numbered below one already applied', () => {
-    expect(() => planMigrations(available, ['002_user.sql'])).toThrow(
-      'numbered below the highest applied migration (2)',
+  it('plans a new file numbered below one already applied, in filename order', () => {
+    // Which migrations a database has already seen depends on which streams'
+    // ranges have reached it, never on every range being present (docs/SPEC/OWNERSHIP.md):
+    // a database that has already applied a stream's 400 has not thereby
+    // applied the trunk's 099, and refusing 099 there would make the trunk's
+    // own range unappliable behind whichever stream got there first.
+    const withAGap = listMigrationFiles([
+      '001_tenant.sql',
+      '002_user.sql',
+      '003_role.sql',
+      '099_trunk_only.sql',
+      '400_billing_only.sql',
+    ]);
+    const pending = planMigrations(withAGap, [
+      '001_tenant.sql',
+      '002_user.sql',
+      '003_role.sql',
+      '400_billing_only.sql',
+    ]);
+
+    expect(pending.map((file) => file.filename)).toEqual(['099_trunk_only.sql']);
+  });
+
+  it('still refuses two files that share a number, from listMigrationFiles', () => {
+    expect(() => listMigrationFiles(['001_tenant.sql', '001_user.sql'])).toThrow(
+      'share the number',
     );
   });
 });
