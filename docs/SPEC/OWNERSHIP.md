@@ -59,7 +59,7 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 > Seeded by the trunk in PR 6 (2026-09-02): `app/admin/clients/ClientDrawer.tsx` (client-record owns it from here) and `app/admin/audit/RecordTimeline.tsx`, `app/api/audit/timeline.ts`, `app/api/audit/schema.ts` (audit-ui owns them from here). The sentence catalogue `domain/shared/audit-narrative.ts` stays with the trunk.
 | `scheduling` | `domain/scheduling/**`, `app/admin/schedule/**`, `app/therapist/today/**`, `app/api/appointments/**`, `db/policies/scheduling/**`, `tests/scheduling/**` | `200–299` | `SPEC/scheduling-manual.md` |
 | `session-capture` | `domain/session/**`, `app/therapist/session/**`, `app/api/sessions/**`, `db/policies/session/**`, `tests/session/**` | `300–399` | `SPEC/session-capture.md` |
-| `billing` | `domain/billing/**`, `app/admin/billing/**`, `app/api/billing/**`, `db/policies/billing/**`, `jobs/billing/**`, `tests/billing/**` | `400–499` | `FINANCE-SPEC.md` |
+| `billing` | `domain/billing/**`, `app/admin/billing/**`, `app/api/billing/**`, `db/policies/billing/**`, `jobs/billing/**`, `tests/billing/**` | `400–499` | `SPEC/billing.md` |
 
 ## Stage 2 worktrees (open only after Stage 1 is merged)
 
@@ -68,7 +68,7 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `assessment` | `domain/assessment/**`, `app/admin/assessments/**`, `app/api/assessments/**`, `tests/assessment/**` | `500–599` | `SPEC/assessment.md` |
 | `reports` | `domain/reports/**`, `app/admin/reports/**`, `jobs/reports/**`, `app/api/reports/**`, `tests/reports/**` | `600–699` | `SPEC/reports-v1.md` |
 | `client-portal` | `app/client/**`, `app/api/portal/**`, `tests/portal/**` | `700–799` | `SPEC/client-portal.md` |
-| `audit-ui` | `app/admin/audit/**`, `app/api/audit/**`, `tests/audit/**` | `800–899` | `AUDIT-SPEC.md` §9 |
+| `audit-ui` | `app/admin/audit/**`, `app/api/audit/**`, `tests/audit/**` | `800–899` | `SPEC/audit.md` section 9 |
 
 ## Rules
 
