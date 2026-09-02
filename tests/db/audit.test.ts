@@ -278,13 +278,13 @@ describe('identity columns', () => {
 });
 
 describe('the client behind an audit row, on any table', () => {
-  const client = '00000008-0000-4000-8000-000000000001';
+  const clientId = '00000008-0000-4000-8000-000000000001';
   const row = (fields: Record<string, unknown>): string => JSON.stringify(fields);
   const resolve = async (
     table: string,
     fields: Record<string, unknown>,
   ): Promise<string | null> => {
-    const { rows } = await owner.query<{ id: string | null }>(
+    const { rows } = await client.query<{ id: string | null }>(
       'select app.audit_client_id($1, $2::jsonb) as id',
       [table, row(fields)],
     );
@@ -292,13 +292,13 @@ describe('the client behind an audit row, on any table', () => {
   };
 
   it('is the row itself for a client, its client for any table carrying client_id, and nothing otherwise', async () => {
-    expect(await resolve('client', { id: client })).toBe(client);
+    expect(await resolve('client', { id: clientId })).toBe(clientId);
     for (const table of ['contact', 'consent', 'document', 'appointment', 'session', 'goal']) {
-      expect(await resolve(table, { id: 'x', client_id: client }), table).toBe(client);
+      expect(await resolve(table, { id: 'x', client_id: clientId }), table).toBe(clientId);
     }
     expect(await resolve('document', { id: 'x', client_id: null })).toBeNull();
-    expect(await resolve('location', { owner_type: 'client', owner_id: client })).toBe(client);
-    expect(await resolve('location', { owner_type: 'tenant', owner_id: client })).toBeNull();
+    expect(await resolve('location', { owner_type: 'client', owner_id: clientId })).toBe(clientId);
+    expect(await resolve('location', { owner_type: 'tenant', owner_id: clientId })).toBeNull();
     expect(await resolve('service_type', { id: 'x', code: 'nf-session' })).toBeNull();
   });
 });
