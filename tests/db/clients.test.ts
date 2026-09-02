@@ -132,6 +132,18 @@ describe('GET /api/clients', () => {
     expect((await list(authIdOf(0), '?status=deleted')).status).toBe(400);
   });
 
+  it('keeps erased records with the owner and lead practitioner, away from an admin', async () => {
+    await owner.query("update client set status = 'erased' where mrn = 'MW-000020'");
+    const asOwner = (await (
+      await list(authIdOf(0), '?status=erased')
+    ).json()) as ClientListResponse;
+    expect(asOwner.clients.map((c) => c.mrn)).toEqual(['MW-000020']);
+    const asAdmin = (await (await list(authIdOf(3))).json()) as ClientListResponse;
+    expect(asAdmin.clients).toHaveLength(19);
+    expect(asAdmin.clients.some((c) => c.status === 'erased')).toBe(false);
+    await owner.query("update client set status = 'active' where mrn = 'MW-000020'");
+  });
+
   it('shows another practice nothing, and a stranger nothing at all', async () => {
     const other = await list(ADMIN_B_AUTH);
     expect(other.status).toBe(200);

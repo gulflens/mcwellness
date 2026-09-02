@@ -12,6 +12,7 @@ describe('devSessionEnabled', () => {
   const local = {
     APP_ENV: 'development',
     API_DATABASE_URL: 'postgresql://mcwellness_api:x@localhost:5432/postgres',
+    SUPABASE_URL: 'http://localhost:54321',
     SUPABASE_JWT_SECRET: SECRET,
   };
 
@@ -23,6 +24,8 @@ describe('devSessionEnabled', () => {
       devSessionEnabled({ ...local, API_DATABASE_URL: 'postgresql://u:x@db.example.com/postgres' }),
     ).toBe(false);
     expect(devSessionEnabled({ ...local, SUPABASE_JWT_SECRET: '' })).toBe(false);
+    expect(devSessionEnabled({ ...local, SUPABASE_URL: 'https://abc.supabase.co' })).toBe(false);
+    expect(devSessionEnabled({ ...local, SUPABASE_URL: undefined })).toBe(false);
   });
 });
 
@@ -51,5 +54,18 @@ describe('mountDevSession', () => {
       body: JSON.stringify({ authId: 'owner' }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('the door answers loopback only', () => {
+  it('returns 404 to any other Host header', async () => {
+    const api = new Hono<ApiEnv>();
+    mountDevSession(api, { secret: SECRET, issuer: ISSUER });
+    const res = await api.request('http://evil.example.com/api/dev/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ authId: AUTH_ID }),
+    });
+    expect(res.status).toBe(404);
   });
 });

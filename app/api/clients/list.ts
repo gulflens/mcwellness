@@ -43,6 +43,8 @@ const SQL =
   'left join contact ct on ct.id = c.primary_contact_id ' +
   'left join location l on l.id = c.primary_location_id ' +
   'where ($1::client_status is null or c.status = $1::client_status) ' +
+  // Erased records stay with the lead practitioner (client-record.md section 2).
+  "and ($3::boolean or c.status <> 'erased') " +
   "and ($2::text is null or c.mrn ilike $2 escape '\\' or c.given_name ilike $2 escape '\\' " +
   "or c.family_name ilike $2 escape '\\' or coalesce(c.given_name_ar, '') ilike $2 escape '\\' " +
   "or coalesce(c.family_name_ar, '') ilike $2 escape '\\') " +
@@ -73,6 +75,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
       .query<Row>(SQL, [
         query.data.status ?? null,
         query.data.q ? likePattern(query.data.q) : null,
+        hasRole(actor, 'owner', 'lead_practitioner'),
       ]);
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
     const clients: ClientRow[] = rows.map((r) => ({
