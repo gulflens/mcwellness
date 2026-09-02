@@ -39,12 +39,18 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
     if (!canWriteClientRecord(actor, clientId, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const client = await db.query<{ id: string }>('select id from client where id = $1', [
-      clientId,
-    ]);
+    const client = await db.query<{ id: string; status: string }>(
+      'select id, status from client where id = $1',
+      [clientId],
+    );
     if (client.rowCount === 0) {
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    // Erased is read-only (client-record.md section 3): writers.sql would refuse the
+    // insert outright; this gives the caller a clean reason rather than a raw RLS error.
+    if (client.rows[0]?.status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
     }
 
     const locationId = randomUUID();
@@ -82,13 +88,17 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
     if (!canWriteClientRecord(actor, clientId, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const existing = await db.query<{ id: string }>(
-      "select id from location where id = $1 and owner_type = 'client' and owner_id = $2",
+    const existing = await db.query<{ id: string; status: string }>(
+      'select l.id, c.status from location l join client c on c.id = l.owner_id ' +
+        "where l.id = $1 and l.owner_type = 'client' and l.owner_id = $2",
       [locationId, clientId],
     );
     if (existing.rowCount === 0) {
       await logRefused(db, 'location', locationId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (existing.rows[0]?.status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
     }
 
     const sets: string[] = [];
@@ -128,13 +138,17 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
     if (!canWriteClientRecord(actor, clientId, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const existing = await db.query<{ id: string }>(
-      "select id from location where id = $1 and owner_type = 'client' and owner_id = $2",
+    const existing = await db.query<{ id: string; status: string }>(
+      'select l.id, c.status from location l join client c on c.id = l.owner_id ' +
+        "where l.id = $1 and l.owner_type = 'client' and l.owner_id = $2",
       [locationId, clientId],
     );
     if (existing.rowCount === 0) {
       await logRefused(db, 'location', locationId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (existing.rows[0]?.status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
     }
     await db.query(
       'update location set entrance_point = extensions.st_geogfromtext($1) where id = $2',

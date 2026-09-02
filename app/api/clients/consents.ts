@@ -36,13 +36,20 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!canWriteClientRecord(actor, clientId, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const contact = await db.query<{ id: string }>(
-      'select id from contact where id = $1 and client_id = $2',
+    const contact = await db.query<{ id: string; client_status: string }>(
+      'select ct.id, c.status as client_status from contact ct ' +
+        'join client c on c.id = ct.client_id where ct.id = $1 and ct.client_id = $2',
       [body.data.givenByContactId, clientId],
     );
-    if (contact.rowCount === 0) {
+    const contactRow = contact.rows[0];
+    if (!contactRow) {
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    // Erased is read-only (client-record.md section 3): writers.sql would refuse the
+    // insert outright; this gives the caller a clean reason rather than a raw RLS error.
+    if (contactRow.client_status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
     }
 
     const consentId = randomUUID();
@@ -78,14 +85,18 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!(c.req.header('x-reason') ?? '').trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
-    const existing = await db.query<{ id: string; status: string }>(
-      'select id, status from consent where id = $1 and client_id = $2',
+    const existing = await db.query<{ id: string; status: string; client_status: string }>(
+      'select cs.id, cs.status, c.status as client_status from consent cs ' +
+        'join client c on c.id = cs.client_id where cs.id = $1 and cs.client_id = $2',
       [consentId, clientId],
     );
     const row = existing.rows[0];
     if (!row) {
       await logRefused(db, 'consent', consentId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (row.client_status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
     }
     if (row.status !== 'active') {
       return c.json({ error: 'bad_request', requestId }, 400);

@@ -302,12 +302,18 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     if (!canWriteClientRecord(actor, clientId, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const existing = await db.query<{ id: string }>('select id from client where id = $1', [
-      clientId,
-    ]);
+    const existing = await db.query<{ id: string; status: ClientRow['status'] }>(
+      'select id, status from client where id = $1',
+      [clientId],
+    );
     if (existing.rowCount === 0) {
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    // Erased is read-only (client-record.md section 3): writers.sql would silently
+    // update nothing, since RLS filters the row out of an UPDATE rather than raising.
+    if (existing.rows[0]?.status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
     }
 
     const sets: string[] = [];

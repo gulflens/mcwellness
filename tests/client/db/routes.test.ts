@@ -237,3 +237,33 @@ describe('GET /api/clients/:id — whole record', () => {
     expect(withReason.status).toBe(200);
   });
 });
+
+describe('erased is read-only, even for the owner', () => {
+  it('refuses to edit demographics or add a contact once a client is erased', async () => {
+    const created = (await (
+      await request(AUTH.ownerA, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Sable',
+          familyName: 'Locked',
+          contact: { relationship: 'self', phone: '+971500001194' },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+    await owner.query("update client set status = 'erased' where id = $1", [created.id]);
+
+    const patch = await request(AUTH.ownerA, `/api/clients/${created.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ referralSource: 'instagram' }),
+    });
+    expect(patch.status).toBe(400);
+    expect(((await patch.json()) as { error: string }).error).toBe('erased');
+
+    const addContact = await request(AUTH.ownerA, `/api/clients/${created.id}/contacts`, {
+      method: 'POST',
+      body: JSON.stringify({ relationship: 'mother', phone: '+971500001195' }),
+    });
+    expect(addContact.status).toBe(400);
+    expect(((await addContact.json()) as { error: string }).error).toBe('erased');
+  });
+});

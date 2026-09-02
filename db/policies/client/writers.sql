@@ -6,6 +6,15 @@
 -- 100_client_record.sql): erasure runs through app.erase_client as the
 -- table owner instead.
 --
+-- Erased is read-only (section 3): nobody, owner included, writes a contact,
+-- location, consent or goal that belongs to an erased client through the
+-- ordinary policies below — the same rule client's own writers policy
+-- already applies to the client row itself. app.client_status_for
+-- (100_client_record.sql) reads that status directly, for the reason
+-- readers.sql does: a raw subquery into client here, alongside client's own
+-- policy querying back into these tables, is how two policies end up
+-- referencing each other and Postgres reports SQLSTATE 42P17.
+--
 -- goal is the one table where admin is deliberately absent: section 2 gives
 -- admin everything else, and lead_practitioner "all of the above, plus set
 -- and close goals" — goals are the lead practitioner's (and the owner's, who
@@ -35,31 +44,43 @@ create policy client_record_update_writers on public.client as restrictive for u
 -- details is Stage 2 (client-record.md section 2); not built here.
 drop policy if exists client_record_writers on public.contact;
 create policy client_record_writers on public.contact as restrictive for insert to app_role with check (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 );
 drop policy if exists client_record_update_writers on public.contact;
 create policy client_record_update_writers on public.contact as restrictive for update to app_role using (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 ) with check (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 );
 
 -- location: creating one is staff-only; a practitioner may update one their
 -- schedule reaches (app.client_visible_to_practitioner, closed for now), and
--- app.guard_location_notes() narrows that update to access_notes alone.
+-- app.guard_location_notes() narrows that update to access_notes alone. A
+-- tenant- or practitioner-owned location has no client to be erased, so the
+-- gate only applies when owner_type is 'client'.
 drop policy if exists client_record_writers on public.location;
 create policy client_record_writers on public.location as restrictive for insert to app_role with check (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  (owner_type <> 'client' or app.client_status_for(owner_id) <> 'erased')
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 );
 drop policy if exists client_record_update_writers on public.location;
 create policy client_record_update_writers on public.location as restrictive for update to app_role using (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
-  or (app.actor_has_role('practitioner') and owner_type = 'client'
-      and app.client_visible_to_practitioner(owner_id))
+  (owner_type <> 'client' or app.client_status_for(owner_id) <> 'erased')
+  and (
+    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+    or (app.actor_has_role('practitioner') and owner_type = 'client'
+        and app.client_visible_to_practitioner(owner_id))
+  )
 ) with check (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
-  or (app.actor_has_role('practitioner') and owner_type = 'client'
-      and app.client_visible_to_practitioner(owner_id))
+  (owner_type <> 'client' or app.client_status_for(owner_id) <> 'erased')
+  and (
+    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+    or (app.actor_has_role('practitioner') and owner_type = 'client'
+        and app.client_visible_to_practitioner(owner_id))
+  )
 );
 
 -- consent: record and withdraw. The verbal_witnessed re-confirmation a
@@ -69,25 +90,31 @@ create policy client_record_update_writers on public.location as restrictive for
 -- has no consent-write path here, only the safer default of none at all.
 drop policy if exists client_record_writers on public.consent;
 create policy client_record_writers on public.consent as restrictive for insert to app_role with check (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 );
 drop policy if exists client_record_update_writers on public.consent;
 create policy client_record_update_writers on public.consent as restrictive for update to app_role using (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 ) with check (
-  app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 );
 
 -- goal: the owner and the lead practitioner alone set and close goals.
 drop policy if exists client_record_writers on public.goal;
 create policy client_record_writers on public.goal as restrictive for insert to app_role with check (
-  app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('lead_practitioner'))
 );
 drop policy if exists client_record_update_writers on public.goal;
 create policy client_record_update_writers on public.goal as restrictive for update to app_role using (
-  app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('lead_practitioner'))
 ) with check (
-  app.actor_has_role('owner') or app.actor_has_role('lead_practitioner')
+  app.client_status_for(client_id) <> 'erased'
+  and (app.actor_has_role('owner') or app.actor_has_role('lead_practitioner'))
 );
 
 -- goal_category: the owner-editable catalogue, floored the same way

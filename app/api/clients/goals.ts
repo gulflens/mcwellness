@@ -31,12 +31,18 @@ export function mountGoals(api: Hono<ApiEnv>): void {
     if (!canWriteGoal(actor)) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const client = await db.query<{ id: string }>('select id from client where id = $1', [
-      clientId,
-    ]);
+    const client = await db.query<{ id: string; status: string }>(
+      'select id, status from client where id = $1',
+      [clientId],
+    );
     if (client.rowCount === 0) {
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    // Erased is read-only (client-record.md section 3): writers.sql would refuse the
+    // insert outright; this gives the caller a clean reason rather than a raw RLS error.
+    if (client.rows[0]?.status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
     }
     const category = await db.query<{ id: string }>('select id from goal_category where id = $1', [
       body.data.categoryId,
@@ -75,14 +81,18 @@ export function mountGoals(api: Hono<ApiEnv>): void {
     if (!canWriteGoal(actor)) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const existing = await db.query<{ id: string; status: string }>(
-      'select id, status from goal where id = $1 and client_id = $2',
+    const existing = await db.query<{ id: string; status: string; client_status: string }>(
+      'select g.id, g.status, c.status as client_status from goal g ' +
+        'join client c on c.id = g.client_id where g.id = $1 and g.client_id = $2',
       [goalId, clientId],
     );
     const row = existing.rows[0];
     if (!row) {
       await logRefused(db, 'goal', goalId, clientId);
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (row.client_status === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
     }
     // Removing a goal — dropping it — is a sensitive action (section 9).
     if (
