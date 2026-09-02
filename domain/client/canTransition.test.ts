@@ -57,4 +57,13 @@ describe('canTransition', () => {
       expect(canTransition(status, status)).toBe(false);
     }
   });
+
+  it('permits nothing from a status it does not recognise, rather than throwing', () => {
+    const unknownStatus = 'not_a_real_status' as unknown as ClientStatus;
+    expect(() => canTransition(unknownStatus, 'active')).not.toThrow();
+    expect(canTransition(unknownStatus, 'active')).toBe(false);
+    for (const to of CLIENT_STATUSES) {
+      expect(canTransition(unknownStatus, to)).toBe(false);
+    }
+  });
 });

@@ -17,7 +17,14 @@ const CONSENTING_CONTACT: ClientRecordContact = {
   isLegalGuardian: false,
   canConsent: true,
   userId: null,
-  hasEmiratesId: false,
+};
+
+const LEGAL_GUARDIAN_CONTACT: ClientRecordContact = {
+  id: 'contact-1',
+  relationship: 'mother',
+  isLegalGuardian: true,
+  canConsent: true,
+  userId: null,
 };
 
 const VERIFIED_LOCATION: ClientRecordLocation = {
@@ -50,6 +57,15 @@ function record(overrides: Partial<ClientRecord> = {}): ClientRecord {
     consents: [consent('participation'), consent('home_visit')],
     ...overrides,
   };
+}
+
+/** A minor's record: same shape as `record`, but with a legal guardian as the default contact. */
+function minorRecord(overrides: Partial<ClientRecord> = {}): ClientRecord {
+  return record({
+    client: { id: 'client-1', status: 'lead', dateOfBirth: MINOR_DOB },
+    contacts: [LEGAL_GUARDIAN_CONTACT],
+    ...overrides,
+  });
 }
 
 describe('canActivate', () => {
@@ -106,19 +122,82 @@ describe('canActivate', () => {
   });
 
   it('is missing consent:minor_participation for a minor who lacks it, and not for an adult', () => {
-    const minor = record({
-      client: { id: 'client-1', status: 'lead', dateOfBirth: MINOR_DOB },
-    });
-    expect(canActivate(minor, TODAY)).toEqual({
+    expect(canActivate(minorRecord(), TODAY)).toEqual({
       ok: false,
       missing: ['consent:minor_participation'],
     });
-    expect(
-      canActivate(
-        { ...minor, consents: [...minor.consents, consent('minor_participation')] },
-        TODAY,
-      ),
-    ).toEqual({ ok: true, missing: [] });
+    // The adult baseline above never asks for it at all: 'activates when...' covers that.
+  });
+
+  it('satisfies consent:minor_participation when it was given by a legal guardian who may consent', () => {
+    const minor = minorRecord();
+    const withGuardianConsent: ClientRecord = {
+      ...minor,
+      consents: [
+        ...minor.consents,
+        consent('minor_participation', { givenByContactId: LEGAL_GUARDIAN_CONTACT.id }),
+      ],
+    };
+    expect(canActivate(withGuardianConsent, TODAY)).toEqual({ ok: true, missing: [] });
+  });
+
+  it('does not satisfy consent:minor_participation when it was given by a contact who is not a legal guardian', () => {
+    const notAGuardian: ClientRecordContact = {
+      id: 'contact-2',
+      relationship: 'other',
+      isLegalGuardian: false,
+      canConsent: true,
+      userId: null,
+    };
+    const minor = minorRecord({ contacts: [LEGAL_GUARDIAN_CONTACT, notAGuardian] });
+    const withNonGuardianConsent: ClientRecord = {
+      ...minor,
+      consents: [
+        ...minor.consents,
+        consent('minor_participation', { givenByContactId: notAGuardian.id }),
+      ],
+    };
+    expect(canActivate(withNonGuardianConsent, TODAY)).toEqual({
+      ok: false,
+      missing: ['consent:minor_participation'],
+    });
+  });
+
+  it('does not satisfy consent:minor_participation when the guardian who gave it may no longer consent', () => {
+    const guardianWithoutConsentRight: ClientRecordContact = {
+      id: 'contact-2',
+      relationship: 'father',
+      isLegalGuardian: true,
+      canConsent: false,
+      userId: null,
+    };
+    const minor = minorRecord({ contacts: [LEGAL_GUARDIAN_CONTACT, guardianWithoutConsentRight] });
+    const withConsent: ClientRecord = {
+      ...minor,
+      consents: [
+        ...minor.consents,
+        consent('minor_participation', { givenByContactId: guardianWithoutConsentRight.id }),
+      ],
+    };
+    expect(canActivate(withConsent, TODAY)).toEqual({
+      ok: false,
+      missing: ['consent:minor_participation'],
+    });
+  });
+
+  it('does not satisfy consent:minor_participation when it names a contact that does not exist on the record', () => {
+    const minor = minorRecord();
+    const withDanglingConsent: ClientRecord = {
+      ...minor,
+      consents: [
+        ...minor.consents,
+        consent('minor_participation', { givenByContactId: 'no-such-contact' }),
+      ],
+    };
+    expect(canActivate(withDanglingConsent, TODAY)).toEqual({
+      ok: false,
+      missing: ['consent:minor_participation'],
+    });
   });
 
   it('treats a withdrawn, expired or superseded consent as not active', () => {

@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { Role } from '../shared/actor';
 import { canViewClient } from './canViewClient';
-import type { ClientSummary, ViewClientContext, ViewingActor } from './types';
+import type { ClientStatus, ClientSummary, ViewClientContext, ViewingActor } from './types';
 
 const NOW = new Date('2026-09-02T08:00:00Z');
-const CLIENT: ClientSummary = { id: 'client-1', status: 'active' };
-const ERASED_CLIENT: ClientSummary = { id: 'client-1', status: 'erased' };
+const TENANT = 'tenant-1';
+const OTHER_TENANT = 'tenant-2';
+const CLIENT: ClientSummary = { id: 'client-1', tenantId: TENANT, status: 'active' };
+const ERASED_CLIENT: ClientSummary = { id: 'client-1', tenantId: TENANT, status: 'erased' };
 const EMPTY_CTX: ViewClientContext = { scheduledClientIds: [], contactClientIds: [] };
 
-function actor(roles: Role[]): ViewingActor {
-  return { userId: 'u', roles };
+function actor(roles: Role[], tenantId: string = TENANT): ViewingActor {
+  return { userId: 'u', tenantId, roles };
 }
 
 describe('canViewClient', () => {
@@ -85,5 +87,33 @@ describe('canViewClient', () => {
       ok: false,
       needsReason: false,
     });
+  });
+
+  it('refuses everyone, owner included, when the actor and the client belong to different tenants', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner', 'finance'] as const) {
+      expect(canViewClient(actor([role], OTHER_TENANT), CLIENT, EMPTY_CTX, NOW)).toEqual({
+        ok: false,
+        needsReason: false,
+      });
+    }
+    // Even the owner cannot use the erased-record door into another tenant's client.
+    expect(canViewClient(actor(['owner'], OTHER_TENANT), ERASED_CLIENT, EMPTY_CTX, NOW)).toEqual({
+      ok: false,
+      needsReason: false,
+    });
+  });
+
+  it('refuses a client with a status this rule does not recognise, rather than falling open', () => {
+    const unknownStatusClient: ClientSummary = {
+      id: 'client-1',
+      tenantId: TENANT,
+      status: 'not_a_real_status' as unknown as ClientStatus,
+    };
+    for (const role of ['owner', 'admin', 'lead_practitioner', 'finance'] as const) {
+      expect(canViewClient(actor([role]), unknownStatusClient, EMPTY_CTX, NOW)).toEqual({
+        ok: false,
+        needsReason: false,
+      });
+    }
   });
 });

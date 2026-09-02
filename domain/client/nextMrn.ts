@@ -8,7 +8,7 @@ export function nextMrn(last: string | null): string {
   }
   const n = parseMrn(last);
   if (n === null) {
-    throw new Error(`Not an MRN: ${last}`);
+    throw new Error('Not an MRN.');
   }
   return formatMrn(n + 1);
 }

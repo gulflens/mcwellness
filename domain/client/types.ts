@@ -50,7 +50,6 @@ export type ClientRecordContact = {
   isLegalGuardian: boolean;
   canConsent: boolean;
   userId: string | null;
-  hasEmiratesId: boolean;
 };
 
 export type ClientRecordLocation = {
@@ -77,10 +76,10 @@ export type ClientRecord = {
 };
 
 /** The narrow slice of a client `canViewClient` needs: nothing about the person, only the gate. */
-export type ClientSummary = Pick<ClientRecordClient, 'id' | 'status'>;
+export type ClientSummary = Pick<ClientRecordClient, 'id' | 'status'> & { tenantId: string };
 
 /** The narrow slice of an actor `canViewClient` needs, matching `Actor` in domain/shared/actor. */
-export type ViewingActor = { userId: string; roles: readonly Role[] };
+export type ViewingActor = { userId: string; tenantId: string; roles: readonly Role[] };
 
 export type ViewClientContext = {
   /** Clients on this practitioner's own schedule. */

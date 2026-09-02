@@ -15,6 +15,7 @@ const ALLOWED_TRANSITIONS: Record<ClientStatus, readonly ClientStatus[]> = {
   erased: [],
 };
 
+/** A status this diagram was not written for permits no transition, rather than throwing. */
 export function canTransition(from: ClientStatus, to: ClientStatus): boolean {
-  return ALLOWED_TRANSITIONS[from].includes(to);
+  return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false;
 }

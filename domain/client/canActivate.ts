@@ -18,14 +18,30 @@ function isActiveOn(consent: ClientRecordConsent, today: IsoDate): boolean {
 }
 
 /**
+ * Whether `consent` was given by a contact who may actually give it on a
+ * minor's behalf: a legal guardian who may consent. A minor_participation
+ * consent recorded against anyone else — a sibling, an unrelated contact, a
+ * guardian whose own consenting right has since been withdrawn — does not
+ * satisfy the gate, even if the consent row itself is active.
+ */
+function isGivenByLegalGuardian(record: ClientRecord, consent: ClientRecordConsent): boolean {
+  const givenBy = record.contacts.find((contact) => contact.id === consent.givenByContactId);
+  return givenBy !== undefined && givenBy.isLegalGuardian && givenBy.canConsent;
+}
+
+/**
  * The lead → active gate (docs/SPEC/client-record.md rule 1, section 3): a
  * date of birth, at least one location with a verified pin, at least one
  * contact who may consent, and every consent `requiredConsents` names active
- * on `today`. Delivery defaults to home, since that is what drives the
- * practice today; a caller planning a remote-only programme passes its own
- * modes. This is a gate for the activation action itself — it does not read
- * or judge `record.client.status`, so it answers the same for a lead as it
- * would for a record whose status has already moved.
+ * on `today`. A minor_participation consent additionally has to have been
+ * given by a legal guardian who may consent — the point of the consent is
+ * that a guardian gave it, so a technically-active row given by the wrong
+ * contact does not satisfy the gate. Delivery defaults to home, since that
+ * is what drives the practice today; a caller planning a remote-only
+ * programme passes its own modes. This is a gate for the activation action
+ * itself — it does not read or judge `record.client.status`, so it answers
+ * the same for a lead as it would for a record whose status has already
+ * moved.
  */
 export function canActivate(
   record: ClientRecord,
@@ -45,10 +61,13 @@ export function canActivate(
   }
 
   for (const purpose of requiredConsents(record, deliveryModes, today)) {
-    const active = record.consents.some(
-      (consent) => consent.purpose === purpose && isActiveOn(consent, today),
+    const satisfied = record.consents.some(
+      (consent) =>
+        consent.purpose === purpose &&
+        isActiveOn(consent, today) &&
+        (purpose !== 'minor_participation' || isGivenByLegalGuardian(record, consent)),
     );
-    if (!active) {
+    if (!satisfied) {
       missing.push(`consent:${purpose}`);
     }
   }
