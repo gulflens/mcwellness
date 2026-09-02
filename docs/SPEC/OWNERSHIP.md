@@ -40,7 +40,7 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `CLAUDE.md`, `.claude/**` | Rules apply to everyone |
 | `docs/SPEC/00-data-model.md`, `docs/SPEC/OWNERSHIP.md` | The contract |
 | `domain/shared/**` | Types every module imports |
-| `db/migrations/000–099` | Core schema: tenant, user, role, practitioner, credential, service_type, location, client, contact, consent, document, audit_log |
+| `db/migrations/000–099 and 900–999` | Core schema: tenant, user, role, practitioner, credential, service_type, location, client, contact, consent, document, audit_log. The core range is exhausted at 099, so the trunk's own migrations continue at 900. |
 | `db/policies/core/**` | RLS on core tables |
 | `db/seed/**` | Synthetic generators |
 | `app/shell/**`, `app/api/_middleware/**` | Auth, audit context, routing |
