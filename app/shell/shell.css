@@ -390,6 +390,11 @@
   color: var(--ink-2);
 }
 
+/* Live sections in ink, arriving ones in ink-2 with a slate icon: two colours, both legible. */
+a.rail__item {
+  color: var(--ink);
+}
+
 .rail__item--later {
   color: var(--ink-2);
 }
@@ -451,7 +456,7 @@ input[type='search']::-webkit-search-results-button {
 }
 
 /* Feedback on controls, instant: the brief forbids transitions, not response. */
-.rail__item:hover {
+a.rail__item:hover {
   background: var(--surface);
 }
 
