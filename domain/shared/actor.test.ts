@@ -180,3 +180,31 @@ describe('client.list', () => {
     expect(canActor(actor([]), { type: 'client.list' }, {}, NOW)).toBe(false);
   });
 });
+
+describe('the appointment and catalogue actions', () => {
+  const list = { type: 'appointment.list' } as const;
+  const create = { type: 'appointment.create' } as const;
+  const read = { type: 'billing.catalogue.read' } as const;
+  const write = { type: 'billing.catalogue.write' } as const;
+
+  it('lets the owner, an admin and the lead practitioner see and book appointments, nobody else', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), list, {}, NOW)).toBe(true);
+      expect(canActor(actor([role]), create, {}, NOW)).toBe(true);
+    }
+    for (const role of ['practitioner', 'finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), list, {}, NOW)).toBe(false);
+      expect(canActor(actor([role]), create, {}, NOW)).toBe(false);
+    }
+  });
+
+  it('shows the price list to finance and the lead practitioner, and lets finance change it', () => {
+    expect(canActor(actor(['finance']), read, {}, NOW)).toBe(true);
+    expect(canActor(actor(['finance']), write, {}, NOW)).toBe(true);
+    expect(canActor(actor(['lead_practitioner']), read, {}, NOW)).toBe(true);
+    expect(canActor(actor(['lead_practitioner']), write, {}, NOW)).toBe(false);
+    expect(canActor(actor(['practitioner']), read, {}, NOW)).toBe(false);
+    expect(canActor(actor(['client_contact']), read, {}, NOW)).toBe(false);
+    expect(canActor(actor([]), write, {}, NOW)).toBe(false);
+  });
+});

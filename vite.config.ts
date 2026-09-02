@@ -24,8 +24,8 @@ export default defineConfig(({ mode }) => {
     build: { outDir: 'dist', emptyOutDir: true, assetsInlineLimit: 0 },
     test: {
       environment: 'node',
-      // Database tests live under tests/db and run through vitest.db.config.ts.
-      exclude: [...configDefaults.exclude, 'tests/db/**'],
+      // Database tests (tests/db and every tests/<stream>/db) run through vitest.db.config.ts.
+      exclude: [...configDefaults.exclude, 'tests/db/**', 'tests/**/db/**'],
     },
   };
 });

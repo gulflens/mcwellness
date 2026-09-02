@@ -45,7 +45,11 @@ export type Action =
   | { type: 'user_role.grant'; role: Role }
   | { type: 'session.execute'; serviceTypeId: string; on: IsoDate }
   | { type: 'report.sign'; serviceTypeId?: string }
-  | { type: 'audit.read'; clientId: string };
+  | { type: 'audit.read'; clientId: string }
+  | { type: 'appointment.list' }
+  | { type: 'appointment.create' }
+  | { type: 'billing.catalogue.read' }
+  | { type: 'billing.catalogue.write' };
 
 export type ActionContext = {
   /** The clients this actor's contact rows point at; resolved by the API for a client contact. */
@@ -121,6 +125,14 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     }
     case 'audit.read':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    case 'appointment.list':
+    case 'appointment.create':
+      // A practitioner reads their own day through its own action later; they never book.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    case 'billing.catalogue.read':
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance');
+    case 'billing.catalogue.write':
+      return hasRole(actor, 'owner', 'admin', 'finance');
     default: {
       const unreachable: never = action;
       return unreachable;

@@ -15,7 +15,8 @@ export default defineConfig({
   resolve,
   test: {
     environment: 'node',
-    include: ['tests/db/**/*.test.ts'],
+    // The trunk's under tests/db; each stream's under tests/<stream>/db (docs/SPEC/OWNERSHIP.md).
+    include: ['tests/db/**/*.test.ts', 'tests/**/db/**/*.test.ts'],
     fileParallelism: false,
     testTimeout: 30_000,
     hookTimeout: 120_000,
