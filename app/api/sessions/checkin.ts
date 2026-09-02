@@ -6,7 +6,7 @@ import {
   type CheckInConsentPurpose,
   type SessionEvent,
 } from '@domain/session';
-import { hasRole, isoDateIn, type IsoDate } from '@domain/shared';
+import { hasRole } from '@domain/shared';
 import { logRefusal } from './audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { CheckInRequest, CheckInResponse } from './schema';
@@ -185,33 +185,19 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // same type narrowing isConsentPurpose always did, now over a shorter list.
     const activeConsentPurposes = contextRow.active_consent_purposes.filter(isConsentPurpose);
 
-    // canCheckIn (domain/session/canCheckIn.ts) takes one actual date of
-    // birth and works out both "is one on file" and "is it a minor's" from
-    // that single value — but app.checkin_context deliberately hands back
-    // only the two booleans, never the date itself (comment above). This
-    // proxy feeds canCheckIn a date that lands on the correct side of every
-    // branch it takes without ever being the client's real date of birth:
-    // null when none is on file (canCheckIn's own "unknown" branch); today,
-    // in the practice's zone, when the client is a minor (age zero is always
-    // under 18); today less a century when the client is not (always 18 or
-    // over, for any date this app will ever run on). canCheckIn's own
-    // PRACTICE_TIME_ZONE constant is 'Asia/Dubai' — the same zone
-    // app.checkin_context judges is_minor in and the same one used here — so
-    // the two can never disagree about which side of midnight "today" is on.
-    const today = isoDateIn(now(), 'Asia/Dubai');
-    const [todayYear, todayMonth, todayDay] = today.split('-');
-    const clientDateOfBirth: IsoDate | null = !contextRow.has_date_of_birth
-      ? null
-      : contextRow.is_minor
-        ? today
-        : `${Number(todayYear) - 100}-${todayMonth}-${todayDay}`;
-
+    // canCheckIn (domain/session/canCheckIn.ts) takes hasDateOfBirth and
+    // isMinor directly, straight from app.checkin_context — it never sees an
+    // actual date of birth, only whether one is on file and whether it makes
+    // the client a minor today, judged in Asia/Dubai by that same function
+    // (canCheckIn's own PRACTICE_TIME_ZONE, so the two never disagree about
+    // which side of midnight "today" falls on).
     const gate = canCheckIn(
       {
         actor,
         serviceTypeId: started.payload.serviceTypeId,
         deliveryMode: started.payload.deliveryMode,
-        clientDateOfBirth,
+        hasDateOfBirth: contextRow.has_date_of_birth,
+        isMinor: contextRow.is_minor,
         activeConsentPurposes,
       },
       now(),
