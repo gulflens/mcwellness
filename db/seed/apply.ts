@@ -1,4 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { emiratesIdHash, sealEmiratesId, type IdentityKeys } from '../../domain/shared/identity';
+import { isLocalHost } from '../runner/plan';
+import { SEED_OWNER_USER_ID, SEED_REASON, SEED_TENANT_ID, type SeedData } from './generate';
+
 /** What applySeed needs from a connection: a query, and the host it reaches. */
 export type SeedClient = {
   host?: string | undefined;
@@ -7,9 +11,6 @@ export type SeedClient = {
     values?: unknown[],
   ): Promise<{ rows: R[]; rowCount: number | null }>;
 };
-import { emiratesIdHash, sealEmiratesId, type IdentityKeys } from '../../domain/shared/identity';
-import { isLocalHost } from '../runner/plan';
-import { SEED_OWNER_USER_ID, SEED_REASON, SEED_TENANT_ID, type SeedData } from './generate';
 
 /**
  * Writes the synthetic practice into a database, in one transaction, with the
@@ -51,6 +52,51 @@ export function seedTargetError(
   return null;
 }
 
+const SYNTHETIC_ID = /^0000000[0-9a-f]-0000-4000-8000-[0-9a-f]{12}$/;
+const SYNTHETIC_PHONE = /^\+97150000\d{4}$/;
+const SYNTHETIC_EMAIL = /@example\.com$/;
+const SYNTHETIC_EMIRATES_ID = /^7841900\d{8}$/;
+
+/**
+ * "Synthetic" is a property the write path enforces, not one the caller promises:
+ * every id, phone, email and Emirates ID must sit in the reserved ranges
+ * generate.ts documents, whichever way the data arrived.
+ */
+export function assertSynthetic(data: SeedData): void {
+  const refuse = (what: string): never => {
+    throw new Error(`The seed writes synthetic data only: ${what}.`);
+  };
+  if (data.tenant.id !== SEED_TENANT_ID) refuse('the tenant is not the synthetic practice');
+  const collections: Array<{ id: string }[]> = [
+    data.users,
+    data.roles,
+    data.serviceTypes,
+    data.practitioners,
+    data.credentials,
+    data.locations,
+    data.clients,
+    data.contacts,
+    data.documents,
+    data.consents,
+  ];
+  for (const rows of collections) {
+    for (const row of rows) {
+      if (!SYNTHETIC_ID.test(row.id)) refuse(`id ${row.id} is outside the reserved range`);
+    }
+  }
+  for (const u of data.users) {
+    if (!SYNTHETIC_PHONE.test(u.phone)) refuse('a phone is outside the reserved block');
+    if (!SYNTHETIC_EMAIL.test(u.email)) refuse('an email is not at example.com');
+  }
+  for (const c of data.contacts) {
+    if (!SYNTHETIC_PHONE.test(c.phone)) refuse('a phone is outside the reserved block');
+    if (!SYNTHETIC_EMAIL.test(c.email)) refuse('an email is not at example.com');
+    if (c.emiratesId !== null && !SYNTHETIC_EMIRATES_ID.test(c.emiratesId.replace(/\D/g, ''))) {
+      refuse('an Emirates ID is outside the 784-1900 range');
+    }
+  }
+}
+
 export async function isSeeded(client: SeedClient): Promise<boolean> {
   const { rows } = await client.query('select 1 from tenant where id = $1', [SEED_TENANT_ID]);
   return rows.length > 0;
@@ -61,11 +107,13 @@ export async function applySeed(
   data: SeedData,
   keys: IdentityKeys,
 ): Promise<SeedCounts> {
-  // The guard travels with the write, not only with the command that calls it.
+  // The guards travel with the write: here for a connection, and rendered into the
+  // script for a paste (render.ts), since only the database is present when that runs.
   const refusal = seedTargetError(client.host, process.env.APP_ENV);
   if (refusal !== null) {
     throw new Error(refusal);
   }
+  assertSynthetic(data);
   if (await isSeeded(client)) {
     throw new Error('The synthetic practice is already seeded; nothing added.');
   }

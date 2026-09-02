@@ -37,16 +37,33 @@ Keep that password in the deployment's secret store, never in the repository.
 
 ## 3. The synthetic practice
 
-Seed it the same way, from a laptop, with `APP_ENV=staging` so the seed
-accepts a non-local database:
+Two routes. With a database password on the laptop, seed it the way the local
+database is seeded, with `APP_ENV=staging` so the seed accepts a non-local
+database:
 
 ```bash
 APP_ENV=staging IDENTITY_KEY=<64 hex chars, generated with: openssl rand -hex 32> \
 DATABASE_URL='postgresql://postgres:<database password>@db.<ref>.supabase.co:5432/postgres' pnpm seed
 ```
 
-Keep that identity key with the API's secrets; the API needs the same one to
-open the seeded Emirates IDs.
+Without one, render the practice as SQL and paste it. The environment file
+must say `APP_ENV=staging` and carry the staging identity key, since that key
+seals the identifiers in the script:
+
+```bash
+node --env-file=.env.staging --import tsx db/seed/render-cli.ts > ../mcwellness-staging.seed.sql
+```
+
+Check the first line, which names the environment it was rendered for. Open
+the project's SQL editor, confirm the project reference in the address bar,
+paste the whole file and run it once: the script opens and commits its own
+transaction, refuses a database that already holds a practice, and stops if
+it is applied piecemeal, but it carries no other target check. Afterwards
+delete the file and the editor's saved snippet; a rendered script is never
+committed (`*.seed.sql` is ignored).
+
+Either way, keep that identity key with the API's secrets; the API needs the
+same one to open the seeded Emirates IDs.
 
 ## 4. The sign-in accounts
 
