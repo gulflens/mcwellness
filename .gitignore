@@ -25,3 +25,6 @@ coverage/
 .github/agents/
 .github/hooks/
 .codex/
+
+# A rendered seed script (pnpm seed:sql) is applied by hand and never committed.
+*.seed.sql

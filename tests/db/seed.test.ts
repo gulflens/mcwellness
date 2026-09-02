@@ -118,3 +118,90 @@ describe('the synthetic seed', () => {
     expect(rows[0]?.capabilities).toHaveLength(2);
   });
 });
+
+describe('the rendered seed script', () => {
+  it('applied as plain SQL, yields exactly the practice applySeed writes, audited the same way', async () => {
+    const { renderSeedSql } = await import('../../db/seed/render');
+    const sql = await renderSeedSql(data, KEYS, { target: 'local' });
+    expect(sql).not.toMatch(/\$\d/);
+    expect(sql.split('\n')[0]).toContain('for a local database');
+    const fresh = await freshDatabase();
+    try {
+      await fresh.query(sql);
+      for (const [table, n] of Object.entries(counts)) {
+        const { rows } = await fresh.query<{ n: number }>(
+          `select count(*)::int as n from ${table}`,
+        );
+        expect(rows[0]?.n, table).toBe(n);
+      }
+      const inserted = Object.values(counts).reduce((sum, n) => sum + n, 0);
+      const { rows } = await fresh.query<{ action: string; actor_id: string | null; n: number }>(
+        'select action, actor_id, count(*)::int as n from audit_log where reason = $1 ' +
+          'and request_id is not null group by action, actor_id',
+        [SEED_REASON],
+      );
+      const insertRows = rows.filter((r) => r.action === 'insert');
+      expect(insertRows.find((r) => r.actor_id === null)?.n).toBe(2);
+      expect(insertRows.find((r) => r.actor_id === SEED_OWNER_USER_ID)?.n).toBe(inserted - 2);
+      expect(rows.find((r) => r.action === 'update')?.n).toBe(20);
+      const { rows: roled } = await fresh.query<{ n: number }>(
+        'select count(*)::int as n from audit_log where reason = $1 and actor_role = $2',
+        [SEED_REASON, 'owner,admin,lead_practitioner,finance'],
+      );
+      expect(roled[0]?.n).toBe(inserted - 2 + 20);
+      const { rows: sealed } = await fresh.query<{ id: string; emirates_id_encrypted: Buffer }>(
+        'select id, emirates_id_encrypted from contact where emirates_id_hash is not null',
+      );
+      for (const row of sealed) {
+        const contact = data.contacts.find((c) => c.id === row.id);
+        expect(openEmiratesId(row.emirates_id_encrypted, KEYS, row.id)).toBe(
+          normaliseEmiratesId(contact?.emiratesId ?? ''),
+        );
+      }
+
+      // The guards travel inside the script: a second application is refused whole.
+      await expect(fresh.query(sql)).rejects.toThrow('already holds a practice');
+      const { rows: still } = await fresh.query<{ n: number }>(
+        'select count(*)::int as n from client',
+      );
+      expect(still[0]?.n).toBe(20);
+    } finally {
+      await fresh.end();
+    }
+  });
+
+  it('stops before writing anything when applied statement by statement', async () => {
+    const { renderSeedSql } = await import('../../db/seed/render');
+    const sql = await renderSeedSql(data, KEYS, { target: 'local' });
+    const lines = sql.split('\n').filter((l) => l !== '' && !l.startsWith('--'));
+    const at = lines.findIndex((l) => l.startsWith("select set_config('app.reason'"));
+    expect(at).toBeGreaterThan(0);
+    const fresh = await freshDatabase();
+    try {
+      // Outside a transaction the transaction-local context evaporates after its own statement.
+      await fresh.query(lines[at] ?? '');
+      await expect(fresh.query(lines[at + 1] ?? '')).rejects.toThrow('one transaction');
+      const { rows } = await fresh.query<{ n: number }>('select count(*)::int as n from tenant');
+      expect(rows[0]?.n).toBe(0);
+    } finally {
+      await fresh.end();
+    }
+  });
+
+  it('renders for a hosted database only when APP_ENV says staging', async () => {
+    const { renderSeedSql } = await import('../../db/seed/render');
+    const before = process.env.APP_ENV;
+    try {
+      process.env.APP_ENV = 'development';
+      await expect(renderSeedSql(data, KEYS, { target: 'hosted' })).rejects.toThrow(
+        'APP_ENV=staging',
+      );
+      process.env.APP_ENV = 'staging';
+      expect((await renderSeedSql(data, KEYS, { target: 'hosted' })).split('\n')[0]).toContain(
+        'for a hosted database (APP_ENV=staging)',
+      );
+    } finally {
+      process.env.APP_ENV = before;
+    }
+  });
+});
