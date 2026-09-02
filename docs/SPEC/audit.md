@@ -288,3 +288,19 @@ Before you call this done, run this drill:
 > Pick a client at random. In under two minutes, produce a complete list of every person who has viewed or modified any part of their record, what they changed, and why — and demonstrate that the list cannot have been altered.
 
 If you can do that, you're ready for an inspection. If you can't, the gap you find is the thing to fix.
+
+---
+
+## 14. Implementation notes (PR 2, 2026-09-02)
+
+Migrations `070_audit_log.sql` and `080_audit_triggers.sql` implement sections 3, 4, 5 (layer 1), 8 and 11. Where the sketches above are not valid Postgres 17 as written, or a stronger form was available, the SQL departs as follows:
+
+1. `id` is a bigint assigned as `app.audit_chain.last_id + 1` inside the chain trigger, under the anchor row's lock, not a `bigserial`: a sequence value taken before the lock lets two writers link in the opposite order to their ids, which a verifier walking by id would report as a false break. Ids are gapless, so a removed row shows as a gap.
+2. The hash is computed by a `before insert` trigger on `audit_log` itself (`app.audit_chain_link()`), so every insert path is chained, including the application's own read logging. Nobody can insert an unchained row. The canonical byte encoding is documented in `070_audit_log.sql`.
+3. `changed_fields` is a sorted jsonb diff, not hstore, so the trigger has no dependency on which schema hstore lives in.
+4. `action` for trigger rows is `insert`, `update` or `delete` (`lower(tg_op)`), not `create`.
+5. `client_id` is resolved by `app.audit_client_id()`: the spec's `coalesce(new.client_id, old.client_id)` fails on tables without that column.
+6. Immutability is triggers that raise (`update`, `delete`, and a statement-level `truncate` per partition), all `enable always`, plus revoked grants. A rule would silently swallow the statement.
+7. `app.verify_audit_chain(from_id)` returns null when intact or the first failing id, and checks the anchor so a removed tail is caught.
+8. The hash covers exactly the nine columns section 4 names. `tenant_id`, `client_id`, `changed_fields`, `reason` and the context columns are not chained; a `hash_version` column and a v2 that hashes the whole row is queued for PR 3 or later.
+9. The nightly job (after PR 3) calls `app.ensure_audit_partitions(24)`, `app.verify_audit_chain()`, checks `audit_log_default` is empty, and publishes the anchor (`last_id`, `last_hash`) outside the database.

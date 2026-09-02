@@ -2,19 +2,17 @@ name: mcwellness
 
 services:
   db:
-    image: postgres:17
+    image: supabase/postgres:17.6.1.155
     ports:
       # Bound to the loopback interface only: the local database is never reachable from the LAN.
       - '127.0.0.1:${DB_PORT:-5432}:5432'
     environment:
-      POSTGRES_DB: mcwellness
-      POSTGRES_USER: postgres
       # Local development only. Staging and production credentials never appear in this repository.
       POSTGRES_PASSWORD: postgres
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres -d mcwellness']
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d postgres']
       interval: 5s
       timeout: 3s
       retries: 12

@@ -5,7 +5,7 @@
 | AWS me-central-1 | Compute, RDS, S3, Secrets | All PHI | UAE | ✅ |
 | Supabase (self-hosted) | Auth, PostgREST, Storage, Studio | All PHI | Runs in our AWS | ✅ |
 | Supabase Cloud Pro | Staging | Synthetic only — NO PHI | Frankfurt | ✅ staging only |
-| GitHub | Source code | Code, no data | US | ✅ code only |
+| GitHub | Source code, CI | Code; the CI database holds only the synthetic rows the tests create, never PHI | US | ✅ code and synthetic tests only |
 | Google Maps Platform | Distance matrix, geocoding | Coordinates only, never names | Global | ⚠️ send location ids only |
 | Payment gateway | TBD | Amount, reference, payer contact | TBD | ❌ not yet |
 | WhatsApp Business API | Phase 2 | Phone, message text (no clinical content) | Meta | ❌ not yet |

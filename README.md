@@ -9,7 +9,7 @@ record is `PRODUCT.md`.
 
 - Node 24 (`node -v`)
 - pnpm 11 (`pnpm -v`)
-- Docker with Compose (`docker compose version`)
+- Docker with Compose (`docker compose version`). The local database is Supabase's own Postgres image at the same version production runs, so what passes here behaves the same there.
 
 On a Mac that uses Colima instead of Docker Desktop, install Compose with
 `brew install docker-compose`, add its plugin directory to `~/.docker/config.json`
@@ -44,9 +44,19 @@ pnpm verify
 It runs four checks in order: formatting, code rules, types, tests. If it prints
 errors, the work is not done. The same command runs on every pull request.
 
+```
+pnpm test:db
+```
+
+The database tests need the local database running (`pnpm db:up`). They wipe
+it and rebuild it from the migrations, then prove the schema, the constraints,
+the audit trail and the tenant isolation. They run on every pull request too,
+against a fresh database that only ever holds synthetic rows.
+
 ## Database commands
 
-- `pnpm db:migrate` applies any new SQL files in `db/migrations`.
+- `pnpm db:migrate` applies any new SQL files in `db/migrations`, then re-applies
+  every policy file in `db/policies`.
 - `pnpm db:reset` wipes the local database and rebuilds it. It refuses to run
   against anything that is not on this computer.
 - `pnpm db:down` stops the database.
@@ -55,6 +65,8 @@ Migration files follow three rules: they are named `NNN_description.sql`, they
 use the number range assigned to their worktree in `docs/SPEC/OWNERSHIP.md`, and
 each carries a `-- rollback:` comment block describing how to reverse it. A file
 without that block is refused. Everything in a file runs inside one transaction.
+Policy files in `db/policies` are different: they are re-applied on every run,
+so each is written as `drop policy if exists` followed by `create policy`.
 
 ## Where things live
 
