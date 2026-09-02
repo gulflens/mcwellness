@@ -138,7 +138,7 @@ export function RecordTimeline({ clientId }: { clientId: string }) {
     <section className="timeline" aria-label="Timeline">
       {groups.map((group) => (
         <div key={group.day} className="timeline__group">
-          <h3 className="timeline__day">{group.day}</h3>
+          <h4 className="timeline__day">{group.day}</h4>
           <ol className="timeline__list">
             {group.events.map((event) => (
               <li key={event.id} className={`timeline__event timeline__event--${event.kind}`}>
