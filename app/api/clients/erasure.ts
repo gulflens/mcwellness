@@ -41,7 +41,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>): void {
       return c.json({ error: 'not_found', requestId }, 404);
     }
     if (row.status === 'erased') {
-      return c.json({ error: 'bad_request', requestId }, 400);
+      return c.json({ error: 'erased', requestId }, 400);
     }
 
     const erasureId = randomUUID();
