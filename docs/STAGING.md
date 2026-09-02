@@ -69,6 +69,18 @@ Once they exist, one statement links each account to its seeded person by
 email (`update app_user set auth_id = ...`), then the exit test runs and
 `trunk-v1` is tagged.
 
+**Done differently, and done.** Instead of the four synthetic accounts the
+owner chose two real staff accounts, created in the dashboard on
+2026-09-02: the owner herself (role owner) and the practice mailbox (role
+admin), each added as a person in the synthetic practice with no phone
+number and linked by email. The exit test passed the same afternoon: the
+owner signed in through Supabase Auth to the built app served with the
+staging settings, the API resolved her as owner, the client list showed
+the twenty synthetic clients, and the audit trail holds one `list` read
+per client under her account with the owner role and a request id, chain
+intact. `trunk-v1` is tagged on main. Real clients stay out of staging: it
+is approved for synthetic data only.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
