@@ -28,6 +28,7 @@ export async function logReads(
   db: Db,
   entityType: string,
   entries: readonly { id: string; clientId: string | null }[],
+  action: 'read' | 'list' = 'read',
 ): Promise<void> {
   if (entries.length === 0) {
     return;
@@ -36,10 +37,10 @@ export async function logReads(
     'insert into audit_log (tenant_id, actor_id, actor_type, actor_role, action, entity_type, ' +
       'entity_id, client_id, reason, request_id) ' +
       "select app.current_tenant_id(), nullif(current_setting('app.actor_id', true), '')::uuid, 'user', " +
-      "nullif(current_setting('app.actor_roles', true), ''), 'read', $1, e.id, e.client_id, " +
+      "nullif(current_setting('app.actor_roles', true), ''), $4, $1, e.id, e.client_id, " +
       "nullif(current_setting('app.reason', true), ''), " +
       "nullif(current_setting('app.request_id', true), '')::uuid " +
       'from unnest($2::uuid[], $3::uuid[]) as e(id, client_id)',
-    [entityType, entries.map((e) => e.id), entries.map((e) => e.clientId)],
+    [entityType, entries.map((e) => e.id), entries.map((e) => e.clientId), action],
   );
 }
