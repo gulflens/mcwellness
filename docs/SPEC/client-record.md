@@ -27,7 +27,7 @@ any ──► erased   (erasure request)
 ```
 
 - `lead`: created from an enquiry. Minimum: one name, one contact phone. No goals or session data on a lead.
-- `lead → active` requires: date of birth, at least one `location` with verified coordinate, `participation` consent active (plus `minor_participation` if under 18, plus `home_visit` if any home delivery). Emirates ID is optional and never required.
+- `lead → active` requires: date of birth, at least one `location` with verified coordinate, `participation` consent active (plus `minor_participation` if under 18, given by a contact who is a legal guardian and may consent, plus `home_visit` if any home delivery). Emirates ID is optional and never required.
 - `active → paused`: no scheduling allowed; entitlements don't expire while paused (see FINANCE).
 - `closed`: read-only except documents. Reactivation creates an audit event with reason.
 - `erased`: see §8.
@@ -52,9 +52,9 @@ any ──► erased   (erasure request)
 1. `canActivate(client)` → `{ ok, missing[] }` — the §3 gate.
 2. `isMinor(dateOfBirth, atDate)` — under 18.
 3. `requiredConsents(client, deliveryModes)` → purposes that must be active.
-4. `validateEmiratesId(raw)` — 15 digits, starts `784`, checksum valid, expiry not past. Returns normalised form. Only when one is captured; never required.
+4. `validateEmiratesId(raw)` — 15 digits, starts `784`, Luhn check digit valid. No expiry check: the expiry column was dropped in the compliance review for want of a need (decision of 2026-09-02). Returns normalised form. Only when one is captured; never required.
 5. `mrn.next(tenant)` — `MW-000001`, sequential per tenant, never reused.
-6. `canViewClient(actor, client)` — role + credential + schedule-based visibility for practitioners + erased handling.
+6. `canViewClient(actor, client)` — same tenant first; then role, schedule-based visibility for practitioners, and erased handling. Reading needs no credential (delivering does). Finance opens the record but sees names, contacts and locations only: that scope is applied per section by the API, not by this rule.
 7. `computeRetentionUntil(lastActivityAt)` — +5 years.
 
 ## 6. Coded fields
