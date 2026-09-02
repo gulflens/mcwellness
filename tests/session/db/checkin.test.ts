@@ -408,6 +408,15 @@ describe('POST /api/sessions/:id/events', () => {
     });
     const rows = await owner.query('select 1 from session where id = $1', [SESSION_BAD_CLOCK]);
     expect(rows.rowCount).toBe(0);
+    expect(await refusalsFor(SESSION_BAD_CLOCK)).toEqual([
+      {
+        action: 'refused',
+        entity_type: 'session',
+        entity_id: SESSION_BAD_CLOCK,
+        client_id: null,
+        reason: 'device_clock_out_of_range',
+      },
+    ]);
   });
 
   it('rejects a geo point outside the boundary of the earth', async () => {

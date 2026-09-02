@@ -86,6 +86,8 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // checked_in_at an outbox would otherwise retry against forever.
     const deviceAtMs = Date.parse(started.deviceAt);
     if (Math.abs(deviceAtMs - now().getTime()) > DEVICE_CLOCK_WINDOW_MS) {
+      // Nothing is verified yet at this point, so the refusal names no client.
+      await logRefusal(db, 'session', sessionId, null, ['device_clock_out_of_range']);
       return c.json({ error: 'bad_request', requestId, detail: 'device_clock_out_of_range' }, 400);
     }
 
