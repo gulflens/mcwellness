@@ -19,9 +19,11 @@ import { ServiceTypesResponse, type ServiceTypeOption } from './schema';
  * for the 'session.execute' action — this route asks the same question,
  * canExecuteSession valid today, over every service type rather than one.
  * service_type itself is then read under ordinary row security, tenant-scoped
- * by app.current_tenant_id() and narrowed to just those ids: it carries no
- * personal data, so nothing here is audited, matching
- * app/api/billing/service-types.ts's own read of the same table.
+ * by app.current_tenant_id() and narrowed to just those ids, and to
+ * status = 'active' — a retired service type never appears here, matching
+ * app/api/billing/service-types.ts's own filter and checkin.ts's own
+ * service_type lookup. It carries no personal data, so nothing here is
+ * audited.
  */
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
@@ -29,7 +31,8 @@ type ServiceTypeRow = { id: string; code: string; name: string; name_ar: string 
 
 const SQL =
   'select id, code, name, name_ar from service_type ' +
-  'where tenant_id = app.current_tenant_id() and id = any($1) order by name';
+  "where tenant_id = app.current_tenant_id() and status = 'active' and id = any($1) " +
+  'order by name';
 
 export function mountServiceTypes(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.get('/api/sessions/service-types', async (c) => {

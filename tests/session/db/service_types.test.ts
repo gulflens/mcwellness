@@ -37,6 +37,7 @@ const SERVICE_EXPIRED = '00000000-0000-4000-8000-000000200003'; // credentialed,
 const SERVICE_NOT_YET = '00000000-0000-4000-8000-000000200004'; // credentialed, but valid_from in the future
 const SERVICE_CANNOT_EXECUTE = '00000000-0000-4000-8000-000000200005'; // credentialed, can_execute_session false
 const SERVICE_NO_CREDENTIAL = '00000000-0000-4000-8000-000000200006'; // in the catalogue, never credentialed
+const SERVICE_RETIRED = '00000000-0000-4000-8000-000000200007'; // credentialed and otherwise valid, but retired
 
 const PRACTITIONER_USER = '00000000-0000-4000-8000-000000201001';
 const PRACTITIONER = '00000000-0000-4000-8000-000000201002';
@@ -88,6 +89,13 @@ beforeAll(async () => {
   await seedServiceType(owner, IDS.tenantA, SERVICE_NOT_YET, 'future-session');
   await seedServiceType(owner, IDS.tenantA, SERVICE_CANNOT_EXECUTE, 'observe-only-session');
   await seedServiceType(owner, IDS.tenantA, SERVICE_NO_CREDENTIAL, 'uncredentialed-session');
+  // Retired (status = 'inactive'): app/api/billing/service-types.ts and
+  // checkin.ts's own service_type lookup both already exclude these, and
+  // this route must match — a service the practice no longer offers is
+  // never on the picker, even for a practitioner still holding a live,
+  // execute-capable credential for it (seeded below).
+  await seedServiceType(owner, IDS.tenantA, SERVICE_RETIRED, 'retired-session');
+  await owner.query("update service_type set status = 'inactive' where id = $1", [SERVICE_RETIRED]);
 
   await seedUser(owner, {
     id: PRACTITIONER_USER,
@@ -141,6 +149,7 @@ beforeAll(async () => {
   await credential(PRACTITIONER, SERVICE_NOT_YET, '2099-01-01', null, true);
   await credential(PRACTITIONER, SERVICE_CANNOT_EXECUTE, '2020-01-01', null, false);
   // SERVICE_NO_CREDENTIAL: deliberately no credential row at all.
+  await credential(PRACTITIONER, SERVICE_RETIRED, '2020-01-01', null, true);
 
   // The lead practitioner: one valid credential, proving the role, not just
   // the ordinary practitioner, may reach this picker.
@@ -176,6 +185,13 @@ describe('GET /api/sessions/service-types', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as ServiceTypesResponse;
     expect(body.serviceTypes.map((s) => s.id)).toEqual([SERVICE_VALID_A]);
+  });
+
+  it('excludes a retired service type even with a valid, execute-capable credential', async () => {
+    const res = await getServiceTypes(AUTH.practitionerA);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ServiceTypesResponse;
+    expect(body.serviceTypes.map((s) => s.id)).not.toContain(SERVICE_RETIRED);
   });
 
   it('refuses a role that may never run a session', async () => {
