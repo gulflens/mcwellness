@@ -6,6 +6,25 @@ command or setting each step needs. Staging holds synthetic data only
 (docs/COMPLIANCE/approved-vendors.md); nothing here ever points at the old
 app's production project, which the repository's hook blocks by name.
 
+
+## Current project
+
+Created 2026-09-02 by the owner's instruction, after the paused June project
+was deleted: **`mcwellness`**, reference `ajjkvjtqxktkgrvcrzkh`, region
+Mumbai (`ap-south-1`), on the organisation's Pro plan. It holds synthetic data
+only. The old app's production project (`mcwellness-app`) is a different
+project and is blocked by name in this repository's hooks.
+
+- API URL: `https://ajjkvjtqxktkgrvcrzkh.supabase.co`
+- Direct database host: `db.ajjkvjtqxktkgrvcrzkh.supabase.co`, port 5432
+- Pooler: `aws-0-ap-south-1.pooler.supabase.com`, port 6543, role
+  `mcwellness_api.ajjkvjtqxktkgrvcrzkh`
+- Publishable key (public by design, safe in the browser):
+  `sb_publishable_8koGsPToZGStQKHYgdZHpA_wwcMlVqG`
+
+The database password and the API role's password never appear in this
+repository; on the laptop they live in the ignored `.env.staging`.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
