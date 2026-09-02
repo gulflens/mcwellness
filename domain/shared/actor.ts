@@ -46,16 +46,18 @@ export type Action =
   | { type: 'session.execute'; serviceTypeId: string; on: IsoDate }
   | { type: 'report.sign'; serviceTypeId?: string }
   | { type: 'audit.read'; clientId: string }
-  | { type: 'appointment.list' }
-  | { type: 'appointment.create' }
-  | { type: 'billing.catalogue.read' }
-  | { type: 'billing.catalogue.write' };
+  | { type: 'appointment.list'; scope: 'practice' | 'own' }
+  | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
+  | { type: 'billing.price.read' }
+  | { type: 'billing.price.write' };
 
 export type ActionContext = {
   /** The clients this actor's contact rows point at; resolved by the API for a client contact. */
   clientIds?: readonly string[];
   /** The practice's time zone, used when an action is judged "today". */
   timeZone?: string;
+  /** The credentials of the practitioner an appointment is booked for; resolved by the route. */
+  assigneeCapabilities?: readonly Capability[];
 };
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -126,12 +128,28 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'audit.read':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.list':
-    case 'appointment.create':
-      // A practitioner reads their own day through its own action later; they never book.
+      if (action.scope === 'own') {
+        // A practitioner's own day; the route and the row policies keep it to their rows.
+        return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner');
+      }
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
-    case 'billing.catalogue.read':
+    case 'appointment.create':
+      // Booking takes the booking role and, for the assignee, a credential that lets
+      // them deliver that service on that date: a role alone never suffices, and the
+      // assignee's credentials are the route's to resolve and pass in.
+      return (
+        hasRole(actor, 'owner', 'admin', 'lead_practitioner') &&
+        (ctx.assigneeCapabilities ?? []).some(
+          (capability) =>
+            capability.serviceTypeId === action.serviceTypeId &&
+            capability.canExecuteSession &&
+            isCredentialValidOn(capability, action.on),
+        )
+      );
+    case 'billing.price.read':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance');
-    case 'billing.catalogue.write':
+    case 'billing.price.write':
+      // The price list; the service catalogue itself stays with the owner and an admin.
       return hasRole(actor, 'owner', 'admin', 'finance');
     default: {
       const unreachable: never = action;

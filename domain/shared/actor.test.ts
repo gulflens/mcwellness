@@ -181,24 +181,61 @@ describe('client.list', () => {
   });
 });
 
-describe('the appointment and catalogue actions', () => {
-  const list = { type: 'appointment.list' } as const;
-  const create = { type: 'appointment.create' } as const;
-  const read = { type: 'billing.catalogue.read' } as const;
-  const write = { type: 'billing.catalogue.write' } as const;
+describe('the appointment and price actions', () => {
+  const capability = (serviceTypeId: string): Capability => ({
+    serviceTypeId,
+    canExecuteSession: true,
+    canAuthorProtocol: false,
+    canSignReport: false,
+    validFrom: '2026-01-01',
+    validTo: null,
+  });
+  const practice = { type: 'appointment.list', scope: 'practice' } as const;
+  const own = { type: 'appointment.list', scope: 'own' } as const;
+  const booking = {
+    type: 'appointment.create',
+    practitionerId: 'p1',
+    serviceTypeId: SERVICE,
+    on: '2026-06-01',
+  } as const;
+  const valid = { assigneeCapabilities: [capability(SERVICE)] };
 
-  it('lets the owner, an admin and the lead practitioner see and book appointments, nobody else', () => {
+  it('shows the whole practice to the owner, an admin and the lead practitioner only', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
-      expect(canActor(actor([role]), list, {}, NOW)).toBe(true);
-      expect(canActor(actor([role]), create, {}, NOW)).toBe(true);
+      expect(canActor(actor([role]), practice, {}, NOW)).toBe(true);
     }
     for (const role of ['practitioner', 'finance', 'client_contact'] as const) {
-      expect(canActor(actor([role]), list, {}, NOW)).toBe(false);
-      expect(canActor(actor([role]), create, {}, NOW)).toBe(false);
+      expect(canActor(actor([role]), practice, {}, NOW)).toBe(false);
     }
   });
 
+  it('lets a practitioner see their own day, and nobody outside the practice', () => {
+    expect(canActor(actor(['practitioner']), own, {}, NOW)).toBe(true);
+    expect(canActor(actor(['owner']), own, {}, NOW)).toBe(true);
+    expect(canActor(actor(['finance']), own, {}, NOW)).toBe(false);
+    expect(canActor(actor(['client_contact']), own, {}, NOW)).toBe(false);
+  });
+
+  it('books only with the booking role and a valid credential for the assignee', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), booking, valid, NOW)).toBe(true);
+      expect(canActor(actor([role]), booking, {}, NOW)).toBe(false);
+    }
+    expect(canActor(actor(['practitioner']), booking, valid, NOW)).toBe(false);
+    expect(canActor(actor(['finance']), booking, valid, NOW)).toBe(false);
+    const wrongService = { assigneeCapabilities: [capability(OTHER_SERVICE)] };
+    expect(canActor(actor(['owner']), booking, wrongService, NOW)).toBe(false);
+    const expired = { assigneeCapabilities: [{ ...capability(SERVICE), validTo: '2026-05-31' }] };
+    expect(canActor(actor(['owner']), booking, expired, NOW)).toBe(false);
+    const cannotExecute = {
+      assigneeCapabilities: [{ ...capability(SERVICE), canExecuteSession: false }],
+    };
+    expect(canActor(actor(['owner']), booking, cannotExecute, NOW)).toBe(false);
+  });
+
   it('shows the price list to finance and the lead practitioner, and lets finance change it', () => {
+    const read = { type: 'billing.price.read' } as const;
+    const write = { type: 'billing.price.write' } as const;
     expect(canActor(actor(['finance']), read, {}, NOW)).toBe(true);
     expect(canActor(actor(['finance']), write, {}, NOW)).toBe(true);
     expect(canActor(actor(['lead_practitioner']), read, {}, NOW)).toBe(true);

@@ -109,3 +109,33 @@ describe('tenant isolation', () => {
     });
   });
 });
+
+describe('the service catalogue', () => {
+  it('is written by the owner or an admin only, whatever the route says', async () => {
+    for (const roles of ['practitioner', 'finance', 'client_contact', 'lead_practitioner']) {
+      await asApiRole(
+        client,
+        IDS.tenantA,
+        () =>
+          rejectsWith(
+            client,
+            '42501',
+            "insert into service_type (tenant_id, code, name, duration_minutes, delivery_modes) values ($1, 'x-' || $2, 'x', 30, '{home}')",
+            [IDS.tenantA, roles],
+          ),
+        roles,
+      );
+    }
+    await asApiRole(
+      client,
+      IDS.tenantA,
+      async () => {
+        await client.query(
+          "insert into service_type (tenant_id, code, name, duration_minutes, delivery_modes) values ($1, 'x-admin', 'x', 30, '{home}')",
+          [IDS.tenantA],
+        );
+      },
+      'admin',
+    );
+  });
+});
