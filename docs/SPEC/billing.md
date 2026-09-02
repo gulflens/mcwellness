@@ -4,6 +4,17 @@
 
 ---
 
+## Who uses it
+
+| Role | Price list | Records money |
+|---|---|---|
+| Owner, admin | sees and changes it | yes |
+| Finance | sees and changes it | yes |
+| Lead practitioner | sees it | no |
+| Practitioner, client contact | no | no |
+
+The service catalogue itself (what the practice offers, its durations and the certification each service needs) is the owner's and an admin's alone; the price list is what finance may change. Enforced twice: in `domain/shared/actor.ts` and in row-level security.
+
 ## 1. The one idea that makes all of this simple
 
 **Everything is an entitlement ledger.**

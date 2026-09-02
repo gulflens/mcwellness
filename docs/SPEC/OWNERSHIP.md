@@ -75,9 +75,10 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 1. **Never edit outside your owned paths.** If you find a bug elsewhere, write a change request, don't fix it.
 2. **Migrations use your range only.** Filename `NNN_description.sql`. Never renumber.
 3. **Import from `domain/shared` freely; never import from another module's `domain/`.** If two modules need the same type, it belongs in `shared` — change request.
-4. **Each worktree has its own local Postgres.** `DATABASE_URL` in the worktree's `.env` points at a port unique to that worktree. Staging is for integration after merge only.
-5. **One PR per worktree per day, small.** Both review agents run. Rebase on `main` before opening.
-6. **A rebase conflict means the ownership map is wrong.** Stop, fix the map, then resolve.
+4. **Database tests live under `tests/<worktree>/db/` and nowhere else.** That is the only path the database runner scans outside the trunk's `tests/db/`; a database test anywhere else runs in the plain suite and fails for want of a database.
+5. **Each worktree has its own local Postgres.** `DATABASE_URL` in the worktree's `.env` points at a port unique to that worktree. Staging is for integration after merge only.
+6. **One PR per worktree per day, small.** Both review agents run. Rebase on `main` before opening.
+7. **A rebase conflict means the ownership map is wrong.** Stop, fix the map, then resolve.
 
 ## Local ports, one set per worktree
 

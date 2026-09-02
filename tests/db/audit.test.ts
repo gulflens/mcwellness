@@ -276,3 +276,75 @@ describe('identity columns', () => {
     });
   });
 });
+
+describe('the client behind an audit row, on any table', () => {
+  const clientId = '00000008-0000-4000-8000-000000000001';
+  const row = (fields: Record<string, unknown>): string => JSON.stringify(fields);
+  const resolve = async (
+    table: string,
+    fields: Record<string, unknown>,
+  ): Promise<string | null> => {
+    const { rows } = await client.query<{ id: string | null }>(
+      'select app.audit_client_id($1, $2::jsonb) as id',
+      [table, row(fields)],
+    );
+    return rows[0]?.id ?? null;
+  };
+
+  it('is the row itself for a client, its client for any table carrying client_id, and nothing otherwise', async () => {
+    expect(await resolve('client', { id: clientId })).toBe(clientId);
+    for (const table of ['contact', 'consent', 'document', 'appointment', 'session', 'goal']) {
+      expect(await resolve(table, { id: 'x', client_id: clientId }), table).toBe(clientId);
+    }
+    expect(await resolve('document', { id: 'x', client_id: null })).toBeNull();
+    expect(await resolve('location', { owner_type: 'client', owner_id: clientId })).toBe(clientId);
+    expect(await resolve('location', { owner_type: 'tenant', owner_id: clientId })).toBeNull();
+    // A location names its client through its owner, never through a client_id key.
+    expect(
+      await resolve('location', { owner_type: 'tenant', owner_id: clientId, client_id: clientId }),
+    ).toBeNull();
+    expect(await resolve('service_type', { id: 'x', code: 'nf-session' })).toBeNull();
+  });
+});
+
+describe('a client_id that is not a client', () => {
+  it('yields nothing rather than aborting the write', async () => {
+    const { rows } = await client.query<{ id: string | null }>(
+      'select app.audit_client_id(\'integration_thing\', \'{"client_id": "zoho-4411"}\'::jsonb) as id',
+    );
+    expect(rows[0]?.id).toBeNull();
+  });
+});
+
+describe('every audited table is classified', () => {
+  // A new audited table must be added to one of these lists on purpose: either it
+  // carries a uuid client_id the audit trail attributes, or it deliberately has none.
+  const WITH_CLIENT = ['contact', 'consent', 'document'];
+  const NAMES_ITSELF = ['client'];
+  const WITHOUT_CLIENT = [
+    'tenant',
+    'app_user',
+    'user_role',
+    'practitioner',
+    'credential',
+    'service_type',
+    'location',
+  ];
+
+  it('carries a uuid client_id, or deliberately none', async () => {
+    const { rows } = await client.query<{ table: string; client_id_type: string | null }>(
+      `select c.relname as table,
+              (select a.atttypid::regtype::text from pg_attribute a
+                where a.attrelid = c.oid and a.attname = 'client_id' and not a.attisdropped) as client_id_type
+         from pg_trigger t join pg_class c on c.oid = t.tgrelid
+        where t.tgname = 'audit_row' and not t.tgisinternal and c.relnamespace = 'public'::regnamespace
+        order by c.relname`,
+    );
+    const audited = rows.map((r) => r.table).sort();
+    expect(audited).toEqual([...WITH_CLIENT, ...NAMES_ITSELF, ...WITHOUT_CLIENT].sort());
+    for (const r of rows) {
+      if (WITH_CLIENT.includes(r.table)) expect(r.client_id_type, r.table).toBe('uuid');
+      else expect(r.client_id_type, r.table).toBeNull();
+    }
+  });
+});
