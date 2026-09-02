@@ -109,3 +109,15 @@ export function isLocalDatabaseUrl(url: string): boolean {
   }
   return true;
 }
+
+/**
+ * Lists policy files: every .sql path under db/policies, in path order, so a
+ * worktree's policies apply after core's and the order is the same on every
+ * machine. Dotfiles and anything that is not .sql are ignored.
+ */
+export function listPolicyFiles(paths: readonly string[]): string[] {
+  return paths
+    .filter((path) => path.endsWith('.sql'))
+    .filter((path) => !path.split('/').some((segment) => segment.startsWith('.')))
+    .sort();
+}

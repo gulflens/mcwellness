@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { hasRollbackBlock, isLocalDatabaseUrl, listMigrationFiles, planMigrations } from './plan';
+import {
+  hasRollbackBlock,
+  isLocalDatabaseUrl,
+  listMigrationFiles,
+  listPolicyFiles,
+  planMigrations,
+} from './plan';
 
 describe('listMigrationFiles', () => {
   it('orders files by their number, not by name', () => {
@@ -107,5 +113,23 @@ describe('isLocalDatabaseUrl', () => {
     expect(
       isLocalDatabaseUrl('postgresql://postgres:postgres@localhost:5432/x?sslmode=disable'),
     ).toBe(true);
+  });
+});
+
+describe('listPolicyFiles', () => {
+  it('keeps only .sql files, in path order', () => {
+    expect(
+      listPolicyFiles([
+        'core/tenant_isolation.sql',
+        'README.md',
+        'core/audit_log.sql',
+        'client/client_roles.sql',
+        'core/.gitkeep',
+      ]),
+    ).toEqual(['client/client_roles.sql', 'core/audit_log.sql', 'core/tenant_isolation.sql']);
+  });
+
+  it('ignores dotfiles at any depth', () => {
+    expect(listPolicyFiles(['.hidden/x.sql', 'core/.draft.sql'])).toEqual([]);
   });
 });

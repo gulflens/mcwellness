@@ -20,6 +20,6 @@
       "@app/*": ["./app/*"]
     }
   },
-  "include": ["app", "domain", "db", "jobs", "tests", "vite.config.ts"],
+  "include": ["app", "domain", "db", "jobs", "tests", "vite.config.ts", "vitest.db.config.ts"],
   "exclude": ["node_modules", "dist"]
 }
