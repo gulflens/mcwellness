@@ -16,22 +16,6 @@ const UNIQUE_VIOLATION = '23505';
 const INVALID_ENUM = '22P02';
 const FOREIGN_KEY_VIOLATION = '23503';
 
-// docs/SPEC/OWNERSHIP.md's core tables that carry tenant_id, in the order
-// 099_tenant_scoped_keys.sql adds them (tenant itself is exempt: it carries
-// no tenant_id, .claude/rules/data-model.md).
-const TENANT_SCOPED_KEY_TABLES = [
-  'app_user',
-  'user_role',
-  'location',
-  'service_type',
-  'practitioner',
-  'credential',
-  'client',
-  'contact',
-  'consent',
-  'document',
-];
-
 let client: pg.Client;
 
 beforeAll(async () => {
@@ -216,13 +200,41 @@ describe('service types and credentials', () => {
 });
 
 describe('tenant-scoped keys (099_tenant_scoped_keys.sql)', () => {
-  it('gives every core table carrying tenant_id a unique (tenant_id, id) key', async () => {
-    for (const table of TENANT_SCOPED_KEY_TABLES) {
-      const { rows } = await client.query(
-        'select 1 from pg_constraint where conrelid = $1::regclass and conname = $2',
-        [table, `${table}_tenant_id_id_key`],
+  it('gives every tenant-scoped public table a unique (tenant_id, id) key, tenant and audit_log excepted', async () => {
+    // Coverage comes from the schema itself, not a hardcoded table list, so a
+    // core table that gains a tenant_id column later and forgets this key
+    // fails here by name rather than silently passing. `tenant` carries no
+    // tenant_id of its own (.claude/rules/data-model.md) and so never appears
+    // in this query. `audit_log` (and its month partitions, audit_log_2026_09
+    // and the like) does carry tenant_id but is structurally exempt: it is
+    // partitioned by occurred_at, Postgres refuses any unique key on a
+    // partitioned table that omits the partition column, so a bare
+    // (tenant_id, id) key can never exist on it - and nothing ever holds a
+    // composite foreign key into an audit row (docs/SPEC/audit.md).
+    const { rows: tables } = await client.query<{ table_name: string }>(
+      'select table_name from information_schema.columns ' +
+        "where table_schema = 'public' and column_name = 'tenant_id' " +
+        "and table_name <> 'tenant' and table_name <> 'audit_log' " +
+        "and table_name not like 'audit_log_%' " +
+        'order by table_name',
+    );
+    // A canary for the query itself: if this ever comes back empty, the
+    // assertion below would vacuously pass without checking anything.
+    expect(tables.length).toBeGreaterThanOrEqual(10);
+
+    for (const { table_name: table } of tables) {
+      const { rows: keyed } = await client.query<{ conname: string }>(
+        'select c.conname from pg_constraint c ' +
+          'where c.conrelid = $1::regclass ' +
+          "and c.contype = 'u' " +
+          'and (' +
+          '  select array_agg(a.attname::text order by a.attname) ' +
+          '    from pg_attribute a ' +
+          '   where a.attrelid = c.conrelid and a.attnum = any(c.conkey)' +
+          ") = array['id', 'tenant_id']",
+        [table],
       );
-      expect(rows.length, `${table}_tenant_id_id_key`).toBe(1);
+      expect(keyed.length, `${table} unique (tenant_id, id)`).toBeGreaterThan(0);
     }
   });
 
