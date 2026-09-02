@@ -37,7 +37,7 @@ type ClientLocation = {
 
 **Two coordinates, not one.** The entrance is where the client is. The parking point is where the car stops. In villa communities and towers these differ by several minutes of walking, and your route solver should be pathing to the parking point while your practitioner's arrival instructions reference the entrance.
 
-**Capture Makani at booking.** Add it to the intake form with a "find my Makani" helper — the client can get it from the official Makani app in ten seconds, and most Dubai residents already know theirs. This single field will do more for your on-time rate than any routing algorithm.
+**Capture Makani at booking.** Add it to the enrolment form with a "find my Makani" helper — the client can get it from the official Makani app in ten seconds, and most Dubai residents already know theirs. This single field will do more for your on-time rate than any routing algorithm.
 
 **Outside Dubai:** Makani is Dubai-only. Abu Dhabi and the Northern Emirates fall back to geocoded address plus a mandatory verified pin. Design the location type so Makani is optional and a verified coordinate is not.
 
@@ -201,7 +201,7 @@ type VisitRecord = {
 
 ## 9. Build sequence
 
-**Phase 1 — no solver.** Makani capture at intake, entrance and parking points, arrival intelligence fields, manual assignment on a map, deep-link handoff to Google Maps, motion lock, check-in/out, WhatsApp ETA messages. With three practitioners this is entirely sufficient and it starts accumulating the arrival data the solver will later need.
+**Phase 1 — no solver.** Makani capture at enrolment, entrance and parking points, arrival intelligence fields, manual assignment on a map, deep-link handoff to Google Maps, motion lock, check-in/out, WhatsApp ETA messages. With three practitioners this is entirely sufficient and it starts accumulating the arrival data the solver will later need.
 
 **Phase 2 — the solver.** OR-Tools VRPTW with the full cost model: drive time, Salik by crossing window, parking, walk overhead, plus the constraints from the market study (certification, prayer times, Ramadan hours, session spacing, kit location, practitioner continuity). Nightly solve, incremental re-solve on disruption. Dispatch board with live status.
 
