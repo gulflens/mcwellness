@@ -1,4 +1,4 @@
-# SPEC — Session Capture (therapist PWA, offline-tolerant)
+# SPEC — Session Capture (practitioner PWA, offline-tolerant)
 
 *Worktree: `session-capture`. Entities: `session`, `visit_actuals`, writes `entitlement.status`, reads `appointment`, `client_protocol`, `consent`, `kit`. Defined in `00-data-model.md`.*
 
@@ -6,7 +6,7 @@
 
 ## 1. Purpose
 
-The therapist is standing in a client's living room, possibly with no signal, carrying an EEG kit. This module lets them run and record the visit with one hand and guarantees the record reaches the server intact. It is the highest-stakes screen in the product and the simplest.
+The practitioner is standing in a client's living room, possibly with no signal, carrying an EEG kit. This module lets them run and record the visit with one hand and guarantees the record reaches the server intact. It is the highest-stakes screen in the product and the simplest.
 
 ## 2. The offline model — read this before anything else
 
@@ -30,15 +30,15 @@ What can still go wrong, and the answer:
 Today ► [Check in] ► Pre-flight ► Signal check ► Run ► End ► Post ► Summary ► [Check out]
 ```
 
-**3.1 Check in.** Tap at the door. Records GPS point and time. Blocks if: appointment not today; no active `treatment` consent (and `home_visit`/`minor_treatment` where required); kit calibration overdue; practitioner credential invalid today. Each block names the reason and who to call. Works offline using cached consent/credential/kit state as of last sync, with a visible "verified at HH:MM" note.
+**3.1 Check in.** Tap at the door. Records GPS point and time. Blocks if: appointment not today; no active `participation` consent (and `home_visit`/`minor_participation` where required); kit calibration overdue; practitioner credential invalid today. Each block names the reason and who to call. Works offline using cached consent/credential/kit state as of last sync, with a visible "verified at HH:MM" note.
 
 **3.2 Pre-flight.** Checklist from `service_type` (data, not code): client identity confirmed, guardian present if minor, environment suitable, electrodes/consumables ready. Each item a large toggle. Pre-session rating: 3–5 questions per protocol (e.g. sleep last night, focus today) on 0–10 sliders.
 
-**3.3 Signal check.** Impedance/quality per site entered manually or from the amplifier's export (Phase 1: manual entry of the vendor software's numbers; Phase 2: file ingest). Shows the five-dot indicator from the design brief. Below threshold → warning, therapist decides.
+**3.3 Signal check.** Impedance/quality per site entered manually or from the amplifier's export (Phase 1: manual entry of the vendor software's numbers; Phase 2: file ingest). Shows the five-dot indicator from the design brief. Below threshold → warning, practitioner decides.
 
-**3.4 Run.** Full-bleed: client name, session N of M, signal indicator, elapsed timer, one button "End session." Every 60 seconds a `telemetry_chunk` event is written with whatever the therapist has entered or the amplifier exported (per-band amplitude, threshold, % time in reward, artefact %). Phase 1 accepts a single end-of-session summary if per-minute data isn't available. No navigation chrome.
+**3.4 Run.** Full-bleed: client name, session N of M, signal indicator, elapsed timer, one button "End session." Every 60 seconds a `telemetry_chunk` event is written with whatever the practitioner has entered or the amplifier exported (per-band amplitude, threshold, % time in reward, artefact %). Phase 1 accepts a single end-of-session summary if per-minute data isn't available. No navigation chrome.
 
-**3.5 End & post.** Post-session ratings (same questions as pre). Structured observations: tolerance, engagement, adverse effects (none / headache / fatigue / irritability / other), each a chip; free-text note beside them. Optional setup photo (requires `photo_video` consent; blocked otherwise).
+**3.5 End & post.** Post-session ratings (same questions as pre). Structured observations: tolerance, engagement, after-session observations (none / headache / fatigue / irritability / other), each a chip; free-text note beside them. Optional setup photo (requires `photo_video` consent; blocked otherwise).
 
 **3.6 Summary.** One screen: duration, signal score, pre/post deltas, observations. Practitioner confirms → `checked_out` event with GPS and time. `visit_actuals` prompts: parking cost, Salik crossings (count; cost resolved server-side), access issues (free text → feeds `location.access_notes` as a suggestion for admin approval).
 
@@ -58,9 +58,9 @@ Late edits after close are a new `session` version with `amendment_reason`, auth
 
 1. `canCheckIn(appointment, consents, credential, kit, now)` → `{ ok, reasons[] }`
 2. `replayEvents(events[])` → session state; must be deterministic and tolerate duplicates and out-of-order arrival within a session.
-3. `scoreSignalQuality(telemetry)` → 0–1, defined in the design brief as cleanliness × time-in-target; exact formula agreed with clinical lead, documented in the function.
+3. `scoreSignalQuality(telemetry)` → 0–1, defined in the design brief as cleanliness × time-in-target; exact formula agreed with lead practitioner, documented in the function.
 4. `sessionNumber(clientHistory, session)` → N of M from completed sessions and entitlements.
-5. `deriveAdverseEventFlag(observations)` → true if any adverse chip other than none; surfaces in clinical lead queue.
+5. `deriveObservationFlag(observations)` → true if any observation chip other than none; surfaces in the lead practitioner's queue.
 6. `isLateCancellation` shared with scheduling → lives in `domain/shared`.
 
 ## 6. Data the module owns
@@ -84,7 +84,7 @@ Check-in/out, every event replay, every block reason, session close, and any adm
 
 ## 9. Out of scope
 
-Amplifier file ingest, live signal streaming, real-time supervision, therapist editing after close, multi-device, clinic-room booking.
+Amplifier file ingest, live signal streaming, real-time supervision, practitioner editing after close, multi-device, studio booking.
 
 ## 10. Done when
 
@@ -92,4 +92,4 @@ Amplifier file ingest, live signal streaming, real-time supervision, therapist e
 - Airplane-mode drill on a real phone: check in, run a 5-minute session, check out, all offline; turn radio on; server shows the full session within 60s; entitlement consumed exactly once.
 - Force-quit mid-session and reopen: resume offered, no data lost.
 - Second device check-in is refused.
-- `pnpm verify` green; both review agents pass; clinical lead has signed off the `scoreSignalQuality` formula.
+- `pnpm verify` green; both review agents pass; lead practitioner has signed off the `scoreSignalQuality` formula.

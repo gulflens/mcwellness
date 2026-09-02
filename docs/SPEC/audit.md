@@ -1,6 +1,6 @@
 # Audit Log & Change History — Spec
 
-*Who did what, to what, when, and why. Non-negotiable in a licensed clinical system.*
+*Who did what, to what, when, and why. Non-negotiable in a system that holds families' data.*
 
 ---
 
@@ -10,7 +10,7 @@ Build all three. They answer different questions and they have different shapes.
 
 | | Question it answers | Shape | Retention |
 |---|---|---|---|
-| **Audit log** | "Who accessed or changed patient data?" | Append-only, immutable, one row per action | 25 years (clinical), 5 years (financial) |
+| **Audit log** | "Who accessed or changed client data?" | Append-only, immutable, one row per action | 5 years |
 | **Version history** | "What did this record look like before?" | Full snapshots per version of an entity | Same as the entity |
 | **Domain events** | "What happened in the business?" | Semantic events feeding analytics and workflow | Indefinite, aggregatable |
 
@@ -20,16 +20,15 @@ The audit log is a compliance artefact — you write it, you almost never read i
 
 ---
 
-## 2. What the regulator actually requires
+## 2. What the business commits to
 
-From Federal Law No. 2 of 2019 and DHA's policies on Health Data Protection, Information Sharing, and Consent & Access Control:
+McWellness is a wellness business (founder's determination, 2026-09-02), so no health regulator inspects this log. The commitments come from the UAE personal-data law and from the trust the product asks of families:
 
-- Health data stored inside UAE borders — **including the audit log**, which contains PHI by definition.
-- Digital records retained **25 years** after the last patient visit.
-- Unauthorised use — research, third-party sharing — prohibited, which means you must be able to *demonstrate* who accessed what.
+- Client data lives with the rest of the record, encrypted, under the same access controls, in the Supabase project the owner designates, and is kept **5 years** after the last activity.
+- A family may ask who has seen their child's record, and the answer must be complete and fast; unauthorised use must be demonstrable, not just forbidden.
 - Consent and access control are auditable.
 
-**The consequence most systems get wrong: you must log reads, not just writes.** "Who opened Layla's file on 14 October?" is the classic audit question in healthcare, and a write-only audit log cannot answer it. A curious receptionist looking up a neighbour's child leaves no trace unless you log the view.
+**The consequence most systems get wrong: you must log reads, not just writes.** "Who opened Layla's file on 14 October?" is the classic question, and a write-only audit log cannot answer it. A curious coordinator looking up a neighbour's child leaves no trace unless you log the view.
 
 ---
 
@@ -51,7 +50,7 @@ create table audit_log (
                                            -- sign | export | login | permission_change
   entity_type     text not null,           -- client | session | report | invoice
   entity_id       uuid not null,
-  client_id       uuid,                    -- the patient this touches, if any
+  client_id       uuid,                    -- the client this touches, if any
 
   -- change
   changed_fields  text[],                  -- column names only
@@ -77,7 +76,7 @@ create index on audit_log (entity_type, entity_id, occurred_at desc);
 create index on audit_log (occurred_at desc);
 ```
 
-`client_id` denormalised onto every row is the single most useful index you'll have. "Show me everything that has ever touched this patient" must be one fast query, not a join across fourteen tables.
+`client_id` denormalised onto every row is the single most useful index you'll have. "Show me everything that has ever touched this client" must be one fast query, not a join across fourteen tables.
 
 ---
 
@@ -159,7 +158,7 @@ Supabase makes this easier — `auth.uid()` is available inside Postgres, so the
 
 Triggers can't see a `SELECT`, and they can't know *why*. The application logs:
 
-- **Reads of PHI** — every client record, session, report or document opened. Log the access, not the payload.
+- **Reads of personal data** — every client record, session, report or document opened. Log the access, not the payload.
 - **Semantic actions** the schema doesn't express: report signed, protocol changed, VAT treatment overridden, refund issued, entitlement adjusted, consent withdrawn, data exported.
 - **Reasons** for anything sensitive.
 
@@ -173,9 +172,9 @@ Some changes should be hard, deliberate, and loudly logged. For each, require a 
 
 | Action | Why it matters |
 |---|---|
-| Signing a clinical report | Legal attestation by a licensed clinician |
+| Signing a report | Attestation by the lead practitioner |
 | Amending a signed report | Must create a new version, never edit — see §7 |
-| Changing a treatment protocol | Clinical decision, must be attributable and reversible |
+| Changing a training protocol | A practice decision, must be attributable and reversible |
 | Overriding a VAT classification | FTA audit exposure |
 | Issuing a refund or credit note | Financial control |
 | Adjusting an entitlement balance | Direct revenue impact |
@@ -184,11 +183,11 @@ Some changes should be hard, deliberate, and loudly logged. For each, require a 
 | Break-glass access to a record | See below |
 | Deleting anything | Should be near-impossible |
 
-**Break-glass.** Occasionally someone needs a record they're not normally authorised for — a clinical emergency, a support escalation. Don't block it; make it expensive. Full-screen warning, mandatory reason, immediate notification to you, and a permanent highlighted entry in the log. Used correctly it's fine. Used casually, you'll see it in the log the same day.
+**Break-glass.** Occasionally someone needs a record they're not normally authorised for — an emergency, a support escalation. Don't block it; make it expensive. Full-screen warning, mandatory reason, immediate notification to you, and a permanent highlighted entry in the log. Used correctly it's fine. Used casually, you'll see it in the log the same day.
 
 ---
 
-## 7. Clinical records are append-only
+## 7. Records are append-only
 
 This is a design rule, not just an audit rule.
 
@@ -215,11 +214,11 @@ Store full snapshots, not diffs. Storage is cheap; reconstructing a document fro
 
 ## 8. What the log must never contain
 
-The audit log is PHI. It lives in UAE region, encrypted, with the same access controls as clinical data — and it needs its own discipline about what goes in it.
+The audit log holds personal data. It lives with the rest of the client data, encrypted, with the same access controls — and it needs its own discipline about what goes in it.
 
 - **No passwords, tokens, API keys or card numbers.** Redact by field name at write time, with a denylist.
-- **No raw clinical free text in `new_values`** for large text fields. Log that the field changed and its length; the content lives in version history where it belongs.
-- **Never log PHI to your application logs, error tracker, or APM.** Sentry and equivalents are almost certainly not UAE-hosted. This is one of the top three ways health data leaves the country by accident — the other two are analytics SDKs and AI API calls containing patient text.
+- **No raw free text in `new_values`** for large text fields. Log that the field changed and its length; the content lives in version history where it belongs.
+- **Never log personal data to your application logs, error tracker, or APM.** Sentry and equivalents are not in the vendor register. This is one of the top three ways client data leaks by accident — the other two are analytics SDKs and AI API calls containing client text.
 
 Add a hook that fails the build on any `console.log`, `logger.info` or error-reporter call whose argument can contain a client entity. Enforce it mechanically.
 
@@ -261,23 +260,23 @@ Start with the last two. The others become useful when you have staff.
 
 A solo practice at 25 sessions a week generates roughly 300–600 audit rows a day, most of them reads. That's a few million rows a year — trivial for Postgres.
 
-**Partition by month** from day one. Twenty-five years of retention is 300 partitions, and you'll want to move anything older than two years to cheaper storage without a painful migration.
+**Partition by month** from day one. Five years of retention is 60 partitions, and dropping a partition older than five years is the retention mechanism: no row-by-row deletion, no exception to immutability.
 
 ```sql
 create table audit_log (...) partition by range (occurred_at);
 ```
 
-Archive old partitions to S3 in UAE region with Object Lock in compliance mode, which makes them undeletable for the retention period — including by you, including by a compromised root account. That last property is the point.
+If an archive beyond the retention period is ever wanted (it is not required), an object store with a retention lock is the place; the default is to drop.
 
 ---
 
 ## 12. Build order
 
-**Phase 1** — schema with partitioning, triggers on every PHI-bearing table, session-context middleware, read logging on client and report access, hash chaining with nightly verification, record timeline UI, immutability grants.
+**Phase 1** — schema with partitioning, triggers on every table holding personal data, session-context middleware, read logging on client and report access, hash chaining with nightly verification, record timeline UI, immutability grants.
 
 **Phase 2** — activity feed with filters, reason prompts on sensitive actions, break-glass workflow, weekly digest, per-client access report.
 
-**Phase 3** — anomaly alerting, archival to S3 Object Lock, exportable audit packs for DHA inspection.
+**Phase 3** — anomaly alerting, the retention job that drops partitions older than 5 years, exportable access reports for a family's request.
 
 ---
 

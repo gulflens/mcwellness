@@ -22,12 +22,12 @@ mcwellness/
 │  └─ seed/                  synthetic data generators only
 ├─ app/                      one React application
 │  ├─ shell/                 layout, navigation, auth guard, role routing
-│  ├─ admin/                 role: owner / admin / clinical_lead / finance
+│  ├─ admin/                 role: owner / admin / lead_practitioner / finance
 │  ├─ therapist/             role: practitioner (installable PWA)
 │  ├─ client/                role: client_contact (portal)
 │  └─ api/                   server routes; thin — they call domain/
 ├─ jobs/                     pg-boss workers (PDF render, notifications)
-├─ infra/                    Terraform — me-central-1 only
+├─ infra/                    deployment definitions, later, if any
 └─ tests/                    integration and end-to-end
 ```
 

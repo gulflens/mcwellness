@@ -1,6 +1,6 @@
 # McWellness
 
-The clinic's own software: one record per client from first enquiry to signed
+The practice's own software: one record per client from first enquiry to signed
 report and paid invoice, and one map per day for every therapist. The rules are
 in `CLAUDE.md`; what lives where is in `docs/SPEC/OWNERSHIP.md`; the product
 record is `PRODUCT.md`.
@@ -74,5 +74,5 @@ so each is written as `drop policy if exists` followed by `create policy`.
 - `domain/` pure business rules with tests, no I/O
 - `db/` migrations, row-level security policies, synthetic seed generators
 - `jobs/` background workers (later)
-- `infra/` deployment definitions, UAE region only (later)
+- `infra/` deployment definitions, later, if anything needs them
 - `docs/` the specs, the design brief, the market study, decisions and compliance

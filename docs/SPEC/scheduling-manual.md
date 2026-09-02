@@ -13,7 +13,7 @@ Get the right practitioner to the right door in the right 45-minute window, with
 | Role | Can |
 |---|---|
 | `admin` | Create, move, cancel, reassign any appointment; see all practitioners |
-| `clinical_lead` | Same, plus override clinical-spacing warnings with reason |
+| `lead_practitioner` | Same, plus override session-spacing warnings with reason |
 | `practitioner` | See own appointments (today list and week); request a change (Stage 2); cannot create |
 | `client_contact` | See upcoming appointments (portal, Stage 2) |
 
@@ -38,11 +38,11 @@ confirmed ──► rescheduled (new appointment, old linked)
 
 **4.2 Day map.** Full-bleed map for one day. Each practitioner a colour; pins numbered in time order; straight lines between consecutive stops with estimated drive minutes from the Maps API (cached per pair per hour-bucket). Click a pin → appointment. Toggle practitioners on/off. This is the screen for noticing "she's in Jumeirah at 2 and Mirdif at 3."
 
-**4.3 New appointment.** From calendar slot, from client record, or from the "unscheduled" list. Fields: client, service type, delivery mode, location (client's locations, or clinic), practitioner (filtered to those credentialed for the service type), window start (window end = start + 45), travel buffer (default from previous stop's estimated drive + 10 min). Shows entitlement balance for that service type and blocks if zero unless admin overrides with reason (creates a receivable, see FINANCE).
+**4.3 New appointment.** From calendar slot, from client record, or from the "unscheduled" list. Fields: client, service type, delivery mode, location (client's locations, or the studio), practitioner (filtered to those credentialed for the service type), window start (window end = start + 45), travel buffer (default from previous stop's estimated drive + 10 min). Shows entitlement balance for that service type and blocks if zero unless admin overrides with reason (creates a receivable, see FINANCE).
 
 **4.4 Unscheduled list.** Active clients with available entitlements and no future appointment, sorted by days since last session. This is the coordinator's daily to-do.
 
-## 5. Screens (therapist PWA)
+## 5. Screens (practitioner PWA)
 
 **5.1 Today.** One column. Each stop: window, client first name + initial, age, service, location label, "Navigate" (opens Google Maps / Waze with parking point), "Brief" (opens client brief: protocol summary, last session notes, access notes, contacts), and the check-in button (handled by session-capture). Current stop is emphasised; past stops collapse. Offline: renders from the last sync; shows a calm "last updated HH:MM" band.
 
@@ -52,7 +52,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 
 1. `checkConflicts(appointment, context)` → `{ blocking[], warnings[] }`
    - **Blocking:** practitioner overlap (including travel buffer); client overlap; practitioner lacks valid `credential.can_execute_session` for `service_type` on that date; client not `active`; required consents not active; kit assigned to practitioner has calibration overdue on that date; window outside practitioner working hours.
-   - **Warnings:** clinical spacing — fewer than `service_type.min_gap_hours` since client's last completed session of same type (default 20h), or more than `max_sessions_per_week` (default 3); zero entitlement balance; prayer-time overlap for a practitioner flagged as observing; drive time from previous stop exceeds buffer; different practitioner from client's last 3 sessions (continuity).
+   - **Warnings:** session spacing — fewer than `service_type.min_gap_hours` since client's last completed session of same type (default 20h), or more than `max_sessions_per_week` (default 3); zero entitlement balance; prayer-time overlap for a practitioner flagged as observing; drive time from previous stop exceeds buffer; different practitioner from client's last 3 sessions (continuity).
 2. `travelBufferMinutes(fromLocation, toLocation, departAt, estimates)` — estimate + 10, min 15, max 90. Estimates come from a cached matrix; the function never calls the network.
 3. `windowFor(start)` → `{ start, end: start + 45min }`.
 4. `isLateCancellation(appointment, cancelledAt)` — < 24h before `window_start`.
@@ -72,15 +72,15 @@ Google Maps Distance Matrix for estimates; Places for pin verification is client
 
 ## 9. Audit
 
-Create, move, reassign, cancel each logged with before/after times and practitioner. Reason required for: late-cancellation waiver, clinical-spacing override, zero-entitlement override.
+Create, move, reassign, cancel each logged with before/after times and practitioner. Reason required for: late-cancellation waiver, session-spacing override, zero-entitlement override.
 
 ## 10. Out of scope
 
-Route solver, dispatch board, live tracking, client notifications, therapist-initiated changes, recurring appointments (Phase 2: "book the next 10 Tuesdays").
+Route solver, dispatch board, live tracking, client notifications, practitioner-initiated changes, recurring appointments (Phase 2: "book the next 10 Tuesdays").
 
 ## 11. Done when
 
 - `checkConflicts` has a test for every blocking and warning rule, including buffer-overlap edge cases and a credential expiring mid-week.
 - On staging with synthetic data: place 25 appointments across 3 practitioners over a week by drag; the day map shows them; a deliberate double-booking is blocked; a 19-hour gap warns.
-- The therapist "Today" screen renders offline from the last sync.
+- The practitioner "Today" screen renders offline from the last sync.
 - `pnpm verify` green; both review agents pass.

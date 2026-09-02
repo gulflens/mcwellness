@@ -2,8 +2,7 @@
   "hooks": {
     "PreToolUse": [
       { "matcher": "Write|Edit|MultiEdit", "hooks": [
-        { "type": "command", "command": "bash .claude/hooks/no-phi-patterns.sh" },
-        { "type": "command", "command": "bash .claude/hooks/region-guard.sh" } ] },
+        { "type": "command", "command": "bash .claude/hooks/no-real-identifiers.sh" } ] },
       { "matcher": "Bash", "hooks": [
         { "type": "command", "command": "bash .claude/hooks/no-prod-in-dev.sh" } ] }
     ],

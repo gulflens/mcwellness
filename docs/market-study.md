@@ -1,5 +1,7 @@
 # Neurofeedback in the UAE — Market Study & Operating-System Blueprint
 
+> **Status note, 2026-09-02.** This study assumed McWellness would operate as a DHA-licensed clinic. The founder has since determined that the business is a wellness company, not a clinic: no DHA licence, no NABIDH, no 25-year retention. Section 8 (regulatory map), the hosting constraint in section 18 and the phase 0 pre-work in section 19 are superseded by that determination and by the repo's CLAUDE.md and `.claude/skills/uae-compliance`. The market, pricing, operations and product analysis stands. The document is kept unedited as source material.
+
 *Prepared September 2026. All figures in AED unless stated. Regulatory dates were accurate at time of writing and shift often — verify against DHA Sheryan, DOH, MOHAP and mof.gov.ae before committing budget.*
 
 ---
