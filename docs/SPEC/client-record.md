@@ -1,12 +1,12 @@
 # SPEC — Client Record
 
-*Worktree: `client-record`. Entities: `client`, `contact`, `location`, `consent`, `document`, `diagnosis`, `erasure_request` — defined in `00-data-model.md`. This spec defines behaviour, not schema.*
+*Worktree: `client-record`. Entities: `client`, `contact`, `location`, `consent`, `document`, `goal`, `erasure_request` — defined in `00-data-model.md`. This spec defines behaviour, not schema.*
 
 ---
 
 ## 1. Purpose
 
-One record per client from first enquiry to discharge. Everything else in the system hangs off it. It must be correct, coded, and consent-complete before a session can be scheduled.
+One record per client from first enquiry to close. Everything else in the system hangs off it. It must be correct, coded, and consent-complete before a session can be scheduled.
 
 ## 2. Who uses it
 
@@ -60,7 +60,6 @@ any ──► erased   (erasure request)
 ## 6. Coded fields
 
 - Goals: category from the owner-editable reference table, description beside it.
-- Nationality: ISO 3166-1 alpha-3.
 - Relationship, consent purpose, location label, status: enums from the data model.
 - Free text always sits beside a typed field, never instead of one.
 
@@ -75,17 +74,17 @@ any ──► erased   (erasure request)
 ## 8. Erasure request
 
 Admin action "Record erasure request" → reason, requested by (contact), date. System then:
-1. Anonymises: names and Arabic names become "Erased client", date of birth, sex, nationality, Emirates ID columns, referral source, `contact.phone/email/whatsapp_opt_in` and the portal user account are nulled or removed; `location` rows lose their coordinates and notes.
+1. Runs `app.erase_client(client_id, request_id)` as the owner (the API role never deletes), inside one transaction that sets `app.erasure = 'true'` so every audit row it writes keeps field names and withholds values: names and Arabic names become "Erased client"; date of birth, sex, the Emirates ID columns and referral source are nulled; `contact.phone/email/whatsapp_opt_in` are nulled and the portal user account removed; each `location` keeps only its emirate and has its coordinates replaced by the emirate's centroid, with Makani, address, parking, gate and notes cleared.
 2. Deletes every `document` from storage except issued invoices, which keep what tax law requires for 5 years.
 3. Sets `client.status = 'erased'`. Excluded from all lists, searches, schedules and reports. The row stays so ledgers and audit history reconcile; only `lead_practitioner` may open it, with a reason prompt.
 4. Writes `erasure_request` with what was anonymised and what was deleted.
 5. Generates a confirmation letter (Stage 2 template) for the contact.
 
-Audit rows already written keep their own 5-year retention; the retention job drops partitions as they age out.
+Audit rows written before the erasure keep the identifiers for the log's own 5-year retention; the lawyer confirms this exception under the personal-data law before the first erasure. The retention job drops partitions as they age out.
 
 ## 9. Audit
 
-Every read of the detail drawer is logged (AUDIT-SPEC §5 read logging). Every write goes through triggers. Sensitive actions with reason prompt: erasure, consent withdrawal, diagnosis removal, reactivation from closed, opening an erased record.
+Every read of the detail drawer is logged (AUDIT-SPEC §5 read logging). Every write goes through triggers. Sensitive actions with reason prompt: erasure, consent withdrawal, goal removal, reactivation from closed, opening an erased record.
 
 ## 10. Out of scope for this worktree
 

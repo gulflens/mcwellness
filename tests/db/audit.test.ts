@@ -226,3 +226,24 @@ describe('the audit trail', () => {
     });
   });
 });
+
+describe('erasure mode', () => {
+  it('withholds every value, so an erasure never re-records the identity it removes', async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA, 'erasure request');
+      await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+      await client.query("select set_config('app.erasure', 'true', true)");
+      await client.query(
+        "update client set given_name = 'Erased', family_name = 'Erased', status = 'erased' where id = $1",
+        [IDS.clientA],
+      );
+      const rows = await rowsFor(IDS.clientA);
+      const erasure = rows[1];
+      expect(erasure?.changed_fields).toEqual(['family_name', 'given_name', 'status']);
+      expect(erasure?.old_values?.family_name).toBe('[withheld: erasure]');
+      expect(erasure?.new_values?.family_name).toBe('[withheld: erasure]');
+      expect(JSON.stringify(erasure?.old_values)).not.toContain('Alpha');
+      expect(erasure?.hash_ok).toBe(true);
+    });
+  });
+});

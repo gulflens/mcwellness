@@ -1,7 +1,7 @@
 # McWellness
 
 The practice's own software: one record per client from first enquiry to signed
-report and paid invoice, and one map per day for every therapist. The rules are
+report and paid invoice, and one map per day for every practitioner. The rules are
 in `CLAUDE.md`; what lives where is in `docs/SPEC/OWNERSHIP.md`; the product
 record is `PRODUCT.md`.
 

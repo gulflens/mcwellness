@@ -9,11 +9,16 @@
 --    than 200 characters with '[redacted: N chars]'. Top-level keys only: the
 --    core tables have no nested jsonb.
 ------------------------------------------------------------------------------
+-- Erasure mode: when the erasing transaction sets app.erasure = 'true', every value
+-- is withheld and only the keys are kept, so an erasure never re-records the
+-- identity it removes (client-record.md section 8).
 create function app.audit_redact(p_row jsonb) returns jsonb
 language sql stable strict
 set search_path = pg_catalog, pg_temp
 as $$
-  select coalesce(
+  select case when current_setting('app.erasure', true) = 'true'
+    then (select coalesce(jsonb_object_agg(e.key, to_jsonb('[withheld: erasure]'::text)), '{}'::jsonb) from jsonb_each(p_row) as e)
+    else coalesce(
     (select jsonb_object_agg(
               e.key,
               case
@@ -23,6 +28,7 @@ as $$
               end)
        from jsonb_each(p_row - array['emirates_id_encrypted', 'emirates_id_hash']) as e),
     '{}'::jsonb)
+  end
 $$;
 
 ------------------------------------------------------------------------------

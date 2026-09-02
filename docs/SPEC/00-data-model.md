@@ -12,12 +12,12 @@ Status: **v1 — owner decisions resolved. Ready to derive the trunk schema.**
 |---|---|
 | Primary key | `id uuid` — never sequential integers on tables holding personal data |
 | Tenancy | `tenant_id uuid not null` on every table. One tenant today. Row-level security filters on it from day one. |
-| Timestamps | `created_at`, `updated_at` (timestamptz). No soft-delete flag: PHI is never deleted, it's superseded or archived (see §7). |
+| Timestamps | `created_at`, `updated_at` (timestamptz). No soft-delete flag: the API role never deletes; rows are superseded, closed or erased under the retention rule (see §7). |
 | Provenance | `created_by uuid` referencing `user`. Audit log carries the rest (see AUDIT-SPEC). |
 | Money | Integer fils (AED × 100). Never floats. Currency column present, always `AED` for now. |
 | Structure | Measurements, goals and observations are typed fields. Free text may sit beside a typed field, never replace it. No diagnosis codes: this is a wellness business. |
-| Identifiers | Emirates ID, if collected at all, stored field-level encrypted plus a stable hash column for lookup; never required to enrol. Phone stored E.164. |
-| Enumerations | Small closed sets (status fields) are Postgres enums. Open sets (service types, diagnosis codes) are reference tables. |
+| Identifiers | Emirates ID, if collected at all (only to verify the adult who consents for a minor or who is refunded), stored field-level encrypted plus a keyed HMAC-SHA256 for lookup; never plain text, never an image, never required to enrol. Phone stored E.164. |
+| Enumerations | Small closed sets (status fields) are Postgres enums. Open sets (service types, goal categories) are reference tables. |
 | Naming | `snake_case` tables and columns, singular table names. |
 
 ---
@@ -77,7 +77,7 @@ Makani optional, verified coordinate mandatory. See NAVIGATION-SPEC §2.
 ## 3. Client and household
 
 ### `client`
-The person receiving care. `mrn` (human-readable medical record number, tenant-unique), `given_name`, `family_name`, `given_name_ar`, `family_name_ar`, `date_of_birth`, `sex_at_birth`, `nationality`, `emirates_id_encrypted`, `emirates_id_hash`, `emirates_id_expiry`, `preferred_locale`, `primary_contact_id`, `primary_location_id`, `referral_source`, `status` (`lead`, `active`, `paused`, `closed`, `erased`).
+The person receiving sessions. `mrn` (human-readable record number, tenant-unique), `given_name`, `family_name`, `given_name_ar`, `family_name_ar`, `date_of_birth`, `sex_at_birth` (optional; the qEEG normative comparison uses age and sex), `emirates_id_encrypted`, `emirates_id_hash`, `preferred_locale`, `primary_contact_id`, `primary_location_id`, `referral_source`, `status` (`lead`, `active`, `paused`, `closed`, `erased`).
 
 Minors are the common case. A client is *not* necessarily a user.
 
@@ -100,7 +100,7 @@ signature_document_id
 Every session start checks the relevant active consent at that moment. No active `participation` consent → session cannot start.
 
 ### `document`
-Anything filed against a client: ID scans, referral letters, signed consents, reports, setup photos. `client_id`, `kind`, `storage_key` (S3, versioned bucket), `mime_type`, `sha256`, `uploaded_by`, `retention_until` (computed: 5 years from the client's last activity), `is_immutable`.
+Anything filed against a client, or a practice document such as a practitioner's certificate (`client_id` null): referral letters, signed consents, reports, setup photos, certificates. Never an image of an identity document. `client_id`, `kind`, `storage_key` (Supabase Storage, versioned bucket), `mime_type`, `sha256`, `uploaded_by`, `retention_until` (computed: 5 years from the client's last activity), `is_immutable`.
 
 ---
 
@@ -113,7 +113,7 @@ Anything filed against a client: ID scans, referral letters, signed consents, re
 Any measurement: qEEG brain map, CPT, questionnaire. Questionnaires are self-report measures, never diagnoses. `client_id`, `performed_at`, `performed_by_practitioner_id`, `instrument` (`qeeg`, `cpt`, `conners`, `vanderbilt`, `asrs`, `gad7`, `phq9`, `isi`, …), `instrument_version`, `raw_document_id`, `derived jsonb` (scores), `version`, `supersedes_id`. Versioned so pre/post comparison is exact.
 
 ### `protocol_template`
-The practice's IP, authored by the lead practitioner. `service_type_id`, `name`, `indication`, `sites` (electrode placements), `reward_bands`, `inhibit_bands`, `thresholds`, `session_minutes`, `version`, `authored_by`, `status`.
+The practice's IP, authored by the lead practitioner. `service_type_id`, `name`, `goal_category`, `sites` (electrode placements), `reward_bands`, `inhibit_bands`, `thresholds`, `session_minutes`, `version`, `authored_by`, `status`.
 
 ### `client_protocol`
 A template instantiated for one client. `client_id`, `template_id`, `version`, `supersedes_id`, `change_reason` (required when version > 1), `authored_by_practitioner_id` (must hold `can_author_protocol`), `effective_from`, `status`. Sessions pin a specific version.
@@ -179,7 +179,7 @@ Summarised here; FINANCE-SPEC is authoritative.
 
 **Credential gates authorship.** Writing a `protocol_template` or `client_protocol`, signing a `report`, being assigned an `appointment` — each checks a specific capability on `credential` and re-checks validity dates.
 
-**Retention and erasure.** 5 years from the last activity, computed onto `document.retention_until` and the client record. On an erasure request: personal fields are anonymised, documents deleted from storage, contacts and portal accounts removed; invoices keep what tax law requires for their 5 years; the client row stays as `erased` so ledgers and audit history reconcile (see §9.3). An `erasure_request` row records who asked, when, what was erased, and the confirmation sent.
+**Retention and erasure.** 5 years from the last activity, computed onto `document.retention_until` and the client record. On an erasure request, a server-side function running as the owner (the API role never deletes) anonymises the personal fields, replaces each location's coordinates with its emirate's centroid and clears its Makani, address and notes, deletes documents from storage, removes contacts and the portal account, and sets the client `erased`; invoices keep what tax law requires for their 5 years. The erasing transaction sets `app.erasure`, so the audit rows it writes keep field names and withhold values (see §9.3). An `erasure_request` row records who asked, when, what was erased, and the confirmation sent.
 
 **Audit.** Every table in §3–§6 carries `client_id` directly or resolvably, so the audit trigger can denormalise it. See AUDIT-SPEC §3.
 
@@ -217,7 +217,7 @@ tenant ─┬─ location (studio)
 
 1. ✅ **Vehicles** — personal cars. Salik and mileage are reimbursed expenses per practitioner, recorded on `visit_actuals`.
 2. ✅ **Appointment window** — 45 minutes. Client-facing copy promises the window, never a clock time.
-3. ✅ **Erasure vs. retention** (re-baselined 2026-09-02) — retention is 5 years after the last activity. A client may request erasure at any time: personal fields are anonymised, documents deleted from storage, contacts and portal accounts removed; invoices keep what tax law requires for 5 years; the client row stays as `client.status = 'erased'`, visible only to `lead_practitioner`, excluded from every list and search, so ledgers and audit history reconcile; audit rows keep their own 5 years. Client receives written confirmation. Lawyer to confirm wording.
+3. ✅ **Erasure vs. retention** (re-baselined 2026-09-02) — retention is 5 years after the last activity. A client may request erasure at any time: a server-side function running as the owner anonymises the personal fields (locations keep only their emirate's centroid), deletes documents from storage, removes contacts and the portal account; invoices keep what tax law requires for 5 years; the client row stays as `client.status = 'erased'`, visible only to `lead_practitioner`, excluded from every list and search, so ledgers and audit history reconcile; audit rows keep their own 5 years. Client receives written confirmation. Lawyer to confirm wording.
 4. ✅ **Phase 1 questionnaires** — all seven: Conners, Vanderbilt, ASRS, GAD-7, PHQ-9, ISI, PSQI. Each is a form + scoring function in `domain/assessment`.
 5. ✅ **Setup photo** — yes. `photo_video` consent is captured at intake; `session.setup_photo_document_id` added.
 
@@ -241,3 +241,4 @@ Recorded here so no later reader mistakes them for the spec's intent.
 - **Extensions** (`pgcrypto`, `postgis`) live in the `extensions` schema, as on Supabase; helper functions live in schema `app`; the public schema holds only tables.
 - **Row level security** is enabled on every table and every policy is written `to app_role`, the API role that stands in until PR 3 chooses the API identity. `app.current_tenant_id()` reads the `app.tenant_id` setting the middleware will stamp per request; unset, every tenant-scoped row is invisible.
 - **Re-baselined 2026-09-02 as a wellness business.** Removed: `tenant.dha_facility_licence_no`, `practitioner.dha_professional_licence_no`, `client.nabidh_opt_out`, `service_type.is_clinical`, and the `jurisdiction`, `licence_type` and `licence_number` columns of `credential` (now `certification`, `certifying_body`, `certificate_number`). Renamed values: `role_kind.clinical_lead` to `lead_practitioner`; `location_label.clinic` and `delivery_mode.clinic` to `studio`; `client_status.discharged` and `locked` to `closed` and `erased`; `consent_purpose.treatment` and `minor_treatment` to `participation` and `minor_participation`, with `data_sharing_hie` removed. `document.retention_until` is 5 years from the last activity.
+- **After the compliance review of 2026-09-02:** `client.nationality` and `client.emirates_id_expiry` are dropped (no stated need); the Emirates ID columns and `sex_at_birth` carry their need in the schema comments; `document.client_id` is nullable so a practitioner's certificate can be filed without a client; `audit_redact` withholds every value when the transaction sets `app.erasure`; no image of an identity document is ever stored.

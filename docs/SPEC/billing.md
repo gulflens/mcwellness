@@ -81,7 +81,7 @@ Three deliberate choices in there:
 | **Card, upfront** | Package purchase | Immediately | Full amount, becomes a liability |
 | **BNPL — Tabby / Tamara** | Packages | **Immediately, net of fee** | The important one — see below |
 | **Bank transfer** | Corporate, large packages | 1–3 days | Needs manual matching |
-| **Cash** | Minority of home clients | At the door | Receipt at door, therapist reconciliation next morning |
+| **Cash** | Minority of home clients | At the door | Receipt at door, practitioner reconciliation next morning |
 
 ### BNPL is the conversion lever
 
@@ -155,7 +155,7 @@ Refund due                              11,100
 
 They lose the volume discount on what they consumed, which is exactly what a volume discount means. State it plainly in the T&Cs at point of sale, show the number in the portal, and let the system compute it.
 
-**Expiry.** 12 months from purchase is reasonable and standard. Be conservative here — aggressive expiry on prepaid healthcare invites both consumer-protection scrutiny and bad reviews. Warn at 60 and 30 days, and allow a documented extension for medical reasons.
+**Expiry.** 12 months from purchase is reasonable and standard. Be conservative here — aggressive expiry on prepaid programmes invites both consumer-protection scrutiny and bad reviews. Warn at 60 and 30 days, and allow a documented extension for good reason.
 
 **Late cancellation and no-show.** Under 24 hours consumes the entitlement. This is standard practice and it must be automatic, because a solo operator will not enforce it manually. Give the coordinator a one-click waiver with a reason field.
 
@@ -218,7 +218,7 @@ The tedious part that breaks quietly if you skip it.
 
 **Gateway settlements arrive net and batched.** A Tuesday settlement of AED 42,317.50 covers eleven transactions minus fees. You need `SettlementBatch → Payment → Invoice` matching, with an exception queue for anything that doesn't tie out.
 
-**Cash at the door** needs a two-step: therapist records collection in the app, then reconciles physical cash at the hub next morning. Any variance is flagged. This is a genuine fraud and loss vector in home-service businesses.
+**Cash at the door** needs a two-step: practitioner records collection in the app, then reconciles physical cash at the hub next morning. Any variance is flagged. This is a genuine fraud and loss vector in home-service businesses.
 
 **Bank transfers** need reference matching with a manual fallback — clients will pay without the reference every time.
 

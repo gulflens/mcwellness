@@ -12,9 +12,9 @@ description: UAE personal-data, VAT, e-invoicing and positioning rules for McWel
 ## Personal data (Federal Decree-Law No. 45 of 2021, the PDPL)
 - Applies to personal data of people in the UAE. Health-related data is sensitive and needs explicit consent for the specific purpose.
 - Rights: access, correction, erasure, withdrawal of consent. Processing is limited to the stated purpose.
-- Minimisation: collect only what the service needs. Emirates ID is optional and never required to enrol; if collected it is encrypted plus a hash.
+- Minimisation: collect only what the service needs. Emirates ID is optional and never required to enrol; if collected (only to verify the adult who consents for a minor or who is refunded) it is encrypted plus a keyed hash, and no image of an identity document is ever stored.
 - Minors: a guardian consents.
-- Retention (product decision, aligned with tax record-keeping): 5 years after the last activity, then erasure or anonymisation on request. Financial records keep 5 years regardless.
+- Retention (product decision, aligned with tax record-keeping): 5 years after the last activity, then erasure or anonymisation on request. Financial records keep 5 years regardless. Audit rows written before an erasure keep the identifiers for the log's own 5 years: the lawyer confirms this exception before the first erasure.
 - Hosting: Supabase Cloud in the region the owner chooses (decision of 2026-09-02, to be confirmed with the lawyer). Every vendor receiving personal data is listed in `docs/COMPLIANCE/approved-vendors.md`. No analytics SDKs, error trackers or font CDNs.
 
 ## VAT (FTA)

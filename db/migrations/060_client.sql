@@ -22,11 +22,12 @@ create table client (
   given_name_ar          text,
   family_name_ar         text,
   date_of_birth          date,                   -- required at activation (client-record.md section 3)
-  sex_at_birth           sex_at_birth,
-  nationality            text check (nationality is null or nationality ~ '^[A-Z]{3}$'),  -- ISO 3166-1 alpha-3
+  sex_at_birth           sex_at_birth,           -- optional; the qEEG normative comparison uses age and sex
+  -- Emirates ID, optional and never required to enrol: collected only when the practice must
+  -- verify the identity of the adult who consents for a minor or who is refunded. Never plain
+  -- text: ciphertext plus a keyed HMAC-SHA256 (server-held key) for lookup.
   emirates_id_encrypted  bytea,
   emirates_id_hash       bytea check (emirates_id_hash is null or octet_length(emirates_id_hash) = 32),
-  emirates_id_expiry     date,
   preferred_locale       locale not null default 'en',
   primary_contact_id     uuid,                   -- references contact(id), added below
   primary_location_id    uuid references location (id),
@@ -77,8 +78,8 @@ create index client_primary_contact_idx on client (primary_contact_id);
 create table document (
   id               uuid primary key default gen_random_uuid(),
   tenant_id        uuid not null references tenant (id),
-  client_id        uuid not null references client (id),
-  kind             text not null,           -- id_scan, referral, consent, report, setup_photo, ...: open set
+  client_id        uuid references client (id),   -- null for practice documents such as a practitioner's certificate
+  kind             text not null,           -- referral, consent, report, setup_photo, certificate, ...: open set; never an image of an identity document
   storage_key      text not null,           -- opaque key in the versioned bucket
   mime_type        text not null,
   sha256           bytea not null check (octet_length(sha256) = 32),

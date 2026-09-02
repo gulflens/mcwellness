@@ -3,7 +3,7 @@ paths: ["db/**", "domain/**", "app/api/**", "jobs/**", "infra/**"]
 ---
 # Compliance rules
 - Positioning: McWellness is a wellness business. No diagnosis, treatment, patient or medical-claim language in code, copy, schema or fixtures; clients have goals, sessions and measurements.
-- Personal data: collect only what the service needs, and a new personal field states its need. Emirates ID, if collected at all, is encrypted plus a hash, never plaintext, never required to enrol.
+- Personal data: collect only what the service needs, and a new personal field states its need. Emirates ID, if collected at all, is encrypted plus a keyed hash, never plaintext, never an image, never required to enrol.
 - Consent: check the specific `consent.purpose` at execution time; never cache a "has consent" boolean on the client. A guardian consents for a minor.
 - Certification: check `credential` capability and validity dates at the moment of authorship or assignment.
 - Audit: every table holding personal data has the audit trigger; every request sets `app.actor_id`, `app.request_id`, `app.reason` and `app.tenant_id` via `set_config(..., true)` inside the request transaction.

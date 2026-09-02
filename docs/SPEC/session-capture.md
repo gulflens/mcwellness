@@ -20,7 +20,7 @@ We do **not** build a sync engine. We build a **single-writer outbox**.
 - **Read data** (today's list, client briefs, protocols) is cached on every successful sync and served from cache when offline. It is never edited on the device.
 
 What can still go wrong, and the answer:
-- Phone dies mid-session → events already written to IndexedDB survive; on restart the app offers "resume session for Layla H., started 14:32."
+- Phone dies mid-session → events already written to IndexedDB survive; on restart the app offers "resume session for Client L., started 14:32."
 - Phone lost → session shows `in_progress` server-side with a partial event stream; admin closes it as `aborted` with reason; entitlement not consumed.
 - Two devices for one practitioner → not supported in Phase 1; the second check-in is refused by the server ("already checked in on another device").
 

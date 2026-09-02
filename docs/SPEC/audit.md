@@ -12,7 +12,7 @@ Build all three. They answer different questions and they have different shapes.
 |---|---|---|---|
 | **Audit log** | "Who accessed or changed client data?" | Append-only, immutable, one row per action | 5 years |
 | **Version history** | "What did this record look like before?" | Full snapshots per version of an entity | Same as the entity |
-| **Domain events** | "What happened in the business?" | Semantic events feeding analytics and workflow | Indefinite, aggregatable |
+| **Domain events** | "What happened in the business?" | Semantic events feeding analytics and workflow | 5 years, aggregated after |
 
 The audit log is a compliance artefact — you write it, you almost never read it, and the day you do read it matters enormously. Version history is an operational tool. Domain events drive dashboards.
 
@@ -28,7 +28,7 @@ McWellness is a wellness business (founder's determination, 2026-09-02), so no h
 - A family may ask who has seen their child's record, and the answer must be complete and fast; unauthorised use must be demonstrable, not just forbidden.
 - Consent and access control are auditable.
 
-**The consequence most systems get wrong: you must log reads, not just writes.** "Who opened Layla's file on 14 October?" is the classic question, and a write-only audit log cannot answer it. A curious coordinator looking up a neighbour's child leaves no trace unless you log the view.
+**The consequence most systems get wrong: you must log reads, not just writes.** "Who opened a child's file on 14 October?" is the classic question, and a write-only audit log cannot answer it. A curious coordinator looking up a neighbour's child leaves no trace unless you log the view.
 
 ---
 
@@ -159,7 +159,7 @@ Supabase makes this easier — `auth.uid()` is available inside Postgres, so the
 Triggers can't see a `SELECT`, and they can't know *why*. The application logs:
 
 - **Reads of personal data** — every client record, session, report or document opened. Log the access, not the payload.
-- **Semantic actions** the schema doesn't express: report signed, protocol changed, VAT treatment overridden, refund issued, entitlement adjusted, consent withdrawn, data exported.
+- **Semantic actions** the schema doesn't express: report signed, protocol changed, refund issued, entitlement adjusted, consent withdrawn, data exported.
 - **Reasons** for anything sensitive.
 
 Read logging is cheap if you write it asynchronously to a queue rather than inline. It should never slow a page load.
@@ -175,7 +175,6 @@ Some changes should be hard, deliberate, and loudly logged. For each, require a 
 | Signing a report | Attestation by the lead practitioner |
 | Amending a signed report | Must create a new version, never edit — see §7 |
 | Changing a training protocol | A practice decision, must be attributable and reversible |
-| Overriding a VAT classification | FTA audit exposure |
 | Issuing a refund or credit note | Financial control |
 | Adjusting an entitlement balance | Direct revenue impact |
 | Changing a user's role or credentials | Privilege escalation path |
@@ -191,7 +190,7 @@ Some changes should be hard, deliberate, and loudly logged. For each, require a 
 
 This is a design rule, not just an audit rule.
 
-A signed report is immutable. A correction issues **version 2** with a visible amendment note explaining what changed and why, and version 1 remains retrievable forever. Same for session records once the visit is closed, and for issued invoices — which get credit notes, never edits.
+A signed report is immutable. A correction issues **version 2** with a visible amendment note explaining what changed and why, and version 1 remains retrievable for the retention period. Same for session records once the visit is closed, and for issued invoices — which get credit notes, never edits.
 
 The regulatory logic: a record that can be silently changed after the fact has no evidentiary value. The practical logic: a parent, a school or an insurer may be holding version 1, and you need to know exactly what they're holding.
 
@@ -208,7 +207,7 @@ type Versioned<T> = {
 }
 ```
 
-Store full snapshots, not diffs. Storage is cheap; reconstructing a document from a diff chain in a legal dispute eleven years from now is not.
+Store full snapshots, not diffs. Storage is cheap; reconstructing a document from a diff chain in a dispute four years from now is not.
 
 ---
 
@@ -228,7 +227,7 @@ Add a hook that fails the build on any `console.log`, `logger.info` or error-rep
 
 Four views. Build the first two in Phase 1.
 
-**1. Record timeline.** On every client, session, report and invoice: a chronological feed of everything that touched it. Plain language, not JSON. *"Sara Mahmoud changed the training protocol from SMR-C3 to Alpha-Theta — reason: poor tolerance reported at session 9."*
+**1. Record timeline.** On every client, session, report and invoice: a chronological feed of everything that touched it. Plain language, not JSON. *"The lead practitioner changed the training protocol from SMR-C3 to Alpha-Theta — reason: poor tolerance reported at session 9."*
 
 **2. Activity feed.** A global reverse-chronological stream, filterable by actor, entity type, action, date range, and client. This is your daily glance.
 
@@ -247,7 +246,7 @@ Cheap queries over the log, run nightly:
 - Bulk read — one actor accessing more than N client records in an hour
 - Export of more than N records at once
 - Access to a client the actor has no scheduled appointment with
-- Access outside working hours by a field therapist
+- Access outside working hours by a field practitioner
 - Repeated failed authorisation on the same record
 - Any break-glass event — immediate, not nightly
 - Hash chain verification failure — immediate, treat as an incident
@@ -286,7 +285,7 @@ Before you call this done, run this drill:
 
 > Pick a client at random. In under two minutes, produce a complete list of every person who has viewed or modified any part of their record, what they changed, and why — and demonstrate that the list cannot have been altered.
 
-If you can do that, you're ready for an inspection. If you can't, the gap you find is the thing to fix.
+If you can do that, you are ready for a family's question. If you can't, the gap you find is the thing to fix.
 
 ---
 

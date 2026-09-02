@@ -123,24 +123,13 @@ describe('clients', () => {
     });
   });
 
-  it('keeps the medical record number unique within a tenant', async () => {
+  it('keeps the record number unique within a tenant', async () => {
     await rolledBack(client, async () => {
       await rejectsWith(
         client,
         UNIQUE_VIOLATION,
         "insert into client (tenant_id, mrn, given_name, family_name) values ($1, $2, 'Synthetic', 'Delta')",
         [IDS.tenantA, `MW-${IDS.clientA.slice(-6)}`],
-      );
-    });
-  });
-
-  it('refuses a nationality that is not an upper-case alpha-3 code', async () => {
-    await rolledBack(client, async () => {
-      await rejectsWith(
-        client,
-        CHECK_VIOLATION,
-        "insert into client (tenant_id, mrn, given_name, family_name, nationality) values ($1, 'MW-900004', 'Synthetic', 'Epsilon', 'are')",
-        [IDS.tenantA],
       );
     });
   });

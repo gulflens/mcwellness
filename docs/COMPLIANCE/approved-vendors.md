@@ -7,6 +7,7 @@
 | GitHub | Source code, CI | Code; the CI database holds only the synthetic rows the tests create | US | ✅ code and synthetic tests only |
 | Google Maps Platform | Distance matrix, geocoding | Coordinates only, never names | Global | ⚠️ send location ids only |
 | Payment gateway | TBD | Amount, reference, payer contact | TBD | ❌ not yet |
+| BNPL provider (Tabby or Tamara, candidates) | Packages | Amount, reference, payer contact | UAE | ❌ not yet |
 | WhatsApp Business API | Phase 2 | Phone, message text (no session content) | Meta | ❌ not yet |
 | Zoho Books | Accounting | Journals, invoice totals, no session content | TBD | ❌ not yet |
 

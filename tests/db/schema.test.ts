@@ -77,10 +77,9 @@ describe('core schema', () => {
     );
     expect(rows.map((row) => row.column_name).sort()).toEqual([
       'emirates_id_encrypted',
-      'emirates_id_expiry',
       'emirates_id_hash',
     ]);
-    for (const row of rows.filter((column) => column.column_name !== 'emirates_id_expiry')) {
+    for (const row of rows) {
       expect(row.data_type).toBe('bytea');
     }
   });

@@ -14,7 +14,7 @@
 - A **practitioner** standing in a stranger's living room, phone in one hand, electrode paste on the other. Possibly dim light. Possibly a child climbing on them. Needs large targets, high contrast, zero ambiguity.
 - A **lead practitioner and admin team** on desktop, dense data, many clients, long sessions. Needs information density without fatigue.
 
-**The primary job:** make invisible neurological change visible and trustworthy.
+**The primary job:** make invisible change visible and trustworthy.
 
 **What this is not:** a meditation app or a SaaS dashboard. McWellness is a wellness business, and two of its competitors position as "holistic centres"; its visual language should still read as *measurement* — closer to a good laboratory instrument than to a spa.
 
@@ -160,7 +160,7 @@ Dark ground. Single column, no nesting, one decision per screen. The session run
 
 ```
 ┌──────────────────────────┐
-│  Layla H.        14:32   │
+│  Client L.        14:32   │
 │  Session 12 of 30        │
 ├──────────────────────────┤
 │                          │
@@ -192,7 +192,7 @@ Calm, generous, low density. Ribbon at top, then plain-language progress. Editor
 
 ### 6.4 The report — the highest-stakes surface
 
-This PDF goes to schools, psychiatrists and insurers. It circulates. It is your best marketing asset and it should be typeset like a scientific journal, not exported like a dashboard screenshot.
+This PDF goes to schools, coaches and whoever the family chooses. It circulates. It is your best marketing asset and it should be typeset like a scientific journal, not exported like a dashboard screenshot.
 
 Single column, 68-character measure, generous margins, figures on a strict grid, the ribbon as cover, tabular figures throughout, page furniture minimal. Arabic edition is a genuine RTL layout — mirrored grid, Arabic numerals where appropriate, correct heading hierarchy — not a flipped English template.
 

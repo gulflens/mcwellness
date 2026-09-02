@@ -141,12 +141,12 @@ Dubai paid parking zones, RTA tariffs by zone and time, free periods (Sundays an
 
 UAE clients have been trained by Careem and Talabat to expect live arrival tracking. Not offering it generates "where are you?" calls that cost your admin real time.
 
-**What to show:** practitioner first name and photo, a live ETA, and a map showing approach — but a coarse position, updating every 30–60 seconds. Not a precise real-time dot. Your practitioner is an employee, not a delivery driver, and second-by-second tracking of a clinician into a family home is the wrong relationship.
+**What to show:** practitioner first name and photo, a live ETA, and a map showing approach — but a coarse position, updating every 30–60 seconds. Not a precise real-time dot. Your practitioner is an employee, not a delivery driver, and second-by-second tracking of a practitioner into a family home is the wrong relationship.
 
 **Automated messages via WhatsApp** (the default channel in the UAE, not email):
 
 - Evening before: confirmation with tomorrow's window.
-- On departure: "Sara is on her way, arriving around 4:15."
+- On departure: "Your practitioner is on her way, arriving around 4:15."
 - If ETA slips more than 10 minutes: proactive update with the new time. Automatic, before the client notices.
 - On completion: session logged, report ready when applicable.
 
