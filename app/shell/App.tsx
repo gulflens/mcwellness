@@ -8,6 +8,7 @@ import { PortalLanding } from '../client/PortalLanding';
 import { CheckInPage } from '../therapist/session/CheckInPage';
 import { TodayLanding } from '../therapist/TodayLanding';
 import { AdminLayout } from './AdminLayout';
+import { canOpenBilling, canOpenSchedule } from './adminAccess';
 import { useAuth, type Actor } from './auth/AuthContext';
 import { Note } from './components/Controls';
 import { NoAccessPage } from './pages/NoAccessPage';
@@ -52,7 +53,7 @@ export function App() {
           element={
             <RequireAuth>
               {(actor) =>
-                hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance') ? (
+                canOpenBilling(actor, new Date()) ? (
                   <BillingPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
@@ -66,7 +67,7 @@ export function App() {
           element={
             <RequireAuth>
               {(actor) =>
-                hasRole(actor, 'owner', 'admin', 'lead_practitioner') ? (
+                canOpenSchedule(actor, new Date()) ? (
                   <SchedulePage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />

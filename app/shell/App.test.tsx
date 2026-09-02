@@ -35,6 +35,14 @@ const ADMIN = {
   capabilities: [],
 };
 
+const FINANCE = {
+  userId: '00000002-0000-4000-8000-000000000012',
+  displayName: 'Priya Nair',
+  tenantId: TENANT_ID,
+  roles: ['finance'],
+  capabilities: [],
+};
+
 const provider: AuthProvider = {
   kind: 'development',
   signIn: async () => undefined,
@@ -122,5 +130,28 @@ describe('App — /admin/billing and /admin/schedule', () => {
     mount(PRACTITIONER, '/admin/schedule');
     expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Schedule' })).toBeNull();
+  });
+
+  it('lets finance reach the price list', async () => {
+    mount(FINANCE, '/admin/billing');
+    expect(await screen.findByRole('heading', { name: 'Billing' })).toBeTruthy();
+  });
+
+  it('sends finance to their own desk instead of the day schedule', async () => {
+    mount(FINANCE, '/admin/schedule');
+    // billing.price.read admits finance, but appointment.list's practice
+    // scope does not — canOpenSchedule refuses, so homeFor lands them on
+    // the admin desk (Clients), not the schedule they cannot read.
+    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Schedule' })).toBeNull();
+  });
+
+  it('shows finance the Billing link but not the Schedule link', async () => {
+    mount(FINANCE, '/admin/clients');
+    expect(await screen.findByRole('link', { name: 'Billing' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/billing'),
+    );
+    expect(screen.queryByRole('link', { name: 'Schedule' })).toBeNull();
   });
 });
