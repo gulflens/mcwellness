@@ -47,6 +47,8 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
       API_DATABASE_URL: postgresql://mcwellness_api:mcwellness_api@localhost:5432/postgres
+      IDENTITY_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      APP_ENV: development
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -56,4 +58,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:migrate
+      - run: pnpm seed
       - run: pnpm test:db
