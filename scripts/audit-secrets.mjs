@@ -20,7 +20,7 @@ const ALLOWED_VALUES = [
 const TEST_PASSWORDS = new Set(['x', 'postgres']);
 const TEST_FILE = /\.test\.tsx?$/;
 // A local host, with a numeric port or a template one such as ${ports.db}.
-const LOCAL_HOST = /@(?:localhost|127\.0\.0\.1|\[::1\])(?::(?:\d+|\{[^}]*\}))?\//;
+const LOCAL_HOST = /@(?:localhost|127\.0\.0\.1|\[::1\])(?::(?:\d+|\$\{[^}]*\}))?\//;
 const SKIP = [
   /^pnpm-lock\.yaml$/,
   /^\.impeccable\//,
