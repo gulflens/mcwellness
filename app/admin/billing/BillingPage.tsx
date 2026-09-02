@@ -16,6 +16,20 @@ import { PriceDrawer } from './PriceDrawer';
  * same rule `app/api/billing/prices.ts` enforces server-side.
  */
 
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+
+// A date like RecordTimeline's own (app/admin/audit/RecordTimeline.tsx):
+// Intl, en-GB, the practice's own time zone, never the raw "YYYY-MM-DD" the
+// API sends. `validFrom` is a calendar date, not a timestamp, so the format
+// is the compact "2 Sep 2026" a table row wants, not the timeline's full
+// weekday heading.
+const dateFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: PRACTICE_TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+
 type State =
   | { kind: 'loading' }
   | { kind: 'error'; message: string }
@@ -25,6 +39,11 @@ export function BillingPage() {
   const { apiFetch, session } = useAuth();
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Names the service and the new price once a save succeeds (the design
+  // review's ask: a calm confirmation, not silence). It dismisses itself on
+  // the next action this page offers — opening the drawer again — rather
+  // than lingering once it no longer describes what's about to happen.
+  const [successNote, setSuccessNote] = useState<string | null>(null);
 
   const actor = session.status === 'signed-in' ? session.actor : null;
   // Reads the same rule the API enforces (domain/shared/actor.ts,
@@ -73,8 +92,10 @@ export function BillingPage() {
         ),
       },
       {
+        // The one column that names the currency (docs/DESIGN-BRIEF.md: say
+        // it once); VAT and Total are obviously the same currency and stay bare.
         key: 'unitPrice',
-        header: 'Unit price',
+        header: 'Unit price (AED)',
         numeric: true,
         align: 'end',
         render: (row) => formatFils(row.unitPriceFils),
@@ -97,30 +118,41 @@ export function BillingPage() {
         key: 'validFrom',
         header: 'Effective from',
         numeric: true,
-        render: (row) => row.validFrom,
+        render: (row) => dateFormat.format(new Date(row.validFrom)),
       },
     ],
     [],
   );
 
+  const openDrawer = useCallback(() => {
+    setSuccessNote(null);
+    setDrawerOpen(true);
+  }, []);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-  const onCreated = useCallback(() => {
-    setDrawerOpen(false);
-    load();
-  }, [load]);
+  const onCreated = useCallback(
+    (price: PriceRow) => {
+      setDrawerOpen(false);
+      setSuccessNote(
+        `${price.serviceTypeName}'s price is now AED ${formatFils(price.unitPriceFils)}.`,
+      );
+      load();
+    },
+    [load],
+  );
 
   return (
     <section className="page">
       <PageHeader
         title="Billing"
-        aside={
+        action={
           canWrite ? (
-            <Button variant="primary" onClick={() => setDrawerOpen(true)}>
+            <Button variant="secondary" onClick={openDrawer}>
               Add price
             </Button>
           ) : null
         }
       />
+      {successNote ? <Note>{successNote}</Note> : null}
       {state.kind === 'loading' ? <Note>Loading the price list.</Note> : null}
       {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
       {state.kind === 'ready' ? (
@@ -132,13 +164,7 @@ export function BillingPage() {
           empty="No prices are set yet."
         />
       ) : null}
-      {drawerOpen ? (
-        <PriceDrawer
-          currentPrices={state.kind === 'ready' ? state.response.prices : []}
-          onClose={closeDrawer}
-          onCreated={onCreated}
-        />
-      ) : null}
+      {drawerOpen ? <PriceDrawer onClose={closeDrawer} onCreated={onCreated} /> : null}
     </section>
   );
 }

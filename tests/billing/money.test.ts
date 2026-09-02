@@ -1,21 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { formatFils, parseAedToFils, previewVat } from '../../app/admin/billing/money';
+import {
+  AED_MAX_FILS,
+  formatFils,
+  isAedAmountTooLarge,
+  parseAedToFils,
+  previewVat,
+} from '../../app/admin/billing/money';
 
 describe('formatFils', () => {
-  it('formats a zero amount', () => {
-    expect(formatFils(0)).toBe('AED 0.00');
+  it('formats a zero amount as a bare figure', () => {
+    expect(formatFils(0)).toBe('0.00');
   });
 
-  it('formats whole AED', () => {
-    expect(formatFils(90_000)).toBe('AED 900.00');
+  it('formats whole AED, with no currency word', () => {
+    expect(formatFils(90_000)).toBe('900.00');
   });
 
   it('formats fils below one AED, padded to two digits', () => {
-    expect(formatFils(5)).toBe('AED 0.05');
+    expect(formatFils(5)).toBe('0.05');
   });
 
-  it('groups thousands', () => {
-    expect(formatFils(1_234_56)).toBe('AED 1,234.56');
+  it('groups thousands with en-GB grouping', () => {
+    expect(formatFils(1_234_56)).toBe('1,234.56');
   });
 });
 
@@ -68,6 +74,36 @@ describe('parseAedToFils', () => {
 
   it('refuses a thousands separator', () => {
     expect(parseAedToFils('1,234.56')).toBeNull();
+  });
+
+  it('accepts the int4 column maximum exactly', () => {
+    expect(parseAedToFils('21474836.47')).toBe(AED_MAX_FILS);
+  });
+
+  it('refuses one fils above the int4 column maximum', () => {
+    expect(parseAedToFils('21474836.48')).toBeNull();
+  });
+
+  it('refuses an amount far above the column maximum, even though it is a safe integer', () => {
+    expect(parseAedToFils('999999999999')).toBeNull();
+  });
+});
+
+describe('isAedAmountTooLarge', () => {
+  it('is false for a well-formed amount at or under the maximum', () => {
+    expect(isAedAmountTooLarge('21474836.47')).toBe(false);
+    expect(isAedAmountTooLarge('120.00')).toBe(false);
+  });
+
+  it('is true for a well-formed amount over the maximum', () => {
+    expect(isAedAmountTooLarge('21474836.48')).toBe(true);
+    expect(isAedAmountTooLarge('999999999999')).toBe(true);
+  });
+
+  it('is false for input that is not a well-formed amount at all', () => {
+    expect(isAedAmountTooLarge('')).toBe(false);
+    expect(isAedAmountTooLarge('abc')).toBe(false);
+    expect(isAedAmountTooLarge('-5')).toBe(false);
   });
 });
 

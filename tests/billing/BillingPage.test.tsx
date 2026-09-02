@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BillingPage } from '../../app/admin/billing/BillingPage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
@@ -24,11 +24,18 @@ const LEAD_PRACTITIONER = {
   capabilities: [],
 };
 
+const NF_SESSION_ID = '00000004-0000-4000-8000-000000000005';
+const SERVICE_TYPES = {
+  serviceTypes: [
+    { id: NF_SESSION_ID, code: 'nf-session', name: 'Neurofeedback session', nameAr: null },
+  ],
+};
+
 const PRICES = {
   prices: [
     {
       id: '00000004-0000-4000-8000-000000000101',
-      serviceTypeId: '00000004-0000-4000-8000-000000000005',
+      serviceTypeId: NF_SESSION_ID,
       serviceTypeCode: 'nf-session',
       serviceTypeName: 'Neurofeedback session',
       serviceTypeNameAr: 'جلسة التغذية الراجعة العصبية',
@@ -42,6 +49,23 @@ const PRICES = {
     },
   ],
 };
+
+const CREATED_PRICE = {
+  id: '00000004-0000-4000-8000-000000000102',
+  serviceTypeId: NF_SESSION_ID,
+  serviceTypeCode: 'nf-session',
+  serviceTypeName: 'Neurofeedback session',
+  serviceTypeNameAr: null,
+  unitPriceFils: 90_000,
+  vatRateBasisPoints: 500,
+  vatFils: 4_500,
+  grossFils: 94_500,
+  validFrom: '2026-12-01',
+  supersedesId: '00000004-0000-4000-8000-000000000101',
+  amendmentReason: 'Adjusting for the new season.',
+};
+
+const VAT_RATE = { rateBasisPoints: 500, effectiveFrom: '2018-01-01' };
 
 const provider: AuthProvider = {
   kind: 'development',
@@ -59,9 +83,16 @@ function json(body: unknown, status = 200): Response {
 }
 
 function mount(me: unknown, pricesStatus: { body: unknown; status?: number }) {
-  const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+  const posted: unknown[] = [];
+  const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(me);
+    if (url === '/api/billing/service-types') return json(SERVICE_TYPES);
+    if (url.startsWith('/api/billing/vat-rate')) return json(VAT_RATE);
+    if (url === '/api/billing/prices' && init?.method === 'POST') {
+      posted.push(JSON.parse(String(init.body)));
+      return json({ price: CREATED_PRICE }, 201);
+    }
     if (url.startsWith('/api/billing/prices')) {
       return json(pricesStatus.body, pricesStatus.status ?? 200);
     }
@@ -72,7 +103,7 @@ function mount(me: unknown, pricesStatus: { body: unknown; status?: number }) {
       <BillingPage />
     </AuthProviderBoundary>,
   );
-  return fetchImpl;
+  return { fetchImpl, posted };
 }
 
 describe('BillingPage', () => {
@@ -80,15 +111,27 @@ describe('BillingPage', () => {
     mount(OWNER, { body: PRICES });
     expect(await screen.findByText('Neurofeedback session')).toBeTruthy();
     expect(screen.getByText('جلسة التغذية الراجعة العصبية')).toBeTruthy();
-    expect(screen.getByText('AED 900.00')).toBeTruthy();
-    expect(screen.getByText('AED 45.00')).toBeTruthy();
-    expect(screen.getByText('AED 945.00')).toBeTruthy();
-    expect(screen.getByText('2026-09-02')).toBeTruthy();
+    // Bare figures: the currency word is named once, in the "Unit price (AED)" header.
+    expect(screen.getByText('900.00')).toBeTruthy();
+    expect(screen.getByText('45.00')).toBeTruthy();
+    expect(screen.getByText('945.00')).toBeTruthy();
+    // Formatted like RecordTimeline's own dates: Intl, en-GB, Asia/Dubai — never the raw ISO string.
+    // (en-GB's short-month form for September is "Sept", not "Sep".)
+    expect(screen.getByText('2 Sept 2026')).toBeTruthy();
+    expect(screen.queryByText('2026-09-02')).toBeNull();
   });
 
-  it('offers "Add price" to the owner', async () => {
+  it('names the currency once, on the unit price column', async () => {
     mount(OWNER, { body: PRICES });
-    expect(await screen.findByRole('button', { name: 'Add price' })).toBeTruthy();
+    await screen.findByText('Neurofeedback session');
+    expect(screen.getByText('Unit price (AED)')).toBeTruthy();
+  });
+
+  it('offers "Add price" to the owner, as the page header\'s secondary action', async () => {
+    mount(OWNER, { body: PRICES });
+    const button = await screen.findByRole('button', { name: 'Add price' });
+    expect(button.className).toContain('button--secondary');
+    expect(button.className).not.toContain('button--primary');
   });
 
   it('hides "Add price" from a lead practitioner, who may read the list but not write to it', async () => {
@@ -107,6 +150,31 @@ describe('BillingPage', () => {
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',
       'The price list could not be loaded. Try again.',
+    );
+  });
+
+  it('shows a calm confirmation naming the service and the new price once a save succeeds, then dismisses it on the next action', async () => {
+    mount(OWNER, { body: PRICES });
+    fireEvent.click(await screen.findByRole('button', { name: 'Add price' }));
+    await screen.findByRole('option', { name: 'Neurofeedback session' });
+    fireEvent.change(screen.getByLabelText('Service'), { target: { value: NF_SESSION_ID } });
+    fireEvent.change(screen.getByLabelText('Price (AED, excluding VAT)'), {
+      target: { value: '900' },
+    });
+    fireEvent.change(screen.getByLabelText('Why this price changes'), {
+      target: { value: 'Adjusting for the new season.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+
+    expect(
+      await screen.findByText("Neurofeedback session's price is now AED 900.00."),
+    ).toBeTruthy();
+    // The drawer closed, not merely emptied.
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add price' }));
+    await waitFor(() =>
+      expect(screen.queryByText("Neurofeedback session's price is now AED 900.00.")).toBeNull(),
     );
   });
 });
