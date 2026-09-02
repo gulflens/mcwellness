@@ -111,14 +111,13 @@ describe('core schema', () => {
       'lead',
       'active',
       'paused',
-      'discharged',
-      'locked',
+      'closed',
+      'erased',
     ]);
     expect(await enumValues('consent_purpose')).toEqual([
-      'treatment',
+      'participation',
+      'minor_participation',
       'home_visit',
-      'minor_treatment',
-      'data_sharing_hie',
       'photo_video',
       'research',
       'marketing',
@@ -126,7 +125,7 @@ describe('core schema', () => {
     expect(await enumValues('role_kind')).toEqual([
       'owner',
       'admin',
-      'clinical_lead',
+      'lead_practitioner',
       'practitioner',
       'finance',
       'client_contact',

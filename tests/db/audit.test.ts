@@ -37,7 +37,7 @@ let client: pg.Client;
 
 beforeAll(async () => {
   client = await freshDatabase();
-  await seedTenant(client, IDS.tenantA, IDS.ownerA, 'Synthetic Clinic A');
+  await seedTenant(client, IDS.tenantA, IDS.ownerA, 'Synthetic Studio A');
 });
 
 afterAll(async () => {
@@ -203,7 +203,7 @@ describe('the audit trail', () => {
 
   it('chains rows written by the API role too, and shows it only its own tenant', async () => {
     await rolledBack(client, async () => {
-      await seedTenant(client, IDS.tenantB, IDS.ownerB, 'Synthetic Clinic B');
+      await seedTenant(client, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
       await setAuditContext(client, IDS.ownerA);
       await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
       await seedClient(client, IDS.tenantB, IDS.clientB, IDS.ownerB, 'Beta');

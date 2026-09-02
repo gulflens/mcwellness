@@ -18,8 +18,8 @@ let client: pg.Client;
 
 beforeAll(async () => {
   client = await freshDatabase();
-  await seedTenant(client, IDS.tenantA, IDS.ownerA, 'Synthetic Clinic A');
-  await seedTenant(client, IDS.tenantB, IDS.ownerB, 'Synthetic Clinic B');
+  await seedTenant(client, IDS.tenantA, IDS.ownerA, 'Synthetic Studio A');
+  await seedTenant(client, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
   await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
 });
 
@@ -180,13 +180,13 @@ describe('service types and credentials', () => {
       await rejectsWith(
         client,
         CHECK_VIOLATION,
-        "insert into service_type (tenant_id, code, name, duration_minutes, is_clinical, delivery_modes) values ($1, 'nf-session', 'Session', 40, true, '{}')",
+        "insert into service_type (tenant_id, code, name, duration_minutes, delivery_modes) values ($1, 'nf-session', 'Session', 40, '{}')",
         [IDS.tenantA],
       );
       await rejectsWith(
         client,
         CHECK_VIOLATION,
-        "insert into service_type (tenant_id, code, name, duration_minutes, is_clinical, delivery_modes) values ($1, 'nf-session', 'Session', 0, true, '{home}')",
+        "insert into service_type (tenant_id, code, name, duration_minutes, delivery_modes) values ($1, 'nf-session', 'Session', 0, '{home}')",
         [IDS.tenantA],
       );
     });
@@ -195,7 +195,7 @@ describe('service types and credentials', () => {
   it('requires a credential to expire after it starts', async () => {
     await rolledBack(client, async () => {
       const { rows } = await client.query<{ id: string }>(
-        "insert into service_type (tenant_id, code, name, duration_minutes, is_clinical, delivery_modes) values ($1, 'nf-session', 'Session', 40, true, '{home}') returning id",
+        "insert into service_type (tenant_id, code, name, duration_minutes, delivery_modes) values ($1, 'nf-session', 'Session', 40, '{home}') returning id",
         [IDS.tenantA],
       );
       const practitioner = await client.query<{ id: string }>(
@@ -205,7 +205,7 @@ describe('service types and credentials', () => {
       await rejectsWith(
         client,
         CHECK_VIOLATION,
-        "insert into credential (tenant_id, practitioner_id, jurisdiction, service_type_id, licence_type, valid_from, valid_to) values ($1, $2, 'DHA', $3, 'dha_technician', '2026-01-01', '2026-01-01')",
+        "insert into credential (tenant_id, practitioner_id, service_type_id, certification, valid_from, valid_to) values ($1, $2, $3, 'bcia_bcn', '2026-01-01', '2026-01-01')",
         [IDS.tenantA, practitioner.rows[0]?.id, rows[0]?.id],
       );
     });

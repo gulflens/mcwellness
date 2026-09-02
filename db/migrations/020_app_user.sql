@@ -6,7 +6,7 @@
 
 create type user_status as enum ('active', 'suspended', 'archived');
 create type role_kind as enum (
-  'owner', 'admin', 'clinical_lead', 'practitioner', 'finance', 'client_contact'
+  'owner', 'admin', 'lead_practitioner', 'practitioner', 'finance', 'client_contact'
 );
 create type locale as enum ('en', 'ar');
 

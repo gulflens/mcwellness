@@ -1,8 +1,8 @@
 -- 040_service_type.sql
--- The catalogue of what the clinic delivers. Never hardcode "neurofeedback":
+-- The catalogue of what the practice delivers. Never hardcode "neurofeedback":
 -- every service is a row here (00-data-model.md section 2).
 
-create type delivery_mode as enum ('home', 'clinic', 'remote');
+create type delivery_mode as enum ('home', 'studio', 'remote');
 create type active_status as enum ('active', 'inactive');
 
 create table service_type (
@@ -12,7 +12,6 @@ create table service_type (
   name                    text not null,
   name_ar                 text,
   duration_minutes        integer not null check (duration_minutes > 0),
-  is_clinical             boolean not null,       -- drives VAT (billing.md section 5)
   requires_certification  text,                   -- credential gate; open set
   delivery_modes          delivery_mode[] not null check (cardinality(delivery_modes) > 0),
   status                  active_status not null default 'active',

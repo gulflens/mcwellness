@@ -49,7 +49,7 @@ create table public.audit_log (
   action          text        not null,   -- insert | update | delete from triggers; read | sign | export ... from the app
   entity_type     text        not null,   -- table name
   entity_id       uuid        not null,
-  client_id       uuid,                   -- denormalised: the patient this touches, if any
+  client_id       uuid,                   -- denormalised: the client this touches, if any
 
   -- change
   changed_fields  text[],                 -- update only; column names, sorted

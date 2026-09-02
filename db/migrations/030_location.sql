@@ -1,10 +1,10 @@
 -- 030_location.sql
--- Any place: a client's home, the clinic, a practitioner's home base.
+-- Any place: a client's home, the studio, a practitioner's home base.
 -- Makani is optional and Dubai-only; the verified entrance coordinate is
 -- mandatory (00-data-model.md section 2, navigation.md section 2).
 
 create type location_owner_type as enum ('client', 'tenant', 'practitioner');
-create type location_label as enum ('home', 'work', 'school', 'clinic', 'base', 'other');
+create type location_label as enum ('home', 'work', 'school', 'studio', 'base', 'other');
 
 create table location (
   id               uuid primary key default gen_random_uuid(),
@@ -33,7 +33,7 @@ create index location_entrance_gix on location using gist (entrance_point);
 create trigger set_updated_at before update on location
   for each row execute function app.set_updated_at();
 
--- The clinic.
+-- The studio.
 alter table tenant add column location_id uuid references location (id);
 create index tenant_location_idx on tenant (location_id);
 

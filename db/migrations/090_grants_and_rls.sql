@@ -22,7 +22,7 @@ begin
       -- Supabase: default privileges grant every new table in public to these roles.
       execute format('revoke all on public.%I from anon, authenticated', t);
     end if;
-    -- No delete anywhere: PHI is never deleted, it is superseded or locked.
+    -- No delete anywhere: client data is superseded, closed or erased, never deleted by the API role.
     execute format('grant select, insert, update on public.%I to app_role', t);
   end loop;
 

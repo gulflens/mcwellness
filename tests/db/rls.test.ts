@@ -18,8 +18,8 @@ let client: pg.Client;
 
 beforeAll(async () => {
   client = await freshDatabase();
-  await seedTenant(client, IDS.tenantA, IDS.ownerA, 'Synthetic Clinic A');
-  await seedTenant(client, IDS.tenantB, IDS.ownerB, 'Synthetic Clinic B');
+  await seedTenant(client, IDS.tenantA, IDS.ownerA, 'Synthetic Studio A');
+  await seedTenant(client, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
   await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
   await seedClient(client, IDS.tenantB, IDS.clientB, IDS.ownerB, 'Beta');
   await seedLocation(client, IDS.tenantA, IDS.locationA, IDS.clientA, IDS.ownerA);

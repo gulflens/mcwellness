@@ -1,15 +1,14 @@
 -- 060_client.sql
--- The person receiving care, the people around them, their consents and their
+-- The person receiving sessions, the people around them, their consents and their
 -- documents (00-data-model.md section 3). Minors are the common case; a client
 -- is not necessarily a user. The Emirates ID exists only encrypted plus a hash
 -- for lookup: no column anywhere holds it in plain text.
 
-create type client_status as enum ('lead', 'active', 'paused', 'discharged', 'locked');
+create type client_status as enum ('lead', 'active', 'paused', 'closed', 'erased');
 create type sex_at_birth as enum ('female', 'male', 'unknown');
 create type relationship as enum ('self', 'mother', 'father', 'guardian', 'spouse', 'other');
 create type consent_purpose as enum (
-  'treatment', 'home_visit', 'minor_treatment', 'data_sharing_hie',
-  'photo_video', 'research', 'marketing'
+  'participation', 'minor_participation', 'home_visit', 'photo_video', 'research', 'marketing'
 );
 create type consent_status as enum ('active', 'withdrawn', 'expired', 'superseded');
 create type consent_method as enum ('app_signature', 'paper_scan', 'verbal_witnessed');
@@ -33,7 +32,6 @@ create table client (
   primary_location_id    uuid references location (id),
   referral_source        text,
   status                 client_status not null default 'lead',
-  nabidh_opt_out         boolean not null default false,
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now(),
   created_by             uuid references app_user (id),
@@ -56,7 +54,7 @@ create table contact (
   relationship               relationship not null,
   is_legal_guardian          boolean not null default false,
   can_consent                boolean not null default false,
-  can_receive_clinical_info  boolean not null default false,
+  can_receive_reports        boolean not null default false,
   can_pay                    boolean not null default false,
   phone                      text check (phone is null or phone ~ '^\+[1-9][0-9]{6,14}$'),  -- E.164
   email                      text,
@@ -85,7 +83,7 @@ create table document (
   mime_type        text not null,
   sha256           bytea not null check (octet_length(sha256) = 32),
   uploaded_by      uuid references app_user (id),
-  retention_until  timestamptz,             -- 25 years from last clinical activity, computed by the application
+  retention_until  timestamptz,             -- 5 years from the last activity, computed by the application
   is_immutable     boolean not null default false,
   created_at       timestamptz not null default now(),
   updated_at       timestamptz not null default now(),
