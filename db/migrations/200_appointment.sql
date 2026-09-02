@@ -9,10 +9,6 @@
 -- request), `cancellation_reason` and `cancelled_at` (the cancel pull
 -- request), `rescheduled_from_id` (the reschedule pull request). Each is its
 -- own migration in this stream's own range when its pull request lands.
---
--- Needs: 000 (schema extensions, app.set_updated_at), 010 (tenant), 020
--- (app_user, for created_by), 030 (location), 040 (service_type, the
--- delivery_mode type), 050 (practitioner), 060 (client), 080 (app.audit_row).
 
 -- Needed for the exclusion constraints below: an equality operator class for
 -- uuid usable inside a GiST index, alongside the range-overlap operator.
