@@ -54,6 +54,11 @@ const CLIENT_OTHER_PRACTITIONER = '00000000-0000-4000-8000-000000101008';
 // tomorrow's is the exclusive upper edge — tomorrow's own day, not found.
 const CLIENT_MIDNIGHT_START = '00000000-0000-4000-8000-000000101009';
 const CLIENT_MIDNIGHT_END = '00000000-0000-4000-8000-000000101010';
+// window_end side of the overlap: starts yesterday 23:30 Dubai, ends
+// today 00:15 (a fixed 45-minute appointment) — no part of window_start
+// falls on today, only window_end does, so this is the case the
+// window_start-alone form would have missed.
+const CLIENT_CROSSES_MIDNIGHT = '00000000-0000-4000-8000-000000101011';
 const CLIENT_FOREIGN = IDS.clientB; // tenant B — never visible to a tenant A caller
 // Ends in six digits so its auto-derived mrn (seedClient: `MW-${id.slice(-6)}`)
 // satisfies app/api/sessions/schema.ts's ClientMrn pattern.
@@ -70,6 +75,13 @@ const CALLER_PRACTITIONER = MORE_IDS.practitionerA;
 // else" has a row to point at.
 const OTHER_PRACTITIONER_USER = '00000000-0000-4000-8000-000000107001';
 const OTHER_PRACTITIONER = '00000000-0000-4000-8000-000000107002';
+// A practitioner of its own for CLIENT_CROSSES_MIDNIGHT's appointment:
+// it would otherwise overlap APPT_MIDNIGHT_START on the caller's own
+// schedule (both hold [today 00:00, 00:15) busy), which the table's own
+// exclusion constraint refuses outright — a genuine double-booking, not
+// a fixture collision to work around by moving either time.
+const CROSSES_MIDNIGHT_PRACTITIONER_USER = '00000000-0000-4000-8000-000000107004';
+const CROSSES_MIDNIGHT_PRACTITIONER = '00000000-0000-4000-8000-000000107005';
 
 const APPT_ADULT = '00000000-0000-4000-8000-000000110001';
 const APPT_MINOR = '00000000-0000-4000-8000-000000110002';
@@ -81,6 +93,7 @@ const APPT_CANCELLED = '00000000-0000-4000-8000-000000110007';
 const APPT_OTHER_PRACTITIONER = '00000000-0000-4000-8000-000000110008';
 const APPT_MIDNIGHT_START = '00000000-0000-4000-8000-000000110009';
 const APPT_MIDNIGHT_END = '00000000-0000-4000-8000-000000110010';
+const APPT_CROSSES_MIDNIGHT = '00000000-0000-4000-8000-000000110011';
 
 let client: pg.Client;
 
@@ -105,6 +118,19 @@ beforeAll(async () => {
     roles: ['practitioner'],
   });
   await seedPractitioner(client, IDS.tenantA, OTHER_PRACTITIONER, OTHER_PRACTITIONER_USER);
+  await seedUser(client, {
+    id: CROSSES_MIDNIGHT_PRACTITIONER_USER,
+    tenantId: IDS.tenantA,
+    authId: null,
+    displayName: 'Synthetic Crosses Midnight Practitioner',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(
+    client,
+    IDS.tenantA,
+    CROSSES_MIDNIGHT_PRACTITIONER,
+    CROSSES_MIDNIGHT_PRACTITIONER_USER,
+  );
 
   await seedServiceType(client, IDS.tenantA, MORE_IDS.serviceTypeA, 'nf-session');
 
@@ -135,6 +161,7 @@ beforeAll(async () => {
   await seedClient(client, IDS.tenantA, CLIENT_OTHER_PRACTITIONER, IDS.ownerA, 'OtherPractitioner');
   await seedClient(client, IDS.tenantA, CLIENT_MIDNIGHT_START, IDS.ownerA, 'MidnightStart');
   await seedClient(client, IDS.tenantA, CLIENT_MIDNIGHT_END, IDS.ownerA, 'MidnightEnd');
+  await seedClient(client, IDS.tenantA, CLIENT_CROSSES_MIDNIGHT, IDS.ownerA, 'CrossesMidnight');
   await seedClient(client, IDS.tenantA, CLIENT_BY_MRN, IDS.ownerA, 'ByMrn');
 
   await seedClient(client, IDS.tenantB, CLIENT_FOREIGN, IDS.ownerB, 'Foreign');
@@ -263,6 +290,22 @@ beforeAll(async () => {
     locationId: IDS.locationA,
     windowStart: at(tomorrow, '00'),
   });
+  // The window_end side of the overlap: a fixed 45-minute appointment
+  // starting yesterday 23:30 Dubai ends today 00:15 — window_start is
+  // yesterday's date, so a window_start-only check would miss it, but
+  // its window genuinely overlaps today's [00:00, 00:15). A practitioner
+  // of its own (see CROSSES_MIDNIGHT_PRACTITIONER_USER's comment above):
+  // its busy window collides with APPT_MIDNIGHT_START's on the caller's
+  // own schedule.
+  await seedAppointment(client, {
+    id: APPT_CROSSES_MIDNIGHT,
+    tenantId: IDS.tenantA,
+    clientId: CLIENT_CROSSES_MIDNIGHT,
+    practitionerId: CROSSES_MIDNIGHT_PRACTITIONER,
+    serviceTypeId: MORE_IDS.serviceTypeA,
+    locationId: IDS.locationA,
+    windowStart: `${yesterday}T23:30:00+04:00`,
+  });
 
   await seedConsentDocument(client, IDS.tenantA, DOCUMENT);
 
@@ -329,17 +372,22 @@ afterAll(async () => {
   await client.end();
 });
 
-/** Runs `fn` as the caller's own practitioner user, inside asApiRole's savepoint. */
-async function asCaller<T>(fn: () => Promise<T>): Promise<T> {
+/** Runs `fn` as the given user's own practitioner, inside asApiRole's savepoint. */
+async function asActor<T>(userId: string, fn: () => Promise<T>): Promise<T> {
   return asApiRole(
     client,
     IDS.tenantA,
     async () => {
-      await client.query("select set_config('app.actor_id', $1, true)", [CALLER_USER]);
+      await client.query("select set_config('app.actor_id', $1, true)", [userId]);
       return fn();
     },
     'practitioner',
   );
+}
+
+/** Runs `fn` as the caller's own practitioner user, inside asApiRole's savepoint. */
+async function asCaller<T>(fn: () => Promise<T>): Promise<T> {
+  return asActor(CALLER_USER, fn);
 }
 
 describe('app.checkin_context', () => {
@@ -457,6 +505,16 @@ describe('app.checkin_context', () => {
         null,
       ]);
       expect(rows[0]).toMatchObject({ found: false, client_id: null });
+    });
+  });
+
+  it('finds an appointment that starts yesterday 23:30 Dubai and ends today 00:15 (the window_end side of the overlap)', async () => {
+    await asActor(CROSSES_MIDNIGHT_PRACTITIONER_USER, async () => {
+      const { rows } = await client.query('select * from app.checkin_context($1, $2)', [
+        CLIENT_CROSSES_MIDNIGHT,
+        null,
+      ]);
+      expect(rows[0]).toMatchObject({ found: true, client_id: CLIENT_CROSSES_MIDNIGHT });
     });
   });
 

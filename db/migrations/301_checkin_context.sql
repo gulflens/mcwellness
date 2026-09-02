@@ -100,18 +100,25 @@ as $$
   with today_dubai as (
     -- Local midnight today, and tomorrow's, as real instants (timestamptz),
     -- computed once so every comparison below reads the same "today" rather
-    -- than each re-deriving it from a fresh now(). date_trunc('day', now()
-    -- at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' is the standard
-    -- idiom for "local midnight, as a timestamptz": the first "at time
-    -- zone" reads now() as Dubai wall-clock time (a plain timestamp),
-    -- date_trunc floors it to midnight, and the second "at time zone"
-    -- reinterprets that floored wall-clock value back as an instant in
-    -- Dubai — never the server's own zone.
+    -- than each re-deriving it from a fresh now(). `today` is a plain date,
+    -- found via at time zone 'Asia/Dubai' (never the server's or session's
+    -- own zone); day_start and day_end are each derived from it by casting
+    -- back to timestamp and reinterpreting that in Dubai — the same
+    -- idiom, run twice, once for today's date and once for tomorrow's
+    -- (ordinary integer-day arithmetic on a date, never a calendar
+    -- interval added to a timestamptz). That second form matters:
+    -- `day_start + interval '1 day'` would ask Postgres to add a
+    -- calendar day to an instant, which it resolves through whichever
+    -- zone the *session's* TimeZone setting names, not 'Asia/Dubai' —
+    -- Asia/Dubai's own lack of DST is beside the point the moment the
+    -- session's zone has one. Computing day_end from `today + 1`
+    -- (a date) and only then converting to a timestamptz, explicitly in
+    -- Dubai, never touches the session's zone at all.
     select
-      (date_trunc('day', now() at time zone 'Asia/Dubai'))::date as today,
-      date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai' as day_start,
-      date_trunc('day', now() at time zone 'Asia/Dubai') at time zone 'Asia/Dubai'
-        + interval '1 day' as day_end
+      t.today,
+      t.today::timestamp at time zone 'Asia/Dubai' as day_start,
+      (t.today + 1)::timestamp at time zone 'Asia/Dubai' as day_end
+    from (select (date_trunc('day', now() at time zone 'Asia/Dubai'))::date as today) as t
   ),
   caller as (
     -- The caller's own practitioner row, resolved once: found never
