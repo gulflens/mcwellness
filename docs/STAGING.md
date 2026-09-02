@@ -86,6 +86,38 @@ so a hashed lookup would miss them. Nothing on staging reads them yet. The
 trunk reseeds staging before the first feature that does (a fresh render with
 `pnpm seed:sql` after the practice is cleared), and records it here.
 
+## What was done on 2026-09-03
+
+- **Caught up.** Staging had stopped at migration 096 while the trunk and
+  the four streams added nine more. The nine were applied one at a time
+  through Supabase's migration tool (097 to 099, 100, 200, 300, 301, 400,
+  900), the eleven policy files re-applied, and the bookkeeping rows
+  written, so `schema_migration` holds twenty-one rows. Fingerprinted
+  against a fresh local database: functions, constraints, indexes,
+  triggers, policies, row-level security and grants identical. One
+  cosmetic difference stands and is accepted: on staging the
+  `schema_migration.checksum` column was added by migration 900 (third
+  column, nullable) whereas a fresh local database is bootstrapped with it
+  second and not null. Nothing reads the column's position, and the runner
+  treats an empty checksum as a legacy row.
+- **A demo the owner can walk.** The owner's own account was given the
+  `lead_practitioner` role alongside owner, a practitioner row
+  (`00000005-0000-4000-8000-0000000000aa`), one neurofeedback credential
+  whose certificate number is the literal `STAGING-DEMO` (not a real
+  certificate; dates are placeholders), and one confirmed home visit on
+  2026-09-03 at 10:00 Dubai time with the synthetic client MW-000005 at
+  that client's seeded home. Every row was written under the owner's own
+  actor id with the reason "Staging demo set-up", so the audit trail names
+  it. The visit is only bookable to check in on its own day: the demo
+  needs a fresh visit row for any later day.
+- **How to walk it from another device.** On the laptop, build the app and
+  start the API with the staging settings and `HOST=0.0.0.0` so it serves
+  the built app on the local network (the development door stays closed
+  under staging settings, so binding beyond loopback is allowed); then
+  open the laptop's address on the same Wi-Fi from the iPad, sign in as
+  the owner through Supabase Auth, and go to "Check in": MW-000005,
+  neurofeedback session, home.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
