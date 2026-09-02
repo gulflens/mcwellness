@@ -22,6 +22,7 @@ import { mountAppointments } from './appointments/routes';
 import { mountTimeline } from './audit/timeline';
 import { mountBilling } from './billing/routes';
 import { mountClients } from './clients/list';
+import { mountClientRecord } from './clients/mount';
 import { mountDevSession, type DevSessionOptions } from './dev-session';
 import { mountSessions } from './sessions/checkin';
 
@@ -151,6 +152,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   });
 
   mountClients(api, deps.now);
+  mountClientRecord(api, deps.now);
   mountTimeline(api, deps.now);
   mountBilling(api, deps.now);
   mountAppointments(api, deps.now);

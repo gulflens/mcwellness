@@ -31,6 +31,8 @@ What follows are the requests still open.
 
 ## CR-03: mount `mountClientRecord` in `app/api/create-api.ts`
 
+**Applied** on the trunk in shared-zone round 8 (2026-09-03): the mount call sits between `mountClients` and `mountTimeline`, and `tests/db/route-mounts.test.ts` proves `GET /api/clients/:id` answers through `createApi` unassisted.
+
 **What.** One call, alongside the two already there:
 
 ```ts

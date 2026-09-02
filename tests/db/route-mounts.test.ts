@@ -6,19 +6,21 @@ import { createTokenVerifier } from '../../app/api/_middleware/token-verifier';
 import { createApi } from '../../app/api/create-api';
 import type { AppointmentListResponse } from '../../app/api/appointments/schema';
 import type { PricesResponse } from '../../app/api/billing/schema';
+import type { ClientRecordResponse } from '../../app/api/clients/record-schema';
 import { applySeed } from '../../db/seed/apply';
 import { generateSeed, SEED_TODAY } from '../../db/seed/generate';
 import { deriveIdentityKeys } from '../../domain/shared/identity';
 import { freshDatabase } from './helpers';
 
 /**
- * Proves that `createApi` (app/api/create-api.ts) actually mounts the three
+ * Proves that `createApi` (app/api/create-api.ts) actually mounts the four
  * routes the streams' own change requests asked for
- * (docs/CHANGE-REQUESTS/billing-01.md, scheduling-01.md, session-capture-01.md):
+ * (docs/CHANGE-REQUESTS/billing-01.md, scheduling-01.md, session-capture-01.md,
+ * client-record-01.md CR-03):
  * unlike each stream's own tests/<stream>/db suite, which mounts its routes
  * by hand on the instance createApi returns, this file calls createApi()
  * exactly as the server does and hits the routes it builds unassisted. If a
- * future edit ever drops one of the three mount calls, the route falls back
+ * future edit ever drops one of the four mount calls, the route falls back
  * to the catch-all 404 and one of the tests below fails loudly rather than
  * the gap passing silently.
  */
@@ -107,5 +109,17 @@ describe('POST /api/sessions/:id/events', () => {
     // reaching its own validation, not about a well-formed check-in.
     const res = await call('POST', `/api/sessions/${sessionId}/events`, authIdOf(0), {});
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/clients/:id', () => {
+  it("answers the seeded owner with the client's record, not the unmounted-route 404", async () => {
+    const client = data.clients[0];
+    if (!client) throw new Error('No seeded client.');
+    const res = await call('GET', `/api/clients/${client.id}`, authIdOf(0));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ClientRecordResponse;
+    expect(body.id).toBe(client.id);
+    expect(Array.isArray(body.contacts)).toBe(true);
   });
 });
