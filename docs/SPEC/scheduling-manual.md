@@ -83,4 +83,5 @@ Route solver, dispatch board, live tracking, client notifications, practitioner-
 - `checkConflicts` has a test for every blocking and warning rule, including buffer-overlap edge cases and a credential expiring mid-week.
 - On staging with synthetic data: place 25 appointments across 3 practitioners over a week by drag; the day map shows them; a deliberate double-booking is blocked; a 19-hour gap warns.
 - The practitioner "Today" screen renders offline from the last sync.
+- The day screen and the booking drawer show the coordinator only what they need to place a visit — window, names, practitioner, service, place, status — and never an identity number or a clinical note; a blocking refusal (credential, consent, inactive client) is never overridable from either screen, only the entitlement and session-spacing warnings in section 6 carry that override.
 - `pnpm verify` green; both review agents pass.
