@@ -201,6 +201,13 @@ export async function runMigrations(client: pg.Client): Promise<number> {
     // checksum could revert to null by some other route and quietly disarm
     // the guard for that one file, rather than the column itself refusing
     // the possibility outright.
+    //
+    // This is intended to break a pre-round-5 runner pointed at a database
+    // that has already reached this point: its own insert into
+    // schema_migration never supplied a checksum, so once the column is
+    // NOT NULL that insert fails outright rather than silently applying a
+    // migration with no checksum recorded for it — an old runner cannot
+    // quietly widen the gap the checksum guard exists to close.
     await client.query('alter table schema_migration alter column checksum set not null');
 
     return pending.length;

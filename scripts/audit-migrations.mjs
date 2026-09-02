@@ -1,14 +1,16 @@
-// Fails when a file under db/migrations that already exists on origin/main
-// has different text here (.claude/rules/data-model.md: "never edit a
-// merged migration"). db/migrations/900_migration_checksums.sql's checksum
-// column catches this too, but only against a database that has already
-// applied the file, and its own backfill re-baselines rather than refuses
-// for a file applied before that column existed (see that migration's own
-// comment, and .claude/rules/data-model.md). This script has no such gap:
-// it compares db/migrations directly against origin/main, for every
-// migration file, regardless of what any one database has or has not
-// applied. Runs in `pnpm verify` and in CI (.github/workflows/verify.yml),
-// the same way scripts/audit-secrets.mjs does.
+// Fails when a file db/migrations already has on origin/main is missing
+// locally, renamed, or has different text here (.claude/rules/data-model.md:
+// "never edit a merged migration"). db/migrations/900_migration_checksums.sql's
+// checksum column catches an edit too, but only against a database that has
+// already applied the file, and its own backfill re-baselines rather than
+// refuses for a file applied before that column existed (see that
+// migration's own comment, and .claude/rules/data-model.md). This script has
+// no such gap: it walks the migration files origin/main actually has — not
+// the ones present locally, so a merged file that this branch deleted or
+// renamed is caught too, not just one that was edited in place — and
+// compares each directly against db/migrations here. Runs in `pnpm verify`
+// and in CI (.github/workflows/verify.yml), the same way
+// scripts/audit-secrets.mjs does.
 //
 // The comparison target is origin/main when that ref resolves (a
 // best-effort `git fetch origin main` is tried first, so a shallow CI
@@ -19,7 +21,7 @@
 // there is nothing to compare against, rather than failing a check it has
 // no baseline to run.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 const MIGRATIONS_DIR = 'db/migrations';
 
@@ -76,40 +78,49 @@ function fileAt(commit, path) {
   }
 }
 
+/** Every db/migrations path the baseline commit actually has, not the working tree. */
+function upstreamMigrationPaths(commit) {
+  const listing = tryGit(['ls-tree', '-r', '--name-only', commit, '--', MIGRATIONS_DIR]) ?? '';
+  return listing.split('\n').filter(Boolean);
+}
+
 const baseline = resolveBaseline();
 if (baseline.commit === null) {
   console.log(`Migration audit: skipped (${baseline.note}).`);
   process.exit(0);
 }
 
-const names = readdirSync(MIGRATIONS_DIR).filter(
-  (name) => !name.startsWith('.') && name.endsWith('.sql'),
-);
+const upstreamPaths = upstreamMigrationPaths(baseline.commit);
 
 const offending = [];
-for (const name of names) {
-  const path = `${MIGRATIONS_DIR}/${name}`;
+for (const path of upstreamPaths) {
   const upstream = fileAt(baseline.commit, path);
   if (upstream === null) {
-    continue; // not on the baseline yet: not merged, free to edit
+    continue; // ls-tree just listed it; a race with the baseline is not our concern
   }
-  const current = readFileSync(path, 'utf8');
+  let current;
+  try {
+    current = readFileSync(path, 'utf8');
+  } catch {
+    offending.push(`${path} (missing locally — deleted or renamed)`);
+    continue;
+  }
   if (current !== upstream) {
-    offending.push(name);
+    offending.push(path);
   }
 }
 
 if (offending.length > 0) {
   console.error(
     `Migration audit: ${offending.length} merged migration file` +
-      `${offending.length === 1 ? '' : 's'} edited after merge ` +
+      `${offending.length === 1 ? '' : 's'} edited, deleted or renamed after merge ` +
       `(.claude/rules/data-model.md: "never edit a merged migration"), against ${baseline.commit}:`,
   );
-  for (const name of offending) console.error(`  ${name}`);
+  for (const path of offending) console.error(`  ${path}`);
   process.exit(1);
 }
 
 console.log(
-  `Migration audit: ${names.length} migration file${names.length === 1 ? '' : 's'} checked ` +
-    `against ${baseline.commit}, none edited after merge.`,
+  `Migration audit: ${upstreamPaths.length} migration file${upstreamPaths.length === 1 ? '' : 's'} ` +
+    `checked against ${baseline.commit}, none edited, deleted or renamed after merge.`,
 );
