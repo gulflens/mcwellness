@@ -4,6 +4,7 @@ import { ageOn, canActor, hasRole, isoDateIn } from '../../../domain/shared';
 import { logReads } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
+import { logRefused } from './refused';
 
 /**
  * GET /api/clients: the admin console's client table. The rule is checked here
@@ -16,6 +17,13 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { CLIENT_STATUSES as STATUSES, ClientListResponse, type ClientRow } from './schema';
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+
+// A single keystroke must never sweep the whole practice: a `q` shorter than
+// this is treated as absent (the unfiltered first page, as if `q` were never
+// sent) rather than searched. The page itself is capped the same way for the
+// same reason — one audit row per listed client, never per matching client.
+const MIN_SEARCH_LENGTH = 2;
+const PAGE_SIZE = 50;
 
 const Query = z.object({
   status: z.enum(STATUSES).optional(),
@@ -52,10 +60,16 @@ const SQL =
   "and ($2::text is null or c.mrn ilike $2 escape '\\' or c.given_name ilike $2 escape '\\' " +
   "or c.family_name ilike $2 escape '\\' or coalesce(c.given_name_ar, '') ilike $2 escape '\\' " +
   "or coalesce(c.family_name_ar, '') ilike $2 escape '\\') " +
-  'order by c.mrn';
+  // One row past the page size, so the route can tell whether more matched
+  // without a second, count-only query.
+  'order by c.mrn limit $4';
 
-function likePattern(q: string): string {
-  return `%${q.replace(/[\\%_]/g, '\\$&')}%`;
+function escapeLike(q: string): string {
+  return q.replace(/[\\%_]/g, '\\$&');
+}
+
+function likePattern(escaped: string): string {
+  return `%${escaped}%`;
 }
 
 export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -63,6 +77,10 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     const actor = c.get('actor');
     const requestId = c.get('requestId');
     if (!canActor(actor, { type: 'client.list' }, {}, now())) {
+      // A collection action: nothing here names a specific row (client-record.md
+      // section 9), so the request id stands in as the entity, the same convention
+      // POST /api/clients uses (issue 13, third review round).
+      await logRefused(c.get('db'), 'client', requestId, null);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const query = Query.safeParse(c.req.query());
@@ -74,15 +92,26 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance')) {
       return c.json(ClientListResponse.parse({ clients: [], note: 'schedule' }));
     }
+    // Below the minimum, the term is dropped rather than searched (see
+    // MIN_SEARCH_LENGTH above): the unfiltered first page comes back, same as
+    // when `q` is absent. Measured on the escaped form, not the raw one: a
+    // lone wildcard character (`%` or `_`) escapes to two characters and is
+    // never a sweep risk in the first place — escaped, it matches only that
+    // literal punctuation, not "everything" — so it still searches.
+    const escaped = query.data.q ? escapeLike(query.data.q) : null;
+    const search = escaped && escaped.length >= MIN_SEARCH_LENGTH ? escaped : null;
     const { rows } = await c
       .get('db')
       .query<Row>(SQL, [
         query.data.status ?? null,
-        query.data.q ? likePattern(query.data.q) : null,
+        search ? likePattern(search) : null,
         hasRole(actor, 'owner', 'lead_practitioner'),
+        PAGE_SIZE + 1,
       ]);
+    const truncated = rows.length > PAGE_SIZE;
+    const page = truncated ? rows.slice(0, PAGE_SIZE) : rows;
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
-    const clients: ClientRow[] = rows.map((r) => ({
+    const clients: ClientRow[] = page.map((r) => ({
       id: r.id,
       mrn: r.mrn,
       givenName: r.given_name,
@@ -103,6 +132,8 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
       clients.map((client) => ({ id: client.id, clientId: client.id })),
       'list',
     );
-    return c.json(ClientListResponse.parse({ clients, note: null }));
+    return c.json(
+      ClientListResponse.parse({ clients, note: null, ...(truncated ? { truncated: true } : {}) }),
+    );
   });
 }
