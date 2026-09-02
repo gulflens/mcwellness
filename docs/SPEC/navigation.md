@@ -1,6 +1,6 @@
 # Navigation & Driving — Field Operations Spec
 
-*How therapists actually get to the door. Dubai-specific throughout.*
+*How practitioners actually get to the door. Dubai-specific throughout.*
 
 ---
 
@@ -8,7 +8,7 @@
 
 Routing software assumes an address resolves to a door. In Dubai it doesn't. A pin dropped from "Villa 42, Arabian Ranches" lands at the community entrance, 1.4km and one security gate from the client. A tower in JLT has three entrances and the residential lobby isn't the one Google picks. New developments have street names that no map has yet.
 
-Your therapist is carrying an EEG kit, has a 4pm session, and is now driving in circles. That is 15 minutes of paid time, one late arrival, and a cascade through the rest of the day.
+Your practitioner is carrying an EEG kit, has a 4pm session, and is now driving in circles. That is 15 minutes of paid time, one late arrival, and a cascade through the rest of the day.
 
 **Three layers solve it:**
 
@@ -28,14 +28,14 @@ Dubai Municipality assigns every building entrance a unique 10-digit Makani numb
 type ClientLocation = {
   makaniNumber: string | null   // "30245 95127" — primary
   entrancePoint: LatLng          // resolved from Makani
-  parkingPoint: LatLng | null    // where the therapist actually stops
+  parkingPoint: LatLng | null    // where the practitioner actually stops
   communityGate: LatLng | null   // if gated
   displayAddress: string         // for humans
   emirate: 'DXB' | 'AUH' | 'SHJ' | ...
 }
 ```
 
-**Two coordinates, not one.** The entrance is where the client is. The parking point is where the car stops. In villa communities and towers these differ by several minutes of walking, and your route solver should be pathing to the parking point while your therapist's arrival instructions reference the entrance.
+**Two coordinates, not one.** The entrance is where the client is. The parking point is where the car stops. In villa communities and towers these differ by several minutes of walking, and your route solver should be pathing to the parking point while your practitioner's arrival instructions reference the entrance.
 
 **Capture Makani at booking.** Add it to the intake form with a "find my Makani" helper — the client can get it from the official Makani app in ten seconds, and most Dubai residents already know theirs. This single field will do more for your on-time rate than any routing algorithm.
 
@@ -58,12 +58,12 @@ Building entrance  which of three lobbies
 Floor & unit
 Lift               service lift required for equipment?
 Walk time          parking to door, in minutes — measured, not guessed
-Pets               relevant: a therapist allergic to cats needs to know
+Pets               relevant: a practitioner allergic to cats needs to know
 Best approach      "enter from Al Thanya St, the Umm Suqeim St gate is exit-only"
 Photos             gate, parking spot, front door
 ```
 
-**Capture it automatically.** After a first visit, the therapist app prompts once: *"Anything the next person should know about finding this place?"* One free-text box, one optional photo. Thirty seconds. That field feeds the structured record after admin review.
+**Capture it automatically.** After a first visit, the practitioner app prompts once: *"Anything the next person should know about finding this place?"* One free-text box, one optional photo. Thirty seconds. That field feeds the structured record after admin review.
 
 **Photos matter more than text.** A photo of the correct gate removes all ambiguity in a way that "the second gate on the left" never does.
 
@@ -88,12 +88,12 @@ The rate charged is **the rate at the moment the vehicle crosses the beam**, not
 
 ### Why this matters to your solver
 
-A therapist doing six home visits a day across Dubai might cross six to ten gates. At peak that's AED 63; off-peak AED 42. Over four therapists, twenty-two working days, the difference is **roughly AED 22,000 a year** — and that's before the fact that peak crossings coincide with the traffic that destroys your schedule anyway.
+A practitioner doing six home visits a day across Dubai might cross six to ten gates. At peak that's AED 63; off-peak AED 42. Over four practitioners, twenty-two working days, the difference is **roughly AED 22,000 a year** — and that's before the fact that peak crossings coincide with the traffic that destroys your schedule anyway.
 
 **Model Salik as a first-class cost term:**
 
 ```
-cost(leg) = driveMinutes × therapistCostPerMinute
+cost(leg) = driveMinutes × practitionerCostPerMinute
           + Σ salikRate(gate, crossingTime)
           + parkingCost(destination, arrivalTime)
 ```
@@ -102,7 +102,7 @@ Encode the ten gate locations and the tariff calendar (weekday/Sunday/Ramadan/pu
 
 **The optimisation this unlocks:** the solver will naturally learn to cluster after-school sessions within one side of the creek, and to schedule cross-city legs into the 10:00–16:00 window. That's a real margin improvement that falls out of correct cost modelling rather than clever heuristics.
 
-**Two therapist-cost realities to encode:** whether the therapist is on a company vehicle or reimbursed for their own, and whether Salik is billed to the company tag or reimbursed. These change the incentive and should change the cost weights.
+**Two practitioner-cost realities to encode:** whether the practitioner is on a company vehicle or reimbursed for their own, and whether Salik is billed to the company tag or reimbursed. These change the incentive and should change the cost weights.
 
 ### Parking
 
@@ -114,7 +114,7 @@ Dubai paid parking zones, RTA tariffs by zone and time, free periods (Sundays an
 
 **Do not build turn-by-turn navigation.** You will not beat Google or Waze, you'll be liable for the outcome if it's wrong, and it doubles your app's complexity. Hand off.
 
-**Hard rule: the app must be unusable while driving.** UAE law penalises phone use at the wheel severely, and your therapist is an employee driving on your instruction. Build for that:
+**Hard rule: the app must be unusable while driving.** UAE law penalises phone use at the wheel severely, and your practitioner is an employee driving on your instruction. Build for that:
 
 - **Motion lock.** When the device detects sustained vehicle-speed movement, the app collapses to a single full-screen card: next stop name, ETA, and one large "Navigate" button that hands off. Nothing else is reachable. No session notes, no client list, no messaging.
 - **Voice-only alerts.** Schedule changes en route are announced audibly. No notification requires a tap while moving.
@@ -122,7 +122,7 @@ Dubai paid parking zones, RTA tariffs by zone and time, free periods (Sundays an
 - **Handoff, not embed.** Tapping Navigate opens Google Maps, Waze or Apple Maps at the *parking point* with a deep link, and passes the Makani number in the label so it appears on the driver's screen.
 
 ```ts
-// Deep link to the parking point, labelled with what the therapist needs
+// Deep link to the parking point, labelled with what the practitioner needs
 `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` +
 `&travelmode=driving&dir_action=navigate`
 ```
@@ -141,12 +141,12 @@ Dubai paid parking zones, RTA tariffs by zone and time, free periods (Sundays an
 
 UAE clients have been trained by Careem and Talabat to expect live arrival tracking. Not offering it generates "where are you?" calls that cost your admin real time.
 
-**What to show:** therapist first name and photo, a live ETA, and a map showing approach — but a coarse position, updating every 30–60 seconds. Not a precise real-time dot. Your therapist is an employee, not a delivery driver, and second-by-second tracking of a clinician into a family home is the wrong relationship.
+**What to show:** practitioner first name and photo, a live ETA, and a map showing approach — but a coarse position, updating every 30–60 seconds. Not a precise real-time dot. Your practitioner is an employee, not a delivery driver, and second-by-second tracking of a practitioner into a family home is the wrong relationship.
 
 **Automated messages via WhatsApp** (the default channel in the UAE, not email):
 
 - Evening before: confirmation with tomorrow's window.
-- On departure: "Sara is on her way, arriving around 4:15."
+- On departure: "Your practitioner is on her way, arriving around 4:15."
 - If ETA slips more than 10 minutes: proactive update with the new time. Automatic, before the client notices.
 - On completion: session logged, report ready when applicable.
 
@@ -156,11 +156,11 @@ The proactive delay message is the single highest-value automation in this modul
 
 ## 7. Offline
 
-Coverage in Dubai is excellent, but underground parking, lifts, and villa interiors with thick walls all drop signal — and that's exactly where your therapist is standing when they need the day's route.
+Coverage in Dubai is excellent, but underground parking, lifts, and villa interiors with thick walls all drop signal — and that's exactly where your practitioner is standing when they need the day's route.
 
 **Pre-cache at start of shift:** the full day's stops with coordinates, arrival intelligence, photos, and client briefs. Everything needed for the whole day, downloaded once.
 
-**Queue outbound:** check-ins, session records, notes and photos write locally and sync when signal returns. The therapist should never see a spinner.
+**Queue outbound:** check-ins, session records, notes and photos write locally and sync when signal returns. The practitioner should never see a spinner.
 
 **Show sync state calmly.** A quiet persistent indicator, not a red error. Working offline is normal.
 
@@ -201,9 +201,9 @@ type VisitRecord = {
 
 ## 9. Build sequence
 
-**Phase 1 — no solver.** Makani capture at intake, entrance and parking points, arrival intelligence fields, manual assignment on a map, deep-link handoff to Google Maps, motion lock, check-in/out, WhatsApp ETA messages. With three therapists this is entirely sufficient and it starts accumulating the arrival data the solver will later need.
+**Phase 1 — no solver.** Makani capture at intake, entrance and parking points, arrival intelligence fields, manual assignment on a map, deep-link handoff to Google Maps, motion lock, check-in/out, WhatsApp ETA messages. With three practitioners this is entirely sufficient and it starts accumulating the arrival data the solver will later need.
 
-**Phase 2 — the solver.** OR-Tools VRPTW with the full cost model: drive time, Salik by crossing window, parking, walk overhead, plus the constraints from the market study (licence scope, certification, prayer times, Ramadan hours, clinical session spacing, kit location, therapist continuity). Nightly solve, incremental re-solve on disruption. Dispatch board with live status.
+**Phase 2 — the solver.** OR-Tools VRPTW with the full cost model: drive time, Salik by crossing window, parking, walk overhead, plus the constraints from the market study (certification, prayer times, Ramadan hours, session spacing, kit location, practitioner continuity). Nightly solve, incremental re-solve on disruption. Dispatch board with live status.
 
 **Phase 3 — calibration.** Replace Google's estimates with your own measured drive times per corridor per time-of-day. Predictive delay alerting. Demand heat maps to decide where hub two goes.
 
@@ -212,5 +212,5 @@ type VisitRecord = {
 ## 10. Three decisions to make now
 
 1. **Company vehicles or personal cars with reimbursement?** Changes your Salik accounting, your insurance, your cost model, and whether you can standardise kit storage in the boot. Company vehicles are more expensive and much simpler.
-2. **How much live tracking do you promise clients?** Coarse ETA is the right answer, but decide it explicitly and write it into both your client-facing copy and your therapist contracts before you build it.
+2. **How much live tracking do you promise clients?** Coarse ETA is the right answer, but decide it explicitly and write it into both your client-facing copy and your practitioner contracts before you build it.
 3. **What's your on-time commitment?** "Within a 30-minute window" is achievable in Dubai traffic with good buffering. "At 4:00" is not, and promising it will make you look worse than promising the window.

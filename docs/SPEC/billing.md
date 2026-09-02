@@ -25,7 +25,7 @@ type Entitlement = {
   sourceType: 'package' | 'single' | 'insurance' | 'complimentary'
   sourceId: string               // the ClientPackage or Invoice that created it
   allocatedValueAed: number      // see §4 — NOT the list price
-  vatTreatment: 'zero' | 'standard'
+  vatTreatment: 'standard'         // every service, see §5
   status: 'available' | 'consumed' | 'expired' | 'refunded'
   consumedBySessionId: string | null
   expiresAt: Date | null
@@ -45,7 +45,6 @@ type ServiceType = {
   code: 'nf-session' | 'brain-map' | 'consultation' | 'cpt-test' | ...
   name: string
   durationMinutes: number
-  isClinical: boolean            // drives VAT — see §5
   requiresCertification: string  // credential gate
 }
 ```
@@ -82,7 +81,7 @@ Three deliberate choices in there:
 | **Card, upfront** | Package purchase | Immediately | Full amount, becomes a liability |
 | **BNPL — Tabby / Tamara** | Packages | **Immediately, net of fee** | The important one — see below |
 | **Bank transfer** | Corporate, large packages | 1–3 days | Needs manual matching |
-| **Cash** | Minority of home clients | At the door | Receipt at door, therapist reconciliation next morning |
+| **Cash** | Minority of home clients | At the door | Receipt at door, practitioner reconciliation next morning |
 
 ### BNPL is the conversion lever
 
@@ -156,7 +155,7 @@ Refund due                              11,100
 
 They lose the volume discount on what they consumed, which is exactly what a volume discount means. State it plainly in the T&Cs at point of sale, show the number in the portal, and let the system compute it.
 
-**Expiry.** 12 months from purchase is reasonable and standard. Be conservative here — aggressive expiry on prepaid healthcare invites both consumer-protection scrutiny and bad reviews. Warn at 60 and 30 days, and allow a documented extension for medical reasons.
+**Expiry.** 12 months from purchase is reasonable and standard. Be conservative here — aggressive expiry on prepaid programmes invites both consumer-protection scrutiny and bad reviews. Warn at 60 and 30 days, and allow a documented extension for good reason.
 
 **Late cancellation and no-show.** Under 24 hours consumes the entitlement. This is standard practice and it must be automatic, because a solo operator will not enforce it manually. Give the coordinator a one-click waiver with a reason field.
 
@@ -185,34 +184,27 @@ BNPL settlement (fee 5.5%):
 
 ## 5. VAT
 
-### 5.1 Classification is per line, derived from the clinical record
+### 5.1 Every service is standard-rated
 
-From the market study: qualifying healthcare supplied **to the patient** is zero-rated with full input VAT recovery; wellness services and B2B supplies where the recipient isn't the patient are standard-rated at 5%.
+McWellness is a wellness business, not a licensed healthcare provider (founder's determination, 2026-09-02), so the healthcare zero-rating does not apply. Every service and package is standard-rated at 5%, whoever pays. The tax advisor confirms this in writing before the first invoice.
+
+The rule that survives the change: **nobody types the rate.** It is computed per line from the standard-rate setting, stored on the line with the version of the setting that produced it, and immutable on an issued invoice. If the rate ever changes, the setting changes and history keeps its snapshots.
 
 ```ts
-function resolveVat(line: InvoiceLine, ctx: ClinicalContext): VatTreatment {
-  if (ctx.recipientType !== 'patient') return 'standard'  // corporate billing
-  if (!line.serviceType.isClinical)   return 'standard'   // performance/wellness
-  if (!ctx.hasCodedDiagnosis)         return 'standard'   // no documented condition
-  if (ctx.reportPurpose === 'school' || ctx.reportPurpose === 'immigration')
-                                       return 'standard'
-  return 'zero'
+function resolveVat(line: InvoiceLine, settings: VatSettings): VatTreatment {
+  return { treatment: 'standard', rateBasisPoints: settings.standardRateBasisPoints, settingVersion: settings.version }
 }
 ```
 
-**Never let an admin pick the VAT rate.** It is computed, stored with a reference to the clinical evidence that justified it, and immutable on the issued invoice. The FTA audits by comparing patient files against invoices — your defence is that the invoice was *derived from* the file.
+Register once taxable supplies exceed AED 375,000. File quarterly within 28 days. Keep records five years, which is also the retention period for client records.
 
-Register once taxable supplies exceed AED 375,000 (zero-rated supplies count toward the threshold). File quarterly within 28 days. Keep records five years — separate from and shorter than the 25-year clinical retention.
+### 5.2 Packages
 
-### 5.2 The mixed package problem
-
-If a package contains both zero-rated clinical sessions and a standard-rated component (a performance-coaching add-on, say), the invoice must split VAT per component using the same allocation from §4.2. Design for it now even if v1 sells only clinical packages.
+A package's components carry the same treatment, so the allocation from §4.2 needs no VAT split today. The per-line structure stays: if a future component is ever treated differently, the split is a data change, not a schema change.
 
 ### 5.3 The question for your tax advisor
 
-**Tax point on prepaid packages.** For a package paid in January and delivered through May, when is VAT due — at payment, or as each session is delivered? UAE VAT generally sets the tax point at the earlier of payment or invoice, which would mean VAT falls due on the full package at sale even though revenue is recognised over months. For a wholly zero-rated package this is immaterial. For any package with standard-rated components it is a real cash-timing question.
-
-Take this to a UAE tax advisor with the specific fact pattern, get the answer in writing, and encode it. Do not guess, and do not let me guess for you.
+**Tax point on prepaid packages.** For a package paid in January and delivered through May, when is VAT due — at payment, or as each session is delivered? UAE VAT generally sets the tax point at the earlier of payment or invoice, which would mean VAT falls due on the full package at sale even though revenue is recognised over months. Take this to a UAE tax advisor with the specific fact pattern, get the answer in writing, and encode it. Do not guess.
 
 ### 5.4 E-invoicing
 
@@ -226,7 +218,7 @@ The tedious part that breaks quietly if you skip it.
 
 **Gateway settlements arrive net and batched.** A Tuesday settlement of AED 42,317.50 covers eleven transactions minus fees. You need `SettlementBatch → Payment → Invoice` matching, with an exception queue for anything that doesn't tie out.
 
-**Cash at the door** needs a two-step: therapist records collection in the app, then reconciles physical cash at the hub next morning. Any variance is flagged. This is a genuine fraud and loss vector in home-service businesses.
+**Cash at the door** needs a two-step: practitioner records collection in the app, then reconciles physical cash at the hub next morning. Any variance is flagged. This is a genuine fraud and loss vector in home-service businesses.
 
 **Bank transfers** need reference matching with a manual fallback — clients will pay without the reference every time.
 
@@ -250,8 +242,8 @@ Post journals nightly, batched, idempotent, with a reconciliation report proving
 1300  Gateway clearing
 2400  Contract liability (deferred revenue)   ← the important one
 2500  VAT payable
-4000  Service revenue — clinical (zero-rated)
-4100  Service revenue — wellness (standard)
+4000  Service revenue — sessions (standard-rated)
+4100  Service revenue — assessments and reports (standard-rated)
 4200  Service revenue — corporate
 5000  Payment processing fees
 5100  Refunds and credits

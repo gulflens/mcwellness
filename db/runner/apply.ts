@@ -1,10 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
-import { hasRollbackBlock, listMigrationFiles, planMigrations } from './plan';
+import { hasRollbackBlock, listMigrationFiles, listPolicyFiles, planMigrations } from './plan';
 
 /** The I/O half of the migration runner. The rules live in ./plan.ts. */
 
 const MIGRATIONS_DIR = new URL('../migrations/', import.meta.url);
+const POLICIES_DIR = new URL('../policies/', import.meta.url);
 const LOCK_KEY = "hashtext('mcwellness:migrate')";
 
 /** Reads DATABASE_URL, with a plain-language message when it is missing. */
@@ -41,6 +43,19 @@ export async function connect(url: string): Promise<pg.Client> {
 }
 
 /**
+ * Stamps the audit context for work the runner does itself, transaction-local
+ * (docs/SPEC/audit.md section 5). The actor stays unset, so anything a data
+ * migration writes to an audited table is logged as a system action, with the
+ * file named as the reason.
+ */
+async function setAuditContext(client: pg.Client, reason: string): Promise<void> {
+  await client.query(
+    "select set_config('app.reason', $1, true), set_config('app.request_id', $2, true)",
+    [reason, randomUUID()],
+  );
+}
+
+/**
  * Applies every pending migration, each inside its own transaction, and
  * records it in schema_migration. Returns how many were applied.
  */
@@ -73,6 +88,7 @@ export async function runMigrations(client: pg.Client): Promise<number> {
       }
       await client.query('begin');
       try {
+        await setAuditContext(client, `migration ${file.filename}`);
         await client.query(sql);
         await client.query('insert into schema_migration (filename) values ($1)', [file.filename]);
         await client.query('commit');
@@ -92,4 +108,62 @@ export async function runMigrations(client: pg.Client): Promise<number> {
   } finally {
     await client.query(`select pg_advisory_unlock(${LOCK_KEY})`);
   }
+}
+
+/**
+ * Re-applies every policy file under db/policies, in path order, inside one
+ * transaction. Policy files are declarative and idempotent (drop if exists,
+ * then create), so this runs on every migrate and a policy change never needs
+ * a migration. Returns how many files were applied.
+ */
+export async function applyPolicies(client: pg.Client): Promise<number> {
+  const files = listPolicyFiles(await readdir(POLICIES_DIR, { recursive: true }));
+  if (files.length === 0) {
+    return 0;
+  }
+  await client.query('begin');
+  try {
+    await setAuditContext(client, 'policies');
+    for (const file of files) {
+      const sql = await readFile(new URL(file, POLICIES_DIR), 'utf8');
+      try {
+        await client.query(sql);
+      } catch (error) {
+        throw new Error(`policy file ${file} failed: ${(error as Error).message}`, {
+          cause: error,
+        });
+      }
+    }
+    await client.query('commit');
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  }
+  return files.length;
+}
+
+/**
+ * Drops and recreates the public and app schemas. Callers must have checked
+ * that the database is local first (db/reset.ts does; tests use the same guard).
+ */
+export async function resetDatabase(client: pg.Client): Promise<void> {
+  await client.query(
+    'drop schema if exists public cascade; ' +
+      'drop schema if exists app cascade; ' +
+      'create schema public; ' +
+      'grant usage on schema public to public; ' +
+      "comment on schema public is 'standard public schema';",
+  );
+}
+
+/** Formats the migrate summary line. */
+export function describeApplied(migrations: number, policies: number): string {
+  const first =
+    migrations === 0 ? 'nothing to apply' : `applied ${migrations} migration${plural(migrations)}`;
+  const second = policies === 0 ? '' : `, ${policies} policy file${plural(policies)} applied`;
+  return first + second;
+}
+
+function plural(count: number): string {
+  return count === 1 ? '' : 's';
 }

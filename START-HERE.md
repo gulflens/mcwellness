@@ -5,10 +5,9 @@ You are non-technical and solo. This folder is the brief. Claude Code is the bui
 ## Before opening Claude Code (about one day)
 1. Create an empty GitHub repository called `mcwellness`. Clone it to your computer.
 2. Copy everything in this folder into that clone (including the hidden `.claude`, `.gitignore`, `.worktreeinclude`, `.env.example`). Commit and push: "chore: starter brief".
-3. Create a Supabase Cloud project (Pro). This is STAGING — synthetic data only. Note the URL and keys.
+3. Create a Supabase Cloud project. This is STAGING — synthetic data only. Note the URL and keys.
 4. Install Docker Desktop. Install Claude Code in the Claude desktop app.
 5. Copy `.env.example` to `.env` and fill in the Supabase staging values. Never put anything from production in this file.
-6. Send DHA the written question: which of our activities generate NABIDH-reportable encounters, and by what date must we be submitting?
 
 ## First Claude Code session
 7. Open Claude Code in the `mcwellness` folder. Run it once to accept the trust prompt.

@@ -6,17 +6,17 @@
 
 ## 1. The brief
 
-**Subject.** Clinical neurofeedback delivered in people's homes across Dubai. EEG sensors on a scalp, a therapist in a family's living room, a 20–40 session program measured in brainwave frequency bands.
+**Subject.** Neurofeedback training delivered in people's homes across Dubai. EEG sensors on a scalp, a practitioner in a family's living room, a 20–40 session program measured in brainwave frequency bands.
 
 **Three audiences, three very different rooms:**
 
-- A **parent** on their phone at 11pm wanting to know whether their nine-year-old is actually improving. Anxious. Not clinical. Needs reassurance grounded in evidence, not a dashboard.
-- A **therapist** standing in a stranger's living room, phone in one hand, electrode paste on the other. Possibly dim light. Possibly a child climbing on them. Needs large targets, high contrast, zero ambiguity.
-- A **clinical lead and admin team** on desktop, dense data, many clients, long sessions. Needs information density without fatigue.
+- A **parent** on their phone at 11pm wanting to know whether their nine-year-old is actually improving. Anxious. Not technical. Needs reassurance grounded in evidence, not a dashboard.
+- A **practitioner** standing in a stranger's living room, phone in one hand, electrode paste on the other. Possibly dim light. Possibly a child climbing on them. Needs large targets, high contrast, zero ambiguity.
+- A **lead practitioner and admin team** on desktop, dense data, many clients, long sessions. Needs information density without fatigue.
 
-**The primary job:** make invisible neurological change visible and trustworthy.
+**The primary job:** make invisible change visible and trustworthy.
 
-**What this is not:** a wellness app, a meditation app, or a SaaS dashboard. Two of your competitors position as "holistic centres." Your visual language should read as *measurement* — closer to a good laboratory instrument than to a spa.
+**What this is not:** a meditation app or a SaaS dashboard. McWellness is a wellness business, and two of its competitors position as "holistic centres"; its visual language should still read as *measurement* — closer to a good laboratory instrument than to a spa.
 
 ---
 
@@ -24,7 +24,7 @@
 
 > **Colour is signal. The interface is silent.**
 
-The interface chrome is achromatic — ink, paper, slate, rule. Colour appears only where it carries clinical meaning. When a colour shows up on screen, it means something specific, always the same thing, on every surface.
+The interface chrome is achromatic — ink, paper, slate, rule. Colour appears only where it carries meaning from the data. When a colour shows up on screen, it means something specific, always the same thing, on every surface.
 
 This is the decision that makes the whole system feel designed rather than decorated, and it is enforceable in code (Section 8).
 
@@ -34,7 +34,7 @@ This is the decision that makes the whole system feel designed rather than decor
 
 ### 3.1 The band spectrum — the only source of hue
 
-The five EEG frequency bands, ordered slow to fast, mapped to a cool-to-warm temperature ramp. Slow waves are cool; fast waves are warm. Clinically meaningful, immediately learnable, and it comes from the subject matter rather than from a palette generator.
+The five EEG frequency bands, ordered slow to fast, mapped to a cool-to-warm temperature ramp. Slow waves are cool; fast waves are warm. Meaningful, immediately learnable, and it comes from the subject matter rather than from a palette generator.
 
 | Band | Hz | Hex | Meaning in UI |
 |---|---|---|---|
@@ -73,7 +73,7 @@ Three, and they are deliberately desaturated so they never compete with band dat
 
 ### 3.4 Dark mode is functional, not optional
 
-The therapist app ships dark-first. Home visits happen in evenings, in dim living rooms, often with a child who has just had a session and doesn't need a phone flashlight in their face. Ink and paper invert; band hues shift up ~12% lightness to hold contrast on dark ground.
+The practitioner app ships dark-first. Home visits happen in evenings, in dim living rooms, often with a child who has just had a session and doesn't need a phone flashlight in their face. Ink and paper invert; band hues shift up ~12% lightness to hold contrast on dark ground.
 
 ---
 
@@ -110,11 +110,11 @@ small    14 / 22   weight 400
 micro    13 / 18   weight 500   (metadata, never all-caps)
 ```
 
-**Therapist app overrides:** every step up one size, minimum tap target 48px, minimum body 17px. Someone reading this at arm's length in bad light is not the same user as someone at a desk.
+**Practitioner app overrides:** every step up one size, minimum tap target 48px, minimum body 17px. Someone reading this at arm's length in bad light is not the same user as someone at a desk.
 
 ### 4.4 Numbers
 
-Clinical data uses the family's **tabular lining figures**, not a monospace face. Monospace for small data labels is a generated-design tell, and tabular figures in a well-drawn sans align better and read cleaner in tables anyway. Enable `font-feature-settings: "tnum" 1` on every numeric cell.
+Measurement data uses the family's **tabular lining figures**, not a monospace face. Monospace for small data labels is a generated-design tell, and tabular figures in a well-drawn sans align better and read cleaner in tables anyway. Enable `font-feature-settings: "tnum" 1` on every numeric cell.
 
 ### 4.5 Typographic prohibitions
 
@@ -145,7 +145,7 @@ A neurofeedback program is 20–40 sessions over 3–6 months, and the single ha
 
 **Where it appears:**
 - Client app — the home screen. It *is* the home screen.
-- Admin console — one ribbon per client row, so the clinical lead scans 40 clients' trajectories in one screen.
+- Admin console — one ribbon per client row, so the lead practitioner scans 40 clients' trajectories in one screen.
 - PDF report — the cover figure.
 
 One idea, three surfaces, instantly recognisable as yours. Everything around it stays quiet.
@@ -154,13 +154,13 @@ One idea, three surfaces, instantly recognisable as yours. Everything around it 
 
 ## 6. Layout, per surface
 
-### 6.1 Therapist app — "the instrument"
+### 6.1 Practitioner app — "the instrument"
 
 Dark ground. Single column, no nesting, one decision per screen. The session runner is full-bleed: signal quality as a single large indicator, elapsed time, and one primary action. No navigation chrome during a session.
 
 ```
 ┌──────────────────────────┐
-│  Layla H.        14:32   │
+│  Client L.        14:32   │
 │  Session 12 of 30        │
 ├──────────────────────────┤
 │                          │
@@ -182,17 +182,17 @@ Light ground, high density, **tables not cards.** Cards are for heterogeneous co
 
 Structure: fixed left rail (icon + label, no collapse toggle), content area with sticky table headers, right-side detail drawer rather than modal dialogs. Row height 44px. Zebra striping off; use hairline rules at `--rule`.
 
-The dispatch map is the one full-bleed screen — map fills the viewport, therapist list overlays left, no chrome competing with it.
+The dispatch map is the one full-bleed screen — map fills the viewport, practitioner list overlays left, no chrome competing with it.
 
 ### 6.3 Client app and portal — "the record"
 
 Calm, generous, low density. Ribbon at top, then plain-language progress. Editorial rhythm, not dashboard rhythm.
 
-**Copy tone matters as much as layout here.** "Your focus scores have improved steadily since session 8" — not "Beta/Theta ratio: +14.2%." The clinical number is available on tap; the plain sentence is the default.
+**Copy tone matters as much as layout here.** "Your focus scores have improved steadily since session 8" — not "Beta/Theta ratio: +14.2%." The measurement is available on tap; the plain sentence is the default.
 
 ### 6.4 The report — the highest-stakes surface
 
-This PDF goes to schools, psychiatrists and insurers. It circulates. It is your best marketing asset and it should be typeset like a scientific journal, not exported like a dashboard screenshot.
+This PDF goes to schools, coaches and whoever the family chooses. It circulates. It is your best marketing asset and it should be typeset like a scientific journal, not exported like a dashboard screenshot.
 
 Single column, 68-character measure, generous margins, figures on a strict grid, the ribbon as cover, tabular figures throughout, page furniture minimal. Arabic edition is a genuine RTL layout — mirrored grid, Arabic numerals where appropriate, correct heading hierarchy — not a flipped English template.
 
@@ -249,8 +249,8 @@ Do not ask for "a nice dashboard." Give it the brief and a specific room:
 ```
 Read docs/DESIGN-BRIEF.md and .claude/skills/frontend-design.
 
-Build the therapist session runner screen (apps/therapist).
-Context: a therapist is standing in a client's living room, dim evening
+Build the practitioner session runner screen (apps/practitioner).
+Context: a practitioner is standing in a client's living room, dim evening
 light, phone in one hand, running session 12 of 30 for a 9-year-old.
 They need to see signal quality and elapsed time at arm's length, and
 end the session with one thumb.
@@ -268,6 +268,6 @@ That last instruction is the one that does the work. Asking it to identify its o
 ## 10. What to decide before anything gets built
 
 1. **Font licence.** Greta Sans + Greta Arabic, or IBM Plex. This blocks everything else and needs a real decision, including budget for the report's print use.
-2. **Band colour ramp.** Show the five hexes to your clinical lead. If your team already associates specific colours with bands from your EEG hardware's software, match theirs — clinical muscle memory beats aesthetic preference.
+2. **Band colour ramp.** Show the five hexes to your lead practitioner. If your team already associates specific colours with bands from your EEG hardware's software, match theirs — muscle memory beats aesthetic preference.
 3. **Does the ribbon actually work?** Sketch it with real data from ten of your sessions before committing. If session quality doesn't vary enough to make an interesting shape, the idea fails and needs replacing.
 4. **Arabic scope for v1.** Full bilingual product, or English product with Arabic reports? The second is much cheaper and covers the highest-value case.

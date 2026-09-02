@@ -1,36 +1,36 @@
 # SPEC — Client Record
 
-*Worktree: `client-record`. Entities: `client`, `contact`, `location`, `consent`, `document`, `diagnosis`, `erasure_request` — defined in `00-data-model.md`. This spec defines behaviour, not schema.*
+*Worktree: `client-record`. Entities: `client`, `contact`, `location`, `consent`, `document`, `goal`, `erasure_request` — defined in `00-data-model.md`. This spec defines behaviour, not schema.*
 
 ---
 
 ## 1. Purpose
 
-One record per client from first enquiry to discharge. Everything else in the system hangs off it. It must be correct, coded, and consent-complete before a session can be scheduled.
+One record per client from first enquiry to close. Everything else in the system hangs off it. It must be correct, coded, and consent-complete before a session can be scheduled.
 
 ## 2. Who uses it
 
 | Role | Can |
 |---|---|
 | `admin` | Create, edit demographics/contacts/locations, upload documents, record consent, view all |
-| `clinical_lead` | All of the above, plus add/resolve diagnoses, view locked records |
+| `lead_practitioner` | All of the above, plus set and close goals, view erased records |
 | `practitioner` | Read the client brief for clients on their schedule only; add access notes to a location |
-| `finance` | Read demographics and contacts; no clinical fields |
+| `finance` | Read demographics and contacts; no goals or session data |
 | `client_contact` | Read own client's demographics; update own contact details (portal, Stage 2) |
 
 ## 3. Lifecycle
 
 ```
 lead ──► active ──► paused ──► active
-              └──► discharged
-any ──► locked   (erasure request)
+              └──► closed
+any ──► erased   (erasure request)
 ```
 
-- `lead`: created from an enquiry. Minimum: one name, one contact phone. No clinical data allowed on a lead.
-- `lead → active` requires: Emirates ID captured and valid, date of birth, at least one `location` with verified coordinate, `treatment` consent active (plus `minor_treatment` if under 18, plus `home_visit` if any home delivery).
+- `lead`: created from an enquiry. Minimum: one name, one contact phone. No goals or session data on a lead.
+- `lead → active` requires: date of birth, at least one `location` with verified coordinate, `participation` consent active (plus `minor_participation` if under 18, plus `home_visit` if any home delivery). Emirates ID is optional and never required.
 - `active → paused`: no scheduling allowed; entitlements don't expire while paused (see FINANCE).
-- `discharged`: read-only except documents. Reactivation creates an audit event with reason.
-- `locked`: see §8.
+- `closed`: read-only except documents. Reactivation creates an audit event with reason.
+- `erased`: see §8.
 
 ## 4. Screens (admin)
 
@@ -41,57 +41,59 @@ any ──► locked   (erasure request)
 - **Contacts** — list with relationship flags; one must be `can_consent` before activation
 - **Locations** — list; each shows Makani, verified pin, parking pin, gate pin, access notes; "verify pin" opens a map to drag the marker
 - **Consent** — every purpose with status, version, who gave it, when; record new consent; withdraw with reason
-- **Clinical** — diagnoses (ICD-10 picker with search), allergies (free text beside SNOMED where possible), referring clinician
+- **Goals** — the client's goals and concerns (category from the owner-editable list, free text beside it), current wellbeing notes, who referred them
 - **Documents** — upload, preview, kind, retention date shown
 - **Timeline** — the audit record for this client in plain language (AUDIT-SPEC §9.1)
 
-**4.3 Intake wizard.** Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → clinical intake (diagnoses, referral, current medication as free text) → consent capture → summary. Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
+**4.3 Intake wizard.** Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → goals (goals and concerns, referral) → consent capture → summary. Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
 
 ## 5. Rules (each is a pure function in `domain/client`, each has tests)
 
 1. `canActivate(client)` → `{ ok, missing[] }` — the §3 gate.
 2. `isMinor(dateOfBirth, atDate)` — under 18.
 3. `requiredConsents(client, deliveryModes)` → purposes that must be active.
-4. `validateEmiratesId(raw)` — 15 digits, starts `784`, checksum valid, expiry not past. Returns normalised form.
+4. `validateEmiratesId(raw)` — 15 digits, starts `784`, checksum valid, expiry not past. Returns normalised form. Only when one is captured; never required.
 5. `mrn.next(tenant)` — `MW-000001`, sequential per tenant, never reused.
-6. `canViewClient(actor, client)` — role + credential + schedule-based visibility for practitioners + locked handling.
-7. `computeRetentionUntil(lastClinicalActivityAt)` — +25 years.
+6. `canViewClient(actor, client)` — role + credential + schedule-based visibility for practitioners + erased handling.
+7. `computeRetentionUntil(lastActivityAt)` — +5 years.
 
 ## 6. Coded fields
 
-- Diagnoses: ICD-10-CM, searchable picker, code stored, description denormalised.
-- Nationality: ISO 3166-1 alpha-3.
+- Goals: category from the owner-editable reference table, description beside it.
 - Relationship, consent purpose, location label, status: enums from the data model.
-- Free text always sits beside a code, never instead of one. The picker must not allow a blank code.
+- Free text always sits beside a typed field, never instead of one.
 
 ## 7. Consent capture
 
 - Consent wording is a versioned `document` per purpose and locale. Recording consent stores the exact document version shown.
 - Method `app_signature`: draw signature on screen → PNG → `document`, hash stored.
 - Method `paper_scan`: upload photo of signed form.
-- Method `verbal_witnessed`: practitioner records, second staff member confirms; allowed only for `home_visit` re-confirmation, never for initial `treatment`.
+- Method `verbal_witnessed`: practitioner records, second staff member confirms; allowed only for `home_visit` re-confirmation, never for initial `participation`.
 - Withdrawal: reason required, immediate effect, existing sessions in progress complete, future appointments cancelled with notification (Stage 2).
 
 ## 8. Erasure request
 
 Admin action "Record erasure request" → reason, requested by (contact), date. System then:
-1. Erases: `contact.email/phone/whatsapp_opt_in` for non-guardian contacts, marketing flags, portal user account, `document.kind = 'setup_photo'`, `referral_source`.
-2. Locks: `client.status = 'locked'`. Excluded from all lists, searches, schedules, reports. Visible only to `clinical_lead` via a dedicated "Locked records" screen with reason prompt on open.
-3. Writes `erasure_request` with what was erased and what was locked.
-4. Generates a confirmation letter (Stage 2 template) for the contact.
+1. Runs `app.erase_client(client_id, request_id)` as the owner (the API role never deletes), inside one transaction that sets `app.erasure = 'true'` so every audit row it writes keeps field names and withholds values: names and Arabic names become "Erased client"; date of birth, sex, the Emirates ID columns and referral source are nulled; `contact.phone/email/whatsapp_opt_in` are nulled and the portal user account removed; each `location` keeps only its emirate and has its coordinates replaced by the emirate's centroid, with Makani, address, parking, gate and notes cleared.
+2. Deletes every `document` from storage except issued invoices, which keep what tax law requires for 5 years.
+3. Sets `client.status = 'erased'`. Excluded from all lists, searches, schedules and reports. The row stays so ledgers and audit history reconcile; only `lead_practitioner` may open it, with a reason prompt.
+4. Writes `erasure_request` with what was anonymised and what was deleted.
+5. Generates a confirmation letter (Stage 2 template) for the contact.
+
+Audit rows written before the erasure keep the identifiers for the log's own 5-year retention; the lawyer confirms this exception under the personal-data law before the first erasure. The retention job drops partitions as they age out.
 
 ## 9. Audit
 
-Every read of the detail drawer is logged (AUDIT-SPEC §5 read logging). Every write goes through triggers. Sensitive actions with reason prompt: erasure, consent withdrawal, diagnosis removal, reactivation from discharged, opening a locked record.
+Every read of the detail drawer is logged (AUDIT-SPEC §5 read logging). Every write goes through triggers. Sensitive actions with reason prompt: erasure, consent withdrawal, goal removal, reactivation from closed, opening an erased record.
 
 ## 10. Out of scope for this worktree
 
-Scheduling from the client screen (scheduling worktree), entitlement balances beyond a read-only count (billing), the ribbon (reports), WhatsApp messaging, NABIDH mapping.
+Scheduling from the client screen (scheduling worktree), entitlement balances beyond a read-only count (billing), the ribbon (reports), WhatsApp messaging.
 
 ## 11. Done when
 
-- All §5 functions have tests covering every branch, including an Emirates ID with a bad checksum and a 17-year-old turning 18 mid-treatment.
+- All §5 functions have tests covering every branch, including an Emirates ID with a bad checksum and a 17-year-old turning 18 mid-programme.
 - A synthetic client can go lead → active through the wizard on staging with every §3 condition enforced.
 - A practitioner not on that client's schedule cannot open the record; the attempt is audited.
-- An erasure request leaves the clinical record retrievable by `clinical_lead` and nothing else.
+- An erasure request anonymises the personal fields, removes the documents, and leaves a row in status `erased` that only `lead_practitioner` can open.
 - `pnpm verify` green; compliance-reviewer and security-reviewer pass.

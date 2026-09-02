@@ -1,29 +1,34 @@
 ---
 name: uae-compliance
-description: UAE health-data, DHA, NABIDH, VAT and e-invoicing rules for McWellness. Load whenever working on clinical records, billing, data storage, infra, consent, or integrations.
+description: UAE personal-data, VAT, e-invoicing and positioning rules for McWellness, a wellness business. Load whenever working on client records, billing, data storage, consent, retention, erasure or integrations.
 ---
-# UAE compliance facts (from docs/market-study.md §8; lawyer/tax advisor confirm before relying)
+# UAE wellness-business compliance facts (lawyer and tax advisor to confirm before relying)
 
-## Data
-- Federal Law No. 2 of 2019: health data physically stored in UAE; digital records retained 25 years after last visit; no unauthorised secondary use.
-- Dubai Health Data Law No. 11 of 2018 + Cabinet Decision 32/2020 govern NABIDH.
-- Only AWS me-central-1 (or Azure UAE North) for anything holding PHI: databases, object storage, backups, logs, analytics, error tracking.
-- Erasure requests: non-clinical data erased; clinical record locked, never deleted.
+## Positioning
+- Founder's determination, 2026-09-02: McWellness is a wellness company, not a licensed healthcare facility. No DHA facility licence, no NABIDH, no 25-year health-record retention.
+- Consequence: the product never describes, claims or records a diagnosis or a treatment. It records goals, sessions, measurements and observations. Marketing makes no medical claims.
+- If the business ever offers services for diagnosed conditions, this classification must be revisited with a lawyer before the first such session.
 
-## Facility & licensing
-- Regulator: DHA (Sheryan). Classification received in writing: outpatient clinic with off-site activity. Physical clinic exists; sessions delivered at home or in clinic.
-- HIE: NABIDH. Certified EMR required; self-certification not accepted. Grace period under 6 months from launch; own-system certification intended — a jurisdiction-aware adapter interface is required so a licensed EMR can be slotted in if needed. Scope confirmation from DHA pending.
-- Structured/coded only: Emirates ID mandatory; ICD-10-CM diagnoses; meds with generic name/dose; allergies; vitals; procedures; referrals. Free text rejected as primary value. FHIR R4 / CDA.
-- Practitioners: DHA professional licence, scope-limited. Only licensed clinicians author protocols and sign reports; only certified technicians execute sessions.
+## Personal data (Federal Decree-Law No. 45 of 2021, the PDPL)
+- Applies to personal data of people in the UAE. Health-related data is sensitive and needs explicit consent for the specific purpose.
+- Rights: access, correction, erasure, withdrawal of consent. Processing is limited to the stated purpose.
+- Minimisation: collect only what the service needs. Emirates ID is optional and never required to enrol; if collected (only to verify the adult who consents for a minor or who is refunded) it is encrypted plus a keyed hash, and no image of an identity document is ever stored.
+- Minors: a guardian consents.
+- Retention (product decision, aligned with tax record-keeping): 5 years after the last activity, then erasure or anonymisation on request. Financial records keep 5 years regardless. Audit rows written before an erasure keep the identifiers for the log's own 5 years: the lawyer confirms this exception before the first erasure.
+- Hosting: Supabase Cloud in the region the owner chooses (decision of 2026-09-02, to be confirmed with the lawyer). Every vendor receiving personal data is listed in `docs/COMPLIANCE/approved-vendors.md`. No analytics SDKs, error trackers or font CDNs.
 
 ## VAT (FTA)
-- Qualifying healthcare to the patient: zero-rated. Wellness/no diagnosis: 5%. Recipient ≠ patient (corporate): 5%. School/immigration-purpose reports: 5%.
-- Rate is computed per invoice line from the clinical record and stored with evidence. Never hand-entered.
-- Registration threshold AED 375,000 (zero-rated counts). Quarterly returns within 28 days. Records 5 years (separate from 25-year clinical).
-- Tax point on prepaid packages: pending written advice — do not assume.
+- Wellness services are standard-rated at 5%. Healthcare zero-rating applies only to qualifying healthcare by licensed providers, which this business is not.
+- The rate is computed by `domain/billing` from the standard-rate setting and stored per invoice line; nobody types it.
+- Registration threshold AED 375,000 of taxable supplies. Quarterly returns within 28 days. Records kept 5 years.
+- Tax point on prepaid packages: written advice pending. Do not assume.
 
 ## E-invoicing
-- PINT AE (Peppol UBL/XML). Second wave: appoint Accredited Service Provider by 31 Mar 2027, mandatory 1 Jul 2027. Build invoices as structured objects now.
+- PINT AE (Peppol UBL/XML). Second wave: appoint an Accredited Service Provider by 31 Mar 2027, mandatory 1 Jul 2027. Build invoices as structured objects now.
+
+## Consumer protection
+- Refund, expiry and cancellation terms are shown at point of sale in wording the lawyer has reviewed.
+- No medical claims in advertising or in the product.
 
 ## Audit
-- Immutable, hash-chained audit log of every PHI read and write. See docs/SPEC/audit.md.
+- Immutable, hash-chained audit log of every read and write of personal data, kept 5 years. See docs/SPEC/audit.md.

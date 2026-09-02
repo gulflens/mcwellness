@@ -1,4 +1,12 @@
-import { connect, describeDatabase, requireDatabaseUrl, runMigrations } from './runner/apply';
+import {
+  applyPolicies,
+  connect,
+  describeApplied,
+  describeDatabase,
+  requireDatabaseUrl,
+  resetDatabase,
+  runMigrations,
+} from './runner/apply';
 import { isLocalDatabaseUrl } from './runner/plan';
 
 // pnpm db:reset — wipes the LOCAL database and rebuilds it from the migrations.
@@ -18,17 +26,11 @@ try {
 
   const client = await connect(url);
   try {
-    await client.query(
-      'drop schema if exists public cascade; ' +
-        'create schema public; ' +
-        'grant usage on schema public to public; ' +
-        "comment on schema public is 'standard public schema';",
-    );
+    await resetDatabase(client);
     console.log(`reset the ${describeDatabase(url)}`);
-    const count = await runMigrations(client);
-    console.log(
-      count === 0 ? 'nothing to apply' : `applied ${count} migration${count === 1 ? '' : 's'}`,
-    );
+    const migrations = await runMigrations(client);
+    const policies = await applyPolicies(client);
+    console.log(describeApplied(migrations, policies));
   } finally {
     await client.end();
   }

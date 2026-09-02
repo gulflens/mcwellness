@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -22,5 +22,9 @@ export default defineConfig({
     },
   },
   build: { outDir: 'dist', emptyOutDir: true },
-  test: { environment: 'node' },
+  test: {
+    environment: 'node',
+    // Database tests live under tests/db and run through vitest.db.config.ts.
+    exclude: [...configDefaults.exclude, 'tests/db/**'],
+  },
 });
