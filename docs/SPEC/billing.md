@@ -84,7 +84,7 @@ Three deliberate choices in there:
 
 ### 2.3 The price list is append-only (round 7b)
 
-Prices are never edited or deleted, only superseded: a new price row must take effect today or later, and strictly after the row it replaces, and it always carries a reason. Nothing rewrites what a client was already shown or charged. The price-list screen shows the net amount, the VAT and the gross total for each row; it never accepts a typed VAT figure — VAT is always resolved from the standard-rate setting and stamped onto the price at the moment it is written, per CLAUDE.md rule 6.
+Prices are never edited or deleted, only superseded: a new price row must take effect today or later, and strictly after the row it replaces, and it always carries a reason. Nothing rewrites what a client was already shown or charged. The price-list screen (pull request 25, the billing stream's second piece) shows the net amount, the VAT and the gross total for each row, all from the prices route's answer; it never accepts a typed VAT figure — VAT is always resolved from the standard-rate setting and stamped onto the price at the moment it is written, per CLAUDE.md rule 6.
 
 ---
 
