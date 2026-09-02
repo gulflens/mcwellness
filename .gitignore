@@ -10,3 +10,11 @@ dist/
 .DS_Store
 coverage/
 *.tsbuildinfo
+
+# Design review evidence and browser scratch
+.impeccable/review/
+.playwright-mcp/
+
+# Vite reads .env.<mode> and .env.*.local; only the example is tracked
+.env.*
+!.env.example

@@ -1,0 +1,659 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-02T00:00:00.000Z",
+  "title": "Design System: McWellness",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Mineral Ink",
+        "canonical": "#16242a",
+        "tonalRamp": [
+          "oklch(15.0% 0.022 226.6)",
+          "oklch(26.4% 0.022 226.6)",
+          "oklch(37.9% 0.022 226.6)",
+          "oklch(49.3% 0.022 226.6)",
+          "oklch(60.7% 0.022 226.6)",
+          "oklch(72.1% 0.022 226.6)",
+          "oklch(83.6% 0.022 226.6)",
+          "oklch(95.0% 0.022 226.6)"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Second Ink",
+        "canonical": "#3e5058",
+        "tonalRamp": [
+          "oklch(15.0% 0.026 226.8)",
+          "oklch(26.4% 0.026 226.8)",
+          "oklch(37.9% 0.026 226.8)",
+          "oklch(49.3% 0.026 226.8)",
+          "oklch(60.7% 0.026 226.8)",
+          "oklch(72.1% 0.026 226.8)",
+          "oklch(83.6% 0.026 226.8)",
+          "oklch(95.0% 0.026 226.8)"
+        ]
+      },
+      "slate": {
+        "role": "neutral",
+        "displayName": "Slate",
+        "canonical": "#6b7c82",
+        "tonalRamp": [
+          "oklch(15.0% 0.022 221.1)",
+          "oklch(26.4% 0.022 221.1)",
+          "oklch(37.9% 0.022 221.1)",
+          "oklch(49.3% 0.022 221.1)",
+          "oklch(60.7% 0.022 221.1)",
+          "oklch(72.1% 0.022 221.1)",
+          "oklch(83.6% 0.022 221.1)",
+          "oklch(95.0% 0.022 221.1)"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "#cbd5d6",
+        "tonalRamp": [
+          "oklch(15.0% 0.011 204.1)",
+          "oklch(26.4% 0.011 204.1)",
+          "oklch(37.9% 0.011 204.1)",
+          "oklch(49.3% 0.011 204.1)",
+          "oklch(60.7% 0.011 204.1)",
+          "oklch(72.1% 0.011 204.1)",
+          "oklch(83.6% 0.011 204.1)",
+          "oklch(95.0% 0.011 204.1)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool Mineral Paper",
+        "canonical": "#eef2f1",
+        "tonalRamp": [
+          "oklch(15.0% 0.004 179.7)",
+          "oklch(26.4% 0.004 179.7)",
+          "oklch(37.9% 0.004 179.7)",
+          "oklch(49.3% 0.004 179.7)",
+          "oklch(60.7% 0.004 179.7)",
+          "oklch(72.1% 0.004 179.7)",
+          "oklch(83.6% 0.004 179.7)",
+          "oklch(95.0% 0.004 179.7)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15.0% 0.000 0)",
+          "oklch(26.4% 0.000 0)",
+          "oklch(37.9% 0.000 0)",
+          "oklch(49.3% 0.000 0)",
+          "oklch(60.7% 0.000 0)",
+          "oklch(72.1% 0.000 0)",
+          "oklch(83.6% 0.000 0)",
+          "oklch(95.0% 0.000 0)"
+        ]
+      },
+      "surface-hover": {
+        "role": "neutral",
+        "displayName": "Surface, hovered",
+        "canonical": "#f1f2f2",
+        "tonalRamp": [
+          "oklch(15.0% 0.001 0)",
+          "oklch(26.4% 0.001 0)",
+          "oklch(37.9% 0.001 0)",
+          "oklch(49.3% 0.001 0)",
+          "oklch(60.7% 0.001 0)",
+          "oklch(72.1% 0.001 0)",
+          "oklch(83.6% 0.001 0)",
+          "oklch(95.0% 0.001 0)"
+        ]
+      },
+      "surface-pressed": {
+        "role": "neutral",
+        "displayName": "Surface, pressed",
+        "canonical": "#e8e9ea",
+        "tonalRamp": [
+          "oklch(15.0% 0.002 0)",
+          "oklch(26.4% 0.002 0)",
+          "oklch(37.9% 0.002 0)",
+          "oklch(49.3% 0.002 0)",
+          "oklch(60.7% 0.002 0)",
+          "oklch(72.1% 0.002 0)",
+          "oklch(83.6% 0.002 0)",
+          "oklch(95.0% 0.002 0)"
+        ]
+      },
+      "selection": {
+        "role": "neutral",
+        "displayName": "Selection",
+        "canonical": "#cbd1d1",
+        "tonalRamp": [
+          "oklch(15.0% 0.007 197.0)",
+          "oklch(26.4% 0.007 197.0)",
+          "oklch(37.9% 0.007 197.0)",
+          "oklch(49.3% 0.007 197.0)",
+          "oklch(60.7% 0.007 197.0)",
+          "oklch(72.1% 0.007 197.0)",
+          "oklch(83.6% 0.007 197.0)",
+          "oklch(95.0% 0.007 197.0)"
+        ]
+      },
+      "ok": {
+        "role": "status",
+        "displayName": "Ok",
+        "canonical": "#2f6b4f",
+        "tonalRamp": [
+          "oklch(15.0% 0.078 161.1)",
+          "oklch(26.4% 0.078 161.1)",
+          "oklch(37.9% 0.078 161.1)",
+          "oklch(49.3% 0.078 161.1)",
+          "oklch(60.7% 0.078 161.1)",
+          "oklch(72.1% 0.078 161.1)",
+          "oklch(83.6% 0.078 161.1)",
+          "oklch(95.0% 0.078 161.1)"
+        ]
+      },
+      "attention": {
+        "role": "status",
+        "displayName": "Attention",
+        "canonical": "#8a6a1e",
+        "tonalRamp": [
+          "oklch(15.0% 0.099 84.6)",
+          "oklch(26.4% 0.099 84.6)",
+          "oklch(37.9% 0.099 84.6)",
+          "oklch(49.3% 0.099 84.6)",
+          "oklch(60.7% 0.099 84.6)",
+          "oklch(72.1% 0.099 84.6)",
+          "oklch(83.6% 0.099 84.6)",
+          "oklch(95.0% 0.099 84.6)"
+        ]
+      },
+      "critical": {
+        "role": "status",
+        "displayName": "Critical",
+        "canonical": "#94382e",
+        "tonalRamp": [
+          "oklch(15.0% 0.126 29.0)",
+          "oklch(26.4% 0.126 29.0)",
+          "oklch(37.9% 0.126 29.0)",
+          "oklch(49.3% 0.126 29.0)",
+          "oklch(60.7% 0.126 29.0)",
+          "oklch(72.1% 0.126 29.0)",
+          "oklch(83.6% 0.126 29.0)",
+          "oklch(95.0% 0.126 29.0)"
+        ]
+      },
+      "delta": {
+        "role": "band (reserved)",
+        "displayName": "Delta",
+        "canonical": "#3b4a87",
+        "tonalRamp": [
+          "oklch(15.0% 0.103 271.1)",
+          "oklch(26.4% 0.103 271.1)",
+          "oklch(37.9% 0.103 271.1)",
+          "oklch(49.3% 0.103 271.1)",
+          "oklch(60.7% 0.103 271.1)",
+          "oklch(72.1% 0.103 271.1)",
+          "oklch(83.6% 0.103 271.1)",
+          "oklch(95.0% 0.103 271.1)"
+        ]
+      },
+      "theta": {
+        "role": "band (reserved)",
+        "displayName": "Theta",
+        "canonical": "#2c7387",
+        "tonalRamp": [
+          "oklch(15.0% 0.076 219.7)",
+          "oklch(26.4% 0.076 219.7)",
+          "oklch(37.9% 0.076 219.7)",
+          "oklch(49.3% 0.076 219.7)",
+          "oklch(60.7% 0.076 219.7)",
+          "oklch(72.1% 0.076 219.7)",
+          "oklch(83.6% 0.076 219.7)",
+          "oklch(95.0% 0.076 219.7)"
+        ]
+      },
+      "alpha": {
+        "role": "band (reserved)",
+        "displayName": "Alpha",
+        "canonical": "#3d8557",
+        "tonalRamp": [
+          "oklch(15.0% 0.102 153.5)",
+          "oklch(26.4% 0.102 153.5)",
+          "oklch(37.9% 0.102 153.5)",
+          "oklch(49.3% 0.102 153.5)",
+          "oklch(60.7% 0.102 153.5)",
+          "oklch(72.1% 0.102 153.5)",
+          "oklch(83.6% 0.102 153.5)",
+          "oklch(95.0% 0.102 153.5)"
+        ]
+      },
+      "beta": {
+        "role": "band (reserved)",
+        "displayName": "Beta",
+        "canonical": "#b8863a",
+        "tonalRamp": [
+          "oklch(15.0% 0.111 74.9)",
+          "oklch(26.4% 0.111 74.9)",
+          "oklch(37.9% 0.111 74.9)",
+          "oklch(49.3% 0.111 74.9)",
+          "oklch(60.7% 0.111 74.9)",
+          "oklch(72.1% 0.111 74.9)",
+          "oklch(83.6% 0.111 74.9)",
+          "oklch(95.0% 0.111 74.9)"
+        ]
+      },
+      "gamma": {
+        "role": "band (reserved)",
+        "displayName": "Gamma",
+        "canonical": "#a8553f",
+        "tonalRamp": [
+          "oklch(15.0% 0.115 35.8)",
+          "oklch(26.4% 0.115 35.8)",
+          "oklch(37.9% 0.115 35.8)",
+          "oklch(49.3% 0.115 35.8)",
+          "oklch(60.7% 0.115 35.8)",
+          "oklch(72.1% 0.115 35.8)",
+          "oklch(83.6% 0.115 35.8)",
+          "oklch(95.0% 0.115 35.8)"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral (dark ground)",
+        "displayName": "Mineral Ink, dark ground",
+        "canonical": "#eef2f1",
+        "tonalRamp": [
+          "oklch(15.0% 0.004 179.7)",
+          "oklch(26.4% 0.004 179.7)",
+          "oklch(37.9% 0.004 179.7)",
+          "oklch(49.3% 0.004 179.7)",
+          "oklch(60.7% 0.004 179.7)",
+          "oklch(72.1% 0.004 179.7)",
+          "oklch(83.6% 0.004 179.7)",
+          "oklch(95.0% 0.004 179.7)"
+        ]
+      },
+      "ink-2-dark": {
+        "role": "neutral (dark ground)",
+        "displayName": "Second Ink, dark ground",
+        "canonical": "#c6d1d4",
+        "tonalRamp": [
+          "oklch(15.0% 0.013 215.8)",
+          "oklch(26.4% 0.013 215.8)",
+          "oklch(37.9% 0.013 215.8)",
+          "oklch(49.3% 0.013 215.8)",
+          "oklch(60.7% 0.013 215.8)",
+          "oklch(72.1% 0.013 215.8)",
+          "oklch(83.6% 0.013 215.8)",
+          "oklch(95.0% 0.013 215.8)"
+        ]
+      },
+      "slate-dark": {
+        "role": "neutral (dark ground)",
+        "displayName": "Slate, dark ground",
+        "canonical": "#8fa0a6",
+        "tonalRamp": [
+          "oklch(15.0% 0.021 221.0)",
+          "oklch(26.4% 0.021 221.0)",
+          "oklch(37.9% 0.021 221.0)",
+          "oklch(49.3% 0.021 221.0)",
+          "oklch(60.7% 0.021 221.0)",
+          "oklch(72.1% 0.021 221.0)",
+          "oklch(83.6% 0.021 221.0)",
+          "oklch(95.0% 0.021 221.0)"
+        ]
+      },
+      "rule-dark": {
+        "role": "neutral (dark ground)",
+        "displayName": "Rule, dark ground",
+        "canonical": "#2b3b41",
+        "tonalRamp": [
+          "oklch(15.0% 0.023 222.9)",
+          "oklch(26.4% 0.023 222.9)",
+          "oklch(37.9% 0.023 222.9)",
+          "oklch(49.3% 0.023 222.9)",
+          "oklch(60.7% 0.023 222.9)",
+          "oklch(72.1% 0.023 222.9)",
+          "oklch(83.6% 0.023 222.9)",
+          "oklch(95.0% 0.023 222.9)"
+        ]
+      },
+      "paper-dark": {
+        "role": "neutral (dark ground)",
+        "displayName": "Paper, dark ground",
+        "canonical": "#10191d",
+        "tonalRamp": [
+          "oklch(15.0% 0.015 227.1)",
+          "oklch(26.4% 0.015 227.1)",
+          "oklch(37.9% 0.015 227.1)",
+          "oklch(49.3% 0.015 227.1)",
+          "oklch(60.7% 0.015 227.1)",
+          "oklch(72.1% 0.015 227.1)",
+          "oklch(83.6% 0.015 227.1)",
+          "oklch(95.0% 0.015 227.1)"
+        ]
+      },
+      "surface-dark": {
+        "role": "neutral (dark ground)",
+        "displayName": "Surface, dark ground",
+        "canonical": "#16242a",
+        "tonalRamp": [
+          "oklch(15.0% 0.022 226.6)",
+          "oklch(26.4% 0.022 226.6)",
+          "oklch(37.9% 0.022 226.6)",
+          "oklch(49.3% 0.022 226.6)",
+          "oklch(60.7% 0.022 226.6)",
+          "oklch(72.1% 0.022 226.6)",
+          "oklch(83.6% 0.022 226.6)",
+          "oklch(95.0% 0.022 226.6)"
+        ]
+      },
+      "ok-dark": {
+        "role": "status (dark ground)",
+        "displayName": "Ok, dark ground",
+        "canonical": "#5f9f83",
+        "tonalRamp": [
+          "oklch(15.0% 0.079 164.4)",
+          "oklch(26.4% 0.079 164.4)",
+          "oklch(37.9% 0.079 164.4)",
+          "oklch(49.3% 0.079 164.4)",
+          "oklch(60.7% 0.079 164.4)",
+          "oklch(72.1% 0.079 164.4)",
+          "oklch(83.6% 0.079 164.4)",
+          "oklch(95.0% 0.079 164.4)"
+        ]
+      },
+      "attention-dark": {
+        "role": "status (dark ground)",
+        "displayName": "Attention, dark ground",
+        "canonical": "#c0a04e",
+        "tonalRamp": [
+          "oklch(15.0% 0.108 88.2)",
+          "oklch(26.4% 0.108 88.2)",
+          "oklch(37.9% 0.108 88.2)",
+          "oklch(49.3% 0.108 88.2)",
+          "oklch(60.7% 0.108 88.2)",
+          "oklch(72.1% 0.108 88.2)",
+          "oklch(83.6% 0.108 88.2)",
+          "oklch(95.0% 0.108 88.2)"
+        ]
+      },
+      "critical-dark": {
+        "role": "status (dark ground)",
+        "displayName": "Critical, dark ground",
+        "canonical": "#c9705f",
+        "tonalRamp": [
+          "oklch(15.0% 0.116 31.9)",
+          "oklch(26.4% 0.116 31.9)",
+          "oklch(37.9% 0.116 31.9)",
+          "oklch(49.3% 0.116 31.9)",
+          "oklch(60.7% 0.116 31.9)",
+          "oklch(72.1% 0.116 31.9)",
+          "oklch(83.6% 0.116 31.9)",
+          "oklch(95.0% 0.116 31.9)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "h1": {
+        "displayName": "H1",
+        "purpose": "The page heading. On the dark ground it becomes 40px/44px."
+      },
+      "h2": {
+        "displayName": "H2",
+        "purpose": "Section headings within a page. On the dark ground 31px/38px."
+      },
+      "h3": {
+        "displayName": "H3",
+        "purpose": "The wordmark in the rail and sub-section headings. On the dark ground 25px/32px."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running text, table cells, field values; buttons take it at weight 500. On the dark ground 17px/27px."
+      },
+      "small": {
+        "displayName": "Small",
+        "purpose": "Field labels, table headers (at 500), the count beside a heading, the Arabic name under a Latin one. On the dark ground 16px/24px."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Metadata in second ink: roles, the Arriving mark. Sentence case, never all-caps. On the dark ground 14px/20px."
+      },
+      "numeric": {
+        "displayName": "Numeric",
+        "purpose": "Tabular lining figures on every numeral that could sit in a column; never monospace."
+      }
+    },
+    "shadows": [
+      {
+        "name": "focus",
+        "value": "0 0 0 2px #eef2f1, 0 0 0 4px #16242a",
+        "purpose": "The focus ring on every :focus-visible element, on a 4px radius; the only lift in the system. Both bands swap with the ground."
+      },
+      {
+        "name": "shadow",
+        "value": "0 8px 24px rgba(22, 36, 42, 0.14)",
+        "purpose": "Reserved for the detail drawer and menus, which are not yet built. Nothing in the shipped app references it. On the dark ground: 0 8px 24px rgba(0, 0, 0, 0.4)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "motion",
+        "value": "160ms",
+        "purpose": "Reserved: motion answers an action (a drawer opening, a value changing). Nothing in the shipped shell transitions; hover feedback is instant."
+      },
+      {
+        "name": "motion-ribbon",
+        "value": "400ms",
+        "purpose": "Reserved for the one real animation: a new slice arriving on the session ribbon, which is not yet built."
+      },
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "The ease-out for any motion that does occur. Both durations drop to 0ms under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "fold",
+        "value": "720px",
+        "purpose": "Below it the rail becomes a band, the grid goes to one column, fields go full width and the first two table columns pin."
+      }
+    ],
+    "structure": [
+      {
+        "name": "rail",
+        "value": "220px"
+      },
+      {
+        "name": "row",
+        "value": "44px"
+      },
+      {
+        "name": "tap",
+        "value": "48px"
+      },
+      {
+        "name": "hairline",
+        "value": "1px"
+      },
+      {
+        "name": "measure",
+        "value": "68ch"
+      },
+      {
+        "name": "content-max",
+        "value": "1200px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action on a screen: ink on paper, no hue, no transition.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Sign in</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border-radius: 4px; border: 1px solid var(--ink, #16242a); background: var(--surface, #ffffff); color: var(--ink, #16242a); font: 500 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); cursor: pointer; background: var(--ink, #16242a); color: var(--paper, #eef2f1); } .ds-btn-primary:hover:not(:disabled) { background: var(--ink-2, #3e5058); } .ds-btn-primary:active { background: var(--ink-2, #3e5058); } .ds-btn-primary:focus-visible { box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); outline: none; } .ds-btn-primary:disabled { opacity: 0.5; cursor: default; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The default button: surface fill, a hairline in ink, instant tonal feedback.",
+      "html": "<button class=\"ds-btn-secondary\" type=\"button\">Sign out</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border-radius: 4px; border: 1px solid var(--ink, #16242a); background: var(--surface, #ffffff); color: var(--ink, #16242a); font: 500 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); cursor: pointer; } .ds-btn-secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--ink, #16242a) 6%, var(--surface, #ffffff)); } .ds-btn-secondary:active { background: color-mix(in srgb, var(--ink, #16242a) 10%, var(--surface, #ffffff)); } .ds-btn-secondary:focus-visible { box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); outline: none; } .ds-btn-secondary:disabled { opacity: 0.5; cursor: default; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Text and icon with no border or fill; the rail's sign-out control, 48px tall.",
+      "html": "<button class=\"ds-btn-quiet\" type=\"button\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M8 3.25H4.5a1 1 0 0 0-1 1v11.5a1 1 0 0 0 1 1H8\"/><path d=\"M12 6.5 15.5 10 12 13.5M15.5 10H7.5\"/></svg><span>Sign out</span></button>",
+      "css": ".ds-btn-quiet { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0; border: 0; background: none; color: var(--ink-2, #3e5058); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); cursor: pointer; } .ds-btn-quiet:hover { color: var(--ink, #16242a); } .ds-btn-quiet:focus-visible { box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); outline: none; border-radius: 4px; }"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "field-input",
+      "description": "Label above, 44px box below; the primary action on a list page.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-field__label\" for=\"ds-search\">Search</label><input class=\"ds-field__input\" id=\"ds-search\" type=\"search\" placeholder=\"Name or record number\"></div>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 4px; min-width: 16rem; max-width: 68ch; font-family: var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); } .ds-field__label { font-size: 14px; line-height: 22px; color: var(--ink-2, #3e5058); } .ds-field__input { min-height: 44px; padding: 0 12px; border: 1px solid var(--rule, #cbd5d6); border-radius: 4px; background: var(--surface, #ffffff); color: var(--ink, #16242a); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); appearance: none; } .ds-field__input::placeholder { color: var(--ink-2, #3e5058); } .ds-field__input:focus-visible { box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); outline: none; }"
+    },
+    {
+      "name": "Select",
+      "kind": "input",
+      "refersTo": "field-input",
+      "description": "The same box as a text field, with a 20px chevron in second ink and no browser chrome.",
+      "html": "<div class=\"ds-field\"><label class=\"ds-field__label\" for=\"ds-status\">Status</label><span class=\"ds-select\"><select class=\"ds-field__input\" id=\"ds-status\"><option>Any status</option><option>Lead</option><option>Active</option><option>Paused</option><option>Closed</option></select><span class=\"ds-select__chevron\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M6 8l4 4 4-4\"/></svg></span></span></div>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 4px; min-width: 12rem; font-family: var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); } .ds-field__label { font-size: 14px; line-height: 22px; color: var(--ink-2, #3e5058); } .ds-select { position: relative; display: block; } .ds-field__input { width: 100%; min-height: 44px; padding: 0 40px 0 12px; border: 1px solid var(--rule, #cbd5d6); border-radius: 4px; background: var(--surface, #ffffff); color: var(--ink, #16242a); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); appearance: none; } .ds-field__input:focus-visible { box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); outline: none; } .ds-select__chevron { position: absolute; inset-inline-end: 12px; top: 50%; translate: 0 -50%; pointer-events: none; color: var(--ink-2, #3e5058); display: inline-flex; }"
+    },
+    {
+      "name": "Rail",
+      "kind": "nav",
+      "refersTo": "rail",
+      "description": "The console's 220px inline-start column: wordmark, sections with icons, the person at the foot.",
+      "html": "<nav class=\"ds-rail\" aria-label=\"Sections\"><div class=\"ds-rail__mark\">McWellness</div><ul class=\"ds-rail__list\"><li><a class=\"ds-rail__item ds-rail__item--active\" href=\"#\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"7.5\" cy=\"6.5\" r=\"2.75\"/><path d=\"M2.5 16.5c0-2.9 2.2-4.8 5-4.8s5 1.9 5 4.8\"/><circle cx=\"14\" cy=\"7.5\" r=\"2.25\"/><path d=\"M13.5 11.6c2.4.2 4 2 4 4.4\"/></svg><span>Clients</span></a></li><li><a class=\"ds-rail__item\" href=\"#\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><rect x=\"3\" y=\"4.5\" width=\"14\" height=\"12.5\" rx=\"1.5\"/><path d=\"M3 8.5h14M7 2.75v3.5M13 2.75v3.5\"/></svg><span>Schedule</span></a></li><li><span class=\"ds-rail__item ds-rail__item--later\" aria-disabled=\"true\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M2.5 10h3l2-5 3 10 2.5-7 1.5 2h3\"/></svg><span>Sessions</span><span class=\"ds-rail__later\">Arriving</span></span></li><li><span class=\"ds-rail__item ds-rail__item--later\" aria-disabled=\"true\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M5 2.75h10v14.5l-2-1.25-2 1.25-2-1.25-2 1.25-2-1.25-2 1.25z\"/><path d=\"M7.5 7h5M7.5 10h5\"/></svg><span>Billing</span><span class=\"ds-rail__later\">Arriving</span></span></li><li><span class=\"ds-rail__item ds-rail__item--later\" aria-disabled=\"true\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M10 2.75 4 5v4.5c0 3.4 2.5 6.2 6 7.75 3.5-1.55 6-4.35 6-7.75V5z\"/><path d=\"M7.5 10l1.75 1.75L12.75 8.5\"/></svg><span>Audit</span><span class=\"ds-rail__later\">Arriving</span></span></li></ul><div class=\"ds-rail__person\"><div class=\"ds-rail__name\">Hazel Harbour</div><div class=\"ds-rail__roles\">Owner, Admin, Lead practitioner</div><button class=\"ds-rail__signout\" type=\"button\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 20 20\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M8 3.25H4.5a1 1 0 0 0-1 1v11.5a1 1 0 0 0 1 1H8\"/><path d=\"M12 6.5 15.5 10 12 13.5M15.5 10H7.5\"/></svg><span>Sign out</span></button></div></nav>",
+      "css": ".ds-rail { width: 220px; min-height: 480px; display: flex; flex-direction: column; padding: 24px 16px; border-inline-end: 1px solid var(--rule, #cbd5d6); background: var(--paper, #eef2f1); color: var(--ink, #16242a); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); } .ds-rail__mark { font-weight: 500; font-size: 20px; line-height: 28px; padding: 0 12px; margin-bottom: 32px; } .ds-rail__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; } .ds-rail__item { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 4px; text-decoration: none; color: var(--ink, #16242a); } a.ds-rail__item:hover { background: var(--surface, #ffffff); } .ds-rail__item:active { background: color-mix(in srgb, var(--ink, #16242a) 10%, var(--surface, #ffffff)); } .ds-rail__item--active { background: var(--surface, #ffffff); font-weight: 500; } .ds-rail__item--later { color: var(--ink-2, #3e5058); } .ds-rail__item--later svg { color: var(--slate, #6b7c82); } .ds-rail__later { margin-inline-start: auto; font-size: 13px; line-height: 18px; font-weight: 500; } .ds-rail__item:focus-visible { box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); outline: none; } .ds-rail__person { margin-top: auto; padding: 16px 12px 0; border-top: 1px solid var(--rule, #cbd5d6); } .ds-rail__name { font-weight: 500; } .ds-rail__roles { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--ink-2, #3e5058); } .ds-rail__signout { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; min-height: 48px; padding: 0; border: 0; background: none; color: var(--ink-2, #3e5058); font: inherit; cursor: pointer; } .ds-rail__signout:hover { color: var(--ink, #16242a); } .ds-rail__signout:focus-visible { box-shadow: 0 0 0 2px var(--paper, #eef2f1), 0 0 0 4px var(--ink, #16242a); outline: none; border-radius: 4px; }"
+    },
+    {
+      "name": "Ledger Table",
+      "kind": "custom",
+      "refersTo": "table-cell",
+      "description": "The signature surface: 44px rows on hairline rules, sticky header, tabular figures, status in words with a dot.",
+      "html": "<div class=\"ds-ledger__scroll\"><table class=\"ds-ledger\"><thead><tr><th scope=\"col\" class=\"ds-numeric\">Record</th><th scope=\"col\">Name</th><th scope=\"col\" class=\"ds-numeric ds-align-end\">Age</th><th scope=\"col\">Status</th><th scope=\"col\">Primary contact</th><th scope=\"col\">Emirate</th></tr></thead><tbody><tr><td class=\"ds-numeric\">MW-000005</td><td><span class=\"ds-name\"><span>Dahlia Bay</span><span class=\"ds-name__ar\" lang=\"ar\" dir=\"rtl\">داليا خليج</span></span></td><td class=\"ds-numeric ds-align-end\">38</td><td><span class=\"ds-status ds-status--active\"><span class=\"ds-status__dot\"></span>Active</span></td><td><span class=\"ds-contact\"><span>Self</span><span class=\"ds-numeric ds-muted\">+971500001105</span></span></td><td>Umm Al Quwain</td></tr><tr><td class=\"ds-numeric\">MW-000003</td><td><span class=\"ds-name\"><span>Cedar Meadow</span></span></td><td class=\"ds-numeric ds-align-end\">31</td><td><span class=\"ds-status ds-status--paused\"><span class=\"ds-status__dot\"></span>Paused</span></td><td><span class=\"ds-contact\"><span>Self</span><span class=\"ds-numeric ds-muted\">+971500001103</span></span></td><td>Sharjah</td></tr><tr><td class=\"ds-numeric\">MW-000013</td><td><span class=\"ds-name\"><span>Maple Dune</span></span></td><td class=\"ds-numeric ds-align-end\">8</td><td><span class=\"ds-status ds-status--lead\"><span class=\"ds-status__dot\"></span>Lead</span></td><td><span class=\"ds-contact\"><span>Mother</span><span class=\"ds-numeric ds-muted\">+971500001113</span></span></td><td>Ras Al Khaimah</td></tr><tr><td class=\"ds-numeric\">MW-000004</td><td><span class=\"ds-name\"><span>Clover Cliff</span></span></td><td class=\"ds-numeric ds-align-end\">34</td><td><span class=\"ds-status ds-status--closed\"><span class=\"ds-status__dot\"></span>Closed</span></td><td><span class=\"ds-contact\"><span>Self</span><span class=\"ds-numeric ds-muted\">+971500001104</span></span></td><td>Ajman</td></tr></tbody></table></div>",
+      "css": ".ds-ledger__scroll { overflow-x: auto; border-top: 1px solid var(--rule, #cbd5d6); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); color: var(--ink, #16242a); } .ds-ledger { width: 100%; border-collapse: collapse; } .ds-ledger th { position: sticky; top: 0; background: var(--paper, #eef2f1); text-align: start; font-size: 14px; line-height: 22px; font-weight: 500; color: var(--ink-2, #3e5058); height: 44px; padding: 0 12px; border-bottom: 1px solid var(--rule, #cbd5d6); } .ds-ledger td { height: 44px; padding: 0 12px; border-bottom: 1px solid var(--rule, #cbd5d6); vertical-align: middle; white-space: nowrap; } .ds-numeric { font-variant-numeric: tabular-nums lining-nums; font-feature-settings: 'tnum' 1, 'lnum' 1; } .ds-ledger .ds-align-end { text-align: end; } .ds-muted { color: var(--ink-2, #3e5058); } .ds-name { display: flex; flex-direction: column; align-items: flex-start; line-height: 22px; } .ds-name__ar { font-size: 14px; color: var(--ink-2, #3e5058); } .ds-contact { display: inline-flex; gap: 12px; align-items: baseline; } .ds-status { display: inline-flex; align-items: center; gap: 8px; } .ds-status__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--slate, #6b7c82); } .ds-status--active .ds-status__dot { background: var(--ok, #2f6b4f); } .ds-status--paused .ds-status__dot { background: var(--attention, #8a6a1e); } .ds-status--erased .ds-status__dot { background: var(--critical, #94382e); } .ds-status--lead .ds-status__dot { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-2, #3e5058); }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "status-chip",
+      "description": "Status as a word in ink; a 6px dot carries the only non-band hue. No pill, no background.",
+      "html": "<div class=\"ds-status-row\"><span class=\"ds-status ds-status--lead\"><span class=\"ds-status__dot\"></span>Lead</span><span class=\"ds-status ds-status--active\"><span class=\"ds-status__dot\"></span>Active</span><span class=\"ds-status ds-status--paused\"><span class=\"ds-status__dot\"></span>Paused</span><span class=\"ds-status ds-status--closed\"><span class=\"ds-status__dot\"></span>Closed</span><span class=\"ds-status ds-status--erased\"><span class=\"ds-status__dot\"></span>Erased</span></div>",
+      "css": ".ds-status-row { display: flex; flex-wrap: wrap; gap: 24px; font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); color: var(--ink, #16242a); } .ds-status { display: inline-flex; align-items: center; gap: 8px; } .ds-status__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--slate, #6b7c82); } .ds-status--active .ds-status__dot { background: var(--ok, #2f6b4f); } .ds-status--paused .ds-status__dot { background: var(--attention, #8a6a1e); } .ds-status--erased .ds-status__dot { background: var(--critical, #94382e); } .ds-status--lead .ds-status__dot { background: transparent; box-shadow: inset 0 0 0 1px var(--ink-2, #3e5058); }"
+    },
+    {
+      "name": "Note",
+      "kind": "custom",
+      "refersTo": "note",
+      "description": "A quiet line that answers a state (loading, empty, error). Never a banner, never a skeleton.",
+      "html": "<p class=\"ds-note\">Loading the client list.</p><p class=\"ds-note ds-note--critical\" role=\"alert\">The client list could not be loaded. Try again.</p>",
+      "css": ".ds-note { margin: 0 0 8px; max-width: 68ch; color: var(--ink-2, #3e5058); font: 400 16px/26px var(--font, 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif); } .ds-note--critical { color: var(--critical, #94382e); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Silent Ledger",
+    "overview": "McWellness is a wellness practice whose product must read as measurement, closer to a good laboratory instrument than to a spa, and its console is a ledger, not a dashboard. Rows, hairline rules and figures carry the practice. The category default of cards, hero metrics and an accent button is refused: a client is a row, a count is a number beside the heading, and the primary action on the first viewport is a search field. The coordinator sees the practice's people at a glance and finds one in seconds.\n\nThe chrome is silent. Every interface surface is achromatic: hue-bearing mineral ink on cool mineral paper, structure drawn in hairline rules, one typeface family (IBM Plex Sans with its matched Arabic) at two weights, tabular figures wherever a numeral appears. Colour is signal: it is reserved for the five EEG bands and the three status states, and it appears only where it carries meaning from the data. There is no accent colour. Emphasis comes from weight, size and space. The inherited McWellness violet lives in the logo image and nowhere in the interface (owner's decision, 2026-09-02).\n\nThe system has three grounds that share one token set. The ledger (light, dense, the admin console) is the reference surface and the only one fully built. The instrument (dark, `[data-ground='dark']`, the practitioner's phone) inverts ink and paper, lifts the band and status hues, and steps every type size up one so it reads at arm's length in a dim room. The record (light, calm, the client portal) uses the same tokens at a 68-character measure and low density. Sampled at the finish review on 2026-09-02: paper #EEF2F1, ink #16242A, hairline #CBD5D6 rules, 44px rows, tabular figures, status in words with a 6px dot, and an ink-on-paper primary button; no hue, no cards, no accent.",
+    "keyCharacteristics": [
+      "Achromatic chrome: mineral ink on cool paper, structure in hairline rules, no accent colour anywhere.",
+      "Hue is signal: five band colours reserved for band data, three desaturated status colours carried by a 6px dot beside a word.",
+      "One family, two weights: IBM Plex Sans and IBM Plex Sans Arabic at 400 and 500, self-hosted; tabular lining figures on every numeral.",
+      "Tables, not cards: homogeneous data sits in 44px rows on hairline rules, with sticky headers and no zebra striping.",
+      "Three grounds, one token set: the ledger (light), the instrument (dark, type up one step) and the record (light, 68ch measure).",
+      "Logical properties only, so every layout mirrors for Arabic.",
+      "Almost no motion: feedback is instant; nothing in the shell transitions."
+    ],
+    "rules": [
+      {
+        "name": "The Silent Chrome Rule",
+        "body": "Interface chrome is achromatic. Hue comes only from band data and the three status states. There is no accent colour, no brand blue, no primary violet; emphasis is weight, size and space. The fastest test of a new screen is whether any colour on it is not a band or a status.",
+        "section": "colors"
+      },
+      {
+        "name": "The Status-in-Words Rule",
+        "body": "Status is written as a word in ink; a 6px dot beside it carries the hue (ok, attention, critical). The default dot is slate, a lead is a hollow ring in second ink, and the word is never coloured.",
+        "section": "colors"
+      },
+      {
+        "name": "The Band Reservation Rule",
+        "body": "The five band hexes appear in charts, protocol chips, session ribbons and report figures. Nowhere else: never a background wash, never a button, never decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ground Swap Rule",
+        "body": "Dark is a ground, not a preference toggle. It is set by `data-ground='dark'` on the surface that needs it (the practitioner's instrument), and it swaps every token at once: ink and paper invert, bands and status lift, type steps up one.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Family Rule",
+        "body": "IBM Plex Sans and IBM Plex Sans Arabic, at 400 and 500, are the only faces. No display face, no monospace, no Inter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Figures Rule",
+        "body": "Every numeral that could sit in a column takes `font-variant-numeric: tabular-nums lining-nums`. Record numbers, ages, counts and phone numbers align because of the figures, not because of a monospace fallback.",
+        "section": "typography"
+      },
+      {
+        "name": "The Weight-Not-Hue Rule",
+        "body": "The only tools of emphasis are the medium weight, the next size up, and space around the thing. A heading never has a single coloured, italic or bold word.",
+        "section": "typography"
+      },
+      {
+        "name": "The 44 Rule",
+        "body": "Rows, inputs, buttons and rail items are 44px tall. One height sets the ledger's rhythm; the sign-out control and the instrument's controls take 48px.",
+        "section": "layout"
+      },
+      {
+        "name": "The Logical Properties Rule",
+        "body": "No `left`, `right`, `margin-left` or `text-align: left` anywhere. Inline-start and inline-end, so Arabic is a mirror and not a fork.",
+        "section": "layout"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Structure is drawn with 1px rules in Rule (#cbd5d6): table rows, the rail's edge, field borders. No zebra striping, no card borders, no boxes around groups.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Ledger Rule",
+        "body": "Surfaces are flat. Depth is tone and rule, never a drop shadow. The one shadow token exists for the drawer and menus and is not used until they arrive.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do take every colour, size, spacing step, radius and timing from `app/shell/tokens.css`; the lint rule `mcwellness/no-hex-colour` refuses a literal in app code.",
+      "Do draw structure with 1px rules in Rule (#cbd5d6) at a 44px row height, with sticky headers and no zebra striping.",
+      "Do set status as a word in ink with a 6px dot beside it; ok, attention and critical live in the dot.",
+      "Do apply tabular lining figures to every numeral that could sit in a column.",
+      "Do use only the regular (400) and medium (500) weights of IBM Plex Sans and IBM Plex Sans Arabic, self-hosted.",
+      "Do write layout in logical properties so the Arabic layout is a mirror.",
+      "Do give a screen at most one primary button, ink on paper, and prefer a search field as the first action on a list.",
+      "Do answer loading, empty and error states with a Note line in second ink or critical, capped at 68ch.",
+      "Do put the dark ground on a surface with `data-ground='dark'` and let the tokens swap; never restyle a component for dark.",
+      "Do keep the Latin wordmark \"McWellness\" in every locale."
+    ],
+    "donts": [
+      "Don't add an accent colour. There is no brand blue or violet in the interface; the inherited violet lives in the logo image only.",
+      "Don't use a band hue outside band data (charts, protocol chips, the session ribbon, report figures); never as a wash, a button or decoration.",
+      "Don't put homogeneous data in cards, hero metrics or tiles; it is a table.",
+      "Don't set labels, headers or micro text in all-caps, or add an eyebrow or kicker above a heading.",
+      "Don't use a monospace face for numbers, a second display face, or Inter.",
+      "Don't add hover transitions, entrance animations, skeleton shimmer or page-load orchestration; feedback is instant and nothing in the shell transitions.",
+      "Don't append an arrow to button or link text, or join metadata with middle dots.",
+      "Don't colour, italicise or embolden a single word inside a heading.",
+      "Don't use a physical `left`/`right` property or a neutral black (#111).",
+      "Don't colour a status word, add a pill behind it, or use slate for running text."
+    ]
+  }
+}

@@ -99,8 +99,13 @@ export function verifierFromEnv(env: NodeJS.ProcessEnv): TokenVerifier {
     );
   }
   return createTokenVerifier({
-    issuer: `${supabaseUrl.replace(/\/+$/, '')}/auth/v1`,
+    issuer: issuerFor(supabaseUrl),
     jwksUrl: env.SUPABASE_JWKS_URL || undefined,
     secret: env.SUPABASE_JWT_SECRET || undefined,
   });
+}
+
+/** Supabase signs its tokens with the project URL plus /auth/v1 as the issuer. */
+export function issuerFor(supabaseUrl: string): string {
+  return `${supabaseUrl.replace(/\/+$/, '')}/auth/v1`;
 }

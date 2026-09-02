@@ -1,0 +1,547 @@
+/* The shell's own components. Every value is a token; logical properties only. */
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The ledger: rail and content */
+.admin {
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  min-block-size: 100dvh;
+}
+
+.admin__main {
+  min-inline-size: 0;
+  padding: var(--s-8) var(--s-8) var(--s-16);
+  max-inline-size: var(--content-max);
+}
+
+.rail {
+  position: sticky;
+  inset-block-start: 0;
+  block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--s-6) var(--s-4);
+  border-inline-end: var(--hairline) solid var(--rule);
+  background: var(--paper);
+}
+
+.rail__mark {
+  font-weight: var(--w-medium);
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  padding-inline: var(--s-3);
+  margin-block-end: var(--s-8);
+}
+
+.rail__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.rail__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  border-radius: var(--r-2);
+  text-decoration: none;
+  color: var(--ink-2);
+}
+
+.rail__item--active {
+  color: var(--ink);
+  background: var(--surface);
+  font-weight: var(--w-medium);
+}
+
+.rail__item--later {
+  color: var(--slate);
+}
+
+.rail__later {
+  margin-inline-start: auto;
+}
+
+.rail__person {
+  margin-block-start: auto;
+  padding: var(--s-4) var(--s-3) 0;
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.rail__name {
+  font-weight: var(--w-medium);
+}
+
+.rail__signout {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-block-start: var(--s-3);
+  min-block-size: var(--tap);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+/* Page furniture */
+.page__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-4);
+  margin-block-end: var(--s-6);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  align-items: end;
+  margin-block-end: var(--s-6);
+}
+
+.toolbar .field {
+  min-inline-size: 16rem;
+}
+
+/* Fields and buttons */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.field__label {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+}
+
+.field__input {
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.field__input::placeholder {
+  color: var(--slate);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--row);
+  padding-inline: var(--s-5);
+  border-radius: var(--r-2);
+  border: var(--hairline) solid var(--ink);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: var(--w-medium);
+  cursor: pointer;
+}
+
+.button--primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.button--quiet {
+  border-color: transparent;
+  background: none;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.note {
+  color: var(--ink-2);
+  max-inline-size: var(--measure);
+}
+
+.note--critical {
+  color: var(--critical);
+}
+
+/* The table */
+.ledger__scroll {
+  overflow-x: auto;
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.ledger {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+
+.ledger th {
+  position: sticky;
+  inset-block-start: 0;
+  background: var(--paper);
+  text-align: start;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+  color: var(--ink-2);
+  block-size: var(--row);
+  padding-inline: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.ledger td {
+  block-size: var(--row);
+  padding-inline: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.ledger th.numeric,
+.ledger td.numeric {
+  text-align: end;
+}
+
+.ledger__empty td {
+  block-size: auto;
+  padding-block: var(--s-6);
+  white-space: normal;
+  color: var(--ink-2);
+}
+
+.name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: var(--lh-small);
+}
+
+.contact {
+  display: inline-flex;
+  gap: var(--s-3);
+  align-items: baseline;
+}
+
+/* Status: words first, one small dot of the allowed hue */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.status__dot {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: 50%;
+  background: var(--slate);
+}
+
+.status--active .status__dot {
+  background: var(--ok);
+}
+
+.status--paused .status__dot {
+  background: var(--attention);
+}
+
+.status--erased .status__dot {
+  background: var(--critical);
+}
+
+.status--lead .status__dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--hairline) var(--ink-2);
+}
+
+/* Sign-in and plain pages */
+.signin,
+.plain {
+  max-inline-size: 24rem;
+  margin: 0 auto;
+  padding: var(--s-16) var(--s-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.signin__mark {
+  font-weight: var(--w-medium);
+  color: var(--ink-2);
+}
+
+.signin__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.signin__door {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-block-start: var(--s-6);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.signin__people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.signin__person > span:first-child {
+  white-space: nowrap;
+}
+
+.signin__person > span:last-child {
+  text-align: end;
+}
+
+.signin__person {
+  inline-size: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+  min-block-size: var(--tap);
+  padding-inline: var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  text-align: start;
+  cursor: pointer;
+}
+
+.ground {
+  min-block-size: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.plain--instrument {
+  max-inline-size: 28rem;
+}
+
+.plain--record {
+  max-inline-size: var(--measure);
+}
+
+@media (max-width: 720px) {
+  .admin {
+    /* minmax(0, 1fr): the table scrolls inside its own container instead of widening the page. */
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rail {
+    position: static;
+    block-size: auto;
+    border-inline-end: 0;
+    border-block-end: var(--hairline) solid var(--rule);
+  }
+
+  .rail__list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .rail__item--later {
+    display: none;
+  }
+
+  .rail__person {
+    margin-block-start: var(--s-4);
+  }
+
+  .admin__main {
+    padding: var(--s-6) var(--s-4) var(--s-12);
+  }
+
+  .toolbar .field {
+    flex: 1 1 100%;
+    min-inline-size: 0;
+  }
+}
+
+/* Finish review, round one */
+
+/* Identity above the heading is separated by a rule, so it reads as a mark, not a kicker. */
+.signin__mark {
+  padding-block-end: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+/* Small text stays above the contrast floor; slate is for marks and rules only. */
+.field__input::placeholder {
+  color: var(--ink-2);
+}
+
+/* Live sections in ink, arriving ones in ink-2 with a slate icon: two colours, both legible. */
+a.rail__item {
+  color: var(--ink);
+}
+
+.rail__item--later {
+  color: var(--ink-2);
+}
+
+.rail__item--later svg {
+  color: var(--slate);
+}
+
+/* The search field is the primary action: wider, and the status select sits beside it. */
+.toolbar .field--search {
+  flex: 1 1 24rem;
+  max-inline-size: var(--measure);
+}
+
+.toolbar .field:not(.field--search) {
+  min-inline-size: 12rem;
+}
+
+/* One vocabulary for both controls: no browser chrome. */
+.field__input {
+  appearance: none;
+}
+
+input[type='search']::-webkit-search-decoration,
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-results-button {
+  appearance: none;
+  display: none;
+}
+
+.select {
+  position: relative;
+  display: block;
+}
+
+.select .field__input {
+  inline-size: 100%;
+  padding-inline-end: calc(var(--s-3) + 20px + var(--s-2));
+}
+
+.select__chevron {
+  position: absolute;
+  inset-inline-end: var(--s-3);
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  pointer-events: none;
+  color: var(--ink-2);
+}
+
+/* Identifiers align start; quantities align end. */
+.ledger th.align-end,
+.ledger td.align-end {
+  text-align: end;
+}
+
+.ledger th.numeric:not(.align-end),
+.ledger td.numeric:not(.align-end) {
+  text-align: start;
+}
+
+/* Feedback on controls, instant: the brief forbids transitions, not response. */
+a.rail__item:hover {
+  background: var(--surface);
+}
+
+a.rail__item:active,
+.button:active,
+.signin__person:active {
+  background: color-mix(in srgb, var(--ink) 10%, var(--surface));
+}
+
+.button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 6%, var(--surface));
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--ink-2);
+}
+
+.signin__person:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+}
+
+.rail__signout:hover {
+  color: var(--ink);
+}
+
+@media (max-width: 720px) {
+  /* The rail folds to one line: mark and person, then the sections, then the heading. */
+  .rail {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'mark person'
+      'list list';
+    align-items: center;
+    row-gap: var(--s-3);
+    padding-block: var(--s-4);
+  }
+
+  .rail__mark {
+    grid-area: mark;
+    margin: 0;
+  }
+
+  .rail__person {
+    grid-area: person;
+    display: flex;
+    align-items: baseline;
+    gap: var(--s-4);
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .rail__person .micro {
+    display: none;
+  }
+
+  .rail__signout {
+    margin: 0;
+    min-block-size: var(--row);
+  }
+
+  .rail__list {
+    grid-area: list;
+  }
+
+  /* The record and the name stay pinned while the rest of the row scrolls. */
+  .ledger th:nth-child(1),
+  .ledger td:nth-child(1) {
+    position: sticky;
+    inset-inline-start: 0;
+    background: var(--paper);
+    inline-size: 7.5rem;
+    min-inline-size: 7.5rem;
+  }
+
+  .ledger th:nth-child(2),
+  .ledger td:nth-child(2) {
+    position: sticky;
+    inset-inline-start: 7.5rem;
+    background: var(--paper);
+    box-shadow: inset calc(-1 * var(--hairline)) 0 0 var(--rule);
+  }
+
+  .ledger th:nth-child(1) {
+    z-index: 1;
+  }
+}

@@ -612,13 +612,4 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
   };
 }
 
-/** Whole years between a date of birth and a day, as a person would count them. */
-export function ageOn(dateOfBirth: string, today: string): number {
-  const [by, bm, bd] = dateOfBirth.split('-').map(Number);
-  const [ty, tm, td] = today.split('-').map(Number);
-  if (by === undefined || bm === undefined || bd === undefined)
-    throw new Error('Bad date of birth.');
-  if (ty === undefined || tm === undefined || td === undefined) throw new Error('Bad date.');
-  const before = tm < bm || (tm === bm && td < bd);
-  return ty - by - (before ? 1 : 0);
-}
+export { ageOn } from '../../domain/shared/dates';

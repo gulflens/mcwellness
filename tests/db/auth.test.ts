@@ -256,6 +256,7 @@ describe('sign-in through the API', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       userId: IDS.ownerA,
+      displayName: expect.any(String),
       tenantId: IDS.tenantA,
       roles: ['owner'],
       capabilities: [],

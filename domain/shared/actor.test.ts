@@ -164,3 +164,19 @@ describe('canActor', () => {
     ).toBe(false);
   });
 });
+
+describe('client.list', () => {
+  it('lets every practice role list clients and a client contact never', () => {
+    for (const role of [
+      'owner',
+      'admin',
+      'lead_practitioner',
+      'practitioner',
+      'finance',
+    ] as const) {
+      expect(canActor(actor([role]), { type: 'client.list' }, {}, NOW)).toBe(true);
+    }
+    expect(canActor(actor(['client_contact']), { type: 'client.list' }, {}, NOW)).toBe(false);
+    expect(canActor(actor([]), { type: 'client.list' }, {}, NOW)).toBe(false);
+  });
+});

@@ -39,6 +39,7 @@ export type Actor = {
 };
 
 export type Action =
+  | { type: 'client.list' }
   | { type: 'client.read'; clientId: string }
   | { type: 'client.write'; clientId: string }
   | { type: 'user_role.grant'; role: Role }
@@ -79,6 +80,9 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     return false;
   }
   switch (action.type) {
+    case 'client.list':
+      // A practitioner lists only the clients on their schedule; the route applies that scope.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner', 'finance');
     case 'client.read':
       if (hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner', 'finance')) {
         return true;

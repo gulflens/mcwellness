@@ -69,6 +69,12 @@ never bypass the access rules.
   from the password manager, never written down in the repository), and fills
   `SUPABASE_URL` and `SUPABASE_JWKS_URL` in the deployment's settings.
 
+## Opening the app
+
+Run `pnpm dev` and open http://localhost:5173. On a laptop the sign-in screen lists the four seeded people as one-click sign-ins: the API opens that door only when `APP_ENV=development`, the database is local and the local secret is set, and it does not exist anywhere else. The owner lands on the admin console, the ledger: a rail on the left, the clients table on the right, read through the database's row security as the signed-in person and recorded in the audit trail. A practitioner lands on the practitioner app's ground and a client contact on the portal's; both are landing pages until their own work arrives. Staging and production sign in through Supabase: set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` and the door is never offered.
+
+Every colour, size and timing on screen comes from `app/shell/tokens.css`, following docs/DESIGN-BRIEF.md: no accent colour, one typeface family (IBM Plex Sans with its Arabic companion, bundled), tables not cards. Lint refuses a hex colour or one of the brief's tells in app code.
+
 ## Synthetic data
 
 No real person is ever written into this repository, so `pnpm seed` invents a whole practice to build and test with: one studio, four people with logins (an owner who is also the lead practitioner, two more practitioners, a coordinator), six services, and twenty clients with contacts, home locations and consents. The same data comes out every run. Every value sits in a range reserved for fakes: names from a fixed fictional list, phones in the `+971 50 000 xxxx` block, emails at `example.com`, Emirates IDs from `784-1900-*`, only on a parent who has consented, sealed with the key in `IDENTITY_KEY`. The two local placeholders (the sign-in secret and the identity key) are accepted only when `APP_ENV=development` is set explicitly. Running the command again adds nothing; `pnpm seed --fresh` wipes the local database and rebuilds it. The seed refuses production always, and a Supabase project unless `APP_ENV=staging`.
