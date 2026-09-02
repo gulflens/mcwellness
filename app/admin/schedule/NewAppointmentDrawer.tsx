@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { windowFor } from '@domain/scheduling';
 import { ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import {
   AppointmentOptionsResponse,
@@ -25,17 +26,6 @@ import { CloseIcon } from '../../shell/components/Icons';
 const PRACTICE_UTC_OFFSET = '+04:00'; // Asia/Dubai carries no daylight-saving change (matches
 // the same constant, independently kept, in app/api/appointments/list.ts, options.ts and create.ts).
 
-/** Mirrors `domain/scheduling/window.ts`'s own `WINDOW_MINUTES`, kept as a
- * local literal rather than imported: `domain/scheduling/index.ts` re-exports
- * `conflicts.ts`, which imports `@domain/shared`, whose own barrel
- * (`domain/shared/index.ts`) re-exports `identity.ts` — server-only code that
- * imports `node:crypto`. Vite cannot bundle that for the browser (this
- * screen is the first browser-side file to import anything from
- * `@domain/*`, which is how this surfaced), and `domain/shared/**` is
- * shared-zone, not this pull request's to fix. Flagged separately; if the
- * two numbers ever diverge, that domain fix is overdue. */
-const WINDOW_MINUTES = 45;
-
 /** `location.label` is the place's category, not a free-text address
  * (docs/SPEC/00-data-model.md section 3): 'studio' is the practice's one
  * studio location; anything else returned by the options route is a
@@ -56,14 +46,16 @@ function deliveryModeOf(locationLabel: string): DeliveryMode {
   return locationLabel === 'studio' ? 'studio' : 'home';
 }
 
-/** The 45-minute arrival window, shown as the start time is typed. Wraps
- * past midnight harmlessly; a session starting that late is out of scope. */
-function addMinutes(time: string, minutes: number): string {
+/** The arrival window's end, shown as the start time is typed, computed by
+ * `domain/scheduling`'s own `windowFor` rather than a locally-mirrored
+ * constant. The reference date is arbitrary — only the wall-clock time
+ * carries meaning here — so wrapping past midnight lands on the next day
+ * harmlessly; a session starting that late is out of scope. */
+function addMinutes(time: string): string {
   const [hours, mins] = time.split(':').map(Number);
-  const total = (hours ?? 0) * 60 + (mins ?? 0) + minutes;
-  const wrapped = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
-  const hh = String(Math.floor(wrapped / 60)).padStart(2, '0');
-  const mm = String(wrapped % 60).padStart(2, '0');
+  const { end } = windowFor(new Date(2000, 0, 1, hours ?? 0, mins ?? 0));
+  const hh = String(end.getHours()).padStart(2, '0');
+  const mm = String(end.getMinutes()).padStart(2, '0');
   return `${hh}:${mm}`;
 }
 
@@ -454,11 +446,7 @@ export function NewAppointmentDrawer({
                 setStartTime(e.target.value);
                 setSubmitError(null);
               }}
-              hint={
-                startTime
-                  ? `Arrival window ${startTime}–${addMinutes(startTime, WINDOW_MINUTES)}`
-                  : undefined
-              }
+              hint={startTime ? `Arrival window ${startTime}–${addMinutes(startTime)}` : undefined}
             />
           </div>
 
