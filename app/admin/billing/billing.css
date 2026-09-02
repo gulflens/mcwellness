@@ -1,0 +1,61 @@
+/*
+  Billing's own rules, layered on the shell's shared vocabulary
+  (app/shell/shell.css, which this worktree does not edit). Every value is a
+  token from app/shell/tokens.css; logical properties only, so the layout
+  mirrors for Arabic.
+*/
+
+/* The page header's aside carries a button here, not the metadata string it
+   was built for (app/shell/components/Controls.tsx wraps it in "small
+   muted"); restore the body type size and full-strength colour so "Add
+   price" reads as the primary action it is. */
+.page__aside .button {
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  color: inherit;
+}
+
+.drawer__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.drawer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-3);
+  padding-block-start: var(--s-2);
+}
+
+/* A field's own validation message, beside its hint but in the critical tone. */
+.field-error {
+  margin: 0;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--critical);
+}
+
+/* The live VAT-inclusive total: a small ledger-within-the-ledger. */
+.price-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--paper);
+}
+
+.price-preview__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+
+.price-preview__row--total {
+  font-weight: var(--w-medium);
+  padding-block-start: var(--s-2);
+  border-block-start: var(--hairline) solid var(--rule);
+}
