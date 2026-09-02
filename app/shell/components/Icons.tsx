@@ -65,3 +65,9 @@ export const SignOutIcon = (p: IconProps) => (
     <path d="M12 6.5 15.5 10 12 13.5M15.5 10H7.5" />
   </Icon>
 );
+
+export const ChevronIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M6 8l4 4 4-4" />
+  </Icon>
+);

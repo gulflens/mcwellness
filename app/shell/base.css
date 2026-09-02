@@ -71,7 +71,7 @@ small,
   font-size: var(--t-micro);
   line-height: var(--lh-micro);
   font-weight: var(--w-medium);
-  color: var(--slate);
+  color: var(--ink-2);
 }
 
 .muted {

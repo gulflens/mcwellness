@@ -4,6 +4,7 @@ import type {
   ReactNode,
   SelectHTMLAttributes,
 } from 'react';
+import { ChevronIcon } from './Icons';
 
 /** Buttons and fields in the ledger's vocabulary: ink on paper, no hue, 44px tall. */
 
@@ -25,10 +26,11 @@ export function Field({
   label,
   id,
   hint,
+  className,
   ...rest
 }: InputHTMLAttributes<HTMLInputElement> & { label: string; id: string; hint?: string }) {
   return (
-    <div className="field">
+    <div className={['field', className].filter(Boolean).join(' ')}>
       <label htmlFor={id} className="field__label">
         {label}
       </label>
@@ -49,9 +51,12 @@ export function Select({
       <label htmlFor={id} className="field__label">
         {label}
       </label>
-      <select id={id} className="field__input" {...rest}>
-        {children}
-      </select>
+      <span className="select">
+        <select id={id} className="field__input" {...rest}>
+          {children}
+        </select>
+        <ChevronIcon className="select__chevron" />
+      </span>
     </div>
   );
 }

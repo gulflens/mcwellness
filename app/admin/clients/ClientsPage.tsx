@@ -133,8 +133,13 @@ export function ClientsPage() {
       <div className="toolbar">
         <Field
           id="client-search"
+          className="field--search"
           label="Search"
           type="search"
+          autoFocus={
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(min-width: 720px)').matches
+          }
           placeholder="Name or record number"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

@@ -9,8 +9,8 @@ export function TodayLanding() {
   return (
     <div className="ground" data-ground="dark">
       <main className="plain plain--instrument">
-        <div className="micro">{roles}</div>
         <h1>Today</h1>
+        <div className="small muted">{roles}</div>
         <Note>
           The day sheet, the session runner and the route arrive with their own work. Nothing is
           scheduled yet.

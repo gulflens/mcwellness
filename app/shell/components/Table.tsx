@@ -7,7 +7,10 @@ import type { ReactNode } from 'react';
 export type Column<Row> = {
   key: string;
   header: string;
+  /** Tabular figures. */
   numeric?: boolean;
+  /** Quantities align end; identifiers and text align start (the default). */
+  align?: 'start' | 'end';
   render: (row: Row) => ReactNode;
 };
 
@@ -31,7 +34,7 @@ export function Table<Row>({
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.key} scope="col" className={column.numeric ? 'numeric' : undefined}>
+              <th key={column.key} scope="col" className={cellClass(column)}>
                 {column.header}
               </th>
             ))}
@@ -46,7 +49,7 @@ export function Table<Row>({
             rows.map((row) => (
               <tr key={rowKey(row)}>
                 {columns.map((column) => (
-                  <td key={column.key} className={column.numeric ? 'numeric' : undefined}>
+                  <td key={column.key} className={cellClass(column)}>
                     {column.render(row)}
                   </td>
                 ))}
@@ -57,4 +60,9 @@ export function Table<Row>({
       </table>
     </div>
   );
+}
+
+function cellClass<Row>(column: Column<Row>): string | undefined {
+  const classes = [column.numeric ? 'numeric' : null, column.align === 'end' ? 'align-end' : null];
+  return classes.filter(Boolean).join(' ') || undefined;
 }

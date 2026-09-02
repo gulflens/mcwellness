@@ -21,8 +21,12 @@ describe('Table', () => {
         rowKey={(r) => r.id}
       />,
     );
-    expect(screen.getByRole('columnheader', { name: 'Record' }).className).toBe('numeric');
-    expect(screen.getByRole('cell', { name: 'MW-000001' }).className).toBe('numeric');
+    expect(screen.getByRole('columnheader', { name: 'Record' }).classList.contains('numeric')).toBe(
+      true,
+    );
+    expect(screen.getByRole('cell', { name: 'MW-000001' }).classList.contains('numeric')).toBe(
+      true,
+    );
     expect(screen.getByRole('cell', { name: 'Amber Harbour' })).toBeTruthy();
   });
 
