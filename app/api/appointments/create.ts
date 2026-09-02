@@ -60,6 +60,8 @@ type OtherAppointmentRow = {
 type ClientRow = {
   given_name: string;
   family_name: string;
+  given_name_ar: string | null;
+  family_name_ar: string | null;
   status: string;
   date_of_birth: string | null;
 };
@@ -129,7 +131,8 @@ export function mountAppointmentCreate(
     // One query at a time: a request holds a single connection (request-context.ts),
     // so running these concurrently only queues them anyway, and pg now warns about it.
     const clientResult = await db.query<ClientRow>(
-      'select given_name, family_name, status, date_of_birth from client where id = $1',
+      'select given_name, family_name, given_name_ar, family_name_ar, status, date_of_birth ' +
+        'from client where id = $1',
       [clientId],
     );
     const client = clientResult.rows[0];
@@ -341,7 +344,13 @@ export function mountAppointmentCreate(
         windowEnd: created.window_end.toISOString(),
         status: created.status,
         deliveryMode: created.delivery_mode,
-        client: { id: clientId, givenName: client.given_name, familyName: client.family_name },
+        client: {
+          id: clientId,
+          givenName: client.given_name,
+          familyName: client.family_name,
+          givenNameAr: client.given_name_ar,
+          familyNameAr: client.family_name_ar,
+        },
         practitioner: { id: practitionerId, displayName: practitioner.display_name },
         serviceType: { id: serviceTypeId, name: serviceType.name },
         location: { id: locationId, label: location.label, emirate: location.emirate },
