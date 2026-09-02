@@ -124,6 +124,20 @@
   gap: var(--s-2);
 }
 
+/* A failed services load is not a dead end: the note names the problem,
+   and this control is the way out, same tap-target floor as everything
+   else on this face. */
+.checkin__services-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+
+.checkin__retry-services {
+  min-block-size: var(--tap);
+}
+
 .checkin__confirmation {
   display: flex;
   flex-direction: column;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { CheckInRequest, CheckInResponseReason } from '../../api/sessions/schema';
 import { CheckInResponse } from '../../api/sessions/schema';
-import { useAuth } from '../../shell/auth/AuthContext';
+import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import './CheckInPage.css';
 import { ServiceTypeOptionsResponse, SessionErrorBody, type ServiceTypeOption } from './schema';
@@ -143,6 +143,21 @@ function readPosition(): Promise<Point | null> {
   });
 }
 
+// A plain fetch-and-parse, returning the next state rather than setting it
+// itself: both the mount effect and the retry control in the services
+// error note call this same function and apply its result, so a failed
+// load is never a dead end (design re-check on pull request 24).
+function fetchServicesState(apiFetch: ApiFetch): Promise<ServicesState> {
+  return apiFetch('/api/sessions/service-types')
+    .then(async (res) => {
+      if (!res.ok) return { kind: 'error' } as const;
+      const parsed = ServiceTypeOptionsResponse.safeParse(await res.json());
+      if (!parsed.success) return { kind: 'error' } as const;
+      return { kind: 'ready', services: parsed.data.serviceTypes } as const;
+    })
+    .catch(() => ({ kind: 'error' }) as const);
+}
+
 export function CheckInPage() {
   const { apiFetch } = useAuth();
   const navigate = useNavigate();
@@ -166,33 +181,23 @@ export function CheckInPage() {
   const [locationNote, setLocationNote] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
 
+  const loadServices = useCallback(() => fetchServicesState(apiFetch), [apiFetch]);
+
   useEffect(() => {
     // The initial state is already 'loading' (useState above); this effect
     // only ever fires once in practice (apiFetch's identity is stable), so
-    // nothing needs setting synchronously here — only from the fetch's own
-    // callbacks, which is what react-hooks/set-state-in-effect asks for.
+    // nothing needs setting synchronously here — only from loadServices'
+    // own resolution, which is what react-hooks/set-state-in-effect asks
+    // for. The retry control in the error note below runs the same
+    // loadServices call — a failed load is not a dead end.
     let live = true;
-    void apiFetch('/api/sessions/service-types')
-      .then(async (res) => {
-        if (!live) return;
-        if (!res.ok) {
-          setServicesState({ kind: 'error' });
-          return;
-        }
-        const parsed = ServiceTypeOptionsResponse.safeParse(await res.json());
-        if (!parsed.success) {
-          setServicesState({ kind: 'error' });
-          return;
-        }
-        setServicesState({ kind: 'ready', services: parsed.data.serviceTypes });
-      })
-      .catch(() => {
-        if (live) setServicesState({ kind: 'error' });
-      });
+    void loadServices().then((next) => {
+      if (live) setServicesState(next);
+    });
     return () => {
       live = false;
     };
-  }, [apiFetch]);
+  }, [loadServices]);
 
   // Derived, not stored: the practitioner's own pick once made, otherwise
   // the first (usually only) certified service — computed at render rather
@@ -384,7 +389,25 @@ export function CheckInPage() {
 
             {servicesState.kind === 'loading' ? <Note>Loading your services.</Note> : null}
             {servicesState.kind === 'error' ? (
-              <Note tone="critical">The service list could not be loaded. Try again.</Note>
+              <div className="checkin__services-error">
+                <Note tone="critical">The service list could not be loaded.</Note>
+                <Button
+                  variant="secondary"
+                  className="checkin__retry-services"
+                  onClick={() => {
+                    // A click handler, not an effect, so setting 'loading'
+                    // synchronously here is fine: the retry shows "Loading
+                    // your services." immediately rather than sitting inert
+                    // until the fetch resolves.
+                    setServicesState({ kind: 'loading' });
+                    void loadServices().then((next) => {
+                      if (mountedRef.current) setServicesState(next);
+                    });
+                  }}
+                >
+                  Try again
+                </Button>
+              </div>
             ) : null}
             {servicesState.kind === 'ready' && services.length === 0 ? (
               <Note tone="critical">

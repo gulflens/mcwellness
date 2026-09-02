@@ -49,14 +49,22 @@ function mount(
   options: {
     services?: unknown[];
     onPost?: PostHandler;
+    onServiceTypes?: (callIndex: number) => Response;
   } = {},
 ) {
   const services = options.services ?? [SERVICE_A];
   const calls: Call[] = [];
+  let serviceTypesCalls = 0;
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
-    if (url === '/api/sessions/service-types') return json({ serviceTypes: services });
+    if (url === '/api/sessions/service-types') {
+      const index = serviceTypesCalls;
+      serviceTypesCalls += 1;
+      return options.onServiceTypes
+        ? options.onServiceTypes(index)
+        : json({ serviceTypes: services });
+    }
     if (init?.method === 'POST' && url.startsWith('/api/sessions/')) {
       const call: Call = { url, body: JSON.parse(String(init.body)) as Record<string, unknown> };
       calls.push(call);
@@ -157,6 +165,27 @@ describe('CheckInPage', () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Check in' })).toHaveProperty('disabled', true);
+  });
+
+  it('offers a visible retry when the services list fails to load, and recovers once it succeeds', async () => {
+    let serviceTypeCalls = 0;
+    mount({
+      onServiceTypes: () => {
+        serviceTypeCalls += 1;
+        return serviceTypeCalls === 1
+          ? json({ error: 'internal', requestId: 'r' }, 500)
+          : json({ serviceTypes: [SERVICE_A] });
+      },
+    });
+
+    await screen.findByText('The service list could not be loaded.');
+    const retry = screen.getByRole('button', { name: 'Try again' });
+    expect(retry.tagName).toBe('BUTTON');
+
+    fireEvent.click(retry);
+    expect(await screen.findByRole('option', { name: 'Neurofeedback session' })).toBeTruthy();
+    expect(screen.queryByText('The service list could not be loaded.')).toBeNull();
+    expect(serviceTypeCalls).toBe(2);
   });
 
   it('shows a confirmation with the time on a successful check-in', async () => {
