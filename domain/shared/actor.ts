@@ -135,8 +135,9 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.create':
       // Booking takes the booking role and, for the assignee, a credential that lets
-      // them deliver that service on that date: a role alone never suffices, and the
-      // assignee's credentials are the route's to resolve and pass in.
+      // them deliver that service on that date: a role alone never suffices. The
+      // assignee's credentials are the route's to resolve, for action.practitionerId
+      // and nobody else, and pass in; like ctx.clientIds, that binding is trusted here.
       return (
         hasRole(actor, 'owner', 'admin', 'lead_practitioner') &&
         (ctx.assigneeCapabilities ?? []).some(
