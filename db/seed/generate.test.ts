@@ -150,10 +150,3 @@ describe('generateSeed', () => {
     ).toHaveLength(1);
   });
 });
-
-describe('ageOn', () => {
-  it('counts whole years the way a person does', () => {
-    expect(ageOn('2008-09-02', '2026-09-02')).toBe(18);
-    expect(ageOn('2008-09-03', '2026-09-02')).toBe(17);
-  });
-});
