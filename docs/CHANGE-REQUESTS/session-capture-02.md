@@ -1,3 +1,7 @@
+**Applied in round 7b, 2026-09-02, pull request 29:** the check-in screen is
+now routed and linked from the shell (item 1 below); items 2 and 3 were
+already closed by pull request 23.
+
 # Change requests — session-capture, pull request 2
 
 The check-in screen (`app/therapist/session/CheckInPage.tsx`) is built and

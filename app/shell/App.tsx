@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
+import { hasRole } from '@domain/shared';
 import { ClientsPage } from '../admin/clients/ClientsPage';
 import { PortalLanding } from '../client/PortalLanding';
+import { CheckInPage } from '../therapist/session/CheckInPage';
 import { TodayLanding } from '../therapist/TodayLanding';
 import { AdminLayout } from './AdminLayout';
 import { useAuth, type Actor } from './auth/AuthContext';
@@ -45,6 +47,20 @@ export function App() {
         <Route path="clients" element={<ClientsPage />} />
       </Route>
       <Route path="/today" element={<RequireAuth>{() => <TodayLanding />}</RequireAuth>} />
+      <Route
+        path="/today/check-in"
+        element={
+          <RequireAuth>
+            {(actor) =>
+              hasRole(actor, 'practitioner', 'lead_practitioner') ? (
+                <CheckInPage />
+              ) : (
+                <Navigate to={homeFor(actor)} replace />
+              )
+            }
+          </RequireAuth>
+        }
+      />
       <Route path="/portal" element={<RequireAuth>{() => <PortalLanding />}</RequireAuth>} />
       <Route path="/no-access" element={<RequireAuth>{() => <NoAccessPage />}</RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
