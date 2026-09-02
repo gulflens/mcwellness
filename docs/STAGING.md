@@ -6,6 +6,81 @@ command or setting each step needs. Staging holds synthetic data only
 (docs/COMPLIANCE/approved-vendors.md); nothing here ever points at the old
 app's production project, which the repository's hook blocks by name.
 
+
+## Current project
+
+Created 2026-09-02 by the owner's instruction, after the paused June project
+was deleted: **`mcwellness`**, reference `ajjkvjtqxktkgrvcrzkh`, region
+Mumbai (`ap-south-1`), on the organisation's Pro plan. It holds synthetic data
+only. The old app's production project (`mcwellness-app`) is a different
+project and is blocked by name in this repository's hooks.
+
+- API URL: `https://ajjkvjtqxktkgrvcrzkh.supabase.co`
+- Direct database host: `db.ajjkvjtqxktkgrvcrzkh.supabase.co`, port 5432
+- Pooler: `aws-0-ap-south-1.pooler.supabase.com`, port 6543, role
+  `mcwellness_api.ajjkvjtqxktkgrvcrzkh`
+- Publishable key: public by design and safe in the browser, but it lives in
+  `.env.staging` and the build settings, never in this repository; the
+  dashboard's API settings show it.
+
+The database password and the API role's password never appear in this
+repository; on the laptop they live in the ignored `.env.staging`.
+
+
+## What was done on 2026-09-02, and what is left
+
+The schema and the seed went in without a database password on the laptop:
+the permission layer of the assistant's tooling refuses to mint one, and the
+password Supabase generated at creation was never retrieved. Nothing needed
+it.
+
+- The twelve migrations were applied one at a time, verbatim, through
+  Supabase's migration tool, then the three policy files, then the runner's
+  bookkeeping table and its twelve rows exactly as `db/runner/apply.ts`
+  writes them, so a later `pnpm db:migrate` sees nothing pending.
+- The hosted schema was fingerprinted against a freshly migrated local
+  database (functions, columns, constraints, indexes, triggers, policies,
+  row-level security, grants, partitions): all nine parts identical.
+- The API role received a generated password, held only in `.env.staging`.
+  From the laptop it connects over the session pooler at
+  `aws-0-ap-south-1.pooler.supabase.com`, with its ten-second statement
+  timeout in force and no rows visible without tenant context.
+- The synthetic practice was rendered as SQL with `pnpm seed:sql` under the
+  staging identity key and applied in one transaction. Every table's content
+  fingerprint matches a local seed, all 159 audit rows carry the seed's
+  reason and request id, the chain verifies, and the six sealed identifiers
+  open under the staging key and match their keyed hashes.
+- The API, started with `.env.staging` and serving the built app, answers
+  health, keeps the development door closed, refuses forged tokens, and
+  sends a content security policy naming the staging project.
+
+Left for the owner, in the dashboard under Authentication, Users, "Add
+user": four accounts with these exact emails, any password, and "Auto
+Confirm User" ticked. The assistant must never create sign-in accounts.
+
+| Email | Person in the seed |
+|---|---|
+| hazel.harbour@example.com | the owner |
+| jasper.ridge@example.com | a practitioner |
+| laurel.summit@example.com | a practitioner |
+| rowan.meadow@example.com | an admin |
+
+Once they exist, one statement links each account to its seeded person by
+email (`update app_user set auth_id = ...`), then the exit test runs and
+`trunk-v1` is tagged.
+
+**Done differently, and done.** Instead of the four synthetic accounts the
+owner chose two real staff accounts, created in the dashboard on
+2026-09-02: the owner herself (role owner) and the practice mailbox (role
+admin), each added as a person in the synthetic practice with no phone
+number and linked by email. The exit test passed the same afternoon: the
+owner signed in through Supabase Auth to the built app served with the
+staging settings, the API resolved her as owner, the client list showed
+the twenty synthetic clients, and the audit trail holds one `list` read
+per client under her account with the owner role and a request id, chain
+intact. `trunk-v1` is tagged on main. Real clients stay out of staging: it
+is approved for synthetic data only.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
