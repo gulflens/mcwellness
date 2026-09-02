@@ -352,6 +352,7 @@ A label above, a box below, both in the ledger's vocabulary.
 - **Select:** the same box, with a 20px chevron in second ink absolutely placed 12px from the inline end and 40px of end padding so the value never runs under it.
 - **Search:** the primary action on the clients page; it takes the toolbar's width and autofocuses at 720px and above.
 - **Focus:** the shared ring. **Error:** there is no red border; errors are a critical Note beneath the form.
+- **Disabled:** ink-2 text on the paper ground, the same hairline border in Rule, a default cursor and no hover change; the hint still renders beneath so a locked step can say what it is waiting for.
 
 ### Navigation
 The rail: the console's fixed inline-start column, icon and label, no collapse toggle.

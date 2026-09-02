@@ -82,3 +82,23 @@ describe('Select', () => {
     expect(select.getAttribute('aria-invalid')).toBeNull();
   });
 });
+
+describe('disabled', () => {
+  it('reaches the input, and the hint keeps explaining what the field waits for', () => {
+    render(<Field id="price" label="Price" hint="Set once the visit type is chosen" disabled />);
+    const input = screen.getByLabelText('Price');
+    expect(input.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Set once the visit type is chosen')).toBeTruthy();
+  });
+
+  it('reaches the select, and the hint keeps explaining what the field waits for', () => {
+    render(
+      <Select id="zone" label="Zone" hint="Set once the address is confirmed" disabled>
+        <option value="">Any zone</option>
+      </Select>,
+    );
+    const select = screen.getByLabelText('Zone');
+    expect(select.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Set once the address is confirmed')).toBeTruthy();
+  });
+});

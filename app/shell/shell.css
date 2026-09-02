@@ -743,3 +743,11 @@ a.rail__item:active,
 .timeline__event--create .timeline__sentence {
   font-weight: var(--w-medium);
 }
+
+/* Round 7a: a locked field explains itself instead of just going quiet. */
+.field__input:disabled {
+  color: var(--ink-2);
+  background: var(--paper);
+  border-color: var(--rule);
+  cursor: default;
+}
