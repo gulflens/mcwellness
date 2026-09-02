@@ -50,7 +50,7 @@ describe('createTokenVerifier', () => {
   it('refuses a token signed with a different secret', async () => {
     const other = createTokenVerifier({
       issuer: ISSUER,
-      secret: 'another-secret-value-9876543210',
+      secret: 'another-test-secret-that-unlocks-nothing-9876543210',
     });
     expect(await other.verify(await mint())).toBeNull();
   });
