@@ -402,6 +402,11 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
       );
     case 'client.update':
       return `${actor} ${joinClauses(clientClauses(event, fields, locale), locale)}`;
+    case 'client.refused':
+      return pick(
+        t(`${actor} was refused access to this record`, `${actor} مُنع من الوصول إلى هذا السجل`),
+        locale,
+      );
     case 'contact.insert': {
       const rel = label(RELATIONSHIP, event.newValues?.relationship, locale);
       return rel
@@ -475,6 +480,18 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         ? pick(t(`${actor} filed a document (${kind})`, `${actor} أودع مستندًا (${kind})`), locale)
         : pick(t(`${actor} filed a document`, `${actor} أودع مستندًا`), locale);
     }
+    case 'goal.insert':
+      return pick(
+        t(`${actor} set a goal for this record`, `${actor} حدّد هدفًا لهذا السجل`),
+        locale,
+      );
+    case 'goal.update':
+      return pick(t(`${actor} updated a goal`, `${actor} حدّث هدفًا`), locale);
+    case 'erasure_request.insert':
+      return pick(
+        t(`${actor} requested erasure of this record`, `${actor} طلب محو هذا السجل`),
+        locale,
+      );
     default: {
       const entity = label(ENTITY, event.entityType, locale) ?? event.entityType.replace(/_/g, ' ');
       switch (event.action) {

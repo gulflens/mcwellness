@@ -122,6 +122,30 @@ const CASES: { name: string; event: AuditEvent; en: string; ar: string }[] = [
     ar: 'Hazel Harbour أودع مستندًا (consent_text)',
   },
   {
+    name: 'setting a goal',
+    event: event({ entityType: 'goal' }),
+    en: 'Hazel Harbour set a goal for this record',
+    ar: 'Hazel Harbour حدّد هدفًا لهذا السجل',
+  },
+  {
+    name: 'updating a goal',
+    event: event({ entityType: 'goal', action: 'update', changedFields: ['status'] }),
+    en: 'Hazel Harbour updated a goal',
+    ar: 'Hazel Harbour حدّث هدفًا',
+  },
+  {
+    name: 'requesting erasure of a record',
+    event: event({ entityType: 'erasure_request' }),
+    en: 'Hazel Harbour requested erasure of this record',
+    ar: 'Hazel Harbour طلب محو هذا السجل',
+  },
+  {
+    name: 'being refused access to a record',
+    event: event({ action: 'refused' }),
+    en: 'Hazel Harbour was refused access to this record',
+    ar: 'Hazel Harbour مُنع من الوصول إلى هذا السجل',
+  },
+  {
     name: 'a system row with no actor',
     event: event({ actor: null, actorType: 'system', entityType: 'tenant' }),
     en: 'The system added a practice',
@@ -186,5 +210,23 @@ describe('narrate', () => {
         expect(narrate(c.event, locale)?.sentence).not.toMatch(/[{}"]/);
       }
     }
+  });
+
+  it('falls back to the generic wording for an entity or action the catalogue has no sentence for', () => {
+    // An entity nothing above names: today's fallback, unchanged by the new sentences.
+    expect(narrate(event({ entityType: 'widget' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added a widget',
+    );
+    expect(narrate(event({ entityType: 'widget' }), 'ar')?.sentence).toBe(
+      'Hazel Harbour أضاف widget',
+    );
+    // goal.delete: goal has sentences for insert and update only, so delete still falls back.
+    expect(narrate(event({ entityType: 'goal', action: 'delete' }), 'en')?.sentence).toBe(
+      'Hazel Harbour removed a goal',
+    );
+    // An action nothing above names, on an entity that does have other special wording.
+    expect(narrate(event({ entityType: 'client', action: 'sign' }), 'en')?.sentence).toBe(
+      'Hazel Harbour recorded sign on the record',
+    );
   });
 });
