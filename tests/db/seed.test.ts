@@ -14,6 +14,25 @@ import { asApiRole, freshDatabase, rolledBack } from './helpers';
 const KEYS = deriveIdentityKeys(Buffer.alloc(32, 7));
 const data = generateSeed();
 
+// The tables the seed itself writes (00-data-model.md sections 2 and 3). A
+// stream's own after-insert trigger on tenant (099_tenant_scoped_keys.sql's
+// convention, docs/SPEC/00-data-model.md section 7) writes its default row
+// under the same transaction and reason, so audit-row counts below are
+// floored to this set rather than every row the seed's transaction produced.
+const SEED_TABLES = [
+  'tenant',
+  'app_user',
+  'user_role',
+  'service_type',
+  'practitioner',
+  'credential',
+  'location',
+  'client',
+  'contact',
+  'document',
+  'consent',
+];
+
 let owner: pg.Client;
 let counts: SeedCounts;
 
@@ -71,8 +90,8 @@ describe('the synthetic seed', () => {
   it('records every row in the audit trail under the seed reason, as the owner', async () => {
     const { rows } = await owner.query<{ action: string; actor_id: string | null; n: number }>(
       'select action, actor_id, count(*)::int as n from audit_log where reason = $1 ' +
-        'group by action, actor_id',
-      [SEED_REASON],
+        'and entity_type = any($2) group by action, actor_id',
+      [SEED_REASON, SEED_TABLES],
     );
     const inserted = Object.values(counts).reduce((sum, n) => sum + n, 0);
     const insertRows = rows.filter((r) => r.action === 'insert');
@@ -82,8 +101,9 @@ describe('the synthetic seed', () => {
     expect(insertRows.find((r) => r.actor_id === SEED_OWNER_USER_ID)?.n).toBe(inserted - 2);
     expect(rows.find((r) => r.action === 'update')?.n).toBe(20);
     const { rows: roled } = await owner.query<{ n: number }>(
-      'select count(*)::int as n from audit_log where reason = $1 and actor_id = $2 and actor_role = $3',
-      [SEED_REASON, SEED_OWNER_USER_ID, 'owner,admin,lead_practitioner,finance'],
+      'select count(*)::int as n from audit_log where reason = $1 and actor_id = $2 ' +
+        'and actor_role = $3 and entity_type = any($4)',
+      [SEED_REASON, SEED_OWNER_USER_ID, 'owner,admin,lead_practitioner,finance', SEED_TABLES],
     );
     expect(roled[0]?.n).toBe(inserted - 2 + 20);
   });
@@ -137,16 +157,17 @@ describe('the rendered seed script', () => {
       const inserted = Object.values(counts).reduce((sum, n) => sum + n, 0);
       const { rows } = await fresh.query<{ action: string; actor_id: string | null; n: number }>(
         'select action, actor_id, count(*)::int as n from audit_log where reason = $1 ' +
-          'and request_id is not null group by action, actor_id',
-        [SEED_REASON],
+          'and request_id is not null and entity_type = any($2) group by action, actor_id',
+        [SEED_REASON, SEED_TABLES],
       );
       const insertRows = rows.filter((r) => r.action === 'insert');
       expect(insertRows.find((r) => r.actor_id === null)?.n).toBe(2);
       expect(insertRows.find((r) => r.actor_id === SEED_OWNER_USER_ID)?.n).toBe(inserted - 2);
       expect(rows.find((r) => r.action === 'update')?.n).toBe(20);
       const { rows: roled } = await fresh.query<{ n: number }>(
-        'select count(*)::int as n from audit_log where reason = $1 and actor_role = $2',
-        [SEED_REASON, 'owner,admin,lead_practitioner,finance'],
+        'select count(*)::int as n from audit_log where reason = $1 and actor_role = $2 ' +
+          'and entity_type = any($3)',
+        [SEED_REASON, 'owner,admin,lead_practitioner,finance', SEED_TABLES],
       );
       expect(roled[0]?.n).toBe(inserted - 2 + 20);
       const { rows: sealed } = await fresh.query<{ id: string; emirates_id_encrypted: Buffer }>(
