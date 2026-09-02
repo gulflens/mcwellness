@@ -22,7 +22,7 @@ try {
   const url = requireDatabaseUrl();
   const appEnv = process.env.APP_ENV;
   const local = isLocalDatabaseUrl(url);
-  const refusal = seedTargetError(local ? 'localhost' : new URL(url).hostname, appEnv);
+  const refusal = seedTargetError(local ? 'localhost' : 'remote', appEnv);
   if (refusal !== null) {
     throw new Error(refusal);
   }

@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type pg from 'pg';
 import { emiratesIdHash, sealEmiratesId, type IdentityKeys } from '../../domain/shared/identity';
+import { isLocalHost } from '../runner/plan';
 import { SEED_OWNER_USER_ID, SEED_REASON, SEED_TENANT_ID, type SeedData } from './generate';
 
 /**
@@ -35,7 +36,7 @@ export function seedTargetError(
   host: string | undefined,
   appEnv: string | undefined,
 ): string | null {
-  const local = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  const local = host !== undefined && isLocalHost(host);
   if (appEnv === 'production') return 'The seed never runs against production.';
   if (!local && appEnv !== 'staging') {
     return 'The seed runs against a local database, or a staging project only when APP_ENV=staging.';

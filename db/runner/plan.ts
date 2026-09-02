@@ -89,7 +89,12 @@ export function planMigrations(
   return pending;
 }
 
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+/** Whether a host name, as a URL or a connected pg.Client reports it, is this machine. */
+export function isLocalHost(host: string): boolean {
+  return LOCAL_HOSTS.has(host);
+}
 
 /**
  * True only for a connection string that can reach nothing but this machine.
