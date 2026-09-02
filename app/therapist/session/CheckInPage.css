@@ -1,0 +1,145 @@
+/*
+  This screen's own layout, plus the location switch, which is not yet in
+  the shared component library (app/shell/components). Every value here is
+  a token from app/shell/tokens.css; the switch's on/off state is drawn in
+  ink versus rule, not a new accent hue, keeping the achromatic chrome rule
+  (docs/DESIGN-BRIEF.md section 2, DESIGN.md "The Silent Chrome Rule").
+*/
+
+.checkin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.checkin__back {
+  align-self: flex-start;
+  padding-inline: 0;
+  min-block-size: var(--tap);
+}
+
+.checkin__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+/* Every tap target on this face meets the practitioner-app floor
+   (.claude/rules/ui.md, DESIGN-BRIEF.md section 4.3) — taller than the
+   ledger's 44px row the shared field styles ship with elsewhere. */
+.checkin .field__input {
+  min-block-size: var(--tap);
+}
+
+.checkin .field__input[aria-invalid='true'] {
+  border-color: var(--critical);
+}
+
+.checkin__switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-block-size: var(--tap);
+  cursor: pointer;
+}
+
+.checkin__switch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  inline-size: var(--s-12);
+  block-size: var(--s-6);
+}
+
+.switch__input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Off is a real, visible control — a filled surface with an ink-2 edge —
+   never a track that reads as blank chrome (item 6). */
+.switch__track {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--s-6) / 2);
+  border: var(--hairline) solid var(--ink-2);
+  background: var(--surface);
+}
+
+.switch--on .switch__track {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.switch__thumb {
+  position: absolute;
+  inset-inline-start: var(--s-1);
+  inset-block-start: var(--s-1);
+  inline-size: var(--s-4);
+  block-size: var(--s-4);
+  border-radius: 50%;
+  background: var(--ink-2);
+}
+
+.switch--on .switch__thumb {
+  inset-inline-start: calc(var(--s-12) - var(--s-4) - var(--s-1));
+  background: var(--paper);
+}
+
+.switch__input:focus-visible ~ .switch__track {
+  box-shadow: var(--focus);
+}
+
+/* The primary action stays reachable in the thumb zone no matter how many
+   notes stack above it (DESIGN-BRIEF.md section 6.1): pinned to the
+   viewport's bottom edge, inside the safe area, instead of scrolled away
+   behind service, location and error notes. */
+.checkin__dock {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 1;
+  padding-block: var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.checkin__primary {
+  inline-size: 100%;
+  min-block-size: calc(var(--s-12) + var(--s-2));
+}
+
+.checkin__reasons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+/* A failed services load is not a dead end: the note names the problem,
+   and this control is the way out, same tap-target floor as everything
+   else on this face. */
+.checkin__services-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+
+.checkin__retry-services {
+  min-block-size: var(--tap);
+}
+
+.checkin__confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
