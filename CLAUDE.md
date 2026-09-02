@@ -26,7 +26,7 @@ TypeScript everywhere. React + Vite app with three role areas (admin, practition
 - The owner is not a developer. When asked, explain changes in plain language.
 
 ## Commands
-pnpm dev · pnpm test · pnpm test:db · pnpm verify · pnpm db:migrate · pnpm db:reset · pnpm seed
+pnpm dev · pnpm test · pnpm test:db · pnpm verify (includes the secrets scan) · pnpm audit:deps · pnpm db:migrate · pnpm db:reset · pnpm seed · pnpm build · pnpm start
 
 ## Visual system
 Read docs/DESIGN-BRIEF.md before writing any UI.
