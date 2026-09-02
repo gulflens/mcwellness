@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { CheckInRequest, CheckInResponseReason } from '../../api/sessions/schema';
 import { CheckInResponse } from '../../api/sessions/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { Button, Note, Select } from '../../shell/components/Controls';
 import './CheckInPage.css';
-import { ServiceTypeOptionsResponse, type ServiceTypeOption } from './schema';
+import { ServiceTypeOptionsResponse, SessionErrorBody, type ServiceTypeOption } from './schema';
 
 /**
  * The practitioner's check-in screen (docs/SPEC/session-capture.md section
@@ -38,27 +38,69 @@ type Outcome =
   | { kind: 'checked-in'; checkedInAt: string }
   | { kind: 'blocked'; reasons: CheckInResponseReason[] }
   | { kind: 'forbidden' }
+  | { kind: 'not-booked' }
   | { kind: 'conflict' }
   | { kind: 'failed' };
+
+// The inputs that decide whether a retry is genuinely a retry (same visit,
+// same tap) or a corrected attempt at checking in someone else (item 1,
+// docs/CHANGE-REQUESTS): the session and event ids are only ever reused
+// when all three match the previous attempt exactly.
+type AttemptKey = { recordNumber: string; serviceTypeId: string; deliveryMode: DeliveryMode };
+type Attempt = { sessionId: string; eventId: string; key: AttemptKey };
+
+function sameAttemptKey(a: AttemptKey, b: AttemptKey): boolean {
+  return (
+    a.recordNumber === b.recordNumber &&
+    a.serviceTypeId === b.serviceTypeId &&
+    a.deliveryMode === b.deliveryMode
+  );
+}
 
 const RECORD_NUMBER_PATTERN = /^MW-\d{6}$/;
 const RECORD_NUMBER_HINT =
   'Enter the record number as MW- followed by six digits, for example MW-000123.';
 
+const LOCATION_PURPOSE =
+  'Proof you were at the door when you checked in, never tracking, and seen only by the practice.';
+
+// Passed to getCurrentPosition itself (item 2): no cached fix, and give up
+// rather than let the practitioner wait indefinitely on a bad signal.
+const LOCATION_TIMEOUT_MS = 10000;
+// A guard the browser's own API does not promise: a device that calls
+// neither callback at all (some in-app WebViews do this) would otherwise
+// leave the switch waiting forever. Resolved here instead, a little after
+// getCurrentPosition's own timeout, with the point left null.
+const LOCATION_DEADMAN_MS = LOCATION_TIMEOUT_MS + 2000;
+const LOCATION_NOTE_UNSUPPORTED = 'This device cannot share its location.';
+const LOCATION_NOTE_NOT_SHARED = 'Location was not shared. Check-in will continue without it.';
+
 const REASON_COPY: Record<CheckInResponseReason, string> = {
-  not_authorised: 'Certification for this service is not valid today.',
-  consent_missing_participation: 'Consent to be seen is missing.',
-  consent_missing_minor_participation: "A guardian's consent is missing.",
-  consent_missing_home_visit: 'Home-visit consent is missing.',
-  date_of_birth_unknown: 'Date of birth is not recorded.',
-  already_checked_in: 'Already checked in on another device.',
+  not_authorised:
+    'You are not set up to deliver this service today. Ask the practice to check why.',
+  consent_missing_participation: 'Consent to be seen is missing. Ask the practice to add it.',
+  consent_missing_minor_participation:
+    "A guardian's consent is missing. Ask the practice to add it.",
+  consent_missing_home_visit: 'Home-visit consent is missing. Ask the practice to add it.',
+  date_of_birth_unknown: 'Date of birth is not recorded. Ask the practice to add it.',
+  already_checked_in: 'Already checked in on another device. Ask the practice if that was not you.',
 };
 
 const FORBIDDEN_MESSAGE =
   'You do not have access to check in a visit. Ask the practice to check your account.';
+const NOT_BOOKED_MESSAGE =
+  'This visit is not booked for you today. Check the record number, or ask the practice.';
 const CONFLICT_MESSAGE = 'That check-in could not be completed. Try again.';
-const FAILED_MESSAGE = 'Something went wrong. Try again.';
+const FAILED_MESSAGE = 'Something went wrong. Check your connection, then try again.';
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+
+// Outcomes a plain retry cannot clear: nothing changes about the request
+// that could make a second identical attempt succeed, so the primary
+// action keeps naming the action rather than implying a retry will help
+// (item 9 — "does not turn the primary into 'Try again'").
+function isUnretriable(outcome: Outcome): boolean {
+  return outcome.kind === 'blocked' || outcome.kind === 'forbidden';
+}
 
 function normalizeRecordNumber(value: string): string {
   return value.trim().toUpperCase();
@@ -77,21 +119,51 @@ function formatCheckedInTime(iso: string): string {
   }).format(new Date(iso));
 }
 
+// A single read of the device's position, options fixed at the door (item
+// 2): never a cached fix, and resolved to null — rather than left pending —
+// whenever the device refuses, times out, or (the dead-man guard) never
+// calls either callback at all.
+function readPosition(): Promise<Point | null> {
+  const geolocation = typeof navigator === 'undefined' ? undefined : navigator.geolocation;
+  if (!geolocation) return Promise.resolve(null);
+  return new Promise<Point | null>((resolve) => {
+    let settled = false;
+    const finish = (value: Point | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadman);
+      resolve(value);
+    };
+    const deadman = setTimeout(() => finish(null), LOCATION_DEADMAN_MS);
+    geolocation.getCurrentPosition(
+      (position) => finish({ lat: position.coords.latitude, lng: position.coords.longitude }),
+      () => finish(null),
+      { timeout: LOCATION_TIMEOUT_MS, maximumAge: 0 },
+    );
+  });
+}
+
 export function CheckInPage() {
   const { apiFetch } = useAuth();
   const navigate = useNavigate();
 
-  const [sessionId] = useState(() => crypto.randomUUID());
-  const [eventId] = useState(() => crypto.randomUUID());
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const [attempt, setAttempt] = useState<Attempt | null>(null);
 
   const [servicesState, setServicesState] = useState<ServicesState>({ kind: 'loading' });
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [recordNumber, setRecordNumber] = useState('');
+  const [recordNumberError, setRecordNumberError] = useState<string | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('home');
   const [shareLocation, setShareLocation] = useState(false);
-  const [point, setPoint] = useState<Point | null>(null);
   const [locationNote, setLocationNote] = useState<string | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
 
   useEffect(() => {
@@ -131,55 +203,62 @@ export function CheckInPage() {
   const handleShareLocationChange = useCallback(async (next: boolean) => {
     setShareLocation(next);
     if (!next) {
-      setPoint(null);
       setLocationNote(null);
       return;
     }
     const geolocation = typeof navigator === 'undefined' ? undefined : navigator.geolocation;
     if (!geolocation) {
-      setPoint(null);
-      setLocationNote('This device cannot share its location.');
+      setLocationNote(LOCATION_NOTE_UNSUPPORTED);
       return;
     }
-    await new Promise<void>((resolve) => {
-      geolocation.getCurrentPosition(
-        (position) => {
-          setPoint({ lat: position.coords.latitude, lng: position.coords.longitude });
-          setLocationNote(null);
-          resolve();
-        },
-        () => {
-          setPoint(null);
-          setLocationNote('Location was not shared. Check-in will continue without it.');
-          resolve();
-        },
-      );
-    });
+    // This first read is only ever used for immediate feedback (permission
+    // refused, device unsupported): the point actually sent is read again,
+    // fresh, at the moment of submission, below.
+    const nextPoint = await readPosition();
+    if (!mountedRef.current) return;
+    setLocationNote(nextPoint ? null : LOCATION_NOTE_NOT_SHARED);
   }, []);
 
   const submit = useCallback(async () => {
     const normalizedRecordNumber = normalizeRecordNumber(recordNumber);
     const formatError = validateRecordNumber(normalizedRecordNumber);
     if (formatError) {
-      setValidationError(formatError);
+      setRecordNumberError(formatError);
       return;
     }
     if (!effectiveServiceId) {
-      setValidationError('Choose a service before checking in.');
+      // The primary action is disabled whenever there is no service to
+      // pick (see canSubmit below), so this guards a state the UI never
+      // actually reaches.
       return;
     }
     const serviceTypeId = effectiveServiceId;
-    setValidationError(null);
+    setRecordNumberError(null);
     setOutcome({ kind: 'submitting' });
+
+    // Read the position again, now, rather than trusting whatever was
+    // captured when the switch was first turned on: the point recorded is
+    // where the practitioner is standing at the moment they tap (item 2).
+    const submittedPoint = shareLocation ? await readPosition() : null;
+    if (mountedRef.current) {
+      setLocationNote(shareLocation && !submittedPoint ? LOCATION_NOTE_NOT_SHARED : null);
+    }
+
+    const key: AttemptKey = { recordNumber: normalizedRecordNumber, serviceTypeId, deliveryMode };
+    const ids: Attempt =
+      attempt && sameAttemptKey(attempt.key, key)
+        ? attempt
+        : { sessionId: crypto.randomUUID(), eventId: crypto.randomUUID(), key };
+    setAttempt(ids);
 
     const body: CheckInRequest = {
       // See this file's header comment and the pull request body: the
       // record number, not yet the uuid app/api/sessions/schema.ts expects.
       clientId: normalizedRecordNumber,
-      point,
+      point: submittedPoint,
       events: [
         {
-          id: eventId,
+          id: ids.eventId,
           seq: 1,
           kind: 'session_started',
           deviceAt: new Date().toISOString(),
@@ -189,7 +268,7 @@ export function CheckInPage() {
     };
 
     try {
-      const res = await apiFetch(`/api/sessions/${sessionId}/events`, {
+      const res = await apiFetch(`/api/sessions/${ids.sessionId}/events`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
@@ -200,6 +279,15 @@ export function CheckInPage() {
       }
       if (res.status === 409) {
         setOutcome({ kind: 'conflict' });
+        return;
+      }
+      if (res.status === 400) {
+        const parsedError = SessionErrorBody.safeParse(await res.json().catch(() => null));
+        if (parsedError.success && parsedError.data.detail === 'client_not_found') {
+          setOutcome({ kind: 'not-booked' });
+          return;
+        }
+        setOutcome({ kind: 'failed' });
         return;
       }
       if (res.status === 422) {
@@ -224,7 +312,7 @@ export function CheckInPage() {
     } catch {
       setOutcome({ kind: 'failed' });
     }
-  }, [apiFetch, deliveryMode, effectiveServiceId, eventId, point, recordNumber, sessionId]);
+  }, [apiFetch, attempt, deliveryMode, effectiveServiceId, recordNumber, shareLocation]);
 
   if (outcome.kind === 'checked-in') {
     return (
@@ -251,6 +339,11 @@ export function CheckInPage() {
 
   const submitting = outcome.kind === 'submitting';
   const canSubmit = services.length > 0 && !submitting;
+  const primaryLabel = submitting
+    ? 'Checking in…'
+    : outcome.kind === 'idle' || isUnretriable(outcome)
+      ? 'Check in'
+      : 'Try again';
 
   return (
     <div className="ground" data-ground="dark">
@@ -261,14 +354,33 @@ export function CheckInPage() {
           </Button>
           <h1>Check in</h1>
           <div className="checkin__form">
-            <Field
-              id="checkin-record-number"
-              label="Record number"
-              placeholder="MW-000123"
-              autoComplete="off"
-              value={recordNumber}
-              onChange={(e) => setRecordNumber(e.target.value)}
-            />
+            <div className="field">
+              <label htmlFor="checkin-record-number" className="field__label">
+                Record number
+              </label>
+              <input
+                id="checkin-record-number"
+                className="field__input numeric"
+                placeholder="MW-000123"
+                autoComplete="off"
+                value={recordNumber}
+                onChange={(e) => {
+                  setRecordNumber(e.target.value);
+                  if (recordNumberError) setRecordNumberError(null);
+                }}
+                aria-invalid={recordNumberError ? true : undefined}
+                aria-describedby="checkin-record-number-hint"
+              />
+              <div
+                id="checkin-record-number-hint"
+                className={
+                  recordNumberError ? 'field__hint small note--critical' : 'field__hint small muted'
+                }
+                role={recordNumberError ? 'alert' : undefined}
+              >
+                {recordNumberError ?? RECORD_NUMBER_HINT}
+              </div>
+            </div>
 
             {servicesState.kind === 'loading' ? <Note>Loading your services.</Note> : null}
             {servicesState.kind === 'error' ? (
@@ -309,7 +421,7 @@ export function CheckInPage() {
             <label className="checkin__switch-row">
               <span className="checkin__switch-copy">
                 <span>Share my location</span>
-                <span className="small muted">Records where you checked in, at the door.</span>
+                <span className="small muted">{LOCATION_PURPOSE}</span>
               </span>
               <span className={shareLocation ? 'switch switch--on' : 'switch'}>
                 <input
@@ -326,7 +438,6 @@ export function CheckInPage() {
             </label>
             {locationNote ? <Note>{locationNote}</Note> : null}
 
-            {validationError ? <Note tone="critical">{validationError}</Note> : null}
             {outcome.kind === 'blocked' ? (
               <div className="checkin__reasons">
                 {outcome.reasons.map((reason) => (
@@ -337,17 +448,22 @@ export function CheckInPage() {
               </div>
             ) : null}
             {outcome.kind === 'forbidden' ? <Note tone="critical">{FORBIDDEN_MESSAGE}</Note> : null}
+            {outcome.kind === 'not-booked' ? (
+              <Note tone="critical">{NOT_BOOKED_MESSAGE}</Note>
+            ) : null}
             {outcome.kind === 'conflict' ? <Note tone="critical">{CONFLICT_MESSAGE}</Note> : null}
             {outcome.kind === 'failed' ? <Note tone="critical">{FAILED_MESSAGE}</Note> : null}
 
-            <Button
-              variant="primary"
-              className="checkin__primary"
-              disabled={!canSubmit}
-              onClick={() => void submit()}
-            >
-              {submitting ? 'Checking in…' : outcome.kind === 'idle' ? 'Check in' : 'Try again'}
-            </Button>
+            <div className="checkin__dock">
+              <Button
+                variant="primary"
+                className="checkin__primary"
+                disabled={!canSubmit}
+                onClick={() => void submit()}
+              >
+                {primaryLabel}
+              </Button>
+            </div>
           </div>
         </div>
       </main>

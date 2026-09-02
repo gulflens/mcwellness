@@ -24,3 +24,17 @@ export const ServiceTypeOptionsResponse = z.object({
   serviceTypes: z.array(ServiceTypeOption),
 });
 export type ServiceTypeOptionsResponse = z.infer<typeof ServiceTypeOptionsResponse>;
+
+/**
+ * The shape of a refusal body from `app/api/sessions/**` (`checkin.ts`'s
+ * `c.json({ error, requestId, detail })`), read only far enough to tell one
+ * 400 apart from another — a record number that does not resolve for this
+ * practitioner today (`detail: 'client_not_found'`) reads a plain sentence
+ * rather than falling into this screen's generic failure.
+ */
+export const SessionErrorBody = z.object({
+  error: z.string(),
+  requestId: z.string().nullable().optional(),
+  detail: z.string().optional(),
+});
+export type SessionErrorBody = z.infer<typeof SessionErrorBody>;
