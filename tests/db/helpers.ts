@@ -5,6 +5,7 @@ import {
   requireDatabaseUrl,
   resetDatabase,
   runMigrations,
+  syncLocalApiRolePassword,
 } from '../../db/runner/apply';
 import { isLocalDatabaseUrl } from '../../db/runner/plan';
 
@@ -46,6 +47,7 @@ export async function freshDatabase(): Promise<pg.Client> {
   await resetDatabase(client);
   await runMigrations(client);
   await applyPolicies(client);
+  await syncLocalApiRolePassword(client, process.env.API_DATABASE_URL);
   return client;
 }
 
@@ -185,4 +187,99 @@ export async function seedLocation(
 export async function count(client: pg.Client, table: string): Promise<number> {
   const { rows } = await client.query<{ n: string }>(`select count(*)::text as n from ${table}`);
   return Number(rows[0]?.n ?? 0);
+}
+
+/** Auth ids (the Supabase user ids a token would carry). Synthetic. */
+export const AUTH = {
+  ownerA: '00000000-0000-4000-8000-0000000000aa',
+  practitionerA: '00000000-0000-4000-8000-0000000000ab',
+  contactA: '00000000-0000-4000-8000-0000000000ac',
+  suspendedA: '00000000-0000-4000-8000-0000000000ad',
+  unknown: '00000000-0000-4000-8000-0000000000af',
+} as const;
+
+export const MORE_IDS = {
+  practitionerUserA: '00000000-0000-4000-8000-0000000000a2',
+  contactUserA: '00000000-0000-4000-8000-0000000000a3',
+  suspendedUserA: '00000000-0000-4000-8000-0000000000a4',
+  practitionerA: '00000000-0000-4000-8000-0000000000b9',
+  serviceTypeA: '00000000-0000-4000-8000-0000000000f1',
+} as const;
+
+export async function seedUser(
+  client: pg.Client,
+  user: {
+    id: string;
+    tenantId: string;
+    authId: string | null;
+    displayName: string;
+    status?: 'active' | 'suspended' | 'archived';
+    roles?: readonly string[];
+  },
+): Promise<void> {
+  await client.query(
+    'insert into app_user (id, tenant_id, auth_id, display_name, status) values ($1, $2, $3, $4, $5)',
+    [user.id, user.tenantId, user.authId, user.displayName, user.status ?? 'active'],
+  );
+  for (const role of user.roles ?? []) {
+    await client.query(
+      'insert into user_role (tenant_id, user_id, role) values ($1, $2, $3::role_kind)',
+      [user.tenantId, user.id, role],
+    );
+  }
+}
+
+export async function seedServiceType(
+  client: pg.Client,
+  tenantId: string,
+  id: string,
+  code: string,
+): Promise<void> {
+  await client.query(
+    'insert into service_type (id, tenant_id, code, name, duration_minutes, delivery_modes) ' +
+      "values ($1, $2, $3, $3, 60, '{home}')",
+    [id, tenantId, code],
+  );
+}
+
+export async function seedPractitioner(
+  client: pg.Client,
+  tenantId: string,
+  id: string,
+  userId: string,
+): Promise<void> {
+  await client.query('insert into practitioner (id, tenant_id, user_id) values ($1, $2, $3)', [
+    id,
+    tenantId,
+    userId,
+  ]);
+}
+
+export async function seedCredential(
+  client: pg.Client,
+  credential: {
+    tenantId: string;
+    practitionerId: string;
+    serviceTypeId: string;
+    certification: string;
+    validFrom: string;
+    validTo: string | null;
+    canExecuteSession?: boolean;
+    canSignReport?: boolean;
+  },
+): Promise<void> {
+  await client.query(
+    'insert into credential (tenant_id, practitioner_id, service_type_id, certification, ' +
+      'valid_from, valid_to, can_execute_session, can_sign_report) values ($1, $2, $3, $4, $5, $6, $7, $8)',
+    [
+      credential.tenantId,
+      credential.practitionerId,
+      credential.serviceTypeId,
+      credential.certification,
+      credential.validFrom,
+      credential.validTo,
+      credential.canExecuteSession ?? false,
+      credential.canSignReport ?? false,
+    ],
+  );
 }

@@ -171,6 +171,6 @@ describe('core schema', () => {
   it('is idempotent: a second migrate applies nothing and re-applies the policies cleanly', async () => {
     const { runMigrations, applyPolicies } = await import('../../db/runner/apply');
     expect(await runMigrations(client)).toBe(0);
-    expect(await applyPolicies(client)).toBe(2);
+    expect(await applyPolicies(client)).toBe(3);
   });
 });
