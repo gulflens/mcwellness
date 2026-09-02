@@ -31,15 +31,18 @@ export type SessionEventKind = (typeof SESSION_EVENT_KINDS)[number];
 
 export type GeoPoint = { lat: number; lng: number };
 
-/** The payload of a 'session_started' event — everything replayEvents needs to open a visit. */
+/**
+ * The payload of a 'session_started' event — everything replayEvents needs
+ * to open a visit, except the client and the door coordinate. Those are
+ * session-level facts, not event history: the session row is their one
+ * record (checked in by the route directly, never through this payload),
+ * so they are never duplicated into the append-only event log.
+ */
 export type SessionStartedPayload = {
-  clientId: string;
   practitionerId: string;
   serviceTypeId: string;
   deliveryMode: DeliveryMode;
   locationId: string | null;
-  /** null when geolocation was denied; check-in still proceeds (section 7, graceful degradation). */
-  point: GeoPoint | null;
 };
 
 /** One event as replayEvents receives it: shape-compatible with a session_event row. */
@@ -62,11 +65,9 @@ export type SessionEvent = {
  */
 export type SessionProjection = {
   status: 'in_progress';
-  clientId: string;
   practitionerId: string;
   serviceTypeId: string;
   deliveryMode: DeliveryMode;
   locationId: string | null;
   checkedInAt: string;
-  checkedInPoint: GeoPoint | null;
 };

@@ -27,10 +27,20 @@ create table session (
   location_id       uuid references location (id),
   status            session_status not null default 'in_progress',
   checked_in_at     timestamptz not null,
-  checked_in_point  extensions.geography(point, 4326),   -- null: geolocation denied, graceful degradation (section 7)
+  -- Proof of attendance at the door: the coordinate recorded when the
+  -- practitioner checked in, if they allowed it — a decline is not a block
+  -- (section 7, graceful degradation). Readable within the practitioner's
+  -- own scope and by the practice's oversight roles, the same reach as the
+  -- row it sits on (db/policies/session/practitioner_scope.sql); it follows
+  -- the session's own retention, with no separate rule of its own.
+  checked_in_point  extensions.geography(point, 4326),
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
-  created_by        uuid references app_user (id)
+  created_by        uuid references app_user (id),
+  -- So session_event's composite foreign key below can bind an event to the
+  -- exact tenant, client and practitioner its session actually has, not
+  -- merely to a session id a caller happens to know.
+  unique (id, tenant_id, client_id, practitioner_id)
 );
 comment on table session is 'audited: client';
 create index session_tenant_idx on session (tenant_id);
@@ -52,21 +62,34 @@ alter table session enable always trigger audit_row;
 create table session_event (
   id               uuid primary key,           -- client-generated; the outbox's idempotency key
   tenant_id        uuid not null references tenant (id),
-  session_id       uuid not null references session (id),
+  session_id       uuid not null,               -- bound by the composite key below, not this alone
   client_id        uuid not null references client (id),        -- denormalised: 097 reads it row-local
   practitioner_id  uuid not null references practitioner (id),   -- denormalised: RLS reads it row-local
   seq              integer not null,
   kind             session_event_kind not null,
-  payload          jsonb not null default '{}'::jsonb,
+  -- Capped while the table is empty: an unbounded jsonb blob is also an
+  -- unbounded, unredacted copy of itself in the audit trail (080's redaction
+  -- only inspects top-level string values, not nested structure).
+  payload          jsonb not null default '{}'::jsonb check (pg_column_size(payload) <= 32768),
   device_at        timestamptz not null,
   received_at      timestamptz not null default now(),
-  unique (session_id, seq)
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  created_by       uuid references app_user (id),
+  unique (session_id, seq),
+  -- Binds the event to its session's actual tenant, client and
+  -- practitioner, not merely to a session id the caller happens to know: a
+  -- practitioner cannot append an event under their own ids to a session
+  -- that is not really theirs, nor to another tenant's.
+  foreign key (session_id, tenant_id, client_id, practitioner_id)
+    references session (id, tenant_id, client_id, practitioner_id)
 );
 comment on table session_event is 'audited: client';
-create index session_event_session_idx on session_event (session_id, seq);
 create index session_event_tenant_idx on session_event (tenant_id);
-create index session_event_client_idx on session_event (client_id);
+-- (session_id, seq) already has an index from the unique constraint above.
+create index session_event_client_idx on session_event (client_id, received_at);
 create index session_event_practitioner_idx on session_event (practitioner_id);
+create index session_event_created_by_idx on session_event (created_by);
 -- Append-only: insert only, so the trigger covers insert alone.
 create trigger audit_row after insert on session_event
   for each row execute function app.audit_row();

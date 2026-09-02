@@ -6,12 +6,10 @@ function isSessionStartedPayload(payload: unknown): payload is SessionStartedPay
   }
   const p = payload as Record<string, unknown>;
   return (
-    typeof p.clientId === 'string' &&
     typeof p.practitionerId === 'string' &&
     typeof p.serviceTypeId === 'string' &&
     typeof p.deliveryMode === 'string' &&
-    (p.locationId === null || typeof p.locationId === 'string') &&
-    (p.point === null || typeof p.point === 'object')
+    (p.locationId === null || typeof p.locationId === 'string')
   );
 }
 
@@ -52,13 +50,11 @@ export function replayEvents(events: readonly SessionEvent[]): SessionProjection
     ) {
       projection = {
         status: 'in_progress',
-        clientId: event.payload.clientId,
         practitionerId: event.payload.practitionerId,
         serviceTypeId: event.payload.serviceTypeId,
         deliveryMode: event.payload.deliveryMode,
         locationId: event.payload.locationId,
         checkedInAt: event.deviceAt,
-        checkedInPoint: event.payload.point,
       };
     }
     // Every other kind is reserved for a later pull request.

@@ -27,6 +27,11 @@ const SECRET = 'test-secret-that-unlocks-nothing-0123456789';
 const ISSUER = 'http://localhost:54321/auth/v1';
 const KEY = new TextEncoder().encode(SECRET);
 
+// The route's own clock, fixed so the ±15-minute device-clock window
+// (checkin.ts) always passes for the fixture deviceAt values below, rather
+// than depending on the wall-clock moment the suite happens to run.
+const FIXED_NOW = '2026-09-02T06:32:00.000Z';
+
 const SERVICE_TYPE = MORE_IDS.serviceTypeA;
 const DOCUMENT = '00000000-0000-4000-8000-000000003001';
 
@@ -49,6 +54,8 @@ const SESSION_MINOR_WITH_GUARDIAN = '00000000-0000-4000-8000-000000005004';
 const SESSION_NULL_DOB = '00000000-0000-4000-8000-000000005005';
 const SESSION_CROSS_TENANT = '00000000-0000-4000-8000-000000005006';
 const SESSION_SECOND_WHILE_OPEN = '00000000-0000-4000-8000-000000005007';
+const SESSION_BAD_CLOCK = '00000000-0000-4000-8000-000000005009';
+const SESSION_BAD_POINT = '00000000-0000-4000-8000-00000000500a';
 
 const EVENT_HAPPY = '00000000-0000-4000-8000-000000006001';
 const EVENT_NO_PARTICIPATION = '00000000-0000-4000-8000-000000006002';
@@ -57,6 +64,15 @@ const EVENT_MINOR_WITH_GUARDIAN = '00000000-0000-4000-8000-000000006004';
 const EVENT_NULL_DOB = '00000000-0000-4000-8000-000000006005';
 const EVENT_CROSS_TENANT = '00000000-0000-4000-8000-000000006006';
 const EVENT_SECOND_WHILE_OPEN = '00000000-0000-4000-8000-000000006007';
+const EVENT_STOLEN = '00000000-0000-4000-8000-000000006008';
+const EVENT_BAD_CLOCK = '00000000-0000-4000-8000-000000006009';
+const EVENT_BAD_POINT = '00000000-0000-4000-8000-00000000600a';
+
+// A lead practitioner, distinct from the ordinary practitioner below, whose
+// only role in these tests is to try to reach into someone else's session.
+const LEAD_USER = '00000000-0000-4000-8000-000000007001';
+const LEAD_PRACTITIONER = '00000000-0000-4000-8000-000000007002';
+const LEAD_AUTH = '00000000-0000-4000-8000-000000007003';
 
 let owner: pg.Client;
 let pool: ReturnType<typeof createPool>;
@@ -81,6 +97,8 @@ async function postCheckIn(
     clientId: string;
     deliveryMode?: 'home' | 'studio' | 'remote';
     point?: { lat: number; lng: number } | null;
+    deviceAt?: string;
+    seq?: number;
   },
 ): Promise<Response> {
   return api.request(`/api/sessions/${sessionId}/events`, {
@@ -90,18 +108,18 @@ async function postCheckIn(
       'content-type': 'application/json',
     },
     body: JSON.stringify({
+      clientId: event.clientId,
+      point: event.point === undefined ? { lat: 25.2, lng: 55.27 } : event.point,
       events: [
         {
           id: event.id,
-          seq: 1,
+          seq: event.seq ?? 1,
           kind: 'session_started',
-          deviceAt: '2026-09-02T06:32:00.000Z',
+          deviceAt: event.deviceAt ?? FIXED_NOW,
           payload: {
-            clientId: event.clientId,
             serviceTypeId: SERVICE_TYPE,
             deliveryMode: event.deliveryMode ?? 'home',
             locationId: null,
-            point: event.point === undefined ? { lat: 25.2, lng: 55.27 } : event.point,
           },
         },
       ],
@@ -133,6 +151,15 @@ beforeAll(async () => {
     validTo: null,
     canExecuteSession: true,
   });
+
+  await seedUser(owner, {
+    id: LEAD_USER,
+    tenantId: IDS.tenantA,
+    authId: LEAD_AUTH,
+    displayName: 'Synthetic Lead Practitioner',
+    roles: ['lead_practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, LEAD_PRACTITIONER, LEAD_USER);
 
   await seedConsentDocument(owner, IDS.tenantA, DOCUMENT);
 
@@ -250,13 +277,28 @@ beforeAll(async () => {
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
   api = createApi({ pool, verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }) });
-  mountSessions(api);
+  mountSessions(api, () => new Date(FIXED_NOW));
 });
 
 afterAll(async () => {
   await pool.end();
   await owner.end();
 });
+
+async function refusalsFor(entityId: string) {
+  const { rows } = await owner.query<{
+    action: string;
+    entity_type: string;
+    entity_id: string;
+    client_id: string | null;
+    reason: string;
+  }>(
+    'select action, entity_type, entity_id, client_id, reason from audit_log ' +
+      "where action = 'refused' and entity_id = $1",
+    [entityId],
+  );
+  return rows;
+}
 
 describe('POST /api/sessions/:id/events', () => {
   it('checks a practitioner in and audits it with the client behind the row', async () => {
@@ -269,7 +311,7 @@ describe('POST /api/sessions/:id/events', () => {
     expect(body).toEqual({
       status: 'checked_in',
       sessionId: SESSION_HAPPY,
-      checkedInAt: '2026-09-02T06:32:00.000Z',
+      checkedInAt: FIXED_NOW,
     });
 
     const session = await owner.query<{
@@ -287,11 +329,15 @@ describe('POST /api/sessions/:id/events', () => {
       delivery_mode: 'home',
     });
 
-    const event = await owner.query<{ kind: string; client_id: string }>(
-      'select kind, client_id from session_event where id = $1',
+    const event = await owner.query<{ kind: string; client_id: string; created_by: string }>(
+      'select kind, client_id, created_by from session_event where id = $1',
       [EVENT_HAPPY],
     );
-    expect(event.rows[0]).toEqual({ kind: 'session_started', client_id: CLIENT_ADULT });
+    expect(event.rows[0]).toEqual({
+      kind: 'session_started',
+      client_id: CLIENT_ADULT,
+      created_by: MORE_IDS.practitionerUserA,
+    });
 
     // The audit trigger fires on both inserts, and 097's generalised
     // app.audit_client_id names the client on each row.
@@ -317,7 +363,7 @@ describe('POST /api/sessions/:id/events', () => {
     expect(await res.json()).toEqual({
       status: 'checked_in',
       sessionId: SESSION_HAPPY,
-      checkedInAt: '2026-09-02T06:32:00.000Z',
+      checkedInAt: FIXED_NOW,
     });
     const after = await owner.query('select count(*)::int as n from session_event where id = $1', [
       EVENT_HAPPY,
@@ -328,17 +374,73 @@ describe('POST /api/sessions/:id/events', () => {
     ).toMatchObject({ rows: [{ n: 1 }] });
   });
 
+  it("refuses a lead practitioner another practitioner's session id, without handing it back or dropping the event", async () => {
+    const res = await postCheckIn(SESSION_HAPPY, LEAD_AUTH, {
+      id: EVENT_STOLEN,
+      clientId: CLIENT_ADULT,
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: 'forbidden' });
+    // Not silently dropped as a false "resend": no row for this event exists anywhere.
+    const dropped = await owner.query('select 1 from session_event where id = $1', [EVENT_STOLEN]);
+    expect(dropped.rowCount).toBe(0);
+    expect(await refusalsFor(SESSION_HAPPY)).toEqual([
+      {
+        action: 'refused',
+        entity_type: 'session',
+        entity_id: SESSION_HAPPY,
+        client_id: null,
+        reason: 'session_not_yours',
+      },
+    ]);
+  });
+
+  it('rejects a device clock far outside the server window, before writing anything', async () => {
+    const res = await postCheckIn(SESSION_BAD_CLOCK, AUTH.practitionerA, {
+      id: EVENT_BAD_CLOCK,
+      clientId: CLIENT_ADULT,
+      deviceAt: '2026-09-02T09:00:00.000Z', // 2h28m after FIXED_NOW
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: 'bad_request',
+      detail: 'device_clock_out_of_range',
+    });
+    const rows = await owner.query('select 1 from session where id = $1', [SESSION_BAD_CLOCK]);
+    expect(rows.rowCount).toBe(0);
+  });
+
+  it('rejects a geo point outside the boundary of the earth', async () => {
+    const res = await postCheckIn(SESSION_BAD_POINT, AUTH.practitionerA, {
+      id: EVENT_BAD_POINT,
+      clientId: CLIENT_ADULT,
+      point: { lat: 200, lng: 55.27 },
+    });
+    expect(res.status).toBe(400);
+    const rows = await owner.query('select 1 from session where id = $1', [SESSION_BAD_POINT]);
+    expect(rows.rowCount).toBe(0);
+  });
+
   it('refuses a second open visit for the same practitioner while one is already in progress', async () => {
     const res = await postCheckIn(SESSION_SECOND_WHILE_OPEN, AUTH.practitionerA, {
       id: EVENT_SECOND_WHILE_OPEN,
       clientId: CLIENT_MINOR_WITH_GUARDIAN,
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     expect(await res.json()).toEqual({ status: 'blocked', reasons: ['already_checked_in'] });
     const rows = await owner.query('select 1 from session where id = $1', [
       SESSION_SECOND_WHILE_OPEN,
     ]);
     expect(rows.rowCount).toBe(0);
+    expect(await refusalsFor(SESSION_SECOND_WHILE_OPEN)).toEqual([
+      {
+        action: 'refused',
+        entity_type: 'session',
+        entity_id: SESSION_SECOND_WHILE_OPEN,
+        client_id: CLIENT_MINOR_WITH_GUARDIAN,
+        reason: 'already_checked_in',
+      },
+    ]);
   });
 
   it("blocks and writes nothing when participation consent is missing, leaving exactly one 'refused' audit row", async () => {
@@ -355,19 +457,7 @@ describe('POST /api/sessions/:id/events', () => {
       SESSION_NO_PARTICIPATION,
     ]);
     expect(rows.rowCount).toBe(0);
-
-    const audit = await owner.query<{
-      action: string;
-      entity_type: string;
-      entity_id: string;
-      client_id: string;
-      reason: string;
-    }>(
-      'select action, entity_type, entity_id, client_id, reason from audit_log ' +
-        "where action = 'refused' and entity_id = $1",
-      [SESSION_NO_PARTICIPATION],
-    );
-    expect(audit.rows).toEqual([
+    expect(await refusalsFor(SESSION_NO_PARTICIPATION)).toEqual([
       {
         action: 'refused',
         entity_type: 'session',
@@ -398,7 +488,7 @@ describe('POST /api/sessions/:id/events', () => {
     // Blocked above by the still-open SESSION_HAPPY visit — check that one out
     // is out of scope for this pull request, so this proves the consent gate
     // alone by observing the *reason*, not a successful check-in.
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(422);
     expect(await res.json()).toEqual({ status: 'blocked', reasons: ['already_checked_in'] });
   });
 
@@ -411,7 +501,7 @@ describe('POST /api/sessions/:id/events', () => {
     expect(await res.json()).toEqual({ status: 'blocked', reasons: ['date_of_birth_unknown'] });
   });
 
-  it("re-verifies the client belongs to the caller's own tenant before writing anything", async () => {
+  it("re-verifies the client belongs to the caller's own tenant before writing anything, leaving a refused row with no client_id", async () => {
     const res = await postCheckIn(SESSION_CROSS_TENANT, AUTH.practitionerA, {
       id: EVENT_CROSS_TENANT,
       clientId: IDS.clientB,
@@ -420,14 +510,33 @@ describe('POST /api/sessions/:id/events', () => {
     expect(await res.json()).toMatchObject({ error: 'bad_request', detail: 'client_not_found' });
     const rows = await owner.query('select 1 from session where id = $1', [SESSION_CROSS_TENANT]);
     expect(rows.rowCount).toBe(0);
+    expect(await refusalsFor(SESSION_CROSS_TENANT)).toEqual([
+      {
+        action: 'refused',
+        entity_type: 'session',
+        entity_id: SESSION_CROSS_TENANT,
+        client_id: null,
+        reason: 'client_not_found',
+      },
+    ]);
   });
 
-  it('refuses a role that may never run a session', async () => {
-    const res = await postCheckIn('00000000-0000-4000-8000-000000005999', AUTH.contactA, {
+  it('refuses a role that may never run a session, leaving a refused row with no client_id', async () => {
+    const sessionId = '00000000-0000-4000-8000-000000005999';
+    const res = await postCheckIn(sessionId, AUTH.contactA, {
       id: '00000000-0000-4000-8000-000000006999',
       clientId: CLIENT_ADULT,
     });
     expect(res.status).toBe(403);
+    expect(await refusalsFor(sessionId)).toEqual([
+      {
+        action: 'refused',
+        entity_type: 'session',
+        entity_id: sessionId,
+        client_id: null,
+        reason: 'wrong_role',
+      },
+    ]);
   });
 
   it('refuses an unknown caller', async () => {

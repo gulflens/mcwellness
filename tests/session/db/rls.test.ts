@@ -15,6 +15,7 @@ import {
 } from '../../db/helpers';
 
 const RLS_VIOLATION = '42501';
+const FK_VIOLATION = '23503';
 
 // A second practitioner under tenant A, distinct from MORE_IDS.practitionerA,
 // so the deny cases have someone else's row to be denied.
@@ -194,4 +195,23 @@ describe('practitioner scope on session and session_event', () => {
       );
     });
   });
+
+  it(
+    "refuses a practitioner appending an event to another practitioner's session under their own ids " +
+      '(the composite foreign key, not row security, catches it: practitioner_id passes their own ' +
+      'practitioner_scope check, but no session row matches that exact tenant/client/practitioner tuple)',
+    async () => {
+      await asPractitioner(MORE_IDS.practitionerUserA, async () => {
+        await rejectsWith(
+          client,
+          FK_VIOLATION,
+          'insert into session_event (id, tenant_id, session_id, client_id, practitioner_id, seq, kind, device_at) ' +
+            // seq 2: SESSION_B's own seeded event already holds seq 1, and the
+            // point here is the composite foreign key, not the (session_id, seq) one.
+            "values (gen_random_uuid(), $1, $2, $3, $4, 2, 'session_started', now())",
+          [IDS.tenantA, SESSION_B, IDS.clientA, MORE_IDS.practitionerA],
+        );
+      });
+    },
+  );
 });

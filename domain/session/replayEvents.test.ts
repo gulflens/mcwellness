@@ -12,12 +12,10 @@ function startedEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
     kind: 'session_started',
     deviceAt: '2026-09-02T06:32:00.000Z',
     payload: {
-      clientId: '00000000-0000-4000-8000-0000000000c1',
       practitionerId: '00000000-0000-4000-8000-0000000000b9',
       serviceTypeId: '00000000-0000-4000-8000-0000000000f1',
       deliveryMode: 'home',
       locationId: '00000000-0000-4000-8000-0000000000d1',
-      point: { lat: 25.2, lng: 55.27 },
     },
     ...overrides,
   };
@@ -49,21 +47,12 @@ describe('replayEvents', () => {
   it('projects a session_started event', () => {
     expect(replayEvents([startedEvent()])).toEqual({
       status: 'in_progress',
-      clientId: '00000000-0000-4000-8000-0000000000c1',
       practitionerId: '00000000-0000-4000-8000-0000000000b9',
       serviceTypeId: '00000000-0000-4000-8000-0000000000f1',
       deliveryMode: 'home',
       locationId: '00000000-0000-4000-8000-0000000000d1',
       checkedInAt: '2026-09-02T06:32:00.000Z',
-      checkedInPoint: { lat: 25.2, lng: 55.27 },
     });
-  });
-
-  it('records a denied geolocation as a null point, not a missing one', () => {
-    const projection = replayEvents([
-      startedEvent({ payload: { ...startedEvent().payload, point: null } }),
-    ]);
-    expect(projection?.checkedInPoint).toBeNull();
   });
 
   it('has no projection for a reserved kind this pull request does not implement', () => {

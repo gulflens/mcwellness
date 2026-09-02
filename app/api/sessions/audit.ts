@@ -11,13 +11,15 @@ import type { Db } from '../_middleware/request-context';
  * Written before the route returns its refusal response; the request's
  * transaction commits normally on a 4xx (only a thrown error or a 5xx rolls
  * it back — see app/api/_middleware/request-context.ts), so this row is not
- * undone by the refusal it records.
+ * undone by the refusal it records. clientId is null when nothing has been
+ * verified to belong to a real client yet (the caller's own claimed id is
+ * not proof of anything) — every refusal path logs, not only the gate's.
  */
 export async function logRefusal(
   db: Db,
   entityType: string,
   entityId: string,
-  clientId: string,
+  clientId: string | null,
   reasons: readonly string[],
 ): Promise<void> {
   await db.query(

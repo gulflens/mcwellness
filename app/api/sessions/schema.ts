@@ -6,6 +6,14 @@ import { z } from 'zod';
  * (docs/CHANGE-REQUESTS/session-capture-01.md).
  */
 
+// A coordinate on the earth, bounded at the boundary: a device with a bad
+// fix (a stray zero, a swapped axis) fails validation once, here, rather
+// than throwing deep in PostGIS and being retried forever by the outbox.
+export const GeoPoint = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
 export const SessionEventInput = z.object({
   id: z.uuid(),
   seq: z.number().int().positive(),
@@ -13,17 +21,22 @@ export const SessionEventInput = z.object({
   // the rest of the vocabulary (docs/SPEC/session-capture.md section 2).
   kind: z.literal('session_started'),
   deviceAt: z.iso.datetime(),
+  // No clientId, no point: those are session-level facts recorded once, on
+  // the session row itself, never duplicated into the event log (see
+  // domain/session/types.ts's SessionStartedPayload).
   payload: z.object({
-    clientId: z.uuid(),
     serviceTypeId: z.uuid(),
     deliveryMode: z.enum(['home', 'studio', 'remote']),
     locationId: z.uuid().nullable(),
-    point: z.object({ lat: z.number(), lng: z.number() }).nullable(),
   }),
 });
 export type SessionEventInput = z.infer<typeof SessionEventInput>;
 
 export const CheckInRequest = z.object({
+  // The client and the door coordinate: session-level, carried once here
+  // rather than inside each event's payload.
+  clientId: z.uuid(),
+  point: GeoPoint.nullable(),
   // A batch, matching the outbox's own shape, even though this pull request
   // only ever expects one event in it.
   events: z.array(SessionEventInput).min(1).max(20),
