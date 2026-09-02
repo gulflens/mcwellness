@@ -23,5 +23,7 @@ export const ClientListResponse = z.object({
   clients: z.array(ClientRow),
   /** 'schedule': the caller sees only clients on their schedule, and no schedule exists yet. */
   note: z.enum(['schedule']).nullable(),
+  /** Present and true only when more clients matched than the page holds (at most 50 rows). */
+  truncated: z.boolean().optional(),
 });
 export type ClientListResponse = z.infer<typeof ClientListResponse>;
