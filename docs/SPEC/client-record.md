@@ -54,7 +54,7 @@ any ──► erased   (erasure request)
 3. `requiredConsents(client, deliveryModes)` → purposes that must be active.
 4. `validateEmiratesId(raw)` — 15 digits, starts `784`, Luhn check digit valid. No expiry check: the expiry column was dropped in the compliance review for want of a need (decision of 2026-09-02). Returns normalised form. Only when one is captured; never required.
 5. `mrn.next(tenant)` — `MW-000001`, sequential per tenant, never reused.
-6. `canViewClient(actor, client)` — same tenant first; then role, schedule-based visibility for practitioners, and erased handling. Reading needs no credential (delivering does). Finance opens the record but sees names, contacts and locations only: that scope is applied per section by the API, not by this rule.
+6. `canViewClient(actor, client)` — same tenant first; then role, schedule-based visibility for practitioners, and erased handling. Reading needs no credential (delivering does). Finance opens the record but sees demographics and contacts only, never locations, goals, consents or documents (section 2): that scope is applied per section by the API and floored by the read policies, not by this rule.
 7. `computeRetentionUntil(lastActivityAt)` — +5 years.
 
 ## 6. Coded fields
