@@ -87,12 +87,17 @@ export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // Under row security a client of another practice does not exist; an erased
     // record's history stays with the owner and the lead practitioner
     // (client-record.md section 2), as the list route already holds.
-    const exists = await db.query(
-      "select 1 from client where id = $1 and ($2::boolean or status <> 'erased')",
+    const exists = await db.query<{ status: string }>(
+      "select status from client where id = $1 and ($2::boolean or status <> 'erased')",
       [clientId, hasRole(actor, 'owner', 'lead_practitioner')],
     );
     if (exists.rowCount === 0) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    // Opening an erased record is a sensitive action (client-record.md section 8):
+    // it needs a typed reason, which the trail then carries with the read.
+    if (exists.rows[0]?.status === 'erased' && !(c.req.header('x-reason') ?? '').trim()) {
+      return c.json({ error: 'reason_required', requestId }, 400);
     }
     const { limit, locale } = query.data;
     const before = query.data.before === undefined ? null : query.data.before.toString();

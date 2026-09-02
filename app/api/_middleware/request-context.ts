@@ -40,7 +40,7 @@ const Reason = z.string().trim().max(500);
 // A pasted token or key must never reach the trail (audit.md section 8): a JWT, or any
 // run of 32 or more key-looking characters, is replaced before the reason is stamped.
 const TOKEN_LIKE =
-  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|[A-Za-z0-9_+/=-]{32,}/g;
+  /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|(?=[A-Za-z0-9_+/=-]*\d)[A-Za-z0-9_+/=-]{32,}/g;
 export function scrubReason(reason: string): string {
   return reason.replace(TOKEN_LIKE, '[redacted]');
 }

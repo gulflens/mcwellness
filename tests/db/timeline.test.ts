@@ -6,9 +6,9 @@ import { createTokenVerifier } from '../../app/api/_middleware/token-verifier';
 import type { TimelineResponse } from '../../app/api/audit/schema';
 import { createApi } from '../../app/api/create-api';
 import { applySeed } from '../../db/seed/apply';
-import { generateSeed } from '../../db/seed/generate';
+import { generateSeed, SEED_TENANT_ID } from '../../db/seed/generate';
 import { deriveIdentityKeys } from '../../domain/shared';
-import { freshDatabase } from './helpers';
+import { asApiRole, freshDatabase, rolledBack } from './helpers';
 
 // Everything synthetic: the seeded practice, a test secret that unlocks nothing,
 // and a second practice with one admin to prove the fence between practices.
@@ -161,13 +161,45 @@ describe('GET /api/clients/:id/timeline', () => {
   it("keeps an erased record's history with the owner and lead practitioner, away from an admin", async () => {
     const client = clientAt(20);
     await owner.query("update client set status = 'erased' where id = $1", [client.id]);
-    expect((await get(authIdOf(0), `/api/clients/${client.id}/timeline`)).status).toBe(200);
+    const withoutReason = await get(authIdOf(0), `/api/clients/${client.id}/timeline`);
+    expect(withoutReason.status).toBe(400);
+    expect(((await withoutReason.json()) as { error: string }).error).toBe('reason_required');
+    const withReason = await api.request(`/api/clients/${client.id}/timeline`, {
+      headers: {
+        authorization: `Bearer ${await mint(authIdOf(0))}`,
+        'x-reason': 'Family asked what was held.',
+      },
+    });
+    expect(withReason.status).toBe(200);
     expect((await get(authIdOf(3), `/api/clients/${client.id}/timeline`)).status).toBe(404);
     await owner.query("update client set status = 'active' where id = $1", [client.id]);
     expect(
       (await get(authIdOf(0), `/api/clients/${client.id}/timeline?before=9223372036854775808`))
         .status,
     ).toBe(400);
+  });
+
+  it('lets only owner, admin and lead practitioner read the trail, in the database itself', async () => {
+    const client = clientAt(5);
+    const countAs = (roles: string) =>
+      rolledBack(owner, () =>
+        asApiRole(
+          owner,
+          SEED_TENANT_ID,
+          async () =>
+            (
+              await owner.query<{ n: number }>(
+                'select count(*)::int as n from audit_log where client_id = $1',
+                [client.id],
+              )
+            ).rows[0]?.n ?? -1,
+          roles,
+        ),
+      );
+    expect(await countAs('owner')).toBeGreaterThan(0);
+    expect(await countAs('lead_practitioner')).toBeGreaterThan(0);
+    expect(await countAs('practitioner')).toBe(0);
+    expect(await countAs('finance')).toBe(0);
   });
 
   it('refuses a practitioner, and shows another practice nothing', async () => {

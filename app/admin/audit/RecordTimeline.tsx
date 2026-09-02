@@ -14,9 +14,11 @@ import { describeRoles } from '../../shell/routing';
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 const PAGE = 50;
 
+class ReasonRequired extends Error {}
+
 type State =
   | { kind: 'loading' }
-  | { kind: 'error' }
+  | { kind: 'error'; reasonRequired?: boolean }
   | {
       kind: 'ready';
       events: TimelineEvent[];
@@ -61,6 +63,10 @@ export function RecordTimeline({ clientId }: { clientId: string }) {
       const params = new URLSearchParams({ limit: String(PAGE) });
       if (before) params.set('before', before);
       const res = await apiFetch(`/api/clients/${clientId}/timeline?${params.toString()}`);
+      if (res.status === 400) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        if (body?.error === 'reason_required') throw new ReasonRequired();
+      }
       if (!res.ok) return null;
       return TimelineResponse.parse(await res.json());
     },
@@ -84,8 +90,8 @@ export function RecordTimeline({ clientId }: { clientId: string }) {
               },
         );
       })
-      .catch(() => {
-        if (live) setState({ kind: 'error' });
+      .catch((error: unknown) => {
+        if (live) setState({ kind: 'error', reasonRequired: error instanceof ReasonRequired });
       });
     return () => {
       live = false;
