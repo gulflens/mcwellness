@@ -460,7 +460,7 @@ a.rail__item:hover {
   background: var(--surface);
 }
 
-.rail__item:active,
+a.rail__item:active,
 .button:active,
 .signin__person:active {
   background: color-mix(in srgb, var(--ink) 10%, var(--surface));
