@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ROLES } from '@domain/shared';
+import { ROLES } from '@domain/shared/actor';
 
 /** What the database's resolver returns for a signed-in person. */
 export const CapabilitySchema = z.object({
@@ -22,6 +22,7 @@ export const ResolvedActorRow = z.object({
 /** What `GET /api/me` answers; parsing the output guarantees nothing extra leaks. */
 export const MeResponse = z.object({
   userId: z.uuid(),
+  displayName: z.string(),
   tenantId: z.uuid(),
   roles: z.array(z.enum(ROLES)),
   capabilities: z.array(CapabilitySchema),
