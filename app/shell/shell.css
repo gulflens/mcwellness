@@ -545,3 +545,140 @@ a.rail__item:active,
     z-index: 1;
   }
 }
+
+/* PR 6: the drawer and the record timeline */
+
+/* A control that reads as a link: the client's name opens the drawer. */
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: start;
+  text-decoration: underline;
+  text-decoration-thickness: var(--hairline);
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* The drawer answers the click with the one motion the brief allows: 160ms, ease-out. */
+.drawer {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: var(--drawer);
+  max-inline-size: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-inline-start: var(--hairline) solid var(--rule);
+  box-shadow: var(--shadow);
+  z-index: 2;
+  transition:
+    translate var(--motion) var(--ease),
+    opacity var(--motion) var(--ease);
+}
+
+@starting-style {
+  .drawer {
+    translate: var(--s-6) 0;
+    opacity: 0;
+  }
+}
+
+.drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-6);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.drawer__facts {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin-block-start: var(--s-2);
+}
+
+.drawer__close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--tap);
+  block-size: var(--tap);
+  margin: calc(-1 * var(--s-2));
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.drawer__close:hover {
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-6);
+}
+
+.drawer__section {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+}
+
+.timeline__day {
+  margin-block: var(--s-6) var(--s-2);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+}
+
+.timeline__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline__event {
+  padding-block: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.timeline__event--read .timeline__sentence,
+.timeline__event--system .timeline__sentence {
+  color: var(--ink-2);
+}
+
+.timeline__meta {
+  display: flex;
+  gap: var(--s-3);
+  margin-block-start: var(--s-1);
+}
+
+.timeline__reason {
+  margin-block-start: var(--s-1);
+  color: var(--ink-2);
+}
+
+.timeline__more {
+  padding-block: var(--s-6);
+}
+
+@media (max-width: 720px) {
+  .drawer {
+    inline-size: 100%;
+    border-inline-start: 0;
+  }
+}

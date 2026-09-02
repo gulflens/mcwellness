@@ -71,3 +71,9 @@ export const ChevronIcon = (p: IconProps) => (
     <path d="M6 8l4 4 4-4" />
   </Icon>
 );
+
+export const CloseIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M5 5l10 10M15 5L5 15" />
+  </Icon>
+);
