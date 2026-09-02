@@ -73,6 +73,8 @@ const REASON_COPY: Record<CheckInResponseReason, string> = {
   consent_missing_home_visit: 'Home-visit consent is missing. Ask the practice to add it.',
   date_of_birth_unknown: 'Date of birth is not recorded. Ask the practice to add it.',
   already_checked_in: 'Already checked in on another device. Ask the practice if that was not you.',
+  not_booked_today:
+    'This visit is not booked for you today. Check the record number, or ask the practice.',
 };
 
 const FORBIDDEN_MESSAGE =
