@@ -18,6 +18,16 @@
 -- — is backfilled from its current text instead of refused, once, the first
 -- time a database old enough to have one reaches this migration.
 --
+-- That backfill's baseline is whatever text db/migrations holds at that
+-- first run, not necessarily what was actually applied historically: a
+-- file already applied before this column existed has no recorded history
+-- to verify against, so the backfilled checksum simply re-baselines from
+-- whatever is present then. From that first run on, this column protects
+-- the file going forward; for the gap it cannot see into — an edit made
+-- to that file between its original apply and this backfill — the guard is
+-- scripts/audit-migrations.mjs, which compares db/migrations directly
+-- against origin/main and does not depend on any database's own history.
+--
 -- This alteration is also carried directly in db/runner/apply.ts's own
 -- bootstrap (`alter table schema_migration add column if not exists
 -- checksum text`, immediately after the `create table if not exists`):
@@ -39,3 +49,17 @@ alter table schema_migration add column if not exists checksum text;
 --   -- this migration without also reverting that line leaves the column in
 --   -- place, which is intended — schema_migration is bootstrapped by the
 --   -- runner, not solely by its migration history.
+--   --
+--   -- Say this plainly, because it is easy to miss: dropping the column
+--   -- discards every checksum this database has recorded, not just the new
+--   -- ones. The very next run re-adds the column nullable (the bootstrap
+--   -- line above) and re-baselines every file from whatever text is present
+--   -- on disk at that run, exactly as the first-ever backfill did — not from
+--   -- what was genuinely applied historically, which this rollback has just
+--   -- thrown away, and not with NOT NULL restored until a further full run
+--   -- backfills everything again. This rollback is therefore itself a
+--   -- bypass of "never edit a merged migration" for however long it is in
+--   -- effect: running it, then editing a merged file, then letting the
+--   -- column come back is indistinguishable from that file never having
+--   -- been checked at all. Running this rollback is a deliberate decision
+--   -- for exactly that reason, never a routine one.
