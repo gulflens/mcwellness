@@ -602,6 +602,11 @@ begin
 end
 $$;
 
+-- Practice-bound keys (trunk round 4): let any foreign key to these tables bind the tenant too.
+alter table public.goal_category add constraint goal_category_tenant_id_id_key unique (tenant_id, id);
+alter table public.goal add constraint goal_tenant_id_id_key unique (tenant_id, id);
+alter table public.erasure_request add constraint erasure_request_tenant_id_id_key unique (tenant_id, id);
+
 -- rollback:
 --   -- Remove db/policies/client/readers.sql from the tree first: the runner
 --   -- re-applies every policy file on each migrate, and each of these six
@@ -652,3 +657,6 @@ $$;
 --   drop function if exists app.client_visible_to_practitioner(uuid);
 --   drop function if exists app.client_erasure_gate(public.client_status);
 --   drop function if exists app.current_actor_id();
+--   alter table public.erasure_request drop constraint if exists erasure_request_tenant_id_id_key;
+--   alter table public.goal drop constraint if exists goal_tenant_id_id_key;
+--   alter table public.goal_category drop constraint if exists goal_category_tenant_id_id_key;
