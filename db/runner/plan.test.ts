@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertKnownMigrationFile,
+  checkNeeds,
+  checksumOf,
   hasRollbackBlock,
   isLocalDatabaseUrl,
   listMigrationFiles,
   listPolicyFiles,
+  parseNeeds,
+  planChecksums,
   planMigrations,
 } from './plan';
 
@@ -154,5 +159,172 @@ describe('listPolicyFiles', () => {
 
   it('ignores dotfiles at any depth', () => {
     expect(listPolicyFiles(['.hidden/x.sql', 'core/.draft.sql'])).toEqual([]);
+  });
+});
+
+describe('checksumOf', () => {
+  it('is a deterministic 64-character lowercase hex digest', () => {
+    const digest = checksumOf('create table t ();\n');
+    expect(digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(checksumOf('create table t ();\n')).toBe(digest);
+  });
+
+  it('changes when the text changes by even one character', () => {
+    expect(checksumOf('create table t ();\n')).not.toBe(checksumOf('create table t();\n'));
+  });
+});
+
+describe('parseNeeds', () => {
+  it('is empty when the file carries no "-- Needs:" comment', () => {
+    expect(parseNeeds('create table t ();\n-- rollback:\n-- drop table t;\n')).toEqual([]);
+  });
+
+  it('reads the numbers on the "-- Needs:" line itself', () => {
+    expect(
+      parseNeeds('-- 200_appointment.sql\n-- Needs: 010, 040, 060\n\ncreate table t ();\n'),
+    ).toEqual([10, 40, 60]);
+  });
+
+  it('follows the comment onto the immediately following "--" lines, stopping at the first that is not one', () => {
+    const sql =
+      '-- 099_tenant_scoped_keys.sql\n' +
+      '-- Needs: 010 (tenant, for tenant_id itself), 020 (app_user, user_role), 030\n' +
+      '-- (location), 040 (service_type), 050 (practitioner, credential), 060\n' +
+      '-- (client, contact, consent, document).\n' +
+      '\n' +
+      'alter table app_user add constraint x unique (tenant_id, id);\n';
+    expect(parseNeeds(sql)).toEqual([10, 20, 30, 40, 50, 60]);
+  });
+
+  it('is case-insensitive on the marker and de-duplicates repeated numbers', () => {
+    expect(parseNeeds('-- needs: 010, 010, 020\n')).toEqual([10, 20]);
+  });
+
+  it('reads the real 400_billing_catalogue.sql Needs comment correctly, including its own trap', () => {
+    // The real file's parenthetical says "generalised in 097 to look for
+    // that column rather than name tables" — 097 is prose, not a
+    // dependency, and must never be read as one just because it sits inside
+    // the same contiguous "--" block as the genuine list.
+    const sql =
+      '-- Needs: 000 (schema app, role app_role, app.set_updated_at, app.current_tenant_id),\n' +
+      '-- 010 (tenant), 020 (app_user, for created_by), 040 (service_type), 080\n' +
+      '-- (app.audit_row, reused as-is: neither table carries a client_id, so\n' +
+      '-- app.audit_client_id — generalised in 097 to look for that column rather\n' +
+      '-- than name tables — correctly denormalises null, exactly as it already does\n' +
+      '-- for tenant and service_type).\n';
+    expect(parseNeeds(sql)).toEqual([0, 10, 20, 40, 80]);
+  });
+
+  it('stops at the first non-numeric token on a Needs line with trailing words', () => {
+    const sql = '-- Needs: 010, 040, and 060 once that lands\n';
+    // "060" sits right after "and", not as its own segment's leading token,
+    // so reading stops at "and" and 060 is never read.
+    expect(parseNeeds(sql)).toEqual([10, 40]);
+  });
+
+  it('never reads a number from prose elsewhere in the Needs comment, such as "500 basis points"', () => {
+    const sql =
+      '-- Needs: 010, 040\n' + '-- By the way, rates rose 500 basis points that quarter.\n';
+    expect(parseNeeds(sql)).toEqual([10, 40]);
+  });
+});
+
+describe('assertKnownMigrationFile', () => {
+  const available = listMigrationFiles(['001_tenant.sql', '002_user.sql']);
+
+  it('passes a filename that is exactly one of the files on disk', () => {
+    expect(() => assertKnownMigrationFile('001_tenant.sql', available)).not.toThrow();
+  });
+
+  it('refuses a filename absent from the on-disk listing, as if taken straight from a database row', () => {
+    expect(() => assertKnownMigrationFile('../../etc/passwd', available)).toThrow(
+      'not one of the migration files currently on disk',
+    );
+  });
+
+  it('refuses a well-formed but simply nonexistent filename', () => {
+    expect(() => assertKnownMigrationFile('099_ghost.sql', available)).toThrow(
+      'not one of the migration files currently on disk',
+    );
+  });
+});
+
+describe('checkNeeds', () => {
+  it('passes a migration whose needs are all strictly earlier than its own number', () => {
+    expect(() =>
+      checkNeeds({ filename: '200_appointment.sql', number: 200 }, '-- Needs: 010, 040, 099\n'),
+    ).not.toThrow();
+  });
+
+  it('passes a migration with no "-- Needs:" comment at all', () => {
+    expect(() =>
+      checkNeeds({ filename: '200_appointment.sql', number: 200 }, 'create table t ();\n'),
+    ).not.toThrow();
+  });
+
+  it('refuses a migration whose "-- Needs:" comment names a number above its own', () => {
+    expect(() =>
+      checkNeeds({ filename: '200_appointment.sql', number: 200 }, '-- Needs: 010, 300\n'),
+    ).toThrow('names 300');
+  });
+
+  it('refuses a migration that names its own number, which is not earlier than itself', () => {
+    expect(() =>
+      checkNeeds({ filename: '200_appointment.sql', number: 200 }, '-- Needs: 200\n'),
+    ).toThrow('not earlier than its own number');
+  });
+});
+
+describe('planChecksums', () => {
+  it("backfills a null recorded checksum from the file's current text, rather than refusing", () => {
+    const plan = planChecksums(
+      [{ filename: '000_foundation.sql', checksum: null }],
+      () => 'create schema app;\n',
+    );
+    expect(plan.mismatched).toEqual([]);
+    expect(plan.toBackfill).toEqual([
+      { filename: '000_foundation.sql', checksum: checksumOf('create schema app;\n') },
+    ]);
+  });
+
+  it('is silent when the recorded checksum still matches the current text', () => {
+    const text = 'create table t ();\n';
+    const plan = planChecksums(
+      [{ filename: '010_tenant.sql', checksum: checksumOf(text) }],
+      () => text,
+    );
+    expect(plan.mismatched).toEqual([]);
+    expect(plan.toBackfill).toEqual([]);
+  });
+
+  it('flags a file whose current text no longer matches its recorded checksum', () => {
+    const plan = planChecksums(
+      [{ filename: '010_tenant.sql', checksum: checksumOf('create table t ();\n') }],
+      () => 'create table t (id uuid);\n',
+    );
+    expect(plan.mismatched).toEqual(['010_tenant.sql']);
+    expect(plan.toBackfill).toEqual([]);
+  });
+
+  it('handles a mix of matching, mismatched and null-checksum files independently', () => {
+    const matching = 'create table a ();\n';
+    const mismatched = 'create table b ();\n';
+    const plan = planChecksums(
+      [
+        { filename: 'a.sql', checksum: checksumOf(matching) },
+        { filename: 'b.sql', checksum: checksumOf('create table b (id uuid);\n') },
+        { filename: 'c.sql', checksum: null },
+      ],
+      (filename) =>
+        filename === 'b.sql'
+          ? mismatched
+          : filename === 'a.sql'
+            ? matching
+            : 'create table c ();\n',
+    );
+    expect(plan.mismatched).toEqual(['b.sql']);
+    expect(plan.toBackfill).toEqual([
+      { filename: 'c.sql', checksum: checksumOf('create table c ();\n') },
+    ]);
   });
 });

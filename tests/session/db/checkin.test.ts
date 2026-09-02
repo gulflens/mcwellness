@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '../../../app/api/_middleware/db';
 import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
 import { createApi } from '../../../app/api/create-api';
-import { mountSessions } from '../../../app/api/sessions/checkin';
 import type { CheckInResponse } from '../../../app/api/sessions/schema';
 import {
   AUTH,
@@ -276,8 +275,17 @@ beforeAll(async () => {
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
-  api = createApi({ pool, verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }) });
-  mountSessions(api, () => new Date(FIXED_NOW));
+  // createApi's own `now` option reaches mountSessions from inside createApi
+  // itself now that round 5 (docs/CHANGE-REQUESTS/session-capture-01.md)
+  // mounts it there: a second, manual mountSessions call on the same Hono
+  // instance would only add a second, shadowed handler for the same path,
+  // since Hono answers a request from whichever handler was registered
+  // first — the fixed clock below would never be reached.
+  api = createApi({
+    pool,
+    verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }),
+    now: () => new Date(FIXED_NOW),
+  });
 });
 
 afterAll(async () => {

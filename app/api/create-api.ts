@@ -18,9 +18,12 @@ import {
   securityHeaders,
   timedOut,
 } from './_middleware/security';
+import { mountAppointments } from './appointments/routes';
 import { mountTimeline } from './audit/timeline';
+import { mountBilling } from './billing/routes';
 import { mountClients } from './clients/list';
 import { mountDevSession, type DevSessionOptions } from './dev-session';
+import { mountSessions } from './sessions/checkin';
 
 /**
  * Builds the API. Kept separate from the server entry so tests can call
@@ -149,6 +152,9 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
 
   mountClients(api, deps.now);
   mountTimeline(api, deps.now);
+  mountBilling(api, deps.now);
+  mountAppointments(api, deps.now);
+  mountSessions(api, deps.now);
 
   // An unknown route answers in the same shape as every other refusal.
   api.notFound((c) => c.json({ error: 'not_found', requestId: c.get('requestId') ?? null }, 404));

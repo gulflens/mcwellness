@@ -1,5 +1,23 @@
 # Change requests — session-capture, pull request 1
 
+> **Applied in round 5** (2026-09-02, PR 17): item 1, mounting
+> `mountSessions` in `app/api/create-api.ts`, is live. Item 2 (the check-in
+> screen's route and link) stays open, deferred to session-capture's second
+> pull request exactly as this file already said; item 3 (the trunk-owned
+> schema test) is resolved separately, already reflected in
+> `tests/db/schema.test.ts` on this branch. Mounting `mountSessions` also
+> exposed a new, narrow issue in this stream's own `tests/session/db/checkin.test.ts`:
+> once `createApi` mounts the route itself, that test's own second, manual
+> `mountSessions(api, () => new Date(FIXED_NOW))` call registered a second
+> handler for the same path that Hono never reaches (it answers from
+> whichever handler was registered first, so the route always ran on the
+> real clock instead of the fixture's). Fixed in round 5 by passing the
+> fixed clock through `createApi`'s own `now` option instead of remounting;
+> the same pattern was corrected in `tests/billing/db/prices.test.ts` and
+> `tests/billing/db/vat-setting-backfill.test.ts` for the same reason.
+> `tests/scheduling/db/appointments.test.ts` mounts with no explicit clock
+> either time, so it was not affected and was left alone.
+
 Three requests from this pull request's own work. The first two were
 expected from the plan (the screen is pull request 2); the third is a new
 finding: building migration 300 correctly exposed a gap in a trunk-owned

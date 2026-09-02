@@ -1,5 +1,10 @@
 # scheduling-01: mount the appointment routes, then give them a screen
 
+> **Applied in round 5** (2026-09-02, PR 18): item 1, mounting
+> `mountAppointments` in `app/api/create-api.ts`, is live. Item 2 (the Day
+> schedule screen's route and rail link) stays open, deferred to
+> scheduling's second pull request exactly as this file already said.
+
 Two requests from the `scheduling` stream. The first is needed now, so this
 pull request's routes are reachable outside the test suite (the database
 tests mount them directly on the instance `createApi` returns, per the

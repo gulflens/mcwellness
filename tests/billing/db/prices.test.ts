@@ -1,7 +1,6 @@
 import { SignJWT } from 'jose';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mountBilling } from '../../../app/api/billing/routes';
 import type {
   CreatePriceResponse,
   PricesResponse,
@@ -22,9 +21,13 @@ import { freshDatabase } from '../../db/helpers';
 
 // Everything synthetic: the seeded practice, a test secret that unlocks
 // nothing, and a second practice with one admin to prove the fence between
-// practices. mountBilling is called by hand here — app/api/create-api.ts is
-// shared, and mounting it there is a change request
-// (docs/CHANGE-REQUESTS/billing-01.md), not this pull request's to make.
+// practices. createApi's own `now` option reaches mountBilling from inside
+// createApi itself (app/api/create-api.ts) now that round 5
+// (docs/CHANGE-REQUESTS/billing-01.md) mounts it there — a second, manual
+// mountBilling call on the same Hono instance would only add a second
+// handler for the same path, shadowed behind the one createApi already
+// registered, since Hono answers from whichever handler was registered
+// first.
 //
 // Both practices get a VAT rate the instant applySeed() and the manual
 // tenant B insert below create their tenant rows: migration 400's
@@ -101,8 +104,11 @@ beforeAll(async () => {
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
-  api = createApi({ pool, verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }) });
-  mountBilling(api, NOW);
+  api = createApi({
+    pool,
+    verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }),
+    now: NOW,
+  });
 });
 
 afterAll(async () => {
