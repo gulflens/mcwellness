@@ -1,0 +1,107 @@
+/*
+  This screen's own layout, plus the location switch, which is not yet in
+  the shared component library (app/shell/components). Every value here is
+  a token from app/shell/tokens.css; the switch's on/off state is drawn in
+  ink versus rule, not a new accent hue, keeping the achromatic chrome rule
+  (docs/DESIGN-BRIEF.md section 2, DESIGN.md "The Silent Chrome Rule").
+*/
+
+.checkin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.checkin__back {
+  align-self: flex-start;
+  padding-inline: 0;
+}
+
+.checkin__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.checkin__switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-block-size: var(--tap);
+  cursor: pointer;
+}
+
+.checkin__switch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  inline-size: 44px;
+  block-size: 24px;
+}
+
+.switch__input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.switch__track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: var(--hairline) solid var(--rule);
+  background: transparent;
+}
+
+.switch--on .switch__track {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.switch__thumb {
+  position: absolute;
+  inset-inline-start: 2px;
+  inset-block-start: 2px;
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 var(--hairline) var(--rule);
+}
+
+.switch--on .switch__thumb {
+  inset-inline-start: 22px;
+}
+
+.switch__input:focus-visible ~ .switch__track {
+  box-shadow: var(--focus);
+}
+
+/* The primary action: full width, in the thumb zone (.claude/rules/ui.md),
+   56px tall, built from the tap and the next spacing step rather than a
+   literal number. */
+.checkin__primary {
+  inline-size: 100%;
+  min-block-size: calc(var(--s-12) + var(--s-2));
+}
+
+.checkin__reasons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.checkin__confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
