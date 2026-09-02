@@ -69,6 +69,10 @@ never bypass the access rules.
   from the password manager, never written down in the repository), and fills
   `SUPABASE_URL` and `SUPABASE_JWKS_URL` in the deployment's settings.
 
+## Synthetic data
+
+No real person is ever written into this repository, so `pnpm seed` invents a whole practice to build and test with: one studio, four people with logins (an owner who is also the lead practitioner, two more practitioners, a coordinator), six services, and twenty clients with contacts, home locations and consents. The same data comes out every run. Every value sits in a range reserved for fakes: names from a fixed fictional list, phones in the `+971 50 000 xxxx` block, emails at `example.com`, Emirates IDs from `784-1900-*` and sealed with the key in `IDENTITY_KEY`. Running the command again adds nothing; `pnpm seed --fresh` wipes the local database and rebuilds it. The seed refuses production always, and a Supabase project unless `APP_ENV=staging`.
+
 ## Database commands
 
 - `pnpm db:migrate` applies any new SQL files in `db/migrations`, then re-applies
