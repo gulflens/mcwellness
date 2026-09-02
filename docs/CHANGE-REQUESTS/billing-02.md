@@ -1,3 +1,11 @@
+**Applied in round 7b part 2, 2026-09-03, pull request 30:** both diffs below
+— the `/admin/billing` route and the rail's `billing` destination — are
+applied on `main`. The route also gained a role gate not shown in the diffs (an
+account holding only the `practitioner` role is sent home instead of
+reaching the screen), mirroring `/today/check-in`'s own pattern from round
+7b, so the screen's reach matches `billing.price.read` in
+`domain/shared/actor.ts`.
+
 # billing-02: routing the price list screen
 
 This is the change billing-01.md's item 2 deferred to "the pull request that

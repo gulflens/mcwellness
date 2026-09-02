@@ -35,6 +35,14 @@ const ADMIN = {
   capabilities: [],
 };
 
+const FINANCE = {
+  userId: '00000002-0000-4000-8000-000000000012',
+  displayName: 'Priya Nair',
+  tenantId: TENANT_ID,
+  roles: ['finance'],
+  capabilities: [],
+};
+
 const provider: AuthProvider = {
   kind: 'development',
   signIn: async () => undefined,
@@ -56,6 +64,8 @@ function mount(me: unknown, path = '/today/check-in') {
     if (url === '/api/me') return json(me);
     if (url === '/api/sessions/service-types') return json({ serviceTypes: [] });
     if (url.startsWith('/api/clients')) return json({ clients: [], note: null });
+    if (url === '/api/billing/prices') return json({ prices: [] });
+    if (url.startsWith('/api/appointments')) return json({ appointments: [] });
     return json({ error: 'not_found', requestId: null }, 404);
   }) as unknown as typeof fetch;
 
@@ -84,5 +94,64 @@ describe('App — /today/check-in', () => {
     // Landed on the admin console (Clients), never the check-in screen.
     expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Check in' })).toBeNull();
+  });
+});
+
+describe('App — /admin/billing and /admin/schedule', () => {
+  it('lets an admin reach the price list', async () => {
+    mount(ADMIN, '/admin/billing');
+    expect(await screen.findByRole('heading', { name: 'Billing' })).toBeTruthy();
+  });
+
+  it('lets an admin reach the day schedule', async () => {
+    mount(ADMIN, '/admin/schedule');
+    expect(await screen.findByRole('heading', { name: 'Schedule' })).toBeTruthy();
+  });
+
+  it("shows the rail's Billing and Schedule links for an admin", async () => {
+    mount(ADMIN, '/admin/clients');
+    expect(await screen.findByRole('link', { name: 'Billing' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/billing'),
+    );
+    expect(screen.getByRole('link', { name: 'Schedule' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/schedule'),
+    );
+  });
+
+  it('sends a practitioner home instead of the price list', async () => {
+    mount(PRACTITIONER, '/admin/billing');
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Billing' })).toBeNull();
+  });
+
+  it('sends a practitioner home instead of the day schedule', async () => {
+    mount(PRACTITIONER, '/admin/schedule');
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Schedule' })).toBeNull();
+  });
+
+  it('lets finance reach the price list', async () => {
+    mount(FINANCE, '/admin/billing');
+    expect(await screen.findByRole('heading', { name: 'Billing' })).toBeTruthy();
+  });
+
+  it('sends finance to their own desk instead of the day schedule', async () => {
+    mount(FINANCE, '/admin/schedule');
+    // billing.price.read admits finance, but appointment.list's practice
+    // scope does not — canOpenSchedule refuses, so homeFor lands them on
+    // the admin desk (Clients), not the schedule they cannot read.
+    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Schedule' })).toBeNull();
+  });
+
+  it('shows finance the Billing link but not the Schedule link', async () => {
+    mount(FINANCE, '/admin/clients');
+    expect(await screen.findByRole('link', { name: 'Billing' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/billing'),
+    );
+    expect(screen.queryByRole('link', { name: 'Schedule' })).toBeNull();
   });
 });

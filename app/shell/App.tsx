@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { hasRole } from '@domain/shared';
+import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
+import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { PortalLanding } from '../client/PortalLanding';
 import { CheckInPage } from '../therapist/session/CheckInPage';
 import { TodayLanding } from '../therapist/TodayLanding';
 import { AdminLayout } from './AdminLayout';
+import { canOpenBilling, canOpenSchedule } from './adminAccess';
 import { useAuth, type Actor } from './auth/AuthContext';
 import { Note } from './components/Controls';
 import { NoAccessPage } from './pages/NoAccessPage';
@@ -45,6 +48,34 @@ export function App() {
       >
         <Route index element={<Navigate to="/admin/clients" replace />} />
         <Route path="clients" element={<ClientsPage />} />
+        <Route
+          path="billing"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenBilling(actor, new Date()) ? (
+                  <BillingPage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="schedule"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenSchedule(actor, new Date()) ? (
+                  <SchedulePage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
       </Route>
       <Route path="/today" element={<RequireAuth>{() => <TodayLanding />}</RequireAuth>} />
       <Route

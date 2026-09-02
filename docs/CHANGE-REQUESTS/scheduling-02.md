@@ -1,3 +1,13 @@
+**Applied in round 7b part 2, 2026-09-03, pull request 30:** items 1 and 2
+below — the `/admin/schedule` route and the rail's `schedule` destination —
+are applied on `main`. The route also gained a role gate not shown in the
+diffs (an account holding only the `practitioner` role is sent home
+instead of reaching the screen), mirroring `/today/check-in`'s own pattern
+from round 7b, so the screen's reach matches `appointment.list`'s practice
+scope in `domain/shared/actor.ts` — owner, admin and lead practitioner, not
+finance. Section 3's `domain/shared` finding was already closed by round 6
+(see the correction within); section 4 is unaffected by this change.
+
 # scheduling-02: the Day schedule screen's route and rail link
 
 This pull request builds `app/admin/schedule/SchedulePage.tsx`, so the second
@@ -53,7 +63,7 @@ edit was reverted before committing (`git status --short` on the
 request asked. `app/shell/components/Rail.test.tsx` on `main` currently
 asserts `queryByRole('link', { name: /Schedule/ })` is null and counts four
 "Arriving" sections; once this lands that assertion needs updating to expect
-the link and three remaining "Arriving" sections — the same shape update
+the link and two remaining "Arriving" sections — the same shape update
 billing's own change request needed and got.
 
 ## 3. A gap this pull request found, not fixed: `domain/shared`'s barrel breaks in the browser

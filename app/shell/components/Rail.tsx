@@ -18,9 +18,9 @@ export type RailSection = { key: string; label: string; to?: string; icon: React
 
 export const ADMIN_SECTIONS: readonly RailSection[] = [
   { key: 'clients', label: 'Clients', to: '/admin/clients', icon: <ClientsIcon /> },
-  { key: 'schedule', label: 'Schedule', icon: <ScheduleIcon /> },
+  { key: 'schedule', label: 'Schedule', to: '/admin/schedule', icon: <ScheduleIcon /> },
   { key: 'sessions', label: 'Sessions', icon: <SessionsIcon /> },
-  { key: 'billing', label: 'Billing', icon: <BillingIcon /> },
+  { key: 'billing', label: 'Billing', to: '/admin/billing', icon: <BillingIcon /> },
   { key: 'audit', label: 'Audit', icon: <AuditIcon /> },
 ];
 
