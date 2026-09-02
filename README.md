@@ -58,7 +58,7 @@ against a fresh database that only ever holds synthetic rows.
 
 Every request to the API carries the person's Supabase sign-in token. The API
 checks the token itself, works out who the person is and what they may do, and
-records who did what on every change. It talks to the database as its own
+records who did what on every change and every read of a client's record. It talks to the database as its own
 limited user, `mcwellness_api`, never as the owner, so a mistake in the API can
 never bypass the access rules.
 

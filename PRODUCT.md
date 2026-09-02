@@ -88,10 +88,10 @@ goals, and the product makes their progress visible.
 - Programmes run 15 to 40 sessions, two or three a week, over three to six
   months. Clients are promised a 45-minute arrival window, never a clock time.
   Moving or cancelling needs the notice period shown in the app (24 hours in
-  the previous app); an unfit-to-treat fee (AED 150 in the previous app)
-  applies when the practitioner arrives and cannot safely proceed. A pre-visit
-  checklist: access and security, parking, a suitably set-up room, no
-  distractions, fresh hair with no oils or products.
+  the previous app); a fee applies when the practitioner arrives and cannot
+  safely proceed (AED 150 in the previous app, under a clinical name this
+  product does not use). A pre-visit checklist: access and security, parking,
+  a suitably set-up room, no distractions, fresh hair with no oils or products.
 - The practitioner drives a personal car; Salik and parking are reimbursed.
   Dubai addressing: Makani numbers plus verified entrance and parking
   coordinates; arrival intelligence accumulates per location.

@@ -190,7 +190,10 @@ export async function syncLocalApiRolePassword(
   const parsed = new URL(apiUrl);
   const user = decodeURIComponent(parsed.username);
   const password = decodeURIComponent(parsed.password);
-  if (user !== 'mcwellness_api' || password === '') {
+  const overridden = [...parsed.searchParams.keys()].some((key) =>
+    ['user', 'password'].includes(key.toLowerCase()),
+  );
+  if (user !== 'mcwellness_api' || password === '' || overridden) {
     return false;
   }
   const { rows } = await client.query("select 1 from pg_roles where rolname = 'mcwellness_api'");

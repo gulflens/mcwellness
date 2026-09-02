@@ -11,8 +11,8 @@ import { isLocalDatabaseUrl } from '../../db/runner/plan';
 
 /**
  * Shared plumbing for the database tests. Every value here is synthetic and
- * stays inside the reserved fake ranges (.claude/rules/testing.md): fictional
- * names, phones in the +971 50 000 xxxx block, and never an identity number.
+ * stays inside the ranges the identifier hook reserves (.claude/hooks/no-real-identifiers.sh):
+ * fictional names, phones in the +971 50 000 xxxx block, and never an identity number.
  */
 
 export const IDS = {
@@ -193,6 +193,7 @@ export async function count(client: pg.Client, table: string): Promise<number> {
 export const AUTH = {
   ownerA: '00000000-0000-4000-8000-0000000000aa',
   practitionerA: '00000000-0000-4000-8000-0000000000ab',
+  adminA: '00000000-0000-4000-8000-0000000000ae',
   contactA: '00000000-0000-4000-8000-0000000000ac',
   suspendedA: '00000000-0000-4000-8000-0000000000ad',
   unknown: '00000000-0000-4000-8000-0000000000af',
@@ -200,6 +201,7 @@ export const AUTH = {
 
 export const MORE_IDS = {
   practitionerUserA: '00000000-0000-4000-8000-0000000000a2',
+  adminUserA: '00000000-0000-4000-8000-0000000000a5',
   contactUserA: '00000000-0000-4000-8000-0000000000a3',
   suspendedUserA: '00000000-0000-4000-8000-0000000000a4',
   practitionerA: '00000000-0000-4000-8000-0000000000b9',

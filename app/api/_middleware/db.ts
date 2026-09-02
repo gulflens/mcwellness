@@ -9,9 +9,16 @@ import pg from 'pg';
 const API_USER = /^mcwellness_api(\.[a-z0-9]+)?$/;
 
 export function assertApiRoleUrl(url: string): void {
-  const user = decodeURIComponent(new URL(url).username);
+  const parsed = new URL(url);
+  const user = decodeURIComponent(parsed.username);
   if (!API_USER.test(user)) {
     throw new Error(`API_DATABASE_URL must connect as mcwellness_api, not as "${user}".`);
+  }
+  // The driver lets ?user= and ?password= override the URL's own credentials.
+  for (const key of parsed.searchParams.keys()) {
+    if (['user', 'password', 'host', 'hostaddr'].includes(key.toLowerCase())) {
+      throw new Error(`API_DATABASE_URL must not carry a "${key}" query parameter.`);
+    }
   }
 }
 

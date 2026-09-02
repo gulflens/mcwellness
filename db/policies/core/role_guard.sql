@@ -21,3 +21,8 @@ begin
   end loop;
 end
 $$;
+
+-- Only the owner hands out ownership. An admin may grant every other role.
+drop policy if exists owner_grants_owner on public.user_role;
+create policy owner_grants_owner on public.user_role as restrictive for insert to app_role
+  with check (role <> 'owner' or app.actor_has_role('owner'));

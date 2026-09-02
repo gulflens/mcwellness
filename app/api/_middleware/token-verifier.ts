@@ -83,11 +83,20 @@ export function createTokenVerifier(config: VerifierConfig): TokenVerifier {
   };
 }
 
+/** The value shipped in .env.example. Fine on a laptop, refused anywhere else. */
+export const LOCAL_PLACEHOLDER_SECRET = 'local-development-only-not-a-real-secret-0123456789';
+
 /** Builds the verifier from the environment; throws at startup, never per request. */
 export function verifierFromEnv(env: NodeJS.ProcessEnv): TokenVerifier {
   const supabaseUrl = env.SUPABASE_URL;
   if (!supabaseUrl) {
     throw new Error('SUPABASE_URL is not set. Copy .env.example to .env.');
+  }
+  const appEnv = env.APP_ENV ?? 'development';
+  if (appEnv !== 'development' && env.SUPABASE_JWT_SECRET === LOCAL_PLACEHOLDER_SECRET) {
+    throw new Error(
+      'SUPABASE_JWT_SECRET is the local placeholder. Set SUPABASE_JWKS_URL for this environment.',
+    );
   }
   return createTokenVerifier({
     issuer: `${supabaseUrl.replace(/\/+$/, '')}/auth/v1`,

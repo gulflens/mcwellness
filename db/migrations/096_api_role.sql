@@ -15,6 +15,8 @@ begin
 end
 $$;
 
+-- Unconditional, so a role created by hand with other attributes is corrected.
+alter role mcwellness_api login noinherit nobypassrls;
 grant app_role to mcwellness_api;
 
 -- Role-level settings apply when a pooled backend starts for this role, so they
@@ -26,5 +28,7 @@ alter role mcwellness_api set idle_in_transaction_session_timeout = '30s';
 
 -- rollback:
 --   revoke app_role from mcwellness_api;
+--   alter role mcwellness_api nologin;          -- it keeps whatever password was set out of band
+--   alter role mcwellness_api reset all;        -- the search_path and timeouts above
 --   -- The role itself is cluster-wide; drop it only when no database still references it:
 --   -- drop role if exists mcwellness_api;

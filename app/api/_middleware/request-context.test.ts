@@ -94,6 +94,7 @@ describe('withRequestContext', () => {
       'set local role',
       'select user_id, tenant_id,',
       "select set_config('app.tenant_id', $1,",
+      'select 1',
       'commit',
     ]);
     expect(fake.params[2]).toEqual([SUB]);

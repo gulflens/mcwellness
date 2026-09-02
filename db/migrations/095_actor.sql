@@ -108,6 +108,15 @@ $$;
 revoke execute on function app.audit_row() from public;
 
 -- rollback:
+--   -- Remove db/policies/core/role_guard.sql from the tree first: the runner re-applies
+--   -- every policy file on each migrate, and those policies depend on actor_has_role.
+--   drop policy if exists admin_inserts_only on public.app_user;
+--   drop policy if exists admin_updates_only on public.app_user;
+--   drop policy if exists admin_inserts_only on public.user_role;
+--   drop policy if exists admin_updates_only on public.user_role;
+--   drop policy if exists owner_grants_owner on public.user_role;
+--   drop policy if exists admin_inserts_only on public.credential;
+--   drop policy if exists admin_updates_only on public.credential;
 --   -- restore app.audit_row() from 080_audit_triggers.sql (the version without actor_role)
 --   drop function if exists app.resolve_actor(uuid);
 --   drop function if exists app.actor_has_role(text);

@@ -83,3 +83,17 @@ describe('createTokenVerifier', () => {
     expect(await verifier.verify('')).toBeNull();
   });
 });
+
+describe('verifierFromEnv', () => {
+  it('refuses the local placeholder secret anywhere but development', async () => {
+    const { verifierFromEnv, LOCAL_PLACEHOLDER_SECRET } = await import('./token-verifier');
+    const base = {
+      SUPABASE_URL: 'http://localhost:54321',
+      SUPABASE_JWT_SECRET: LOCAL_PLACEHOLDER_SECRET,
+    };
+    expect(() => verifierFromEnv({ ...base, APP_ENV: 'development' })).not.toThrow();
+    expect(() => verifierFromEnv({ ...base })).not.toThrow();
+    expect(() => verifierFromEnv({ ...base, APP_ENV: 'staging' })).toThrow('local placeholder');
+    expect(() => verifierFromEnv({ ...base, APP_ENV: 'production' })).toThrow('local placeholder');
+  });
+});

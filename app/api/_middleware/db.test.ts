@@ -13,6 +13,12 @@ describe('assertApiRoleUrl', () => {
     ).not.toThrow();
   });
 
+  it('refuses a credential hidden in the query string', () => {
+    expect(() =>
+      assertApiRoleUrl('postgresql://mcwellness_api:x@localhost:5432/postgres?user=postgres'),
+    ).toThrow('query parameter');
+  });
+
   it('refuses the owner and every Supabase system role', () => {
     for (const user of [
       'postgres',

@@ -63,6 +63,7 @@ function forbidden(c: Context, requestId: string): Response {
 
 export function withRequestContext({ pool, verifier }: RequestContextDeps) {
   return createMiddleware<ApiEnv>(async (c, next) => {
+    // A caller-chosen correlation id, echoed back and recorded; never proof of anything.
     const incoming = c.req.header('x-request-id');
     const requestId = RequestId.safeParse(incoming).success ? (incoming as string) : randomUUID();
     c.header('X-Request-Id', requestId);
@@ -113,7 +114,9 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
       ]);
 
       c.set('actor', actor);
-      // Only `query`: a route can neither commit, release nor nest a transaction.
+      // Only `query` is exposed. This is a trust boundary for route code, not a
+      // sandbox: raw SQL could still commit or change a setting, so routes are
+      // reviewed; what the fence guarantees is the database role and the stamp.
       c.set('db', {
         query: <R extends pg.QueryResultRow = pg.QueryResultRow>(
           text: string,
@@ -124,7 +127,17 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
 
       await next();
 
-      const failed = c.error !== undefined || c.res.status >= 500;
+      let failed = c.error !== undefined || c.res.status >= 500;
+      if (!failed) {
+        // A route that swallowed a database error would otherwise be told
+        // "committed" while Postgres quietly rolled the aborted transaction back.
+        try {
+          await client.query('select 1');
+        } catch {
+          failed = true;
+          c.res = c.json({ error: 'internal', requestId }, 500);
+        }
+      }
       await client.query(failed ? 'rollback' : 'commit');
       inTransaction = false;
       client.release();

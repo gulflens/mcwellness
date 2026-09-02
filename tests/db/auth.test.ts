@@ -43,6 +43,7 @@ let api: ReturnType<typeof createApi>;
 let probe: Hono<ApiEnv>;
 let tokens: {
   owner: string;
+  admin: string;
   practitioner: string;
   contact: string;
   suspended: string;
@@ -59,6 +60,13 @@ beforeAll(async () => {
     authId: AUTH.practitionerA,
     displayName: 'Synthetic Practitioner',
     roles: ['practitioner'],
+  });
+  await seedUser(owner, {
+    id: MORE_IDS.adminUserA,
+    tenantId: IDS.tenantA,
+    authId: AUTH.adminA,
+    displayName: 'Synthetic Admin',
+    roles: ['admin'],
   });
   await seedUser(owner, {
     id: MORE_IDS.contactUserA,
@@ -121,18 +129,35 @@ beforeAll(async () => {
       await logRead(c.get('db'), 'client', id, id);
       return c.json({ ok: true });
     })
-    .post('/probe/user-role', async (c) => {
+    .post('/probe/grant/:role', async (c) => {
+      // An expected refusal is handled with a savepoint so the transaction stays
+      // healthy; without one the middleware would answer 500, by design.
+      const db = c.get('db');
+      await db.query('savepoint grant_probe');
+      try {
+        await db.query(
+          'insert into user_role (tenant_id, user_id, role) values (app.current_tenant_id(), $1, $2::role_kind)',
+          [c.get('actor').userId, c.req.param('role')],
+        );
+        return c.json({ ok: true });
+      } catch (error) {
+        await db.query('rollback to savepoint grant_probe');
+        return c.json({ code: (error as { code?: string }).code }, 409);
+      }
+    })
+    .post('/probe/swallow', async (c) => {
+      // A route that hides a database error must not be told it committed.
       try {
         await c
           .get('db')
           .query(
-            "insert into user_role (tenant_id, user_id, role) values (app.current_tenant_id(), $1, 'admin')",
-            [c.get('actor').userId],
+            'insert into user_role (tenant_id, user_id, role) values (app.current_tenant_id(), $1, $2::role_kind)',
+            [c.get('actor').userId, 'nonsense'],
           );
-        return c.json({ ok: true });
-      } catch (error) {
-        return c.json({ code: (error as { code?: string }).code }, 409);
+      } catch {
+        // swallowed on purpose
       }
+      return c.json({ ok: true });
     })
     .patch('/probe/auth-id', async (c) => {
       // Row level security hides rows a person may not update, so a refused
@@ -157,6 +182,7 @@ beforeAll(async () => {
 
   tokens = {
     owner: await mint(AUTH.ownerA),
+    admin: await mint(AUTH.adminA),
     practitioner: await mint(AUTH.practitionerA),
     contact: await mint(AUTH.contactA),
     suspended: await mint(AUTH.suspendedA),
@@ -303,18 +329,41 @@ describe('the request context', () => {
   });
 
   it('lets the owner grant a role and refuses a practitioner who tries to grant themselves one', async () => {
-    const asPractitioner = await probe.request('/probe/user-role', {
+    const asPractitioner = await probe.request('/probe/grant/admin', {
       method: 'POST',
       ...bearer(tokens.practitioner),
     });
     expect(asPractitioner.status).toBe(409);
     expect(await asPractitioner.json()).toEqual({ code: '42501' });
 
-    const asOwner = await probe.request('/probe/user-role', {
+    const asOwner = await probe.request('/probe/grant/admin', {
       method: 'POST',
       ...bearer(tokens.owner),
     });
     expect(asOwner.status).toBe(200);
+  });
+
+  it('lets only the owner hand out ownership: an admin granting owner is refused', async () => {
+    const asAdmin = await probe.request('/probe/grant/owner', {
+      method: 'POST',
+      ...bearer(tokens.admin),
+    });
+    expect(asAdmin.status).toBe(409);
+    expect(await asAdmin.json()).toEqual({ code: '42501' });
+    const asAdminOther = await probe.request('/probe/grant/finance', {
+      method: 'POST',
+      ...bearer(tokens.admin),
+    });
+    expect(asAdminOther.status).toBe(200);
+  });
+
+  it('answers 500 and saves nothing when a route swallows a database error', async () => {
+    const res = await probe.request('/probe/swallow', { method: 'POST', ...bearer(tokens.owner) });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({
+      error: 'internal',
+      requestId: res.headers.get('X-Request-Id'),
+    });
   });
 
   it("lets a practitioner touch no identity link but their own, so the owner's stays put", async () => {
