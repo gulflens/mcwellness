@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { canActor } from '@domain/shared';
+import { logRead, logReads } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { AppointmentOptionsResponse, type DeliveryMode } from './schema';
 
@@ -85,8 +86,19 @@ export function mountAppointmentOptions(api: Hono<ApiEnv>): void {
 
     let locationRows: LocationRow[] = [];
     if (query.data.clientId) {
+      // This client's own record is read to build the form (their locations,
+      // below); logged exactly as app/api/clients/list.ts logs what it shows.
+      await logRead(db, 'client', query.data.clientId, query.data.clientId);
       const { rows } = await db.query<LocationRow>(CLIENT_LOCATIONS_SQL, [query.data.clientId]);
       locationRows = rows;
+      if (locationRows.length > 0) {
+        await logReads(
+          db,
+          'location',
+          locationRows.map((r) => ({ id: r.id, clientId: query.data.clientId ?? null })),
+          'read',
+        );
+      }
     }
 
     return c.json(

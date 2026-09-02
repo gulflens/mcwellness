@@ -1,28 +1,45 @@
-import type { Hono } from 'hono';
-import { canActor, isoDateIn, type Capability } from '@domain/shared';
-import { checkConflicts, windowFor, type ExistingAppointment } from '@domain/scheduling';
+import type { Context, Hono } from 'hono';
+import { ageOn, canActor, hasRole, isoDateIn, type Capability, type IsoDate } from '@domain/shared';
+import {
+  checkConflicts,
+  windowFor,
+  CLIENT_OVERLAP_MESSAGE,
+  PRACTITIONER_OVERLAP_MESSAGE,
+  type ExistingAppointment,
+} from '@domain/scheduling';
+import { logRead } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import {
   AppointmentRow,
   ConflictResponse,
   CreateAppointmentRequest,
+  type BadRequestCode,
   type DeliveryMode,
 } from './schema';
 
 /**
  * POST /api/appointments: places a proposed appointment (scheduling-manual.md
  * section 4.3, cut to what this stream's first pull request needs — no
- * entitlement balance yet, no override). Two gates, in order: `canActor`
- * (the booking role, and the assignee actually holding a valid, executing
- * credential for the chosen service on the chosen date) refuses before
- * anything else is even loaded; `checkConflicts` (the same credential rule
- * again, plus the two overlaps and the client's status) then refuses with a
- * plain reason. What survives both is inserted as `proposed`; telling the
- * family is still a manual step (scheduling-manual.md section 3).
+ * entitlement balance yet, no override).
+ *
+ * Gates, in order: the booking role, checked before any read at all, so a
+ * refused caller never causes a client row to be looked at; `canActor`'s
+ * credential rule, once the assignee's own credentials are loaded; a set of
+ * plain-code 400s for a row that does not exist, is not active, or does not
+ * fit (a service the location or delivery mode do not support); then
+ * `checkConflicts` (the credential rule again, the two overlaps, the
+ * client's status and the consents this appointment needs), which refuses
+ * with a plain reason and no write. What survives every gate is inserted as
+ * `proposed` — telling the family is still a manual step (scheduling-manual.md
+ * section 3). The insert itself is still guarded a last time by the
+ * database's own exclusion constraints (db/migrations/200_appointment.sql):
+ * a concurrent booking that slips past the checkConflicts read is caught
+ * there and answered the same way, not as a raw 500.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 const LIVE_STATUSES_EXCLUDED = "('cancelled', 'cancelled_late', 'no_show', 'rescheduled')";
+const EXCLUSION_VIOLATION = '23P01';
 
 type CredentialRow = {
   service_type_id: string;
@@ -40,10 +57,47 @@ type OtherAppointmentRow = {
   travel_buffer_minutes: number;
 };
 
-type ClientRow = { given_name: string; family_name: string; status: string };
+type ClientRow = {
+  given_name: string;
+  family_name: string;
+  status: string;
+  date_of_birth: string | null;
+};
 type PractitionerRow = { display_name: string; status: string };
 type ServiceTypeRow = { name: string; delivery_modes: DeliveryMode[]; status: string };
-type LocationRow = { label: string; emirate: string };
+type LocationRow = {
+  label: string;
+  emirate: string;
+  owner_type: string;
+  owner_id: string;
+  tenant_location_id: string | null;
+};
+type ConsentRow = { purpose: string };
+
+/** The consent purposes this appointment needs (scheduling-manual.md section 6.1). A
+ * null date of birth cannot be proven adult, so it counts as needing the minor
+ * purpose too — fail closed, not open. Booking policy, not a scheduling
+ * conflict rule, so it lives here rather than in domain/scheduling; and not in
+ * domain/client, which this stream may not import from (docs/SPEC/OWNERSHIP.md
+ * rule 3). */
+export function requiredConsentPurposes(
+  deliveryMode: DeliveryMode,
+  dateOfBirth: string | null,
+  on: IsoDate,
+): string[] {
+  const purposes = ['participation'];
+  if (dateOfBirth === null || ageOn(dateOfBirth, on) < 18) {
+    purposes.push('minor_participation');
+  }
+  if (deliveryMode === 'home') {
+    purposes.push('home_visit');
+  }
+  return purposes;
+}
+
+function badRequest(c: Context<ApiEnv>, requestId: string | null, code: BadRequestCode) {
+  return c.json({ error: 'bad_request', code, requestId }, 400);
+}
 
 export function mountAppointmentCreate(
   api: Hono<ApiEnv>,
@@ -56,8 +110,16 @@ export function mountAppointmentCreate(
 
     const body = CreateAppointmentRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
-      return c.json({ error: 'bad_request', requestId }, 400);
+      return badRequest(c, requestId, 'invalid_request');
     }
+
+    // The booking role, before a single row is read: a refused caller must
+    // never trigger a client read (the credential-bound check below still
+    // runs later, once the assignee's own credentials are loaded).
+    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+
     const { clientId, practitionerId, serviceTypeId, locationId, deliveryMode } = body.data;
     const travelBufferMinutes = body.data.travelBufferMinutes ?? 15;
     const windowStart = new Date(body.data.windowStart);
@@ -67,41 +129,75 @@ export function mountAppointmentCreate(
     // One query at a time: a request holds a single connection (request-context.ts),
     // so running these concurrently only queues them anyway, and pg now warns about it.
     const clientResult = await db.query<ClientRow>(
-      'select given_name, family_name, status from client where id = $1',
+      'select given_name, family_name, status, date_of_birth from client where id = $1',
       [clientId],
     );
+    const client = clientResult.rows[0];
+    if (!client) {
+      return badRequest(c, requestId, 'client_not_found');
+    }
+    // Read logging, exactly as app/api/clients/list.ts logs the clients it shows.
+    await logRead(db, 'client', clientId, clientId);
+
     const practitionerResult = await db.query<PractitionerRow>(
       'select u.display_name, p.status from practitioner p join app_user u on u.id = p.user_id ' +
         'where p.id = $1',
       [practitionerId],
     );
+    const practitioner = practitionerResult.rows[0];
+    if (!practitioner) {
+      return badRequest(c, requestId, 'practitioner_not_found');
+    }
+    if (practitioner.status !== 'active') {
+      return badRequest(c, requestId, 'practitioner_inactive');
+    }
+
     const serviceTypeResult = await db.query<ServiceTypeRow>(
       // Cast: pg has no built-in parser for a custom enum's array OID and
       // would otherwise hand back the raw "{home,studio}" text.
       'select name, delivery_modes::text[] as delivery_modes, status from service_type where id = $1',
       [serviceTypeId],
     );
+    const serviceType = serviceTypeResult.rows[0];
+    if (!serviceType) {
+      return badRequest(c, requestId, 'service_type_not_found');
+    }
+    if (serviceType.status !== 'active') {
+      return badRequest(c, requestId, 'service_type_inactive');
+    }
+    if (!serviceType.delivery_modes.includes(deliveryMode)) {
+      return badRequest(c, requestId, 'delivery_mode_unavailable');
+    }
+
     const locationResult = await db.query<LocationRow>(
-      'select label::text as label, emirate::text as emirate from location where id = $1',
-      [locationId],
+      'select l.label::text as label, l.emirate::text as emirate, l.owner_type::text as owner_type, ' +
+        'l.owner_id, t.location_id as tenant_location_id ' +
+        'from location l, tenant t where l.id = $1 and t.id = $2',
+      [locationId, actor.tenantId],
     );
+    const location = locationResult.rows[0];
+    if (!location) {
+      return badRequest(c, requestId, 'location_not_found');
+    }
+    // The location must actually be this client's own (a home visit) or the
+    // practice's studio (a studio visit): the day sheet reads it live, so the
+    // wrong location is not a cosmetic mistake (scheduling-manual.md section 4.3).
+    // 'remote' carries no such constraint.
+    if (
+      deliveryMode === 'home' &&
+      !(location.owner_type === 'client' && location.owner_id === clientId)
+    ) {
+      return badRequest(c, requestId, 'location_mismatch');
+    }
+    if (deliveryMode === 'studio' && locationId !== location.tenant_location_id) {
+      return badRequest(c, requestId, 'location_mismatch');
+    }
+
     const credentialResult = await db.query<CredentialRow>(
       'select service_type_id, can_execute_session, can_author_protocol, can_sign_report, ' +
         'valid_from, valid_to from credential where practitioner_id = $1',
       [practitionerId],
     );
-
-    const client = clientResult.rows[0];
-    const practitioner = practitionerResult.rows[0];
-    const serviceType = serviceTypeResult.rows[0];
-    const location = locationResult.rows[0];
-    if (!client || !practitioner || !serviceType || !location) {
-      return c.json({ error: 'bad_request', requestId }, 400);
-    }
-    if (!serviceType.delivery_modes.includes(deliveryMode)) {
-      return c.json({ error: 'bad_request', requestId }, 400);
-    }
-
     const assigneeCapabilities: Capability[] = credentialResult.rows.map((r) => ({
       serviceTypeId: r.service_type_id,
       canExecuteSession: r.can_execute_session,
@@ -121,6 +217,12 @@ export function mountAppointmentCreate(
     ) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
+
+    const consentResult = await db.query<ConsentRow>(
+      "select purpose from consent where client_id = $1 and status = 'active' " +
+        'and (expires_at is null or expires_at > $2)',
+      [clientId, windowStart],
+    );
 
     const practitionerAppointmentsResult = await db.query<OtherAppointmentRow>(
       `select id, window_start, window_end, travel_buffer_minutes from appointment ` +
@@ -155,6 +257,8 @@ export function mountAppointmentCreate(
         clientAppointments: toExisting(clientAppointmentsResult.rows),
         practitionerCredentials: assigneeCapabilities,
         clientActive: client.status === 'active',
+        requiredConsentPurposes: requiredConsentPurposes(deliveryMode, client.date_of_birth, on),
+        activeConsentPurposes: consentResult.rows.map((r) => r.purpose),
       },
     );
 
@@ -173,31 +277,59 @@ export function mountAppointmentCreate(
       );
     }
 
-    const { rows } = await db.query<{
+    type CreatedRow = {
       id: string;
       window_start: Date;
       window_end: Date;
       status: AppointmentRow['status'];
       delivery_mode: DeliveryMode;
-    }>(
-      'insert into appointment (tenant_id, client_id, practitioner_id, service_type_id, location_id, ' +
-        'delivery_mode, window_start, window_end, travel_buffer_minutes, created_by) ' +
-        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ' +
-        'returning id, window_start, window_end, status, delivery_mode',
-      [
-        actor.tenantId,
-        clientId,
-        practitionerId,
-        serviceTypeId,
-        locationId,
-        deliveryMode,
-        windowStart,
-        windowEnd,
-        travelBufferMinutes,
-        actor.userId,
-      ],
-    );
-    const created = rows[0];
+    };
+    let created: CreatedRow | undefined;
+    try {
+      const result = await db.query<CreatedRow>(
+        'insert into appointment (tenant_id, client_id, practitioner_id, service_type_id, location_id, ' +
+          'delivery_mode, window_start, window_end, travel_buffer_minutes, created_by) ' +
+          'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ' +
+          'returning id, window_start, window_end, status, delivery_mode',
+        [
+          actor.tenantId,
+          clientId,
+          practitionerId,
+          serviceTypeId,
+          locationId,
+          deliveryMode,
+          windowStart,
+          windowEnd,
+          travelBufferMinutes,
+          actor.userId,
+        ],
+      );
+      created = result.rows[0];
+    } catch (error) {
+      // A concurrent booking can slip past the read above and still be caught
+      // here, by the database's own exclusion constraints
+      // (db/migrations/200_appointment.sql) — answered the same way a
+      // checkConflicts refusal is, not as a raw 500.
+      const pgError = error as { code?: string; constraint?: string };
+      if (pgError.code === EXCLUSION_VIOLATION) {
+        const isClientConflict = pgError.constraint === 'appointment_no_overlap_client';
+        return c.json(
+          ConflictResponse.parse({
+            error: 'conflict',
+            issues: [
+              {
+                code: isClientConflict ? 'client_overlap' : 'practitioner_overlap',
+                message: isClientConflict ? CLIENT_OVERLAP_MESSAGE : PRACTITIONER_OVERLAP_MESSAGE,
+                conflictsWithAppointmentId: null,
+              },
+            ],
+            requestId,
+          }),
+          409,
+        );
+      }
+      throw error;
+    }
     if (!created) {
       return c.json({ error: 'internal', requestId }, 500);
     }

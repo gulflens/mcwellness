@@ -23,7 +23,23 @@ export const CONFLICT_CODES = [
   'client_overlap',
   'credential_invalid',
   'client_inactive',
+  'consent_missing',
 ] as const;
+
+/** Why a booking attempt was refused before it ever reached a conflict check:
+ * a row that does not exist, is not active, or does not fit. */
+export const BAD_REQUEST_CODES = [
+  'invalid_request',
+  'client_not_found',
+  'practitioner_not_found',
+  'practitioner_inactive',
+  'service_type_not_found',
+  'service_type_inactive',
+  'delivery_mode_unavailable',
+  'location_not_found',
+  'location_mismatch',
+] as const;
+export type BadRequestCode = (typeof BAD_REQUEST_CODES)[number];
 
 export const ConflictIssue = z.object({
   code: z.enum(CONFLICT_CODES),
