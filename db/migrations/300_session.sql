@@ -121,6 +121,9 @@ begin
 end
 $$;
 
+-- Practice-bound keys (trunk round 4): let any foreign key to a session or an event bind the tenant too.
+alter table public.session add constraint session_tenant_id_id_key unique (tenant_id, id);
+alter table public.session_event add constraint session_event_tenant_id_id_key unique (tenant_id, id);
 -- rollback:
 --   revoke select, insert on session_event from app_role;
 --   revoke select, insert, update on session from app_role;
@@ -131,3 +134,5 @@ $$;
 --   drop table if exists session;
 --   drop type if exists session_event_kind;
 --   drop type if exists session_status;
+--   alter table public.session_event drop constraint if exists session_event_tenant_id_id_key;
+--   alter table public.session drop constraint if exists session_tenant_id_id_key;
