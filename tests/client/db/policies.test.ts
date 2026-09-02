@@ -722,3 +722,15 @@ describe('cross-tenant: goal, goal_category and erasure_request', () => {
     });
   });
 });
+
+describe('the record-number helper', () => {
+  it('serves only the acting practice through the API role', async () => {
+    await asApiRole(owner, IDS.tenantA, async () => {
+      const { rows } = await owner.query<{ mrn: string }>('select app.next_mrn($1) as mrn', [
+        IDS.tenantA,
+      ]);
+      expect(rows[0]?.mrn).toMatch(/^MW-\d{6}$/);
+      await rejectsWith(owner, '42501', 'select app.next_mrn($1)', [IDS.tenantB]);
+    });
+  });
+});

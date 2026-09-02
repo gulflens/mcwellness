@@ -534,6 +534,14 @@ as $$
 declare
   v_max int;
 begin
+  -- Bound to the caller's own practice: the API role always acts with a tenant
+  -- set, and may not count another practice's clients. The owner (no tenant
+  -- set, maintenance and seeding) may name any tenant.
+  if current_setting('app.tenant_id', true) is not null
+     and current_setting('app.tenant_id', true) <> ''
+     and p_tenant is distinct from app.current_tenant_id() then
+    raise exception 'next_mrn: not the acting practice' using errcode = 'insufficient_privilege';
+  end if;
   perform pg_advisory_xact_lock(hashtext('mrn:' || p_tenant::text));
 
   select coalesce(max((regexp_match(mrn, '^MW-(\d+)$'))[1]::int), 0)
