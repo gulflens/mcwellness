@@ -1,22 +1,31 @@
 import { describe, expect, it } from 'vitest';
+import { generateSeed } from '../../db/seed/generate';
 import { validateEmiratesId } from './validateEmiratesId';
 
-// Both in the reserved 784-1900 range (.claude/rules/testing.md), with a genuine
-// Luhn check digit computed by hand, not the seed generator's simpler sum-of-digits
-// stand-in (db/seed/generate.ts's emiratesId() is shape-only and need not pass a
-// real Luhn check).
-const VALID = '784-1900-0000012-6';
-const BAD_CHECKSUM = '784-1900-0000012-7'; // last digit off by one from VALID
+// Drawn from the seed generator rather than hand-written (.claude/rules/testing.md):
+// db/seed/generate.ts's emiratesId() computes a genuine Luhn check digit (via the
+// exported luhnCheckDigit()), so a seeded guardian's identifier is valid Emirates ID
+// shape and checksum both, not merely shape.
+const SEEDED_CONTACT = generateSeed().contacts.find((c) => c.emiratesId !== null);
+if (!SEEDED_CONTACT?.emiratesId) {
+  throw new Error('The seed has no guardian with an Emirates ID; fixtures below assume one.');
+}
+const VALID = SEEDED_CONTACT.emiratesId;
+const VALID_DIGITS = VALID.replace(/[^0-9]/g, '');
+const LAST_DIGIT = Number(VALID_DIGITS.at(-1));
+const OFF_BY_ONE = (LAST_DIGIT + 1) % 10;
+// Same fifteen digits as VALID, with only the check digit altered by one.
+const BAD_CHECKSUM = `${VALID_DIGITS.slice(0, -1)}${OFF_BY_ONE}`;
 
 describe('validateEmiratesId', () => {
   it('accepts a fifteen-digit 784 number with a correct Luhn check digit', () => {
-    expect(validateEmiratesId(VALID)).toEqual({ ok: true, normalised: '784190000000126' });
+    expect(validateEmiratesId(VALID)).toEqual({ ok: true, normalised: VALID_DIGITS });
   });
 
   it('accepts digits written with spaces instead of dashes', () => {
-    expect(validateEmiratesId('784 1900 0000012 6')).toEqual({
+    expect(validateEmiratesId(VALID.replace(/-/g, ' '))).toEqual({
       ok: true,
-      normalised: '784190000000126',
+      normalised: VALID_DIGITS,
     });
   });
 
@@ -32,6 +41,9 @@ describe('validateEmiratesId', () => {
 
   it('fails with reason prefix when the number does not start 784', () => {
     // Same fifteen-digit shape as VALID, wrong prefix; the checksum is never reached.
-    expect(validateEmiratesId('123-1900-0000012-6')).toEqual({ ok: false, reason: 'prefix' });
+    expect(validateEmiratesId(`123${VALID_DIGITS.slice(3)}`)).toEqual({
+      ok: false,
+      reason: 'prefix',
+    });
   });
 });
