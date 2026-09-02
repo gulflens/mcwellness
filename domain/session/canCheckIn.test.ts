@@ -33,7 +33,8 @@ function input(overrides: Partial<CheckInInput> = {}): CheckInInput {
     actor: actor(),
     serviceTypeId: SERVICE_TYPE,
     deliveryMode: 'home',
-    clientDateOfBirth: '1990-01-01',
+    hasDateOfBirth: true,
+    isMinor: false,
     activeConsentPurposes: ['participation', 'home_visit'],
     ...overrides,
   };
@@ -73,7 +74,7 @@ describe('canCheckIn', () => {
   it('blocks a minor without minor_participation consent', () => {
     const result = canCheckIn(
       input({
-        clientDateOfBirth: '2015-01-01',
+        isMinor: true,
         activeConsentPurposes: ['participation', 'home_visit'],
       }),
       NOW,
@@ -84,7 +85,7 @@ describe('canCheckIn', () => {
   it('allows a minor once minor_participation consent is active', () => {
     const result = canCheckIn(
       input({
-        clientDateOfBirth: '2015-01-01',
+        isMinor: true,
         activeConsentPurposes: ['participation', 'minor_participation', 'home_visit'],
       }),
       NOW,
@@ -92,12 +93,14 @@ describe('canCheckIn', () => {
     expect(result).toEqual({ ok: true, reasons: [] });
   });
 
-  it('treats a client turning 18 today as an adult, not a minor', () => {
+  it('never asks for minor_participation consent when isMinor is false', () => {
+    // Whether a client turning 18 today counts as an adult is now
+    // app.checkin_context's own age arithmetic
+    // (db/migrations/301_checkin_context.sql, judged in the practice's zone)
+    // — canCheckIn only ever acts on the isMinor boolean it is handed, and
+    // this proves it never re-derives an age of its own to second-guess it.
     const result = canCheckIn(
-      input({
-        clientDateOfBirth: '2008-09-02',
-        activeConsentPurposes: ['participation', 'home_visit'],
-      }),
+      input({ isMinor: false, activeConsentPurposes: ['participation', 'home_visit'] }),
       NOW,
     );
     expect(result).toEqual({ ok: true, reasons: [] });
@@ -117,7 +120,14 @@ describe('canCheckIn', () => {
   });
 
   it('fails closed when the date of birth is unknown', () => {
-    const result = canCheckIn(input({ clientDateOfBirth: null }), NOW);
+    const result = canCheckIn(input({ hasDateOfBirth: false, isMinor: false }), NOW);
+    expect(result.reasons).toEqual(['date_of_birth_unknown']);
+  });
+
+  it('fails closed on a missing date of birth even if isMinor were somehow true', () => {
+    // hasDateOfBirth false must win outright: isMinor is meaningless without
+    // a date of birth on file, and the gate must never read it in that case.
+    const result = canCheckIn(input({ hasDateOfBirth: false, isMinor: true }), NOW);
     expect(result.reasons).toEqual(['date_of_birth_unknown']);
   });
 
@@ -125,7 +135,7 @@ describe('canCheckIn', () => {
     const result = canCheckIn(
       input({
         actor: actor({ roles: ['client_contact'] }),
-        clientDateOfBirth: null,
+        hasDateOfBirth: false,
         activeConsentPurposes: [],
       }),
       NOW,

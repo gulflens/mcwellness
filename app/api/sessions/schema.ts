@@ -32,20 +32,42 @@ export const SessionEventInput = z.object({
 });
 export type SessionEventInput = z.infer<typeof SessionEventInput>;
 
-export const CheckInRequest = z.object({
-  // The client and the door coordinate: session-level, carried once here
-  // rather than inside each event's payload.
-  clientId: z.uuid(),
-  point: GeoPoint.nullable(),
-  // A batch, matching the outbox's own shape, even though this pull request
-  // only ever expects one event in it.
-  events: z.array(SessionEventInput).min(1).max(20),
-});
+// A client record number (docs/SPEC/00-data-model.md: "MW-000001, allocated
+// by domain/client"), typed by a practitioner who does not already have the
+// client's id to hand — the walk-up case the check-in screen (pull request
+// 24) adds alongside picking a client from a list.
+export const ClientMrn = z.string().regex(/^MW-\d{6,}$/, 'Not a valid record number');
+
+export const CheckInRequest = z
+  .object({
+    // The client and the door coordinate: session-level, carried once here
+    // rather than inside each event's payload. Exactly one of clientId and
+    // clientMrn is given — never both, never neither — and
+    // app.checkin_context (db/migrations/301_checkin_context.sql) resolves
+    // whichever the caller sent; the refine below is the edge that catches a
+    // caller mixing or omitting both before either reaches the database.
+    clientId: z.uuid().optional(),
+    clientMrn: ClientMrn.optional(),
+    point: GeoPoint.nullable(),
+    // A batch, matching the outbox's own shape, even though this pull request
+    // only ever expects one event in it.
+    events: z.array(SessionEventInput).min(1).max(20),
+  })
+  .refine((value) => (value.clientId === undefined) !== (value.clientMrn === undefined), {
+    message: 'Provide exactly one of clientId or clientMrn.',
+    path: ['clientId'],
+  });
 export type CheckInRequest = z.infer<typeof CheckInRequest>;
 
 // The domain's CheckInBlockReason plus reasons only the route can discover:
 // 'already_checked_in' comes from the one-open-visit constraint at insert
-// time, not from the pure gate.
+// time, not from the pure gate. 'not_booked_today' is the one generic reason
+// app.checkin_context's found = false stands for — an unknown client, a
+// foreign-tenant client, or a real client with no qualifying appointment
+// today, all indistinguishable on purpose (checkin.ts) — surfaced as a
+// 400 with this detail, not a 422 'blocked' response, but named here
+// alongside every other reason this module can cite rather than left as a
+// bare string literal.
 export const CHECK_IN_BLOCK_REASONS = [
   'not_authorised',
   'consent_missing_participation',
@@ -53,6 +75,7 @@ export const CHECK_IN_BLOCK_REASONS = [
   'consent_missing_home_visit',
   'date_of_birth_unknown',
   'already_checked_in',
+  'not_booked_today',
 ] as const;
 export type CheckInResponseReason = (typeof CHECK_IN_BLOCK_REASONS)[number];
 
@@ -68,3 +91,24 @@ export const CheckInResponse = z.discriminatedUnion('status', [
   }),
 ]);
 export type CheckInResponse = z.infer<typeof CheckInResponse>;
+
+// GET /api/sessions/service-types (app/api/sessions/service-types.ts): the
+// service types the caller may run a session for today, driving the check-in
+// screen's own picker. Same shape as app/api/billing/service-types.ts's
+// ServiceTypeOption — a different door reading the same table for a
+// different audience (every active service in the catalogue there; only the
+// caller's own credentialed ones here) — kept as its own type in this
+// module's own schema file rather than a shared import, matching how this
+// stream keeps to app/api/sessions/**.
+export const ServiceTypeOption = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  name: z.string(),
+  nameAr: z.string().nullable(),
+});
+export type ServiceTypeOption = z.infer<typeof ServiceTypeOption>;
+
+export const ServiceTypesResponse = z.object({
+  serviceTypes: z.array(ServiceTypeOption),
+});
+export type ServiceTypesResponse = z.infer<typeof ServiceTypesResponse>;
