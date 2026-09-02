@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { canActor } from '../../../domain/shared/actor';
+import { canActor, hasRole } from '../../../domain/shared/actor';
 import { narrate, type AuditEvent } from '../../../domain/shared/audit-narrative';
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
@@ -18,7 +18,7 @@ import { TimelineResponse, type TimelineEvent } from './schema';
 const Params = z.object({ id: z.uuid() });
 const Query = z.object({
   /** An audit row id: the page before it. Ids are gapless and rise with time. */
-  before: z.coerce.bigint().positive().optional(),
+  before: z.coerce.bigint().positive().lte(9223372036854775807n).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   locale: z.enum(['en', 'ar']).default('en'),
 });
@@ -84,8 +84,13 @@ export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!canActor(actor, { type: 'audit.read', clientId }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    // Under row security a client of another practice does not exist.
-    const exists = await db.query('select 1 from client where id = $1', [clientId]);
+    // Under row security a client of another practice does not exist; an erased
+    // record's history stays with the owner and the lead practitioner
+    // (client-record.md section 2), as the list route already holds.
+    const exists = await db.query(
+      "select 1 from client where id = $1 and ($2::boolean or status <> 'erased')",
+      [clientId, hasRole(actor, 'owner', 'lead_practitioner')],
+    );
     if (exists.rowCount === 0) {
       return c.json({ error: 'not_found', requestId }, 404);
     }

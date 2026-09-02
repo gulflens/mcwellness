@@ -158,6 +158,18 @@ describe('GET /api/clients/:id/timeline', () => {
     expect((await get(authIdOf(0), '/api/clients/not-a-uuid/timeline')).status).toBe(400);
   });
 
+  it("keeps an erased record's history with the owner and lead practitioner, away from an admin", async () => {
+    const client = clientAt(20);
+    await owner.query("update client set status = 'erased' where id = $1", [client.id]);
+    expect((await get(authIdOf(0), `/api/clients/${client.id}/timeline`)).status).toBe(200);
+    expect((await get(authIdOf(3), `/api/clients/${client.id}/timeline`)).status).toBe(404);
+    await owner.query("update client set status = 'active' where id = $1", [client.id]);
+    expect(
+      (await get(authIdOf(0), `/api/clients/${client.id}/timeline?before=9223372036854775808`))
+        .status,
+    ).toBe(400);
+  });
+
   it('refuses a practitioner, and shows another practice nothing', async () => {
     const client = clientAt(5);
     expect((await get(authIdOf(1), `/api/clients/${client.id}/timeline`)).status).toBe(403);

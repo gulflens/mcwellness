@@ -291,6 +291,8 @@ If you can do that, you are ready for a family's question. If you can't, the gap
 
 ## 14. Implementation notes (PR 2, 2026-09-02)
 
+11. **`list` is an application action (PR 6, 2026-09-02).** Beside the trigger's `insert | update | delete` and the application's `read`, a client that appears in a list the caller fetched is logged with action `list`, one row per listed record, same context columns. "Who has seen this record" (section 9.4) and the bulk-read alert (section 10) must count `action in ('read', 'list')`. The record timeline (9.1) reads both and says "saw this record in a list" or "viewed this record". A refused attempt (403, 404) writes no row today; section 10's failed-authorisation alert needs one when it is built.
+
 Migrations `070_audit_log.sql` and `080_audit_triggers.sql` implement sections 3, 4, 5 (layer 1), 8 and 11. Where the sketches above are not valid Postgres 17 as written, or a stronger form was available, the SQL departs as follows:
 
 1. `id` is a bigint assigned as `app.audit_chain.last_id + 1` inside the chain trigger, under the anchor row's lock, not a `bigserial`: a sequence value taken before the lock lets two writers link in the opposite order to their ids, which a verifier walking by id would report as a false break. Ids are gapless, so a removed row shows as a gap.

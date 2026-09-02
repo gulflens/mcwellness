@@ -11,3 +11,12 @@ create policy audit_log_select on public.audit_log for select to app_role
 drop policy if exists audit_log_insert on public.audit_log;
 create policy audit_log_insert on public.audit_log for insert to app_role
   with check (tenant_id = app.current_tenant_id());
+
+-- Who may read the trail at all: the owner, an admin and the lead practitioner
+-- (audit.read in domain/shared/actor.ts). Restrictive, so it is combined with
+-- the tenant policy above; inserts (read logging by any role) are untouched.
+drop policy if exists audit_log_readers on public.audit_log;
+create policy audit_log_readers on public.audit_log as restrictive for select to app_role
+  using (
+    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  );

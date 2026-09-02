@@ -83,11 +83,15 @@ export async function asApiRole<T>(
   client: pg.Client,
   tenantId: string | null,
   fn: () => Promise<T>,
+  roles = 'owner',
 ): Promise<T> {
   await client.query('savepoint api_role');
   try {
     await client.query('set local role app_role');
-    await client.query("select set_config('app.tenant_id', $1, true)", [tenantId ?? '']);
+    await client.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_roles', $2, true)",
+      [tenantId ?? '', roles],
+    );
     return await fn();
   } finally {
     await client.query('rollback to savepoint api_role');
