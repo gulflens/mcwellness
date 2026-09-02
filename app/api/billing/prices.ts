@@ -24,6 +24,26 @@ const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 const JURISDICTION = 'AE';
 const RECIPIENT_TYPE = 'individual';
 
+/**
+ * A stable code for each of validateNewPrice's two refusals
+ * (domain/billing/price.ts), so a 400 body carries something the screen can
+ * map to a fixed sentence — the security review's finding this round: the
+ * domain's own reason text must never reach the browser to be rendered
+ * unmediated. Domain code is out of this worktree's edit paths, so the two
+ * reason strings are mirrored here rather than carried as a field on
+ * NewPriceRefusal; a third refusal added there without a matching branch
+ * here falls back to 'invalid', which is still a safe, fixed sentence.
+ */
+function refusalCode(reason: string): 'date_not_future' | 'date_not_after_current' | 'invalid' {
+  if (reason === 'A new price cannot take effect before today.') {
+    return 'date_not_future';
+  }
+  if (reason === 'A new price must take effect after the price it supersedes.') {
+    return 'date_not_after_current';
+  }
+  return 'invalid';
+}
+
 type PriceListRow = {
   id: string;
   service_type_id: string;
@@ -128,7 +148,7 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
     }
     const body = CreatePriceInput.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
-      return c.json({ error: 'bad_request', requestId }, 400);
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const db = c.get('db');
 
@@ -166,7 +186,7 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
     const approval = validateNewPrice(currentPrice, { validFrom: body.data.validFrom }, today);
     if (!approval.ok) {
-      return c.json({ error: 'bad_request', reason: approval.reason, requestId }, 400);
+      return c.json({ error: 'bad_request', code: refusalCode(approval.reason), requestId }, 400);
     }
 
     const vatSetting = await db.query<{ rate_basis_points: number; version: number }>(
