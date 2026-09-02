@@ -23,15 +23,17 @@ create policy scheduling_update on public.appointment as restrictive for update 
     app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
   );
 
--- Owner, admin, lead practitioner and finance see every appointment; anyone
--- else sees only the rows for the practitioner row they themselves are. This
--- is the same floor a later practitioner "Today" screen will read from, laid
--- down now so nothing has to widen access retroactively.
+-- Owner, admin and lead practitioner see every appointment; anyone else sees
+-- only the rows for the practitioner row they themselves are. Finance grants
+-- nothing here (scheduling-manual.md section 2 names owner, admin, lead
+-- practitioner and practitioner only; finance is absent from that table on
+-- purpose). This is the same floor a later practitioner "Today" screen will
+-- read from, laid down now so nothing has to widen access retroactively.
 drop policy if exists scheduling_read_scope on public.appointment;
 create policy scheduling_read_scope on public.appointment as restrictive for select to app_role
   using (
     app.actor_has_role('owner') or app.actor_has_role('admin')
-    or app.actor_has_role('lead_practitioner') or app.actor_has_role('finance')
+    or app.actor_has_role('lead_practitioner')
     or practitioner_id in (
       select p.id from public.practitioner p
       where p.user_id = nullif(current_setting('app.actor_id', true), '')::uuid

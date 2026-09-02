@@ -3,6 +3,12 @@
 -- scheduling-manual.md). No route solver in this stream: a coordinator places
 -- appointments by hand and this table, its two exclusion constraints and
 -- domain/scheduling/conflicts.ts stop them double-booking anyone.
+--
+-- Deliberately absent from this slice, all columns the data model names for
+-- `appointment` (section 5): `planned_arrival` (the day-map/ETA pull
+-- request), `cancellation_reason` and `cancelled_at` (the cancel pull
+-- request), `rescheduled_from_id` (the reschedule pull request). Each is its
+-- own migration in this stream's own range when its pull request lands.
 
 -- Needed for the exclusion constraints below: an equality operator class for
 -- uuid usable inside a GiST index, alongside the range-overlap operator.
@@ -28,12 +34,14 @@ create table appointment (
   window_start           timestamptz not null,
   window_end             timestamptz not null,
   travel_buffer_minutes  integer not null default 15,
-  -- The practitioner's busy interval (window padded by its own travel buffer,
-  -- both sides), kept in step by set_busy_window below. timestamptz +/- interval
-  -- is only STABLE, not IMMUTABLE (it is timezone-aware in general), so it
-  -- cannot appear inside the exclusion constraint's index expression directly;
-  -- these columns let the constraint reference plain, already-computed values.
-  busy_start             timestamptz not null,
+  -- The moment this appointment stops being busy: window_end plus its own
+  -- travel buffer (the drive to whatever comes next — the buffer is never
+  -- applied before a visit, only after it), kept in step by set_busy_window
+  -- below. timestamptz + interval is only STABLE, not IMMUTABLE (it is
+  -- timezone-aware in general), so it cannot appear inside the exclusion
+  -- constraint's index expression directly; this column lets the constraint
+  -- reference a plain, already-computed value. window_start needs no such
+  -- column: it carries no arithmetic and is used as stored.
   busy_end               timestamptz not null,
   status                 appointment_status not null default 'proposed',
   created_at             timestamptz not null default now(),
@@ -44,28 +52,30 @@ create table appointment (
 );
 comment on table appointment is 'audited: client';
 
-create function app.appointment_set_busy_window() returns trigger
+create function app.appointment_set_busy_end() returns trigger
 language plpgsql
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  new.busy_start := new.window_start - (new.travel_buffer_minutes * interval '1 minute');
-  new.busy_end   := new.window_end   + (new.travel_buffer_minutes * interval '1 minute');
+  new.busy_end := new.window_end + (new.travel_buffer_minutes * interval '1 minute');
   return new;
 end
 $$;
-create trigger set_busy_window before insert or update on appointment
-  for each row execute function app.appointment_set_busy_window();
+create trigger set_busy_end before insert or update on appointment
+  for each row execute function app.appointment_set_busy_end();
 
 -- Belt and braces beneath domain/scheduling/conflicts.ts: even a bug, or a
 -- write that bypasses the API entirely, cannot double-book a practitioner or
 -- a client. Only the "live" statuses hold the slot; a cancelled, no-show or
 -- rescheduled row no longer occupies it. The range matches the domain
--- function's half-open overlap test ('[)': touching at the edge is not a clash).
+-- function's busyInterval exactly: `[window_start, window_end + buffer)` —
+-- buffered only after the visit, so two back-to-back default-buffer visits
+-- need one buffer's worth of gap, not two — and its half-open overlap test
+-- ('[)': touching at the edge is not a clash).
 alter table appointment add constraint appointment_no_overlap_practitioner
   exclude using gist (
     practitioner_id with =,
-    tstzrange(busy_start, busy_end, '[)') with &&
+    tstzrange(window_start, busy_end, '[)') with &&
   ) where (status not in ('cancelled', 'cancelled_late', 'no_show', 'rescheduled'));
 
 alter table appointment add constraint appointment_no_overlap_client
@@ -74,9 +84,14 @@ alter table appointment add constraint appointment_no_overlap_client
     tstzrange(window_start, window_end, '[)') with &&
   ) where (status not in ('cancelled', 'cancelled_late', 'no_show', 'rescheduled'));
 
-create index appointment_tenant_idx on appointment (tenant_id);
+-- (tenant_id, window_start): the admin day view's query. (client_id, created_at):
+-- the standard client-history index every client-linked core table carries
+-- (.claude/rules/data-model.md), alongside (client_id, window_start) below,
+-- which serves the scheduling-specific "this client's other appointments" read.
+create index appointment_tenant_window_idx on appointment (tenant_id, window_start);
 create index appointment_practitioner_window_idx on appointment (practitioner_id, window_start);
 create index appointment_client_window_idx on appointment (client_id, window_start);
+create index appointment_client_created_idx on appointment (client_id, created_at);
 create index appointment_service_type_idx on appointment (service_type_id);
 create index appointment_location_idx on appointment (location_id);
 create index appointment_created_by_idx on appointment (created_by);
@@ -109,8 +124,14 @@ end
 $$;
 
 -- rollback:
---   alter table appointment disable trigger audit_row;
+--   -- The three scheduling policy files (db/policies/scheduling/*.sql) must be deleted
+--   -- first, or the next migrate's policy pass fails trying to create a policy on a
+--   -- table that no longer exists. Their own drops, run ahead of the table drop:
+--   drop policy if exists scheduling_read_scope on public.appointment;
+--   drop policy if exists scheduling_update on public.appointment;
+--   drop policy if exists scheduling_write on public.appointment;
+--   drop policy if exists tenant_isolation on public.appointment;
 --   drop table if exists appointment;
---   drop function if exists app.appointment_set_busy_window();
+--   drop function if exists app.appointment_set_busy_end();
 --   drop type if exists appointment_status;
 --   -- btree_gist left in place: another stream's table may come to depend on it.
