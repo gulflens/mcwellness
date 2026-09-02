@@ -237,11 +237,28 @@ function phone(n: number): string {
   return `+97150000${String(1000 + n).padStart(4, '0')}`;
 }
 
-/** 784-1900-NNNNNNN-C from the reserved fake range; C keeps the shape, nothing more. */
+/**
+ * 784-1900-NNNNNNN-C from the reserved fake range, with a real Luhn check digit
+ * so a seeded identifier passes the same validation a captured one must, and
+ * fixtures can be drawn from here (.claude/rules/testing.md).
+ */
 function emiratesId(seq: number): string {
-  const body = String(seq).padStart(7, '0');
-  const check = `7841900${body}`.split('').reduce((sum, d) => sum + Number(d), 0) % 10;
-  return `784-1900-${body}-${check}`;
+  const digits = `7841900${String(seq).padStart(7, '0')}`;
+  return `784-1900-${digits.slice(7)}-${luhnCheckDigit(digits)}`;
+}
+
+/** The check digit that makes `payload` + digit pass the Luhn test. */
+export function luhnCheckDigit(payload: string): number {
+  let sum = 0;
+  for (let i = payload.length - 1, double = true; i >= 0; i--, double = !double) {
+    let d = Number(payload[i]);
+    if (double) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return (10 - (sum % 10)) % 10;
 }
 
 function email(local: string): string {

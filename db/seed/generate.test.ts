@@ -13,6 +13,21 @@ const text = JSON.stringify(data);
 const minors = data.clients.filter((c) => ageOn(c.dateOfBirth, data.today) < 18);
 const adults = data.clients.filter((c) => ageOn(c.dateOfBirth, data.today) >= 18);
 
+// An independent Luhn check, written right to left, so the generator's own
+// arithmetic is not the thing that verifies it.
+function passesLuhn(digits: string): boolean {
+  let sum = 0;
+  for (let i = digits.length - 1, double = false; i >= 0; i--, double = !double) {
+    let d = Number(digits[i]);
+    if (double) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
 describe('generateSeed', () => {
   it('produces the same practice every time', () => {
     expect(JSON.stringify(generateSeed())).toBe(text);
@@ -53,6 +68,7 @@ describe('generateSeed', () => {
     for (const e of emails) expect(e).toMatch(/^[a-z0-9.]+@example\.com$/);
     for (const c of data.contacts.filter((c) => c.emiratesId !== null)) {
       expect(c.emiratesId).toMatch(/^784-1900-[0-9]{7}-[0-9]$/);
+      expect(passesLuhn(c.emiratesId?.replace(/\D/g, '') ?? '')).toBe(true);
     }
     for (const match of text.match(EMIRATES_ID_LIKE) ?? []) expect(match).toMatch(/^784-1900-/);
     for (const match of text.match(UAE_MOBILE_LIKE) ?? []) expect(match).toMatch(/^\+97150000/);

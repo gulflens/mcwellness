@@ -79,7 +79,12 @@ staging settings, the API resolved her as owner, the client list showed
 the twenty synthetic clients, and the audit trail holds one `list` read
 per client under her account with the owner role and a request id, chain
 intact. `trunk-v1` is tagged on main. Real clients stay out of staging: it
-is approved for synthetic data only.
+is approved for synthetic data only. The six sealed identifiers seeded that
+day predate the generator's Luhn check digit (trunk round 2): they will not
+validate, and their keyed hashes differ from what the generator now produces,
+so a hashed lookup would miss them. Nothing on staging reads them yet. The
+trunk reseeds staging before the first feature that does (a fresh render with
+`pnpm seed:sql` after the practice is cleared), and records it here.
 
 ## 1. The project
 
