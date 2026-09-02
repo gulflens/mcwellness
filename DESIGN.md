@@ -329,6 +329,8 @@ Rectilinear with a single softening. Every rounded corner in the app is 4px: inp
 
 ## Components
 
+Round 7a (2026-09-02) adds two contract slots to the shared library: `PageHeader` takes an optional `action` rendered at the header row's inline end, vertically centred and pushed clear of the count by `margin-inline-start: auto`; and `Field`/`Select` take an optional `error` string that occupies the hint's own slot in critical ink, wired to the control by `aria-invalid` and `aria-describedby`.
+
 ### Buttons
 Ink on paper, hairline-bordered, instant to respond. Three variants share one shell.
 - **Shape:** softly squared (4px radius), 44px tall, 20px horizontal padding, medium weight, inline-flex centred.

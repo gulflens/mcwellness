@@ -103,6 +103,13 @@
   margin-block-end: var(--s-6);
 }
 
+/* The page's one primary action, vertically centred and pushed to the far end
+   of the header row regardless of whether an aside sits beside the title. */
+.page__action {
+  margin-inline-start: auto;
+  align-self: center;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -139,6 +146,11 @@
 
 .field__input::placeholder {
   color: var(--slate);
+}
+
+/* A field's error takes the hint's own slot and rhythm; only the colour changes. */
+.field__hint--error {
+  color: var(--critical);
 }
 
 .button {
