@@ -1,5 +1,12 @@
 # billing-01: mounting the price list
 
+> **Applied in round 5** (2026-09-02, PR 16): item 1, mounting `mountBilling`
+> in `app/api/create-api.ts`, is live. Item 2 (the screen's route and rail
+> link) stays open, deferred to billing's next pull request exactly as this
+> file already said; items 3 and 4 (the trunk-owned test loosenings) are
+> resolved separately, already reflected in `tests/db/schema.test.ts`,
+> `tests/db/audit.test.ts` and `tests/db/seed.test.ts` on this branch.
+
 Two requests left over from this pull request's plan. (A third — the
 `billing.price.read` / `billing.price.write` actions in
 `domain/shared/actor.ts` — is already done, on `shared-zone-round-1`.) Both
