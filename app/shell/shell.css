@@ -750,14 +750,14 @@ a.rail__item:active,
    reads as more than an enabled empty field: the fill drops from surface
    to the paper ground rather than staying white. */
 .field__input:disabled {
-  color: var(--ink-2);
+  color: var(--ink);
   background: var(--paper);
   border-color: var(--rule);
   cursor: default;
 }
 
 .field__input:disabled ~ .select__chevron {
-  color: var(--ink-2);
+  color: var(--slate);
 }
 
 /* Round 7a: the general-purpose status chip's own tones, alongside the

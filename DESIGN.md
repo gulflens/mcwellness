@@ -352,7 +352,7 @@ A label above, a box below, both in the ledger's vocabulary.
 - **Select:** the same box, with a 20px chevron in second ink absolutely placed 12px from the inline end and 40px of end padding so the value never runs under it.
 - **Search:** the primary action on the clients page; it takes the toolbar's width and autofocuses at 720px and above.
 - **Focus:** the shared ring. **Error:** there is no red border; the message takes over the hint's own slot in critical ink, wired to the control by `aria-invalid`/`aria-describedby`. A field's error sits with its field; a Note is for an outcome (loading, empty, a submission failing), never for a field's own validation.
-- **Disabled:** ink-2 text on the paper ground (a visible drop from the enabled field's white), the same hairline border in Rule, a default cursor and no hover change, its select chevron dimmed to ink-2 alongside it; the hint still renders beneath so a locked step can say what it is waiting for.
+- **Disabled:** the value stays in ink but the field loses its white fill and sits on the paper ground, which is what carries the state; the same hairline border in Rule, a default cursor and no hover change, its select chevron dimmed to slate; the hint still renders beneath so a locked step can say what it is waiting for.
 
 ### Navigation
 The rail: the console's fixed inline-start column, icon and label, no collapse toggle.
