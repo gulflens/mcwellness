@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type pg from 'pg';
+/** What applySeed needs from a connection: a query, and the host it reaches. */
+export type SeedClient = {
+  host?: string | undefined;
+  query<R extends Record<string, unknown> = Record<string, unknown>>(
+    text: string,
+    values?: unknown[],
+  ): Promise<{ rows: R[]; rowCount: number | null }>;
+};
 import { emiratesIdHash, sealEmiratesId, type IdentityKeys } from '../../domain/shared/identity';
 import { isLocalHost } from '../runner/plan';
 import { SEED_OWNER_USER_ID, SEED_REASON, SEED_TENANT_ID, type SeedData } from './generate';
@@ -44,13 +51,13 @@ export function seedTargetError(
   return null;
 }
 
-export async function isSeeded(client: pg.Client): Promise<boolean> {
+export async function isSeeded(client: SeedClient): Promise<boolean> {
   const { rows } = await client.query('select 1 from tenant where id = $1', [SEED_TENANT_ID]);
   return rows.length > 0;
 }
 
 export async function applySeed(
-  client: pg.Client,
+  client: SeedClient,
   data: SeedData,
   keys: IdentityKeys,
 ): Promise<SeedCounts> {

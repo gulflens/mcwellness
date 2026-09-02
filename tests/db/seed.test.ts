@@ -118,3 +118,29 @@ describe('the synthetic seed', () => {
     expect(rows[0]?.capabilities).toHaveLength(2);
   });
 });
+
+describe('the rendered seed script', () => {
+  it('applied as plain SQL, yields exactly the practice applySeed writes', async () => {
+    const { renderSeedSql } = await import('../../db/seed/render');
+    const sql = await renderSeedSql(data, KEYS);
+    expect(sql).not.toMatch(/\$\d/);
+    const fresh = await freshDatabase();
+    try {
+      await fresh.query('begin');
+      await fresh.query(sql);
+      await fresh.query('commit');
+      const { rows } = await fresh.query<{ n: number }>('select count(*)::int as n from client');
+      expect(rows[0]?.n).toBe(data.clients.length);
+      const { rows: sealed } = await fresh.query<{ n: number }>(
+        'select count(*)::int as n from contact where emirates_id_hash is not null',
+      );
+      expect(sealed[0]?.n).toBe(data.contacts.filter((c) => c.emiratesId !== null).length);
+      const { rows: audited } = await fresh.query<{ n: number }>(
+        "select count(*)::int as n from audit_log where reason = 'synthetic seed'",
+      );
+      expect(audited[0]?.n).toBeGreaterThan(0);
+    } finally {
+      await fresh.end();
+    }
+  });
+});
