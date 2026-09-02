@@ -8,13 +8,15 @@ import { ServiceTypeOptionsResponse, type ServiceTypeOption } from './schema';
  * the second pull request, the billing screen itself. This route reads the
  * existing service_type table under row security as the caller; it does not
  * own that table, only reads it, the same way the clients route reads
- * location and contact.
+ * location and contact. The tenant_id predicate is explicit, not left to row
+ * security alone.
  */
 
 type Row = { id: string; code: string; name: string; name_ar: string | null };
 
 const SQL =
-  "select id, code, name, name_ar from service_type where status = 'active' order by name";
+  'select id, code, name, name_ar from service_type ' +
+  "where tenant_id = app.current_tenant_id() and status = 'active' order by name";
 
 export function mountServiceTypeOptions(
   api: Hono<ApiEnv>,

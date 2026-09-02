@@ -25,6 +25,11 @@ import { freshDatabase } from '../../db/helpers';
 // practices. mountBilling is called by hand here — app/api/create-api.ts is
 // shared, and mounting it there is a change request
 // (docs/CHANGE-REQUESTS/billing-01.md), not this pull request's to make.
+//
+// Both practices get a VAT rate the instant applySeed() and the manual
+// tenant B insert below create their tenant rows: migration 400's
+// app.default_vat_setting() trigger sees to that, so no test here inserts a
+// vat_setting row for a normal tenant by hand any more.
 const SECRET = 'test-secret-that-unlocks-nothing-0123456789';
 const ISSUER = 'http://localhost:54321/auth/v1';
 const KEY = new TextEncoder().encode(SECRET);
@@ -129,123 +134,194 @@ describe('GET /api/billing/prices before any price is set', () => {
   });
 });
 
-describe('POST /api/billing/prices before the practice has a VAT rate', () => {
-  it('refuses with a named reason, not a guessed rate', async () => {
+describe('POST /api/billing/prices', () => {
+  it('refuses a practitioner: reading prices is one thing, setting them is another', async () => {
+    const res = await call('POST', '/api/billing/prices', authIdOf(1), {
+      serviceTypeId: serviceTypeId('nf-session'),
+      unitPriceFils: 90_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'Setting the launch price.',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('sets the first price for a service, VAT resolved from the tenant rate and stamped on the row', async () => {
     const res = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: serviceTypeId('nf-session'),
       unitPriceFils: 90_000,
       validFrom: SEED_TODAY,
+      amendmentReason: 'Setting the launch price.',
     });
-    expect(res.status).toBe(422);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: 'no_vat_setting' });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as CreatePriceResponse;
+    expect(body.price.unitPriceFils).toBe(90_000);
+    expect(body.price.vatRateBasisPoints).toBe(500);
+    expect(body.price.vatFils).toBe(4_500);
+    expect(body.price.grossFils).toBe(94_500);
+    expect(body.price.validFrom).toBe(SEED_TODAY);
+    expect(body.price.supersedesId).toBeNull();
+    expect(body.price.amendmentReason).toBe('Setting the launch price.');
+
+    const { rows } = await owner.query<{ n: number }>(
+      "select count(*)::int as n from audit_log where action = 'insert' and entity_type = 'price' " +
+        'and entity_id = $1 and client_id is null',
+      [body.price.id],
+    );
+    expect(rows[0]?.n).toBe(1);
+  });
+
+  it('lets an admin, not only the owner, set a price', async () => {
+    const res = await call('POST', '/api/billing/prices', authIdOf(3), {
+      serviceTypeId: serviceTypeId('brain-map'),
+      unitPriceFils: 145_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'Setting the launch price for the brain map.',
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses a second price for the same service that does not start after the current one', async () => {
+    const sameDay = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: serviceTypeId('nf-session'),
+      unitPriceFils: 95_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'Trying to reprice the same day.',
+    });
+    expect(sameDay.status).toBe(400);
+
+    const earlier = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: serviceTypeId('nf-session'),
+      unitPriceFils: 95_000,
+      validFrom: '2026-01-01',
+      amendmentReason: 'Trying to backdate a reprice.',
+    });
+    expect(earlier.status).toBe(400);
+  });
+
+  it('accepts a future price, which supersedes without touching the current row', async () => {
+    const res = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: serviceTypeId('nf-session'),
+      unitPriceFils: 99_000,
+      validFrom: '2026-12-01',
+      amendmentReason: "Scheduling next quarter's increase.",
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('links a superseding price to the one it replaces, both carrying a reason', async () => {
+    const svc = serviceTypeId('results-call');
+    const first = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      unitPriceFils: 20_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'Initial price for results calls.',
+    });
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as CreatePriceResponse;
+    expect(firstBody.price.supersedesId).toBeNull();
+    expect(firstBody.price.amendmentReason).toBe('Initial price for results calls.');
+
+    const second = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      unitPriceFils: 22_000,
+      validFrom: '2026-10-01',
+      amendmentReason: 'Aligning with the updated price list.',
+    });
+    expect(second.status).toBe(201);
+    const secondBody = (await second.json()) as CreatePriceResponse;
+    expect(secondBody.price.supersedesId).toBe(firstBody.price.id);
+    expect(secondBody.price.amendmentReason).toBe('Aligning with the updated price list.');
+  });
+
+  it('cannot price a service type in a tenant it does not belong to', async () => {
+    const res = await call('POST', '/api/billing/prices', ADMIN_B_AUTH, {
+      serviceTypeId: serviceTypeId('nf-session'),
+      unitPriceFils: 90_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'Attempting to price a service in another practice.',
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("uses the VAT rate in force on the price's own valid_from, not a later scheduled one", async () => {
+    // A rate change the practice has already scheduled for the new year.
+    await owner.query(
+      'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, created_by) ' +
+        'values ($1, 2, 700, $2, $3)',
+      [SEED_TENANT_ID, '2027-01-01', SEED_OWNER_USER_ID],
+    );
+
+    const beforeChange = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: serviceTypeId('consultation'),
+      unitPriceFils: 50_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'Setting the consultation price ahead of the rate change.',
+    });
+    expect(beforeChange.status).toBe(201);
+    expect(((await beforeChange.json()) as CreatePriceResponse).price.vatRateBasisPoints).toBe(500);
+
+    const afterChange = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: serviceTypeId('consultation'),
+      unitPriceFils: 52_000,
+      validFrom: '2027-02-01',
+      amendmentReason: 'Re-pricing once the new VAT rate is in force.',
+    });
+    expect(afterChange.status).toBe(201);
+    expect(((await afterChange.json()) as CreatePriceResponse).price.vatRateBasisPoints).toBe(700);
+  });
+
+  describe('validation', () => {
+    it('refuses a date that does not exist, as a bad request, not a database error', async () => {
+      const res = await call('POST', '/api/billing/prices', authIdOf(0), {
+        serviceTypeId: serviceTypeId('discovery-call'),
+        unitPriceFils: 10_000,
+        validFrom: '2026-13-45',
+        amendmentReason: 'Testing an impossible date.',
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('refuses a price above the integer column maximum', async () => {
+      const res = await call('POST', '/api/billing/prices', authIdOf(0), {
+        serviceTypeId: serviceTypeId('discovery-call'),
+        unitPriceFils: 2_147_483_648,
+        validFrom: SEED_TODAY,
+        amendmentReason: 'Testing an oversized price.',
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('refuses a price with no reason', async () => {
+      const res = await call('POST', '/api/billing/prices', authIdOf(0), {
+        serviceTypeId: serviceTypeId('discovery-call'),
+        unitPriceFils: 10_000,
+        validFrom: SEED_TODAY,
+        amendmentReason: '',
+      });
+      expect(res.status).toBe(400);
+    });
   });
 });
 
-describe('once the practice has set its VAT rate', () => {
-  beforeAll(async () => {
-    await owner.query(
-      'insert into vat_setting (tenant_id, version, rate_basis_points, effective_from, created_by) ' +
-        'values ($1, 1, 500, $2, $3)',
-      [SEED_TENANT_ID, SEED_TODAY, SEED_OWNER_USER_ID],
-    );
+describe('GET /api/billing/prices', () => {
+  it("shows today's price for each service, not a future one that hasn't started", async () => {
+    const res = await call('GET', '/api/billing/prices', authIdOf(0));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PricesResponse;
+    const nf = body.prices.find((p) => p.serviceTypeCode === 'nf-session');
+    expect(nf?.unitPriceFils).toBe(90_000); // the future 99,000 row does not apply yet
+    const map = body.prices.find((p) => p.serviceTypeCode === 'brain-map');
+    expect(map?.unitPriceFils).toBe(145_000);
   });
 
-  describe('POST /api/billing/prices', () => {
-    it('refuses a practitioner: reading prices is one thing, setting them is another', async () => {
-      const res = await call('POST', '/api/billing/prices', authIdOf(1), {
-        serviceTypeId: serviceTypeId('nf-session'),
-        unitPriceFils: 90_000,
-        validFrom: SEED_TODAY,
-      });
-      expect(res.status).toBe(403);
-    });
-
-    it('sets the first price for a service, VAT resolved from the tenant rate and stamped on the row', async () => {
-      const res = await call('POST', '/api/billing/prices', authIdOf(0), {
-        serviceTypeId: serviceTypeId('nf-session'),
-        unitPriceFils: 90_000,
-        validFrom: SEED_TODAY,
-      });
-      expect(res.status).toBe(201);
-      const body = (await res.json()) as CreatePriceResponse;
-      expect(body.price.unitPriceFils).toBe(90_000);
-      expect(body.price.vatRateBasisPoints).toBe(500);
-      expect(body.price.vatFils).toBe(4_500);
-      expect(body.price.grossFils).toBe(94_500);
-      expect(body.price.validFrom).toBe(SEED_TODAY);
-
-      const { rows } = await owner.query<{ n: number }>(
-        "select count(*)::int as n from audit_log where action = 'insert' and entity_type = 'price' " +
-          'and entity_id = $1 and client_id is null',
-        [body.price.id],
-      );
-      expect(rows[0]?.n).toBe(1);
-    });
-
-    it('lets an admin, not only the owner, set a price', async () => {
-      const res = await call('POST', '/api/billing/prices', authIdOf(3), {
-        serviceTypeId: serviceTypeId('brain-map'),
-        unitPriceFils: 145_000,
-        validFrom: SEED_TODAY,
-      });
-      expect(res.status).toBe(201);
-    });
-
-    it('refuses a second price for the same service that does not start after the current one', async () => {
-      const sameDay = await call('POST', '/api/billing/prices', authIdOf(0), {
-        serviceTypeId: serviceTypeId('nf-session'),
-        unitPriceFils: 95_000,
-        validFrom: SEED_TODAY,
-      });
-      expect(sameDay.status).toBe(400);
-
-      const earlier = await call('POST', '/api/billing/prices', authIdOf(0), {
-        serviceTypeId: serviceTypeId('nf-session'),
-        unitPriceFils: 95_000,
-        validFrom: '2026-01-01',
-      });
-      expect(earlier.status).toBe(400);
-    });
-
-    it('accepts a future price, which supersedes without touching the current row', async () => {
-      const res = await call('POST', '/api/billing/prices', authIdOf(0), {
-        serviceTypeId: serviceTypeId('nf-session'),
-        unitPriceFils: 99_000,
-        validFrom: '2026-12-01',
-      });
-      expect(res.status).toBe(201);
-    });
-
-    it('cannot price a service type in a tenant it does not belong to', async () => {
-      const res = await call('POST', '/api/billing/prices', ADMIN_B_AUTH, {
-        serviceTypeId: serviceTypeId('nf-session'),
-        unitPriceFils: 90_000,
-        validFrom: SEED_TODAY,
-      });
-      expect(res.status).toBe(404);
-    });
+  it('refuses a practitioner', async () => {
+    const res = await call('GET', '/api/billing/prices', authIdOf(1));
+    expect(res.status).toBe(403);
   });
 
-  describe('GET /api/billing/prices', () => {
-    it("shows today's price for each service, not a future one that hasn't started", async () => {
-      const res = await call('GET', '/api/billing/prices', authIdOf(0));
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as PricesResponse;
-      const nf = body.prices.find((p) => p.serviceTypeCode === 'nf-session');
-      expect(nf?.unitPriceFils).toBe(90_000); // the future 99,000 row does not apply yet
-      const map = body.prices.find((p) => p.serviceTypeCode === 'brain-map');
-      expect(map?.unitPriceFils).toBe(145_000);
-    });
-
-    it('refuses a practitioner', async () => {
-      const res = await call('GET', '/api/billing/prices', authIdOf(1));
-      expect(res.status).toBe(403);
-    });
-
-    it("shows a second tenant none of the first tenant's prices", async () => {
-      const res = await call('GET', '/api/billing/prices', ADMIN_B_AUTH);
-      expect(res.status).toBe(200);
-      expect(((await res.json()) as PricesResponse).prices).toEqual([]);
-    });
+  it("shows a second tenant none of the first tenant's prices", async () => {
+    const res = await call('GET', '/api/billing/prices', ADMIN_B_AUTH);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as PricesResponse).prices).toEqual([]);
   });
 });

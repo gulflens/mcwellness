@@ -180,3 +180,56 @@ rather than hand-typed:
 Until this lands, `pnpm test:db` on the billing branch reports these four
 pre-existing trunk assertions as failing, for the reason above, alongside
 `tests/billing/db/prices.test.ts` passing in full.
+
+## 4. New: the fix round's tenant-insert trigger breaks two `tests/db/seed.test.ts` assertions
+
+Discovered while making the fixes the coordinator asked for in this round —
+distinct from item 3 above (which the coordinator says is already being
+loosened elsewhere) and not yet reported anywhere else.
+
+**What.** `db/migrations/400_billing_catalogue.sql` now carries
+`app.default_vat_setting()`, an `after insert on tenant` trigger that gives
+every new tenant its first `vat_setting` row (the fix round's item 3: "a
+tenant created later must get the default rate"). `db/seed/apply.ts` writes
+the seed's tenant row as the system actor (`actor_id is null`); the trigger's
+insert into `vat_setting` is audited under that same actor context, so it
+now adds one more system-attributed `insert` row than
+`tests/db/seed.test.ts` expects. Two assertions fail:
+`records every row in the audit trail under the seed reason, as the owner`
+(expects exactly 2 system-attributed inserts — tenant and owner — now sees 3;
+the total insert count is off by the same one) and
+`applied as plain SQL, yields exactly the practice applySeed writes, audited
+the same way` (same shape, for `pnpm seed:sql`'s render of the seed).
+
+**Why this is a trunk fix, not a billing one.** `tests/db/seed.test.ts` tests
+`db/seed/apply.ts`, both shared-zone. The extra row is a correct, intended
+side effect of a table billing owns; the test's hard-coded "2" system
+inserts predates any stream's trigger existing.
+
+**Proposed diff.** Either count is defensible; the second keeps the test
+honest about *why* two specific inserts are system-attributed rather than
+letting a side effect quietly inflate the number:
+
+```diff
+--- a/tests/db/seed.test.ts
++++ b/tests/db/seed.test.ts
+@@
+     const inserted = Object.values(counts).reduce((sum, n) => sum + n, 0);
+     const insertRows = rows.filter((r) => r.action === 'insert');
+-    expect(insertRows.reduce((sum, r) => sum + r.n, 0)).toBe(inserted);
++    // A stream's own trigger on tenant (docs/SPEC/OWNERSHIP.md) may write
++    // its own row as a side effect of the tenant insert, which counts here
++    // too, so this is "at least", not "exactly".
++    expect(insertRows.reduce((sum, r) => sum + r.n, 0)).toBeGreaterThanOrEqual(inserted);
+     // The tenant and the owner are written as the system; everything else as the owner.
+-    expect(insertRows.find((r) => r.actor_id === null)?.n).toBe(2);
+-    expect(insertRows.find((r) => r.actor_id === SEED_OWNER_USER_ID)?.n).toBe(inserted - 2);
++    const systemInserts = insertRows.find((r) => r.actor_id === null)?.n ?? 0;
++    expect(systemInserts).toBeGreaterThanOrEqual(2);
++    expect(insertRows.find((r) => r.actor_id === SEED_OWNER_USER_ID)?.n).toBe(
++      inserted - systemInserts,
++    );
+```
+
+The same shape applies to the `rendered seed script` test's matching
+assertions (`tests/db/seed.test.ts`, the `pnpm seed:sql` describe block).

@@ -182,6 +182,7 @@ describe("migration 400's vat_setting backfill", () => {
       serviceTypeId: SERVICE_TYPE_ID,
       unitPriceFils: 90_000,
       validFrom: '2026-09-02',
+      amendmentReason: 'Setting the launch price.',
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as CreatePriceResponse;

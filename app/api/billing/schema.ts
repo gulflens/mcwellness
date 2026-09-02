@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cleanText } from '../_middleware/text';
 
 /**
  * The shapes the billing catalogue routes return and accept. Imported by the
@@ -30,6 +31,9 @@ export const PriceRow = z.object({
   grossFils: z.number().int().nonnegative(),
   /** YYYY-MM-DD. Inclusive: the price applies from this day on. */
   validFrom: z.string(),
+  /** The price this one replaces; null only for a service's first price. */
+  supersedesId: z.uuid().nullable(),
+  amendmentReason: z.string(),
 });
 export type PriceRow = z.infer<typeof PriceRow>;
 
@@ -38,12 +42,39 @@ export const PricesResponse = z.object({
 });
 export type PricesResponse = z.infer<typeof PricesResponse>;
 
-const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Dates are YYYY-MM-DD.');
+/** The price column is Postgres integer (int4); this is its largest value. */
+const INT4_MAX = 2_147_483_647;
+
+/**
+ * YYYY-MM-DD, and a real calendar date: 2026-13-45 matches the shape but
+ * names no day that exists, so it fails here — a 400, not a database error
+ * surfacing as a 500.
+ */
+const IsoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Dates are YYYY-MM-DD.')
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (year === undefined || month === undefined || day === undefined) {
+      return false;
+    }
+    const asDate = new Date(Date.UTC(year, month - 1, day));
+    return (
+      asDate.getUTCFullYear() === year &&
+      asDate.getUTCMonth() === month - 1 &&
+      asDate.getUTCDate() === day
+    );
+  }, 'Dates must be a real calendar date.');
 
 export const CreatePriceInput = z.object({
   serviceTypeId: z.uuid(),
-  unitPriceFils: z.number().int().nonnegative(),
+  unitPriceFils: z.number().int().nonnegative().max(INT4_MAX),
   validFrom: IsoDate,
+  /** Why: required on every price, including a service's first. */
+  amendmentReason: z
+    .string()
+    .transform((value) => cleanText(value, 200))
+    .refine((value) => value.length >= 1, 'A reason is required.'),
 });
 export type CreatePriceInput = z.infer<typeof CreatePriceInput>;
 

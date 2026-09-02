@@ -21,14 +21,21 @@ begin
       'create policy catalogue_readers on public.%I as restrictive for select to app_role '
       'using (app.actor_has_role(''owner'') or app.actor_has_role(''admin'') '
       'or app.actor_has_role(''lead_practitioner'') or app.actor_has_role(''finance''))', t);
-
-    -- Restrictive; both tables are insert-only for app_role (400_billing_catalogue.sql),
-    -- so there is no update case to guard here.
-    execute format('drop policy if exists catalogue_writers on public.%I', t);
-    execute format(
-      'create policy catalogue_writers on public.%I as restrictive for insert to app_role '
-      'with check (app.actor_has_role(''owner'') or app.actor_has_role(''admin'') '
-      'or app.actor_has_role(''finance''))', t);
   end loop;
 end
 $$;
+
+-- Writers differ by table (docs/SPEC/billing.md's "Who uses it": finance
+-- changes the price list; the VAT rate is a practice setting, owner or admin
+-- only). Restrictive, so each combines with tenant_isolation above; neither
+-- table grants update to app_role at all (400_billing_catalogue.sql), so
+-- there is no update case to guard here.
+drop policy if exists catalogue_writers on public.price;
+create policy catalogue_writers on public.price as restrictive for insert to app_role
+  with check (
+    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('finance')
+  );
+
+drop policy if exists catalogue_writers on public.vat_setting;
+create policy catalogue_writers on public.vat_setting as restrictive for insert to app_role
+  with check (app.actor_has_role('owner') or app.actor_has_role('admin'));
