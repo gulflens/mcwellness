@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '@app/api/_middleware/db';
 import { createTokenVerifier } from '@app/api/_middleware/token-verifier';
 import { createApi } from '@app/api/create-api';
-import { mountAppointments } from '@app/api/appointments/routes';
 import type {
   AppointmentListResponse,
   AppointmentOptionsResponse,
@@ -365,7 +364,6 @@ beforeAll(async () => {
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
   api = createApi({ pool, verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }) });
-  mountAppointments(api);
 
   // Everything from here runs inside one ambient transaction, so the raw-SQL
   // (asApiRole) tests can use savepoints; the seeding above is already committed.
