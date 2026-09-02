@@ -70,6 +70,8 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `client-portal` | `app/client/**`, `app/api/portal/**`, `tests/portal/**` | `700–799` | `SPEC/client-portal.md` |
 | `audit-ui` | `app/admin/audit/**`, `app/api/audit/**`, `tests/audit/**` | `800–899` | `SPEC/audit.md` section 9 |
 
+**Apply order across these ranges is not fixed.** Every worktree runs its own local Postgres (see the ports below), and each one only ever applies the migrations it has: the trunk's, and its own. Which of another stream's migrations, if any, a given database has seen depends on integration order, not on the numbers themselves — a database can carry billing's `400` without ever having carried the trunk's `099`, or the reverse. `db/runner/plan.ts` reflects this: a pending migration numbered below the highest one already applied is planned, not refused (the missing-file and duplicate-number checks still catch genuinely edited history). A migration may therefore depend only on what it names in its own `Needs` comment at the top of the file; it must never assume another stream's range is present just because its own number is higher.
+
 ## Rules
 
 1. **Never edit outside your owned paths.** If you find a bug elsewhere, write a change request, don't fix it.

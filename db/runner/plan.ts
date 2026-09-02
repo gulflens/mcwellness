@@ -50,9 +50,24 @@ export function hasRollbackBlock(sql: string): boolean {
 
 /**
  * Decides which files to apply, given what is on disk and what the database
- * has already recorded. Refuses two situations that mean history was edited:
- * an applied file that no longer exists, and a new file numbered below one
- * that has already been applied.
+ * has already recorded. Refuses one situation that means history was edited:
+ * an applied file that no longer exists (duplicate numbers are already
+ * refused by listMigrationFiles before a caller gets here).
+ *
+ * A pending file numbered below the highest applied one is admitted, not
+ * refused: with eight streams each owning its own range (docs/SPEC/OWNERSHIP.md),
+ * which migrations a given database has already applied depends on which
+ * streams have reached it and in what order, never on every range being
+ * present. A database that has already run a stream's 400 has not thereby
+ * seen the trunk's 099 - refusing 099 there would make the trunk's own range
+ * unappliable behind a stream that got there first, and by the same logic
+ * any migration ever numbered 9xx would cap every stream forever. A
+ * migration's only real dependency is what it declares in its own "Needs"
+ * comment; the file's number says nothing about apply order across ranges,
+ * only within one. Pending files are returned in filename order, which is
+ * numeric order: `available` is already sorted that way by listMigrationFiles,
+ * and every filename carries a fixed three-digit prefix, so the two orders
+ * never disagree.
  */
 export function planMigrations(
   available: readonly MigrationFile[],
@@ -69,24 +84,7 @@ export function planMigrations(
   }
 
   const appliedSet = new Set(applied);
-  let highestApplied = -1;
-  for (const file of available) {
-    if (appliedSet.has(file.filename)) {
-      highestApplied = Math.max(highestApplied, file.number);
-    }
-  }
-
-  const pending = available.filter((file) => !appliedSet.has(file.filename));
-  for (const file of pending) {
-    if (file.number < highestApplied) {
-      throw new Error(
-        `"${file.filename}" is numbered below the highest applied migration (${highestApplied}). ` +
-          'Migrations are forward-only; give it a higher number.',
-      );
-    }
-  }
-
-  return pending;
+  return available.filter((file) => !appliedSet.has(file.filename));
 }
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
