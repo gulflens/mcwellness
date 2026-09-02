@@ -123,6 +123,8 @@ begin
 end
 $$;
 
+-- Practice-bound key (trunk round 4): lets any foreign key to an appointment bind the tenant too.
+alter table public.appointment add constraint appointment_tenant_id_id_key unique (tenant_id, id);
 -- rollback:
 --   -- The three scheduling policy files (db/policies/scheduling/*.sql) must be deleted
 --   -- first, or the next migrate's policy pass fails trying to create a policy on a
@@ -135,3 +137,4 @@ $$;
 --   drop function if exists app.appointment_set_busy_end();
 --   drop type if exists appointment_status;
 --   -- btree_gist left in place: another stream's table may come to depend on it.
+--   alter table public.appointment drop constraint if exists appointment_tenant_id_id_key;
