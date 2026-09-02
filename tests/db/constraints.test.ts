@@ -14,6 +14,23 @@ import {
 const CHECK_VIOLATION = '23514';
 const UNIQUE_VIOLATION = '23505';
 const INVALID_ENUM = '22P02';
+const FOREIGN_KEY_VIOLATION = '23503';
+
+// docs/SPEC/OWNERSHIP.md's core tables that carry tenant_id, in the order
+// 099_tenant_scoped_keys.sql adds them (tenant itself is exempt: it carries
+// no tenant_id, .claude/rules/data-model.md).
+const TENANT_SCOPED_KEY_TABLES = [
+  'app_user',
+  'user_role',
+  'location',
+  'service_type',
+  'practitioner',
+  'credential',
+  'client',
+  'contact',
+  'consent',
+  'document',
+];
 
 let client: pg.Client;
 
@@ -193,6 +210,53 @@ describe('service types and credentials', () => {
         CHECK_VIOLATION,
         "insert into credential (tenant_id, practitioner_id, service_type_id, certification, valid_from, valid_to) values ($1, $2, $3, 'bcia_bcn', '2026-01-01', '2026-01-01')",
         [IDS.tenantA, practitioner.rows[0]?.id, rows[0]?.id],
+      );
+    });
+  });
+});
+
+describe('tenant-scoped keys (099_tenant_scoped_keys.sql)', () => {
+  it('gives every core table carrying tenant_id a unique (tenant_id, id) key', async () => {
+    for (const table of TENANT_SCOPED_KEY_TABLES) {
+      const { rows } = await client.query(
+        'select 1 from pg_constraint where conrelid = $1::regclass and conname = $2',
+        [table, `${table}_tenant_id_id_key`],
+      );
+      expect(rows.length, `${table}_tenant_id_id_key`).toBe(1);
+    }
+  });
+
+  it("refuses a composite foreign key row naming another tenant's client, and accepts its own", async () => {
+    await rolledBack(client, async () => {
+      // A stream's own migration would write this against its own table, in
+      // its own numeric range; here it is a throwaway table demonstrating the
+      // shape 099 makes possible: (tenant_id, client_id) references
+      // client (tenant_id, id). A temporary table cannot carry a foreign key
+      // to a permanent one, so this is a plain table instead - harmless
+      // inside a transaction the rollback always undoes, creation included.
+      await client.query(
+        'create table stream_client_ref (' +
+          'id uuid primary key default gen_random_uuid(), ' +
+          'tenant_id uuid not null, ' +
+          'client_id uuid not null, ' +
+          'foreign key (tenant_id, client_id) references client (tenant_id, id)' +
+          ')',
+      );
+
+      // Tenant A naming its own client is accepted: the pairing matches.
+      await client.query('insert into stream_client_ref (tenant_id, client_id) values ($1, $2)', [
+        IDS.tenantA,
+        IDS.clientA,
+      ]);
+
+      // Tenant A naming tenant B's client is refused, even though clientB is a
+      // real row - the composite key demands the tenant_id agree too, which a
+      // plain foreign key on client_id alone would never have caught.
+      await rejectsWith(
+        client,
+        FOREIGN_KEY_VIOLATION,
+        'insert into stream_client_ref (tenant_id, client_id) values ($1, $2)',
+        [IDS.tenantA, IDS.clientB],
       );
     });
   });
