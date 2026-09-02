@@ -98,7 +98,19 @@ export const noDesignTells = {
 };
 
 export default defineConfig([
-  globalIgnores(['node_modules/', 'dist/', 'coverage/', '.claude/', 'docs/']),
+  globalIgnores([
+    'node_modules/',
+    'dist/',
+    'coverage/',
+    'docs/',
+    // Installed skills and their harness copies are third-party content, not project code.
+    '.claude/',
+    '.agents/',
+    '.github/skills/',
+    '.github/agents/',
+    '.github/hooks/',
+    '.codex/',
+  ]),
   js.configs.recommended,
   tseslint.configs.recommended,
   {

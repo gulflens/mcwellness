@@ -79,13 +79,17 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 5. **One PR per worktree per day, small.** Both review agents run. Rebase on `main` before opening.
 6. **A rebase conflict means the ownership map is wrong.** Stop, fix the map, then resolve.
 
-## Local database ports
+## Local ports, one set per worktree
 
-| Worktree | Port |
-|---|---|
-| `main` (trunk) | 5432 |
-| `client-record` | 5433 |
-| `scheduling` | 5434 |
-| `session-capture` | 5435 |
-| `billing` | 5436 |
-| Stage 2 | 5437+ in table order |
+Every port is a setting, so several worktrees run at once without collision
+(docs/PARALLEL-SESSIONS.md). Each worktree's own `.env` carries its row, plus
+`COMPOSE_PROJECT_NAME` so its database container and volume are its own.
+
+| Worktree | Database (`DB_PORT`) | API (`PORT`) | Web (`WEB_PORT`) |
+|---|---|---|---|
+| `main` (trunk) | 5432 | 3000 | 5173 |
+| `client-record` | 5433 | 3001 | 5174 |
+| `scheduling` | 5434 | 3002 | 5175 |
+| `session-capture` | 5435 | 3003 | 5176 |
+| `billing` | 5436 | 3004 | 5177 |
+| Stage 2 | 5437+ in table order | 3005+ | 5178+ |

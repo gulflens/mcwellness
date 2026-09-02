@@ -14,6 +14,8 @@
     "dev:api": "node --watch --env-file-if-exists=.env --import tsx app/api/server.ts",
     "start": "SERVE_APP=true node --env-file-if-exists=.env --import tsx app/api/server.ts",
     "audit:secrets": "node scripts/audit-secrets.mjs",
+    "worktree:add": "node scripts/worktree.mjs add",
+    "worktree:remove": "node scripts/worktree.mjs remove",
     "audit:deps": "pnpm audit --prod --audit-level=high",
     "build": "vite build",
     "test": "vitest run",

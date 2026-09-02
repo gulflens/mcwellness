@@ -18,3 +18,10 @@ coverage/
 # Vite reads .env.<mode> and .env.*.local; only the example is tracked
 .env.*
 !.env.example
+
+# Skills are kept once, in .agents/ (every harness reads it) and linked from .claude/.
+# The copies these installers make for harnesses this project does not use are ignored.
+.github/skills/
+.github/agents/
+.github/hooks/
+.codex/
