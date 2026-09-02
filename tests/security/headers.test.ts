@@ -78,3 +78,19 @@ describe('protective headers', () => {
     expect(unauthenticated.status).toBe(401);
   });
 });
+
+describe('the policy and the sign-in project', () => {
+  it('names the Supabase origin as the one outside connection, and nothing when none is configured', async () => {
+    const withProject = await createApi({
+      ...deps,
+      supabaseUrl: 'https://abcdefghij.supabase.co/',
+    }).request('/api/health');
+    expect(withProject.headers.get('content-security-policy')).toContain(
+      "connect-src 'self' https://abcdefghij.supabase.co",
+    );
+    const without = await createApi(deps).request('/api/health');
+    expect(without.headers.get('content-security-policy')).toContain("connect-src 'self';");
+    const broken = await createApi({ ...deps, supabaseUrl: 'not a url' }).request('/api/health');
+    expect(broken.headers.get('content-security-policy')).toContain("connect-src 'self';");
+  });
+});

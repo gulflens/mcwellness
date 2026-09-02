@@ -23,9 +23,10 @@ import { mountDevSession, type DevSessionOptions } from './dev-session';
 /**
  * Builds the API. Kept separate from the server entry so tests can call
  * `createApi(deps).request(...)` in-process. Order of the stack, outermost
- * first: protective headers on everything; then on /api/*: no caching, a body
- * cap, a timeout, JSON only for bodies, the per-address budget and the
- * auth-failure budget, the development door with its own budget, the request
+ * first: protective headers on everything; then on /api/*: no caching, the
+ * per-address budget and the auth-failure budget (first, so a flood of
+ * oversized or malformed bodies is limited too), a body cap, a timeout, JSON
+ * only for bodies, the development door with its own budget, the request
  * context (one transaction, fenced to the API role, stamped with who is acting
  * and why), the per-person budget, and the routes.
  */
@@ -67,9 +68,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
 
   api.use('*', securityHeaders(deps.appEnv, { supabaseUrl: deps.supabaseUrl }));
   api.use('/api/*', noStore);
-  api.use('/api/*', bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge }));
-  api.use('/api/*', timeout(REQUEST_TIMEOUT_MS, timedOut));
-  api.use('/api/*', jsonOnly);
+  // Budgets first, so a flood of oversized or malformed bodies is limited too.
   api.use(
     '/api/*',
     rateLimit({ name: 'address', windowMs: MINUTE, max: limits.perMinute, keyOf: byAddress }),
@@ -84,6 +83,9 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
       mode: 'failure',
     }),
   );
+  api.use('/api/*', bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge }));
+  api.use('/api/*', timeout(REQUEST_TIMEOUT_MS, timedOut));
+  api.use('/api/*', jsonOnly);
 
   // Public, registered before the fence. The payload carries nothing
   // environment-specific on purpose.

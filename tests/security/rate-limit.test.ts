@@ -143,3 +143,23 @@ describe('the API budgets', () => {
     ).toBe('null');
   });
 });
+
+describe('budgets before the body gates', () => {
+  it('counts oversized and malformed bodies against the address budget', async () => {
+    const api = createApi({
+      pool: {
+        connect: async () => {
+          throw new Error('no database in this test');
+        },
+      },
+      verifier: { verify: async () => null },
+      keyOf: () => 'ip:flood',
+      limits: { perMinute: 2 },
+    });
+    const post = (body: string, type: string) =>
+      api.request('/api/me', { method: 'POST', headers: { 'content-type': type }, body });
+    expect((await post('x', 'text/plain')).status).toBe(415);
+    expect((await post('x', 'text/plain')).status).toBe(415);
+    expect((await post('x', 'text/plain')).status).toBe(429);
+  });
+});
