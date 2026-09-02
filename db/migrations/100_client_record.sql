@@ -608,6 +608,22 @@ $$;
 --   drop policy if exists client_record_readers on public.location;
 --   drop policy if exists client_record_readers on public.contact;
 --   drop policy if exists client_record_readers on public.client;
+--   -- Remove db/policies/client/writers.sql from the tree first as well: its policies
+--   -- reference app.client_status_for too, and the runner re-applies every policy file.
+--   drop policy if exists client_record_writers on public.client;
+--   drop policy if exists client_record_writers on public.contact;
+--   drop policy if exists client_record_writers on public.location;
+--   drop policy if exists client_record_writers on public.consent;
+--   drop policy if exists client_record_writers on public.goal;
+--   drop policy if exists client_record_writers on public.erasure_request;
+--   drop policy if exists client_record_update_writers on public.client;
+--   drop policy if exists client_record_update_writers on public.contact;
+--   drop policy if exists client_record_update_writers on public.location;
+--   drop policy if exists client_record_update_writers on public.consent;
+--   drop policy if exists client_record_update_writers on public.goal;
+--   drop policy if exists client_record_update_writers on public.erasure_request;
+--   drop policy if exists admin_inserts_only on public.goal_category;
+--   drop policy if exists admin_updates_only on public.goal_category;
 --   drop trigger if exists audit_row on public.erasure_request;
 --   drop trigger if exists audit_row on public.goal;
 --   drop trigger if exists audit_row on public.goal_category;
