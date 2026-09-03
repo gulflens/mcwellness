@@ -1,0 +1,381 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type {
+  BalanceResponse,
+  PackageResponse,
+  PackagesResponse,
+  SellPackageResponse,
+} from '../../../app/api/billing/ledger-schema';
+import { SEED_TODAY } from '../../../db/seed/generate';
+import { SEEDED, setPracticePrices, silverInput, startHarness, type Harness } from './support';
+
+/**
+ * The bundle catalogue and a sale, end to end: the practice's own Silver
+ * package, sold to a synthetic family, and every figure it leaves behind.
+ */
+
+// SEED_TODAY (2026-09-02) at 08:00 UTC is still 2026-09-02 in Asia/Dubai.
+const NOW = () => new Date('2026-09-02T08:00:00.000Z');
+
+let h: Harness;
+
+beforeAll(async () => {
+  h = await startHarness(NOW);
+  await setPracticePrices(h, SEED_TODAY);
+});
+
+afterAll(async () => {
+  await h.close();
+});
+
+describe('the bundle catalogue', () => {
+  it('is empty before the practice adds one', async () => {
+    const res = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as PackagesResponse).packages).toEqual([]);
+  });
+
+  it('refuses a practitioner, who neither sees nor sets what the practice sells', async () => {
+    expect((await h.call('GET', '/api/billing/packages', SEEDED.practitioner)).status).toBe(403);
+    expect(
+      (
+        await h.call(
+          'POST',
+          '/api/billing/packages',
+          SEEDED.practitioner,
+          silverInput(h, SEED_TODAY),
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it('takes the list price and the launch price as two separate figures', async () => {
+    const res = await h.call(
+      'POST',
+      '/api/billing/packages',
+      SEEDED.owner,
+      silverInput(h, SEED_TODAY),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as PackageResponse;
+
+    // AED 12,150 published, AED 10,325 charged. Neither is derived from the
+    // other, and no discount percentage is stored anywhere.
+    expect(body.package.listPriceFils).toBe(1_215_000);
+    expect(body.package.currentPrice?.amountFils).toBe(1_032_500);
+    // The same sum done against the practice's own price list agrees with the
+    // figure the founder published.
+    expect(body.package.componentsTotalFils).toBe(1_215_000);
+    expect(body.package.sellable).toBe(true);
+    expect(body.package.expiryMonths).toBe(12);
+  });
+
+  it('adds VAT on top of the net launch price, at the rate in force', async () => {
+    const res = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const silver = ((await res.json()) as PackagesResponse).packages[0];
+    expect(silver?.currentPrice?.vatRateBasisPoints).toBe(500);
+    expect(silver?.currentPrice?.vatFils).toBe(51_625); // 5% of 1,032,500
+    expect(silver?.currentPrice?.grossFils).toBe(1_084_125);
+  });
+
+  it('lists the contents with what each costs on its own', async () => {
+    const res = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const silver = ((await res.json()) as PackagesResponse).packages[0];
+    expect(
+      silver?.components.map((c) => [c.serviceTypeCode, c.quantity, c.standaloneNetFils]),
+    ).toEqual([
+      ['consultation', 1, 0],
+      ['brain-map', 2, 82_500],
+      ['nf-session', 15, 70_000],
+    ]);
+  });
+
+  it('refuses a second bundle under a code the practice already uses', async () => {
+    const res = await h.call(
+      'POST',
+      '/api/billing/packages',
+      SEEDED.owner,
+      silverInput(h, SEED_TODAY),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('refuses a bundle naming the same service twice', async () => {
+    const input = silverInput(h, SEED_TODAY);
+    const res = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...input,
+      code: 'silver-twice',
+      components: [
+        { serviceTypeId: h.serviceTypeId('nf-session'), quantity: 5 },
+        { serviceTypeId: h.serviceTypeId('nf-session'), quantity: 5 },
+      ],
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('lets an admin, not only the owner, add a bundle', async () => {
+    const input = silverInput(h, SEED_TODAY);
+    const res = await h.call('POST', '/api/billing/packages', SEEDED.admin, {
+      ...input,
+      code: 'gold',
+      name: 'Gold',
+      nameAr: 'الذهبية',
+      listPriceFils: 1_997_500,
+      components: [
+        { serviceTypeId: h.serviceTypeId('consultation'), quantity: 2 },
+        { serviceTypeId: h.serviceTypeId('brain-map'), quantity: 3 },
+        { serviceTypeId: h.serviceTypeId('nf-session'), quantity: 25 },
+      ],
+      price: { ...input.price, amountFils: 1_697_500 },
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('will not sell a bundle whose service has no price of its own', async () => {
+    const res = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...silverInput(h, SEED_TODAY),
+      code: 'unpriced-bundle',
+      name: 'Compassionate Inquiry course',
+      nameAr: null,
+      listPriceFils: 300_000,
+      components: [{ serviceTypeId: h.serviceTypeId('compassionate-inquiry'), quantity: 6 }],
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as PackageResponse;
+    // Compassionate Inquiry carries no price row, so a share of the package
+    // price cannot honestly be worked out for it.
+    expect(body.package.sellable).toBe(false);
+    expect(body.package.componentsTotalFils).toBeNull();
+  });
+
+  it('appends a new price rather than editing the one a family was shown', async () => {
+    const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const silver = ((await list.json()) as PackagesResponse).packages.find(
+      (p) => p.code === 'silver',
+    );
+    const res = await h.call('POST', `/api/billing/packages/${silver?.id}/price`, SEEDED.owner, {
+      amountFils: 1_100_000,
+      validFrom: '2026-12-01',
+      amendmentReason: 'Launch pricing ends.',
+    });
+    expect(res.status).toBe(201);
+    // Dated in the future, so today's list still shows the launch price.
+    const after = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const stillSilver = ((await after.json()) as PackagesResponse).packages.find(
+      (p) => p.code === 'silver',
+    );
+    expect(stillSilver?.currentPrice?.amountFils).toBe(1_032_500);
+
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from package_price where package_id = $1',
+      [silver?.id],
+    );
+    expect(Number(rows[0]?.n)).toBe(2);
+  });
+
+  it('refuses to backdate a price a family may already have been quoted', async () => {
+    const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const silver = ((await list.json()) as PackagesResponse).packages.find(
+      (p) => p.code === 'silver',
+    );
+    const res = await h.call('POST', `/api/billing/packages/${silver?.id}/price`, SEEDED.owner, {
+      amountFils: 900_000,
+      validFrom: '2026-01-01',
+      amendmentReason: 'Trying to backdate.',
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('selling a Silver package', () => {
+  let silverId: string;
+  let purchaseId: string;
+
+  beforeAll(async () => {
+    const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const silver = ((await list.json()) as PackagesResponse).packages.find(
+      (p) => p.code === 'silver',
+    );
+    if (!silver) throw new Error('Silver was not created.');
+    silverId = silver.id;
+  });
+
+  it('refuses a practitioner: reading a balance is one thing, selling is another', async () => {
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.practitioner, {
+      packageId: silverId,
+      clientId: h.clientId(0),
+      purchasedOn: SEED_TODAY,
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('writes the purchase, the invoice and eighteen credits in one go', async () => {
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: silverId,
+      clientId: h.clientId(0),
+      purchasedOn: SEED_TODAY,
+      payment: { method: 'transfer', amountFils: 1_084_125, reference: 'Bank transfer' },
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as SellPackageResponse;
+    purchaseId = body.purchase.id;
+
+    expect(body.purchase.netFils).toBe(1_032_500);
+    expect(body.purchase.vatFils).toBe(51_625);
+    expect(body.purchase.grossFils).toBe(1_084_125);
+    expect(body.purchase.listPriceFils).toBe(1_215_000);
+    // Twelve months from the day of purchase (the founder's decision).
+    expect(body.purchase.expiresOn).toBe('2027-09-02');
+    expect(body.invoiceReference).toBe('INV-000001');
+    expect(body.entitlements).toBe(18);
+  });
+
+  it('gives every credit its share of what was paid, to the fils', async () => {
+    const { rows } = await h.owner.query<{ total: string; n: string }>(
+      'select coalesce(sum(allocated_net_fils), 0)::text as total, count(*)::text as n ' +
+        'from entitlement where package_purchase_id = $1',
+      [purchaseId],
+    );
+    expect(Number(rows[0]?.n)).toBe(18);
+    expect(Number(rows[0]?.total)).toBe(1_032_500);
+  });
+
+  it('allocates by what each service costs on its own, not by dividing the price', async () => {
+    const { rows } = await h.owner.query<{ code: string; allocated_net_fils: number; n: string }>(
+      'select st.code, e.allocated_net_fils, count(*)::text as n from entitlement e ' +
+        'join service_type st on st.id = e.service_type_id where e.package_purchase_id = $1 ' +
+        'group by st.code, e.allocated_net_fils order by st.code, e.allocated_net_fils desc',
+      [purchaseId],
+    );
+    expect(rows).toEqual([
+      { code: 'brain-map', allocated_net_fils: 70_108, n: '2' },
+      { code: 'consultation', allocated_net_fils: 0, n: '1' },
+      // Nine fils of rounding remainder go to the nine credits that lost the
+      // most to it; the price divided by fifteen would have been 68,833.
+      { code: 'nf-session', allocated_net_fils: 59_486, n: '9' },
+      { code: 'nf-session', allocated_net_fils: 59_485, n: '6' },
+    ]);
+  });
+
+  it('writes one invoice with one line, and the payment against it', async () => {
+    const { rows: invoices } = await h.owner.query<{
+      reference: string;
+      kind: string;
+      net_fils: number;
+      vat_fils: number;
+      gross_fils: number;
+      document_id: string | null;
+    }>(
+      'select reference, kind, net_fils, vat_fils, gross_fils, document_id from invoice ' +
+        'where package_purchase_id = $1',
+      [purchaseId],
+    );
+    expect(invoices).toEqual([
+      {
+        reference: 'INV-000001',
+        kind: 'package',
+        net_fils: 1_032_500,
+        vat_fils: 51_625,
+        gross_fils: 1_084_125,
+        // The rendered PDF is the next pull request's.
+        document_id: null,
+      },
+    ]);
+
+    const { rows: lines } = await h.owner.query<{ description: string; quantity: number }>(
+      'select l.description, l.quantity from invoice_line l join invoice i on i.id = l.invoice_id ' +
+        'where i.package_purchase_id = $1',
+      [purchaseId],
+    );
+    expect(lines).toEqual([{ description: 'Silver', quantity: 1 }]);
+
+    const { rows: payments } = await h.owner.query<{ method: string; amount_fils: number }>(
+      'select p.method, p.amount_fils from payment p join invoice i on i.id = p.invoice_id ' +
+        'where i.package_purchase_id = $1',
+      [purchaseId],
+    );
+    expect(payments).toEqual([{ method: 'transfer', amount_fils: 1_084_125 }]);
+  });
+
+  it('shows the family fifteen sessions to come and nothing owed', async () => {
+    const res = await h.call('GET', `/api/billing/clients/${h.clientId(0)}/balance`, SEEDED.owner);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as BalanceResponse;
+
+    const sessions = body.services.find((s) => s.serviceTypeCode === 'nf-session');
+    expect(sessions?.purchased).toBe(15);
+    expect(sessions?.delivered).toBe(0);
+    expect(sessions?.remaining).toBe(15);
+    expect(body.nextExpiryOn).toBe('2027-09-02');
+    expect(body.expiryWarning).toBe('none');
+    // Charged and paid in the same breath, so the family owes nothing.
+    expect(body.chargedFils).toBe(1_084_125);
+    expect(body.paidFils).toBe(1_084_125);
+    expect(body.outstandingFils).toBe(0);
+    expect(body.purchases).toHaveLength(1);
+  });
+
+  it('refuses to change what a bundle contains once a family has bought it', async () => {
+    // 403_billing_entitlement.sql's guard: the composition a client was sold
+    // is history. SQLSTATE 23001, restrict_violation.
+    await expect(
+      h.owner.query('delete from package_component where package_id = $1', [silverId]),
+    ).rejects.toMatchObject({ code: '23001' });
+  });
+
+  it('will not sell a bundle that no longer has a price it can be sold at', async () => {
+    const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
+    const unpriced = ((await list.json()) as PackagesResponse).packages.find(
+      (p) => p.code === 'unpriced-bundle',
+    );
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: unpriced?.id,
+      clientId: h.clientId(1),
+      purchasedOn: SEED_TODAY,
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it('will not record a sale that has not happened yet', async () => {
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: silverId,
+      clientId: h.clientId(1),
+      purchasedOn: '2027-01-01',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('will not sell to a client of another practice, or to nobody', async () => {
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: silverId,
+      clientId: '00000000-0000-4000-8000-0000000000ff',
+      purchasedOn: SEED_TODAY,
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('the exact-sum guard in the database', () => {
+  it('refuses credits that do not total what was paid, whatever wrote them', async () => {
+    const { rows } = await h.owner.query<{ id: string; net_fils: number; client_id: string }>(
+      'select id, net_fils, client_id from package_purchase limit 1',
+    );
+    const purchase = rows[0];
+    if (!purchase) throw new Error('No purchase to test against.');
+
+    await h.owner.query('begin');
+    try {
+      await h.owner.query(
+        'insert into entitlement (tenant_id, client_id, service_type_id, source_type, ' +
+          'package_purchase_id, allocated_net_fils, vat_rate_basis_points, vat_setting_version) ' +
+          "select tenant_id, client_id, service_type_id, 'package', $1, 1, 500, 1 " +
+          'from entitlement where package_purchase_id = $1 limit 1',
+        [purchase.id],
+      );
+      // Deferred to commit, so this is where it fails: a nineteenth credit
+      // pushes the total one fils past what the family paid.
+      await expect(h.owner.query('commit')).rejects.toMatchObject({ code: '23514' });
+    } finally {
+      await h.owner.query('rollback');
+    }
+  });
+});

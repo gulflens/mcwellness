@@ -1,8 +1,15 @@
 import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
+import { mountBalance } from './balance';
+import { mountInvoices } from './invoices';
+import { mountPackages } from './packages';
+import { mountPayments } from './payments';
 import { mountPrices } from './prices';
+import { mountRefundQuotes } from './refunds';
+import { mountSales } from './sales';
 import { mountServiceTypeOptions } from './service-types';
 import { mountVatRate } from './vat-rate';
+import { mountWaivers } from './waivers';
 
 /**
  * Mounts every billing route. Called from app/api/create-api.ts as of round 5
@@ -14,4 +21,11 @@ export function mountBilling(api: Hono<ApiEnv>, now: () => Date = () => new Date
   mountServiceTypeOptions(api, now);
   mountPrices(api, now);
   mountVatRate(api, now);
+  mountPackages(api, now);
+  mountSales(api, now);
+  mountPayments(api, now);
+  mountBalance(api, now);
+  mountInvoices(api, now);
+  mountRefundQuotes(api, now);
+  mountWaivers(api, now);
 }
