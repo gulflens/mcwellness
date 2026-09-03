@@ -662,3 +662,8 @@ Two smaller notes for the same rebase: section 4's two defensive
 `to_jsonb(st) -> '...'` expressions can become ordinary column references now
 that migration 901 exists, and the `alter table` statements in
 `tests/session/db/service_types.test.ts` can go with them.
+
+**One more for the trunk, noted rather than asked.** A malformed session id
+on `POST /api/sessions/:id/close` is now refused before anything is written,
+but that refusal cannot be audited at all: `audit_log.entity_id` is a `uuid`,
+so the very value worth recording is the one value the column will not take.

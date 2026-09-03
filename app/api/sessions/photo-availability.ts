@@ -1,9 +1,10 @@
 /**
  * Whether a setup photo can be stored at all yet.
  *
- * The device half is built and tested (app/therapist/session/photo.ts takes
- * the picture, shrinks it under a megabyte and fingerprints it). The server
- * half needs the trunk's storage seam — `c.get('storage')`, a
+ * There is no device half either: the module that took the picture, shrank
+ * it under a megabyte and fingerprinted it is deleted rather than left as
+ * code nothing calls, and comes back from git history when it is wanted. The
+ * server half needs the trunk's storage seam — `c.get('storage')`, a
  * `StorageProvider` with `put(key, bytes, mimeType)` — which is landing in
  * shared-zone round 14 and has not merged. Until it does there is nowhere to
  * put the bytes, and a `document` row filed against a key nothing ever

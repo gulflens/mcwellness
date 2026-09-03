@@ -30,8 +30,8 @@ import { PHOTO_STORAGE_AVAILABLE } from './photo-availability';
  * already hold, replays the whole stream, and hands back exactly which ids
  * it now owns so the outbox can let those go and keep the rest.
  *
- * Two properties this route owes the device, and both are proved in
- * tests/session/db/events.test.ts:
+ * Two properties this route owes the device, and both are proved against a
+ * real database in tests/session/db/run.test.ts:
  *
  * - **Idempotent on the event id.** A resend of an event already stored is a
  *   success, not a conflict and not a second row. The id is the device's
