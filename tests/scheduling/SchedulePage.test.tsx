@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { plainText } from './support';
 import { SchedulePage } from '../../app/admin/schedule/SchedulePage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
@@ -66,7 +67,7 @@ describe('SchedulePage', () => {
     expect(screen.getByRole('cell', { name: 'Standard session' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'Home' })).toBeTruthy();
     expect(screen.getByText('Confirmed')).toBeTruthy();
-    expect(screen.getByText('09:00–09:45')).toBeTruthy();
+    expect(screen.getByText('09:00–09:45', plainText)).toBeTruthy();
     expect(screen.getByText('1 appointment')).toBeTruthy();
   });
 

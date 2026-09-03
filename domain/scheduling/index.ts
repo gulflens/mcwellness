@@ -1,4 +1,4 @@
-export { WINDOW_MINUTES, windowFor } from './window';
+export { WINDOW_MINUTES, formatArrivalWindow, windowFor } from './window';
 export type { ArrivalWindow } from './window';
 export { checkConflicts, CLIENT_OVERLAP_MESSAGE, PRACTITIONER_OVERLAP_MESSAGE } from './conflicts';
 export type {
@@ -15,6 +15,7 @@ export {
   ALWAYS_LATE_REASONS,
   CANCELLATION_REASONS,
   DEFAULT_NOTICE_HOURS,
+  DEFAULT_UNFIT_FEE_FILS,
   NEVER_LATE_REASONS,
   cancellationStatusFor,
   isLateCancellation,

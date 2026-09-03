@@ -6,6 +6,7 @@ import {
   cancellationStatusFor,
   reasonCanBeGivenAt,
 } from '@domain/scheduling';
+import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import {
   CancelAppointmentRequest,
@@ -49,6 +50,14 @@ import {
  * 2026-09-03) — recorded, and charged by nothing yet
  * (docs/CHANGE-REQUESTS/scheduling-04.md).
  */
+
+/** The length app/api/_middleware/request-context.ts trims a reason to before
+ * stamping it on the transaction. Applied here too, so this route's own test
+ * of "was a reason given" asks about the same string the trail will carry: a
+ * header of nothing but control characters or non-breaking spaces is not a
+ * reason, and `.trim()` alone would have accepted several of them (security
+ * review of this pull request). */
+const REASON_MAX = 500;
 
 const EXPECTED_STATUSES = ['proposed', 'confirmed'] as const;
 
@@ -147,7 +156,7 @@ export function mountAppointmentCancel(
     // the notice period one of its credits — so the trail carries why
     // (docs/SPEC/scheduling-manual.md section 9). The middleware has already
     // scrubbed and stamped the header; this only insists there was one.
-    if ((c.req.header('x-reason') ?? '').trim().length === 0) {
+    if (cleanText(c.req.header('x-reason') ?? '', REASON_MAX).length === 0) {
       return badRequest(c, requestId, 'reason_required');
     }
 

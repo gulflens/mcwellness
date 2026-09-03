@@ -305,3 +305,27 @@ export const SchedulingSettingsResponse = z.object({
   unfitFeeFils: z.number().int().nonnegative(),
 });
 export type SchedulingSettingsResponse = z.infer<typeof SchedulingSettingsResponse>;
+
+/**
+ * Changing either figure. Both optional and at least one required, so a screen
+ * amending the notice period does not have to resend a fee it did not touch.
+ *
+ * The bounds are the column's own (db/migrations/202_scheduling_setting.sql):
+ * a fortnight of notice is past anything a home visit could honestly ask for
+ * and well inside a typo, and AED 10,000 is more than a single visit has ever
+ * cost. Checked here as well as there so a mistake comes back as a sentence
+ * rather than as a constraint violation.
+ */
+export const NOTICE_HOURS_MAX = 336;
+export const UNFIT_FEE_FILS_MAX = 1_000_000;
+
+export const UpdateSchedulingSettingsRequest = z
+  .object({
+    noticeHours: z.number().int().min(0).max(NOTICE_HOURS_MAX).optional(),
+    unfitFeeFils: z.number().int().min(0).max(UNFIT_FEE_FILS_MAX).optional(),
+  })
+  .refine(
+    (value) => value.noticeHours !== undefined || value.unfitFeeFils !== undefined,
+    'Change at least one of the two figures.',
+  );
+export type UpdateSchedulingSettingsRequest = z.infer<typeof UpdateSchedulingSettingsRequest>;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   directionsUrl,
+  formatArrivalWindow,
   isSettled,
   navigationTarget,
   practiceDate,
@@ -95,13 +96,6 @@ const CRITICAL_STATUSES: readonly AppointmentStatus[] = [
   'no_show',
 ] as const;
 
-const TIME_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  timeZone: PRACTICE_TIME_ZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
 const DAY_FORMAT = new Intl.DateTimeFormat('en-GB', {
   timeZone: PRACTICE_TIME_ZONE,
   weekday: 'long',
@@ -123,8 +117,15 @@ const LOAD_ERROR = 'Your day could not be loaded. Check your connection, then tr
 
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; stops: readonly DayStop[] };
 
+/**
+ * The window, in the practice's zone and in that order in both languages:
+ * `formatArrivalWindow` isolates the range so an Arabic name beside it cannot
+ * reverse the two clock times (domain/scheduling/window.ts). The admin
+ * console's own screens call the same function through
+ * app/admin/schedule/windows.ts.
+ */
 function formatWindow(windowStart: string, windowEnd: string): string {
-  return `${TIME_FORMAT.format(new Date(windowStart))}–${TIME_FORMAT.format(new Date(windowEnd))}`;
+  return formatArrivalWindow(new Date(windowStart), new Date(windowEnd), PRACTICE_TIME_ZONE);
 }
 
 /**

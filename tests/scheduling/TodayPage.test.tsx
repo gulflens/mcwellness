@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { plainText } from './support';
 import type { DayStop } from '../../app/api/appointments/schema';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
@@ -175,14 +176,14 @@ describe('TodayPage', () => {
   it("asks only for the caller's own day, for today in the practice's zone", async () => {
     const fetchImpl = dayOf(stop({ id: '00000009-0000-4000-8000-000000000201' }));
     renderPage(fetchImpl);
-    await screen.findByText('09:00–09:45');
+    await screen.findByText('09:00–09:45', plainText);
     const calls = (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     expect(calls.some((call) => String(call[0]).includes(`date=${TODAY}&scope=own`))).toBe(true);
   });
 
   it('shows the window, the first name and family initial, the age, the service and the place', async () => {
     renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000202' })));
-    expect(await screen.findByText('09:00–09:45')).toBeTruthy();
+    expect(await screen.findByText('09:00–09:45', plainText)).toBeTruthy();
     expect(screen.getByText('Iris C.')).toBeTruthy();
     expect(screen.getByText('9 years old')).toBeTruthy();
     expect(screen.getByText('Standard session')).toBeTruthy();
@@ -359,7 +360,7 @@ describe('TodayPage', () => {
   it('asks again when the practitioner comes back to the screen', async () => {
     const fetchImpl = dayOf(stop({ id: '00000009-0000-4000-8000-000000000213' }));
     renderPage(fetchImpl);
-    await screen.findByText('09:00–09:45');
+    await screen.findByText('09:00–09:45', plainText);
     const dayCalls = () =>
       (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((call) =>
         String(call[0]).startsWith('/api/appointments?'),

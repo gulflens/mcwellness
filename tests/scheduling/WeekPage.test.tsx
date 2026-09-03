@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { plainText } from './support';
 import type { AppointmentRow } from '../../app/api/appointments/schema';
 import { WeekPage } from '../../app/admin/schedule/WeekPage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
@@ -92,7 +93,7 @@ describe('WeekPage', () => {
   it("carries the same facts a day's own row carries", async () => {
     renderWeek(week());
     expect(await screen.findByText('Iris Cliff')).toBeTruthy();
-    expect(screen.getByText('09:00–09:45')).toBeTruthy();
+    expect(screen.getByText('09:00–09:45', plainText)).toBeTruthy();
     expect(screen.getByText('Cedar Ridge')).toBeTruthy();
     expect(screen.getByText('Standard session, Home')).toBeTruthy();
     expect(screen.getByText('Confirmed')).toBeTruthy();
@@ -101,6 +102,28 @@ describe('WeekPage', () => {
     const arabic = screen.getByText('إيريس كليف');
     expect(arabic.getAttribute('lang')).toBe('ar');
     expect(arabic.getAttribute('dir')).toBe('rtl');
+  });
+
+  it('keeps the arrival window in one order in a right-to-left layout', async () => {
+    // jsdom does not run the bidirectional algorithm, so what is asserted is
+    // the thing that makes the browser get it right: the range is isolated, so
+    // an Arabic name beside it cannot reorder it into 09:45–09:00 — the
+    // practice telling a household the wrong hour.
+    const { container } = render(
+      <AuthProviderBoundary provider={provider} fetchImpl={week()}>
+        <MemoryRouter initialEntries={[`/admin/schedule/week?date=${ANCHOR}`]}>
+          <div dir="rtl" lang="ar">
+            <WeekPage />
+          </div>
+        </MemoryRouter>
+      </AuthProviderBoundary>,
+    );
+    await screen.findByText('Iris Cliff');
+    const window = container.querySelector('.week__window');
+    const text = window?.textContent ?? '';
+    expect(text.startsWith('\u2066')).toBe(true);
+    expect(text.endsWith('\u2069')).toBe(true);
+    expect(text.indexOf('09:00')).toBeLessThan(text.indexOf('09:45'));
   });
 
   it('says plainly which days hold nothing', async () => {

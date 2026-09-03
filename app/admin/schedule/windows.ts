@@ -1,4 +1,4 @@
-import { windowFor } from '@domain/scheduling';
+import { formatArrivalWindow, windowFor } from '@domain/scheduling';
 
 /**
  * Turning what a coordinator types — a date and a start time — into the
@@ -46,9 +46,14 @@ export function timeOf(iso: string): string {
   return TIME_FORMAT.format(new Date(iso));
 }
 
-/** "09:00–09:45", in the practice's zone. */
+/**
+ * "09:00–09:45", in the practice's zone, and in that order in Arabic too:
+ * `formatArrivalWindow` wraps the range in bidirectional isolates so the two
+ * clock times cannot swap inside a right-to-left paragraph
+ * (domain/scheduling/window.ts explains what that would mean).
+ */
 export function formatWindow(windowStart: string, windowEnd: string): string {
-  return `${timeOf(windowStart)}–${timeOf(windowEnd)}`;
+  return formatArrivalWindow(new Date(windowStart), new Date(windowEnd), PRACTICE_TIME_ZONE);
 }
 
 /** "Mon 8 Sep", for a column heading or a line of context. */

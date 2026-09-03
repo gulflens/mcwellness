@@ -9,6 +9,7 @@ import {
   type ExistingAppointment,
 } from '@domain/scheduling';
 import { logRead } from '../_middleware/audit';
+import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
 import { requiredConsentPurposes } from './create';
 import {
@@ -54,6 +55,14 @@ import {
  * to change hands as well as time is a second action, not a wider version of
  * this one.
  */
+
+/** The length app/api/_middleware/request-context.ts trims a reason to before
+ * stamping it on the transaction. Applied here too, so this route's own test
+ * of "was a reason given" asks about the same string the trail will carry: a
+ * header of nothing but control characters or non-breaking spaces is not a
+ * reason, and `.trim()` alone would have accepted several of them (security
+ * review of this pull request). */
+const REASON_MAX = 500;
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 const EXCLUSION_VIOLATION = '23P01';
@@ -195,7 +204,7 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
     // (docs/SPEC/scheduling-manual.md section 9). The middleware has already
     // scrubbed this header and stamped it on the transaction; the route's
     // only job is to insist there was one.
-    if ((c.req.header('x-reason') ?? '').trim().length === 0) {
+    if (cleanText(c.req.header('x-reason') ?? '', REASON_MAX).length === 0) {
       return badRequest(c, requestId, 'reason_required');
     }
 

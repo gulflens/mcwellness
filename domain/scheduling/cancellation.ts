@@ -31,6 +31,15 @@ import type { AppointmentStatus } from './status';
 export const DEFAULT_NOTICE_HOURS = 24;
 
 /**
+ * And the fee for a visit that could not go ahead once the practitioner had
+ * arrived: AED 150, the operator's decision of the same day, in integer fils.
+ * The practice's own figure lives in `scheduling_setting.unfit_fee_fils`; this
+ * is what it starts life as, and what a screen falls back to only when the row
+ * cannot be read at all.
+ */
+export const DEFAULT_UNFIT_FEE_FILS = 15_000;
+
+/**
  * Why a visit was called off. A closed set, because the ledger and the
  * practice's own policy both read it: which reason a cancellation carries
  * decides whether a credit goes with it.

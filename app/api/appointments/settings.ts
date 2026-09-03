@@ -1,8 +1,9 @@
 import type { Hono } from 'hono';
 import { hasRole } from '@domain/shared';
-import { DEFAULT_NOTICE_HOURS } from '@domain/scheduling';
+import { DEFAULT_NOTICE_HOURS, DEFAULT_UNFIT_FEE_FILS } from '@domain/scheduling';
+import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
-import { SchedulingSettingsResponse } from './schema';
+import { SchedulingSettingsResponse, UpdateSchedulingSettingsRequest } from './schema';
 
 /**
  * `GET /api/appointments/settings` — the practice's cancellation policy, as
@@ -28,9 +29,18 @@ import { SchedulingSettingsResponse } from './schema';
  * logging is about records of people, and this is a practice setting.
  */
 
+/** The length app/api/_middleware/request-context.ts itself trims a reason to. */
+const REASON_MAX = 500;
+
 const SETTINGS_SQL =
   'select notice_hours, unfit_fee_fils from scheduling_setting ' +
   'where tenant_id = app.current_tenant_id()';
+
+const UPDATE_SQL =
+  'update scheduling_setting set notice_hours = coalesce($1, notice_hours), ' +
+  'unfit_fee_fils = coalesce($2, unfit_fee_fils) ' +
+  'where tenant_id = app.current_tenant_id() ' +
+  'returning notice_hours, unfit_fee_fils';
 
 export function mountAppointmentSettings(api: Hono<ApiEnv>): void {
   api.get('/api/appointments/settings', async (c) => {
@@ -49,7 +59,61 @@ export function mountAppointmentSettings(api: Hono<ApiEnv>): void {
     return c.json(
       SchedulingSettingsResponse.parse({
         noticeHours: row?.notice_hours ?? DEFAULT_NOTICE_HOURS,
-        unfitFeeFils: row?.unfit_fee_fils ?? 0,
+        unfitFeeFils: row?.unfit_fee_fils ?? DEFAULT_UNFIT_FEE_FILS,
+      }),
+    );
+  });
+
+  /**
+   * `PATCH /api/appointments/settings` — the owner changing the practice's own
+   * cancellation policy.
+   *
+   * Both figures were described as the owner's to change from the day they
+   * were added, and until now nothing could change them: they were editable in
+   * the way a column is editable, which is to say by somebody with a database
+   * client (compliance review of this pull request). This is the route that
+   * makes the claim true.
+   *
+   * The owner and an admin, and nobody else. It is the same class of decision
+   * as the practice's own identity — what a household is charged when it calls
+   * a visit off late — so it takes the audience `practice.settings.write` has,
+   * and `scheduling_setting_write` (db/policies/scheduling) says the same
+   * beneath. Finance records money without deciding the policy the money is
+   * taken under.
+   *
+   * A reason is required, and the row's own audit trigger carries it: this
+   * changes what every future cancellation costs, and "who moved it, when and
+   * why" is exactly what the trail should be able to answer about it.
+   */
+  api.patch('/api/appointments/settings', async (c) => {
+    const actor = c.get('actor');
+    const requestId = c.get('requestId');
+    if (!hasRole(actor, 'owner', 'admin')) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    if (cleanText(c.req.header('x-reason') ?? '', REASON_MAX).length === 0) {
+      return c.json({ error: 'bad_request', code: 'reason_required', requestId }, 400);
+    }
+    const body = UpdateSchedulingSettingsRequest.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const db = c.get('db');
+    const { rows } = await db.query<{ notice_hours: number; unfit_fee_fils: number }>(UPDATE_SQL, [
+      body.data.noticeHours ?? null,
+      body.data.unfitFeeFils ?? null,
+    ]);
+    const row = rows[0];
+    if (!row) {
+      // Row security refused, or the practice somehow has no settings row.
+      // Neither is something a caller can fix by trying again with different
+      // words, and neither should be described as an internal failure.
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    return c.json(
+      SchedulingSettingsResponse.parse({
+        noticeHours: row.notice_hours,
+        unfitFeeFils: row.unfit_fee_fils,
       }),
     );
   });
