@@ -107,6 +107,12 @@ const APPT_OPEN_ADULT = '00000000-0000-4000-8000-000000209001';
 const APPT_CLOSED_CALLER = '00000000-0000-4000-8000-000000209002';
 const APPT_CLOSED_OTHER = '00000000-0000-4000-8000-000000209003';
 const APPT_CLOSED_INACTIVE = '00000000-0000-4000-8000-000000209004';
+// Two more, behind the open visits app.mark_appointment_checked_in
+// (305_appointment_checked_in.sql) must refuse: without one apiece, a false
+// answer from that door would only mean "no appointment to mark" and would
+// prove nothing about the guard under test.
+const APPT_OPEN_INACTIVE = '00000000-0000-4000-8000-000000209005';
+const APPT_OPEN_OTHER = '00000000-0000-4000-8000-000000209006';
 
 let client: pg.Client;
 
@@ -253,6 +259,8 @@ beforeAll(async () => {
     [APPT_CLOSED_CALLER, CALLER, '10'],
     [APPT_CLOSED_OTHER, OTHER, '12'],
     [APPT_CLOSED_INACTIVE, INACTIVE, '14'],
+    [APPT_OPEN_INACTIVE, INACTIVE, '16'],
+    [APPT_OPEN_OTHER, OTHER, '18'],
   ] as const) {
     await seedAppointment(client, {
       id: appointmentId,
@@ -307,6 +315,7 @@ beforeAll(async () => {
     clientId: ADULT,
     practitionerId: OTHER,
     locationId: LOCATION_A,
+    appointmentId: APPT_OPEN_OTHER,
   });
   await seedSession({
     id: OPEN_INACTIVE,
@@ -314,6 +323,7 @@ beforeAll(async () => {
     clientId: ADULT,
     practitionerId: INACTIVE,
     locationId: LOCATION_A,
+    appointmentId: APPT_OPEN_INACTIVE,
   });
   await seedSession({
     id: OPEN_FOREIGN,
@@ -388,6 +398,42 @@ async function historyRows(userId: string, tenantId: string, sessionId: string):
   });
 }
 
+/**
+ * app.mark_appointment_checked_in for the session named, on whatever
+ * connection state the caller has already set up. Separate from the
+ * `asActor` wrapper below because the first test calls it twice inside one
+ * savepoint — the flip and its own replay have to see each other, and
+ * `asApiRole` rolls back at the end of every block it wraps.
+ */
+async function callMark(sessionId: string): Promise<boolean> {
+  const { rows } = await client.query<{ answer: boolean }>(
+    'select app.mark_appointment_checked_in($1) as answer',
+    [sessionId],
+  );
+  return rows[0]!.answer;
+}
+
+async function markCheckedIn(
+  userId: string,
+  tenantId: string,
+  sessionId: string,
+): Promise<boolean> {
+  return asActor(userId, tenantId, async () => callMark(sessionId));
+}
+
+/**
+ * The appointment's status as whichever role is current: the owner outside an
+ * `asActor` block, the practitioner inside one (their own rows are readable
+ * under db/policies/scheduling/appointment_access.sql, and only their own).
+ */
+async function appointmentStatus(appointmentId: string): Promise<string> {
+  const { rows } = await client.query<{ status: string }>(
+    'select status::text as status from appointment where id = $1',
+    [appointmentId],
+  );
+  return rows[0]!.status;
+}
+
 async function completeAppointment(
   userId: string,
   tenantId: string,
@@ -460,6 +506,86 @@ describe('app.session_history_for', () => {
   });
 });
 
+describe('app.mark_appointment_checked_in', () => {
+  // The defect this door closes (db/migrations/305_appointment_checked_in.sql):
+  // nothing used to write appointment.status = 'checked_in' at all, so every
+  // guard phrased as "a checked-in visit cannot be moved or cancelled" was
+  // written against a status no row ever reached. Each case below runs inside
+  // asApiRole's own savepoint, so the one that flips does not leave the
+  // appointment marked for the next.
+  it("marks the appointment behind the caller's own open visit, exactly once", async () => {
+    const seen = await asActor(CALLER_USER, IDS.tenantA, async () => {
+      const first = await callMark(OPEN_ADULT);
+      const afterFirst = await appointmentStatus(APPT_OPEN_ADULT);
+      // The device's outbox flushing the same check-in again, or a second
+      // device attempting it: the row is already marked, so this changes
+      // nothing rather than marking it twice.
+      const replay = await callMark(OPEN_ADULT);
+      const afterReplay = await appointmentStatus(APPT_OPEN_ADULT);
+      return { first, afterFirst, replay, afterReplay };
+    });
+    expect(seen).toEqual({
+      first: true,
+      afterFirst: 'checked_in',
+      replay: false,
+      afterReplay: 'checked_in',
+    });
+  });
+
+  it('refuses a visit the practice has called off, leaving it called off', async () => {
+    // The one that costs money: a late cancellation consumes the credit, and
+    // a check-in that could write over it would put the visit back in front
+    // of the session's own completion to consume a second.
+    await client.query('savepoint cancelled');
+    await client.query("update appointment set status = 'cancelled_late' where id = $1", [
+      APPT_OPEN_ADULT,
+    ]);
+    expect(await markCheckedIn(CALLER_USER, IDS.tenantA, OPEN_ADULT)).toBe(false);
+    expect(await appointmentStatus(APPT_OPEN_ADULT)).toBe('cancelled_late');
+    await client.query('rollback to savepoint cancelled');
+  });
+
+  it('refuses a visit that is already closed', async () => {
+    // Their own visit, their own confirmed appointment: the closing is the
+    // only thing standing in the way. A stale outbox flush arriving after the
+    // close must not mark an attendance nobody attended.
+    expect(await markCheckedIn(CALLER_USER, IDS.tenantA, CLOSED_CALLER)).toBe(false);
+    expect(await appointmentStatus(APPT_CLOSED_CALLER)).toBe('confirmed');
+  });
+
+  it('refuses a practitioner the practice has made inactive', async () => {
+    expect(await markCheckedIn(INACTIVE_USER, IDS.tenantA, OPEN_INACTIVE)).toBe(false);
+    expect(await appointmentStatus(APPT_OPEN_INACTIVE)).toBe('confirmed');
+  });
+
+  it("refuses another practitioner's visit, and another practice's", async () => {
+    expect(await markCheckedIn(CALLER_USER, IDS.tenantA, OPEN_OTHER)).toBe(false);
+    expect(await appointmentStatus(APPT_OPEN_OTHER)).toBe('confirmed');
+    // The other direction of the same wall: a practitioner of another
+    // practice cannot mark this practice's confirmed appointment, even
+    // naming its session id exactly.
+    expect(await markCheckedIn(FOREIGN_USER, IDS.tenantB, OPEN_ADULT)).toBe(false);
+    expect(await markCheckedIn(CALLER_USER, IDS.tenantA, OPEN_FOREIGN)).toBe(false);
+    expect(await appointmentStatus(APPT_OPEN_ADULT)).toBe('confirmed');
+  });
+
+  it('leaves a proposed appointment where the coordinator put it', async () => {
+    // The same narrow reading as app.complete_appointment_for_session, and
+    // for the same reason (docs/CHANGE-REQUESTS/session-capture-02.md section
+    // 3b): while the two doors disagree about whether a proposed appointment
+    // counts, this one marks 'confirmed' and nothing else. The check-in
+    // itself still goes ahead — app.checkin_context admits a proposed visit —
+    // and the coordinator settles the row from the calendar as before.
+    await client.query('savepoint proposed_checkin');
+    await client.query("update appointment set status = 'proposed' where id = $1", [
+      APPT_OPEN_ADULT,
+    ]);
+    expect(await markCheckedIn(CALLER_USER, IDS.tenantA, OPEN_ADULT)).toBe(false);
+    expect(await appointmentStatus(APPT_OPEN_ADULT)).toBe('proposed');
+    await client.query('rollback to savepoint proposed_checkin');
+  });
+});
+
 describe('app.complete_appointment_for_session', () => {
   // Every visit below has a confirmed appointment behind it, so a false
   // answer is the guard refusing rather than the function finding nothing to
@@ -467,6 +593,20 @@ describe('app.complete_appointment_for_session', () => {
   // succeeds does not leave the appointment completed for the next.
   it("settles the appointment behind the caller's own closed visit", async () => {
     expect(await completeAppointment(CALLER_USER, IDS.tenantA, CLOSED_CALLER)).toBe(true);
+  });
+
+  it('settles a visit that was marked as checked in at the door', async () => {
+    // The other half of 305: once check-in marks the appointment, the close
+    // must still be able to complete it. 302's own door already admits
+    // 'checked_in' alongside 'confirmed'; this is that clause held to,
+    // because a status nothing could complete would strand every visit the
+    // new door marks.
+    await client.query('savepoint checked_in_close');
+    await client.query("update appointment set status = 'checked_in' where id = $1", [
+      APPT_CLOSED_CALLER,
+    ]);
+    expect(await completeAppointment(CALLER_USER, IDS.tenantA, CLOSED_CALLER)).toBe(true);
+    await client.query('rollback to savepoint checked_in_close');
   });
 
   it('refuses a visit that is still open: a visit settles nothing until it is closed', async () => {

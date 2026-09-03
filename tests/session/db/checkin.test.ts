@@ -83,6 +83,11 @@ const CONTACT_BY_MRN = '00000000-0000-4000-8000-000000900002';
 const SESSION_BY_MRN = '00000000-0000-4000-8000-000000900003';
 const EVENT_BY_MRN = '00000000-0000-4000-8000-000000900004';
 const APPOINTMENT_BY_MRN = '00000000-0000-4000-8000-000000900005';
+// The adult's own booked visit, named because the check-in is expected to
+// mark it (db/migrations/305_appointment_checked_in.sql). Confirmed, unlike
+// every other fixture in this file, which stays at seedAppointment's own
+// 'proposed' default.
+const APPOINTMENT_ADULT = '00000000-0000-4000-8000-000000008001';
 // A practitioner of its own for the record-number check-in, rather than
 // practitionerA: practitionerA's own one-open-visit slot is already spent by
 // SESSION_HAPPY for the rest of this file (checking a visit out is out of
@@ -315,6 +320,7 @@ beforeAll(async () => {
     appointmentClientId: string,
     hour: string,
     practitionerId: string = MORE_IDS.practitionerA,
+    status: 'proposed' | 'confirmed' = 'proposed',
   ) =>
     seedAppointment(owner, {
       id,
@@ -324,8 +330,9 @@ beforeAll(async () => {
       serviceTypeId: SERVICE_TYPE,
       locationId: IDS.locationA,
       windowStart: at(hour),
+      status,
     });
-  await bookToday('00000000-0000-4000-8000-000000008001', CLIENT_ADULT, '08');
+  await bookToday(APPOINTMENT_ADULT, CLIENT_ADULT, '08', MORE_IDS.practitionerA, 'confirmed');
   await bookToday('00000000-0000-4000-8000-000000008002', CLIENT_NO_PARTICIPATION, '09');
   await bookToday('00000000-0000-4000-8000-000000008003', CLIENT_MINOR_NO_GUARDIAN, '10');
   await bookToday('00000000-0000-4000-8000-000000008004', CLIENT_MINOR_WITH_GUARDIAN, '11');
@@ -459,6 +466,18 @@ describe('POST /api/sessions/:id/events', () => {
       created_by: MORE_IDS.practitionerUserA,
     });
 
+    // And the booked visit behind it now says a practitioner is standing in
+    // the household's hall (db/migrations/305_appointment_checked_in.sql,
+    // called by the route inside this same transaction). Until this existed
+    // the row stayed at 'confirmed' for the whole visit, and every guard
+    // phrased as "a checked-in visit cannot be moved or cancelled" was
+    // written against a status nothing ever wrote.
+    const appointment = await owner.query<{ status: string }>(
+      'select status::text as status from appointment where id = $1',
+      [APPOINTMENT_ADULT],
+    );
+    expect(appointment.rows[0]).toEqual({ status: 'checked_in' });
+
     // The audit trigger fires on both inserts, and 097's generalised
     // app.audit_client_id names the client on each row.
     const audit = await owner.query<{ entity_type: string; client_id: string }>(
@@ -492,6 +511,16 @@ describe('POST /api/sessions/:id/events', () => {
       client_id: CLIENT_BY_MRN,
       practitioner_id: MRN_PRACTITIONER,
     });
+
+    // This one's appointment is only proposed, so the check-in goes ahead and
+    // the row keeps the status the coordinator gave it: 305 marks 'confirmed'
+    // and nothing else, and a practitioner at the door is never made to wait
+    // on a coordinator's click.
+    const appointment = await owner.query<{ status: string }>(
+      'select status::text as status from appointment where id = $1',
+      [APPOINTMENT_BY_MRN],
+    );
+    expect(appointment.rows[0]).toEqual({ status: 'proposed' });
   });
 
   it('refuses a body naming both clientId and clientMrn', async () => {
