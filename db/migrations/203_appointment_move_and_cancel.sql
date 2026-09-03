@@ -48,15 +48,22 @@
 -- off. Moving it retires the appointment its open session still points at, so
 -- closing that session later completes a superseded row and the replacement
 -- stands for ever; calling it off late takes a credit, which the session's own
--- close takes again. The status test would catch both — except that check-in
--- does not currently move an appointment to `checked_in` (the session-capture
--- stream is adding that), so a visit in progress still reads `confirmed`.
--- `app/api/appointments/move.ts` and `cancel.ts` therefore ask the question
--- directly, of `session.closed_at`, before either write. It is not repeated in
--- these functions because `session` is another stream's table and a definer
--- body in this one is the wrong place to hold a rule about it; the routes are
--- the only callers, and both are tested against a seeded open session
--- (schema review of this pull request).
+-- close takes again. The status test in both routes ought to catch it, and
+-- until migration 305 landed it could not: nothing ever wrote `checked_in`, so
+-- a visit in progress still read `confirmed` and every guard phrased in terms
+-- of that status was written against a value no row reached (the schema review
+-- of this pull request found it; the session-capture stream fixed it at the
+-- door).
+--
+-- `app/api/appointments/move.ts` and `cancel.ts` ask the question directly all
+-- the same, of `session.closed_at`, and keep asking it now that 305 has
+-- merged. The status is a thing something has to remember to write; an open
+-- session is the fact itself. Both routes are tested against a session seeded
+-- open beneath an appointment still reading `confirmed`, which is the state
+-- the two guards disagree about — so the belt is proved rather than shadowed
+-- by the brace. It is not repeated inside these functions: `session` is
+-- another stream's table, and a definer body in this one is the wrong place to
+-- hold a rule about it.
 --
 -- Needs: 000 (schema app, app.current_tenant_id), 020 (app_user), 050
 -- (practitioner), 080 (app.audit_row, already on appointment), 100

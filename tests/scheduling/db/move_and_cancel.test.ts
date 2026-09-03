@@ -382,8 +382,14 @@ beforeAll(async () => {
   await giveCredit(IDS.clientB);
 
   // A session already open on one visit, so both routes can be held to
-  // refusing underneath one. Written straight in, as the session-capture
-  // stream's own check-in would.
+  // refusing underneath one.
+  //
+  // Written straight in, and the appointment deliberately left reading
+  // `confirmed` rather than `checked_in`. Migration 305 now flips the status at
+  // check-in, so in ordinary life the status test in both routes catches this
+  // first; this fixture is the state the two guards disagree about, which is
+  // the only state in which the open-session check can be proved to do
+  // anything at all.
   await owner.query(
     'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
       'appointment_id, delivery_mode, checked_in_at, created_by) ' +
