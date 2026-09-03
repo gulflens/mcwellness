@@ -6,9 +6,10 @@ import { ClientsPage } from '../admin/clients/ClientsPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { PortalLanding } from '../client/PortalLanding';
 import { CheckInPage } from '../therapist/session/CheckInPage';
+import { TodayPage } from '../therapist/today/TodayPage';
 import { TodayLanding } from '../therapist/TodayLanding';
 import { AdminLayout } from './AdminLayout';
-import { canOpenBilling, canOpenSchedule } from './adminAccess';
+import { canOpenBilling, canOpenSchedule, canOpenToday } from './adminAccess';
 import { useAuth, type Actor } from './auth/AuthContext';
 import { Note } from './components/Controls';
 import { NoAccessPage } from './pages/NoAccessPage';
@@ -77,7 +78,14 @@ export function App() {
           }
         />
       </Route>
-      <Route path="/today" element={<RequireAuth>{() => <TodayLanding />}</RequireAuth>} />
+      <Route
+        path="/today"
+        element={
+          <RequireAuth>
+            {(actor) => (canOpenToday(actor) ? <TodayPage /> : <TodayLanding />)}
+          </RequireAuth>
+        }
+      />
       <Route
         path="/today/check-in"
         element={

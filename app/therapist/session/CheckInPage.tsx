@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import type { CheckInRequest, CheckInResponseReason } from '../../api/sessions/schema';
 import { CheckInResponse } from '../../api/sessions/schema';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
@@ -158,6 +158,17 @@ function fetchServicesState(apiFetch: ApiFetch): Promise<ServicesState> {
 export function CheckInPage() {
   const { apiFetch } = useAuth();
   const navigate = useNavigate();
+  // The day sheet knows which client this is and hands the record number over
+  // in router state, so nobody types MW-000123 standing at a door
+  // (app/therapist/today/TodayPage.tsx). Never a query string: a record
+  // number is personal data, and .claude/rules/ui.md keeps personal data out
+  // of paths and query strings. Read once at mount, normalised like a typed
+  // value, and validated on submit exactly as one is; prefilling grants
+  // nothing, the route still resolves it inside the caller's own practice.
+  const location = useLocation();
+  const handedOver = (location.state as { record?: unknown } | null)?.record;
+  const prefilledRecordNumber =
+    typeof handedOver === 'string' ? normalizeRecordNumber(handedOver) : '';
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -171,7 +182,7 @@ export function CheckInPage() {
 
   const [servicesState, setServicesState] = useState<ServicesState>({ kind: 'loading' });
   const [selectedServiceId, setSelectedServiceId] = useState('');
-  const [recordNumber, setRecordNumber] = useState('');
+  const [recordNumber, setRecordNumber] = useState(prefilledRecordNumber);
   const [recordNumberError, setRecordNumberError] = useState<string | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('home');
   const [shareLocation, setShareLocation] = useState(false);

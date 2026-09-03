@@ -171,12 +171,26 @@ describe('App — the way across to the practitioner side', () => {
 
   it('shows a practitioner-only account no way into the console from Today', async () => {
     mount(PRACTITIONER, '/today');
-    await screen.findByRole('button', { name: 'Check in' });
+    await screen.findByText('Nothing is booked for you today.');
     expect(screen.queryByRole('button', { name: 'Admin console' })).toBeNull();
   });
 
   it('offers a lead practitioner the way back to the console from Today', async () => {
     mount(LEAD_PRACTITIONER, '/today');
     expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
+  });
+});
+
+describe('App — /today is the day sheet for someone who treats', () => {
+  it('shows a practitioner their day, not the landing', async () => {
+    mount(PRACTITIONER, '/today');
+    await screen.findByText('Nothing is booked for you today.');
+    expect(screen.queryByText(/There is no day of visits for this account/)).toBeNull();
+  });
+
+  it('keeps the landing for an admin-only account that types the address', async () => {
+    mount(ADMIN, '/today');
+    await screen.findByText(/There is no day of visits for this account/);
+    expect(screen.queryByText('Nothing is booked for you today.')).toBeNull();
   });
 });
