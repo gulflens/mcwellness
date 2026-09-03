@@ -254,8 +254,10 @@ begin
      and s.tenant_id = app.current_tenant_id()
      and p.tenant_id = app.current_tenant_id()
      and p.user_id = app.current_actor_id()
-     -- A suspended or archived practitioner is not who this door opens for,
-     -- any more than they are who checkin.ts's own lookup opens for.
+     -- A practitioner the practice has made inactive is not who this door
+     -- opens for, any more than they are who checkin.ts's own lookup opens
+     -- for. `active_status` has two values and this is the one that means
+     -- still working here (040_service_type.sql).
      and p.status = 'active'
      and s.closed_at is not null;
 

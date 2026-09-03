@@ -319,10 +319,28 @@ const NO_ACTUALS = {
   visitActuals: { salikCrossings: 0, parkingCostFils: 0 },
 };
 
+/**
+ * A practitioner of another practice entirely: same shape, same roles, same
+ * everything but the tenant. Nothing of tenant A is theirs to touch, and the
+ * three routes below are asked to say so.
+ */
+const FOREIGN_USER = '00000000-0000-4000-8000-000000990001';
+const FOREIGN_AUTH = '00000000-0000-4000-8000-000000990002';
+const FOREIGN_PRACTITIONER = '00000000-0000-4000-8000-000000990003';
+
 beforeAll(async () => {
   owner = await freshDatabase();
   await seedTenant(owner, IDS.tenantA, IDS.ownerA, 'Synthetic Studio A');
+  await seedTenant(owner, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
   await seedServiceType(owner, IDS.tenantA, SERVICE_TYPE, 'nf-session');
+  await seedUser(owner, {
+    id: FOREIGN_USER,
+    tenantId: IDS.tenantB,
+    authId: FOREIGN_AUTH,
+    displayName: 'Synthetic Practitioner',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantB, FOREIGN_PRACTITIONER, FOREIGN_USER);
   await seedConsentDocument(owner, IDS.tenantA, DOCUMENT);
   const dates = await owner.query<{ today: string }>(
     "select (now() at time zone 'Asia/Dubai')::date::text as today",
@@ -637,9 +655,7 @@ describe('closing a visit', () => {
     // row against a key nothing ever uploads to is a record of a photograph
     // that does not exist. So the event is refused by name, the device stops
     // asking, and everything else in the same batch still lands.
-    expect(flushed.refused).toEqual([
-      { id: id('15', 38), reason: 'photo_storage_unavailable' },
-    ]);
+    expect(flushed.refused).toEqual([{ id: id('15', 38), reason: 'photo_storage_unavailable' }]);
     expect(flushed.acknowledged).toHaveLength(8);
 
     const body = (await (
@@ -728,13 +744,10 @@ describe('closing a visit', () => {
   });
 });
 
-
 describe('the coordinate at the door', () => {
   it('records the check-out point on the session, and nowhere the audit trail can keep it', async () => {
     const visit = await seedVisit('19', { sharePoint: true });
-    const flushed = (await (
-      await flush(visit, wholeVisit(visit), DOOR)
-    ).json()) as EventsResponse;
+    const flushed = (await (await flush(visit, wholeVisit(visit), DOOR)).json()) as EventsResponse;
     expect(flushed.refused).toEqual([]);
 
     const session = await owner.query<{ in_point: boolean; out_point: boolean }>(
@@ -762,7 +775,7 @@ describe('the coordinate at the door', () => {
     // search would have called this passing when it was not looking.
     const trail = await owner.query<{ n: string; offending: string }>(
       'select count(*)::text as n, ' +
-        "count(*) filter (where new_values ?| $2 or old_values ?| $2 " +
+        'count(*) filter (where new_values ?| $2 or old_values ?| $2 ' +
         "or jsonb_path_exists(coalesce(new_values, '{}'::jsonb), '$.**.point') " +
         "or jsonb_path_exists(coalesce(old_values, '{}'::jsonb), '$.**.point'))::text " +
         'as offending ' +
@@ -811,9 +824,7 @@ describe('the coordinate at the door', () => {
     // not for the moment. Held by the server rather than trusted from the
     // device: a device that sends one anyway is refused by name.
     const visit = await seedVisit('20');
-    const flushed = (await (
-      await flush(visit, wholeVisit(visit), DOOR)
-    ).json()) as EventsResponse;
+    const flushed = (await (await flush(visit, wholeVisit(visit), DOOR)).json()) as EventsResponse;
     expect(flushed.refused).toEqual([
       { id: id('20', 39), reason: 'location_not_shared_at_check_in' },
     ]);
@@ -824,5 +835,60 @@ describe('the coordinate at the door', () => {
       [visit.sessionId],
     );
     expect(session.rows[0]).toEqual({ in_point: false, out_point: false });
+  });
+});
+
+describe("another practice's visit", () => {
+  /**
+   * Row security is the boundary and the route is the courtesy, so each of
+   * these is asked at the route and answered by what the caller's own tenant
+   * can see. A practitioner of another practice holds a perfectly good token
+   * and a perfectly good practitioner row; what they do not hold is any of
+   * this visit.
+   */
+  it('is not there to append events to', async () => {
+    const visit = await seedVisit('22');
+    const res = await post(`/api/sessions/${visit.sessionId}/events`, FOREIGN_AUTH, {
+      events: [
+        {
+          id: id('22', 80),
+          seq: 2,
+          kind: 'telemetry_chunk',
+          deviceAt: new Date().toISOString(),
+          payload: { seconds: 60, artefactPercent: 0, timeInRewardPercent: 100 },
+        },
+      ],
+    });
+    // Not 403: a visit another practice cannot see is a visit that is not
+    // there, and the same generic refusal app.checkin_context gives.
+    expect(res.status).toBe(404);
+
+    const { rows } = await owner.query<{ n: string }>(
+      'select count(*)::text as n from session_event where id = $1',
+      [id('22', 80)],
+    );
+    expect(rows[0]!.n).toBe('0');
+  });
+
+  it('is not the visit they are offered to resume', async () => {
+    await seedVisit('23');
+    const body = (await (
+      await get('/api/sessions/open', FOREIGN_AUTH)
+    ).json()) as OpenSessionResponse;
+    expect(body.session).toBeNull();
+  });
+
+  it('is not theirs to close', async () => {
+    const visit = await seedVisit('24');
+    await flush(visit, wholeVisit(visit));
+
+    const res = await post(`/api/sessions/${visit.sessionId}/close`, FOREIGN_AUTH, NO_ACTUALS);
+    expect(res.status).toBe(404);
+
+    const { rows } = await owner.query<{ status: string; closed_at: Date | null }>(
+      'select status, closed_at from session where id = $1',
+      [visit.sessionId],
+    );
+    expect(rows[0]).toMatchObject({ status: 'in_progress', closed_at: null });
   });
 });

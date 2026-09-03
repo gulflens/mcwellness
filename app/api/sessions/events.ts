@@ -224,7 +224,7 @@ export async function appendEvents(
 }
 
 async function hasPhotoConsent(db: Db, sessionId: string): Promise<boolean> {
-  // app.session_consent_active (302_session_close.sql): a definer door that
+  // app.session_consent_active (304_session_reads.sql): a definer door that
   // answers one boolean about one purpose for the caller's own session, and
   // never hands back a consent row, a date or a name.
   const { rows } = await db.query<{ active: boolean }>(
