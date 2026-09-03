@@ -142,6 +142,11 @@ describe('the three figures above the book', () => {
     expect(cash.nextElementSibling?.textContent).toBe('10,325.00');
     expect(screen.getByText('688.33')).toBeTruthy();
     expect(screen.getByText('9,636.67')).toBeTruthy();
+    // Two of the three are net and one is gross: set side by side without
+    // saying which, the arithmetic a reader would do between them is wrong.
+    expect(screen.getByText('What arrived, including any VAT')).toBeTruthy();
+    expect(screen.getByText('Earned by delivering, net of VAT')).toBeTruthy();
+    expect(screen.getByText('Paid for, not yet delivered, net of VAT')).toBeTruthy();
   });
 
   it('still shows the book when the figures cannot be had', async () => {

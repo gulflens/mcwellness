@@ -45,6 +45,22 @@ async function asPractitioner(): Promise<void> {
   );
 }
 
+/**
+ * Puts the shared connection back to no role at all.
+ *
+ * `set_config(..., false)` is session-wide, not transaction-local, so a fixture
+ * that acts as a practitioner leaves every later statement in the file acting as
+ * one — including the ones that create a signing contact below, which are the
+ * practice's own maintenance and nobody's role. Every guard trigger in this
+ * schema stands aside when no role is stamped, and that is the state a fixture
+ * should hand back.
+ */
+async function asNobody(): Promise<void> {
+  await h.owner.query(
+    "select set_config('app.actor_roles', '', false), set_config('app.actor_id', '', false)",
+  );
+}
+
 let sessionSeq = 0;
 
 async function deliverVisit(client: string): Promise<void> {
@@ -57,6 +73,7 @@ async function deliverVisit(client: string): Promise<void> {
       "delivery_mode, status, checked_in_at) values ($1, $2, $3, $4, $5, 'home', 'completed', now())",
     [id, h.data.tenant.id, client, practitioner?.id, h.serviceTypeId('nf-session')],
   );
+  await asNobody();
 }
 
 /**
@@ -69,19 +86,24 @@ async function scheduleVisit(client: string): Promise<void> {
   // that the acting user is the practitioner on the appointment, and the owner
   // holds practitioners[0].
   const practitioner = h.data.practitioners[SEEDED.practitioner];
+  // Scheduled from the database's own clock, not a date written down here.
+  // app.client_visible_to_practitioner measures its window — ninety days back,
+  // thirty forward — from `now()` in Postgres, while the harness injects a
+  // different clock into the API. A fixed date passes today and silently stops
+  // being inside the window as the calendar moves, which is a test that fails
+  // for a reason that has nothing to do with the code.
   await h.owner.query(
     'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
       'location_id, delivery_mode, window_start, window_end, status) ' +
-      "select $1, $2, $3, $4, $5, l.id, 'home', $6::timestamptz, " +
-      "$6::timestamptz + interval '45 minutes', 'confirmed' " +
-      'from location l where l.owner_type = $7 and l.owner_id = $3 limit 1',
+      "select $1, $2, $3, $4, $5, l.id, 'home', now(), " +
+      "now() + interval '45 minutes', 'confirmed' " +
+      'from location l where l.owner_type = $6 and l.owner_id = $3 limit 1',
     [
       '00000000-0000-4000-8000-00000000a900',
       h.data.tenant.id,
       client,
       practitioner?.id,
       h.serviceTypeId('nf-session'),
-      new Date(Date.UTC(2026, 8, 3, 6, 0, 0)).toISOString(),
       'client',
     ],
   );
@@ -114,6 +136,7 @@ beforeAll(async () => {
 
   await deliverVisit(clientId);
   await scheduleVisit(clientId);
+  await asNobody();
 
   // A contact of this household who signs in, so the client-contact door is
   // tested against a real actor rather than argued about.
