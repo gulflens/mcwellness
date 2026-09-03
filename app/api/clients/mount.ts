@@ -3,6 +3,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { mountConsents } from './consents';
 import { mountContacts } from './contacts';
 import { mountErasureRequests } from './erasure';
+import { mountGoalCategories } from './goal-categories';
 import { mountGoals } from './goals';
 import { mountLocations } from './locations';
 import { mountClientRecordCore } from './record';
@@ -21,6 +22,11 @@ import { mountClientRecordCore } from './record';
  * outside a test that mounts them itself.
  */
 export function mountClientRecord(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  // Registered before the /:id routes below: a static path (goal-categories
+  // is not a client) and a param one never actually conflict in Hono's
+  // router, but there is no reason to rely on that when the safe order costs
+  // nothing.
+  mountGoalCategories(api);
   mountClientRecordCore(api, now);
   mountContacts(api, now);
   mountLocations(api, now);
