@@ -13,7 +13,18 @@ import { mountBilling } from '../../../app/api/billing/routes';
 import { mountClientRecord } from '../../../app/api/clients/mount';
 import { mountClients } from '../../../app/api/clients/list';
 import { sweepErasureFiles } from '../../../app/api/clients/erasure-file-sweep';
-import { AUTH, IDS, freshDatabase, seedTenant, seedUser } from '../../db/helpers';
+import {
+  AUTH,
+  IDS,
+  asApiRole,
+  freshDatabase,
+  rejectsWith,
+  rolledBack,
+  seedPractitioner,
+  seedServiceType,
+  seedTenant,
+  seedUser,
+} from '../../db/helpers';
 
 /**
  * Being forgotten, end to end (docs/SPEC/client-record.md section 8): the
@@ -62,6 +73,17 @@ const ROLLED_BACK = {
   invoicePdf: '00000000-0000-4000-8000-000000000227',
   mrn: 'MW-000902',
 };
+const TAXED = {
+  client: '00000000-0000-4000-8000-000000000251',
+  contact: '00000000-0000-4000-8000-000000000252',
+  portalUser: '00000000-0000-4000-8000-000000000253',
+  portalAuth: '00000000-0000-4000-8000-00000000025a',
+  location: '00000000-0000-4000-8000-000000000254',
+  goal: '00000000-0000-4000-8000-000000000255',
+  referral: '00000000-0000-4000-8000-000000000256',
+  invoicePdf: '00000000-0000-4000-8000-000000000257',
+  mrn: 'MW-000904',
+};
 const SWEPT = {
   client: '00000000-0000-4000-8000-000000000231',
   contact: '00000000-0000-4000-8000-000000000232',
@@ -76,6 +98,13 @@ const SWEPT = {
 type Household = typeof MAIN;
 
 const PDF_BYTES = new TextEncoder().encode('%PDF-1.7\n% synthetic\n');
+
+const SERVICE_TYPE = '00000000-0000-4000-8000-000000000241';
+const PRACTITIONER_ROW = '00000000-0000-4000-8000-000000000242';
+const SESSION = '00000000-0000-4000-8000-000000000243';
+const SESSION_EVENT = '00000000-0000-4000-8000-000000000244';
+/** Another practice entirely: its admin holds every role there and none here. */
+const OTHER_ADMIN_AUTH = '00000000-0000-4000-8000-000000000245';
 
 let owner: pg.Client;
 let pool: pg.Pool;
@@ -111,6 +140,9 @@ async function request(
     headers,
   });
 }
+
+const request2 = request;
+const erasurePath = (id: string): string => `/api/clients/${MAIN.client}/erasure-requests/${id}`;
 
 /** A whole household: names in both scripts, a contact who signs in, an address, a goal, two files. */
 async function seedHousehold(h: Household): Promise<void> {
@@ -190,6 +222,72 @@ async function seedHousehold(h: Household): Promise<void> {
   await owner.query('commit');
 }
 
+/**
+ * A completed visit for a household: the two coordinates, the observations,
+ * the access notes and an event payload with a note and a point in it — every
+ * shape of personal data the 300-series holds, and the measurements beside
+ * them that must survive.
+ */
+async function seedCompletedVisit(h: Household): Promise<void> {
+  // Open first, because migration 302 refuses an event on a closed visit —
+  // and the order is the real one: a device sends its events while the visit
+  // is running, and the close is the last write.
+  await owner.query(
+    'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+      'delivery_mode, location_id, status, checked_in_at, checked_in_point, pre_rating) values ' +
+      "($1, $2, $3, $4, $5, 'home', $6, 'in_progress', now(), " +
+      "extensions.st_geogfromtext('SRID=4326;POINT(55.31 25.26)'), $7::jsonb)",
+    [
+      SESSION,
+      IDS.tenantA,
+      h.client,
+      PRACTITIONER_ROW,
+      SERVICE_TYPE,
+      h.location,
+      JSON.stringify([{ key: 'calm', value: 4 }]),
+    ],
+  );
+  await owner.query(
+    'insert into session_event (id, tenant_id, session_id, client_id, practitioner_id, seq, ' +
+      "kind, payload, device_at) values ($1, $2, $3, $4, $5, 1, 'observation_recorded', " +
+      '$6::jsonb, now())',
+    [
+      SESSION_EVENT,
+      IDS.tenantA,
+      SESSION,
+      h.client,
+      PRACTITIONER_ROW,
+      // A note, a coordinate and a timestamp beside two measurements: every
+      // shape a payload can hold, and only the two numbers may survive.
+      JSON.stringify({
+        text: 'Asked after the neighbour',
+        at: '2026-09-01T10:00:00Z',
+        point: { lng: 55.31, lat: 25.26 },
+        rating: 6,
+        flagged: true,
+      }),
+    ],
+  );
+  await owner.query(
+    'update session set status = $2, closed_at = now(), ' +
+      "checked_out_point = extensions.st_geogfromtext('SRID=4326;POINT(55.31 25.26)'), " +
+      'observations = $3::jsonb, post_rating = $4::jsonb, telemetry = $5::jsonb, ' +
+      'signal_quality_score = 0.812 where id = $1',
+    [
+      SESSION,
+      'completed',
+      JSON.stringify({ chips: ['settled'], note: 'Told me about the move next month.' }),
+      JSON.stringify([{ key: 'calm', value: 7 }]),
+      JSON.stringify([{ seconds: 600, artefactPercent: 4 }]),
+    ],
+  );
+  await owner.query(
+    'insert into visit_actuals (tenant_id, session_id, client_id, access_issues) ' +
+      "values ($1, $2, $3, 'The gate code on file was wrong; the neighbour let me in.')",
+    [IDS.tenantA, SESSION, h.client],
+  );
+}
+
 async function recordRequest(h: Household): Promise<string> {
   const res = await request(api, ADMIN_AUTH, `/api/clients/${h.client}/erasure-requests`, {
     method: 'POST',
@@ -229,9 +327,24 @@ beforeAll(async () => {
   mountClientRecord(api);
   mountBilling(api);
 
-  for (const household of [MAIN, ROLLED_BACK, SWEPT]) {
+  for (const household of [MAIN, ROLLED_BACK, SWEPT, TAXED]) {
     await seedHousehold(household);
   }
+
+  // A second practice, so "another tenant's admin" is a real actor rather than
+  // an unknown id.
+  await seedTenant(owner, IDS.tenantB, IDS.ownerB, 'Other Studio');
+  await seedUser(owner, {
+    id: '00000000-0000-4000-8000-000000000246',
+    tenantId: IDS.tenantB,
+    authId: OTHER_ADMIN_AUTH,
+    displayName: 'Juniper Reef',
+    roles: ['admin'],
+  });
+
+  await seedServiceType(owner, IDS.tenantA, SERVICE_TYPE, 'neurofeedback');
+  await seedPractitioner(owner, IDS.tenantA, PRACTITIONER_ROW, PRACTITIONER_ID);
+  await seedCompletedVisit(MAIN);
 });
 
 afterAll(async () => {
@@ -294,6 +407,30 @@ describe('performing it', () => {
       [MAIN.client],
     );
     expect(Number(refused.rows[0]?.n)).toBeGreaterThan(0);
+  });
+
+  it('refuses finance, and another practice’s admin, before anything moves', async () => {
+    const finance = await request(
+      api,
+      FINANCE_AUTH,
+      `/api/clients/${MAIN.client}/erasure-requests/${requestId}/execute`,
+      { method: 'POST', headers: { 'x-reason': 'Tidying the ledger.' } },
+    );
+    expect(finance.status).toBe(403);
+
+    // Another practice entirely: the client is not theirs to find, so this is
+    // a not-found rather than a refusal — app.client_status_for is scoped to
+    // the caller's own tenant and answers nothing at all.
+    const otherPractice = await request(
+      api,
+      OTHER_ADMIN_AUTH,
+      `/api/clients/${MAIN.client}/erasure-requests/${requestId}/execute`,
+      { method: 'POST', headers: { 'x-reason': 'Curiosity.' } },
+    );
+    expect(otherPractice.status).toBe(404);
+
+    const after = await owner.query('select status from client where id = $1', [MAIN.client]);
+    expect(after.rows[0]?.status).toBe('active');
   });
 
   it('anonymises the person, keeps the invoice, and files the letter', async () => {
@@ -387,6 +524,47 @@ describe('performing it', () => {
     // The category and the status are structured history, not personal data.
     expect(goal.rows[0]?.status).toBe('active');
 
+    // The visit: the door, the words and the payload's text go; the
+    // measurements stay, because they identify nobody once the record around
+    // them is anonymous (migration 105, and the letter says so).
+    const session = await owner.query<{
+      has_in: boolean;
+      has_out: boolean;
+      observations: unknown;
+      pre_rating: { key: string; value: number }[];
+      post_rating: { key: string; value: number }[];
+      telemetry: unknown[];
+      signal_quality_score: string | null;
+      status: string;
+    }>(
+      'select (checked_in_point is not null) as has_in, (checked_out_point is not null) as has_out, ' +
+        'observations, pre_rating, post_rating, telemetry, signal_quality_score, status ' +
+        'from session where id = $1',
+      [SESSION],
+    );
+    expect(session.rows[0]).toMatchObject({ has_in: false, has_out: false, observations: null });
+    // Migration 302 freezes a closed visit; the erasure is the one thing that
+    // may still write to one, and this proves the trigger stood aside.
+    expect(session.rows[0]?.status).toBe('completed');
+    expect(session.rows[0]?.pre_rating).toEqual([{ key: 'calm', value: 4 }]);
+    expect(session.rows[0]?.post_rating).toEqual([{ key: 'calm', value: 7 }]);
+    expect(session.rows[0]?.telemetry).toEqual([{ seconds: 600, artefactPercent: 4 }]);
+    expect(Number(session.rows[0]?.signal_quality_score)).toBeCloseTo(0.812, 3);
+
+    const event = await owner.query<{ payload: Record<string, unknown> }>(
+      'select payload from session_event where id = $1',
+      [SESSION_EVENT],
+    );
+    // Numbers and flags only: the note, the timestamp string and the point are
+    // gone, and nothing was left behind by being nested.
+    expect(event.rows[0]?.payload).toEqual({ rating: 6, flagged: true });
+
+    const actuals = await owner.query<{ access_issues: string | null }>(
+      'select access_issues from visit_actuals where session_id = $1',
+      [SESSION],
+    );
+    expect(actuals.rows[0]?.access_issues).toBeNull();
+
     // The referral is gone, row and bytes; the invoice's PDF is untouched.
     const documents = await owner.query<{ id: string }>(
       'select id from document where client_id = $1',
@@ -416,6 +594,9 @@ describe('performing it', () => {
       goalsCleared: 1,
       documentsDeleted: 1,
       documentsKept: 1,
+      sessionsCleared: 1,
+      sessionEventsCleared: 1,
+      visitActualsCleared: 1,
     });
     expect(body.request.performedAt).toBeTruthy();
     expect(body.request.letterVersion).toMatch(/^\d+\.\d+/);
@@ -534,6 +715,76 @@ describe('what is left of an erased record', () => {
     expect(Number(listed.rows[0]?.n)).toBeGreaterThan(0);
   });
 
+  it('records what happened and is not rewritten afterwards', async () => {
+    const request = await owner.query<{ id: string }>(
+      'select id from erasure_request where client_id = $1',
+      [MAIN.client],
+    );
+    const id = request.rows[0]?.id as string;
+    await rolledBack(owner, async () => {
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          // The row says what an erasure did. Row security says which rows an
+          // admin may reach and never which columns, so the guard trigger
+          // (migration 105) is what refuses this.
+          await rejectsWith(
+            owner,
+            '42501',
+            "update erasure_request set summary = '{}'::jsonb where id = $1",
+            [id],
+          );
+          await rejectsWith(
+            owner,
+            '42501',
+            "update erasure_request set reason = 'something else' where id = $1",
+            [id],
+          );
+          await rejectsWith(owner, '42501', 'delete from erasure_request where id = $1', [id]);
+          // The letter is the one thing that may still be written.
+          await owner.query('update erasure_request set letter_sent_at = now() where id = $1', [
+            id,
+          ]);
+        },
+        'admin',
+      );
+    });
+  });
+
+  it('keeps the number the letter goes to until the letter has gone and the files are clear', async () => {
+    const request = await owner.query<{ id: string; requested_by_phone: string | null }>(
+      'select id, requested_by_phone from erasure_request where client_id = $1',
+      [MAIN.client],
+    );
+    const id = request.rows[0]?.id as string;
+    // Still there: the letter has not been sent, so there is still something
+    // to send it to.
+    expect(request.rows[0]?.requested_by_phone).toBe('+971500000042');
+    const beforeSweep = await sweepErasureFiles(owner, storage);
+    expect(beforeSweep.some((one) => one.erasureRequestId === id)).toBe(true);
+    const held = await owner.query<{ phone: string | null }>(
+      'select requested_by_phone as phone from erasure_request where id = $1',
+      [id],
+    );
+    expect(held.rows[0]?.phone).toBe('+971500000042');
+
+    // The practice says it has sent the letter, and the next sweep takes the
+    // number with it: that was the whole of its purpose.
+    const sent = await request2(api, ADMIN_AUTH, `${erasurePath(id)}/letter-sent`, {
+      method: 'POST',
+    });
+    expect(sent.status).toBe(200);
+    await sweepErasureFiles(owner, storage);
+    const after = await owner.query<{ phone: string | null; cleared: Date | null }>(
+      'select requested_by_phone as phone, files_cleared_at as cleared from erasure_request ' +
+        'where id = $1',
+      [id],
+    );
+    expect(after.rows[0]?.phone).toBeNull();
+    expect(after.rows[0]?.cleared).not.toBeNull();
+  });
+
   it('is in no list, and answers to no search by its own record number', async () => {
     const list = await request(api, ADMIN_AUTH, '/api/clients');
     expect(list.status).toBe(200);
@@ -555,6 +806,54 @@ describe('what is left of an erased record', () => {
       const balance = await request(api, auth, `/api/billing/clients/${MAIN.client}/balance`);
       expect([403, 404]).toContain(balance.status);
     }
+  });
+});
+
+describe('a rendered tax document', () => {
+  it('is kept when the billing stream has linked one to its invoice', async ({ skip }) => {
+    // billing_document is the billing worktree's pull request 54: it names the
+    // rendered PDF of every invoice and receipt, with a foreign key to
+    // `document` and no `on delete`. Before it lands there is nothing to
+    // prove, and app.erase_client asks the same question this test does
+    // (migration 105).
+    const present = await owner.query<{ table: string | null }>(
+      "select to_regclass('public.billing_document')::text as table",
+    );
+    if (!present.rows[0]?.table) {
+      skip();
+      return;
+    }
+
+    const documentId = '00000000-0000-4000-8000-000000000258';
+    const key = `tenant/${IDS.tenantA}/client/${TAXED.client}/${documentId}`;
+    await storage.put(key, PDF_BYTES, 'application/pdf');
+    await owner.query(
+      'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256, ' +
+        "uploaded_by) values ($1, $2, $3, 'report', $4, 'application/pdf', sha256($5::bytea), $6)",
+      [documentId, IDS.tenantA, TAXED.client, key, Buffer.from(PDF_BYTES), IDS.ownerA],
+    );
+    // Filed as an ordinary kind on purpose: what keeps it is the link, not the
+    // word on the row.
+    await owner.query('insert into billing_document (tenant_id, document_id) values ($1, $2)', [
+      IDS.tenantA,
+      documentId,
+    ]);
+
+    const requestId = await recordRequest(TAXED);
+    const res = await request(
+      api,
+      ADMIN_AUTH,
+      `/api/clients/${TAXED.client}/erasure-requests/${requestId}/execute`,
+      { method: 'POST', headers: { 'x-reason': 'The household asked.' } },
+    );
+    expect(res.status).toBe(200);
+
+    const kept = await owner.query<{ n: string }>(
+      'select count(*)::text as n from document where id = $1',
+      [documentId],
+    );
+    expect(kept.rows[0]?.n).toBe('1');
+    expect(await storage.exists(key)).toBe(true);
   });
 });
 

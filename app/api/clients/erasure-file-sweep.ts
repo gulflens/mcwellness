@@ -121,16 +121,9 @@ export async function sweepErasureFiles(
       // store that says a thing is gone is the only authority there is on it.
     }
 
-    // The number the confirmation went to has done its work once the letter
-    // has been handed over and the files are confirmed clear, so it goes:
-    // that is the whole of its purpose and the whole of its retention
-    // (migration 105). Both conditions, and in the same statement that
-    // empties the list, so nothing can clear one without the other.
     await db.query(
       'update erasure_request set storage_keys_pending = $1::jsonb, ' +
-        'files_cleared_at = case when jsonb_array_length($1::jsonb) = 0 then now() else null end, ' +
-        'requested_by_phone = case when jsonb_array_length($1::jsonb) = 0 and letter_sent_at is not null ' +
-        'then null else requested_by_phone end ' +
+        'files_cleared_at = case when jsonb_array_length($1::jsonb) = 0 then now() else null end ' +
         'where id = $2',
       [JSON.stringify(left), row.id],
     );
@@ -141,7 +134,31 @@ export async function sweepErasureFiles(
       notOurs: refused,
     });
   }
+  await clearDeliveredNumbers(db);
   return swept;
+}
+
+/**
+ * The number the confirmation letter went to, once it has done its work.
+ *
+ * It is the one contact detail that outlives an erasure, kept for one purpose
+ * — a household that asks to be forgotten is owed a letter saying it is done —
+ * and it goes as soon as that purpose is met: the letter handed over, and the
+ * files confirmed gone (migration 105).
+ *
+ * Its own statement rather than a clause on the one above, because the two
+ * conditions do not arrive in a fixed order. A practice that sends the letter
+ * a week after the files cleared would otherwise keep the number for ever:
+ * the sweep's worklist is empty by then, so the row it would have ridden on
+ * is never selected again.
+ */
+export async function clearDeliveredNumbers(db: Db): Promise<number> {
+  const { rowCount } = await db.query(
+    'update erasure_request set requested_by_phone = null ' +
+      'where requested_by_phone is not null and letter_sent_at is not null ' +
+      'and files_cleared_at is not null',
+  );
+  return rowCount ?? 0;
 }
 
 /** What the job prints. Counts and request ids; never a key, never a person. */
