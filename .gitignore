@@ -28,3 +28,6 @@ coverage/
 
 # A rendered seed script (pnpm seed:sql) is applied by hand and never committed.
 *.seed.sql
+
+# The local document store (STORAGE_DIR, docs/SEAMS.md): real bytes, never in git.
+.storage/

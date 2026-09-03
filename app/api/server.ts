@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { createPool } from './_middleware/db';
 import { identityKeysFromEnv } from './_middleware/identity-key';
 import { limitsFromEnv, trustedProxyHopsFromEnv } from './_middleware/rate-limit';
+import { storageFromEnv } from './_middleware/storage';
 import { issuerFor, verifierFromEnv } from './_middleware/token-verifier';
 import { createApi } from './create-api';
 import { devSessionEnabled, isLoopback } from './dev-session';
@@ -13,10 +14,14 @@ if (!apiDatabaseUrl) {
   process.exit(1);
 }
 
-// All three throw a plain-language message at startup rather than failing per request.
+// All four throw a plain-language message at startup rather than failing per
+// request. The store is chosen here and never reached until a call is made, so
+// a project that is down cannot stop the API from starting (docs/SEAMS.md).
 const pool = createPool(apiDatabaseUrl);
 const verifier = verifierFromEnv(process.env);
 const identityKeys = identityKeysFromEnv(process.env);
+const storage = storageFromEnv(process.env);
+console.log(`Documents: ${storage.describe()}.`);
 
 // The development sign-in door exists only on a laptop: APP_ENV=development, a
 // local database, a local Supabase URL and the local secret to sign with.
@@ -39,6 +44,7 @@ const api = createApi({
   limits: limitsFromEnv(process.env),
   trustedProxyHops: trustedProxyHopsFromEnv(process.env),
   identityKeys,
+  storage,
 });
 
 // SERVE_APP=true: the built app (pnpm build) is served by this process too, so

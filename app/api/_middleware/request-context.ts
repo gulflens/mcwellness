@@ -7,6 +7,7 @@ import { cleanText } from './text';
 import type { Actor } from '@domain/shared';
 import type { IdentityKeys } from '@domain/shared/identity';
 import { ResolvedActorRow } from './actor-schema';
+import type { ServerStorageProvider } from './storage/types';
 import type { TokenVerifier } from './token-verifier';
 
 /**
@@ -30,8 +31,18 @@ export type Db = {
 // identityKeys is set only when create-api.ts was given identityKeys (a route
 // reads it via the identity-context middleware, ./identity-context.ts); it is
 // never guaranteed the way actor, db and requestId are, so its type says so.
+// storage is the same: set only when create-api.ts was given a provider
+// (./storage/index.ts's withStorage), and unlike identityKeys it is published
+// ahead of the fence, because the local signed-URL route must answer without
+// a session.
 export type ApiEnv = {
-  Variables: { actor: Actor; db: Db; requestId: string; identityKeys: IdentityKeys | undefined };
+  Variables: {
+    actor: Actor;
+    db: Db;
+    requestId: string;
+    identityKeys: IdentityKeys | undefined;
+    storage: ServerStorageProvider | undefined;
+  };
 };
 
 export type PoolClientLike = {
