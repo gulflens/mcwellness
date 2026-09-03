@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Field, Note, PageHeader, Select } from '../../shell/components/Controls';
+import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
 import { ClientStatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
+import './clients.css';
 import { ClientDrawer } from './ClientDrawer';
+import { EnrolmentWizard } from './EnrolmentWizard';
 
 /**
  * The admin console's client table (docs/SPEC/client-record.md section 4.1),
@@ -42,7 +44,28 @@ export function ClientsPage() {
   const [query, setQuery] = useState('');
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [selected, setSelected] = useState<ClientRow | null>(null);
-  const closeDrawer = useCallback(() => setSelected(null), []);
+  const [enrolling, setEnrolling] = useState(false);
+  // Bumped after the enrolment wizard closes, so the table picks up the lead it just
+  // created (or any later step's write) without duplicating the fetch effect below.
+  const [reloadToken, setReloadToken] = useState(0);
+  // Closing the drawer reloads the table: a status changed on Overview (a lead
+  // activated) must not leave the row behind it still saying what it said before.
+  const closeDrawer = useCallback(() => {
+    setSelected(null);
+    setReloadToken((t) => t + 1);
+  }, []);
+  const selectClient = useCallback((row: ClientRow) => {
+    setEnrolling(false);
+    setSelected(row);
+  }, []);
+  const openWizard = useCallback(() => {
+    setSelected(null);
+    setEnrolling(true);
+  }, []);
+  const closeWizard = useCallback(() => {
+    setEnrolling(false);
+    setReloadToken((t) => t + 1);
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -69,7 +92,7 @@ export function ClientsPage() {
       live = false;
       clearTimeout(timer);
     };
-  }, [apiFetch, status, query]);
+  }, [apiFetch, status, query, reloadToken]);
 
   const columns = useMemo<Column<ClientRow>[]>(
     () => [
@@ -79,7 +102,7 @@ export function ClientsPage() {
         header: 'Name',
         render: (row) => (
           <span className="name">
-            <button type="button" className="link" onClick={() => setSelected(row)}>
+            <button type="button" className="link" onClick={() => selectClient(row)}>
               {row.givenName} {row.familyName}
             </button>
             {row.givenNameAr ? (
@@ -122,7 +145,7 @@ export function ClientsPage() {
         render: (row) => (row.emirate ? (EMIRATES[row.emirate] ?? row.emirate) : ''),
       },
     ],
-    [],
+    [selectClient],
   );
 
   const count = state.kind === 'ready' ? state.response.clients.length : null;
@@ -136,6 +159,11 @@ export function ClientsPage() {
             <span className="numeric">{count === 1 ? '1 client' : `${count} clients`}</span>
           )
         }
+        action={
+          <Button variant="primary" onClick={openWizard}>
+            Enrol a client
+          </Button>
+        }
       />
       <div className="toolbar">
         <Field
@@ -147,7 +175,7 @@ export function ClientsPage() {
             typeof window.matchMedia === 'function' &&
             window.matchMedia('(min-width: 720px)').matches
           }
-          placeholder="Name or record number"
+          placeholder="Name, record number or Emirates ID"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -180,7 +208,8 @@ export function ClientsPage() {
           }
         />
       ) : null}
-      {selected ? <ClientDrawer client={selected} onClose={closeDrawer} /> : null}
+      {selected ? <ClientDrawer key={selected.id} client={selected} onClose={closeDrawer} /> : null}
+      {enrolling ? <EnrolmentWizard onDone={closeWizard} /> : null}
     </section>
   );
 }
