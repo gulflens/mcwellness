@@ -189,6 +189,10 @@
   max-inline-size: var(--measure);
 }
 
+.note--attention {
+  color: var(--attention);
+}
+
 .note--critical {
   color: var(--critical);
 }
