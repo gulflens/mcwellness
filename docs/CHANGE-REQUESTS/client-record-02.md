@@ -6,8 +6,9 @@ landed on `main` before it opened (pull request 31, "feat(api): mount the
 client-record routes"), so every route the screens call is reachable, and
 CR-04 turned out to need nothing at all — see below.
 
-What follows is one request for the trunk, one decision for the operator, and
-the list of what this pull request deliberately left for the fourth.
+What follows is one decision for the operator, one request for the trunk, the
+one place this pull request departed from its brief, and the list of what it
+deliberately left for the fourth.
 
 ---
 
@@ -52,6 +53,66 @@ only the way the two numbers are chosen.
 
 **Proposed diff.** None yet. It depends on the provider, and the provider is
 the decision being asked for.
+
+---
+
+## CR-06: fold Arabic-Indic digits inside `normaliseEmiratesId`
+
+**What.** Two lines in `domain/shared/emirates-id.ts`, so the normaliser reads
+an Emirates ID typed in Arabic-Indic (U+0660-0669) or Extended Arabic-Indic
+(U+06F0-06F9) digits as readily as one typed in Latin.
+
+**Why.** Arabic is a first-class layout here (CLAUDE.md), and an Arabic
+keyboard is an ordinary way to type a number in this practice. Today
+`normaliseEmiratesId` strips those code points as "not a digit", so a number
+typed that way comes up short and throws.
+
+This pull request folds them in its own browser-safe file
+(`app/api/clients/emirates-id-shape.ts`) before anything reaches the
+normaliser, on both sides of the search and on both capture forms, so the
+console searches and captures correctly today and nothing is asked of the
+trunk for correctness. The security review confirmed the unfolded case fails
+closed rather than wrong — the normaliser throws, so one physical number can
+never produce two fingerprints or be stored twice.
+
+What it leaves is a **drift trap**, which is what this request is for: the
+console folds, and the routes do not. The next caller to post a contact — the
+practitioner app, an import, anything — must remember to fold or it gets an
+opaque `invalid_emirates_id` for a number that is perfectly valid. The rule
+belongs where the normalising already happens.
+
+**Proposed diff** (`domain/shared/emirates-id.ts`):
+
+```diff
++const ARABIC_INDIC = 0x0660; // ٠ to ٩
++const EXTENDED_ARABIC_INDIC = 0x06f0; // ۰ to ۹
++
++/** Arabic-Indic and Extended Arabic-Indic digits as their Latin counterparts. */
++function toLatinDigits(input: string): string {
++  return Array.from(input)
++    .map((character) => {
++      const code = character.codePointAt(0) ?? 0;
++      if (code >= ARABIC_INDIC && code <= ARABIC_INDIC + 9) return String(code - ARABIC_INDIC);
++      if (code >= EXTENDED_ARABIC_INDIC && code <= EXTENDED_ARABIC_INDIC + 9)
++        return String(code - EXTENDED_ARABIC_INDIC);
++      return character;
++    })
++    .join('');
++}
++
+ export function normaliseEmiratesId(input: string): string {
+-  const digits = input.replace(/[^0-9]/g, '');
++  const digits = toLatinDigits(input).replace(/[^0-9]/g, '');
+   if (digits.length !== EMIRATES_ID_DIGITS || !digits.startsWith('784')) {
+     throw new Error('An Emirates ID is fifteen digits starting 784.');
+   }
+   return digits;
+ }
+```
+
+Applying it makes this stream's own fold redundant but harmless, and that
+file's fold can be dropped in a later pull request rather than in the same
+commit. Nothing here waits on it.
 
 ---
 
