@@ -43,13 +43,7 @@ const LOAD_ERROR = 'The client list could not be loaded. Try again.';
 const IDENTITY_UNAVAILABLE =
   'Searching by Emirates ID is not set up on this installation yet. Search by name or record number.';
 
-/**
- * An Emirates ID is never put in the address: it goes to POST
- * /api/clients/lookup in a request body, where no proxy's access log can
- * pick it up (.claude/rules/ui.md; app/api/clients/list.ts says the same
- * from the other side). Anything else is the ordinary `?q=` search over
- * names and record numbers.
- */
+/** The fifteen digits when the term is shaped like an Emirates ID; null otherwise. */
 function emiratesIdShapeOf(term: string): string | null {
   if (!term) return null;
   try {
@@ -59,6 +53,17 @@ function emiratesIdShapeOf(term: string): string | null {
   }
 }
 
+/**
+ * An Emirates ID is never put in the address: it goes to POST
+ * /api/clients/lookup in a request body, where no proxy's access log can pick
+ * it up (.claude/rules/ui.md; app/api/clients/list.ts says the same from the
+ * other side). Anything else is the ordinary `?q=` search over names and
+ * record numbers.
+ *
+ * The status filter is not applied to a lookup, deliberately: an identity
+ * number names at most one client, and filtering it away would answer "no
+ * such client" to someone holding that person's card.
+ */
 function searchRequest(status: string, query: string): { url: string; init?: RequestInit } {
   const term = query.trim();
   const digits = emiratesIdShapeOf(term);
