@@ -1,34 +1,21 @@
+import { formatFils } from '../shared/fils';
+
 /**
  * Money is displayed in exactly one place (CLAUDE.md's "Money" rule: doubles
  * are banned for money everywhere; there is one formatter).
  *
- * It lives here, in the domain, because two things now show money and both must
- * show it identically: the admin screens (`app/admin/billing/money.ts`
- * re-exports this and adds the parsing a typed field needs) and the rendered
- * invoice (`domain/billing/document`), which is pure and cannot reach into
- * `app/`. One function, one output, whichever is asking.
+ * That place is now `domain/shared/fils.ts`, beside the `Fils` type itself.
+ * It stood here while the rendered invoice and the admin screens were the two
+ * things showing money — a PDF is drawn by pure code that cannot reach into
+ * `app/`, so the domain was the only home they shared. Then the
+ * practitioner's stop card and the session's parking field wanted it too, and
+ * `docs/SPEC/OWNERSHIP.md` rule 3 says a module never imports another
+ * module's `domain/`: two streams duplicated the arithmetic rather than
+ * import billing's (`docs/CHANGE-REQUESTS/scheduling-04.md` section 4,
+ * `session-capture-02.md`). In `domain/shared` it is importable by everyone
+ * and nobody has to think about this again.
  *
- * The arithmetic is exact. `formatFils` reads the fils integer as two integer
- * parts — whole AED, and the remaining fils — so nothing is ever divided as a
- * floating-point number.
+ * Re-exported here so billing's own callers — `domain/billing/document/render.ts`
+ * and everything through the `@domain/billing` barrel — keep their import.
  */
-
-/**
- * Formats an integer number of fils as a bare figure with en-GB grouping:
- * "1,234.56". Bare, not "AED 1,234.56": the currency is named once, by the
- * column header or the field label, not repeated on every row
- * (docs/DESIGN-BRIEF.md's silence by default).
- */
-export function formatFils(amountFils: number): string {
-  if (!Number.isFinite(amountFils)) {
-    throw new RangeError(`Money must be a finite number of fils, received ${amountFils}`);
-  }
-  const rounded = Math.round(amountFils);
-  const negative = rounded < 0;
-  const abs = Math.abs(rounded);
-  const wholeAed = Math.floor(abs / 100);
-  const remainderFils = abs % 100;
-  const wholeFormatted = wholeAed.toLocaleString('en-GB');
-  const sign = negative ? '-' : '';
-  return `${sign}${wholeFormatted}.${String(remainderFils).padStart(2, '0')}`;
-}
+export { formatFils };
