@@ -53,17 +53,21 @@ function point(p: { lng: number; lat: number } | null): string | null {
 const CONTACT_NAMES_SETTING = 'app.seed_contact_names';
 const FILL_CONTACT_NAMES = `do $fill$
 begin
-  if exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'contact' and column_name = 'given_name'
-  ) then
+  -- All four, not one of them: a database part-way through the migration, or
+  -- one where a column was renamed, is not a database these names fit.
+  if (
+    select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'contact'
+      and column_name in ('given_name', 'family_name', 'given_name_ar', 'family_name_ar')
+  ) = 4 then
     execute $names$
-      update contact as c
+      update public.contact as c
          set given_name = v.given_name,
              family_name = v.family_name,
              given_name_ar = v.given_name_ar,
              family_name_ar = v.family_name_ar
-        from jsonb_to_recordset(current_setting('${CONTACT_NAMES_SETTING}')::jsonb)
+        from pg_catalog.jsonb_to_recordset(
+               pg_catalog.current_setting('${CONTACT_NAMES_SETTING}')::jsonb)
           as v(id uuid, given_name text, family_name text,
                given_name_ar text, family_name_ar text)
        where c.id = v.id

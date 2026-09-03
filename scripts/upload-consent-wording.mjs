@@ -4,6 +4,7 @@ import {
   describeWordingResult,
   isWordingRefusal,
   uploadConsentWording,
+  wordingTargetError,
 } from '../db/seed/wording-upload.ts';
 import { storageFromEnv } from '../app/api/_middleware/storage/index.ts';
 
@@ -34,6 +35,11 @@ try {
     throw new Error('Neither API_DATABASE_URL nor DATABASE_URL is set; there is nothing to read.');
   }
   const storage = storageFromEnv(process.env);
+  // A folder on this machine is not where a hosted project's documents go.
+  const refusal = wordingTargetError(storage.kind, url);
+  if (refusal !== null) {
+    throw new Error(refusal);
+  }
   const client = await connect(url);
   try {
     await client.query(

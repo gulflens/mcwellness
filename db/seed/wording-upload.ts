@@ -1,4 +1,5 @@
 import type { StorageProvider } from '../../domain/shared/storage';
+import { isLocalDatabaseUrl } from '../runner/plan';
 import type { SeedClient } from './apply';
 import { CONSENT_TEXT_MIME_TYPE, loadConsentTexts, type ConsentText } from './consent-text';
 
@@ -36,6 +37,25 @@ export type WordingResult = {
   size: number;
   outcome: WordingOutcome;
 };
+
+/**
+ * Where the wording may be filed: the fallback implementation only ever fills a
+ * folder on this machine, so pointing it at a database that is not on this
+ * machine would report eight uploads and leave a hosted project's rows pointing
+ * at nothing — the exact failure this command exists to end. Returns the
+ * refusal, or null, the way seedTargetError does for the seed itself.
+ */
+export function wordingTargetError(storageKind: string, databaseUrl: string): string | null {
+  if (storageKind === 'local' && !isLocalDatabaseUrl(databaseUrl)) {
+    return (
+      'The document store is a folder on this machine and the database is not: the files would go ' +
+      'into that folder while the rows point at a bucket nobody filled. Set STORAGE_PROVIDER=supabase ' +
+      'and SUPABASE_STORAGE_KEY (a service key, never the anon key) in the environment file given to ' +
+      'this command.'
+    );
+  }
+  return null;
+}
 
 /** The outcomes that mean the store is not what the rows say it is. */
 export function isWordingRefusal(outcome: WordingOutcome): boolean {

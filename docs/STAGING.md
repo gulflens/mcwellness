@@ -187,9 +187,12 @@ staging is a patched-up version of an older seed.
    project's API settings — never the anon key, which the browser holds and
    which storage does not fence — into `.env.staging` as
    `SUPABASE_STORAGE_KEY`, and set `STORAGE_PROVIDER=supabase` in the same
-   file. That replaces the `local` stopgap that has been standing in, and its
-   `STORAGE_DIR` line can go: a folder on the laptop was never where staging's
-   documents belong.
+   file. `SUPABASE_URL` must be there too, naming the project the bucket sits
+   in; the store cannot be reached without it. That replaces the `local`
+   stopgap that has been standing in, and its `STORAGE_DIR` line can go: a
+   folder on the laptop was never where staging's documents belong — and the
+   upload command in step 3 refuses to run in that state rather than filing
+   eight files on the laptop while staging's rows point at nothing.
 3. **Put the wording in the bucket**, from the repository, once:
 
    ```bash
