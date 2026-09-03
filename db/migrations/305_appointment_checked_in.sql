@@ -85,6 +85,7 @@ as $$
 declare
   v_appointment_id  uuid;
   v_practitioner_id uuid;
+  v_client_id       uuid;
   v_updated         integer;
 begin
   -- The session must be this caller's own, still open, and in the caller's
@@ -100,8 +101,8 @@ begin
   -- arriving after the visit was closed as a no-show could still flip the
   -- appointment to 'checked_in', which is a check-in that nobody attended
   -- being written into the record hours after the fact.
-  select s.appointment_id, s.practitioner_id
-    into v_appointment_id, v_practitioner_id
+  select s.appointment_id, s.practitioner_id, s.client_id
+    into v_appointment_id, v_practitioner_id, v_client_id
     from public.session s
     join public.practitioner p on p.id = s.practitioner_id
    where s.id = p_session_id
@@ -129,6 +130,16 @@ begin
      -- appointment because a session row pointed at it is a door that trusts
      -- its own table more than it should.
      and a.practitioner_id = v_practitioner_id
+     -- And to the session's own client, carried out of the same select. The
+     -- three together are the whole of what "the appointment this session
+     -- names" means: a row that agrees about the practice, the practitioner
+     -- and the household. Nothing constrains session.appointment_id to name
+     -- an appointment of the session's own client — the foreign key binds the
+     -- tenant and no more — so without this a session written by any path but
+     -- the check-in route could mark a visit belonging to another household
+     -- entirely, and mark it in a way the household's own records would then
+     -- disagree with.
+     and a.client_id = v_client_id
      -- 'confirmed' alone, so a replay, a second device, and a visit the
      -- practice has since called off all change nothing (see the header).
      and a.status = 'confirmed';

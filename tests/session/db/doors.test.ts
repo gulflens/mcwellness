@@ -62,6 +62,11 @@ const GUARDIAN_VISIT_USER = '00000000-0000-4000-8000-000000201009';
 const GUARDIAN_VISIT = '00000000-0000-4000-8000-000000201010';
 const IMPROPER_VISIT_USER = '00000000-0000-4000-8000-000000201011';
 const IMPROPER_VISIT = '00000000-0000-4000-8000-000000201012';
+// One more, standing in a visit whose session names an appointment booked for
+// a different household: nothing in the schema stops a session row doing that
+// (the foreign key binds the tenant and no more), so the door must.
+const MISMATCH_USER = '00000000-0000-4000-8000-000000201013';
+const MISMATCH = '00000000-0000-4000-8000-000000201014';
 
 const ADULT = '00000000-0000-4000-8000-000000202001';
 const MINOR_PROPER_CONSENT = '00000000-0000-4000-8000-000000202002';
@@ -85,6 +90,7 @@ const OPEN_INACTIVE = '00000000-0000-4000-8000-000000206003';
 const OPEN_FOREIGN = '00000000-0000-4000-8000-000000206004';
 const OPEN_MINOR_PROPER = '00000000-0000-4000-8000-000000206006';
 const OPEN_MINOR_IMPROPER = '00000000-0000-4000-8000-000000206007';
+const OPEN_MISMATCHED_CLIENT = '00000000-0000-4000-8000-000000206008';
 
 /**
  * Three visits that are finished, one per practitioner. The caller's own is
@@ -113,6 +119,8 @@ const APPT_CLOSED_INACTIVE = '00000000-0000-4000-8000-000000209004';
 // prove nothing about the guard under test.
 const APPT_OPEN_INACTIVE = '00000000-0000-4000-8000-000000209005';
 const APPT_OPEN_OTHER = '00000000-0000-4000-8000-000000209006';
+/** Booked for one household; named by a session that says it is visiting another. */
+const APPT_OTHER_HOUSEHOLD = '00000000-0000-4000-8000-000000209007';
 
 let client: pg.Client;
 
@@ -176,6 +184,7 @@ beforeAll(async () => {
     [FOREIGN_USER, FOREIGN, IDS.tenantB, ['practitioner']],
     [GUARDIAN_VISIT_USER, GUARDIAN_VISIT, IDS.tenantA, ['practitioner']],
     [IMPROPER_VISIT_USER, IMPROPER_VISIT, IDS.tenantA, ['practitioner']],
+    [MISMATCH_USER, MISMATCH, IDS.tenantA, ['practitioner']],
   ] as const) {
     await seedUser(client, {
       id: userId,
@@ -274,6 +283,19 @@ beforeAll(async () => {
     });
   }
 
+  // Booked for the child, not for the adult: the session below names it while
+  // saying it is visiting the adult, which is the disagreement under test.
+  await seedAppointment(client, {
+    id: APPT_OTHER_HOUSEHOLD,
+    tenantId: IDS.tenantA,
+    clientId: MINOR_PROPER_CONSENT,
+    practitionerId: MISMATCH,
+    serviceTypeId: SERVICE_TYPE,
+    locationId: LOCATION_A,
+    windowStart: `${today}T20:00:00+04:00`,
+    status: 'confirmed',
+  });
+
   await seedSession({
     id: OPEN_ADULT,
     tenantId: IDS.tenantA,
@@ -331,6 +353,15 @@ beforeAll(async () => {
     clientId: FOREIGN_CLIENT,
     practitionerId: FOREIGN,
     locationId: LOCATION_B,
+  });
+
+  await seedSession({
+    id: OPEN_MISMATCHED_CLIENT,
+    tenantId: IDS.tenantA,
+    clientId: ADULT,
+    practitionerId: MISMATCH,
+    locationId: LOCATION_A,
+    appointmentId: APPT_OTHER_HOUSEHOLD,
   });
 
   // Each minor's visit gets a practitioner of its own: 300's
@@ -567,6 +598,16 @@ describe('app.mark_appointment_checked_in', () => {
     expect(await markCheckedIn(FOREIGN_USER, IDS.tenantB, OPEN_ADULT)).toBe(false);
     expect(await markCheckedIn(CALLER_USER, IDS.tenantA, OPEN_FOREIGN)).toBe(false);
     expect(await appointmentStatus(APPT_OPEN_ADULT)).toBe('confirmed');
+  });
+
+  it("refuses an appointment booked for a different household from the session's", async () => {
+    // Same practice, same practitioner, and the session names this very
+    // appointment — only the household disagrees. Nothing in the schema
+    // stops a session row pointing at another household's visit, so the
+    // door checks it rather than trusting its own table: marking it would
+    // put a check-in on a visit these records say nobody attended.
+    expect(await markCheckedIn(MISMATCH_USER, IDS.tenantA, OPEN_MISMATCHED_CLIENT)).toBe(false);
+    expect(await appointmentStatus(APPT_OTHER_HOUSEHOLD)).toBe('confirmed');
   });
 
   it('leaves a proposed appointment where the coordinator put it', async () => {
