@@ -27,7 +27,9 @@ credential); every read and write of a record is logged, hash-chained.
    fonts and connections (`'self'`, images also `data:`, and the Supabase
    project's origin as the one outside connection, for sign-in), no framing
    (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), no sniffing, no
-   referrer, no camera, microphone or geolocation, `Cross-Origin-Resource-
+   referrer, no camera or microphone, and location only for the app's own
+   origin (the check-in and enrolment ask for it on a tap; no embedded
+   third party may), `Cross-Origin-Resource-
    Policy: same-origin`, and in production `Strict-Transport-Security` for a
    year with subdomains. API answers are `Cache-Control: no-store`. In
    production the API serves the built app itself (`SERVE_APP=true`), so the
