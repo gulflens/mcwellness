@@ -171,7 +171,7 @@ export function PracticePage() {
           <section className="practice__group">
             <h2 className="practice__heading">Tax</h2>
             <dl className="practice__facts">
-              <Fact label="Tax registration number">
+              <Fact label="Corporate tax registration number">
                 {practice.taxRegistrationNumber ? (
                   <span className="numeric">{practice.taxRegistrationNumber}</span>
                 ) : null}
@@ -182,10 +182,11 @@ export function PracticePage() {
               </Fact>
             </dl>
             <p className="small muted">
-              The tax registration number is the practice&rsquo;s corporate-tax number, not its VAT
-              number. Recording a VAT registration does not change what an invoice charges: VAT is
-              worked out from the practice&rsquo;s standard rate today, whichever way the switch is
-              set.
+              &ldquo;Tax registration number&rdquo; is what the Federal Tax Authority calls a VAT
+              registration, so the field above names corporate tax on its face. It is the number the
+              practice holds for corporate tax and is never printed as a VAT one. Recording a VAT
+              registration does not change what an invoice charges: VAT is worked out from the
+              practice&rsquo;s standard rate today, whichever way the switch is set.
             </p>
           </section>
         </div>

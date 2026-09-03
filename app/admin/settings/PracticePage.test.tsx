@@ -105,7 +105,8 @@ describe('Practice settings — what it shows', () => {
     expect(screen.getByText('No')).toBeTruthy();
     // The two things this group must not leave a reader to guess: which tax
     // number this is, and that recording a registration charges nothing.
-    expect(screen.getByText(/corporate-tax number, not/)).toBeTruthy();
+    expect(screen.getByText('Corporate tax registration number')).toBeTruthy();
+    expect(screen.getByText(/never printed as a VAT one/)).toBeTruthy();
     expect(screen.getByText(/does not change what an invoice/)).toBeTruthy();
   });
 

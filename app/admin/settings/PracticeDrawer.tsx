@@ -138,7 +138,8 @@ export function PracticeDrawer({
     }
     const typedTax = taxRegistrationNumber.replace(/\s/g, '');
     if (typedTax.length > 0 && !/^[A-Za-z0-9-]{5,30}$/.test(typedTax)) {
-      errors.taxRegistrationNumber = 'A tax registration number is letters, digits and hyphens.';
+      errors.taxRegistrationNumber =
+        'A corporate tax registration number is letters, digits and hyphens.';
     }
     const typedVatTrn = vatTrn.replace(/\s/g, '');
     if (vatRegistered && !new RegExp(`^\\d{${VAT_TRN_DIGITS}}$`).test(typedVatTrn)) {
@@ -376,7 +377,7 @@ export function PracticeDrawer({
 
           <Field
             id={FIELD_IDS.taxRegistrationNumber}
-            label="Tax registration number (optional)"
+            label="Corporate tax registration number (optional)"
             hint="The corporate tax registration the practice holds. Not the VAT number."
             type="text"
             maxLength={40}
