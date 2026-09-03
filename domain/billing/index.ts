@@ -1,3 +1,4 @@
+export { formatFils } from './money';
 export { resolveSaleVat, resolveVat } from './vat';
 export type { Supplier, VatResolution, VatSetting, VatTreatment } from './vat';
 export { currentPriceFor, validateNewPrice } from './price';

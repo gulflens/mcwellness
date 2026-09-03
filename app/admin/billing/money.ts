@@ -1,5 +1,15 @@
-import { resolveVat, type VatSetting } from '@domain/billing';
+import { formatFils, resolveVat, type VatSetting } from '@domain/billing';
 import { fils } from '@domain/shared';
+
+/**
+ * The formatter itself moved to `domain/billing/money.ts` when the rendered
+ * invoice needed it: a PDF is drawn by pure code that cannot reach into `app/`,
+ * and two formatters that happen to agree is exactly what CLAUDE.md's one-place
+ * rule exists to prevent. It is re-exported here so every screen keeps its
+ * import, and what stays in this file is the half that is genuinely the
+ * browser's: reading an amount a person typed.
+ */
+export { formatFils };
 
 /**
  * Money is displayed and parsed in exactly one place (CLAUDE.md's "Money"
@@ -43,21 +53,6 @@ const AED_INPUT = /^(\d+|[1-9]\d{0,2}(?:,\d{3})+)(?:\.(\d{1,2}))?$/;
  * own column check turn it into a generic 400.
  */
 export const AED_MAX_FILS = 2_147_483_647;
-
-/** Formats an integer number of fils as a bare figure with en-GB grouping: "1,234.56". */
-export function formatFils(amountFils: number): string {
-  if (!Number.isFinite(amountFils)) {
-    throw new RangeError(`Money must be a finite number of fils, received ${amountFils}`);
-  }
-  const rounded = Math.round(amountFils);
-  const negative = rounded < 0;
-  const abs = Math.abs(rounded);
-  const wholeAed = Math.floor(abs / 100);
-  const remainderFils = abs % 100;
-  const wholeFormatted = wholeAed.toLocaleString('en-GB');
-  const sign = negative ? '-' : '';
-  return `${sign}${wholeFormatted}.${String(remainderFils).padStart(2, '0')}`;
-}
 
 /**
  * A live estimate of VAT and the gross total for the "add a price" drawer,
