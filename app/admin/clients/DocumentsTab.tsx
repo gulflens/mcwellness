@@ -204,7 +204,13 @@ export function DocumentsTab({
                       : 'Not on a fixed clock'}
                   </td>
                   <td>
-                    <DocumentLink clientId={clientId} documentId={document.id} label="Open" />
+                    {document.bytesRemoved ? (
+                      <span className="small muted">
+                        Removed when photographs and video consent was withdrawn
+                      </span>
+                    ) : (
+                      <DocumentLink clientId={clientId} documentId={document.id} label="Open" />
+                    )}
                   </td>
                 </tr>
               ))}

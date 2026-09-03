@@ -372,6 +372,15 @@ export const ClientDocument = z.object({
   uploadedByName: z.string().nullable(),
   retentionUntil: z.string().nullable(),
   isImmutable: z.boolean(),
+  /**
+   * Whether the bytes behind this row are gone. True only for a setup
+   * photograph whose household withdrew its photographs-and-video consent,
+   * which is the one case this platform deletes a client's file outside an
+   * erasure (app/api/clients/withdrawal.ts). The row stays, because the trail
+   * should show what was held and what happened to it; the tab says so rather
+   * than offering a link that cannot open.
+   */
+  bytesRemoved: z.boolean(),
 });
 export type ClientDocument = z.infer<typeof ClientDocument>;
 

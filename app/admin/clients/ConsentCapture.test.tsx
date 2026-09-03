@@ -398,6 +398,7 @@ describe('DocumentsTab', () => {
             uploadedByName: 'Hazel Harbour',
             retentionUntil: '2031-09-01T08:00:00.000Z',
             isImmutable: true,
+            bytesRemoved: false,
           },
         ],
       },

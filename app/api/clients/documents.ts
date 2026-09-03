@@ -50,6 +50,7 @@ type DocumentRow = {
   uploaded_by_name: string | null;
   retention_until: Date | null;
   is_immutable: boolean;
+  bytes_removed: boolean;
 };
 
 /**
@@ -132,9 +133,24 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
     // No size: the row names the bytes, the store holds them, and `document`
     // records no length. A column that was always null would be worse than the
     // absence.
+    // `bytes_removed` is inferred rather than recorded, and the inference is
+    // narrow on purpose. Withdrawing photo_video deletes the setup photographs
+    // (app/api/clients/withdrawal.ts) and the row has nowhere to say so: the
+    // API role holds no delete grant on `document`, and `retired_at` is
+    // constrained to consent wording (migration 902). So the one condition
+    // under which this route knows the bytes went — a photo_video consent
+    // withdrawn and none active — is asked here, and the tab says the
+    // photograph was removed rather than offering a link that 404s.
+    // docs/CHANGE-REQUESTS/client-record-03.md's CR-09 asks for the column
+    // that would let the row say it outright.
     const { rows } = await db.query<DocumentRow>(
       'select d.id, d.kind, d.mime_type, d.created_at, ' +
-        'u.display_name as uploaded_by_name, d.retention_until, d.is_immutable ' +
+        'u.display_name as uploaded_by_name, d.retention_until, d.is_immutable, ' +
+        "(d.kind = 'setup_photo' and exists (select 1 from consent gone " +
+        "where gone.client_id = d.client_id and gone.purpose = 'photo_video' " +
+        "and gone.status = 'withdrawn') and not exists (select 1 from consent live " +
+        "where live.client_id = d.client_id and live.purpose = 'photo_video' " +
+        "and live.status = 'active')) as bytes_removed " +
         'from document d left join app_user u on u.id = d.uploaded_by ' +
         'where d.client_id = $1 order by d.created_at desc',
       [clientId],
@@ -160,6 +176,7 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
           uploadedByName: row.uploaded_by_name,
           retentionUntil: row.retention_until ? row.retention_until.toISOString() : null,
           isImmutable: row.is_immutable,
+          bytesRemoved: row.bytes_removed,
         })),
       }),
     );

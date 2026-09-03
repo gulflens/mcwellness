@@ -1131,6 +1131,18 @@ describe('withdrawing a consent', () => {
     );
     expect(trail.rows[0]?.action).toBe('update');
     expect(trail.rows[0]?.reason).toBe('The household asked us to stop taking photographs.');
+
+    // The Documents tab must not offer a link to bytes that are gone. The row
+    // stays — the trail should show what was held — and the list says the
+    // photograph was removed.
+    const list = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/documents`);
+    const { documents } = (await list.json()) as {
+      documents: { id: string; kind: string; bytesRemoved: boolean }[];
+    };
+    expect(documents.find((document) => document.id === photoId)?.bytesRemoved).toBe(true);
+    expect(
+      documents.filter((document) => document.kind !== 'setup_photo').every((d) => !d.bytesRemoved),
+    ).toBe(true);
   });
 });
 
