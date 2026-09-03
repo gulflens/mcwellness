@@ -133,6 +133,9 @@ internal error in the record it belongs to.
 
 **Using it from a route**: `c.get('storage')`, the way `c.get('db')` and
 `c.get('identityKeys')` work. `createApi` publishes it when it is given one.
+`put`, `getSignedUrl` and `exists` are called where the route stands;
+`delete` is called from `c.get('afterCommit')` and nowhere else, for the
+reason the next section gives.
 
 **The forced-fallback test** — `app/api/storage-seam.test.ts`. With the real
 implementation disabled, the whole document path runs: put a document, sign a
@@ -140,6 +143,57 @@ link, fetch exactly those bytes back. With the real implementation selected
 but unreachable, the API starts, answers its health check, and refuses a
 document call with a clean 503. `app/api/_middleware/storage/seam.test.ts`
 covers the choice itself, including every way of choosing wrong.
+
+---
+
+## After the commit — how bytes are deleted
+
+**A delete cannot be rolled back and a transaction can.** Every request runs
+inside one transaction (`app/api/_middleware/request-context.ts`), and that
+transaction is rolled back on anything the route raised rather than returned,
+and on any 5xx. A route that removes a client's photograph in the middle of
+its own transaction has therefore already destroyed the bytes when the
+withdrawal that justified them going is rolled back a moment later: the
+consent comes back to life and the file does not.
+
+So the store is never called from inside the transaction. The route hands the
+deletion back to the fence instead:
+
+```ts
+c.get('afterCommit')(async () => {
+  await storage.delete(document.storage_key);
+});
+```
+
+Read it exactly as it is written: **this is the only correct way to delete
+bytes from the store after a database change**, and it is what the erasure
+deletion job, a withdrawal of `photo_video` consent and the retention job all
+use. Nothing else in this codebase may call `storage.delete` from a route.
+
+What the fence guarantees:
+
+- **Only on a commit.** Work registered by a request that rolled back is
+  discarded, unrun. A 5xx runs nothing; a refusal a route *raised* runs
+  nothing; a refusal a route *returned* has committed, like every other
+  request below 500, and so does run what it registered — which is right, and
+  is why a route that means to change nothing should register nothing.
+- **In the order it was registered**, one piece at a time, after `commit` has
+  returned and the connection is back in the pool.
+- **A failure stays inside.** A piece that throws is logged with the request
+  id and the shape of the failure — never its message, which can carry a key
+  or a row value — and the pieces after it still run. The caller is told
+  nothing: the response is already decided and the row is already committed,
+  so a store that would not answer is an operational fact, not this request's
+  refusal.
+
+What it does not give you: a database. By the time the work runs, `c.get('db')`
+is a connection that belongs to somebody else. Anything that must be written
+belongs in the transaction; anything that cannot be unwritten belongs here.
+
+`c.get('afterCommit')` is published by the request-context middleware, so it
+exists for every route below the authentication fence and — like `c.get('db')`
+— for none above it. `storage` and `identityKeys` sit beside it on the same
+context.
 
 ---
 

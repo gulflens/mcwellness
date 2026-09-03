@@ -19,6 +19,14 @@ import type { TokenVerifier } from './token-verifier';
  * transaction-local settings. The audit trigger reads them; row level
  * security reads the practice and the roles. Nothing leaks between requests
  * on a pooled connection because everything is transaction-scoped.
+ *
+ * It also owns the one moment after that transaction closes.
+ * `c.get('afterCommit')(fn)` registers work to run once the commit has
+ * returned — never on a rollback, and so never on a 5xx or on a refusal a
+ * route raised rather than returned. Deleting bytes from the document store
+ * is what that is for and docs/SEAMS.md says so: a delete cannot be rolled
+ * back and a transaction can, so bytes removed inside the transaction that
+ * removed the row outlive nothing when the row comes back.
  */
 
 export type Db = {
@@ -28,6 +36,14 @@ export type Db = {
   ): Promise<pg.QueryResult<R>>;
 };
 
+/**
+ * Work a route hands back to run once its transaction has committed
+ * (docs/CHANGE-REQUESTS/client-record-03.md, CR-12). Takes nothing, answers
+ * nothing: by the time it runs the response is settled and the connection is
+ * back in the pool, so there is no database to reach and no caller to tell.
+ */
+export type AfterCommitWork = () => void | Promise<void>;
+
 // identityKeys is set only when create-api.ts was given identityKeys (a route
 // reads it via the identity-context middleware, ./identity-context.ts); it is
 // never guaranteed the way actor, db and requestId are, so its type says so.
@@ -35,11 +51,14 @@ export type Db = {
 // (./storage/index.ts's withStorage), and unlike identityKeys it is published
 // ahead of the fence, because the local signed-URL route must answer without
 // a session.
+// afterCommit is published by this middleware, so — like actor, db and
+// requestId — it exists for every route below the fence and for none above it.
 export type ApiEnv = {
   Variables: {
     actor: Actor;
     db: Db;
     requestId: string;
+    afterCommit: (work: AfterCommitWork) => void;
     identityKeys: IdentityKeys | undefined;
     storage: ServerStorageProvider | undefined;
   };
@@ -78,6 +97,31 @@ function bearerToken(header: string | undefined): string | null {
   return scheme?.toLowerCase() === 'bearer' && token ? token : null;
 }
 
+/**
+ * Runs the work a request registered, in the order it was registered, once
+ * the commit has returned.
+ *
+ * Each piece is isolated: a throw is logged and the next piece still runs.
+ * Nothing reaches the caller — the response is already decided and the
+ * transaction is already committed, so there is nothing left to refuse and
+ * nothing left to roll back. What is logged is the request id and the shape
+ * of the failure, never a message: the same rule createApi's own error
+ * handler follows, because a message from a store or a driver can carry a
+ * key or a row value.
+ */
+async function runAfterCommit(work: readonly AfterCommitWork[], requestId: string): Promise<void> {
+  for (const piece of work) {
+    try {
+      await piece();
+    } catch (error) {
+      const shape = error as { name?: string; code?: string };
+      console.error(
+        JSON.stringify({ requestId, after: 'commit', name: shape.name, code: shape.code }),
+      );
+    }
+  }
+}
+
 function unauthorized(c: Context, requestId: string): Response {
   c.header('WWW-Authenticate', 'Bearer');
   return c.json({ error: 'unauthorized', requestId }, 401);
@@ -108,6 +152,9 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
 
     const client = await pool.connect();
     let inTransaction = false;
+    // Work to run once this transaction has committed, and never if it has
+    // not (docs/SEAMS.md, "After the commit"). Registered by routes below.
+    const afterCommit: AfterCommitWork[] = [];
     try {
       await client.query('begin');
       inTransaction = true;
@@ -150,6 +197,9 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
         ) => client.query<R>(text, params),
       });
       c.set('requestId', requestId);
+      c.set('afterCommit', (work: AfterCommitWork) => {
+        afterCommit.push(work);
+      });
 
       await next();
 
@@ -167,6 +217,11 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
       await client.query(failed ? 'rollback' : 'commit');
       inTransaction = false;
       client.release();
+      // Only now, and only on a commit: a rolled-back request leaves nothing
+      // behind for this work to be consistent with.
+      if (!failed && afterCommit.length > 0) {
+        await runAfterCommit(afterCommit, requestId);
+      }
     } catch (error) {
       if (inTransaction) {
         await client.query('rollback').catch(() => undefined);
