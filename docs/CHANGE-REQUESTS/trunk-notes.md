@@ -276,3 +276,72 @@ append-only, so a missing column can never be backfilled.
   address) to the snapshot, or record the simplified-invoice decision in
   `docs/SPEC/billing.md` and say there that the recipient is deliberately not
   snapshotted.
+
+---
+
+## Round 23, 2026-09-04 (what the trunk did not do, and why)
+
+Three streams have open pull requests whose change-request files ask the shared
+zone for things. This round did four of them — the requester's phone on the
+redaction list (migration 906), the erasure sentence in
+`docs/SPEC/client-record.md` section 8, the sending seam in `docs/SEAMS.md`
+with the WhatsApp row corrected, and `logAction` in
+`app/api/_middleware/audit.ts`. Everything below is deliberately left.
+
+Nothing here is blocked work of the trunk's own making. Each is a change whose
+correctness cannot be seen from `main`, because the code that gives it meaning
+is on a branch.
+
+### 1. After the merges of 51, 52 and 54
+
+Pull request 51 is `client-record-5`, 52 is `scheduling-3`, 54 is `billing-3`.
+51 and 54 were merged on 2026-09-04, and this round took `logSensitiveAction`
+(`app/api/billing/audit.ts`, billing-04 request 4's interim copy) out with the
+merge, re-pointing `app/api/billing/documents.ts` at the shared `logAction`.
+Everything in the table is now round 24's, the moment 52 is on `main`.
+
+| What | Asked in | Waits on | Why it cannot be done first |
+|---|---|---|---|
+| A route for `/admin/schedule/week` in `app/shell/App.tsx` | scheduling-04 item 2 | 52 | `app/admin/schedule/WeekPage.tsx` is on the branch. A route to a component that does not exist does not compile, and one added blind is a route nobody has seen render |
+| `appointment.move` and `appointment.cancel` in `domain/shared/actor.ts` | scheduling-04 item 3 | 52 | The union members would compile alone, but a `canActor` case with no caller is an audience nobody has exercised. The audience table lands with `move.ts` and `cancel.ts`, which assert it against the running routes |
+| `formatFils` moved to `domain/shared/fils.ts` | scheduling-04 item 4 | 52 and 54 | The source is `app/admin/billing/money.ts`, billing's path, and both streams have callers mid-flight. Moving it under two open branches is a conflict in three worktrees rather than a tidy in one |
+| `alter table invoice add constraint invoice_no_vat_unless_supplier_registered` in a 9xx migration | billing-04 request 1 | 54 | The trunk wrote this constraint in round 20, ran it, and took it out again: until billing charges VAT only when the practice is registered (54's request 1a), it refuses every charge the platform makes and fourteen tests in `tests/billing` fail. It is one line the moment 1a is on `main` |
+| The practice's logo as a replaceable document, on `app/admin/settings/**` | billing-04 request 5 | 54 | The settings page is the trunk's, but the two halves that make it mean anything — `app/api/billing/document-source.ts` reading it onto the model, and an `/XObject` in `domain/billing/document/pdf.ts` drawing it — are billing's and unwritten. An upload box feeding a renderer that ignores it is worse than the wordmark, which is at least honest |
+| `jobs/client/retry-erasure-deletions.ts` and its `package.json` script | client-record-04 CR-14 | 51 | The job is twenty lines around `sweepErasureFiles`, which is in `app/api/clients/erasure-file-sweep.ts` on the branch. The sweep itself already works and is tested; what waits is the command an operator can be told to run |
+
+### 2. Not waiting on a merge, and still not done this round
+
+Recorded so the next trunk round picks them up rather than rediscovers them.
+Each could be done from `main` today; none was in this round's scope.
+
+- **`docs/SPEC/billing.md` section 5.4, the simplified-tax-invoice
+  decision** (billing-04 request 2). `docs/SPEC/**` is the trunk's and the text
+  is written out in full in that file. It answers round 20's own second note,
+  which asked for either a recipient snapshot or the decision recorded in
+  writing — so leaving it open leaves a question the trunk asked unanswered.
+  The nearest thing to urgent on this list.
+- **A `client.erase` sentence in `domain/shared/audit-narrative.ts`**
+  (client-record-04 CR-16). One case beside the existing
+  `erasure_request.insert`, so the timeline stops rendering "X recorded erase
+  on the client". The generic sentence is not wrong, only unwritten by anybody.
+- **The `erasure-letter` filter in `db/seed/consent-text.ts`**
+  (client-record-04 CR-15), which would let the two letter templates sit at
+  `docs/CONSENT/erasure-letter.en.md` and `.ar.md` rather than one directory
+  down. `db/seed/**` was not in this round's zone. Worth noting that the stream
+  itself says a subdirectory is arguably the better home for a family of
+  templates about to grow a second member, and that closing this as declined
+  costs nothing.
+
+### 3. One thing for whoever integrates, not for a stream
+
+`tests/client/db/erasure_act.test.ts` has a case named "a rendered tax
+document" that **skips itself while `billing_document` is absent** and stops
+skipping the moment 54 is on `main` (client-record-04 CR-20). Migration 105
+holds rendered invoices and credit notes back from an erasure through a
+`to_regclass` guard, for two reasons at once: without it the delete raises for
+any household that ever had an invoice rendered, and deleting a rendered tax
+document would breach the five-year financial-record rule.
+
+So the first `pnpm test:db` after 51 and 54 are both on `main` runs a test that
+has never run in CI. If it fails, that is where to look first, and the failure
+is real rather than a merge artefact.

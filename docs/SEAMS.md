@@ -15,6 +15,7 @@ capability that sends personal data anywhere is approved before it exists.
 | Seam | Interface | Real | Fallback | Chosen by |
 |---|---|---|---|---|
 | Documents | `domain/shared/storage.ts` | Supabase Storage, private bucket `documents` | a folder on this machine | `STORAGE_PROVIDER` |
+| Documents out | `domain/billing/sending.ts` | an email vendor, once one is approved | the message composed and the link handed back for the share sheet | `DOCUMENT_EMAIL_VENDOR` |
 
 ---
 
@@ -143,6 +144,60 @@ link, fetch exactly those bytes back. With the real implementation selected
 but unreachable, the API starts, answers its health check, and refuses a
 document call with a clean 503. `app/api/_middleware/storage/seam.test.ts`
 covers the choice itself, including every way of choosing wrong.
+
+---
+
+## Documents out (the sending seam)
+
+**The interface** — `domain/billing/sending.ts`, browser-safe, one call:
+
+```
+sendDocument({ to, message }) -> { delivered: true, channel }
+                               | { delivered: false, channel, handoffUrl }
+```
+
+Beside it, the pure helpers that compose what is sent: `draftMessage` writes
+the sentence in English with the Arabic beneath it, and `whatsAppHandoff` turns
+a number and that message into a `wa.me` link. Both decide nothing about the
+network.
+
+**Today the fallback is the whole of it, and that is an answer rather than a
+stub.** No email vendor is on `docs/COMPLIANCE/approved-vendors.md`, and
+nothing unapproved receives a family's address. So `shareSheetSender` composes
+the message, sends nothing, and hands the link back for a person to share —
+which is how the practice already works.
+
+**WhatsApp is a hand-off, not an integration**, and the distinction is the
+whole of why the Business API is not needed here. The platform composes a
+`wa.me` link carrying the drafted message; the person opens it and presses send
+in their own WhatsApp, on their own account. Nothing reaches Meta from this
+server, and the only number involved is the household's own, which is already
+in the record. Approval is needed to send *on the practice's behalf*, which
+nothing does. If the Business API is ever approved it is a second
+implementation behind this same seam, not a rewrite.
+
+**The real one is unreachable until a vendor exists.** `DOCUMENT_EMAIL_VENDOR`
+names it and nothing names one today; a name the platform has no implementation
+for is refused at startup rather than on the first send weeks later. The branch
+was left unreachable rather than half-written, because the rule is that a
+vendor is approved in `docs/COMPLIANCE/approved-vendors.md` before it exists
+here.
+
+**What the trail records.** Sending is neither a read nor a row change, so
+neither the middleware's read helpers nor the row triggers write it; the route
+calls `logAction` (`app/api/_middleware/audit.ts`) instead. The details it
+carries are **the contact's id and the channel, and nothing else** — never the
+telephone number, never the address. The trail is kept five years and read by
+people who have no business knowing how to reach a family
+(`docs/SPEC/audit.md` section 8); an id answers "who was it sent to" for
+anyone entitled to ask, and the contact record answers the rest to whoever may
+read that.
+
+**What travels in the message.** The document's reference — "INV-000001" —
+never an id out of a URL, and a short-lived signed link to the bytes. Nothing
+in it says what the visit was for.
+
+**The forced-fallback test** — `tests/billing/sending.test.ts`.
 
 ---
 
