@@ -81,9 +81,19 @@ Three things make that hold rather than merely intend it:
   a hand-written request cannot put one in a query string either. A record
   number is never mistaken for one (MRNs read `MW-000001`).
 - A lookup that finds **nobody** is audited too. `logReads` writes one row per
-  client returned and nothing when there are none, so without this the trail
-  could not answer "who searched for whose identity number and was told
-  nothing".
+  client returned and nothing when there are none, so without this a search by
+  identity number that found nothing left no trace at all. The row records
+  **who searched and when, never what for** — the number must not enter the
+  trail, and does not.
+
+The shape rule itself lives in one browser-safe file both sides import
+(`app/api/clients/emirates-id-shape.ts`), because two copies of a rule this
+one enforces would drift. It reads the digits through any separator — hyphen,
+space, non-breaking space, bracket, dot, a zero-width joiner `cleanText`
+deliberately keeps for Persian and Urdu — and folds Arabic-Indic and Extended
+Arabic-Indic digits to Latin first, so an Emirates ID typed on an Arabic
+keyboard is both refused from the URL and accepted by the lookup and the
+capture fields.
 
 Nothing in the shared zone changed for any of it, and nothing is being asked
 of the trunk: it is recorded because it is a deliberate departure from the
@@ -132,8 +142,18 @@ place would be a screen for undoing something the console cannot do.
 
 ---
 
-## Two smaller notes for the trunk
+## Three smaller notes for the trunk
 
+- **An audit row for a search that found nobody has `client_id` null.**
+  `POST /api/clients/lookup` writes one `list` row with the request id as its
+  entity and a null `client_id` when it matches no one, so the trail records
+  the search itself. The discriminator for those rows is therefore
+  `action = 'list' and client_id is null`, which holds only because
+  `logReads`'s other caller always sets `clientId` to the client's own id. A
+  later "reads per client" aggregation that assumes every `list` row names a
+  client would bucket them as null. Worth a sentence in `docs/SPEC/audit.md`
+  (audit-ui's file, not this stream's) so the assumption is written down
+  rather than inferred.
 - **The vendor register names the Platform, not the consumer map.**
   `docs/COMPLIANCE/approved-vendors.md` lists "Google Maps Platform …
   coordinates only, never names". The "Open in Google Maps" link this pull

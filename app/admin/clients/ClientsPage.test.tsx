@@ -119,9 +119,7 @@ describe('ClientsPage search', () => {
       target: { value: EMIRATES_ID.slice(0, 14) },
     });
     expect(
-      await screen.findByText(
-        'Keep typing: an Emirates ID is fifteen digits, and none of it is searched until it is whole.',
-      ),
+      await screen.findByText(/Numbers starting 784 are searched as an Emirates ID/),
     ).toBeTruthy();
     // Well past the 150 ms debounce, and still nothing has gone out.
     await new Promise((resolve) => setTimeout(resolve, 400));

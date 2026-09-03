@@ -40,6 +40,12 @@ type State =
   | { kind: 'ready'; response: ClientListResponse };
 
 const LOAD_ERROR = 'The client list could not be loaded. Try again.';
+// Says what the box has decided and why, without asserting what the person is
+// typing: a record-number search that happens to open 784 gets the same line,
+// and being told "an Emirates ID is fifteen digits" would be a claim about
+// their own intent rather than a description of the rule.
+const PARTIAL_EMIRATES_ID_HINT =
+  'Numbers starting 784 are searched as an Emirates ID, and only once all fifteen digits are in. For a record number, type it as MW-000123.';
 const IDENTITY_UNAVAILABLE =
   'Searching by Emirates ID is not set up on this installation yet. Search by name or record number.';
 
@@ -232,11 +238,7 @@ export function ClientsPage() {
           placeholder="Name, record number or Emirates ID"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          hint={
-            partialEmiratesId
-              ? 'Keep typing: an Emirates ID is fifteen digits, and none of it is searched until it is whole.'
-              : undefined
-          }
+          hint={partialEmiratesId ? PARTIAL_EMIRATES_ID_HINT : undefined}
         />
         <Select
           id="client-status"

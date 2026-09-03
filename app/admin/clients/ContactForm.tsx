@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { validateEmiratesId } from '@domain/client';
+import { toLatinDigits } from '../../api/clients/emirates-id-shape';
 import { RELATIONSHIPS, type Contact, IdResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
@@ -97,7 +98,10 @@ export function ContactForm({
     setFormError(null);
     const errors: FieldErrors = {};
     if (!relationship) errors.relationship = 'Choose how this person relates to the client.';
-    const trimmedEmiratesId = emiratesId.trim();
+    // Folded to Latin digits before it is judged or sent, so an Arabic keyboard
+    // captures an identity number as readily as it searches for one
+    // (app/api/clients/emirates-id-shape.ts). The server normalises again.
+    const trimmedEmiratesId = toLatinDigits(emiratesId.trim());
     if (trimmedEmiratesId && !validateEmiratesId(trimmedEmiratesId).ok) {
       errors.emiratesId = 'Enter fifteen digits starting 784, or leave this blank.';
     }
