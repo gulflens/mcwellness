@@ -41,6 +41,8 @@ export type Harness = {
     path: string,
     seededUser: number,
     body?: unknown,
+    /** Extra request headers: an idempotency key, a reason for the trail. */
+    extra?: Record<string, string>,
   ) => Promise<Response>;
   authIdOf: (index: number) => string;
   serviceTypeId: (code: string) => string;
@@ -96,9 +98,10 @@ export async function startHarness(now: () => Date): Promise<Harness> {
       if (!client) throw new Error(`No seeded client ${index}.`);
       return client.id;
     },
-    async call(method, path, seededUser, body) {
+    async call(method, path, seededUser, body, extra) {
       const headers: Record<string, string> = {
         authorization: `Bearer ${await mint(authIdOf(seededUser))}`,
+        ...extra,
       };
       const init: RequestInit = { method, headers };
       if (body !== undefined) {

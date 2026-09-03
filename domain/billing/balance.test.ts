@@ -149,6 +149,68 @@ describe('balanceFor', () => {
   });
 });
 
+describe('what has been earned, and what is still owed in sessions', () => {
+  // docs/SPEC/billing.md section 4.1: cash is not revenue. Ten programmes
+  // sold in a launch month is a great month for cash and an average one for
+  // revenue, and the difference is the obligation the practice is carrying.
+  it('recognises a credit when it is used up, and defers it until then', () => {
+    const balance = balanceFor(
+      [...credits(2, { status: 'consumed', consumptionKind: 'session' }), ...credits(13)],
+      TODAY,
+    );
+    expect(balance.recognisedNetFils).toBe(2 * 59_486);
+    expect(balance.deferredNetFils).toBe(13 * 59_486);
+  });
+
+  it('recognises a forfeited credit too: the practice kept the money', () => {
+    const balance = balanceFor(
+      [
+        credit({ status: 'consumed', consumptionKind: 'late_cancellation' }),
+        credit({ status: 'consumed', consumptionKind: 'no_show' }),
+        credit(),
+      ],
+      TODAY,
+    );
+    expect(balance.recognisedNetFils).toBe(2 * 59_486);
+    expect(balance.deferredNetFils).toBe(59_486);
+  });
+
+  it('keeps a credit that ran out of time on the deferred side until it is written off', () => {
+    // Out of time is not the same as delivered. Until the practice decides to
+    // write it off, it is still a promise it made and took money for.
+    const balance = balanceFor([credit({ expiresOn: '2026-01-01' })], TODAY);
+    expect(balance.remaining).toBe(0);
+    expect(balance.recognisedNetFils).toBe(0);
+    expect(balance.deferredNetFils).toBe(59_486);
+  });
+
+  it('counts neither a refunded credit nor a waived one', () => {
+    const balance = balanceFor(
+      [
+        credit({ status: 'refunded' }),
+        credit({ status: 'waived', consumptionKind: 'late_cancellation' }),
+        credit(),
+      ],
+      TODAY,
+    );
+    expect(balance.recognisedNetFils).toBe(0);
+    expect(balance.deferredNetFils).toBe(59_486);
+  });
+
+  it('adds up to what was allocated, across every service', () => {
+    const all = [
+      ...credits(2, { status: 'consumed', consumptionKind: 'session' }),
+      ...credits(13),
+      credit({ serviceTypeId: MAP, allocatedNetFils: fils(70_108) }),
+    ];
+    const balance = balanceFor(all, TODAY);
+    const allocated = all.reduce((total, c) => total + c.allocatedNetFils, 0);
+    // Nothing falls between the two halves: every credit is either earned or
+    // still owed.
+    expect(balance.recognisedNetFils + balance.deferredNetFils).toBe(allocated);
+  });
+});
+
 describe('outstandingBalanceFils', () => {
   it('is what was charged less what was paid', () => {
     expect(

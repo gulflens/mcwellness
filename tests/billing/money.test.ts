@@ -90,6 +90,31 @@ describe('parseAedToFils', () => {
     }
   });
 
+  it('refuses everything that merely looks like a number', () => {
+    // A parser that reads money is a place where "nearly a number" must be
+    // refused outright rather than coerced into a figure somebody is then
+    // charged. Each of these has a plausible way of arriving: a copy from a
+    // spreadsheet, an Arabic keyboard, a paste that brought its spaces with
+    // it, a European price list.
+    expect(parseAedToFils('١٢٣')).toBeNull(); // Arabic-Indic digits
+    expect(parseAedToFils('12\u00a0150.00')).toBeNull(); // a non-breaking space
+    expect(parseAedToFils('12\u2009150.00')).toBeNull(); // a thin space
+    expect(parseAedToFils('12 150.00')).toBeNull(); // a plain space as a separator
+    expect(parseAedToFils('1.000,50')).toBeNull(); // German grouping
+    expect(parseAedToFils('1e3')).toBeNull();
+    expect(parseAedToFils('1E3')).toBeNull();
+    expect(parseAedToFils('12.')).toBeNull(); // a trailing dot
+    expect(parseAedToFils('.5')).toBeNull(); // a leading dot
+    expect(parseAedToFils('+5')).toBeNull();
+    expect(parseAedToFils('5 ')).toBe(500); // trailing whitespace is trimmed, not rejected
+    expect(parseAedToFils('Infinity')).toBeNull();
+    expect(parseAedToFils('NaN')).toBeNull();
+    // Beyond what a double can count exactly: refused rather than rounded to
+    // a figure nobody typed.
+    expect(parseAedToFils('99999999999999999999')).toBeNull();
+    expect(isAedAmountTooLarge('99999999999999999999')).toBe(false);
+  });
+
   it('refuses grouping that is not grouping', () => {
     // A European decimal comma must never be read as a separator and paid a
     // hundredfold: "12,34" is not AED 1,234.

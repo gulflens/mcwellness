@@ -156,6 +156,37 @@ describe('the bundle catalogue', () => {
     expect(res.status).toBe(201);
   });
 
+  it('leaves nothing behind when the price is refused', async () => {
+    // The whole request runs in one transaction, but the request-context
+    // middleware commits anything below a 500 — so a 400 returned after the
+    // package and its components were written committed them anyway. The
+    // founder was told her date was wrong and left with a nameless bundle
+    // holding the code she wanted, so trying again answered "that code is
+    // taken". The price is settled before the first insert now.
+    const input = silverInput(h, SEED_TODAY);
+    const refused = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...input,
+      code: 'half-made',
+      name: 'Half made',
+      price: { ...input.price, validFrom: '2020-01-01' },
+    });
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { code: string }).code).toBe('date_not_future');
+
+    const { rows } = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from package where code = 'half-made'",
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
+
+    // And the code is free, which is the thing the founder actually needs.
+    const second = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...input,
+      code: 'half-made',
+      name: 'Half made',
+    });
+    expect(second.status).toBe(201);
+  });
+
   it('will not sell a bundle whose service has no price of its own', async () => {
     const res = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
       ...silverInput(h, SEED_TODAY),
