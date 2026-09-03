@@ -78,3 +78,46 @@ export const MonthlyMoneyResponse = z.object({
   deferredNetFils: z.number().int().nonnegative(),
 });
 export type MonthlyMoneyResponse = z.infer<typeof MonthlyMoneyResponse>;
+
+/** One payment in the receipt book. */
+export const ReceiptRow = z.object({
+  id: z.uuid(),
+  /** "RCP-000004"; null only on a payment recorded before the receipt book existed. */
+  receiptReference: z.string().nullable(),
+  method: z.enum(['cash', 'transfer', 'link']),
+  amountFils: z.number().int().positive(),
+  /** A bank reference or a payment link's own id. Never a card number. */
+  reference: z.string().nullable(),
+  receivedOn: z.string(),
+  clientId: z.uuid(),
+  clientMrn: z.string(),
+  clientName: z.string(),
+  /** The invoice it settles, when it named one. */
+  invoiceReference: z.string().nullable(),
+  /** The rendered PDF, when one has been filed. */
+  documentId: z.uuid().nullable(),
+});
+export type ReceiptRow = z.infer<typeof ReceiptRow>;
+
+export const ReceiptsResponse = z.object({
+  receipts: z.array(ReceiptRow),
+  truncated: z.boolean().optional(),
+});
+export type ReceiptsResponse = z.infer<typeof ReceiptsResponse>;
+
+/**
+ * A contact a document may be sent to. Deliberately without the number or the
+ * address: a screen needs to know that there is one, not what it is.
+ */
+export const SendOption = z.object({
+  id: z.uuid(),
+  name: z.string().nullable(),
+  relationship: z.string(),
+  hasPhone: z.boolean(),
+  hasEmail: z.boolean(),
+  whatsappOptIn: z.boolean(),
+});
+export type SendOption = z.infer<typeof SendOption>;
+
+export const SendOptionsResponse = z.object({ contacts: z.array(SendOption) });
+export type SendOptionsResponse = z.infer<typeof SendOptionsResponse>;

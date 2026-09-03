@@ -77,8 +77,17 @@ export function mountInvoices(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       'list',
     );
 
+    // Whether the practice charges VAT at all, so the screen can say so in a
+    // sentence rather than leaving a reader to notice a column of zeroes. Read
+    // live, because it describes the practice now — the invoices below each
+    // carry their own snapshot of what was true when they were issued.
+    const registered = await db.query<{ registered: boolean }>(
+      'select app.tenant_charges_vat(app.current_tenant_id()) as registered',
+    );
+
     return c.json(
       InvoicesResponse.parse({
+        practiceVatRegistered: registered.rows[0]?.registered === true,
         invoices: page.map((row) => ({
           id: row.id,
           reference: row.reference,
