@@ -75,6 +75,16 @@ describe('searchRequest', () => {
     expect(typeof whole === 'object' ? whole.url : null).toBe('/api/clients/lookup');
   });
 
+  it('routes a whole number buried in a longer term to the lookup, not to the query', () => {
+    for (const term of ['MW-1 784-1900-0000013-4', '0784190000000134']) {
+      const request = searchRequest('', term);
+      expect(typeof request === 'object' ? request.url : request).toBe('/api/clients/lookup');
+      expect(JSON.parse(String(typeof request === 'object' ? request.init?.body : ''))).toEqual({
+        emiratesId: EMIRATES_ID.replace(/-/g, ''),
+      });
+    }
+  });
+
   it('still searches a name, a record number and its bare digits', () => {
     for (const term of ['Juniper', 'MW-000031', '000031', '']) {
       const request = searchRequest('', term);

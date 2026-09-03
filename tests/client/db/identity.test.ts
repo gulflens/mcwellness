@@ -357,6 +357,77 @@ describe('capturing an Emirates ID on a contact add or edit', () => {
   });
 });
 
+describe('who may search by identity number', () => {
+  it('refuses finance the lookup, and still lets it list by name', async () => {
+    // Finance reads demographics and contacts (client-record.md section 2), but the
+    // stated need for holding an identity number at all is verifying the adult who
+    // consents for a minor or who is refunded — and finance does neither. A role that
+    // may not ask is told nothing about whether the number is on file.
+    const res = (await (
+      await lookup(api, FINANCE_AUTH, emiratesId(1))
+    ).json()) as ClientListResponse;
+    expect(res.clients).toHaveLength(0);
+    expect(res.note).toBe('schedule');
+
+    // The table itself is unchanged for finance.
+    const byName = await request(api, FINANCE_AUTH, '/api/clients?q=Juniper');
+    expect(byName.status).toBe(200);
+    expect(((await byName.json()) as ClientListResponse).clients.length).toBeGreaterThan(0);
+  });
+
+  it('records the refusal, so a search finance may not make still leaves a trace', async () => {
+    const requestId = '00000000-0000-4000-8000-0000000000f3';
+    await lookup(api, FINANCE_AUTH, emiratesId(1), requestId);
+    const { rows } = await owner.query<{ n: number }>(
+      "select count(*)::int as n from audit_log where action = 'list' and entity_type = 'client' " +
+        'and request_id = $1 and actor_id = $2 and client_id is null',
+      [requestId, FINANCE_ID],
+    );
+    expect(rows[0]?.n).toBe(1);
+  });
+});
+
+describe('a date of birth is in the past', () => {
+  it('refuses one in the future on create and on edit, naming the field', async () => {
+    const future = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const created = await request(api, AUTH.ownerA, '/api/clients', {
+      method: 'POST',
+      body: JSON.stringify({
+        givenName: 'Iris',
+        familyName: 'Dune',
+        dateOfBirth: future,
+        contact: { relationship: 'self', phone: '+971500000059' },
+      }),
+    });
+    expect(created.status).toBe(400);
+    // Named by field, so the screen can say which one (design review of pull request 35).
+    expect(((await created.json()) as { fields?: string[] }).fields).toContain('dateOfBirth');
+
+    const real = (await (
+      await request(api, AUTH.ownerA, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Iris',
+          familyName: 'Dune',
+          contact: { relationship: 'self', phone: '+971500000060' },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+    const patched = await request(api, AUTH.ownerA, `/api/clients/${real.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ dateOfBirth: future }),
+    });
+    expect(patched.status).toBe(400);
+    // Today is fine: a client born today is not refused for the server's own clock.
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(new Date());
+    const ok = await request(api, AUTH.ownerA, `/api/clients/${real.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ dateOfBirth: today }),
+    });
+    expect(ok.status).toBe(200);
+  });
+});
+
 describe('GET /api/clients/goal-categories', () => {
   it('answers the six seeded categories for staff roles, and refuses finance', async () => {
     const res = (await (
