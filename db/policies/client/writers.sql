@@ -102,15 +102,12 @@ create policy client_record_update_writers on public.consent as restrictive for 
   and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 );
 
--- document: filing one against a client, and the ordinary edits `document`
--- admits. Until 2026-09-03 this table had no write floor at all in this file:
--- row security fenced which practice's rows an actor could reach and nothing
--- said who among them might file one, so any role the practice had admitted —
--- finance included, which section 2 gives demographics and contacts and
--- nothing else — could put a document on a client's record. Migration 903 is
--- the column floor (who may write the wording columns, and that an immutable
--- row never changes); this is the row floor beside it, and the two answer
--- different questions.
+-- document: who may file one against a client. Until 2026-09-03 this table
+-- had no write floor at all in this file: row security fenced which practice's
+-- rows an actor could reach and nothing said who among them might file one, so
+-- any role the practice had admitted — finance included, which section 2 gives
+-- demographics and contacts and nothing else — could put a document on a
+-- client's record.
 --
 -- The three roles section 2 gives "upload documents" to, and no others. A
 -- practitioner is deliberately absent: section 2 gives them the client brief
@@ -123,6 +120,21 @@ create policy client_record_update_writers on public.consent as restrictive for 
 -- erasure gate does not apply to them, since they name no client to be erased.
 -- Delete is granted to nobody (090_grants_and_rls.sql): a document leaves
 -- through app.erase_client as the table owner, never through this role.
+--
+-- **Insert only, deliberately.** There is no matching update policy here, and
+-- that is a decision rather than an omission. Migration 903 is `document`'s
+-- update floor by design — it refuses the wording columns to anyone but the
+-- owner or an admin, refuses any change to an immutable row, and refuses
+-- is_immutable ever going back to false — and it does so by raising, with a
+-- sentence saying which rule was met. A restrictive update policy here would
+-- filter those rows out instead, and row security filters an UPDATE rather
+-- than raising: every one of those refusals would become a silent no-op, the
+-- caller would be told nothing, and tests/db/document-guard.test.ts would
+-- start passing for the wrong reason. What that leaves open is narrow — a
+-- practitioner editing `kind` or `retention_until` on a mutable client
+-- document, which no route offers — and it is written down in
+-- docs/CHANGE-REQUESTS/client-record-03.md rather than closed here by
+-- quietly disabling the trunk's own messages.
 drop policy if exists client_record_writers on public.document;
 create policy client_record_writers on public.document as restrictive for insert to app_role with check (
   case when client_id is null then
@@ -134,23 +146,6 @@ create policy client_record_writers on public.document as restrictive for insert
   end
 );
 drop policy if exists client_record_update_writers on public.document;
-create policy client_record_update_writers on public.document as restrictive for update to app_role using (
-  case when client_id is null then
-    app.actor_has_role('owner') or app.actor_has_role('admin')
-  else
-    app.client_status_for(client_id) <> 'erased'
-    and (app.actor_has_role('owner') or app.actor_has_role('admin')
-         or app.actor_has_role('lead_practitioner'))
-  end
-) with check (
-  case when client_id is null then
-    app.actor_has_role('owner') or app.actor_has_role('admin')
-  else
-    app.client_status_for(client_id) <> 'erased'
-    and (app.actor_has_role('owner') or app.actor_has_role('admin')
-         or app.actor_has_role('lead_practitioner'))
-  end
-);
 
 -- goal: the owner and the lead practitioner alone set and close goals.
 drop policy if exists client_record_writers on public.goal;
