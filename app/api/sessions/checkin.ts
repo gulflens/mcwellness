@@ -372,6 +372,22 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         await db.query('rollback to savepoint check_in');
         return c.json({ error: 'conflict', requestId, detail: 'event_id_collision' }, 409);
       }
+      // And the appointment behind the visit now says so
+      // (db/migrations/305_appointment_checked_in.sql). In the same
+      // transaction as the session and its opening event, so a visit is never
+      // running against an appointment that still reads 'confirmed': that gap
+      // is what let a running visit be moved or late-cancelled, since every
+      // guard written in terms of a checked-in visit had a status nothing
+      // ever wrote.
+      //
+      // The answer is deliberately not read. False means the appointment was
+      // only proposed, or there was none at all (a walk-up visit), or a
+      // replay found the row already checked in — none of which is a reason
+      // to undo a check-in that has passed every gate at the door. The door
+      // itself refuses anything that is not this caller's own open session
+      // and a 'confirmed' appointment of their own; there is nothing left
+      // here for the route to check.
+      await db.query('select app.mark_appointment_checked_in($1)', [sessionId]);
       await db.query('release savepoint check_in');
     } catch (error) {
       await db.query('rollback to savepoint check_in');
