@@ -51,6 +51,10 @@ export const SYSTEM_WRITTEN_KINDS = [
   'invoice',
   'setup_photo',
   'certificate',
+  // The confirmation an erasure sends (domain/client/erasureLetter.ts). The
+  // app writes it, files it against the erasure request rather than against
+  // the client who has just been erased, and nobody uploads one by hand.
+  'erasure_letter',
 ] as const;
 
 /** The kind the consent route files a signature PNG under. */
