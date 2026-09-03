@@ -6,6 +6,7 @@ import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import './CheckInPage.css';
 import { SessionRunner, type RunnerVisit } from './SessionRunner';
+import { useForgetDeviceOnSignOut } from './outbox/signed-out';
 import { createOutboxStore, type OutboxStore } from './outbox/store';
 import { ServiceTypeOptionsResponse, SessionErrorBody, type ServiceTypeOption } from './schema';
 
@@ -236,6 +237,10 @@ async function fetchOpenVisit(apiFetch: ApiFetch): Promise<RunnerVisit | null> {
 export function CheckInPage() {
   const { apiFetch } = useAuth();
   const navigate = useNavigate();
+  // This face reads the device's own open-visit note, which carries a given
+  // name and a family initial, so it arms the sign-out wipe too
+  // (./outbox/signed-out.ts).
+  useForgetDeviceOnSignOut();
   // The day sheet knows which client this is and hands the record number over
   // in router state, so nobody types MW-000123 standing at a door
   // (app/therapist/today/TodayPage.tsx). Never a query string: a record

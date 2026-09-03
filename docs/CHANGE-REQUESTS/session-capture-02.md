@@ -514,19 +514,40 @@ paths, and the two decisions it took while waiting.*
 **What.** Exactly the diff in section 1f above, and it is now the only half
 of the sign-out rule this stream does not hold itself.
 
-**Why, restated.** The device's own half is done and tested: the outbox
-observes the auth session and empties both IndexedDB stores the moment it
-becomes signed out (`app/therapist/session/SessionRunner.tsx`,
-`outbox/store.ts`), a store claimed by a different practitioner is wiped
-before it is used, and nothing survives seven days. What that cannot reach is
-the service worker's `mcwellness-reads-v1` cache, which holds the day sheet —
-a given name and a family initial per household — and belongs to
-`app/shell/**`.
+**Why, restated.** The device's own half is built and tested:
+`app/therapist/session/outbox/signed-out.ts` observes the auth session and
+empties both IndexedDB object stores the moment it becomes signed out, from
+whichever of this module's faces is on screen; a store claimed by a different
+practitioner is wiped before it is used; and nothing survives seven days.
 
-So the rule reads: **a signed-out device keeps nothing of anybody.** Two
-caches, two owners, one sentence. Until 1f lands, a practitioner who signs
-out on a shared phone leaves the day sheet behind in the HTTP cache, and
-nothing in this stream's paths can take it out.
+Two things that cannot reach:
+
+**5a. The service worker's cached reads.** `mcwellness-reads-v1` holds the day
+sheet — a given name and a family initial per household — and `app/shell/**`
+is the only place that can clear it. That is the diff in 1f, unchanged.
+
+**5b. A sign-out from a screen that is not this module's.** The observation is
+a React effect, so it fires when one of this module's own faces is mounted. A
+practitioner who signs out from Today is signing out of a screen this stream
+does not own, and nothing here runs. The fix is one line beside 1f:
+
+```diff
+   const signOut = useCallback(async () => {
+     await provider.signOut();
++    await forgetDevice();
+     navigator.serviceWorker?.controller?.postMessage({ type: 'forget-reads' });
+     setSession({ status: 'signed-out' });
+   }, [provider]);
+```
+
+importing `forgetDevice` from `app/therapist/session/outbox/store.ts` — this
+module's own function, so the rule stays written where it belongs and the
+shell only says when. It needs no arguments, opens nothing that is not
+already there, and is safe to call on a device that has never run a visit.
+
+So the rule reads: **a signed-out device keeps nothing of anybody.** Until 1f
+and 5b land, a practitioner who signs out on a shared phone from the day sheet
+leaves the cached day sheet, and a queue if they had one, behind.
 
 ---
 

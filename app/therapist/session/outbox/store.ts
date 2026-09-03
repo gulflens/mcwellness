@@ -283,6 +283,24 @@ export async function createOutboxStore(): Promise<OutboxStore> {
 }
 
 /**
+ * Everything this device holds for this practitioner, gone: both object
+ * stores, without an Outbox and without a visit in progress.
+ *
+ * Separate from `OutboxStore.forgetEverything` on purpose. That one empties a
+ * store somebody is already holding; this one is for the moment nobody is —
+ * a practitioner signing out from a screen that never opened a store at all.
+ * It opens the database only if there is one to open, and a browser that
+ * refuses is a browser with nothing stored to clear.
+ */
+export async function forgetDevice(
+  /** Injected in tests, where IndexedDB does not exist. */
+  createStore: () => Promise<OutboxStore> = createOutboxStore,
+): Promise<void> {
+  const store = await createStore();
+  await store.forgetEverything();
+}
+
+/**
  * Asks the browser to keep this origin's storage rather than evicting it
  * under pressure (section 7). Best effort by definition: a browser may
  * decline, and a decline is not an error worth showing anybody.

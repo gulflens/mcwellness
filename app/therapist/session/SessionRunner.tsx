@@ -9,6 +9,7 @@ import { RunStep } from './RunStep';
 import { SignalStep, meanQuality } from './SignalStep';
 import { SummaryStep } from './SummaryStep';
 import { Outbox, type PostEvents } from './outbox/outbox';
+import { useForgetDeviceOnSignOut } from './outbox/signed-out';
 import {
   PRUNE_AFTER_DAYS,
   createOutboxStore,
@@ -164,6 +165,9 @@ export function SessionRunner({
 }) {
   const { apiFetch, session } = useAuth();
   const settings: ServiceSettings = service ?? EMPTY_SETTINGS;
+  // Signing out empties the device, from whichever of this module's faces is
+  // on screen when it happens (./outbox/signed-out.ts).
+  useForgetDeviceOnSignOut(createStore);
 
   const [outbox, setOutbox] = useState<Outbox | null>(null);
   const [pending, setPending] = useState(0);
@@ -261,15 +265,6 @@ export function SessionRunner({
     // auth refresh would re-open the store mid-visit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiFetch, createStore]);
-
-  // Signing out empties the device. The queue holds ratings, chips and the
-  // note the practitioner typed, and the open-visit note holds a given name:
-  // a signed-out phone keeps nothing of anybody
-  // (.claude/rules/compliance.md, section 7).
-  useEffect(() => {
-    if (session.status !== 'signed-out' || !outbox) return;
-    void outbox.forgetEverything();
-  }, [outbox, session.status]);
 
   // The note the next reload reads. Rewritten as the visit moves, so its own
   // record of how far the seq has got stays true.
