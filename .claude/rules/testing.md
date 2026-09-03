@@ -10,5 +10,5 @@ paths: ["domain/**", "tests/**"]
 - The reserved fake ranges, enforced by `.claude/hooks/no-real-identifiers.sh` and by the
   generator's own tests: Emirates IDs `784-1900-*`; phones `+971 50 000 xxxx` (the seed uses
   `1xxx`, hand-written test fixtures `00xx`); emails at `example.com`; names only from
-  `db/seed/names.ts`; ids of the form `0000000K-0000-4000-8000-*`. `generateSeed()` in
+  `db/seed/names.ts`; ids of the form `0000000K-0000-4000-8000-*` or, for a two-character kind such as the billing catalogue's `d0` to `d3`, `000000KK-0000-4000-8000-*`. `generateSeed()` in
   `db/seed/generate.ts` is the fixture source; `applySeed()` writes it.
