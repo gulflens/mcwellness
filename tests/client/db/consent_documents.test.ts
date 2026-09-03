@@ -624,6 +624,27 @@ describe('the Documents tab', () => {
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { code: string }).toMatchObject({ code: 'identity_document' });
+
+    // A kind the platform writes for itself, and one it has never heard of:
+    // three refusals, three reasons, one rule (domain/client's
+    // documentUploadRefusal).
+    const written = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/documents`, {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'consent_text',
+        file: { mimeType: 'image/png', bytesBase64: PNG_BASE64 },
+      }),
+    });
+    expect((await written.json()) as { code: string }).toMatchObject({ code: 'system_written' });
+
+    const unknown = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/documents`, {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'something_else',
+        file: { mimeType: 'image/png', bytesBase64: PNG_BASE64 },
+      }),
+    });
+    expect((await unknown.json()) as { code: string }).toMatchObject({ code: 'unknown_kind' });
   });
 
   it('writes a read before it signs a link, and hands back a link that works', async () => {

@@ -165,15 +165,7 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
     const clientId = params.data.id;
     const bodyJson = await c.req.json().catch(() => null);
     const body = UploadDocumentBody.safeParse(bodyJson);
-    if (!body.success) {
-      // A kind outside the offered list never reaches documentUploadRefusal,
-      // because the schema's own enum stops it first; say which anyway, so an
-      // identity document is refused with its reason rather than as a shape
-      // error. The rule lives in domain/client either way.
-      const kind = (bodyJson as { kind?: unknown } | null)?.kind;
-      const refusal = typeof kind === 'string' ? documentUploadRefusal(kind) : null;
-      return c.json({ error: 'bad_request', code: refusal ?? undefined, requestId }, 400);
-    }
+    if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
     const statusRow = await db.query<{ status: ClientStatus | null }>(
       'select app.client_status_for($1) as status',

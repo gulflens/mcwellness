@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CLIENT_UPLOAD_KINDS, KNOWN_MIME_TYPES } from '../../../domain/client';
+import { KNOWN_MIME_TYPES } from '../../../domain/client';
 import { isoDateIn } from '../../../domain/shared';
 
 /**
@@ -364,7 +364,15 @@ export const DocumentLinkResponse = z.object({
 export type DocumentLinkResponse = z.infer<typeof DocumentLinkResponse>;
 
 export const UploadDocumentBody = z.object({
-  kind: z.enum(CLIENT_UPLOAD_KINDS),
+  /**
+   * Deliberately a string rather than an enum of the kinds the tab offers.
+   * `documentUploadRefusal` in domain/client is the rule — it separates an
+   * identity document, which is refused with a reason worth saying, from a
+   * kind the platform writes for itself, from one it has never heard of — and
+   * an enum here would refuse all three as the same shape error before that
+   * rule was ever consulted. One gate, and it always answers precisely.
+   */
+  kind: z.string().min(1).max(64),
   file: DocumentBytes,
 });
 export type UploadDocumentBody = z.infer<typeof UploadDocumentBody>;
