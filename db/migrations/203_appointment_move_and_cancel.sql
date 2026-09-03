@@ -77,11 +77,24 @@ comment on column public.appointment.rescheduled_from_id is
 alter table appointment add constraint appointment_cancellation_is_whole
   check ((cancelled_at is null) = (cancellation_reason is null));
 
--- And it matches the status. Exactly the two cancelled statuses carry a
--- cancellation; a no-show did not cancel (the practitioner was genuinely sent
--- to that door) and a rescheduled visit did not either — it moved.
-alter table appointment add constraint appointment_cancellation_matches_status
-  check ((status in ('cancelled', 'cancelled_late')) = (cancelled_at is not null));
+-- And it belongs to a cancelled visit. One direction only, deliberately: a
+-- row that carries a cancellation must be in one of the two cancelled
+-- statuses — a no-show did not cancel (the practitioner was genuinely sent to
+-- that door) and a rescheduled visit did not either, it moved — but a
+-- cancelled row is not required to carry one.
+--
+-- The biconditional was written first and taken out again, because it is a
+-- rule about this stream's own routes masquerading as a rule about the table.
+-- Every write here stamps both, and so should anything that follows. But an
+-- appointment can legitimately be *created* cancelled or late-cancelled by
+-- something that is recording history rather than calling a visit off —
+-- billing's own consumption tests do exactly that, and the trigger they
+-- exercise (404_billing_consumption.sql) fires on such an insert on purpose —
+-- and rows written before this migration have no stamp to offer. A
+-- constraint that makes another stream's legitimate write impossible is a
+-- constraint that is wrong, not a stream that is.
+alter table appointment add constraint appointment_cancellation_belongs_to_a_cancellation
+  check (cancelled_at is null or status in ('cancelled', 'cancelled_late'));
 
 -- The link is to another appointment of this same practice, and never to
 -- itself. The composite key 200 added (appointment_tenant_id_id_key) is what
@@ -247,7 +260,7 @@ grant execute on function app.cancel_future_appointments(uuid, text) to app_role
 --   drop index if exists appointment_one_move_per_source;
 --   alter table appointment drop constraint if exists appointment_rescheduled_from_fk;
 --   alter table appointment drop constraint if exists appointment_not_moved_from_itself;
---   alter table appointment drop constraint if exists appointment_cancellation_matches_status;
+--   alter table appointment drop constraint if exists appointment_cancellation_belongs_to_a_cancellation;
 --   alter table appointment drop constraint if exists appointment_cancellation_is_whole;
 --   alter table appointment drop column if exists rescheduled_from_id;
 --   alter table appointment drop column if exists cancelled_at;
