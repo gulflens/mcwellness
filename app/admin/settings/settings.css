@@ -1,0 +1,153 @@
+/*
+  Settings' own rules, layered on the shell's shared vocabulary
+  (app/shell/shell.css, app/shell/tokens.css). Every value is a token; logical
+  properties only, so the layout mirrors for Arabic.
+
+  The two drawer rules below are the same pair app/admin/billing/billing.css
+  and app/admin/clients/clients.css each carry: a module states the drawer
+  form's own rhythm beside the screen that uses it, and the shell owns the
+  drawer itself. Identical values, deliberately, so nothing shifts as a person
+  moves between the console's drawers.
+*/
+
+.drawer__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.drawer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-3);
+  padding-block-start: var(--s-2);
+}
+
+/* What the practice currently says it is: read down, not across. */
+.practice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+  max-inline-size: var(--measure);
+}
+
+.practice__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.practice__heading {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+  padding-block-end: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.practice__facts {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) 2fr;
+  gap: var(--s-3) var(--s-4);
+}
+
+.practice__facts dt {
+  color: var(--ink-2);
+}
+
+.practice__facts dd {
+  margin: 0;
+}
+
+@media (width < 40rem) {
+  .practice__facts {
+    grid-template-columns: 1fr;
+    gap: var(--s-1) 0;
+  }
+
+  .practice__facts dd {
+    padding-block-end: var(--s-3);
+  }
+}
+
+/*
+  The VAT switch. Its own name rather than the therapist app's `.switch`
+  (app/therapist/session/CheckInPage.css): both are stated beside the screen
+  that uses them until the shell grows one control for both, and two rules of
+  the same name in one stylesheet is a collision waiting for whichever file
+  loads second.
+*/
+.vat-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-block-size: var(--tap);
+  cursor: pointer;
+}
+
+.vat-switch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.vat-switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  inline-size: var(--s-12);
+  block-size: var(--s-6);
+}
+
+.vat-switch__input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Off is a real, visible control — a filled surface with an ink-2 edge —
+   never a track that reads as blank chrome. */
+.vat-switch__track {
+  position: absolute;
+  inset: 0;
+  border-radius: calc(var(--s-6) / 2);
+  border: var(--hairline) solid var(--ink-2);
+  background: var(--surface);
+}
+
+.vat-switch--on .vat-switch__track {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.vat-switch__thumb {
+  position: absolute;
+  inset-inline-start: var(--s-1);
+  inset-block-start: var(--s-1);
+  inline-size: var(--s-4);
+  block-size: var(--s-4);
+  border-radius: 50%;
+  background: var(--ink-2);
+}
+
+.vat-switch--on .vat-switch__thumb {
+  inset-inline-start: calc(var(--s-12) - var(--s-4) - var(--s-1));
+  background: var(--paper);
+}
+
+.vat-switch__input:focus-visible ~ .vat-switch__track {
+  box-shadow: var(--focus);
+}
+
+/* A latitude and a longitude sit side by side: they are one fact. */
+.coordinate-pair {
+  display: flex;
+  gap: var(--s-3);
+}
+
+.coordinate-pair .field {
+  flex: 1 1 0;
+}

@@ -66,6 +66,15 @@ export const AuditIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const SettingsIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3.25 6h13.5M3.25 10h13.5M3.25 14h13.5" />
+    <circle cx="7" cy="6" r="1.75" />
+    <circle cx="13" cy="10" r="1.75" />
+    <circle cx="8.5" cy="14" r="1.75" />
+  </Icon>
+);
+
 export const SignOutIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M8 3.25H4.5a1 1 0 0 0-1 1v11.5a1 1 0 0 0 1 1H8" />

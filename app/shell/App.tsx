@@ -4,12 +4,13 @@ import { hasRole } from '@domain/shared';
 import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
+import { PracticePage } from '../admin/settings/PracticePage';
 import { PortalLanding } from '../client/PortalLanding';
 import { CheckInPage } from '../therapist/session/CheckInPage';
 import { TodayPage } from '../therapist/today/TodayPage';
 import { TodayLanding } from '../therapist/TodayLanding';
 import { AdminLayout } from './AdminLayout';
-import { canOpenBilling, canOpenSchedule, canOpenToday } from './adminAccess';
+import { canOpenBilling, canOpenSchedule, canOpenSettings, canOpenToday } from './adminAccess';
 import { useAuth, type Actor } from './auth/AuthContext';
 import { Note } from './components/Controls';
 import { NoAccessPage } from './pages/NoAccessPage';
@@ -70,6 +71,20 @@ export function App() {
               {(actor) =>
                 canOpenSchedule(actor, new Date()) ? (
                   <SchedulePage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="settings/practice"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenSettings(actor, new Date()) ? (
+                  <PracticePage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )

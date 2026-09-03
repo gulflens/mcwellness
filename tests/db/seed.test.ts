@@ -51,6 +51,14 @@ afterAll(async () => {
   await owner.end();
 });
 
+/**
+ * How many rows the seed goes back and updates: the circular references the
+ * data model adds after the row they name (section 11) — every practitioner's
+ * home base, every client's primary location and primary contact, and the
+ * tenant's own studio.
+ */
+const SEED_UPDATES = 21;
+
 async function count(table: string): Promise<number> {
   const { rows } = await owner.query<{ n: number }>(`select count(*)::int as n from ${table}`);
   return rows[0]?.n ?? -1;
@@ -172,13 +180,19 @@ describe('the synthetic seed', () => {
     // The tenant and the owner are written as the system; everything else as the owner.
     expect(insertRows.find((r) => r.actor_id === null)?.n).toBe(2);
     expect(insertRows.find((r) => r.actor_id === SEED_OWNER_USER_ID)?.n).toBe(inserted - 2);
-    expect(rows.find((r) => r.action === 'update')?.n).toBe(20);
+    // The circular references, each set after the row it names exists
+    // (docs/SPEC/00-data-model.md section 11): a practitioner's home base, a
+    // client's primary location and primary contact, and — from shared-zone
+    // round 20 — the tenant's own studio. A number that moves is a row the
+    // seed started or stopped writing, so it is changed deliberately or not
+    // at all.
+    expect(rows.find((r) => r.action === 'update')?.n).toBe(SEED_UPDATES);
     const { rows: roled } = await owner.query<{ n: number }>(
       'select count(*)::int as n from audit_log where reason = $1 and actor_id = $2 ' +
         'and actor_role = $3 and entity_type = any($4)',
       [SEED_REASON, SEED_OWNER_USER_ID, 'owner,admin,lead_practitioner,finance', SEED_TABLES],
     );
-    expect(roled[0]?.n).toBe(inserted - 2 + 20);
+    expect(roled[0]?.n).toBe(inserted - 2 + SEED_UPDATES);
   });
 
   it('seals every Emirates ID with a lookup fingerprint and stores no digits in the clear', async () => {
@@ -336,13 +350,13 @@ describe('the rendered seed script', () => {
       const insertRows = rows.filter((r) => r.action === 'insert');
       expect(insertRows.find((r) => r.actor_id === null)?.n).toBe(2);
       expect(insertRows.find((r) => r.actor_id === SEED_OWNER_USER_ID)?.n).toBe(inserted - 2);
-      expect(rows.find((r) => r.action === 'update')?.n).toBe(20);
+      expect(rows.find((r) => r.action === 'update')?.n).toBe(SEED_UPDATES);
       const { rows: roled } = await fresh.query<{ n: number }>(
         'select count(*)::int as n from audit_log where reason = $1 and actor_role = $2 ' +
           'and entity_type = any($3)',
         [SEED_REASON, 'owner,admin,lead_practitioner,finance', SEED_TABLES],
       );
-      expect(roled[0]?.n).toBe(inserted - 2 + 20);
+      expect(roled[0]?.n).toBe(inserted - 2 + SEED_UPDATES);
       const { rows: sealed } = await fresh.query<{ id: string; emirates_id_encrypted: Buffer }>(
         'select id, emirates_id_encrypted from contact where emirates_id_hash is not null',
       );

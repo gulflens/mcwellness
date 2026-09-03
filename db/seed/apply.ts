@@ -366,6 +366,15 @@ export async function applySeed(
       );
     }
 
+    // The studio, once it exists: tenant.location_id is a circular reference
+    // (030_location.sql) so it can only be set after the row it names. Without
+    // it the practice has an address nothing points at, and every invoice
+    // app.stamp_invoice_supplier numbers carries a blank supplier address.
+    const studio = data.locations.find((l) => l.ownerType === 'tenant');
+    if (studio) {
+      await client.query('update tenant set location_id = $1 where id = $2', [studio.id, t.id]);
+    }
+
     for (const p of data.practitioners) {
       await insert('practitioner', {
         id: p.id,

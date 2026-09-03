@@ -43,6 +43,7 @@ export type Action =
   | { type: 'client.read'; clientId: string }
   | { type: 'client.write'; clientId: string }
   | { type: 'user_role.grant'; role: Role }
+  | { type: 'practice.settings.write' }
   | { type: 'session.execute'; serviceTypeId: string; on: IsoDate }
   | { type: 'report.sign'; serviceTypeId?: string }
   | { type: 'audit.read'; clientId: string }
@@ -109,6 +110,14 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       if (action.role === 'owner') {
         return hasRole(actor, 'owner');
       }
+      return hasRole(actor, 'owner', 'admin');
+    case 'practice.settings.write':
+      // The practice's own identity: its legal name, its trade licence and
+      // whether it charges VAT. The owner and an admin, and nobody else —
+      // this is what a tax invoice says the supplier is, so a coordinator who
+      // may take a payment is deliberately not the same person as one who may
+      // change the name the receipt is issued under. The floor beneath this is
+      // app.guard_tenant_identity (migration 905), not this rule.
       return hasRole(actor, 'owner', 'admin');
     case 'session.execute':
       return (

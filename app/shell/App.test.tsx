@@ -43,6 +43,21 @@ const FINANCE = {
   capabilities: [],
 };
 
+/** What GET /api/practice answers on this synthetic practice. */
+const PRACTICE = {
+  legalName: 'Synthetic Wellness Studio',
+  legalNameAr: null,
+  taxRegistrationNumber: null,
+  licenceNumber: null,
+  licensingAuthority: null,
+  licenceExpiresOn: null,
+  vatRegistered: false,
+  vatTrn: null,
+  defaultEmirate: 'DXB',
+  timezone: 'Asia/Dubai',
+  address: null,
+};
+
 const provider: AuthProvider = {
   kind: 'development',
   signIn: async () => undefined,
@@ -65,6 +80,7 @@ function mount(me: unknown, path = '/today/check-in') {
     if (url === '/api/sessions/service-types') return json({ serviceTypes: [] });
     if (url.startsWith('/api/clients')) return json({ clients: [], note: null });
     if (url === '/api/billing/prices') return json({ prices: [] });
+    if (url === '/api/practice') return json({ practice: PRACTICE });
     if (url.startsWith('/api/appointments')) return json({ appointments: [] });
     return json({ error: 'not_found', requestId: null }, 404);
   }) as unknown as typeof fetch;
@@ -153,6 +169,41 @@ describe('App — /admin/billing and /admin/schedule', () => {
       expect.stringContaining('/admin/billing'),
     );
     expect(screen.queryByRole('link', { name: 'Schedule' })).toBeNull();
+  });
+});
+
+describe('App — /admin/settings/practice', () => {
+  it('lets an admin reach the practice settings', async () => {
+    mount(ADMIN, '/admin/settings/practice');
+    expect(await screen.findByRole('heading', { name: 'Practice' })).toBeTruthy();
+  });
+
+  it('sends a lead practitioner to their own desk instead', async () => {
+    mount(LEAD_PRACTITIONER, '/admin/settings/practice');
+    // practice.settings.write is the owner's and an admin's alone: what a tax
+    // invoice says the supplier is, is not a clinical decision.
+    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Practice' })).toBeNull();
+  });
+
+  it('sends finance to their own desk instead', async () => {
+    mount(FINANCE, '/admin/settings/practice');
+    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Practice' })).toBeNull();
+  });
+
+  it('shows an admin the Settings link', async () => {
+    mount(ADMIN, '/admin/clients');
+    expect(await screen.findByRole('link', { name: 'Settings' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/settings/practice'),
+    );
+  });
+
+  it('never offers finance a Settings link its own route would refuse', async () => {
+    mount(FINANCE, '/admin/clients');
+    await screen.findByRole('link', { name: 'Billing' });
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
   });
 });
 

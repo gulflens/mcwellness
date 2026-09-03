@@ -25,6 +25,18 @@ export function canOpenSchedule(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `practice.settings.write` (app/api/practice/routes.ts) — who may
+ * open Settings. The practice's legal name, its trade licence and its VAT
+ * registration are what a tax invoice says the supplier is, so the audience is
+ * the owner and an admin: finance records money without deciding whose name it
+ * is taken in, and `app.guard_tenant_identity` (migration 905) says the same
+ * beneath both the route and this screen.
+ */
+export function canOpenSettings(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'practice.settings.write' }, {}, now);
+}
+
+/**
  * Matches the `/today/check-in` gate in App.tsx: who may cross to the
  * practitioner's side. An owner who also treats holds `lead_practitioner`
  * alongside owner, so the console offers them "Today"; an admin-only or
