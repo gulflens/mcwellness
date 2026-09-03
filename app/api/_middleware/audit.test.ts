@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import { describe, expect, it } from 'vitest';
-import { logAction, logRead, logReads } from './audit';
+import { logAction, logRead, logReads, refuseContactDetails } from './audit';
 import type { Db } from './request-context';
 
 /**
@@ -80,12 +80,12 @@ describe('logAction', () => {
     expect(calls[0]?.params).toHaveLength(5);
   });
 
-  it('writes the details as given: nothing on this path redacts them', async () => {
-    // app.audit_redact is reached only from app.audit_row, the trigger on the
-    // audited tables. A row written straight into audit_log carries exactly
-    // what the caller passed, which is why the rule is that details hold ids
-    // and channels and never a way to reach a family (audit.ts, audit.md
-    // section 8). This test states the fact the rule rests on.
+  it('hands the details to the insert as given, and lets the database redact them', async () => {
+    // This route composes no redaction of its own: app.audit_chain_link()
+    // does it on the way in, whichever path wrote the row (migration 908).
+    // What the caller passes is what the insert carries; what the trail keeps
+    // is what the redaction leaves, which tests/db/audit.test.ts proves
+    // against a real database.
     const { calls, db } = recordingDb();
 
     await logAction(
@@ -100,6 +100,67 @@ describe('logAction', () => {
       contactId: '00000000-0000-4000-8000-0000000000e4',
       channel: 'whatsapp',
     });
+  });
+});
+
+describe('what logAction refuses to write down', () => {
+  /**
+   * The rule the helper's own comment states, enforced rather than trusted
+   * (docs/SPEC/audit.md section 8): the details hold ids and the shape of the
+   * act, never a way to reach a family. A number under a key nothing drops is
+   * short and unremarkable, so the database's redaction would not catch it;
+   * this is what does.
+   */
+  const ENTITY = { type: 'document', id: '00000000-0000-4000-8000-0000000000a5', clientId: null };
+
+  it('refuses a telephone number, naming the key and never the number', async () => {
+    const { calls, db } = recordingDb();
+
+    await expect(
+      logAction(db, 'send', ENTITY, { channel: 'whatsapp', sentTo: '+971500000001' }),
+    ).rejects.toThrow('may not carry a telephone number; "sentTo" does');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses one written the way a person types it, inside a longer sentence', async () => {
+    const { db } = recordingDb();
+
+    await expect(
+      logAction(db, 'send', ENTITY, { note: 'handed to +971 50 000 0001 at the door' }),
+    ).rejects.toThrow('may not carry a telephone number');
+  });
+
+  it('refuses an email address, naming the key and never the address', async () => {
+    const { calls, db } = recordingDb();
+
+    await expect(
+      logAction(db, 'send', ENTITY, { channel: 'email', sentTo: 'nobody@example.invalid' }),
+    ).rejects.toThrow('may not carry an email address; "sentTo" does');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('throws before the insert, so no half-written row reaches the trail', async () => {
+    const { calls, db } = recordingDb();
+
+    await expect(
+      logAction(db, 'send', ENTITY, { contactId: '00000000-0000-4000-8000-0000000000e5' }),
+    ).resolves.toBeUndefined();
+    await expect(logAction(db, 'send', ENTITY, { to: '+971500000002' })).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('leaves an id, a channel and a money figure alone', async () => {
+    // Nothing here reads as a way to reach anybody, and a helper that refused
+    // an invoice reference or a figure would be a helper nobody could use.
+    expect(() =>
+      refuseContactDetails({
+        contactId: '00000000-0000-4000-8000-0000000000e6',
+        channel: 'whatsapp',
+        reference: 'INV-000012',
+        grossFils: '103250',
+        delivered: 'false',
+      }),
+    ).not.toThrow();
   });
 });
 

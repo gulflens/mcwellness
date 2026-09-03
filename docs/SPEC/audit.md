@@ -230,6 +230,10 @@ Both rules reach **inside a jsonb object value**, at any depth (migration 904, a
 
 **Arrays are not descended into.** The jsonb arrays in this schema hold settings, not personal data (`service_type.preflight_checklist` is the only one today). A stream that means to put free text or a coordinate inside a jsonb array must raise it here first, the way these two rules were raised.
 
+**Every row is redacted, not only the ones a trigger wrote** (migration 908). Until that migration `app.audit_redact` ran from `app.audit_row` alone, the row trigger on the eleven audited tables — so a row written straight into `audit_log` by the application (`logRead`, `logReads`, `logAction`, a refusal, the erasure's own act row) carried exactly what the caller passed. The redaction now runs inside `app.audit_chain_link()`, the before-insert trigger on `audit_log` itself, which is the one place every insert passes through whoever performs it. It runs **before the row hash is computed**, so the hash is taken over what is actually stored and `app.verify_audit_chain` recomputes it from the same bytes; rows written before 908 are untouched and verify exactly as they did. It is idempotent, so a trigger-written row — redacted once by `app.audit_row` and again on the way in — is unchanged. And `old_values` and `new_values` must now be a JSON object or nothing at all: an array or a bare scalar is refused with a sentence, because a value that is not a row's columns is a value nothing can redact.
+
+That is the floor, not the whole rule. A telephone number under a key nothing drops is short and unremarkable, so `logAction` refuses one before the insert: any value reading as an E.164 number or an email address throws, naming the key and never the value (`app/api/_middleware/audit.ts`). The details a sensitive action records are the contact's **id** and the channel.
+
 ---
 
 ## 9. The UI — your "overview of every change"
