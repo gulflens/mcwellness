@@ -155,3 +155,28 @@ describe('App — /admin/billing and /admin/schedule', () => {
     expect(screen.queryByRole('link', { name: 'Schedule' })).toBeNull();
   });
 });
+
+describe('App — the way across to the practitioner side', () => {
+  it('shows a lead practitioner the Today link in the console rail', async () => {
+    mount(LEAD_PRACTITIONER, '/admin/clients');
+    const link = await screen.findByRole('link', { name: 'Today' });
+    expect(link).toHaveProperty('href', expect.stringContaining('/today'));
+  });
+
+  it('never shows an admin-only account a Today link it could not open', async () => {
+    mount(ADMIN, '/admin/clients');
+    await screen.findByRole('link', { name: 'Clients' });
+    expect(screen.queryByRole('link', { name: 'Today' })).toBeNull();
+  });
+
+  it('shows a practitioner-only account no way into the console from Today', async () => {
+    mount(PRACTITIONER, '/today');
+    await screen.findByRole('button', { name: 'Check in' });
+    expect(screen.queryByRole('button', { name: 'Admin console' })).toBeNull();
+  });
+
+  it('offers a lead practitioner the way back to the console from Today', async () => {
+    mount(LEAD_PRACTITIONER, '/today');
+    expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
+  });
+});

@@ -7,6 +7,7 @@ import {
   ScheduleIcon,
   SessionsIcon,
   SignOutIcon,
+  TodayIcon,
 } from './Icons';
 
 /**
@@ -22,6 +23,9 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
   { key: 'sessions', label: 'Sessions', icon: <SessionsIcon /> },
   { key: 'billing', label: 'Billing', to: '/admin/billing', icon: <BillingIcon /> },
   { key: 'audit', label: 'Audit', icon: <AuditIcon /> },
+  // The practitioner's side. Listed last because it leaves the console;
+  // AdminLayout shows it only to someone who treats (adminAccess.ts).
+  { key: 'today', label: 'Today', to: '/today', icon: <TodayIcon /> },
 ];
 
 export function Rail({
