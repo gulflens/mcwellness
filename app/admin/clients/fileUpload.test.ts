@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { compressToFit, readFileForUpload } from './fileUpload';
 
 /**
@@ -21,6 +21,42 @@ function fileOf(name: string, type: string, bytes: Uint8Array): File {
 }
 
 const PDF = new TextEncoder().encode('%PDF-1.7\nsynthetic\n');
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+/**
+ * A photograph the browser can actually scale: jsdom has neither
+ * `createImageBitmap` nor a canvas encoder, so both are stood in for. The
+ * stand-in encoder returns a size proportional to pixels times quality, which
+ * is the only property of a JPEG encoder the ladder depends on, and records
+ * every attempt so the *order* of the ladder can be asserted rather than only
+ * its answer.
+ */
+function stubEncoder(): { width: number; quality: number }[] {
+  const attempts: { width: number; quality: number }[] = [];
+  vi.stubGlobal('createImageBitmap', async () => ({
+    width: 3000,
+    height: 4000,
+    close: () => undefined,
+  }));
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+    () => ({ drawImage: () => undefined }) as never,
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(function (
+    this: HTMLCanvasElement,
+    _type?: string,
+    quality?: unknown,
+  ) {
+    const q = Number(quality);
+    attempts.push({ width: this.width, quality: q });
+    const bytes = Math.round((this.width * this.height * q) / 4000);
+    return `data:image/jpeg;base64,${'A'.repeat(Math.ceil(bytes / 3) * 4)}`;
+  });
+  return attempts;
+}
 
 describe('compressToFit', () => {
   it('sends a small PDF as it stands', async () => {
@@ -61,6 +97,43 @@ describe('compressToFit', () => {
       expect(prepared.file.mimeType).toBe('image/png');
       expect(Buffer.from(prepared.file.bytesBase64, 'base64')).toEqual(Buffer.from(png));
     }
+  });
+});
+
+describe('making a photograph fit', () => {
+  it('makes it smaller before it makes it worse', async () => {
+    // 0.4 quality at full size is where handwriting turns to porridge. Fewer
+    // pixels of clean ink beats the same page smeared, so every size is tried
+    // at the best quality before the quality moves at all.
+    const attempts = stubEncoder();
+    const prepared = await compressToFit(
+      fileOf('form.jpg', 'image/jpeg', new Uint8Array(3000).fill(1)),
+      500,
+    );
+    expect(prepared.ok).toBe(true);
+    expect(attempts.length).toBeGreaterThan(1);
+    expect(attempts.every((attempt) => attempt.quality === 0.8)).toBe(true);
+    // Descending, and never below the long-edge floor while quality remains.
+    expect(attempts.map((attempt) => attempt.width)).toEqual([1800, 1500, 1275]);
+    if (prepared.ok) {
+      expect(prepared.file.mimeType).toBe('image/jpeg');
+      expect(prepared.warning).toBeUndefined();
+    }
+  });
+
+  it('says so when a page had to go below what can be read', async () => {
+    const attempts = stubEncoder();
+    const prepared = await compressToFit(
+      fileOf('form.jpg', 'image/jpeg', new Uint8Array(5000).fill(1)),
+      100,
+    );
+    expect(prepared.ok).toBe(true);
+    if (prepared.ok) {
+      expect(prepared.warning).toContain('check the writing');
+    }
+    // The floor was reached at every quality before anything smaller was tried.
+    expect(attempts.filter((attempt) => attempt.width === 1050)).toHaveLength(3);
+    expect(attempts.at(-1)?.width).toBeLessThan(1050);
   });
 });
 

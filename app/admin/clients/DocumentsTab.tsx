@@ -79,6 +79,10 @@ export function DocumentsTab({
   const [kind, setKind] = useState<ClientUploadKind>('referral');
   const [file, setFile] = useState<UploadFile | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [fileWarning, setFileWarning] = useState<string | null>(null);
+  // Bumped after a successful upload so the input is a fresh element and stops
+  // naming a file that has already been filed.
+  const [chooserKey, setChooserKey] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -108,6 +112,7 @@ export function DocumentsTab({
 
   async function choose(chosen: File | null): Promise<void> {
     setFileError(null);
+    setFileWarning(null);
     setFile(null);
     if (!chosen) return;
     const prepared = await compressToFit(chosen, MAX_DOCUMENT_BYTES);
@@ -116,6 +121,7 @@ export function DocumentsTab({
       return;
     }
     setFile(prepared.file);
+    setFileWarning(prepared.warning ?? null);
   }
 
   async function upload(): Promise<void> {
@@ -133,6 +139,8 @@ export function DocumentsTab({
       });
       if (res.status === 201) {
         setFile(null);
+        setFileWarning(null);
+        setChooserKey((key) => key + 1);
         setState(await load());
         return;
       }
@@ -225,6 +233,7 @@ export function DocumentsTab({
               The file
             </label>
             <input
+              key={chooserKey}
               id="document-file"
               className="field__input"
               type="file"
@@ -236,6 +245,7 @@ export function DocumentsTab({
               practice does not hold those.
             </p>
             {file ? <p className="small muted">Ready to file: {file.name}</p> : null}
+            {fileWarning ? <Note>{fileWarning}</Note> : null}
             {fileError ? <Note tone="critical">{fileError}</Note> : null}
           </div>
           {formError ? <Note tone="critical">{formError}</Note> : null}

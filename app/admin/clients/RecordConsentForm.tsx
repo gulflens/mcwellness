@@ -109,6 +109,7 @@ export function RecordConsentForm({
   const [signature, setSignature] = useState<SignatureResult | null>(null);
   const [scan, setScan] = useState<UploadFile | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanWarning, setScanWarning] = useState<string | null>(null);
   const [witnessState, setWitnessState] = useState<WitnessState>({ kind: 'idle' });
   const [witnessId, setWitnessId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -219,6 +220,7 @@ export function RecordConsentForm({
 
   async function chooseScan(file: File | null): Promise<void> {
     setScanError(null);
+    setScanWarning(null);
     setScan(null);
     if (!file) return;
     const prepared = await compressToFit(file, MAX_DOCUMENT_BYTES);
@@ -227,6 +229,9 @@ export function RecordConsentForm({
       return;
     }
     setScan(prepared.file);
+    // A form that had to be squeezed hard is still filed, and the person
+    // filing it is told to look at it first (./fileUpload.ts).
+    setScanWarning(prepared.warning ?? null);
   }
 
   async function submit(): Promise<void> {
@@ -390,6 +395,7 @@ export function RecordConsentForm({
                 is sent as it is.
               </p>
               {scan ? <p className="small muted">Ready to file: {scan.name}</p> : null}
+              {scanWarning ? <Note>{scanWarning}</Note> : null}
               {scanError ? <Note tone="critical">{scanError}</Note> : null}
             </div>
           ) : null}

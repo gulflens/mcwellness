@@ -22,12 +22,48 @@ export type UploadFile = {
   sizeBytes: number;
 };
 
-export type PreparedFile = { ok: true; file: UploadFile } | { ok: false; message: string };
+export type PreparedFile =
+  { ok: true; file: UploadFile; warning?: string } | { ok: false; message: string };
 
 const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'] as const;
-/** The widths tried in turn, largest first: legibility before size, until it fits. */
-const WIDTHS = [2000, 1600, 1200, 1000, 800];
-const QUALITIES = [0.7, 0.55, 0.4];
+
+/**
+ * How a photograph is made smaller, and in which order — which is the whole
+ * of whether a signed form can still be read afterwards.
+ *
+ * **Size before quality, not the other way round.** This used to drop the JPEG
+ * quality to 0.4 at full resolution before it tried a smaller picture at all,
+ * and 0.4 is where handwriting turns to porridge: the artefacts land on the
+ * thin strokes of a signature and the small print of a form. Fewer pixels of
+ * clean ink beats the same page smeared. So each quality is tried at every
+ * size down to a floor first, and only then does the quality step down.
+ *
+ * The floor is the long edge, not the width: a form is usually photographed
+ * portrait, and scaling by width would shrink a portrait page far further than
+ * a landscape one for the same setting. 1400px on the long edge is about
+ * 170 dpi across an A4 page, which is comfortably enough to read twelve-point
+ * type and a signature.
+ *
+ * Below the floor is a last resort rather than a step in the ladder, and it
+ * says so on screen: 45 KiB is a hard ceiling until the body cap is raised
+ * (CR-08), and refusing a photograph outright would be worse than filing a
+ * small one with a warning beside it.
+ */
+const LEGIBLE_LONG_EDGE = 1400;
+const LONG_EDGES = [2400, 2000, 1700, LEGIBLE_LONG_EDGE];
+const QUALITIES = [0.8, 0.65, 0.5];
+const LAST_RESORT_EDGES = [1100, 900, 700];
+const LAST_RESORT_QUALITY = 0.5;
+/**
+ * A result this much smaller than the original has lost a great deal, whatever
+ * size it came out at, and the person filing it should look before they file.
+ */
+const HEAVY_COMPRESSION = 10;
+
+const ILLEGIBLE_WARNING =
+  'This had to be made smaller than a page is usually readable at. Open it and check the writing before filing, or photograph one page at a time.';
+const SHRUNK_WARNING =
+  'This photograph was made much smaller to fit. Check the writing is still readable before filing it.';
 
 function isAccepted(type: string): type is UploadFile['mimeType'] {
   return (ACCEPTED as readonly string[]).includes(type);
@@ -123,31 +159,59 @@ export async function compressToFit(file: File, maxBytes: number): Promise<Prepa
   if (!bitmap) {
     return { ok: false, message: 'That photograph could not be read.' };
   }
+  const longEdge = Math.max(bitmap.width, bitmap.height);
+  /** One attempt at a given long edge and quality, or null when the canvas will not encode. */
+  const attempt = async (
+    edge: number,
+    quality: number,
+  ): Promise<{ bytesBase64: string; sizeBytes: number } | null> => {
+    const scale = Math.min(1, edge / longEdge);
+    return encode(
+      bitmap,
+      Math.max(1, Math.round(bitmap.width * scale)),
+      Math.max(1, Math.round(bitmap.height * scale)),
+      quality,
+    );
+  };
+  const accept = (
+    encoded: { bytesBase64: string; sizeBytes: number },
+    warning?: string,
+  ): PreparedFile => {
+    const shrunk = file.size >= encoded.sizeBytes * HEAVY_COMPRESSION;
+    return {
+      ok: true,
+      file: {
+        name: file.name,
+        mimeType: 'image/jpeg',
+        bytesBase64: encoded.bytesBase64,
+        sizeBytes: encoded.sizeBytes,
+      },
+      ...(warning ? { warning } : shrunk ? { warning: SHRUNK_WARNING } : {}),
+    };
+  };
+
   try {
-    for (const width of WIDTHS) {
-      const scale = Math.min(1, width / bitmap.width);
-      const targetWidth = Math.max(1, Math.round(bitmap.width * scale));
-      const targetHeight = Math.max(1, Math.round(bitmap.height * scale));
-      for (const quality of QUALITIES) {
-        const encoded = await encode(bitmap, targetWidth, targetHeight, quality);
+    // Size first, at the best quality, down to the floor; then the next
+    // quality, from the top again.
+    for (const quality of QUALITIES) {
+      for (const edge of LONG_EDGES) {
+        const encoded = await attempt(edge, quality);
         if (!encoded) {
           return {
             ok: false,
             message: 'That photograph could not be made smaller in this browser.',
           };
         }
-        if (encoded.sizeBytes <= maxBytes) {
-          return {
-            ok: true,
-            file: {
-              name: file.name,
-              mimeType: 'image/jpeg',
-              bytesBase64: encoded.bytesBase64,
-              sizeBytes: encoded.sizeBytes,
-            },
-          };
-        }
+        if (encoded.sizeBytes <= maxBytes) return accept(encoded);
       }
+    }
+    // Below what a page is comfortably read at: filed, and said so.
+    for (const edge of LAST_RESORT_EDGES) {
+      const encoded = await attempt(edge, LAST_RESORT_QUALITY);
+      if (!encoded) {
+        return { ok: false, message: 'That photograph could not be made smaller in this browser.' };
+      }
+      if (encoded.sizeBytes <= maxBytes) return accept(encoded, ILLEGIBLE_WARNING);
     }
   } finally {
     bitmap.close?.();
