@@ -7,11 +7,13 @@ export { canViewClient } from './canViewClient';
 export { computeRetentionUntil } from './computeRetentionUntil';
 export {
   CLIENT_UPLOAD_KINDS,
+  CONSENT_EVIDENCE_KINDS,
   CONSENT_SCAN_KIND,
   CONSENT_SIGNATURE_KIND,
   IDENTITY_DOCUMENT_KINDS,
   SYSTEM_WRITTEN_KINDS,
   documentUploadRefusal,
+  isConsentEvidenceKind,
   isIdentityDocumentKind,
 } from './documentKinds';
 export type { ClientUploadKind, DocumentUploadRefusal } from './documentKinds';

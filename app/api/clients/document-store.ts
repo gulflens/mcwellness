@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { bytesMatchMimeType, computeRetentionUntil } from '../../../domain/client';
+import {
+  bytesMatchMimeType,
+  computeRetentionUntil,
+  isConsentEvidenceKind,
+} from '../../../domain/client';
 import {
   DEFAULT_SIGNED_URL_TTL_SECONDS,
   clientDocumentKey,
@@ -74,6 +78,19 @@ export function decodeDocumentBytes(
  * domain/shared is the other rule — five years from upload — and belongs to
  * practice documents, which have no client whose activity to follow.
  *
+ * **Consent evidence is on neither clock**, and that is the exception worth
+ * reading twice. A signature or a scanned form is filed immutable, and
+ * migration 903 freezes an immutable row the moment it exists — every column,
+ * `retention_until` included. So a date written here could never be moved on,
+ * and the evidence of a consent still live in year six would be a file marked
+ * for deletion in year five: the record would delete the proof of the
+ * agreement it is still acting on. `isConsentEvidenceKind` therefore leaves
+ * `retention_until` null, exactly as 903 does for `consent_text`, meaning "not
+ * on an upload clock" and never "nobody computed it". Whatever removes files
+ * must ask what still references one before it removes it — which is already
+ * the rule for the wording, and is now the rule for what was signed against
+ * it. docs/CHANGE-REQUESTS/client-record-03.md records it (CR-13).
+ *
  * `isImmutable` is the caller's to decide and true for anything that evidences
  * what a person was shown or agreed to. Migration 903 makes it mean something:
  * once set, the row is neither changed nor deleted outside an erasure.
@@ -118,7 +135,9 @@ export async function fileClientDocument(
       input.file.mimeType,
       stored.sha256,
       actor.userId,
-      computeRetentionUntil(isoDateIn(input.now, PRACTICE_TIME_ZONE)),
+      isConsentEvidenceKind(input.kind)
+        ? null
+        : computeRetentionUntil(isoDateIn(input.now, PRACTICE_TIME_ZONE)),
       input.isImmutable,
     ],
   );

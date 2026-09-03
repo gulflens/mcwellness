@@ -413,8 +413,13 @@ describe('POST /api/clients/:id/consents', () => {
     expect(row?.storage_key).toBe(
       `tenant/${IDS.tenantA}/client/${ADULT_ID}/${row?.signature_document_id}`,
     );
-    // Five years from the client's own last activity, which filing this is.
-    expect(row?.retention_until).not.toBeNull();
+    // Not on a clock at all, and deliberately: an immutable row is frozen by
+    // migration 903 the moment it is filed, retention_until included, so a
+    // date here could never be moved on and the evidence of a consent still
+    // live in year six would be marked for deletion in year five. It is kept
+    // while a consent references it, exactly as the wording is
+    // (domain/client/documentKinds.ts, CONSENT_EVIDENCE_KINDS).
+    expect(row?.retention_until).toBeNull();
     // The fingerprint is the store's, of the bytes as written.
     expect(row?.sha256.length).toBe(32);
   });
@@ -552,6 +557,13 @@ describe('POST /api/clients/:id/consents', () => {
       }),
     });
     expect(scan.status).toBe(201);
+    const scanned = await owner.query<{ kind: string; retention_until: Date | null }>(
+      'select d.kind, d.retention_until from consent c ' +
+        'join document d on d.id = c.signature_document_id where c.id = $1',
+      [((await scan.json()) as { id: string }).id],
+    );
+    expect(scanned.rows[0]?.kind).toBe('consent_scan');
+    expect(scanned.rows[0]?.retention_until).toBeNull();
 
     const wrong = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
       method: 'POST',
@@ -765,6 +777,8 @@ describe('the Documents tab', () => {
     };
     const referral = body.documents.find((document) => document.kind === 'referral');
     expect(referral?.uploadedByName).toBe('Hazel Ridge');
+    // An ordinary client document is still on the five-year clock; only
+    // consent evidence and the practice's wording are off it.
     expect(referral?.retentionUntil).not.toBeNull();
     // The consent evidence is listed here too: it is part of what the practice
     // holds about this client.
