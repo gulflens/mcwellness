@@ -83,6 +83,11 @@ const CONTACT_BY_MRN = '00000000-0000-4000-8000-000000900002';
 const SESSION_BY_MRN = '00000000-0000-4000-8000-000000900003';
 const EVENT_BY_MRN = '00000000-0000-4000-8000-000000900004';
 const APPOINTMENT_BY_MRN = '00000000-0000-4000-8000-000000900005';
+// The adult's own booked visit, named because the check-in is expected to
+// mark it (db/migrations/305_appointment_checked_in.sql). Confirmed, unlike
+// every other fixture in this file, which stays at seedAppointment's own
+// 'proposed' default.
+const APPOINTMENT_ADULT = '00000000-0000-4000-8000-000000008001';
 // A practitioner of its own for the record-number check-in, rather than
 // practitionerA: practitionerA's own one-open-visit slot is already spent by
 // SESSION_HAPPY for the rest of this file (checking a visit out is out of
@@ -91,6 +96,28 @@ const APPOINTMENT_BY_MRN = '00000000-0000-4000-8000-000000900005';
 const MRN_PRACTITIONER_USER = '00000000-0000-4000-8000-000000900101';
 const MRN_PRACTITIONER = '00000000-0000-4000-8000-000000900102';
 const MRN_PRACTITIONER_AUTH = '00000000-0000-4000-8000-000000900103';
+
+// A household with two visits on the same day, and a practitioner of its own
+// for the same reason the record-number fixture has one. The check-in happens
+// during the second window, and the first must not be the row that gets
+// stamped.
+const CLIENT_TWO_VISITS = '00000000-0000-4000-8000-000000901001';
+const CONTACT_TWO_VISITS = '00000000-0000-4000-8000-000000901002';
+const SESSION_TWO_VISITS = '00000000-0000-4000-8000-000000901003';
+const EVENT_TWO_VISITS = '00000000-0000-4000-8000-000000901004';
+const APPOINTMENT_EARLIER_TODAY = '00000000-0000-4000-8000-000000901005';
+const APPOINTMENT_AROUND_NOW = '00000000-0000-4000-8000-000000901006';
+const TWO_VISIT_USER = '00000000-0000-4000-8000-000000901101';
+const TWO_VISIT_PRACTITIONER = '00000000-0000-4000-8000-000000901102';
+const TWO_VISIT_AUTH = '00000000-0000-4000-8000-000000901103';
+
+/**
+ * When each of the two-visit household's windows opens, in epoch
+ * milliseconds, filled in by the fixture below. The test works out from these
+ * which visit the practitioner is standing in, rather than asserting an hour
+ * the suite cannot know in advance.
+ */
+let visitWindows: { earlier: number; later: number };
 
 let owner: pg.Client;
 let pool: ReturnType<typeof createPool>;
@@ -315,6 +342,7 @@ beforeAll(async () => {
     appointmentClientId: string,
     hour: string,
     practitionerId: string = MORE_IDS.practitionerA,
+    status: 'proposed' | 'confirmed' = 'proposed',
   ) =>
     seedAppointment(owner, {
       id,
@@ -324,8 +352,9 @@ beforeAll(async () => {
       serviceTypeId: SERVICE_TYPE,
       locationId: IDS.locationA,
       windowStart: at(hour),
+      status,
     });
-  await bookToday('00000000-0000-4000-8000-000000008001', CLIENT_ADULT, '08');
+  await bookToday(APPOINTMENT_ADULT, CLIENT_ADULT, '08', MORE_IDS.practitionerA, 'confirmed');
   await bookToday('00000000-0000-4000-8000-000000008002', CLIENT_NO_PARTICIPATION, '09');
   await bookToday('00000000-0000-4000-8000-000000008003', CLIENT_MINOR_NO_GUARDIAN, '10');
   await bookToday('00000000-0000-4000-8000-000000008004', CLIENT_MINOR_WITH_GUARDIAN, '11');
@@ -376,6 +405,94 @@ beforeAll(async () => {
     'home_visit',
   );
   await bookToday(APPOINTMENT_BY_MRN, CLIENT_BY_MRN, '13', MRN_PRACTITIONER);
+
+  // The two-visit household. Both windows are placed against the database's
+  // own clock rather than at a fixed hour, because the route picks the
+  // appointment by where now() falls: the second contains this moment, the
+  // first finished a little over an hour before it. (Checked in the small
+  // hours, the earlier window falls outside today's Dubai day and is not a
+  // candidate at all — the assertion below then holds for the plainer reason,
+  // and holds either way.)
+  await seedUser(owner, {
+    id: TWO_VISIT_USER,
+    tenantId: IDS.tenantA,
+    authId: TWO_VISIT_AUTH,
+    displayName: 'Synthetic Two Visit Practitioner',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, TWO_VISIT_PRACTITIONER, TWO_VISIT_USER);
+  await seedCredential(owner, {
+    tenantId: IDS.tenantA,
+    practitionerId: TWO_VISIT_PRACTITIONER,
+    serviceTypeId: SERVICE_TYPE,
+    certification: 'bcia_bcn',
+    validFrom: '2020-01-01',
+    validTo: null,
+    canExecuteSession: true,
+  });
+  await seedClient(owner, IDS.tenantA, CLIENT_TWO_VISITS, IDS.ownerA, 'TwoVisits');
+  await owner.query('update client set date_of_birth = $1 where id = $2', [
+    '1990-01-01',
+    CLIENT_TWO_VISITS,
+  ]);
+  await owner.query(
+    'insert into contact (id, tenant_id, client_id, relationship, can_consent) ' +
+      "values ($1, $2, $3, 'mother', true)",
+    [CONTACT_TWO_VISITS, IDS.tenantA, CLIENT_TWO_VISITS],
+  );
+  await consent(
+    '00000000-0000-4000-8000-00000000400d',
+    CLIENT_TWO_VISITS,
+    CONTACT_TWO_VISITS,
+    'participation',
+  );
+  await consent(
+    '00000000-0000-4000-8000-00000000400e',
+    CLIENT_TWO_VISITS,
+    CONTACT_TWO_VISITS,
+    'home_visit',
+  );
+  // The first visit opens the Dubai day; the second is the one this check-in
+  // happens inside, ten minutes after its window opened — except in the first
+  // seventy minutes after midnight, when there is no room behind now() for a
+  // second window and it is placed at 01:10 instead. Both are read back as
+  // epoch milliseconds so the test can work out, independently of the query
+  // under test, which window this moment actually belongs to.
+  const dayStart =
+    "(date_trunc('day', now() at time zone 'Asia/Dubai')::date::timestamp " +
+    "at time zone 'Asia/Dubai')";
+  const windows = await owner.query<{
+    earlier: string;
+    earlier_ms: string;
+    later: string;
+    later_ms: string;
+  }>(
+    `select ${dayStart}::text as earlier, ` +
+      `(extract(epoch from ${dayStart}) * 1000)::bigint::text as earlier_ms, ` +
+      `greatest(now() - interval '10 minutes', ${dayStart} + interval '70 minutes')::text ` +
+      'as later, ' +
+      `(extract(epoch from greatest(now() - interval '10 minutes', ` +
+      `${dayStart} + interval '70 minutes')) * 1000)::bigint::text as later_ms`,
+  );
+  visitWindows = {
+    earlier: Number(windows.rows[0]!.earlier_ms),
+    later: Number(windows.rows[0]!.later_ms),
+  };
+  for (const [id, windowStart] of [
+    [APPOINTMENT_EARLIER_TODAY, windows.rows[0]!.earlier],
+    [APPOINTMENT_AROUND_NOW, windows.rows[0]!.later],
+  ] as const) {
+    await seedAppointment(owner, {
+      id,
+      tenantId: IDS.tenantA,
+      clientId: CLIENT_TWO_VISITS,
+      practitionerId: TWO_VISIT_PRACTITIONER,
+      serviceTypeId: SERVICE_TYPE,
+      locationId: IDS.locationA,
+      windowStart,
+      status: 'confirmed',
+    });
+  }
 
   // A client belonging to a different tenant, to prove the route's own tenant re-check.
   await seedClient(owner, IDS.tenantB, IDS.clientB, IDS.ownerB, 'Foreign');
@@ -459,6 +576,18 @@ describe('POST /api/sessions/:id/events', () => {
       created_by: MORE_IDS.practitionerUserA,
     });
 
+    // And the booked visit behind it now says a practitioner is standing in
+    // the household's hall (db/migrations/305_appointment_checked_in.sql,
+    // called by the route inside this same transaction). Until this existed
+    // the row stayed at 'confirmed' for the whole visit, and every guard
+    // phrased as "a checked-in visit cannot be moved or cancelled" was
+    // written against a status nothing ever wrote.
+    const appointment = await owner.query<{ status: string }>(
+      'select status::text as status from appointment where id = $1',
+      [APPOINTMENT_ADULT],
+    );
+    expect(appointment.rows[0]).toEqual({ status: 'checked_in' });
+
     // The audit trigger fires on both inserts, and 097's generalised
     // app.audit_client_id names the client on each row.
     const audit = await owner.query<{ entity_type: string; client_id: string }>(
@@ -492,6 +621,63 @@ describe('POST /api/sessions/:id/events', () => {
       client_id: CLIENT_BY_MRN,
       practitioner_id: MRN_PRACTITIONER,
     });
+
+    // This one's appointment is only proposed, so the check-in goes ahead and
+    // the row keeps the status the coordinator gave it: 305 marks 'confirmed'
+    // and nothing else, and a practitioner at the door is never made to wait
+    // on a coordinator's click.
+    const appointment = await owner.query<{ status: string }>(
+      'select status::text as status from appointment where id = $1',
+      [APPOINTMENT_BY_MRN],
+    );
+    expect(appointment.rows[0]).toEqual({ status: 'proposed' });
+  });
+
+  it('stamps the visit the practitioner is standing in, not the earliest of the day', async () => {
+    // A household with two visits on one day. Picking the day's first
+    // appointment stamps the wrong one, and the wrong one is then the row the
+    // close settles and the right one stays live for ever.
+    //
+    // Which visit is the right answer depends on the hour the suite runs, so
+    // it is worked out here from the two seeded windows rather than assumed:
+    // the window containing this moment, or failing that the nearer of the
+    // two. That is the rule the route's ordering implements, written a second
+    // time and independently. For all but the first seventy minutes of the
+    // Dubai day the answer is the later window, which is exactly the case
+    // ordering by window_start alone gets wrong.
+    const WINDOW_MS = 45 * 60 * 1000;
+    const distance = (opens: number, at: number) =>
+      at < opens ? opens - at : Math.max(0, at - (opens + WINDOW_MS));
+    const at = Date.now();
+    const standingIn =
+      distance(visitWindows.later, at) < distance(visitWindows.earlier, at)
+        ? APPOINTMENT_AROUND_NOW
+        : APPOINTMENT_EARLIER_TODAY;
+    const untouched =
+      standingIn === APPOINTMENT_AROUND_NOW ? APPOINTMENT_EARLIER_TODAY : APPOINTMENT_AROUND_NOW;
+
+    const res = await postCheckIn(SESSION_TWO_VISITS, TWO_VISIT_AUTH, {
+      id: EVENT_TWO_VISITS,
+      clientId: CLIENT_TWO_VISITS,
+    });
+    expect(res.status).toBe(201);
+
+    const session = await owner.query<{ appointment_id: string }>(
+      'select appointment_id from session where id = $1',
+      [SESSION_TWO_VISITS],
+    );
+    expect(session.rows[0]).toEqual({ appointment_id: standingIn });
+
+    const statuses = await owner.query<{ id: string; status: string }>(
+      'select id, status::text as status from appointment where id = any($1)',
+      [[standingIn, untouched]],
+    );
+    expect(statuses.rows).toEqual(
+      expect.arrayContaining([
+        { id: standingIn, status: 'checked_in' },
+        { id: untouched, status: 'confirmed' },
+      ]),
+    );
   });
 
   it('refuses a body naming both clientId and clientMrn', async () => {

@@ -283,8 +283,20 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // asks for exactly the row that policy already shows them. Null is not a
     // failure; a session with no appointment simply closes without one to
     // flip (app.complete_appointment_for_session, 302).
-    const appointment = await db.query<{ id: string }>(
-      'select a.id from appointment a ' +
+    //
+    // Ordered by the visit the practitioner is actually standing in front of,
+    // never merely by the earliest of the day: a household with a morning and
+    // an afternoon visit would otherwise have its 16:00 check-in stamped onto
+    // the 08:00 row, and every consequence of that — the wrong row marked
+    // checked in, the wrong row completed at close — would follow silently.
+    // First key: does the window contain this moment. Second: distance from
+    // this moment to the window, zero inside it, so a check-in in the gap
+    // between two visits takes the nearer one whether it has just finished or
+    // is about to start. greatest(..., interval '0') is that distance written
+    // out; the containment key is redundant beside it by construction and is
+    // kept because it states the intent the ordering exists for.
+    const appointment = await db.query<{ id: string; status: string }>(
+      'select a.id, a.status::text as status from appointment a ' +
         'where a.tenant_id = app.current_tenant_id() and a.client_id = $1 ' +
         'and a.practitioner_id = $2 ' +
         "and a.status in ('proposed', 'confirmed', 'checked_in') " +
@@ -292,10 +304,13 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         "::timestamp at time zone 'Asia/Dubai') " +
         "and a.window_end > ((date_trunc('day', now() at time zone 'Asia/Dubai')::date)" +
         "::timestamp at time zone 'Asia/Dubai') " +
-        'order by a.window_start limit 1',
+        'order by (now() >= a.window_start and now() < a.window_end) desc, ' +
+        "greatest(a.window_start - now(), now() - a.window_end, interval '0') asc, " +
+        'a.window_start asc limit 1',
       [clientId, practitionerId],
     );
     const appointmentId = appointment.rows[0]?.id ?? null;
+    const appointmentStatus = appointment.rows[0]?.status ?? null;
 
     // No clientId, no point: those are recorded on the session row directly
     // below, never duplicated into the event's own payload (see
@@ -371,6 +386,41 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       if (eventInsert.rowCount !== 1) {
         await db.query('rollback to savepoint check_in');
         return c.json({ error: 'conflict', requestId, detail: 'event_id_collision' }, 409);
+      }
+      // And the appointment behind the visit now says so
+      // (db/migrations/305_appointment_checked_in.sql). In the same
+      // transaction as the session and its opening event, so a visit is never
+      // running against an appointment that still reads 'confirmed': that gap
+      // is what let a running visit be moved or late-cancelled, since every
+      // guard written in terms of a checked-in visit had a status nothing
+      // ever wrote.
+      //
+      // The answer is deliberately not read. False means the appointment was
+      // only proposed, or there was none at all (a walk-up visit), or a
+      // replay found the row already checked in — none of which is a reason
+      // to undo a check-in that has passed every gate at the door. The door
+      // itself refuses anything that is not this caller's own open session
+      // and a 'confirmed' appointment of their own; there is nothing left
+      // here for the route to check.
+      const marked = await db.query<{ marked: boolean }>(
+        'select app.mark_appointment_checked_in($1) as marked',
+        [sessionId],
+      );
+      // A confirmed appointment of this practitioner's own that the door
+      // nevertheless declined to mark is the one combination nothing above
+      // explains — a cancellation landing between the select and the flip, say.
+      // Not an error: the check-in stands either way, and the day is not
+      // stopped for it. Debug level, opaque ids only, no client and no name,
+      // so the line is safe wherever logs are kept (.claude/rules/compliance.md).
+      if (appointmentStatus === 'confirmed' && marked.rows[0]?.marked !== true) {
+        console.debug(
+          JSON.stringify({
+            event: 'appointment_not_marked_checked_in',
+            requestId,
+            sessionId,
+            appointmentId,
+          }),
+        );
       }
       await db.query('release savepoint check_in');
     } catch (error) {
