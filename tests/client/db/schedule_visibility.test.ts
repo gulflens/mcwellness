@@ -24,17 +24,12 @@ import {
  *
  * The route used to pass `scheduledClientIds: []` unconditionally, which was
  * honest while `app.client_visible_to_practitioner` was a stub answering
- * false for everyone. Migration 201 (the scheduling stream, pull request 34)
- * gives that function the real window, and from that moment the six read
- * policies open the record to a practitioner holding a visit — so a route
+ * false for everyone. Migration 201 (the scheduling stream, pull request 34,
+ * now on `main`) gives that function the real window, so the six read
+ * policies open the record to a practitioner holding a visit — and a route
  * still passing an empty list would refuse someone the database had just
  * admitted, and write a `refused` row about them
  * (docs/CHANGE-REQUESTS/scheduling-03.md item 3).
- *
- * **This file needs migration 201, which lives on the scheduling branch and
- * is not this stream's to commit.** Until pull request 34 lands on `main`,
- * these tests skip themselves rather than fail: the stub answers false for
- * everyone, which is the old behaviour and not what is being tested here.
  */
 
 const SECRET = 'test-secret-that-unlocks-nothing-0123456789';
@@ -48,8 +43,6 @@ const LOCATION = '00000000-0000-4000-8000-0000000000d7';
 let owner: pg.Client;
 let pool: pg.Pool;
 let api: ReturnType<typeof createApi>;
-/** False until migration 201 is applied: the stub it replaces answers false for everyone. */
-let scheduleDoorExists = false;
 
 async function mint(sub: string): Promise<string> {
   return new SignJWT({ role: 'authenticated' })
@@ -105,13 +98,6 @@ beforeAll(async () => {
     [IDS.tenantA, SCHEDULED_CLIENT, MORE_IDS.practitionerA, MORE_IDS.serviceTypeA, LOCATION],
   );
 
-  const { rows } = await owner.query<{ secdef: boolean }>(
-    "select prosecdef as secdef from pg_proc where proname = 'client_visible_to_practitioner'",
-  );
-  // The stub is a plain SQL function; migration 201 replaces it with a security
-  // definer one. That is the cheapest honest way to tell which is installed.
-  scheduleDoorExists = rows[0]?.secdef === true;
-
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
@@ -125,7 +111,6 @@ afterAll(async () => {
 
 describe('a practitioner and the client record', () => {
   it('opens the record of a client they hold a visit with, and is not audited as refused', async () => {
-    if (!scheduleDoorExists) return; // Waiting on pull request 34; see the note above.
     const res = await read(SCHEDULED_CLIENT, '00000000-0000-4000-8000-0000000000f7');
     expect(res.status).toBe(200);
     expect(await refusedRows(SCHEDULED_CLIENT)).toBe(0);

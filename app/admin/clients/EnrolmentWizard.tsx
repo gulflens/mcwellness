@@ -128,10 +128,18 @@ export function EnrolmentWizard({
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus();
+    // Escape closes this as it closes the record drawer beside it. Nothing is lost by
+    // closing: the lead and every step's writes are already saved (section 4.3), which
+    // is what the line above the buttons says.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onDone();
+    };
+    document.addEventListener('keydown', onKey);
     return () => {
+      document.removeEventListener('keydown', onKey);
       previous?.focus();
     };
-  }, []);
+  }, [onDone]);
 
   /** The one way the step moves, so the high-water mark can never drift from it. */
   function goTo(next: Step) {
@@ -336,6 +344,7 @@ export function EnrolmentWizard({
             return (
               <li
                 key={s}
+                aria-current={s === step ? 'step' : undefined}
                 className={[
                   'wizard__step-name',
                   s === step ? 'wizard__step-name--current' : null,

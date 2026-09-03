@@ -228,6 +228,52 @@ describe('EnrolmentWizard', () => {
     expect(await screen.findByRole('button', { name: 'Add goal' })).toBeTruthy();
   });
 
+  it('names a phone typed without its country code, rather than looping on a generic line', async () => {
+    const { calls } = mountWithRecord(baseRecord());
+    fireEvent.change(screen.getByLabelText('Given name'), { target: { value: 'Laurel' } });
+    fireEvent.change(screen.getByLabelText('Family name'), { target: { value: 'Meadow' } });
+    fireEvent.change(screen.getByLabelText('Relationship to the client'), {
+      target: { value: 'self' },
+    });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '0500001234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+
+    expect(
+      await screen.findByText(
+        'Enter the phone number with its country code, for example +971500001234.',
+      ),
+    ).toBeTruthy();
+    // Nothing was sent: the rule the server holds is checked before the request.
+    expect(calls.some((c) => c.url === '/api/clients')).toBe(false);
+    // And the caret is on the field to fix.
+    expect(document.activeElement).toBe(screen.getByLabelText('Phone'));
+  });
+
+  it('refuses a date of birth in the future, naming the field', async () => {
+    mountWithRecord(baseRecord());
+    const future = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    fireEvent.change(screen.getByLabelText('Given name'), { target: { value: 'Laurel' } });
+    fireEvent.change(screen.getByLabelText('Family name'), { target: { value: 'Meadow' } });
+    fireEvent.change(screen.getByLabelText('Relationship to the client'), {
+      target: { value: 'self' },
+    });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971500000058' } });
+    fireEvent.change(screen.getByLabelText('Date of birth (optional)'), {
+      target: { value: future },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
+    expect(await screen.findByText('A date of birth is in the past.')).toBeTruthy();
+  });
+
+  it('closes on Escape, saying the lead is already saved', async () => {
+    const { onDone } = mountWithRecord(baseRecord());
+    await fillIdentity();
+    await screen.findByRole('button', { name: 'Add contact' });
+    expect(await screen.findByText(/Saved as a lead/)).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onDone).toHaveBeenCalled();
+  });
+
   it('leaves a real lead at any step: Finish later closes without losing what was saved', async () => {
     const { onDone } = mountWithRecord(baseRecord());
     await fillIdentity();

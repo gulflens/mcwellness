@@ -21,35 +21,22 @@
  * 78. `q` searches names and record numbers, and a record number reads
  * MW-000001, so the terms lost are theoretical.
  *
- * It lives here rather than in `domain/client` or `domain/shared` because
- * both are the shared zone; `docs/CHANGE-REQUESTS/client-record-02.md` CR-06
- * asks for the fold to move to `domain/shared/emirates-id.ts`, beside the
- * normaliser it exists to feed, and says what becomes of this file when it
- * does.
+ * The fold it used to carry has moved to `domain/shared/emirates-id.ts`
+ * (CR-06, applied in pull request 36), and is re-exported below rather than
+ * copied. The shape rule itself still lives here because `domain/shared` is
+ * the shared zone; moving it is agreed for the next pull request.
  */
 
-const ARABIC_INDIC = 0x0660; // ٠ to ٩
-const EXTENDED_ARABIC_INDIC = 0x06f0; // ۰ to ۹
-
-/** Arabic-Indic and Extended Arabic-Indic digits as their Latin counterparts. */
-export function toLatinDigits(value: string): string {
-  return Array.from(value)
-    .map((character) => {
-      const code = character.codePointAt(0) ?? 0;
-      if (code >= ARABIC_INDIC && code <= ARABIC_INDIC + 9) {
-        return String(code - ARABIC_INDIC);
-      }
-      if (code >= EXTENDED_ARABIC_INDIC && code <= EXTENDED_ARABIC_INDIC + 9) {
-        return String(code - EXTENDED_ARABIC_INDIC);
-      }
-      return character;
-    })
-    .join('');
-}
+// The fold itself is the trunk's now: CR-06 was applied in pull request 36 and
+// `normaliseEmiratesId` folds before it parses, so this file keeps no copy of it.
+// Re-exported because both of this module's callers reach for it beside the shape
+// rule, and one import is plainer than two.
+export { toLatinDigits } from '@domain/shared';
+import { toLatinDigits as foldDigits } from '@domain/shared';
 
 /** Every digit in the term, in order, whatever sat between them. */
 export function digitsOf(term: string): string {
-  return toLatinDigits(term).replace(/[^0-9]/g, '');
+  return foldDigits(term).replace(/[^0-9]/g, '');
 }
 
 // A whole Emirates ID anywhere in the digit run, not only at its start. The
