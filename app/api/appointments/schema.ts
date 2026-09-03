@@ -90,15 +90,21 @@ export type AppointmentRow = z.infer<typeof AppointmentRow>;
  *   SQL, in both scripts. The full family name never leaves the database for
  *   this screen, which is a property of the shape rather than of what the
  *   component happens to render.
- * - **The client's id.** Nothing on the day sheet opens a client record by
- *   id; check-in is reached by record number. The route still resolves the
- *   id internally to write the audit trail — it just does not hand it out.
  * - **The practitioner.** Every row is the caller's own.
  *
- * `serviceType.id` and `location.id` stay: they are opaque ids of practice
- * rows, not personal data, and `location.id` is the handle for the one write
- * a practitioner has on a client's record (access notes,
- * db/policies/client/writers.sql).
+ * `clientId`, `serviceType.id` and `location.id` are all opaque ids of rows,
+ * not personal data, and each is here because something on the screen needs
+ * a handle. `location.id` is the handle for the one write a practitioner has
+ * on a client's record (access notes, db/policies/client/writers.sql).
+ *
+ * **`clientId` was deliberately absent until now**, on the reasoning that
+ * nothing on the day sheet opened a client record by id and check-in is
+ * reached by record number. Something does need it now: the stop card asks
+ * billing what this household holds and what it owes
+ * (`GET /api/billing/clients/:clientId/balance`,
+ * docs/CHANGE-REQUESTS/billing-03.md item 5), and a uuid in a path is
+ * exactly what `.claude/rules/ui.md` means by "route by opaque ids only".
+ * The record number is still the thing that never travels in an address.
  *
  * `age` and `parkingPoint` are null when the practice holds neither;
  * `entrancePoint` is never null, because db/migrations/030_location.sql
@@ -106,6 +112,7 @@ export type AppointmentRow = z.infer<typeof AppointmentRow>;
  */
 export const DayStop = z.object({
   id: z.uuid(),
+  clientId: z.uuid(),
   windowStart: z.iso.datetime(),
   windowEnd: z.iso.datetime(),
   status: z.enum(APPOINTMENT_STATUSES),

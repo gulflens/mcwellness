@@ -207,6 +207,10 @@ function toPracticeRow(r: PracticeRow): AppointmentRow {
 function toDayStop(r: OwnRow, today: string): DayStop {
   return {
     id: r.id,
+    // An opaque row id, and the handle the stop card asks billing for this
+    // household's balance with (schema.ts's note on DayStop). The record
+    // number stays out of every address.
+    clientId: r.client_id,
     windowStart: r.window_start.toISOString(),
     windowEnd: r.window_end.toISOString(),
     status: r.status,

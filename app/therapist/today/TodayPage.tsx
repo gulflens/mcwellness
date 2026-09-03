@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   directionsUrl,
@@ -11,6 +11,8 @@ import {
   type StopPhase,
 } from '@domain/scheduling';
 import { DayStopListResponse, type DayStop } from '../../api/appointments/schema';
+import { BalanceResponse } from '../../api/billing/ledger-schema';
+import { formatFils } from '../../admin/billing/money';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ChevronIcon } from '../../shell/components/Icons';
@@ -160,6 +162,59 @@ function navigateHref(location: DayStop['location']): string {
   );
 }
 
+/**
+ * What the practitioner is told about the money at the door
+ * (docs/CHANGE-REQUESTS/billing-03.md item 5, docs/SPEC/billing.md
+ * section 1: "Session 3 of 15" is the thing the ledger exists to be able to
+ * say, and the person who needs it is the one driving there).
+ *
+ * `unavailable` is not an error state. Billing may decline for a perfectly
+ * correct reason — a client outside this practitioner's own schedule window
+ * answers 404 rather than an empty balance — and a red alert at somebody's
+ * front door about a figure the visit does not depend on would be the wrong
+ * shape of noise. It says one calm line and the stop stands.
+ */
+type StopBalance = { kind: 'unavailable' } | { kind: 'ready'; balance: BalanceResponse };
+
+/**
+ * Which session of the programme this one is.
+ *
+ * Counted against the stop's own service, because a household on a bundle
+ * holds sessions of several kinds and "3 of 15" means three of the fifteen
+ * neurofeedback sessions, not three of everything they bought. A visit still
+ * to be delivered is the one after the last delivered; a visit already
+ * delivered is already counted, so it is that count itself. Null when the
+ * household holds no bundle for this service at all — a single visit is not
+ * session one of one, it is simply a visit.
+ */
+function sessionOfProgramme(
+  balance: BalanceResponse,
+  serviceTypeId: string,
+  settled: boolean,
+): string | null {
+  const service = balance.services.find((row) => row.serviceTypeId === serviceTypeId);
+  if (!service || service.purchased === 0) {
+    return null;
+  }
+  const ordinal = settled ? service.delivered : service.delivered + 1;
+  return `Session ${Math.min(ordinal, service.purchased)} of ${service.purchased}`;
+}
+
+/**
+ * What the household owes, in words a person can act on at a door. The
+ * currency is named once, beside the figure, rather than assumed
+ * (app/admin/billing/money.ts writes the figure bare).
+ */
+function owedLine(outstandingFils: number): string {
+  if (outstandingFils > 0) {
+    return `AED ${formatFils(outstandingFils)} owed`;
+  }
+  if (outstandingFils < 0) {
+    return `AED ${formatFils(-outstandingFils)} in credit`;
+  }
+  return 'Nothing owed';
+}
+
 function fetchDay(apiFetch: ApiFetch, date: string): Promise<State> {
   return apiFetch(`/api/appointments?date=${date}&scope=own`)
     .then(async (res) => {
@@ -174,10 +229,14 @@ function fetchDay(apiFetch: ApiFetch, date: string): Promise<State> {
 function Stop({
   stop,
   phase,
+  balance,
   onCheckIn,
 }: {
   stop: DayStop;
   phase: StopPhase;
+  /** Null while billing has not answered yet: the line appears when it does,
+   * rather than a placeholder standing in for it. */
+  balance: StopBalance | null;
   onCheckIn: (stop: DayStop) => void;
 }) {
   const name = shortName(stop.client.givenName, stop.client.familyInitial);
@@ -215,11 +274,26 @@ function Stop({
     </>
   );
 
+  const programme =
+    balance?.kind === 'ready'
+      ? sessionOfProgramme(balance.balance, stop.serviceType.id, settled)
+      : null;
+
   const detail = (
     <div className="stop__detail">
       {age ? <div className="small muted numeric">{age}</div> : null}
       <div className="small muted">{stop.serviceType.name}</div>
       <div className="small muted">{describePlace(stop.location)}</div>
+      {balance === null ? null : balance.kind === 'unavailable' ? (
+        <div className="small muted">Balance unavailable</div>
+      ) : (
+        <div className="stop__money small numeric">
+          {programme ? <span className="muted">{programme}</span> : null}
+          <span className={balance.balance.outstandingFils > 0 ? 'stop__owed' : 'muted'}>
+            {owedLine(balance.balance.outstandingFils)}
+          </span>
+        </div>
+      )}
       {settled ? null : (
         <div className="stop__actions">
           {/* The visible word is one of several identical ones down the
@@ -282,6 +356,12 @@ export function TodayPage() {
   const [now, setNow] = useState(() => new Date());
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
+  const [balances, setBalances] = useState<Record<string, StopBalance>>({});
+  // Which day each household's balance was last asked for. A ref rather than
+  // state, because it decides whether to make a request and must not itself
+  // cause a render: one fetch per household per day, so refreshing the day
+  // sheet does not re-ask a question already answered, and a new day does.
+  const askedOn = useRef(new Map<string, string>());
 
   // The day is derived from the clock, never frozen at mount: a screen left
   // open overnight asks for the new day, not yesterday's.
@@ -314,6 +394,46 @@ export function TodayPage() {
       live = false;
     };
   }, [apiFetch, date, reloadToken]);
+
+  // The money at the door, one household at a time. Every request is its own,
+  // so a household billing declines does not take the others down with it,
+  // and no stop waits on another stop's answer.
+  useEffect(() => {
+    if (state.kind !== 'ready') {
+      return;
+    }
+    let live = true;
+    for (const stop of state.stops) {
+      const clientId = stop.clientId;
+      if (askedOn.current.get(clientId) === date) {
+        continue;
+      }
+      askedOn.current.set(clientId, date);
+      void apiFetch(`/api/billing/clients/${clientId}/balance`)
+        .then(async (res) => {
+          if (!live) return;
+          if (!res.ok) {
+            setBalances((all) => ({ ...all, [clientId]: { kind: 'unavailable' } }));
+            return;
+          }
+          const parsed = BalanceResponse.safeParse(await res.json());
+          setBalances((all) => ({
+            ...all,
+            [clientId]: parsed.success
+              ? { kind: 'ready', balance: parsed.data }
+              : { kind: 'unavailable' },
+          }));
+        })
+        .catch(() => {
+          if (live) {
+            setBalances((all) => ({ ...all, [clientId]: { kind: 'unavailable' } }));
+          }
+        });
+    }
+    return () => {
+      live = false;
+    };
+  }, [apiFetch, date, state]);
 
   const checkIn = useCallback(
     (stop: DayStop) => {
@@ -374,6 +494,7 @@ export function TodayPage() {
                 key={stop.id}
                 stop={stop}
                 phase={phases[index] ?? 'later'}
+                balance={balances[stop.clientId] ?? null}
                 onCheckIn={checkIn}
               />
             ))}

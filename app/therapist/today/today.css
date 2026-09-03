@@ -185,3 +185,22 @@ a.stop__action {
 .stop__fold[open] .stop__chevron {
   rotate: 180deg;
 }
+
+/* What the household holds and what it owes, on the stop itself: which
+   session of the programme this is, and whether there is anything to collect
+   at the door. Two facts on one line where the column is wide enough for
+   them, stacked where it is not. */
+.stop__money {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-3);
+}
+
+/* An amount outstanding is the one figure here that asks something of the
+   practitioner, so it carries the weight the muted lines around it do not.
+   No hue: the day sheet keeps colour for status, and money owed is not a
+   fault (docs/DESIGN-BRIEF.md). */
+.stop__owed {
+  font-weight: var(--w-medium);
+  color: var(--ink);
+}
