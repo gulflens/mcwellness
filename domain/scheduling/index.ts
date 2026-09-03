@@ -9,3 +9,9 @@ export type {
   SchedulingCandidate,
   SchedulingContext,
 } from './conflicts';
+export { APPOINTMENT_STATUSES, SETTLED_STATUSES, isSettled } from './status';
+export type { AppointmentStatus } from './status';
+export { PRACTICE_TIME_ZONE, currentStopIndex, practiceDate, stopPhases } from './day';
+export type { DayStop, StopPhase } from './day';
+export { directionsUrl, navigationTarget } from './navigation';
+export type { GeoPoint, NavigableLocation } from './navigation';

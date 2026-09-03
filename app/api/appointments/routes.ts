@@ -5,13 +5,12 @@ import { mountAppointmentList } from './list';
 import { mountAppointmentOptions } from './options';
 
 /**
- * Mounts every appointment route. Not wired into app/api/create-api.ts yet —
- * that file is shared, so the mount call itself is a change request
- * (docs/CHANGE-REQUESTS/scheduling-01.md); the database tests mount these
- * routes directly on the Hono instance createApi returns.
+ * Mounts every appointment route. `app/api/create-api.ts` calls this — it is
+ * a shared file, so the mount call was a change request rather than a direct
+ * edit (docs/CHANGE-REQUESTS/scheduling-01.md item 1, applied in round 5).
  */
 export function mountAppointments(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
-  mountAppointmentList(api);
+  mountAppointmentList(api, now);
   mountAppointmentOptions(api);
   mountAppointmentCreate(api, now);
 }

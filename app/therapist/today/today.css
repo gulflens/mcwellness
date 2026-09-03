@@ -1,0 +1,187 @@
+/*
+  The practitioner's day sheet. Tokens only, logical properties only
+  (.claude/rules/ui.md, DESIGN.md) — the layout mirrors for Arabic without a
+  second rule. Everything the screen shares with the rest of the practitioner
+  app — the dark ground, the single column, buttons, notes — already lives in
+  app/shell/shell.css and app/shell/tokens.css and is reused as-is.
+
+  docs/DESIGN-BRIEF.md section 6.1: dark ground, single column, no nesting.
+  Section 4.3's practitioner override: every tap target at least 48px
+  (var(--tap)), which is the one place this screen departs from the ledger's
+  own 44px row.
+*/
+
+/* Title, roles and date as one block. The shared .plain column puts 24px
+   between everything it holds, which is right between a stop and the next
+   stop and too much between three lines of a heading: on a 360x640 phone it
+   pushed the first arrival window most of the way down the screen. Grouping
+   them lets the header keep its own tighter rhythm without touching .plain,
+   which every other plain screen stands on. */
+.today__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+/* The actions on a stop are thumb-sized and full width: the person using them
+   is standing at a door in bad light, not pointing a mouse. */
+.stop__action {
+  inline-size: 100%;
+  min-block-size: var(--tap);
+}
+
+.today__error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+/* Signing out and crossing to the console are not day work. A rule sets them
+   apart from it, and they take their own width rather than the full-width
+   shape that means "the action on this stop". */
+.today__account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+  padding-block-start: var(--s-6);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.today__account .button {
+  min-block-size: var(--tap);
+}
+
+/* One stop after another, separated by space and a hairline rather than by
+   cards: the day is a list, and a stack of rounded panels is the SaaS-kit
+   default the brief refuses. */
+.stops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  margin: 0;
+}
+
+.stop {
+  padding-block-start: var(--s-6);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.stop:first-child {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+/* Both shapes a stop takes — open on the page, or folded into a disclosure —
+   stack the same way, so folding one changes nothing but its height. */
+.stop,
+.stop__fold > summary,
+.stop__detail {
+  display: flex;
+  flex-direction: column;
+  /* align-items: start so a line only ever takes the width of its own text.
+     The Arabic name carries dir="rtl", and stretched to the full column it
+     would align its text to the far edge and read as something unrelated to
+     the name above it. */
+  align-items: start;
+  gap: var(--s-1);
+}
+
+.stop__detail {
+  gap: var(--s-1);
+  inline-size: 100%;
+}
+
+/* The window is the first thing read and the thing read from a distance, so
+   it carries the size; tabular figures come from the shared .numeric class. */
+.stop__window {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--w-medium);
+}
+
+.stop__name {
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--w-medium);
+}
+
+.stop__note {
+  padding-block-start: var(--s-1);
+}
+
+.stop__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-block-start: var(--s-4);
+  inline-size: 100%;
+}
+
+/* A link that acts as a button still needs the button's own shape, and none
+   of the underline an anchor carries by default. */
+a.stop__action {
+  text-decoration: none;
+}
+
+/* The current stop is emphasised by size and weight, never by colour: hue is
+   reserved for band data and the three status states (DESIGN-BRIEF section
+   3). The window steps up one, and the name with it. */
+.stop--current .stop__window {
+  font-size: var(--t-h2);
+  line-height: var(--lh-h2);
+}
+
+.stop--current .stop__name {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+}
+
+/* A stop behind the practitioner folds down to when it was and who it was,
+   and opens again in full — the drive and the check-in included, whenever
+   nobody closed the visit. */
+.stop--past {
+  color: var(--slate);
+}
+
+.stop--past .stop__window {
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--w-regular);
+}
+
+.stop__fold {
+  inline-size: 100%;
+}
+
+.stop__summary {
+  /* The platform marker is replaced by the shell's own chevron, so the
+     summary reads as one line of this screen's vocabulary rather than two
+     browsers' idea of a triangle. */
+  list-style: none;
+  min-block-size: var(--tap);
+  justify-content: center;
+  cursor: pointer;
+}
+
+.stop__summary::-webkit-details-marker {
+  display: none;
+}
+
+.stop__chevron {
+  position: absolute;
+  inset-inline-end: 0;
+  align-self: center;
+  color: var(--slate);
+  transition: rotate var(--motion) var(--ease);
+}
+
+/* The chevron sits at the far end of the summary's own line, so the summary
+   is the positioning context and the fold keeps the column's full width. */
+.stop--past {
+  position: relative;
+}
+
+.stop__fold[open] .stop__chevron {
+  rotate: 180deg;
+}
