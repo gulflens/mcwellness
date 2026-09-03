@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import {
   allocateEntitlements,
   expiryOn,
-  resolveVat,
+  resolveSaleVat,
   type PackageComponent,
 } from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
@@ -39,8 +39,13 @@ import { readPackages } from './packages';
  * (403_billing_entitlement.sql's deferred check).
  *
  * **VAT** comes from the rate stamped on the package price row, never typed
- * and never read off today's setting (CLAUDE.md rule 6). Prices are net; VAT
- * is added on top at write time.
+ * and never read off today's setting (CLAUDE.md rule 6) — and only while the
+ * practice is registered for VAT. McWellness is not, so a sale today carries
+ * none and the gross is the net (migration 406, docs/SPEC/billing.md section
+ * 5.1). Prices are published net either way, so the family pays the figure the
+ * price list showed; registering later adds five per cent on top of the same
+ * net price and changes nothing already issued. The single-visit charge asks
+ * the same question in SQL, in `app.charge_single_visit`.
  *
  * **The same press twice is one sale.** A sale writes into four tables that
  * grant no delete and no update, so a retried request — a double tap, a lost
@@ -247,20 +252,27 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
 
     // The rate and the setting version the price row was stamped with, so the
     // purchase records the same VAT the price list showed, whatever today's
-    // setting happens to be (CLAUDE.md rule 6).
-    const stamped = await db.query<{ vat_setting_version: number }>(
-      'select vat_setting_version from package_price ' +
-        'where tenant_id = app.current_tenant_id() and id = $1',
+    // setting happens to be (CLAUDE.md rule 6) — and whether the practice may
+    // charge it at all, which is the registration's to say and not the price
+    // row's. Both in one statement: the same transaction, so the answer cannot
+    // change between reading it and writing the invoice, and the invoice's own
+    // `supplier_vat_registered` snapshot is stamped from the same row a moment
+    // later by `app.stamp_invoice_supplier`.
+    const stamped = await db.query<{ vat_setting_version: number; vat_registered: boolean }>(
+      'select pp.vat_setting_version, app.tenant_charges_vat(app.current_tenant_id()) ' +
+        'as vat_registered from package_price pp ' +
+        'where pp.tenant_id = app.current_tenant_id() and pp.id = $1',
       [price.id],
     );
     const version = stamped.rows[0]?.vat_setting_version;
     if (version === undefined) {
       throw new Error('The package price just read has no VAT setting version.');
     }
-    const vat = resolveVat(fils(price.amountFils), {
-      rateBasisPoints: price.vatRateBasisPoints,
-      version,
-    });
+    const vat = resolveSaleVat(
+      fils(price.amountFils),
+      { rateBasisPoints: price.vatRateBasisPoints, version },
+      { vatRegistered: stamped.rows[0]?.vat_registered === true },
+    );
 
     const expiresOn = expiryOn(input.purchasedOn, bundle.expiryMonths);
 
@@ -288,7 +300,10 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
         input.purchasedOn,
         price.amountFils,
         vat.vatFils,
-        price.vatRateBasisPoints,
+        // The purchase records what was charged, so its rate is the charged
+        // one; the credits below keep the price row's own standard rate, which
+        // is a fact about the service and is never printed on a document.
+        vat.rateBasisPoints,
         version,
         bundle.listPriceFils,
         expiresOn,
@@ -327,6 +342,9 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
       throw new Error('Insert of an invoice did not return an id and a reference.');
     }
 
+    // The line stamps the rate that was *charged*, which is zero while the
+    // practice is unregistered, not the rate the price row records. The
+    // rendered document reads the line, so the two must not disagree.
     await db.query(INSERT_LINE_SQL, [
       invoiceId,
       input.clientId,
@@ -334,7 +352,7 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
       bundle.nameAr,
       bundle.id,
       price.amountFils,
-      price.vatRateBasisPoints,
+      vat.rateBasisPoints,
       version,
       vat.vatFils,
       vat.grossFils,

@@ -270,15 +270,17 @@ describe('selling a Silver package', () => {
       packageId: silverId,
       clientId: h.clientId(0),
       purchasedOn: SEED_TODAY,
-      payment: { method: 'transfer', amountFils: 1_084_125, reference: 'Bank transfer' },
+      payment: { method: 'transfer', amountFils: 1_032_500, reference: 'Bank transfer' },
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as SellPackageResponse;
     purchaseId = body.purchase.id;
 
     expect(body.purchase.netFils).toBe(1_032_500);
-    expect(body.purchase.vatFils).toBe(51_625);
-    expect(body.purchase.grossFils).toBe(1_084_125);
+    // No VAT: the practice is not registered for it, so the family pays the
+    // net price the list showed them (migration 406).
+    expect(body.purchase.vatFils).toBe(0);
+    expect(body.purchase.grossFils).toBe(1_032_500);
     expect(body.purchase.listPriceFils).toBe(1_215_000);
     // Twelve months from the day of purchase (the founder's decision).
     expect(body.purchase.expiresOn).toBe('2027-09-02');
@@ -331,9 +333,11 @@ describe('selling a Silver package', () => {
         reference: 'INV-000001',
         kind: 'package',
         net_fils: 1_032_500,
-        vat_fils: 51_625,
-        gross_fils: 1_084_125,
-        // The rendered PDF is the next pull request's.
+        vat_fils: 0,
+        gross_fils: 1_032_500,
+        // `invoice.document_id` stays null and nothing writes it: an invoice
+        // grants no update, so the rendered PDF hangs off `billing_document`
+        // instead (migration 407).
         document_id: null,
       },
     ]);
@@ -350,7 +354,7 @@ describe('selling a Silver package', () => {
         'where i.package_purchase_id = $1',
       [purchaseId],
     );
-    expect(payments).toEqual([{ method: 'transfer', amount_fils: 1_084_125 }]);
+    expect(payments).toEqual([{ method: 'transfer', amount_fils: 1_032_500 }]);
   });
 
   it('shows the family fifteen sessions to come and nothing owed', async () => {
@@ -365,8 +369,8 @@ describe('selling a Silver package', () => {
     expect(body.nextExpiryOn).toBe('2027-09-02');
     expect(body.expiryWarning).toBe('none');
     // Charged and paid in the same breath, so the family owes nothing.
-    expect(body.chargedFils).toBe(1_084_125);
-    expect(body.paidFils).toBe(1_084_125);
+    expect(body.chargedFils).toBe(1_032_500);
+    expect(body.paidFils).toBe(1_032_500);
     expect(body.outstandingFils).toBe(0);
     expect(body.purchases).toHaveLength(1);
   });
