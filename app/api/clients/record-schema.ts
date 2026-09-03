@@ -31,6 +31,10 @@ export const CLIENT_RECORD_STATUSES = ['lead', 'active', 'paused', 'closed'] as 
 const Name = z.string().min(1).max(100);
 const FreeText = z.string().min(1).max(2000);
 const Phone = z.string().regex(E164, 'A phone number is E.164, e.g. +971501234567.');
+// Raw form, digits and hyphens: validated and normalised server-side by
+// domain/client's validateEmiratesId (15 digits, starts 784, Luhn check
+// digit), never required (docs/SPEC/00-data-model.md section 3).
+const EmiratesIdInput = z.string().min(1).max(40);
 
 export const Contact = z.object({
   id: z.uuid(),
@@ -119,6 +123,7 @@ export const CreateClientBody = z.object({
     canConsent: z.boolean().default(false),
     canReceiveReports: z.boolean().default(true),
     canPay: z.boolean().default(false),
+    emiratesId: EmiratesIdInput.optional(),
   }),
 });
 export type CreateClientBody = z.infer<typeof CreateClientBody>;
@@ -151,6 +156,7 @@ export const CreateContactBody = z.object({
   phone: Phone.optional(),
   email: z.email().optional(),
   whatsappOptIn: z.boolean().default(false),
+  emiratesId: EmiratesIdInput.optional(),
 });
 export type CreateContactBody = z.infer<typeof CreateContactBody>;
 
@@ -164,6 +170,8 @@ export const UpdateContactBody = z
     phone: Phone.nullable(),
     email: z.email().nullable(),
     whatsappOptIn: z.boolean(),
+    // Absent: unchanged. null: clears the identity number. A string: replaces it.
+    emiratesId: EmiratesIdInput.nullable(),
   })
   .partial();
 export type UpdateContactBody = z.infer<typeof UpdateContactBody>;
@@ -232,3 +240,21 @@ export const ErasureRequestBody = z.object({
 export type ErasureRequestBody = z.infer<typeof ErasureRequestBody>;
 
 export const IdResponse = z.object({ id: z.uuid() });
+
+// The Goals tab and the enrolment wizard's goals step choose a category
+// from this owner-editable reference table (docs/SPEC/client-record.md
+// section 6); never a free-text field standing in for it.
+export const GoalCategory = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  name: z.string(),
+  nameAr: z.string().nullable(),
+});
+export type GoalCategory = z.infer<typeof GoalCategory>;
+
+export const GoalCategoryListResponse = z.object({ categories: z.array(GoalCategory) });
+export type GoalCategoryListResponse = z.infer<typeof GoalCategoryListResponse>;
+
+/** The two ways a captured Emirates ID can fail, distinct from a plain `bad_request`. */
+export const EMIRATES_ID_ERROR_CODES = ['invalid_emirates_id', 'emirates_id_in_use'] as const;
+export type EmiratesIdErrorCode = (typeof EMIRATES_ID_ERROR_CODES)[number];

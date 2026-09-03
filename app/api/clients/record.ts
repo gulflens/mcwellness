@@ -7,11 +7,12 @@ import {
   canViewClient,
   type ClientStatus,
 } from '../../../domain/client';
-import { hasRole } from '../../../domain/shared';
+import { hasRole, isoDateIn } from '../../../domain/shared';
 import { logRead } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { canWriteClientRecord } from './access';
+import { captureEmiratesId, emiratesIdInUse } from './emirates-id-capture';
 import {
   ClientRecordResponse,
   CreateClientBody,
@@ -33,6 +34,12 @@ import { logRefused } from './refused';
  */
 
 const Params = z.object({ id: z.uuid() });
+
+// Every date this module judges is the practice's own day, not the server's:
+// a request at 22:00 UTC is already tomorrow in Dubai, and the activation
+// gate must agree with the day sheet about which day that is (list.ts keeps
+// the same constant for the same reason).
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
 type ClientRow = {
   id: string;
@@ -279,6 +286,27 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
 
     const tenantId = actor.tenantId;
+    // contactId is generated before either insert, both so the Emirates ID seal below can
+    // bind to it (identity.ts's boundTo) and so a bad identity number is caught before the
+    // client row is allocated an MRN at all — a lead with no contact, MRN spent for nothing,
+    // is exactly the half-written row this ordering avoids.
+    const contactId = randomUUID();
+    const emiratesIdInput = body.data.contact.emiratesId;
+    const capture =
+      emiratesIdInput !== undefined
+        ? captureEmiratesId(emiratesIdInput, contactId, c.get('identityKeys'))
+        : null;
+    if (capture && !capture.ok) {
+      return capture.code === 'emirates_id_unavailable'
+        ? c.json({ error: 'emirates_id_unavailable', requestId }, 503)
+        : c.json({ error: 'bad_request', code: capture.code, requestId }, 400);
+    }
+    // Before a single row is written, so a repeated identity number costs neither a
+    // half-made client nor a record number spent on nothing.
+    if (capture && capture.ok && (await emiratesIdInUse(db, capture.hash))) {
+      return c.json({ error: 'conflict', code: 'emirates_id_in_use', requestId }, 409);
+    }
+
     // app.next_mrn (db/migrations/100_client_record.sql) takes its own advisory lock,
     // scoped to this tenant, and reads every client regardless of row level security —
     // including one this actor's role cannot see because it is erased — so the practice's
@@ -310,11 +338,10 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
         body.data.referralSource ? cleanText(body.data.referralSource, 200) : null,
       ],
     );
-    const contactId = randomUUID();
     await db.query(
       'insert into contact (id, tenant_id, client_id, relationship, is_legal_guardian, ' +
-        'can_consent, can_receive_reports, can_pay, phone, email) ' +
-        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+        'can_consent, can_receive_reports, can_pay, phone, email, emirates_id_encrypted, ' +
+        'emirates_id_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
       [
         contactId,
         tenantId,
@@ -326,6 +353,8 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
         body.data.contact.canPay,
         body.data.contact.phone,
         body.data.contact.email ?? null,
+        capture && capture.ok ? capture.sealed : null,
+        capture && capture.ok ? capture.hash : null,
       ],
     );
     await db.query('update client set primary_contact_id = $1 where id = $2', [
@@ -464,7 +493,10 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
             expiresAt: cs.expiresAt,
           })),
         },
-        new Date().toISOString().slice(0, 10),
+        // The injected clock, in the practice's own time zone: this route takes `now`
+        // like every other, and reading Date directly here would make the one gate that
+        // decides activation the one thing a test cannot pin.
+        isoDateIn(now(), PRACTICE_TIME_ZONE),
       );
       if (!gate.ok) {
         return c.json({ error: 'incomplete', missing: gate.missing, requestId }, 400);
