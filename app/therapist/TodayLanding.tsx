@@ -4,7 +4,11 @@ import { Button, Note } from '../shell/components/Controls';
 import { describeRoles, homeFor } from '../shell/routing';
 import './TodayLanding.css';
 
-/** The instrument's ground, before the instrument: dark, one column, one decision. */
+/**
+ * The practitioner side for an account that has no day of its own: an admin,
+ * finance or a client contact who typed the address. Someone who treats never
+ * sees this; App.tsx sends them to the day sheet (app/therapist/today).
+ */
 export function TodayLanding() {
   const { session, signOut } = useAuth();
   const navigate = useNavigate();
@@ -18,16 +22,9 @@ export function TodayLanding() {
         <h1>Today</h1>
         <div className="small muted">{roles}</div>
         <Note>
-          The day sheet, the session runner and the route arrive with their own work. Nothing is
-          scheduled yet.
+          There is no day of visits for this account. Visits belong to practitioners; the console is
+          where the rest of the practice's work lives.
         </Note>
-        <Button
-          variant="primary"
-          className="today__primary"
-          onClick={() => navigate('/today/check-in')}
-        >
-          Check in
-        </Button>
         {hasConsole ? (
           <Button onClick={() => navigate('/admin/clients')}>Admin console</Button>
         ) : null}

@@ -50,6 +50,8 @@ function mount(
     services?: unknown[];
     onPost?: PostHandler;
     onServiceTypes?: (callIndex: number) => Response;
+    /** Router state the day sheet hands over when a stop's Check in is tapped. */
+    state?: { record?: unknown };
   } = {},
 ) {
   const services = options.services ?? [SERVICE_A];
@@ -84,7 +86,9 @@ function mount(
 
   const utils = render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <MemoryRouter initialEntries={['/today/check-in']}>
+      <MemoryRouter
+        initialEntries={[{ pathname: '/today/check-in', state: options.state ?? null }]}
+      >
         <CheckInPage />
       </MemoryRouter>
     </AuthProviderBoundary>,
@@ -448,5 +452,23 @@ describe('CheckInPage', () => {
     expect(
       screen.getByText('Location was not shared. Check-in will continue without it.'),
     ).toBeTruthy();
+  });
+});
+
+describe('the record number the day sheet hands over', () => {
+  it('opens with the field carrying the handed-over record number', async () => {
+    mount({ state: { record: 'MW-000123' } });
+    await ready();
+    expect((screen.getByLabelText('Record number') as HTMLInputElement).value).toBe('MW-000123');
+  });
+
+  it('opens empty when nothing was handed over, and ignores a value that is not text', async () => {
+    mount({ state: { record: 42 } });
+    await ready();
+    expect((screen.getByLabelText('Record number') as HTMLInputElement).value).toBe('');
+    cleanup();
+    mount();
+    await ready();
+    expect((screen.getByLabelText('Record number') as HTMLInputElement).value).toBe('');
   });
 });

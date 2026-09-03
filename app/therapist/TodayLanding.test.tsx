@@ -13,7 +13,7 @@ const ME = {
   userId: '00000002-0000-4000-8000-000000000009',
   displayName: 'Rowan Meadow',
   tenantId: '00000001-0000-4000-8000-000000000001',
-  roles: ['practitioner'],
+  roles: ['admin'],
   capabilities: [],
 };
 
@@ -39,10 +39,10 @@ function mount() {
 }
 
 describe('TodayLanding', () => {
-  it('offers a primary action to check in', async () => {
+  it('tells an account with no day of its own so, and offers the console when it has one', async () => {
     mount();
-    const button = await screen.findByRole('button', { name: 'Check in' });
-    expect(button).toBeTruthy();
-    expect(button.className).toContain('button--primary');
+    await screen.findByText(/There is no day of visits for this account/);
+    expect(screen.queryByRole('button', { name: 'Check in' })).toBeNull();
+    expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
   });
 });
