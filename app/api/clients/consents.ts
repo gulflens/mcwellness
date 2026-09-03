@@ -12,7 +12,12 @@ import type { ApiEnv, Db } from '../_middleware/request-context';
 import { canWriteClientRecord } from './access';
 import { currentWording } from './consent-wording';
 import { fileClientDocument } from './document-store';
-import { IdResponse, RecordConsentBody, type DocumentBytes } from './record-schema';
+import {
+  IdResponse,
+  RecordConsentBody,
+  WithdrawConsentResponse,
+  type DocumentBytes,
+} from './record-schema';
 import { logRefused } from './refused';
 import { retirePhotoEvidence } from './withdrawal';
 
@@ -338,12 +343,20 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       consentId,
     ]);
 
-    // Withdrawing photo_video is the permission to hold a setup photo being
-    // taken back, so the photos go with it (./withdrawal.ts explains what
-    // "go" can and cannot mean today).
-    if (row.purpose === 'photo_video') {
-      await retirePhotoEvidence(db, c.get('storage'), clientId);
-    }
-    return c.json(IdResponse.parse({ id: consentId }));
+    // Withdrawing photo_video is the permission to hold a setup photograph
+    // being taken back, so the photographs go with it (./withdrawal.ts
+    // explains what "go" can and cannot mean today). The counts travel back so
+    // the console can say what happened rather than imply it.
+    const photographs =
+      row.purpose === 'photo_video'
+        ? await retirePhotoEvidence(db, c.get('storage'), clientId)
+        : { removed: 0, stillOnFile: 0 };
+    return c.json(
+      WithdrawConsentResponse.parse({
+        id: consentId,
+        photographsRemoved: photographs.removed,
+        photographsStillOnFile: photographs.stillOnFile,
+      }),
+    );
   });
 }

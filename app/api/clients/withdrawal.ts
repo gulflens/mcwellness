@@ -40,25 +40,26 @@ export async function retirePhotoEvidence(
   db: Db,
   storage: ServerStorageProvider | undefined,
   clientId: string,
-): Promise<{ removed: number; unreachable: number }> {
+): Promise<{ removed: number; stillOnFile: number }> {
   const stillPermitted = await db.query<{ n: string }>(
     "select count(*)::text as n from consent where client_id = $1 and purpose = 'photo_video' " +
       "and status = 'active'",
     [clientId],
   );
   if (Number(stillPermitted.rows[0]?.n ?? '0') > 0) {
-    return { removed: 0, unreachable: 0 };
+    return { removed: 0, stillOnFile: 0 };
   }
 
   const { rows } = await db.query<{ id: string; storage_key: string }>(
     "select id, storage_key from document where client_id = $1 and kind = 'setup_photo'",
     [clientId],
   );
-  if (rows.length === 0) return { removed: 0, unreachable: 0 };
+  if (rows.length === 0) return { removed: 0, stillOnFile: 0 };
 
   // No store configured is not a reason to pretend: the count comes back so
-  // the caller knows the bytes are still out there.
-  if (!storage) return { removed: 0, unreachable: rows.length };
+  // the route can say the photographs are still out there rather than let the
+  // withdrawal read as having taken them.
+  if (!storage) return { removed: 0, stillOnFile: rows.length };
 
   let removed = 0;
   for (const row of rows) {
@@ -66,5 +67,5 @@ export async function retirePhotoEvidence(
     await storage.delete(row.storage_key);
     removed += 1;
   }
-  return { removed, unreachable: 0 };
+  return { removed, stillOnFile: 0 };
 }

@@ -425,6 +425,24 @@ export type ErasureRequestBody = z.infer<typeof ErasureRequestBody>;
 
 export const IdResponse = z.object({ id: z.uuid() });
 
+/**
+ * What a withdrawal did beyond stopping the consent. Withdrawing
+ * `photo_video` takes back the permission a setup photograph exists under, so
+ * the photographs go with it (app/api/clients/withdrawal.ts) — and the console
+ * says how many, because a withdrawal that quietly removed a family's
+ * photographs, or quietly failed to, is the same screen either way.
+ *
+ * `photographsStillOnFile` is not always zero: a store that is unreachable
+ * cannot be made to forget anything, and saying so is better than a number
+ * that implies it did.
+ */
+export const WithdrawConsentResponse = z.object({
+  id: z.uuid(),
+  photographsRemoved: z.number().int().nonnegative(),
+  photographsStillOnFile: z.number().int().nonnegative(),
+});
+export type WithdrawConsentResponse = z.infer<typeof WithdrawConsentResponse>;
+
 // The Goals tab and the enrolment wizard's goals step choose a category
 // from this owner-editable reference table (docs/SPEC/client-record.md
 // section 6); never a free-text field standing in for it.

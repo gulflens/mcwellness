@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { CONSENT_PURPOSES, requiredConsents, type ConsentPurpose } from '@domain/client';
-import type { ClientRecordResponse, Consent } from '../../api/clients/record-schema';
+import {
+  WithdrawConsentResponse,
+  type ClientRecordResponse,
+  type Consent,
+} from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { practiceToday, toActivationRecord } from './activation';
@@ -88,6 +92,7 @@ export function ConsentTab({
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { apiFetch } = useAuth();
 
@@ -109,6 +114,25 @@ export function ConsentTab({
         body: JSON.stringify({}),
       });
       if (res.ok) {
+        // Withdrawing photographs and video takes the photographs with it, so
+        // the screen says how many rather than leaving the household to
+        // wonder (app/api/clients/withdrawal.ts).
+        const body = WithdrawConsentResponse.safeParse(await res.json());
+        if (body.success && body.data.photographsStillOnFile > 0) {
+          setOutcome(
+            `Consent withdrawn. ${body.data.photographsStillOnFile} setup ${
+              body.data.photographsStillOnFile === 1 ? 'photograph is' : 'photographs are'
+            } still on file: the document store could not be reached, so tell whoever keeps it.`,
+          );
+        } else if (body.success && body.data.photographsRemoved > 0) {
+          setOutcome(
+            `Consent withdrawn, and ${body.data.photographsRemoved} setup ${
+              body.data.photographsRemoved === 1 ? 'photograph was' : 'photographs were'
+            } removed.`,
+          );
+        } else {
+          setOutcome(null);
+        }
         setWithdrawing(null);
         setReason('');
         onChanged();
@@ -132,6 +156,7 @@ export function ConsentTab({
 
   return (
     <div className="tab-section">
+      {outcome ? <Note>{outcome}</Note> : null}
       {consenting.length === 0 ? (
         <Note>
           No contact on this record may give consent yet. Set &ldquo;May give consent&rdquo; on the

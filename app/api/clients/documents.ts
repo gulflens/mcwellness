@@ -52,9 +52,15 @@ type DocumentRow = {
 };
 
 /**
- * Whether this actor may see the client's documents at all. Finance may not:
- * section 2 gives it demographics and contacts and nothing else, and the read
- * policy is the floor under this (db/policies/client/readers.sql).
+ * Whether this actor may see the client's documents at all.
+ *
+ * Finance may not: section 2 gives it demographics and contacts and nothing
+ * else, and the read policy is the floor under this
+ * (db/policies/client/readers.sql). The test is "holds nothing but finance",
+ * not "holds finance" — one person may be several things at once
+ * (docs/SPEC/00-data-model.md section 2, roles live on `user_role`), and an
+ * owner who also keeps the books must not lose the record because of it. It is
+ * the same test app/admin/clients/clientAccess.ts makes for the same reason.
  */
 async function mayReadDocuments(
   db: Db,
@@ -63,7 +69,9 @@ async function mayReadDocuments(
   status: ClientStatus,
   now: Date,
 ): Promise<{ ok: boolean; needsReason: boolean }> {
-  if (hasRole(actor, 'finance')) return { ok: false, needsReason: false };
+  if (actor.roles.every((role) => role === 'finance')) {
+    return { ok: false, needsReason: false };
+  }
   const contactClientIds = hasRole(actor, 'client_contact')
     ? (
         await db.query<{ client_id: string }>('select client_id from contact where user_id = $1', [

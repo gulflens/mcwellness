@@ -727,6 +727,11 @@ describe('withdrawing a consent', () => {
       },
     );
     expect(withdrawn.status).toBe(200);
+    // The answer says what it did, so the console can say it too.
+    expect((await withdrawn.json()) as { photographsRemoved: number }).toMatchObject({
+      photographsRemoved: 1,
+      photographsStillOnFile: 0,
+    });
     // The permission is gone and so are the bytes, with the read recorded.
     expect(await storage.exists(photoKey)).toBe(false);
     expect(await auditRows(photoId, 'read')).toBe(1);
