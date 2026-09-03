@@ -27,6 +27,7 @@ owns, the same way `docs/CHANGE-REQUESTS/scheduling-03.md` did it.
 | 3 | `domain/shared/actor.ts` (trunk) | `appointment.move` and `appointment.cancel` | nothing — composed today |
 | 4 | `app/admin/billing/money.ts` → `domain/shared` (billing) | One money formatter, importable from anywhere | nothing — imported today |
 | 5 | `tests/client/**` (client-record) | Two tests that fail between midnight and 04:00 | `pnpm verify` and `pnpm test:db`, for four hours a day |
+| 6 | `app/api/billing/**` (billing) | The stop-card balance route — **already built** on billing's own pull request | this branch, until that one merges |
 
 ---
 
@@ -285,6 +286,32 @@ every hour.
 
 ---
 
+## 5a. Not a request: this branch depends on billing's stop-card route
+
+The compliance review of this pull request found the practitioner's stop card
+reading `GET /api/billing/clients/:id/balance`, whose body is the console's
+whole commercial picture — every purchase with its net, its VAT and its list
+price, the reason somebody extended one, invoice ids, recognised and deferred
+figures — on a phone at a family's front door. The permission was never the
+problem: a practitioner is entitled to both figures the card shows, and
+`app.client_visible_to_practitioner` scopes which household they may ask
+about. The size of the answer was.
+
+Billing has since built the narrow door for it —
+`GET /api/billing/clients/:clientId/stop-balance`, the same permission and the
+same audit row, answering per service a code and three counts plus one
+outstanding figure — and this branch **merges billing's branch in** so it
+builds and is tested against it. That merge disappears into `main` the moment
+billing's own pull request lands, which it does first. Nothing else in this
+pull request touches a billing path.
+
+Two things this stream changed to consume it, both in its own files: the day
+stop now carries the service's **code** as well as its name, because the
+narrow route answers by code and never by id; and a test asserts the wide
+route is not called at all.
+
+---
+
 ## 6. Not a request: the unfit fee is recorded, and nothing charges it
 
 The operator set AED 150 for a visit that cannot go ahead once the
@@ -315,20 +342,39 @@ late", so (3) is what is built, minus the fee nothing charges. Changing to (2)
 is one line: move `'unfit_to_attend'` out of `ALWAYS_LATE_REASONS` in
 `domain/scheduling/cancellation.ts`, and its two tests with it.
 
+**One thing the compliance review closed in the meantime.** Because that
+reason skips the notice rule, it was also a way to take a household's whole
+session for a visit two hundred hours away, by choosing it. It can now only be
+given once the arrival window has opened — the rule is `reasonCanBeGivenAt`
+in `domain/scheduling/cancellation.ts`, the route refuses it, the drawer says
+so before anybody types a sentence about it, and `app.cancel_own_appointment`
+refuses it again because it runs with row security switched off.
+
 ---
 
-## 7. Not a request: billing's waiver has a route and no screen
+## 7. Not a request: the waiver is given from the cancel drawer
 
-`POST /api/billing/entitlements/:id/waiver` exists, is tested, and is the way
-back from a late cancellation that should not have cost a session
-(`docs/SPEC/billing.md` section 4.3 — "a one-click waiver with a reason
-field"). Nothing on any screen calls it.
+`POST /api/billing/entitlements/:id/waiver` exists and is tested, and billing's
+own screens do not call it. `docs/SPEC/billing.md` section 4.3 asks for "a
+one-click waiver with a reason field", and after the compliance review this
+pull request gives it one: the cancel drawer's outcome panel offers "Give the
+session back", addressed to the credit billing's trigger actually took, and
+carrying the sentence the coordinator has already written about what happened.
 
-`POST /api/appointments/:id/cancel` now answers with `waiverEntitlementId`:
-the exact credit billing's trigger took, or null when it took none. So the
-moment a waiver screen exists, the coordinator can go straight from the
-cancellation to the credit. Until then the cancel drawer says what happened
-and offers a link to Billing, which is as far as an honest screen can go.
+That is deliberate rather than opportunistic. It is the one moment somebody
+both knows a waiver is wanted and has said why; sending them to another screen
+to find the credit again is the click that never happens, and the family keeps
+paying for it. The route and the permission stay billing's — a lead
+practitioner may call a visit off and may not forgive the charge, which the
+drawer says plainly rather than argues with — and the way through to Billing
+stays beside it.
+
+**If billing would rather own that button**, say so and this stream will take
+it out and link to wherever billing puts it. The response's
+`waiverEntitlementId` is what either shape needs, and a database test in this
+pull request proves it is an id billing's own route acts on: a late
+cancellation takes a credit, the waiver gives it back, and the record still
+shows the visit as late-cancelled and the credit as waived.
 
 ---
 
@@ -351,6 +397,26 @@ than a status word being ahead of a phone call, so the status carries over and
 the Move drawer says on its face that the household still has to be told. The
 right fix is the confirm toggle section 3 already asks for; it is a small
 route and a smaller button, and it is this stream's to build next.
+
+---
+
+## 8a. Not a request: nothing tells anybody a visit moved
+
+A move and a cancellation both change a promise made to a household, and the
+platform tells nobody about either. The household is told by whoever picks up
+the phone, exactly as they are told about every other status change in Phase 1
+(`docs/SPEC/scheduling-manual.md` section 3, "manual toggle in Phase 1;
+WhatsApp in Phase 2"), and the practitioner finds out when their Today next
+loads.
+
+Both drawers now say so on their face rather than leaving it to be discovered
+— "The household still has to be told the new window, and the practitioner
+sees it on their next Today" — which is the honest interim and not the
+destination. A notification is its own piece of work with its own decisions
+(which changes are worth an interruption, to whom, and through what), and
+section 10 of the manual puts client notifications out of scope for this phase
+on purpose. Recorded here so that the silence is a decision somebody made
+rather than a gap somebody missed (compliance review of this pull request).
 
 ---
 
