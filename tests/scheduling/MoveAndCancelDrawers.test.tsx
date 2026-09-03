@@ -88,6 +88,22 @@ function mount(node: React.ReactNode, fetchImpl: typeof fetch) {
   );
 }
 
+/**
+ * Waits for the drawer to have read the practice's notice period.
+ *
+ * The action is deliberately closed off until it has: a cancellation that
+ * might silently cost a household a session is not one to allow while the
+ * screen cannot say which it is. So a test that clicks before this has
+ * happened is testing a disabled button.
+ */
+async function policyRead() {
+  await waitFor(() =>
+    expect(
+      (screen.getByRole('button', { name: 'Call off this visit' }) as HTMLButtonElement).disabled,
+    ).toBe(false),
+  );
+}
+
 function settingsAnd(handler: (url: string, init?: RequestInit) => Response): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -143,10 +159,13 @@ describe('MoveAppointmentDrawer', () => {
     expect(screen.getByText('Choose a different time first.')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('New start time'), { target: { value: '14:00' } });
-    // A new time, and still no reason.
+    // A new time, and still no reason — and the screen says which, rather than
+    // leaving a grey button to be clicked twice and given up on.
     expect(
       (screen.getByRole('button', { name: 'Move appointment' }) as HTMLButtonElement).disabled,
     ).toBe(true);
+    expect(screen.getByText('Say why it is moving first.')).toBeTruthy();
+    expect(screen.queryByText('Choose a different time first.')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Why is it moving?'), {
       target: { value: 'The family asked for the afternoon.' },
@@ -154,6 +173,8 @@ describe('MoveAppointmentDrawer', () => {
     expect(
       (screen.getByRole('button', { name: 'Move appointment' }) as HTMLButtonElement).disabled,
     ).toBe(false);
+    // And nothing is missing any more.
+    expect(screen.queryByText('Say why it is moving first.')).toBeNull();
   });
 
   it('sends the new window and carries the reason on the request, not in the body', async () => {
@@ -342,6 +363,7 @@ describe('CancelAppointmentDrawer', () => {
     fireEvent.change(screen.getByLabelText('What happened?'), {
       target: { value: 'The child is unwell.' },
     });
+    await policyRead();
     fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
 
     expect(await screen.findByText(/It used one of the client’s sessions\./)).toBeTruthy();
@@ -390,6 +412,7 @@ describe('CancelAppointmentDrawer', () => {
     fireEvent.change(screen.getByLabelText('What happened?'), {
       target: { value: 'The practice moved it at the last minute.' },
     });
+    await policyRead();
     fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Give the session back' }));
@@ -438,6 +461,7 @@ describe('CancelAppointmentDrawer', () => {
     fireEvent.change(screen.getByLabelText('What happened?'), {
       target: { value: 'A genuine emergency at home.' },
     });
+    await policyRead();
     fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Give the session back' }));
     // A lead practitioner may call a visit off and may not forgive the charge.
@@ -471,12 +495,35 @@ describe('CancelAppointmentDrawer', () => {
       fetchImpl,
     );
     fireEvent.change(screen.getByLabelText('What happened?'), { target: { value: 'No answer.' } });
+    await policyRead();
     fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
 
     expect(
       await screen.findByText(/The client had no session left to use for it, so nothing was taken/),
     ).toBeTruthy();
     expect(screen.queryByText(/It used one of the client’s sessions/)).toBeNull();
+  });
+
+  it('will not let a visit be called off while the consequence is unknown', async () => {
+    // The practice's notice period cannot be read, so the drawer cannot say
+    // whether this costs the household a session. Saying nothing and letting
+    // it happen anyway is the one outcome that is not acceptable.
+    const fetchImpl = vi.fn(
+      async () => new Response('nope', { status: 500 }),
+    ) as unknown as typeof fetch;
+    mount(
+      <CancelAppointmentDrawer
+        appointment={IMMINENT}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      fetchImpl,
+    );
+    expect(await screen.findByText(/The practice’s notice period could not be read/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('What happened?'), { target: { value: 'No answer.' } });
+    expect(
+      (screen.getByRole('button', { name: 'Call off this visit' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it('will not call a visit off without saying what happened', async () => {

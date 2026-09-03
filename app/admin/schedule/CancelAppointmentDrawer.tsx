@@ -89,6 +89,10 @@ export function CancelAppointmentDrawer({
   const [reason, setReason] = useState<CancellationReason>('client_request');
   const [note, setNote] = useState('');
   const [settings, setSettings] = useState<SchedulingSettingsResponse | null>(null);
+  // Whether the practice's own policy could be read at all. Its own state, not
+  // an absent `settings`: "still loading" and "cannot be read" want different
+  // sentences, and neither may quietly become "there is no consequence".
+  const [policy, setPolicy] = useState<'loading' | 'ready' | 'unavailable'>('loading');
   const [submitting, setSubmitting] = useState(false);
   const [state, setState] = useState<State>({ kind: 'asking' });
   const [waiver, setWaiver] = useState<Waiver>({ kind: 'offered' });
@@ -110,11 +114,22 @@ export function CancelAppointmentDrawer({
     let live = true;
     void apiFetch('/api/appointments/settings')
       .then(async (res) => {
-        if (!live || !res.ok) return;
+        if (!live) return;
+        if (!res.ok) {
+          setPolicy('unavailable');
+          return;
+        }
         const parsed = SchedulingSettingsResponse.safeParse(await res.json());
-        if (parsed.success) setSettings(parsed.data);
+        if (parsed.success) {
+          setSettings(parsed.data);
+          setPolicy('ready');
+        } else {
+          setPolicy('unavailable');
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (live) setPolicy('unavailable');
+      });
     return () => {
       live = false;
     };
@@ -351,12 +366,26 @@ export function CancelAppointmentDrawer({
                 />
               </div>
 
+              {policy === 'loading' ? (
+                <Note>Reading the practice&rsquo;s notice period.</Note>
+              ) : null}
+              {policy === 'unavailable' ? (
+                <Note tone="critical">
+                  The practice&rsquo;s notice period could not be read, so this screen cannot say
+                  whether calling this visit off uses one of the client&rsquo;s sessions. Try again
+                  in a moment.
+                </Note>
+              ) : null}
               {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
 
               <div className="stepper__submit">
                 <Button
                   variant="primary"
-                  disabled={!note.trim() || tooEarly || submitting}
+                  // Never while the consequence is unknown. A cancellation
+                  // that might silently cost a household a session is not a
+                  // thing to let somebody do without telling them which it is
+                  // (design review of this pull request).
+                  disabled={!note.trim() || tooEarly || policy !== 'ready' || submitting}
                   onClick={() => void handleSubmit()}
                 >
                   {submitting ? 'Calling off…' : 'Call off this visit'}

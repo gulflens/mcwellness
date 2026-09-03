@@ -93,6 +93,24 @@ export function MoveAppointmentDrawer({
     date === dayOf(appointment.windowStart) && startTime === timeOf(appointment.windowStart);
   const canSubmit = Boolean(date && startTime && reason.trim()) && !unchanged && !submitting;
 
+  /**
+   * What is still missing, in the order the drawer asks for it.
+   *
+   * A disabled button that says nothing is a button somebody clicks twice and
+   * then gives up on: they have picked a new time, the primary is still grey,
+   * and nothing on screen says the reason field below is why (design review of
+   * this pull request). Null once there is nothing missing.
+   */
+  const missing = !date
+    ? 'Choose a new date first.'
+    : !startTime
+      ? 'Choose a new start time first.'
+      : unchanged
+        ? 'Choose a different time first.'
+        : !reason.trim()
+          ? 'Say why it is moving first.'
+          : null;
+
   async function handleSubmit() {
     if (!date || !startTime || !reason.trim()) return;
     setSubmitting(true);
@@ -187,7 +205,6 @@ export function MoveAppointmentDrawer({
           <div className="stepper__step">
             <Field
               id="move-date"
-              className="schedule__date"
               label="New date"
               type="date"
               value={date}
@@ -255,7 +272,7 @@ export function MoveAppointmentDrawer({
             <Button variant="primary" disabled={!canSubmit} onClick={() => void handleSubmit()}>
               {submitting ? 'Moving…' : 'Move appointment'}
             </Button>
-            {unchanged ? <span className="small muted">Choose a different time first.</span> : null}
+            {missing ? <span className="small muted">{missing}</span> : null}
           </div>
         </div>
       </div>

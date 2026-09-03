@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -79,6 +80,39 @@ function datesAsked(fetchImpl: typeof fetch): string[] {
     .sort();
 }
 
+describe('the week keeps seven columns', () => {
+  // jsdom lays nothing out, so the assertion is on the rule rather than on the
+  // rendered width: the grid is seven columns, and nothing between a phone and
+  // a wide screen folds them into fewer. A laptop at 1024px used to get
+  // 3 + 3 + 1, which is not a week — the reader loses the one thing they came
+  // for, Monday to Sunday side by side (design review of this pull request).
+  // What gives at that width is how much each stop says, not where it sits.
+  // Read from the repository root, which is where vitest runs: this file is a
+  // jsdom test, so `import.meta.url` here is an http URL and not a path.
+  const css = readFileSync('app/admin/schedule/schedule.css', 'utf8');
+
+  it('declares seven columns and folds them only below phone width', () => {
+    expect(css).toContain('grid-template-columns: repeat(7, minmax(0, 1fr))');
+    // Every media query that changes the week's column count, with its width.
+    const folds = [...css.matchAll(/@media \(max-width: (\d+)px\)\s*\{\s*\.week\s*\{/g)];
+    for (const [, width] of folds) {
+      expect(Number(width), `a fold at ${width}px`).toBeLessThanOrEqual(640);
+    }
+  });
+
+  it('renders all seven days whatever the width', async () => {
+    const { container } = render(
+      <AuthProviderBoundary provider={provider} fetchImpl={week()}>
+        <MemoryRouter initialEntries={[`/admin/schedule/week?date=${ANCHOR}`]}>
+          <WeekPage />
+        </MemoryRouter>
+      </AuthProviderBoundary>,
+    );
+    await screen.findByText('Iris Cliff');
+    expect(container.querySelectorAll('.week__day')).toHaveLength(7);
+  });
+});
+
 describe('WeekPage', () => {
   it('asks for the seven days of the week the chosen day falls in, Monday first', async () => {
     const fetchImpl = week();
@@ -124,6 +158,24 @@ describe('WeekPage', () => {
     expect(text.startsWith('\u2066')).toBe(true);
     expect(text.endsWith('\u2069')).toBe(true);
     expect(text.indexOf('09:00')).toBeLessThan(text.indexOf('09:45'));
+  });
+
+  it('marks today, drawn and announced', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(new Date());
+    const { container } = render(
+      <AuthProviderBoundary provider={provider} fetchImpl={week()}>
+        <MemoryRouter initialEntries={[`/admin/schedule/week?date=${today}`]}>
+          <WeekPage />
+        </MemoryRouter>
+      </AuthProviderBoundary>,
+    );
+    await waitFor(() => expect(container.querySelectorAll('.week__day')).toHaveLength(7));
+    // Exactly one column, and it is the one whose heading names today.
+    const marked = container.querySelectorAll('.week__day--today');
+    expect(marked).toHaveLength(1);
+    // A week is read to find where one is in it, so the mark is not visual only.
+    expect(marked[0]?.getAttribute('aria-current')).toBe('date');
+    expect(container.querySelectorAll('[aria-current="date"]')).toHaveLength(1);
   });
 
   it('says plainly which days hold nothing', async () => {

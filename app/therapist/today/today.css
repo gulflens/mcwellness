@@ -194,6 +194,13 @@ a.stop__action {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-1) var(--s-3);
+  /* Reserved before there is anything to put in it. The day sheet renders and
+     billing answers a moment later; without this the line arrives underneath
+     the practitioner's thumb and pushes Navigate and Check in down the height
+     of it, so a tap aimed at one lands on the other — at somebody's front
+     door. One line's worth, which is what it holds: both facts sit on one row
+     wherever the column is wide enough for them. */
+  min-block-size: var(--lh-small);
 }
 
 /* An amount outstanding is the one figure here that asks something of the

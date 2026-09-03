@@ -109,26 +109,57 @@
   align-items: center;
 }
 
-/* The week: seven days across on a wide screen, folding to fewer columns and
-   then to one as the screen narrows. Not a grid of time slots — the practice
-   runs at most a handful of visits a day, so a column of the day's stops in
-   time order says more than an hour scale mostly made of blank space. */
+/* The week: seven days across, and seven days across. Not a grid of time slots
+   — the practice runs at most a handful of visits a day, so a column of the
+   day's stops in time order says more than an hour scale mostly made of blank
+   space.
+
+   The columns do not fold. A week that reflows into 3 + 3 + 1 is not a week:
+   the reader loses the one thing they came for, which is Monday-to-Sunday side
+   by side, and a laptop at 1024px got exactly that (design review of this pull
+   request). What gives instead is how much each stop says — below the width at
+   which a service and a practitioner still fit, the columns keep their places
+   and the rows go terse, showing the window and the name only. The dropped
+   facts are a click away on the day itself, which the heading links to.
+
+   One phone-sized exception: below 640px seven columns are four characters
+   wide and the screen is not a week at all, so it becomes a list. The console
+   is a desk tool (docs/DESIGN-BRIEF.md) and this is the edge, not the case. */
 .week {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: var(--s-3);
 }
 
-@media (max-width: 1100px) {
-  .week {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 640px) {
   .week {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* The terser row: what identifies a stop stays — the window, and the name in
+   both scripts, because a name is not a detail — and the practitioner and the
+   service stand down so seven columns keep their places. */
+@media (max-width: 1100px) {
+  .week__aside {
+    display: none;
+  }
+}
+
+/* Today, marked. A week is read to find where one is in it, and a column that
+   looks like the other six makes the reader count dates to find out (design
+   review). A hairline and a heavier heading, no hue: colour on this screen
+   belongs to the status chips. */
+.week__day--today .week__heading {
+  font-weight: var(--w-medium);
+  color: var(--ink);
+  border-block-end-color: var(--ink);
+}
+
+.week__day--today {
+  border-inline-start: var(--hairline) solid var(--ink);
+  padding-inline-start: var(--s-2);
+  margin-inline-start: calc(var(--s-2) * -1);
 }
 
 .week__day {

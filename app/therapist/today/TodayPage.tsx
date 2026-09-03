@@ -299,16 +299,24 @@ function Stop({
       {age ? <div className="small muted numeric">{age}</div> : null}
       <div className="small muted">{stop.serviceType.name}</div>
       <div className="small muted">{describePlace(stop.location)}</div>
-      {balance === null ? null : balance.kind === 'unavailable' ? (
-        <div className="small muted">Balance unavailable</div>
-      ) : (
-        <div className="stop__money small numeric">
-          {programme ? <span className="muted">{programme}</span> : null}
-          <span className={balance.balance.outstandingFils > 0 ? 'stop__owed' : 'muted'}>
-            {owedLine(balance.balance.outstandingFils)}
-          </span>
-        </div>
-      )}
+      {/* The slot is here from the first paint, empty, and keeps its height.
+          Billing answers a moment after the day does, and a line appearing
+          under a thumb pushes Navigate and Check in down by the height of it —
+          so the tap that was aimed at one lands on the other, at a front door,
+          which is the worst place in this app for a control to move (design
+          review of this pull request). */}
+      <div className="stop__money small numeric" aria-live="polite">
+        {balance === null ? null : balance.kind === 'unavailable' ? (
+          <span className="muted">Balance unavailable</span>
+        ) : (
+          <>
+            {programme ? <span className="muted">{programme}</span> : null}
+            <span className={balance.balance.outstandingFils > 0 ? 'stop__owed' : 'muted'}>
+              {owedLine(balance.balance.outstandingFils)}
+            </span>
+          </>
+        )}
+      </div>
       {settled ? null : (
         <div className="stop__actions">
           {/* The visible word is one of several identical ones down the

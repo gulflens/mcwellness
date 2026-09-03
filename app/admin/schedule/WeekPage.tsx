@@ -74,6 +74,9 @@ export function WeekPage() {
   const [params, setParams] = useSearchParams();
   const anchor = params.get('date') ?? practiceDay(new Date());
   const days = useMemo(() => weekOf(anchor), [anchor]);
+  // Read once per render rather than frozen at mount, so a week left open
+  // overnight marks the right column in the morning.
+  const today = practiceDay(new Date());
   const [state, setState] = useState<State>({ kind: 'loading' });
 
   useEffect(() => {
@@ -143,7 +146,15 @@ export function WeekPage() {
       {settled?.kind === 'ready' ? (
         <div className="week">
           {settled.days.map((day) => (
-            <section key={day.date} className="week__day" aria-label={formatDay(day.date)}>
+            <section
+              key={day.date}
+              className={`week__day${day.date === today ? ' week__day--today' : ''}`}
+              aria-label={formatDay(day.date)}
+              // Announced as well as drawn: a week is read to find where one is
+              // in it, and the mark that says so should not be visual only
+              // (design review of this pull request).
+              aria-current={day.date === today ? 'date' : undefined}
+            >
               <h2 className="week__heading small">
                 <Link className="link" to={`/admin/schedule?date=${day.date}`}>
                   {formatDay(day.date)}
@@ -172,8 +183,14 @@ export function WeekPage() {
                           {row.client.givenNameAr} {row.client.familyNameAr}
                         </span>
                       ) : null}
-                      <span className="small muted">{row.practitioner.displayName}</span>
-                      <span className="small muted">
+                      {/* Stood down rather than dropped when the columns get
+                          narrow: seven days side by side is the thing this
+                          screen is for, and these two facts are a click away on
+                          the day itself (schedule.css, .week__aside). */}
+                      <span className="week__aside small muted">
+                        {row.practitioner.displayName}
+                      </span>
+                      <span className="week__aside small muted">
                         {row.serviceType.name}, {DELIVERY_LABELS[row.deliveryMode]}
                       </span>
                       <StatusChip

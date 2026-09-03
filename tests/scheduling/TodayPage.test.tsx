@@ -437,6 +437,49 @@ describe('TodayPage, the money at the door', () => {
     expect(screen.queryByText(/^Session /)).toBeNull();
   });
 
+  it('does not move the actions under the thumb when the balance arrives', async () => {
+    // The structural half of the promise: the slot the balance lands in is
+    // present from the first paint and in the same place in the stop, so the
+    // buttons beneath it do not shift when billing answers. The height it
+    // keeps while empty is today.css's own min-block-size.
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(
+          JSON.stringify({ appointments: [stop({ id: '00000009-0000-4000-8000-000000000409' })] }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/stop-balance')) {
+        await held;
+        return new Response(JSON.stringify(balanceBody()), { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const { container } = renderPage(fetchImpl);
+    await screen.findByText('Iris C.');
+
+    const shape = () =>
+      [...(container.querySelector('.stop__detail')?.children ?? [])].map(
+        (child) => child.className,
+      );
+    const before = shape();
+    // The slot is already there, and empty.
+    expect(before).toContain('stop__money small numeric');
+    expect(container.querySelector('.stop__money')?.textContent).toBe('');
+
+    release?.();
+    await screen.findByText('Nothing owed');
+    // The same children in the same order: the money line filled in where it
+    // already was, and nothing below it moved.
+    expect(shape()).toEqual(before);
+  });
+
   it('says so calmly when billing will not answer, and the stop still stands', async () => {
     renderPage(
       dayWithBalance({
