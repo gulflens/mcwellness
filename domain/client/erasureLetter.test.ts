@@ -12,6 +12,8 @@ import { formatLetterDate, parseErasureLetterTemplate, renderErasureLetter } fro
 const TEMPLATES = new URL('../../docs/CONSENT/erasure-letter/', import.meta.url);
 const read = (file: string): string =>
   readFileSync(fileURLToPath(new URL(file, TEMPLATES)), 'utf8');
+/** The same text with its line breaks flattened: these files wrap at eighty columns. */
+const flat = (text: string): string => text.replace(/\s+/g, ' ');
 
 describe('the date a letter carries', () => {
   it('reads as a person writes it, in English', () => {
@@ -77,14 +79,54 @@ describe('rendering the letter', () => {
     expect(arabic).not.toContain('{{');
   });
 
-  it('says what is kept, and why, in both languages', () => {
-    const english = renderErasureLetter(parseErasureLetterTemplate(read('en.md')), {
+  it('names all three things that are kept, and why, in both languages', () => {
+    // The files wrap at eighty columns, so a sentence is matched against the
+    // text with its line breaks flattened, never against the file's layout.
+    const english = flat(
+      renderErasureLetter(parseErasureLetterTemplate(read('en.md')), {
+        erasedOn: '2026-09-03',
+        practiceLegalName: 'Synthetic Studio',
+      }),
+    );
+    // Measurements without an identity, the tax documents, and the practice's
+    // own log — each named, each with the reason it is kept.
+    expect(english).toMatch(/measurements stay, with nobody attached/i);
+    expect(english).toMatch(/invoices and receipts stay for five years/i);
+    expect(english).toMatch(/tax law/i);
+    expect(english).toMatch(/without any of the values/i);
+    // And what the visit record loses, which is the half the first draft of
+    // this letter did not mention at all.
+    expect(english).toMatch(/checked in and out/i);
+
+    const arabic = flat(parseErasureLetterTemplate(read('ar.md')).body);
+    expect(arabic).toContain('خمس سنوات');
+    expect(arabic).toContain('القياسات');
+    expect(arabic).toContain('الفواتير والإيصالات');
+  });
+
+  it('names where to write when the practice has an address, and how to reach them when it has not', () => {
+    const withAddress = renderErasureLetter(parseErasureLetterTemplate(read('en.md')), {
       erasedOn: '2026-09-03',
       practiceLegalName: 'Synthetic Studio',
+      practiceAddress: 'Office 9, Synthetic Tower, Dubai',
     });
-    expect(english).toMatch(/invoices/i);
-    expect(english).toMatch(/five years/i);
-    expect(parseErasureLetterTemplate(read('ar.md')).body).toContain('خمس سنوات');
+    expect(withAddress).toContain('at Office 9, Synthetic Tower, Dubai');
+
+    // No address on file is a sentence, never a bracket left in a legal letter.
+    const without = renderErasureLetter(parseErasureLetterTemplate(read('en.md')), {
+      erasedOn: '2026-09-03',
+      practiceLegalName: 'Synthetic Studio',
+      practiceAddress: '   ',
+    });
+    expect(without).toContain("through the practice's usual contact");
+    expect(without).not.toContain('[');
+
+    const arabic = renderErasureLetter(parseErasureLetterTemplate(read('ar.md')), {
+      erasedOn: '2026-09-03',
+      practiceLegalName: 'Synthetic Studio',
+      practiceAddress: null,
+    });
+    expect(arabic).toContain('عبر وسيلة التواصل المعتادة مع المركز');
   });
 
   it('refuses to send a letter with a hole in it', () => {

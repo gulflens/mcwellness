@@ -118,7 +118,26 @@ export function parseErasureLetterTemplate(text: string): ErasureLetterTemplate 
 }
 
 /**
- * The letter itself: the template's body with the two things only the moment
+ * How a person reaches the practice about this, as a phrase the letter's own
+ * sentence ends with.
+ *
+ * The address is the practice's registered one (`tenant.location_id`), and it
+ * may not be recorded: a settings page that has never been filled in is an
+ * ordinary state of a young practice. Where it is missing the letter says how
+ * to reach them in words rather than shipping a bracket somebody has to
+ * notice — a placeholder in a legal confirmation is worse than a plainer
+ * sentence, because the plainer sentence is true.
+ */
+function practiceContact(address: string | null, locale: ErasureLetterLocale): string {
+  const trimmed = address?.trim() ?? '';
+  if (locale === 'ar') {
+    return trimmed ? `على العنوان: ${trimmed}` : 'عبر وسيلة التواصل المعتادة مع المركز';
+  }
+  return trimmed ? `at ${trimmed}` : "through the practice's usual contact";
+}
+
+/**
+ * The letter itself: the template's body with the things only the moment
  * knows put into it — the day the record was erased, and the practice's legal
  * name as the tenant row records it.
  *
@@ -128,11 +147,12 @@ export function parseErasureLetterTemplate(text: string): ErasureLetterTemplate 
  */
 export function renderErasureLetter(
   template: ErasureLetterTemplate,
-  values: { erasedOn: string; practiceLegalName: string },
+  values: { erasedOn: string; practiceLegalName: string; practiceAddress?: string | null },
 ): string {
   const filled: Record<string, string> = {
     erased_on: formatLetterDate(values.erasedOn, template.locale),
     practice_legal_name: values.practiceLegalName.trim(),
+    practice_contact: practiceContact(values.practiceAddress ?? null, template.locale),
   };
   if (!filled.practice_legal_name) {
     throw new Error('An erasure letter names the practice that sent it.');
