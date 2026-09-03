@@ -242,6 +242,19 @@ describe('a delivered visit with no credit left', () => {
     ]);
   });
 
+  it('names the supplier on the invoice the trigger wrote, with nobody to remember to', async () => {
+    // This invoice was written by app.charge_single_visit, inside a trigger,
+    // with no route above it. The supplier stamp is a before-insert trigger
+    // for exactly that reason: there are two callers, and forgetting in one of
+    // them would not show until somebody rendered a PDF.
+    const { rows } = await h.owner.query<{ name: string | null; trn: string | null }>(
+      "select supplier_legal_name as name, supplier_trn as trn from invoice where kind = 'session' " +
+        'order by number desc limit 1',
+    );
+    expect(rows[0]?.name).toBe(h.data.tenant.legalName);
+    expect(rows[0]?.trn).toBe(h.data.tenant.trn);
+  });
+
   it('charges once, however many times the completion is written', async () => {
     const clientId = h.clientId(2);
     const sessionId = await openSession(clientId, 'nf-session');

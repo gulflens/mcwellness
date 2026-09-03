@@ -126,3 +126,34 @@ describe('a number taken by a sale that never happens', () => {
     expect(rows[0]?.next_number).toBe(1);
   });
 });
+
+describe("the supplier's own identity, on every invoice", () => {
+  it('is snapshotted at the moment the invoice is written, not looked up later', async () => {
+    // A UAE tax invoice must name its supplier, and this row can never be
+    // updated: an invoice issued before the practice recorded its TRN would be
+    // missing it for ever, with no way to backfill. So the database stamps it
+    // (402_billing_document.sql), rather than each of the two callers
+    // remembering to.
+    const { rows } = await h.owner.query<{
+      supplier_legal_name: string | null;
+      supplier_trn: string | null;
+      n: string;
+    }>(
+      'select supplier_legal_name, supplier_trn, count(*)::text as n from invoice ' +
+        'group by 1, 2',
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.supplier_legal_name).toBe(h.data.tenant.legalName);
+    expect(rows[0]?.supplier_trn).toBe(h.data.tenant.trn);
+  });
+
+  it('keeps saying what it said when the practice is renamed', async () => {
+    await h.owner.query("update tenant set legal_name = 'Renamed Studio' where id = $1", [
+      h.data.tenant.id,
+    ]);
+    const { rows } = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from invoice where supplier_legal_name = 'Renamed Studio'",
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
+  });
+});

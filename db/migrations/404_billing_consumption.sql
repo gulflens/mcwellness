@@ -19,6 +19,14 @@
 -- whatever the read said. The read is the courtesy; the index is the
 -- guarantee. Proved in tests/billing/db/consumption.test.ts.
 --
+-- **Nothing is backfilled, and the triggers key on the transition.** A visit
+-- already completed when this migration ran is not charged, and never will be
+-- by this file: the price it should have been charged at is a fact about a day
+-- that has passed, and inventing one from today's list would be worse than
+-- leaving it to a person. For the same reason the update triggers fire only
+-- when a status *becomes* completed or called-off-late — editing a note on a
+-- visit closed last month is not a second visit.
+--
 -- **What happens when there is no credit.** A completed visit with no credit
 -- left is charged at the current single-visit price, and that charge creates
 -- its own credit, consumed on the spot — one mechanism, not two (billing.md
