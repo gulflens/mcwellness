@@ -245,6 +245,12 @@ export async function applySeed(
     }
 
     for (const d of data.documents) {
+      // retention_until is deliberately absent, and so null. A practice
+      // document is otherwise kept five years from upload
+      // (domain/shared/storage.ts, migration 903), but consent wording is
+      // exempt from that clock: it is kept while any consent still points at
+      // it and the last of those clients is still within their own retention.
+      // Null here means "not on an upload clock", never "nobody computed it".
       await insert(
         'document',
         {

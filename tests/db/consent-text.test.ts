@@ -174,6 +174,7 @@ describe('the session settings on a service', () => {
     expect(nf?.preflight_checklist.map((item) => item.key)).toEqual([
       'identity',
       'guardian_present',
+      'child_assents',
       'environment',
       'equipment',
     ]);

@@ -134,6 +134,13 @@ export type SeedConsent = {
   clientId: string;
   givenByContactId: string;
   purpose: ConsentPurpose;
+  /**
+   * The consent record's OWN version, counting amendments of this consent:
+   * every seeded one is a first giving, so every one is 1. It is not the
+   * wording's version, which this row carries only as the pointer
+   * `textDocumentId` — the document row holds `version` ('0.1-draft' today)
+   * and the two never need to agree (docs/SPEC/00-data-model.md section 3).
+   */
   version: 1;
   textDocumentId: string;
   status: 'active' | 'withdrawn';
@@ -252,9 +259,18 @@ const NF_PREFLIGHT: readonly ChecklistItem[] = [
     label_ar: 'وجود الوصي إذا كان العميل دون الثامنة عشرة',
   },
   {
+    // The minor-participation wording promises the child's own agreement
+    // ("A child's 'no' ends the session", section 2), and a promise nothing
+    // records is a promise nobody can show was kept. Beside the guardian's
+    // presence because that is the order the door is worked in.
+    key: 'child_assents',
+    label_en: 'For a child: they agreed to take part today',
+    label_ar: 'للطفل: وافق على المشاركة اليوم',
+  },
+  {
     key: 'environment',
     label_en: 'Environment suitable: quiet, seated, well lit',
-    label_ar: 'البيئة مناسبة: هادئة، مقعد مريح، إضاءة جيدة',
+    label_ar: 'البيئة مناسبة: هادئة، والعميل جالس، وإضاءة جيدة',
   },
   {
     key: 'equipment',
@@ -511,14 +527,24 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
   // client, immutable, carrying the file's own version and status and the
   // fingerprint of its actual bytes. The text is the practice's real words,
   // not a synthetic stand-in: a person signs the version they were shown.
-  const documents: SeedDocument[] = (options.consentTexts ?? loadConsentTexts()).map((text, i) => {
+  const documents: SeedDocument[] = (options.consentTexts ?? loadConsentTexts()).map((text) => {
     const purpose = text.purpose as ConsentPurpose;
     if (!CONSENT_PURPOSES.includes(purpose)) {
       throw new Error(
         `${text.file} names the consent purpose "${text.purpose}", which does not exist.`,
       );
     }
-    const id = seedId('a', i + 1);
+    // Keyed by what the wording IS, not by where it sat in the directory
+    // listing: purpose, then language. Numbering by position meant adding a
+    // ninth file — a research wording, say — silently renumbered every
+    // wording sorting after it, and with it the storage key of each and the
+    // text_document_id every seeded consent points at. Two digits per
+    // purpose, one for the language: 11 is participation in English, 42
+    // photo_video in Arabic.
+    const id = seedId(
+      'a',
+      (CONSENT_PURPOSES.indexOf(purpose) + 1) * 10 + (text.locale === 'en' ? 1 : 2),
+    );
     return {
       id,
       purpose,
@@ -675,6 +701,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
           clientId,
           givenByContactId: consentingContactId,
           purpose,
+          // A first giving, never an amendment: see SeedConsent.version.
           version: 1,
           // The wording in the language this household reads: the version they were shown.
           textDocumentId: wording(purpose, arabicFirst ? 'ar' : 'en').id,
