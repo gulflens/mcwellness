@@ -66,8 +66,17 @@ describe('the API with the real store disabled', () => {
     await storage.put(KEY, BYTES, 'text/markdown');
     const url = await storage.getSignedUrl(KEY, 60);
 
+    // A hex digit flipped to a different one, deterministically. Writing
+    // `token=0` over the first digit was a coin flip: an HMAC begins with '0'
+    // about one time in sixteen, and the expiry it signs comes from the clock,
+    // so on those runs the "tampered" link was the untouched link and served
+    // the bytes. The route was never at fault; the tampering was.
+    const token = new URLSearchParams(url.split('?')[1]).get('token') ?? '';
+    const tamperedUrl = url.replace(token, `${token.startsWith('0') ? '1' : '0'}${token.slice(1)}`);
+    expect(tamperedUrl).not.toBe(url);
+
     const unsigned = await api.request(`/api/storage/${KEY}`);
-    const tampered = await api.request(url.replace(/token=./, 'token=0'));
+    const tampered = await api.request(tamperedUrl);
     const expired = await api.request(url.replace(/expires=\d+/, 'expires=1'));
     const unknown = await api.request(
       await storage.getSignedUrl('tenant/a/practice/never-written', 60),
