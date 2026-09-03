@@ -180,6 +180,128 @@ renaming the action to one the catalogue already knows.
 
 ---
 
+## CR-17: `requested_by_phone` is written to the trail in clear
+
+**What.** Add `requested_by_phone` to the keys `app.audit_redact` drops
+outright, beside `emirates_id_encrypted`, `emirates_id_hash`,
+`checked_in_point` and `checked_out_point`.
+
+**Why.** Recording an erasure request writes the number the confirmation will
+be sent to onto `erasure_request` (migration 104). That insert is audited like
+every other, and the insert is **not** inside erasure mode — the erasure has
+not happened yet, and will not until somebody presses the second button — so
+the number lands in `audit_log.new_values` in clear and stays there for the
+trail's own five years, which is exactly the retention the column itself is
+written to escape (migration 105 clears it as soon as the letter has been sent
+and the files are confirmed gone).
+
+It is a phone number on a row that says a household asked to be forgotten. The
+redaction list is where the schema already keeps the things that must not
+outlive their column, and this belongs on it.
+
+**Proposed diff** (a trunk migration in the 9NN range, restating
+`app.audit_redact` in full as 098 and 904 do):
+
+```diff
+-       from jsonb_each(p_row - array['emirates_id_encrypted', 'emirates_id_hash',
+-                                     'checked_in_point', 'checked_out_point']) as e),
++       from jsonb_each(p_row - array['emirates_id_encrypted', 'emirates_id_hash',
++                                     'checked_in_point', 'checked_out_point',
++                                     'requested_by_phone']) as e),
+```
+
+(904 made the dropping reach inside a nested jsonb object, so the key is
+dropped wherever it appears.)
+
+**If the answer is no**, the alternative is to stop recording the number at
+all and lose the confirmation letter with it, or to write the request row
+inside erasure mode, which would withhold the reason and the requester too —
+both worse than one key on a list.
+
+---
+
+## CR-18: the erasure reaches the visit record (for session-capture)
+
+**Not a request for a change — a request to keep something in mind.**
+
+`app.erase_client` now clears session-capture's own columns, because a letter
+that says the record is gone while the household's door is still on file is a
+letter that lies. Migration 105 nulls `session.checked_in_point`,
+`checked_out_point`, `observations` and `setup_photo_document_id`, replaces
+`amendment_reason` where the row's constraint allows it, nulls
+`visit_actuals.access_issues`, and rewrites every `session_event.payload` of
+that client's visits to keep only numbers and booleans.
+
+What it deliberately keeps: `pre_rating`, `post_rating`, `telemetry`,
+`preflight`, `signal_check` and `signal_quality_score` — measurements that
+identify nobody once the record around them is anonymous, and the practice
+needs them in aggregate. The letter says so to the household in as many words.
+
+Three things this asks of session-capture:
+
+1. **A new column holding words, a coordinate or free jsonb needs a line in
+   that step.** The payload rule is safe by construction — nothing survives
+   unless it is a number or a boolean — but a new *column* is not covered by
+   anything, and the erasure is enumerated there because the alternative
+   (a structural rewrite of the whole row) would take the measurements too.
+2. **`setup_photo_document_id` was a live fault**, not tidiness: the foreign
+   key to `document` has no `on delete`, so the first erasure of a household
+   that had ever had a setup photograph taken would have raised on the
+   document delete and rolled the whole erasure back. Any new reference from
+   the 300-range to `document` needs the same unlinking.
+3. **The immutability trigger's erasure exemption is now load-bearing.**
+   `app.session_refuse_update_after_close` stands aside inside
+   `app.erasure_active`, and `tests/client/db/erasure_act.test.ts` proves it
+   against a completed visit. It was written that way from the start; this is
+   the first thing that depends on it.
+
+Nothing is asked of that stream today, and nothing in this pull request edits
+its files.
+
+---
+
+## CR-19: one sentence for the spec (for the trunk)
+
+**What.** Add to `docs/SPEC/client-record.md` section 8, as the second half of
+step 1, exactly this:
+
+> The visit record is anonymised with it: `session.checked_in_point`,
+> `checked_out_point`, `observations` and `setup_photo_document_id` are
+> nulled, `amendment_reason` is cleared where the row's own constraint allows
+> it, `visit_actuals.access_issues` is nulled, and every `session_event.payload`
+> of that client's visits keeps only its numbers and booleans, so a note, a
+> timestamp or a coordinate inside one cannot survive. The measurements do
+> survive, and deliberately: `pre_rating`, `post_rating`, `telemetry`,
+> `preflight`, `signal_check` and `signal_quality_score` identify nobody once
+> the record around them is anonymous, the practice uses them in aggregate,
+> and the confirmation letter tells the household exactly that.
+
+**Why.** The spec is the source of truth and currently says the erasure
+touches the client, the contacts, the locations and the documents. It now
+touches four more tables and keeps six columns on purpose, and the promise
+made to a household in the letter should be the promise written in the spec.
+
+---
+
+## CR-20: this pull request depends on billing's `billing_document`
+
+**Not a request — a note for the integrator, and a dependency worth naming.**
+
+Billing's pull request 54 adds `billing_document`, linking every rendered
+invoice and receipt PDF to its `document` row with a foreign key and no
+`on delete`. Migration 105 holds those documents back from the erasure, for
+both reasons at once: without it the delete would raise for any household that
+ever had an invoice rendered, and deleting a rendered tax document would breach
+the five-year financial-record rule.
+
+The reference is guarded with `to_regclass`, so this migration is valid before
+54 lands and correct after it, and the test that proves it
+(`tests/client/db/erasure_act.test.ts`, "a rendered tax document") skips itself
+while the table is absent. **When 54 is on main, that test stops skipping** —
+if it then fails, this is the place to look first.
+
+---
+
 ## Not asked for, recorded as noticed
 
 **A receipt is not yet a document kind.** `db/migrations/104_erasure_the_act.sql`
