@@ -32,7 +32,18 @@ export const WORDS = {
 
   licenceNumber: { en: 'Licence number', ar: 'رقم الرخصة' },
   licensingAuthority: { en: 'Licensing authority', ar: 'جهة الترخيص' },
-  taxRegistrationNumber: { en: 'Tax registration number', ar: 'رقم التسجيل الضريبي' },
+  /**
+   * The **corporate-tax** registration, named at length so it cannot be read as
+   * the other one. "Tax registration number" / "رقم التسجيل الضريبي" is the exact
+   * phrase the Federal Tax Authority uses for a VAT TRN, so printing the
+   * corporate-tax number under it says the practice holds a registration it does
+   * not — the misstatement `tenant.trn` and `invoice.supplier_trn` carry column
+   * comments to prevent, undone by the label.
+   */
+  corporateTaxNumber: {
+    en: 'Corporate tax registration number',
+    ar: 'رقم التسجيل في ضريبة الشركات',
+  },
   vatRegistrationNumber: {
     en: 'VAT registration number',
     ar: 'رقم التسجيل في ضريبة القيمة المضافة',
@@ -92,6 +103,41 @@ export const NOT_REGISTERED_BASIS: Phrase = {
   en: 'The practice is not registered for VAT, so no VAT is charged on this document.',
   ar: 'المنشأة غير مسجلة في ضريبة القيمة المضافة، ولذلك لا تُحتسب أي ضريبة على هذا المستند.',
 };
+
+/**
+ * What a receipt says at the foot of the page.
+ *
+ * **A receipt makes no tax statement, in either direction.** It carried
+ * `SIMPLIFIED_BASIS` until the compliance review caught it, which meant a
+ * registered practice's receipt described itself as a simplified *tax invoice* —
+ * a document it is not, under a heading that says so two hundred points above.
+ * The opposite footer would be no better: a receipt acknowledges money that
+ * arrived, and what tax was charged is a fact about the invoice it settles, not
+ * about the act of paying.
+ *
+ * So the footer says what the document is and what the money was: the method,
+ * the day, and the invoice it settles or that it was taken on account. The
+ * amounts and the dates are already on the page; saying them again in a sentence
+ * is what makes the page readable to somebody who is not reading a table.
+ */
+export function receiptBasis(input: {
+  method: 'cash' | 'transfer' | 'link';
+  receivedOn: string;
+  settlesReference: string | null;
+}): Phrase {
+  const on = formatDocumentDate(input.receivedOn);
+  const against = input.settlesReference;
+  return {
+    en:
+      `Received by ${WORDS[input.method].en.toLowerCase()} on ${on}, ` +
+      `${against ? `against invoice ${against}` : 'on account'}. ` +
+      'This is a receipt for money received, not a tax invoice.',
+    ar:
+      `استُلم بواسطة ${WORDS[input.method].ar} بتاريخ ${on}، ` +
+      `${against ? `سداداً للفاتورة ${against}` : 'على الحساب'}. ` +
+      'هذا إيصال باستلام مبلغ وليس فاتورة ضريبية.',
+  };
+}
 
 /** The wordmark at the top of the page. */
 export const WORDMARK = 'McWellness';

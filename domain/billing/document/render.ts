@@ -36,6 +36,7 @@ import {
   formatDocumentDate,
   formatRate,
   NOT_REGISTERED_BASIS,
+  receiptBasis,
   SIMPLIFIED_BASIS,
   WORDMARK,
   WORDS,
@@ -184,7 +185,7 @@ function supplierBlock(sheet: Sheet, supplier: SupplierSnapshot): void {
   if (supplier.corporateTaxNumber) {
     // Labelled as what it is. This is the corporate-tax registration and it is
     // never printed as a VAT number (migration 905's column comments).
-    labelled(sheet, WORDS.taxRegistrationNumber, supplier.corporateTaxNumber);
+    labelled(sheet, WORDS.corporateTaxNumber, supplier.corporateTaxNumber);
   }
   // The VAT number appears only on a document whose own snapshot says the
   // practice held one. There is no other branch that can print it.
@@ -339,7 +340,6 @@ function invoicePage(document_: InvoiceDocument, fonts: FontSet): Page {
 }
 
 function receiptPage(document_: ReceiptDocument, fonts: FontSet): Page {
-  const registered = chargesVat(document_.supplier);
   const sheet = new Sheet();
 
   documentHeading(sheet, WORDS.receipt);
@@ -368,7 +368,17 @@ function receiptPage(document_: ReceiptDocument, fonts: FontSet): Page {
   sheet.down(LINE + 2);
   totalRow(sheet, WORDS.amountReceived, formatFils(document_.amountFils), true);
 
-  footer(sheet, registered ? SIMPLIFIED_BASIS : NOT_REGISTERED_BASIS);
+  // A receipt's own footer, and never an invoice's: it is not a tax invoice,
+  // simplified or otherwise, and it makes no claim about VAT in either
+  // direction (strings.ts, receiptBasis).
+  footer(
+    sheet,
+    receiptBasis({
+      method: document_.method,
+      receivedOn: document_.receivedOn,
+      settlesReference: document_.settles?.reference ?? null,
+    }),
+  );
   void measure('', { font: 'regular', size: SIZE.body }, fonts);
   return { ops: sheet.ops };
 }

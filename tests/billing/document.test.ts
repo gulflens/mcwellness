@@ -109,12 +109,14 @@ describe('an invoice from a practice that is not registered for VAT', () => {
     expect(page).toContain(asDrawn('المنشأة غير مسجلة في ضريبة القيمة المضافة'));
   });
 
-  it('names the corporate-tax registration as what it is', () => {
-    // Never as a VAT number: tenant.trn and invoice.supplier_trn both carry a
-    // column comment saying so, and printing it wrongly is the misstatement the
-    // two columns exist to prevent.
-    expect(page).toContain('Tax registration number');
+  it('names the corporate-tax registration at length, never as a tax registration number', () => {
+    // "Tax registration number" is the exact phrase the Federal Tax Authority
+    // uses for a VAT TRN, so the corporate-tax number under that label claims a
+    // registration the practice does not hold — the misstatement tenant.trn and
+    // invoice.supplier_trn carry column comments to prevent.
+    expect(page).toContain('Corporate tax registration number');
     expect(page).toContain('000000000000000');
+    expect(page).not.toContain('VAT registration number');
   });
 });
 
@@ -205,6 +207,57 @@ describe('the date of supply', () => {
     );
     expect(differs).toContain('Date of supply');
     expect(differs).toContain('28 August 2026');
+  });
+});
+
+function receiptFor(supplier: SupplierSnapshot): ReceiptDocument {
+  return {
+    kind: 'receipt',
+    supplier,
+    recipient: RECIPIENT,
+    reference: 'RCP-000004',
+    receivedOn: '2026-09-02',
+    method: 'transfer',
+    amountFils: 70_000,
+    paymentReference: 'SYN 0001',
+    settles: { reference: 'INV-000001', issuedOn: '2026-09-02' },
+  };
+}
+
+describe('a receipt makes no tax statement, whoever issued it', () => {
+  it('never calls itself a tax invoice, even from a registered practice', () => {
+    // It carried the simplified-tax-invoice basis until the compliance review
+    // caught it, which had a registered practice's receipt describing itself as
+    // a document it is not, two hundred points under a heading saying "Receipt".
+    const page = extractAll(renderDocument(receiptFor(REGISTERED), fonts));
+    expect(page).not.toContain('simplified tax invoice');
+    expect(page).not.toContain('Tax Invoice');
+    expect(page).toContain('Receipt');
+  });
+
+  it('says what the money was: the method, the day and what it settles', () => {
+    const page = extractAll(renderDocument(receiptFor(REGISTERED), fonts));
+    expect(page).toContain(
+      'Received by bank transfer on 2 September 2026, against invoice INV-000001.',
+    );
+    expect(page).toContain('This is a receipt for money received, not a tax invoice.');
+  });
+
+  it('says it was taken on account when it settles no invoice', () => {
+    const page = extractAll(renderDocument({ ...receiptFor(UNREGISTERED), settles: null }, fonts));
+    expect(page).toContain('Received by bank transfer on 2 September 2026, on account.');
+  });
+
+  it('makes no claim about VAT in either direction', () => {
+    // A receipt acknowledges money that arrived. What tax was charged is a fact
+    // about the invoice it settles, not about the act of paying.
+    const registered = extractAll(renderDocument(receiptFor(REGISTERED), fonts));
+    const unregistered = extractAll(renderDocument(receiptFor(UNREGISTERED), fonts));
+    for (const page of [registered, unregistered]) {
+      expect(page).not.toContain('not registered for VAT');
+      expect(page).not.toContain('VAT (AED)');
+      expect(page).not.toContain('VAT rate');
+    }
   });
 });
 
