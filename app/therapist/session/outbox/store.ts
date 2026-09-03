@@ -17,11 +17,19 @@
  *   A visit still runs; it simply does not survive a reload, and the screen
  *   says so rather than pretending otherwise.
  *
- * Nothing here holds a name, a record number or an address. The queue holds
- * event payloads (ratings, telemetry, observation chips) and the open-visit
- * note holds the same short label the screen already shows — a given name
- * and an initial — because that is what "resume session for Client L." needs
- * and no more.
+ * What it holds is still personal data: the open-visit note carries a given
+ * name and an initial, and the queue carries ratings, observation chips and
+ * whatever the practitioner typed in the note beside them. So it is not left
+ * lying about:
+ *
+ * - **Signing out empties it** (`forgetEverything`). A practitioner who signs
+ *   out on a shared phone leaves nothing of the household behind.
+ * - **A different person signing in empties it** (`claim`). The store records
+ *   whose it is; a store claimed by somebody else is wiped before it is used,
+ *   so a sign-out that never happened cannot leak into the next session.
+ * - **Anything older than a week goes** (`PRUNE_AFTER_DAYS`). An event that
+ *   has not reached the server in seven days is not going to, and keeping it
+ *   is keeping a client's session on a device for no reason.
  */
 
 export type OutboxRecord = {
@@ -62,13 +70,30 @@ export type OutboxStore = {
   forget(ids: readonly string[]): Promise<void>;
   readOpenVisit(): Promise<OpenVisitNote | null>;
   writeOpenVisit(note: OpenVisitNote | null): Promise<void>;
+  /** Every queued event and the open-visit note, gone. Sign-out, and a store claimed by somebody else. */
+  forgetEverything(): Promise<void>;
+  /**
+   * Records whose store this is, wiping it first if it belonged to anybody
+   * else. Returns whether it wiped, so a screen can say what happened.
+   */
+  claim(userId: string): Promise<boolean>;
+  /** Drops queued events older than `days`. Returns how many went. */
+  prune(days: number, now: Date): Promise<number>;
 };
+
+/**
+ * A week. Long enough that a practitioner on leave with a phone in a drawer
+ * still delivers a visit when they come back; short enough that a household's
+ * session is not sitting on a device a month later.
+ */
+export const PRUNE_AFTER_DAYS = 7;
 
 const DB_NAME = 'mcwellness-session';
 const DB_VERSION = 1;
 const EVENTS = 'events';
 const META = 'meta';
 const OPEN_VISIT_KEY = 'open-visit';
+const OWNER_KEY = 'owner';
 
 function byOrder(a: OutboxRecord, b: OutboxRecord): number {
   if (a.sessionId !== b.sessionId) return a.sessionId < b.sessionId ? -1 : 1;
@@ -76,11 +101,19 @@ function byOrder(a: OutboxRecord, b: OutboxRecord): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/** How old a queued event is, judged on the device clock that wrote it. */
+function ageInDays(record: OutboxRecord, now: Date): number {
+  const at = Date.parse(record.deviceAt);
+  if (!Number.isFinite(at)) return Number.POSITIVE_INFINITY;
+  return (now.getTime() - at) / 86_400_000;
+}
+
 /** The fallback: correct, in order, and gone when the tab is. */
 export function createMemoryStore(): OutboxStore {
   const records = new Map<string, OutboxRecord>();
   let openVisit: OpenVisitNote | null = null;
-  return {
+  let owner: string | null = null;
+  const store: OutboxStore = {
     durable: false,
     append: async (record) => {
       // Append-only: an id already queued is the same event, never a change.
@@ -94,7 +127,25 @@ export function createMemoryStore(): OutboxStore {
     writeOpenVisit: async (note) => {
       openVisit = note;
     },
+    forgetEverything: async () => {
+      records.clear();
+      openVisit = null;
+      owner = null;
+    },
+    claim: async (userId) => {
+      if (owner !== null && owner === userId) return false;
+      const wiped = owner !== null;
+      if (wiped) await store.forgetEverything();
+      owner = userId;
+      return wiped;
+    },
+    prune: async (days, now) => {
+      const stale = [...records.values()].filter((record) => ageInDays(record, now) > days);
+      for (const record of stale) records.delete(record.id);
+      return stale.length;
+    },
   };
+  return store;
 }
 
 function promisify<T>(request: IDBRequest<T>): Promise<T> {
@@ -170,6 +221,39 @@ function createIndexedDbStore(db: IDBDatabase): OutboxStore {
         store.get(OPEN_VISIT_KEY),
       );
       return note ?? null;
+    },
+    forgetEverything: async () => {
+      await run<undefined>(EVENTS, 'readwrite', (store) => store.clear());
+      await run<undefined>(META, 'readwrite', (store) => store.clear());
+    },
+    claim: async (userId) => {
+      const current = await run<string | undefined>(META, 'readonly', (store) =>
+        store.get(OWNER_KEY),
+      );
+      if (current === userId) return false;
+      const wiped = current !== undefined;
+      if (wiped) {
+        await run<undefined>(EVENTS, 'readwrite', (store) => store.clear());
+        await run<undefined>(META, 'readwrite', (store) => store.clear());
+      }
+      await run<IDBValidKey>(META, 'readwrite', (store) => store.put(userId, OWNER_KEY));
+      return wiped;
+    },
+    prune: async (days, now) => {
+      const all = await run<OutboxRecord[]>(EVENTS, 'readonly', (store) => store.getAll());
+      const stale = all.filter((record) => ageInDays(record, now) > days);
+      if (stale.length === 0) return 0;
+      const transaction = db.transaction(EVENTS, 'readwrite');
+      const events = transaction.objectStore(EVENTS);
+      for (const record of stale) events.delete(record.id);
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () =>
+          reject(transaction.error ?? new Error('IndexedDB prune failed'));
+        transaction.onabort = () =>
+          reject(transaction.error ?? new Error('IndexedDB prune aborted'));
+      });
+      return stale.length;
     },
     writeOpenVisit: async (note) => {
       // Written as two calls rather than one conditional expression: `delete`

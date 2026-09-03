@@ -27,10 +27,15 @@ export type FlushOutcome = {
 };
 
 /** How the outbox reaches the server. Injected, so the loop is testable without one. */
+/**
+ * What the server said. 'retry' is a failure that may pass; 'give-up' is a
+ * refusal that never will; 'too-large' is neither — the batch was rejected
+ * for its size, so the same events go again in smaller pieces.
+ */
 export type PostEvents = (
   sessionId: string,
   events: readonly OutboxRecord[],
-) => Promise<FlushOutcome | 'retry' | 'give-up'>;
+) => Promise<FlushOutcome | 'retry' | 'give-up' | 'too-large'>;
 
 export type OutboxState = {
   pending: number;
@@ -43,15 +48,50 @@ export type OutboxState = {
 export const RETRY_MS = 30_000;
 /** The server takes fifty at a time (app/api/sessions/schema.ts). */
 export const BATCH_SIZE = 50;
+/**
+ * And no more than this many bytes, whatever the count. The API's body cap
+ * is 64 KB (app/api/create-api.ts) and one observation may carry a thousand
+ * characters of note, so fifty events can be well over it — and a batch that
+ * is always refused for its size is a batch the loop retries every thirty
+ * seconds for the rest of the day. Measured on the encoded body, with room
+ * left for the envelope.
+ */
+export const BATCH_BYTES = 48 * 1024;
 
 type Listener = (state: OutboxState) => void;
+
+/**
+ * As many events as fit, by count and by encoded size. Always at least one:
+ * a single event over the cap is the caller's problem to refuse, not a
+ * reason to send nothing and spin.
+ */
+export function takeBatch(records: readonly OutboxRecord[], limit = BATCH_SIZE): OutboxRecord[] {
+  const batch: OutboxRecord[] = [];
+  let bytes = 0;
+  for (const record of records) {
+    if (batch.length >= limit) break;
+    const size = new TextEncoder().encode(JSON.stringify(record)).length;
+    if (batch.length > 0 && bytes + size > BATCH_BYTES) break;
+    batch.push(record);
+    bytes += size;
+  }
+  return batch;
+}
 
 export class Outbox {
   private readonly listeners = new Set<Listener>();
   private state: OutboxState;
   private timer: ReturnType<typeof setInterval> | null = null;
-  private running = false;
-  private queued = false;
+  /**
+   * Flushes run one after another, never at the same time, and every caller
+   * gets back a promise that resolves when *its* turn has finished. A queued
+   * flag would have been enough to stop two running at once, but not to let
+   * `drain` below wait for one already in flight — and a drain that returns
+   * while the queue is still going is a check-out posted over events the
+   * server has not got, which is a 409 and a thirty-second wait the
+   * practitioner should never have seen.
+   */
+  private chain: Promise<void> = Promise.resolve();
 
   private readonly store: OutboxStore;
   private readonly post: PostEvents;
@@ -95,27 +135,21 @@ export class Outbox {
   }
 
   /**
-   * Delivers what it can, once. Concurrent calls collapse into one run
-   * followed by at most one more, so an append during a flush is never lost
-   * and never starts a second flush racing the first.
+   * Delivers what it can, once, after whatever is already running. The
+   * returned promise resolves when this call's own turn is done, so an
+   * append during a flush is never lost and a caller that waits actually
+   * waits.
    */
-  async flush(): Promise<void> {
-    if (this.running) {
-      this.queued = true;
-      return;
-    }
-    this.running = true;
-    this.publish({ flushing: true });
-    try {
-      await this.deliver();
-    } finally {
-      this.running = false;
-      this.publish({ flushing: false });
-      if (this.queued) {
-        this.queued = false;
-        await this.flush();
+  flush(): Promise<void> {
+    this.chain = this.chain.then(async () => {
+      this.publish({ flushing: true });
+      try {
+        await this.deliver();
+      } finally {
+        this.publish({ flushing: false });
       }
-    }
+    });
+    return this.chain;
   }
 
   private async deliver(): Promise<void> {
@@ -125,10 +159,29 @@ export class Outbox {
       return;
     }
     let pending = await this.store.pending();
+    // Halved on a 413 and restored on the next success: a batch refused for
+    // its size is split rather than retried, and one long note does not
+    // shrink every batch after it for ever.
+    let limit = BATCH_SIZE;
     while (pending.length > 0) {
       const sessionId = pending[0]!.sessionId;
-      const batch = pending.filter((record) => record.sessionId === sessionId).slice(0, BATCH_SIZE);
+      const batch = takeBatch(
+        pending.filter((record) => record.sessionId === sessionId),
+        limit,
+      );
       const outcome = await this.post(sessionId, batch);
+      if (outcome === 'too-large') {
+        if (batch.length <= 1) {
+          // One event, on its own, still too big for the door. Nothing about
+          // it will change; keeping it would mean retrying it for ever.
+          await this.store.forget(batch.map((record) => record.id));
+          pending = await this.store.pending();
+          continue;
+        }
+        limit = Math.max(1, Math.floor(batch.length / 2));
+        continue;
+      }
+      limit = BATCH_SIZE;
       if (outcome === 'retry') {
         this.publish({ behind: true, pending: pending.length });
         return;
@@ -149,6 +202,24 @@ export class Outbox {
       pending = await this.store.pending();
     }
     this.publish({ behind: false, pending: 0 });
+  }
+
+  /**
+   * Delivers everything, or reports that it could not. Used by the summary
+   * screen, which must not post a close while the visit's own events are
+   * still queued behind it — the server refuses a close it has no check-out
+   * for, and the practitioner would be left waiting under copy telling them
+   * they need not.
+   */
+  async drain(): Promise<boolean> {
+    await this.flush();
+    return (await this.store.pending()).length === 0;
+  }
+
+  /** Everything this device holds for this practitioner, gone (sign-out). */
+  async forgetEverything(): Promise<void> {
+    await this.store.forgetEverything();
+    this.publish({ pending: 0, behind: false });
   }
 
   /** Starts the loop: on reconnection, on becoming visible again, and every 30 seconds. */
