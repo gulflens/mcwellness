@@ -195,17 +195,24 @@ describe('a refused attempt is audited', () => {
       headers: { 'x-request-id': requestId },
       body: JSON.stringify({
         givenName: 'Basil',
-        familyName: 'Refused',
+        familyName: 'Cliff',
         contact: { relationship: 'self', phone: '+971500001189' },
       }),
     });
     expect(res.status).toBe(403);
-    const { rows } = await owner.query<{ n: string }>(
-      "select count(*)::text as n from audit_log where action = 'refused' and entity_type = 'client' " +
-        'and entity_id = $1 and client_id is null and request_id = $1',
+    // The row is found by its request id, not by its entity: a collection action names
+    // no row, so the entity is a fresh id rather than the caller's own `x-request-id`,
+    // which a signed-in actor could otherwise point at any uuid they chose (security
+    // review of pull request 35). The correlation the test needs is the request id,
+    // and that still holds.
+    const { rows } = await owner.query<{ n: string; entity_id: string }>(
+      'select count(*)::text as n, min(entity_id::text) as entity_id from audit_log ' +
+        "where action = 'refused' and entity_type = 'client' and client_id is null " +
+        'and request_id = $1',
       [requestId],
     );
     expect(rows[0]?.n).toBe('1');
+    expect(rows[0]?.entity_id).not.toBe(requestId);
   });
 
   it('writes a refused row for a 403 that names a row which exists — a practitioner reading any client', async () => {

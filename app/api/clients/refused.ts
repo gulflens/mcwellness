@@ -8,6 +8,13 @@ import type { Db } from '../_middleware/request-context';
  * the same class of fact). Same insert shape as logRead
  * (app/api/_middleware/audit.ts), action 'refused', local to these routes
  * because no other module needs it yet.
+ *
+ * `entityId` names the row that was refused. Where there is no such row — a
+ * collection action, where nothing can be named — the caller passes a fresh
+ * `randomUUID()`, never the request id: `x-request-id` comes from the caller,
+ * and an entity taken from it would let any signed-in actor write an audit row
+ * pointing at a uuid of their choosing. The request id reaches `request_id`
+ * from the transaction's own setting either way.
  */
 export async function logRefused(
   db: Db,

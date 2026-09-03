@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isoDateIn } from '../../../domain/shared';
 
 /**
  * Request and response shapes for the client-record routes (GET/POST/PATCH
@@ -30,7 +31,27 @@ export const CLIENT_RECORD_STATUSES = ['lead', 'active', 'paused', 'closed'] as 
 
 const Name = z.string().min(1).max(100);
 const FreeText = z.string().min(1).max(2000);
-const Phone = z.string().regex(E164, 'A phone number is E.164, e.g. +971501234567.');
+const Phone = z.string().regex(E164, 'A phone number is E.164, e.g. +971500001234.');
+// Raw form, digits and hyphens: validated and normalised server-side by
+// domain/client's validateEmiratesId (15 digits, starts 784, Luhn check
+// digit), never required (docs/SPEC/00-data-model.md section 3).
+const EmiratesIdInput = z.string().min(1).max(40);
+
+/**
+ * A date of birth is in the past. Format alone was not enough: a date in the
+ * future passed, and `isMinor` then read it as an age below zero — a minor,
+ * silently, with the guardian consent that implies. Judged against the
+ * practice's own day, so a client born today in Dubai is not refused because
+ * the server is still on yesterday. The upper bound is deliberately soft (no
+ * "oldest plausible person" rule): a wrong century is a typo for the practice
+ * to see and fix, not a body of policy for a schema to hold.
+ */
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+const DateOfBirth = z.iso
+  .date()
+  .refine((value) => value <= isoDateIn(new Date(), PRACTICE_TIME_ZONE), {
+    message: 'A date of birth is in the past.',
+  });
 
 export const Contact = z.object({
   id: z.uuid(),
@@ -109,7 +130,7 @@ export const CreateClientBody = z.object({
   familyName: Name,
   givenNameAr: Name.optional(),
   familyNameAr: Name.optional(),
-  dateOfBirth: z.iso.date().optional(),
+  dateOfBirth: DateOfBirth.optional(),
   referralSource: z.string().max(200).optional(),
   contact: z.object({
     relationship: z.enum(RELATIONSHIPS),
@@ -119,6 +140,7 @@ export const CreateClientBody = z.object({
     canConsent: z.boolean().default(false),
     canReceiveReports: z.boolean().default(true),
     canPay: z.boolean().default(false),
+    emiratesId: EmiratesIdInput.optional(),
   }),
 });
 export type CreateClientBody = z.infer<typeof CreateClientBody>;
@@ -132,7 +154,7 @@ export const UpdateClientBody = z
     familyName: Name,
     givenNameAr: Name.nullable(),
     familyNameAr: Name.nullable(),
-    dateOfBirth: z.iso.date().nullable(),
+    dateOfBirth: DateOfBirth.nullable(),
     sexAtBirth: z.enum(['female', 'male', 'unknown']).nullable(),
     referralSource: z.string().max(200).nullable(),
   })
@@ -151,6 +173,7 @@ export const CreateContactBody = z.object({
   phone: Phone.optional(),
   email: z.email().optional(),
   whatsappOptIn: z.boolean().default(false),
+  emiratesId: EmiratesIdInput.optional(),
 });
 export type CreateContactBody = z.infer<typeof CreateContactBody>;
 
@@ -164,6 +187,8 @@ export const UpdateContactBody = z
     phone: Phone.nullable(),
     email: z.email().nullable(),
     whatsappOptIn: z.boolean(),
+    // Absent: unchanged. null: clears the identity number. A string: replaces it.
+    emiratesId: EmiratesIdInput.nullable(),
   })
   .partial();
 export type UpdateContactBody = z.infer<typeof UpdateContactBody>;
@@ -232,3 +257,21 @@ export const ErasureRequestBody = z.object({
 export type ErasureRequestBody = z.infer<typeof ErasureRequestBody>;
 
 export const IdResponse = z.object({ id: z.uuid() });
+
+// The Goals tab and the enrolment wizard's goals step choose a category
+// from this owner-editable reference table (docs/SPEC/client-record.md
+// section 6); never a free-text field standing in for it.
+export const GoalCategory = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  name: z.string(),
+  nameAr: z.string().nullable(),
+});
+export type GoalCategory = z.infer<typeof GoalCategory>;
+
+export const GoalCategoryListResponse = z.object({ categories: z.array(GoalCategory) });
+export type GoalCategoryListResponse = z.infer<typeof GoalCategoryListResponse>;
+
+/** The two ways a captured Emirates ID can fail, distinct from a plain `bad_request`. */
+export const EMIRATES_ID_ERROR_CODES = ['invalid_emirates_id', 'emirates_id_in_use'] as const;
+export type EmiratesIdErrorCode = (typeof EMIRATES_ID_ERROR_CODES)[number];
