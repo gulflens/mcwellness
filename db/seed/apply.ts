@@ -31,6 +31,47 @@ function point(p: { lng: number; lat: number } | null): string | null {
   return p === null ? null : `SRID=4326;POINT(${p.lng} ${p.lat})`;
 }
 
+/**
+ * The four name columns on `contact` arrive with migration 101, which belongs
+ * to the client record's range and is not on main yet. So the names are filled
+ * in by their own statement, and that statement asks the database whether it
+ * has the columns before it writes: the seed fills a database migrated to
+ * either point, and nothing here has to be timed to a merge.
+ *
+ * The question is asked in SQL rather than in TypeScript on purpose. The same
+ * statement travels into the rendered script (render.ts), which is applied to a
+ * hosted project this process never connects to, so a decision taken here
+ * against a laptop would be the wrong decision there. `execute` keeps the
+ * update unplanned until the branch is taken, so a database without the columns
+ * never resolves them.
+ *
+ * The values come through a transaction-local setting because a `do` block
+ * takes no parameters, and the rendered script inlines that one statement the
+ * way it inlines every other. When 101 is on main this collapses into the
+ * insert above it and the setting goes away.
+ */
+const CONTACT_NAMES_SETTING = 'app.seed_contact_names';
+const FILL_CONTACT_NAMES = `do $fill$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'contact' and column_name = 'given_name'
+  ) then
+    execute $names$
+      update contact as c
+         set given_name = v.given_name,
+             family_name = v.family_name,
+             given_name_ar = v.given_name_ar,
+             family_name_ar = v.family_name_ar
+        from jsonb_to_recordset(current_setting('${CONTACT_NAMES_SETTING}')::jsonb)
+          as v(id uuid, given_name text, family_name text,
+               given_name_ar text, family_name_ar text)
+       where c.id = v.id
+    $names$;
+  end if;
+end
+$fill$`;
+
 /** A nonce that never repeats across contacts and never changes for one, so the seed is stable. */
 function nonceFor(contactId: string): Buffer {
   return createHash('sha256').update(`mcwellness-seed-nonce:${contactId}`).digest().subarray(0, 12);
@@ -372,6 +413,18 @@ export async function applySeed(
         created_by: owner,
       });
     }
+    await client.query(`select set_config('${CONTACT_NAMES_SETTING}', $1, true)`, [
+      JSON.stringify(
+        data.contacts.map((c) => ({
+          id: c.id,
+          given_name: c.givenName,
+          family_name: c.familyName,
+          given_name_ar: c.givenNameAr,
+          family_name_ar: c.familyNameAr,
+        })),
+      ),
+    ]);
+    await client.query(FILL_CONTACT_NAMES);
     for (const c of data.clients) {
       await client.query('update client set primary_contact_id = $1 where id = $2', [
         c.primaryContactId,

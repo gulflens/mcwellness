@@ -88,6 +88,38 @@ describe('generateSeed', () => {
       expect(isListedGivenName(given ?? '')).toBe(true);
       expect(isListedFamilyName(family ?? '')).toBe(true);
     }
+    for (const c of data.contacts) {
+      expect(isListedGivenName(c.givenName)).toBe(true);
+      expect(isListedFamilyName(c.familyName)).toBe(true);
+      if (c.givenNameAr !== null) expect(isListedGivenName(c.givenNameAr)).toBe(true);
+      if (c.familyNameAr !== null) expect(isListedFamilyName(c.familyNameAr)).toBe(true);
+    }
+  });
+
+  it('names each contact as part of their own household, in the language it reads', () => {
+    for (const client of data.clients) {
+      const household = data.contacts.filter((c) => c.clientId === client.id);
+      expect(household.length).toBeGreaterThan(0);
+      for (const contact of household) {
+        // One family name across the household: a mother and her child share it.
+        expect(contact.familyName, contact.id).toBe(client.familyName);
+        // Arabic wherever the client carries Arabic, and nowhere else.
+        expect(contact.familyNameAr, contact.id).toBe(client.familyNameAr);
+        if (client.givenNameAr === null) expect(contact.givenNameAr, contact.id).toBeNull();
+        else expect(contact.givenNameAr, contact.id).not.toBeNull();
+        // An adult is their own contact and carries their own name; a parent
+        // is somebody else, and is never the child under another relationship.
+        if (contact.relationship === 'self') {
+          expect(contact.givenName).toBe(client.givenName);
+          expect(contact.givenNameAr).toBe(client.givenNameAr);
+        } else {
+          expect(contact.givenName).not.toBe(client.givenName);
+        }
+      }
+      // Two parents are two people, not one name twice.
+      const givenNames = household.map((c) => c.givenName);
+      expect(new Set(givenNames).size).toBe(givenNames.length);
+    }
   });
 
   it('gives every minor a consenting legal guardian, with an Emirates ID only once they have consented', () => {

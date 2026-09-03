@@ -185,6 +185,92 @@ describe('the synthetic seed', () => {
   });
 });
 
+// The four name columns arrive with migration 101, which belongs to the client
+// record's range and is not on main yet, so the seed asks the database whether
+// it has them (db/seed/apply.ts). Both answers are proved here rather than
+// waiting for the merge: one database has the columns added by hand, the other
+// has them removed, and each is a database this seed must fill.
+const CONTACT_NAME_COLUMNS = ['given_name', 'family_name', 'given_name_ar', 'family_name_ar'];
+
+async function withContactNameColumns(client: pg.Client): Promise<void> {
+  await client.query(
+    `alter table contact ${CONTACT_NAME_COLUMNS.map((c) => `add column if not exists ${c} text`).join(', ')}`,
+  );
+}
+
+async function withoutContactNameColumns(client: pg.Client): Promise<void> {
+  await client.query(
+    `alter table contact ${CONTACT_NAME_COLUMNS.map((c) => `drop column if exists ${c}`).join(', ')}`,
+  );
+}
+
+type ContactNameRow = {
+  id: string;
+  given_name: string | null;
+  family_name: string | null;
+  given_name_ar: string | null;
+  family_name_ar: string | null;
+};
+
+const CONTACT_NAMES_QUERY =
+  'select id, given_name, family_name, given_name_ar, family_name_ar from contact';
+
+function expectEveryContactNamed(rows: ContactNameRow[]): void {
+  expect(rows).toHaveLength(data.contacts.length);
+  for (const row of rows) {
+    const contact = data.contacts.find((c) => c.id === row.id);
+    expect(contact, row.id).toBeDefined();
+    expect(row.given_name, row.id).toBe(contact?.givenName);
+    expect(row.family_name, row.id).toBe(contact?.familyName);
+    expect(row.given_name_ar, row.id).toBe(contact?.givenNameAr);
+    expect(row.family_name_ar, row.id).toBe(contact?.familyNameAr);
+  }
+}
+
+async function contactUpdatesAudited(client: pg.Client): Promise<number> {
+  const { rows } = await client.query<{ n: number }>(
+    "select count(*)::int as n from audit_log where reason = $1 and action = 'update' " +
+      "and entity_type = 'contact'",
+    [SEED_REASON],
+  );
+  return rows[0]?.n ?? -1;
+}
+
+describe('a seeded contact carries a name', () => {
+  it('writes all four columns when the database has them', async () => {
+    const fresh = await freshDatabase();
+    try {
+      await withContactNameColumns(fresh);
+      await applySeed(fresh, data, KEYS);
+      const { rows } = await fresh.query<ContactNameRow>(CONTACT_NAMES_QUERY);
+      expectEveryContactNamed(rows);
+      // One audit row per contact: the names are a write like any other.
+      expect(await contactUpdatesAudited(fresh)).toBe(data.contacts.length);
+    } finally {
+      await fresh.end();
+    }
+  });
+
+  it('fills the same practice when the database has no name columns, and writes no name', async () => {
+    const fresh = await freshDatabase();
+    try {
+      await withoutContactNameColumns(fresh);
+      const counted = await applySeed(fresh, data, KEYS);
+      expect(counted.contact).toBe(data.contacts.length);
+      const { rows } = await fresh.query<{ column_name: string }>(
+        'select column_name from information_schema.columns where table_schema = $1 ' +
+          'and table_name = $2 and column_name = any($3)',
+        ['public', 'contact', CONTACT_NAME_COLUMNS],
+      );
+      expect(rows).toHaveLength(0);
+      // Nothing was attempted, rather than attempted and swallowed.
+      expect(await contactUpdatesAudited(fresh)).toBe(0);
+    } finally {
+      await fresh.end();
+    }
+  });
+});
+
 describe('the rendered seed script', () => {
   it('applied as plain SQL, yields exactly the practice applySeed writes, audited the same way', async () => {
     const { renderSeedSql } = await import('../../db/seed/render');
@@ -232,6 +318,20 @@ describe('the rendered seed script', () => {
         'select count(*)::int as n from client',
       );
       expect(still[0]?.n).toBe(20);
+    } finally {
+      await fresh.end();
+    }
+  });
+
+  it('carries the same gate, so a hosted database with the columns gets the names', async () => {
+    const { renderSeedSql } = await import('../../db/seed/render');
+    const sql = await renderSeedSql(data, KEYS, { target: 'local' });
+    const fresh = await freshDatabase();
+    try {
+      await withContactNameColumns(fresh);
+      await fresh.query(sql);
+      const { rows } = await fresh.query<ContactNameRow>(CONTACT_NAMES_QUERY);
+      expectEveryContactNamed(rows);
     } finally {
       await fresh.end();
     }

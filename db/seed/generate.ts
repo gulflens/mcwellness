@@ -141,6 +141,12 @@ export type SeedClient = {
 export type SeedContact = {
   id: string;
   clientId: string;
+  /** The person to ask for at the door, and the person a consent was given by. */
+  givenName: string;
+  familyName: string;
+  /** The same name in Arabic, on the households that read Arabic; null on the rest, as a client's is. */
+  givenNameAr: string | null;
+  familyNameAr: string | null;
   relationship: Relationship;
   isLegalGuardian: boolean;
   canConsent: boolean;
@@ -777,12 +783,25 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       isPrimary: true,
     });
 
+    // A contact's name, on the household's own family name: a mother and her
+    // child share it, and an adult contact is the client. Arabic only where
+    // the client carries Arabic, so a household reads as one household. The
+    // given names come from a fixed offset into the list rather than from the
+    // random source, so adding a name changes nothing else the seed produces.
+    const named = (person: Name) => ({
+      givenName: person.en,
+      familyName: family.en,
+      givenNameAr: arabicFirst ? person.ar : null,
+      familyNameAr: arabicFirst ? family.ar : null,
+    });
+
     const consentingContactId = seedId('9', contactCount + 1);
     if (minor) {
       const parent: Relationship = n % 2 === 1 ? 'mother' : 'father';
       contacts.push({
         id: seedId('9', ++contactCount),
         clientId,
+        ...named(at(GIVEN_NAMES, (n + 6) % GIVEN_NAMES.length)),
         relationship: parent,
         isLegalGuardian: true,
         canConsent: true,
@@ -798,6 +817,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
         contacts.push({
           id: seedId('9', ++contactCount),
           clientId,
+          ...named(at(GIVEN_NAMES, (n + 12) % GIVEN_NAMES.length)),
           relationship: other,
           isLegalGuardian: true,
           canConsent: false,
@@ -813,6 +833,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       contacts.push({
         id: seedId('9', ++contactCount),
         clientId,
+        ...named(given),
         relationship: 'self',
         isLegalGuardian: false,
         canConsent: true,
