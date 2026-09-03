@@ -317,6 +317,25 @@ describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 
     expect(canActor(a, { type: 'billing.sale.write' }, {}, NOW)).toBe(false);
   });
 
+  it('keeps the practice’s own identity with the owner and an admin', () => {
+    // Who the practice says it is on an invoice: the legal name, the trade
+    // licence and the VAT registration (migration 905). Finance records money
+    // and does not decide whose name it is taken in.
+    const settings = { type: 'practice.settings.write' } as const;
+    for (const role of ['owner', 'admin'] as const) {
+      expect(canActor(actor([role]), settings, {}, NOW), role).toBe(true);
+    }
+    for (const role of [
+      'lead_practitioner',
+      'practitioner',
+      'finance',
+      'client_contact',
+    ] as const) {
+      expect(canActor(actor([role]), settings, {}, NOW), role).toBe(false);
+    }
+    expect(canActor(actor([]), settings, {}, NOW)).toBe(false);
+  });
+
   it('lets a client contact read only the balance of their own client', () => {
     const a = actor(['client_contact']);
     const ctx = { clientIds: [CLIENT] };

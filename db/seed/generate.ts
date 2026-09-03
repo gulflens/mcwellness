@@ -26,7 +26,20 @@ export type ConsentMethod = 'app_signature' | 'paper_scan' | 'verbal_witnessed';
 export type SeedTenant = {
   id: string;
   legalName: string;
+  legalNameAr: string;
+  /** The corporate-tax registration the practice holds today, never a VAT one (migration 905). */
   trn: string;
+  licenceNumber: string;
+  licensingAuthority: string;
+  licenceExpiresOn: string;
+  /**
+   * The synthetic practice is not registered for VAT, because the real one is
+   * not: registration follows the AED 375,000 threshold (docs/SPEC/billing.md
+   * section 5.1) and has not happened. So there is no VAT number to seed, and
+   * a screen built against this fixture meets the state it will actually meet.
+   */
+  vatRegistered: false;
+  vatTrn: null;
   defaultEmirate: Emirate;
   timezone: string;
 };
@@ -485,7 +498,13 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
   const tenant: SeedTenant = {
     id: SEED_TENANT_ID,
     legalName: 'Synthetic Wellness Studio',
+    legalNameAr: 'استوديو العافية التجريبي',
     trn: '000000000000000',
+    licenceNumber: 'SYN-000000',
+    licensingAuthority: 'Synthetic Department of Economy and Tourism',
+    licenceExpiresOn: isoDate(Number(today.slice(0, 4)) + 1, 12, 31),
+    vatRegistered: false,
+    vatTrn: null,
     defaultEmirate: 'DXB',
     timezone: 'Asia/Dubai',
   };

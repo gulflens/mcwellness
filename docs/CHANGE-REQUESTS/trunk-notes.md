@@ -176,3 +176,103 @@ stands in the file and is corrected here instead.
 arrays in this schema hold settings, not personal data. A stream that means to
 put free text or a coordinate inside a jsonb array must raise it as a change
 request first (`docs/SPEC/audit.md` section 8).
+
+---
+
+## Round 20, 2026-09-03 (the practice's identity and its VAT registration)
+
+### 1. VAT is recorded but not yet charged: the three pieces billing owes
+
+**Who.** `billing`.
+
+**What the trunk built.** Migration 905 gives `tenant` a `vat_registered`
+switch (false today) and a `vat_trn`, and snapshots both onto every invoice as
+`supplier_vat_registered` and `supplier_vat_trn` at numbering time, beside the
+legal name, address and corporate-tax number the stamp already copied. There is
+now a Practice settings screen where the owner records the registration.
+
+**What it deliberately did not build, and nobody should assume.** *Nothing
+charges from that switch.* `400_billing_catalogue.sql` stamps the standard rate
+on every price and `app.charge_single_visit` (404) writes VAT on every sale,
+whatever the practice is registered for. The trunk's own copy was reworded to
+say so plainly — the screen, the column comments and the migration header all
+now say the switch records the registration and changes no charge — precisely
+so that nobody reads a column called `vat_registered` and assumes a rule that
+does not exist. **McWellness is not registered for VAT today, so every invoice
+the platform currently issues charges VAT it should not be charging.** That is
+the defect; these three requests close it.
+
+**Request 1a — charge VAT only when the practice is registered.** At the moment
+of sale, in `app.charge_single_visit` and in the package-sale path
+(`app/api/billing/sales.ts` and whatever writes `package_price`'s invoice), the
+VAT on an invoice line is zero unless `tenant.vat_registered` is true. Net stays
+net; gross equals net. The price list keeps its stamped
+`vat_rate_basis_points` and `vat_setting_version` — those are what the rate
+*was*, and a registration later makes them live without a data migration — but
+the money written to `invoice.vat_fils` and `invoice_line.vat_fils` follows the
+registration. The outcome to aim at: **no invoice can carry `vat_fils > 0` for
+an unregistered practice.**
+
+**Request 1b — the constraint that holds it, in the same migration.** Add to
+billing's own migration, in the same commit as 1a:
+
+```sql
+alter table invoice add constraint invoice_no_vat_unless_supplier_registered
+  check (supplier_vat_registered is null or supplier_vat_registered or vat_fils = 0);
+```
+
+The trunk wrote this constraint, ran it, and **took it out again**: with 1a
+unbuilt it refuses every charge the platform makes, and fourteen tests in
+`tests/billing` fail — which is how this was established rather than argued.
+It is a one-line addition once 1a lands, and it is the difference between a
+rule and a habit. The two sibling constraints it belongs with are already in
+905 (`invoice_supplier_vat_trn_fifteen_digits`,
+`invoice_supplier_vat_trn_needs_registration`), and
+`app.stamp_invoice_supplier` enforces both again in the trigger so the
+supply-your-own-snapshot path cannot slip past them.
+
+**Request 1c — the rendered invoice reads the invoice, never the tenant.**
+Whoever writes the PDF: every supplier fact comes from the `invoice` row's own
+`supplier_*` columns. Reading `tenant` at render time would make last year's
+invoice re-render with this year's registration, which is the whole reason the
+snapshot exists. Specifically, when `supplier_vat_registered` is false or null:
+
+- no **"Tax Invoice"** heading — it is an invoice, and calling it a tax invoice
+  is a statement about a registration the practice does not hold;
+- no VAT registration number anywhere on the page;
+- no rate, and no VAT line in the totals;
+- a single AED amount, not a net/VAT/gross breakdown.
+
+And `supplier_trn` is the **corporate-tax** number: it carries a column comment
+saying so, in the same words `tenant.trn` carries. It must never be printed
+labelled as a VAT number. If the layout wants to show it at all, label it
+"Tax registration number".
+
+### 2. Two things a UAE tax invoice needs that the snapshot has not got
+
+**Who.** `billing`, with a decision from the operator on the second.
+
+Raised here because they are cheap to add while the snapshot is young and
+expensive once invoices exist that lack them — an issued invoice is
+append-only, so a missing column can never be backfilled.
+
+- **Date of supply, where it differs from the issue date.** A UAE tax invoice
+  states the date of supply as well as the date of issue. For a single visit
+  charged on the day they are the same, and `issued_on` carries both. For a
+  package sold in January and delivered through May, and for any invoice
+  raised after the fact, they are not. One nullable `supplied_on date`, written
+  when it differs and left null when it does not, keeps the row honest and the
+  renderer simple.
+- **A recipient snapshot, or the decision that none is needed.** The invoice
+  snapshots the supplier and names the client by foreign key, so a household
+  that is renamed or erased changes what an already-issued invoice renders as.
+  A full tax invoice must carry the recipient's name and address; a
+  **simplified** tax invoice, which is what a registered business issues to a
+  private individual below the threshold, need not. The practice bills
+  households, so "we issue simplified tax invoices" is very likely the right
+  answer — but it is an answer somebody has to give in writing, with the tax
+  advisor `docs/SPEC/billing.md` section 5.3 already says to consult, not a gap
+  to be discovered at the first audit. Either add `recipient_name` (and
+  address) to the snapshot, or record the simplified-invoice decision in
+  `docs/SPEC/billing.md` and say there that the recipient is deliberately not
+  snapshotted.

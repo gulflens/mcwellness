@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { HTTPException } from 'hono/http-exception';
+import { describe, expect, it, vi } from 'vitest';
 import type { AuthClaims, TokenVerifier } from './token-verifier';
 import {
   withRequestContext,
   type ApiEnv,
+  type Db,
   type PoolClientLike,
   type PoolLike,
 } from './request-context';
@@ -139,6 +141,175 @@ describe('withRequestContext', () => {
     });
     expect(res.headers.get('X-Request-Id')).toMatch(/^[0-9a-f-]{36}$/);
     expect(res.headers.get('X-Request-Id')).not.toBe('not-a-uuid');
+  });
+});
+
+/**
+ * The after-commit hook (docs/CHANGE-REQUESTS/client-record-03.md CR-12,
+ * docs/SEAMS.md). It runs when — and only when — the transaction committed,
+ * in registration order, and a piece that throws takes nothing with it.
+ */
+describe('afterCommit', () => {
+  type Ctx = {
+    get: (k: string) => (work: () => void | Promise<void>) => void;
+    json: (b: unknown) => Response;
+  };
+  /** A context read loosely, for the cases that reach for more than one variable. */
+  type AnyCtx = { get: (k: string) => unknown; json: (b: unknown, s?: number) => Response };
+  const register = (c: AnyCtx) => c.get('afterCommit') as (w: () => void | Promise<void>) => void;
+
+  /** A route that registers `work`, then answers plainly. */
+  function registering(work: readonly (() => void | Promise<void>)[]) {
+    const fake = fakePool(ownerRow);
+    const probe = app(fake.pool, (c: Ctx) => {
+      for (const piece of work) {
+        c.get('afterCommit')(piece);
+      }
+      return c.json({ ok: true });
+    });
+    return { fake, probe };
+  }
+
+  const signedIn = { headers: { authorization: 'Bearer good' } };
+
+  it('runs the work after a committed request, in the order it was registered', async () => {
+    const order: string[] = [];
+    const { fake, probe } = registering([
+      () => {
+        order.push('first');
+      },
+      async () => {
+        await Promise.resolve();
+        order.push('second');
+      },
+      () => {
+        order.push('third');
+      },
+    ]);
+    const res = await probe.request('/probe', signedIn);
+    expect(res.status).toBe(200);
+    expect(fake.statements.at(-1)).toBe('commit');
+    expect(order).toEqual(['first', 'second', 'third']);
+  });
+
+  it('runs nothing when the transaction rolled back under a 4xx the route raised', async () => {
+    const ran = vi.fn();
+    const fake = fakePool(ownerRow);
+    const probe = new Hono<ApiEnv>()
+      .use('*', withRequestContext({ pool: fake.pool, verifier }))
+      .get('/probe', (c) => {
+        c.get('afterCommit')(ran);
+        throw new HTTPException(409, { message: 'already filed' });
+      });
+    const res = await probe.request('/probe', signedIn);
+    expect(res.status).toBe(409);
+    expect(fake.statements.at(-1)).toBe('rollback');
+    expect(ran).not.toHaveBeenCalled();
+  });
+
+  it('runs nothing when the route throws and the request answers 500', async () => {
+    const ran = vi.fn();
+    const fake = fakePool(ownerRow);
+    const probe = new Hono<ApiEnv>()
+      .onError((_error, c) => c.json({ error: 'internal' }, 500))
+      .use('*', withRequestContext({ pool: fake.pool, verifier }))
+      .get('/probe', (c) => {
+        c.get('afterCommit')(ran);
+        throw new Error('boom');
+      });
+    const res = await probe.request('/probe', signedIn);
+    expect(res.status).toBe(500);
+    expect(fake.statements.at(-1)).toBe('rollback');
+    expect(ran).not.toHaveBeenCalled();
+  });
+
+  it('runs the work of a refusal the route returned, because that transaction committed', async () => {
+    // docs/SEAMS.md says so plainly, so it is proved rather than described:
+    // the fence commits everything below 500, a returned 4xx included.
+    const ran = vi.fn();
+    const fake = fakePool(ownerRow);
+    const probe = app(fake.pool, (c: AnyCtx) => {
+      register(c)(ran);
+      return c.json({ error: 'not_found' }, 404);
+    });
+    const res = await probe.request('/probe', signedIn);
+    expect(res.status).toBe(404);
+    expect(fake.statements.at(-1)).toBe('commit');
+    expect(ran).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to query once the connection is back in the pool', async () => {
+    // The pool hands the same connection to the next request. A hook that
+    // reaches for c.get('db') must not find itself inside somebody else's
+    // transaction: it gets a plain error, which the fence logs and swallows.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const fake = fakePool(ownerRow);
+    let thrown: unknown = null;
+    const probe = app(fake.pool, (c: AnyCtx) => {
+      const db = c.get('db') as Db;
+      register(c)(async () => {
+        try {
+          await db.query('select 1 from client');
+        } catch (error) {
+          thrown = error;
+          throw error;
+        }
+      });
+      return c.json({ ok: true });
+    });
+    const res = await probe.request('/probe', signedIn);
+    expect(res.status).toBe(200);
+    expect((thrown as Error | null)?.message).toContain('returned to the pool');
+    // The statement never reached the connection: the last one is the commit.
+    expect(fake.statements.at(-1)).toBe('commit');
+    expect(fake.statements).not.toContain('select 1 from client');
+    // And the caller is told nothing about it beyond the log.
+    expect(logged).toHaveBeenCalledTimes(1);
+    logged.mockRestore();
+  });
+
+  it('does not let one request’s handle reach the next request’s transaction', async () => {
+    const fake = fakePool(ownerRow);
+    const escaped: { db?: Db } = {};
+    const probe = app(fake.pool, (c: AnyCtx) => {
+      escaped.db ??= c.get('db') as Db;
+      return c.json({ ok: true });
+    });
+    await probe.request('/probe', signedIn);
+    // A second request, on the very same pooled connection.
+    await probe.request('/probe', signedIn);
+    await expect(escaped.db?.query('select 1 from client')).rejects.toThrow(/returned to the pool/);
+    expect(fake.statements).not.toContain('select 1 from client');
+  });
+
+  it('lets a throwing piece pass without touching the response or the pieces around it', async () => {
+    const before = vi.fn();
+    const after = vi.fn();
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { probe } = registering([
+      before,
+      () => {
+        throw new Error('the store was unreachable');
+      },
+      after,
+    ]);
+    const res = await probe.request('/probe', {
+      headers: { ...signedIn.headers, 'x-request-id': '00000000-0000-4000-8000-0000000000ee' },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(after).toHaveBeenCalledTimes(1);
+    // The request id names the failure; the message never reaches the log.
+    expect(logged).toHaveBeenCalledTimes(1);
+    const line = String(logged.mock.calls[0]?.[0]);
+    expect(JSON.parse(line)).toEqual({
+      requestId: '00000000-0000-4000-8000-0000000000ee',
+      after: 'commit',
+      name: 'Error',
+    });
+    expect(line).not.toContain('unreachable');
+    logged.mockRestore();
   });
 });
 

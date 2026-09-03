@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router';
-import { canOpenBilling, canOpenSchedule, canOpenToday } from './adminAccess';
+import { canOpenBilling, canOpenSchedule, canOpenSettings, canOpenToday } from './adminAccess';
 import type { Actor } from './auth/AuthContext';
 import { useAuth } from './auth/AuthContext';
 import { ADMIN_SECTIONS, Rail, type RailSection } from './components/Rail';
@@ -7,7 +7,7 @@ import { describeRoles } from './routing';
 
 /**
  * The sections this actor may open, in `ADMIN_SECTIONS`' own order. Reads
- * the same `canOpenBilling`/`canOpenSchedule` rules the routes enforce
+ * the same `canOpenBilling`/`canOpenSchedule`/`canOpenSettings` rules the routes enforce
  * (adminAccess.ts), so the rail never shows a link a route would bounce
  * the person straight back out of — a finance account sees Billing but not
  * Schedule, and only someone who treats sees Today. `clients`, `sessions`
@@ -20,6 +20,7 @@ function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
     if (section.key === 'billing') return canOpenBilling(actor, now);
     if (section.key === 'schedule') return canOpenSchedule(actor, now);
     if (section.key === 'today') return canOpenToday(actor);
+    if (section.key === 'settings') return canOpenSettings(actor, now);
     return true;
   });
 }

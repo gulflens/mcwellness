@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from './auth/AuthContext';
@@ -43,6 +43,21 @@ const FINANCE = {
   capabilities: [],
 };
 
+/** What GET /api/practice answers on this synthetic practice. */
+const PRACTICE = {
+  legalName: 'Synthetic Wellness Studio',
+  legalNameAr: null,
+  taxRegistrationNumber: null,
+  licenceNumber: null,
+  licensingAuthority: null,
+  licenceExpiresOn: null,
+  vatRegistered: false,
+  vatTrn: null,
+  defaultEmirate: 'DXB',
+  timezone: 'Asia/Dubai',
+  address: null,
+};
+
 const provider: AuthProvider = {
   kind: 'development',
   signIn: async () => undefined,
@@ -65,6 +80,7 @@ function mount(me: unknown, path = '/today/check-in') {
     if (url === '/api/sessions/service-types') return json({ serviceTypes: [] });
     if (url.startsWith('/api/clients')) return json({ clients: [], note: null });
     if (url === '/api/billing/prices') return json({ prices: [] });
+    if (url === '/api/practice') return json({ practice: PRACTICE });
     if (url.startsWith('/api/appointments')) return json({ appointments: [] });
     return json({ error: 'not_found', requestId: null }, 404);
   }) as unknown as typeof fetch;
@@ -153,6 +169,77 @@ describe('App — /admin/billing and /admin/schedule', () => {
       expect.stringContaining('/admin/billing'),
     );
     expect(screen.queryByRole('link', { name: 'Schedule' })).toBeNull();
+  });
+});
+
+describe('App — /admin/settings/practice', () => {
+  it('lets an admin reach the practice settings', async () => {
+    mount(ADMIN, '/admin/settings/practice');
+    expect(await screen.findByRole('heading', { name: 'Practice' })).toBeTruthy();
+  });
+
+  it('sends a lead practitioner to their own desk instead', async () => {
+    mount(LEAD_PRACTITIONER, '/admin/settings/practice');
+    // practice.settings.write is the owner's and an admin's alone: what a tax
+    // invoice says the supplier is, is not a clinical decision.
+    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Practice' })).toBeNull();
+  });
+
+  it('sends finance to their own desk instead', async () => {
+    mount(FINANCE, '/admin/settings/practice');
+    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Practice' })).toBeNull();
+  });
+
+  it('shows an admin the Settings link', async () => {
+    mount(ADMIN, '/admin/clients');
+    expect(await screen.findByRole('link', { name: 'Settings' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/settings/practice'),
+    );
+  });
+
+  it('takes the rest of the console out of reach while the drawer is open', async () => {
+    // The drawer's `inert` used to be a no-op: it read document.body.children,
+    // and the app renders inside #root, so nothing behind it was ever marked
+    // and a rail link could take focus from an open drawer (design review,
+    // round 20). jsdom implements `inert` as a property and not as behaviour,
+    // so the mechanism is asserted directly, and the focus cycle beside it.
+    mount(ADMIN, '/admin/settings/practice');
+    const edit = await screen.findByRole('button', { name: 'Edit details' });
+    // Disabled until the details land: pressing it before then does nothing.
+    await waitFor(() => expect(edit).toHaveProperty('disabled', false));
+    fireEvent.click(edit);
+    const drawer = await screen.findByRole('dialog', { name: 'Practice details' });
+
+    const rail = document.querySelector<HTMLElement>('.rail');
+    const main = document.querySelector<HTMLElement>('.admin__main');
+    expect(rail?.inert).toBe(true);
+    // The drawer's own ancestors stay live, or the drawer would be inert too.
+    expect(main?.inert).toBeFalsy();
+    expect(drawer.inert).toBeFalsy();
+    // Everything else on the page behind it is not.
+    expect(document.querySelector<HTMLElement>('.page__header')?.inert).toBe(true);
+    expect(document.querySelector<HTMLElement>('.practice')?.inert).toBe(true);
+
+    // Tab does not walk out of the drawer.
+    const close = screen.getByRole('button', { name: 'Close' });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(drawer.contains(document.activeElement)).toBe(true);
+
+    // And it all comes back when the drawer closes.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await screen.findByRole('button', { name: 'Edit details' });
+    expect(rail?.inert).toBeFalsy();
+    expect(document.querySelector<HTMLElement>('.practice')?.inert).toBeFalsy();
+  });
+
+  it('never offers finance a Settings link its own route would refuse', async () => {
+    mount(FINANCE, '/admin/clients');
+    await screen.findByRole('link', { name: 'Billing' });
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
   });
 });
 
