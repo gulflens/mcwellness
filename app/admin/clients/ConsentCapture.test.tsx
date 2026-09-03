@@ -212,7 +212,13 @@ describe('ConsentTab', () => {
     mount(<ConsentTab clientId={CLIENT_ID} record={signed} onChanged={vi.fn()} mayWrite />);
     // CR-07's whole point: "Given by: Mother" is not an identification.
     expect(await screen.findByText('Given by Iris Harbour (mother)')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open what was signed' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Open what was signed, opens in a new tab' }),
+    ).toBeTruthy();
+    // The words as well as the signature, at the exact version signed.
+    expect(
+      screen.getByRole('button', { name: 'Wording version 0.1-draft, opens in a new tab' }),
+    ).toBeTruthy();
   });
 
   it('asks for a reason before it will withdraw, and says what it does not do', async () => {

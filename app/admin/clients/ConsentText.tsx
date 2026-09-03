@@ -19,12 +19,21 @@ import { Fragment, type ReactNode } from 'react';
 
 const FRONT_MATTER = /^---\r?\n[\s\S]*?\r?\n---\r?\n/;
 
-/** `**bold**` inside a line. Deliberately the only inline construct. */
+/**
+ * `**bold**` and `*italic*` inside a line. Two constructs, and the wording
+ * files use both: the lawyer's own bracketed notes and the emphasis in "not a
+ * medical clinic" are marked with single asterisks, and rendering those as
+ * literal asterisks made the practice's own words look like a source file.
+ * The double form is matched first, or `**` would be read as an empty italic.
+ */
 function inline(text: string, keyPrefix: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) => {
+  return text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).map((part, index) => {
     const key = `${keyPrefix}-${index}`;
     if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
       return <strong key={key}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      return <em key={key}>{part.slice(1, -1)}</em>;
     }
     return <Fragment key={key}>{part}</Fragment>;
   });
@@ -81,6 +90,16 @@ function parse(markdown: string): Block[] {
     if (bullet?.[1]) {
       flushParagraph();
       items.push(bullet[1]);
+      continue;
+    }
+    // A line under an open bullet is that bullet continuing, not a new
+    // paragraph. The wording files are hard-wrapped at about seventy-five
+    // characters, so nearly every bullet in them runs to two or three lines;
+    // flushing the list here turned each one into a one-item list with an
+    // orphan fragment beneath it, and section 3's four bullets rendered as
+    // four lists. Markdown calls this a lazy continuation and so does this.
+    if (items.length > 0) {
+      items[items.length - 1] = `${items[items.length - 1] ?? ''} ${line}`;
       continue;
     }
     flushList();

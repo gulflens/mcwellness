@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ConsentText } from './ConsentText';
@@ -89,5 +90,30 @@ describe('ConsentText', () => {
   it('renders a file with no front matter at all', () => {
     render(<ConsentText markdown={'Just a sentence.'} />);
     expect(screen.getByText('Just a sentence.')).toBeTruthy();
+  });
+});
+
+describe('the practice’s own wording, as filed', () => {
+  /** The real file, not a fixture: this renderer exists for these words. */
+  const participation = readFileSync('docs/CONSENT/participation.en.md', 'utf8');
+
+  it('keeps a hard-wrapped bullet in its list', () => {
+    render(<ConsentText markdown={participation} />);
+    // Section 3 has four bullets and every one of them wraps. Each
+    // continuation line used to flush the list and become a paragraph, so the
+    // section rendered as four one-item lists with orphan fragments between
+    // them — the lawyer's sentences broken in half on screen.
+    const heading = screen.getByText(/What a session involves/);
+    const list = heading.nextElementSibling;
+    expect(list?.tagName).toBe('UL');
+    expect(list?.querySelectorAll('li')).toHaveLength(4);
+    // The wrapped half is inside its own bullet, not adrift beneath the list.
+    expect(list?.querySelectorAll('li')[0]?.textContent).toContain('washes out with water');
+  });
+
+  it('renders emphasis as emphasis rather than asterisks', () => {
+    render(<ConsentText markdown={'A wellness provider, *not* a medical clinic.'} />);
+    expect(screen.getByText('not').tagName).toBe('EM');
+    expect(screen.queryByText(/\*not\*/)).toBeNull();
   });
 });

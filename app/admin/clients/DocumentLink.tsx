@@ -17,6 +17,15 @@ import { Button } from '../../shell/components/Controls';
  * It is good for five minutes. It is not stored, not reused, and not put in
  * the address bar — the browser opens it in a new tab and this component keeps
  * nothing.
+ *
+ * **Unless the browser refuses.** A popup blocker returns null from
+ * `window.open` and says nothing, and pressing a button that does nothing at
+ * all is the worst answer on this screen: the person concludes the file is
+ * missing. So a refused open falls back to a plain anchor carrying the link,
+ * which the person clicks themselves — a click the browser will honour,
+ * because it is theirs. That link is held in state until the tab is closed or
+ * the drawer goes, which is the one exception to keeping nothing, and it is
+ * the same five minutes it was already good for.
  */
 export function DocumentLink({
   clientId,
@@ -30,10 +39,12 @@ export function DocumentLink({
   const { apiFetch } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
 
   async function open(): Promise<void> {
     setBusy(true);
     setError(null);
+    setBlockedUrl(null);
     try {
       const res = await apiFetch(`/api/clients/${clientId}/documents/${documentId}/link`);
       if (!res.ok) {
@@ -45,7 +56,10 @@ export function DocumentLink({
       const { url } = DocumentLinkResponse.parse(await res.json());
       // noreferrer as well as noopener: the link carries a signature, and the
       // page it opens has no business knowing which screen sent it.
-      window.open(url, '_blank', 'noopener,noreferrer');
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      // A blocked popup is null and silent. Hand the link over rather than
+      // leave a button that appears to do nothing.
+      if (!opened) setBlockedUrl(url);
     } catch {
       setError('That file did not open.');
     } finally {
@@ -55,10 +69,27 @@ export function DocumentLink({
 
   return (
     <span className="document-link">
-      <Button variant="quiet" onClick={() => void open()} disabled={busy}>
+      <Button
+        variant="quiet"
+        onClick={() => void open()}
+        disabled={busy}
+        aria-label={`${label}, opens in a new tab`}
+      >
         {busy ? 'Opening…' : label}
       </Button>
-      {error ? <span className="field__hint field__hint--error small">{error}</span> : null}
+      {blockedUrl ? (
+        <span className="small" role="status">
+          Your browser stopped the file opening.{' '}
+          <a href={blockedUrl} target="_blank" rel="noopener noreferrer">
+            Open it in a new tab
+          </a>
+        </span>
+      ) : null}
+      {error ? (
+        <span className="field__hint field__hint--error small" role="alert">
+          {error}
+        </span>
+      ) : null}
     </span>
   );
 }
