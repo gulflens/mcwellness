@@ -87,7 +87,7 @@ beforeAll(async () => {
     'insert into package_purchase (id, tenant_id, client_id, package_id, package_name, ' +
       'purchased_on, net_fils, vat_fils, vat_rate_basis_points, vat_setting_version, ' +
       "list_price_fils, expires_on) values ($1, $2, $3, $4, 'Silver', '2026-09-02', 1032500, " +
-      "51625, 500, 1, 1215000, '2027-09-02')",
+      "0, 0, 1, 1215000, '2027-09-02')",
     [PURCHASE_ID, IDS.tenantA, IDS.clientA, PACKAGE_ID],
   );
   await client.query(
@@ -100,19 +100,19 @@ beforeAll(async () => {
   await client.query(
     'insert into invoice (id, tenant_id, client_id, number, kind, issued_on, ' +
       "package_purchase_id, net_fils, vat_fils, gross_fils) values ($1, $2, $3, 1, 'package', " +
-      "'2026-09-02', $4, 1032500, 51625, 1084125)",
+      "'2026-09-02', $4, 1032500, 0, 1032500)",
     [INVOICE_ID, IDS.tenantA, IDS.clientA, PURCHASE_ID],
   );
   await client.query(
     'insert into invoice_line (id, tenant_id, invoice_id, client_id, line_no, description, ' +
       'package_id, quantity, unit_net_fils, net_fils, vat_rate_basis_points, vat_setting_version, ' +
-      "vat_fils, gross_fils) values ($1, $2, $3, $4, 1, 'Silver', $5, 1, 1032500, 1032500, 500, " +
-      '1, 51625, 1084125)',
+      "vat_fils, gross_fils) values ($1, $2, $3, $4, 1, 'Silver', $5, 1, 1032500, 1032500, 0, " +
+      '1, 0, 1032500)',
     [LINE_ID, IDS.tenantA, INVOICE_ID, IDS.clientA, PACKAGE_ID],
   );
   await client.query(
     'insert into payment (id, tenant_id, client_id, method, amount_fils, received_at, invoice_id) ' +
-      "values ($1, $2, $3, 'transfer', 1084125, now(), $4)",
+      "values ($1, $2, $3, 'transfer', 1032500, now(), $4)",
     [PAYMENT_ID, IDS.tenantA, IDS.clientA, INVOICE_ID],
   );
   await client.query(

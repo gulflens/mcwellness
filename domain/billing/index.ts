@@ -1,5 +1,6 @@
-export { resolveVat } from './vat';
-export type { VatResolution, VatSetting } from './vat';
+export { formatFils } from './money';
+export { resolveSaleVat, resolveVat } from './vat';
+export type { Supplier, VatResolution, VatSetting, VatTreatment } from './vat';
 export { currentPriceFor, validateNewPrice } from './price';
 export type { NewPriceApproval, NewPriceRefusal, Price } from './price';
 export { allocateEntitlements, standaloneTotalFils } from './allocation';
@@ -26,6 +27,8 @@ export type {
   EntitlementStatus,
   ServiceBalance,
 } from './balance';
+export { monthlyMoney } from './recognition';
+export type { CollectedPayment, LedgerCredit, MonthlyMoney } from './recognition';
 export { refundOnTermination } from './refund';
 export type { DeliveredCount, RefundLine, RefundQuote, SingleRate } from './refund';
 export {

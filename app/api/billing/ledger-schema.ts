@@ -289,13 +289,23 @@ export const InvoiceRow = z.object({
   netFils: z.number().int().nonnegative(),
   vatFils: z.number().int().nonnegative(),
   grossFils: z.number().int().nonnegative(),
-  /** The rendered PDF; always null until the document pull request lands. */
+  /**
+   * The rendered PDF, when one has been filed. Null means it has not been
+   * rendered yet, not that it cannot be: the screen offers to make it.
+   */
   documentId: z.uuid().nullable(),
 });
 export type InvoiceRow = z.infer<typeof InvoiceRow>;
 
 export const InvoicesResponse = z.object({
   invoices: z.array(InvoiceRow),
+  /**
+   * Whether the practice is registered for VAT *now*. Not a fact about any
+   * invoice in the list — each of those carries its own snapshot of what was
+   * true on the day — but what the screen needs to say plainly why the VAT
+   * column reads as it does.
+   */
+  practiceVatRegistered: z.boolean(),
   /** True when more matched than the page holds. */
   truncated: z.boolean().optional(),
 });
