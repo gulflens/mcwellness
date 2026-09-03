@@ -254,10 +254,19 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     // purchase records the same VAT the price list showed, whatever today's
     // setting happens to be (CLAUDE.md rule 6) — and whether the practice may
     // charge it at all, which is the registration's to say and not the price
-    // row's. Both in one statement: the same transaction, so the answer cannot
-    // change between reading it and writing the invoice, and the invoice's own
-    // `supplier_vat_registered` snapshot is stamped from the same row a moment
-    // later by `app.stamp_invoice_supplier`.
+    // row's.
+    //
+    // Both in one statement, but the *stamp* happens in another: the invoice
+    // insert below reads `tenant` again through app.stamp_invoice_supplier, and
+    // under read committed that row can move between the two. What makes it safe
+    // is not that it cannot happen but that only one direction is dangerous, and
+    // that direction fails rather than lands. If the practice deregisters in
+    // between, VAT is computed here and the stamp writes false, and
+    // app.guard_invoice_vat (migration 406) refuses the insert — the whole sale
+    // rolls back and nobody is charged tax under no registration. If it
+    // registers in between, the sale charges no VAT under a live registration,
+    // which is an undercharge the practice can correct rather than a
+    // misstatement on a document.
     const stamped = await db.query<{ vat_setting_version: number; vat_registered: boolean }>(
       'select pp.vat_setting_version, app.tenant_charges_vat(app.current_tenant_id()) ' +
         'as vat_registered from package_price pp ' +

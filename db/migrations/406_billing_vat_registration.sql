@@ -44,18 +44,35 @@
 -- the first place it bites and it is written up in
 -- docs/CHANGE-REQUESTS/billing-04.md with the one line to add and where.
 --
--- What lands instead is the same rule at the same moment, enforced by a
--- before-insert trigger: a plpgsql body names `new.supplier_vat_registered` at
+-- What lands instead is the same rule at the same moment, enforced by
+-- before-insert triggers: a plpgsql body names `new.supplier_vat_registered` at
 -- execution, not at creation, so it is written now and holds from the moment
 -- 905 has run. `app.stamp_invoice_supplier` already sets this precedent — it
 -- restates 905's two check constraints inside the trigger so a caller gets a
 -- sentence rather than a constraint name — and `invoice` grants neither update
--- nor delete (402), so an insert is the only way a row can ever arrive. The
--- guarantee is therefore the one request 1b asked for: **no invoice can carry
--- `vat_fils > 0` for a practice that was not registered when it was numbered.**
--- The constraint should still be added when the trunk can add it: belt and
--- braces on a rule that is a false statement to the Federal Tax Authority if it
--- ever fails.
+-- nor delete (402), so an insert is the only way a row can ever arrive.
+--
+-- **Two things the check constraint would have covered that a first draft of
+-- the guard did not** (both found in review, both closed below):
+--
+--   * A null `supplier_vat_registered` was read as "says nothing" and let
+--     through. That is right for an invoice issued before 905 — there were
+--     none, but the reading is right — and wrong for one being inserted now,
+--     because `app.stamp_invoice_supplier` returns early when a caller supplies
+--     `supplier_legal_name`, leaving every other supplier column exactly as the
+--     caller left it. So a hand-written insert naming its own supplier could
+--     carry VAT under no registration at all. The guard now falls back to the
+--     practice's own registration when the column says nothing.
+--   * Nothing tied an **invoice line's** rate to its header. The totals could be
+--     zero and honest while every line beneath them printed five per cent, which
+--     is what the rendered document reads. `app.guard_invoice_line_vat` closes
+--     it against the same question.
+--
+-- The guarantee is therefore the one request 1b asked for: **no invoice and no
+-- invoice line can carry VAT for a practice that was not registered when it was
+-- numbered.** The constraint should still be added when the trunk can add it:
+-- belt and braces on a rule that is a false statement to the Federal Tax
+-- Authority if it ever fails.
 --
 -- **Date of supply.** Round 20's second request. A UAE tax invoice states the
 -- date of supply as well as the date of issue. For a visit charged on the day
@@ -135,14 +152,17 @@ comment on function app.tenant_charges_vat(uuid) is
 --    caller passed in.
 ------------------------------------------------------------------------------
 create function app.guard_invoice_vat() returns trigger
-language plpgsql
+language plpgsql security definer
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  -- Null is "this invoice predates migration 905 and says nothing", never
-  -- "false" — the same reading 905's own columns take.
-  if new.supplier_vat_registered is not null
-     and not new.supplier_vat_registered
+  -- A null here is not "says nothing" at insert time. The stamp returns early
+  -- when a caller supplies its own supplier_legal_name, so null is exactly what
+  -- an insert that named its own supplier and skipped the registration leaves
+  -- behind — and reading that as permission is how VAT gets onto an invoice
+  -- from a practice that holds no registration. The practice's own answer is
+  -- the fallback, which is what the stamp would have written.
+  if not coalesce(new.supplier_vat_registered, app.tenant_charges_vat(new.tenant_id))
      and new.vat_fils <> 0 then
     raise exception 'an invoice cannot carry VAT for a practice that is not registered for it'
       using errcode = 'check_violation',
@@ -156,6 +176,38 @@ revoke execute on function app.guard_invoice_vat() from public;
 create trigger zz_guard_invoice_vat before insert on public.invoice
   for each row execute function app.guard_invoice_vat();
 alter table public.invoice enable always trigger zz_guard_invoice_vat;
+
+-- The same question, asked of a line. Nothing tied a line's rate to its
+-- header: an invoice could total zero VAT honestly while every line under it
+-- printed five per cent, and the rendered document reads the lines. The header
+-- is read rather than trusted from the line, and its null is resolved the same
+-- way.
+create function app.guard_invoice_line_vat() returns trigger
+language plpgsql security definer
+set search_path = pg_catalog, pg_temp
+as $$
+declare
+  v_registered boolean;
+begin
+  select coalesce(i.supplier_vat_registered, app.tenant_charges_vat(i.tenant_id))
+    into v_registered
+    from public.invoice i
+   where i.id = new.invoice_id and i.tenant_id = new.tenant_id;
+
+  if not coalesce(v_registered, false)
+     and (new.vat_fils <> 0 or new.vat_rate_basis_points <> 0) then
+    raise exception 'an invoice line cannot carry VAT for a practice that is not registered for it'
+      using errcode = 'check_violation',
+            hint    = 'The line''s rate is what the rendered document prints. Leave '
+                      'vat_rate_basis_points and vat_fils at zero (migration 406).';
+  end if;
+  return new;
+end
+$$;
+revoke execute on function app.guard_invoice_line_vat() from public;
+create trigger zz_guard_invoice_line_vat before insert on public.invoice_line
+  for each row execute function app.guard_invoice_line_vat();
+alter table public.invoice_line enable always trigger zz_guard_invoice_line_vat;
 
 ------------------------------------------------------------------------------
 -- 4. The single-visit charge, with the rate taken from the registration.
@@ -251,6 +303,8 @@ revoke execute on function app.charge_single_visit(uuid, uuid, uuid, date) from 
 -- rollback:
 --   alter table invoice drop constraint if exists invoice_supplied_on_differs;
 --   alter table invoice drop column if exists supplied_on;
+--   drop trigger if exists zz_guard_invoice_line_vat on public.invoice_line;
+--   drop function if exists app.guard_invoice_line_vat();
 --   drop trigger if exists zz_guard_invoice_vat on public.invoice;
 --   drop function if exists app.guard_invoice_vat();
 --   -- 404's charge, written out: `create or replace` has no undo of its own,
