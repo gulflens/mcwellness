@@ -289,7 +289,10 @@ export const InvoiceRow = z.object({
   netFils: z.number().int().nonnegative(),
   vatFils: z.number().int().nonnegative(),
   grossFils: z.number().int().nonnegative(),
-  /** The rendered PDF; always null until the document pull request lands. */
+  /**
+   * The rendered PDF, when one has been filed. Null means it has not been
+   * rendered yet, not that it cannot be: the screen offers to make it.
+   */
   documentId: z.uuid().nullable(),
 });
 export type InvoiceRow = z.infer<typeof InvoiceRow>;

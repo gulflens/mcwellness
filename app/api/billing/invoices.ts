@@ -16,15 +16,22 @@ import { InvoicesResponse } from './ledger-schema';
  *
  * A page is capped, and for the same reason that route's is — one audit row
  * per row shown, never one per row that matched.
+ *
+ * `documentId` is the rendered PDF where one exists, so the screen can tell
+ * "open it" from "make it" without a request per row.
  */
 
 const PAGE_SIZE = 50;
 
 const SQL =
   'select i.id, i.reference, i.number, i.kind, i.issued_on, i.client_id, i.net_fils, ' +
-  'i.vat_fils, i.gross_fils, i.document_id, c.mrn as client_mrn, ' +
+  'i.vat_fils, i.gross_fils, bd.document_id, c.mrn as client_mrn, ' +
   "c.given_name || ' ' || c.family_name as client_name " +
   'from invoice i join client c on c.id = i.client_id ' +
+  // The rendered PDF, when one has been filed. It hangs off billing_document
+  // rather than invoice.document_id, because an invoice grants no update and
+  // that column can never be filled in (407_billing_rendered_document.sql).
+  'left join billing_document bd on bd.invoice_id = i.id ' +
   'where i.tenant_id = app.current_tenant_id() ' +
   'and ($1::uuid is null or i.client_id = $1) ' +
   // One row past the page, so the route can say "there are more" without a
