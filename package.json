@@ -32,7 +32,8 @@
     "db:migrate": "node --env-file-if-exists=.env --import tsx db/migrate.ts",
     "db:reset": "node --env-file-if-exists=.env --import tsx db/reset.ts",
     "seed": "node --env-file-if-exists=.env --import tsx db/seed/index.ts",
-    "seed:sql": "node --env-file-if-exists=.env --import tsx db/seed/render-cli.ts"
+    "seed:sql": "node --env-file-if-exists=.env --import tsx db/seed/render-cli.ts",
+    "seed:wording": "node --env-file-if-exists=.env --import tsx scripts/upload-consent-wording.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.3.0",

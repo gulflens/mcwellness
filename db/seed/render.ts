@@ -41,7 +41,13 @@ export function literal(value: unknown): string {
 /**
  * Replaces $1, $2, ... with literals in one pass, so a literal already written
  * is never scanned again and a value that itself contains "$1" stays intact.
- * The seed's statements carry no dollar sign inside quotes or dollar-quoting.
+ *
+ * One of the seed's statements does carry dollar-quoting: the block that fills
+ * in the contact names (apply.ts) is written between $fill$ and $names$ tags.
+ * That is safe here because only a dollar sign followed by digits is replaced,
+ * and neither tag is numeric — a rule this file's own tests hold, and one any
+ * future tag must keep. The statement carries no placeholders of its own
+ * either: its values arrive through the setting inlined a line above it.
  */
 export function inline(text: string, values: unknown[]): string {
   return text.replace(/\$(\d+)/g, (_, n: string) => {

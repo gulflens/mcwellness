@@ -132,6 +132,78 @@ trunk reseeds staging before the first feature that does (a fresh render with
   there. Either way it waits on billing's migration 401, without which the
   three package tables do not exist on staging at all.
 
+## What was done on 2026-09-03, second pass: the rebuild
+
+Staging was two things behind: thirteen migrations, and a practice seeded
+before the price list, the programmes and the Luhn check digit existed. The
+first of the two ways out named above was taken — clear the practice and reseed
+it from a fresh render — so both debts are settled at once and nothing on
+staging is a patched-up version of an older seed.
+
+- **The practice was cleared**, in one transaction:
+  `truncate public.tenant cascade`. Everything the synthetic practice owns
+  hangs off that row, so one statement empties all of it and leaves the schema,
+  the roles and the bookkeeping alone.
+- **Thirteen migrations were applied** one at a time through Supabase's
+  migration tool: 201, 302 to 304, 401 to 405, and 901 to 904.
+  `schema_migration` now holds thirty-four rows. The legacy rows whose checksum
+  was null were backfilled and the column set not null, which is what the
+  runner itself does, so a later `pnpm db:migrate` sees nothing pending and
+  nothing unexplained.
+- **Twelve policy files were re-applied**, in path order, the way the runner
+  applies them.
+- **The practice was reseeded whole.** Rendered from main at `de84cd0` with
+  `pnpm seed:sql` under the staging identity key, and applied as one
+  transaction: the tenant, the people, the services, the price list and the
+  three programmes, the twenty clients with their contacts, homes and consents.
+  The catalogue is in this time, so the money screens have something to show.
+- **Fingerprinted against a fresh local database**, table by table, and
+  identical but for two differences that are expected and benign:
+  `user_role.granted_at`, which defaults to the wall clock and so records when
+  each row was written, and the position of `schema_migration.checksum`, which
+  on staging was added as a third column by migration 900 where a fresh local
+  database is bootstrapped with it second. Nothing reads either.
+- **The two real accounts were restored and linked**: the owner (with
+  `lead_practitioner` added alongside owner) and the practice mailbox as admin,
+  each linked to their person in the practice by email. Real clients still stay
+  out: staging is approved for synthetic data only.
+- **The demo was rebuilt** on top: the owner's practitioner row
+  `00000005-0000-4000-8000-0000000000aa`, one neurofeedback credential whose
+  certificate number is the literal `STAGING-DEMO` (not a real certificate),
+  and one confirmed home visit with MW-000005 at 10:00 Dubai time on the day of
+  the rebuild, at that client's seeded home. Its `busy_end` was computed by the
+  trigger to 11:15 rather than typed. A later day needs a fresh visit row, as
+  before.
+- **`checkin_context` was found and answers**, so the check-in screen has the
+  visit, the client and the consents it reads.
+- **The audit chain verifies** end to end, every row under its own reason.
+
+### What the owner does next, in this order
+
+1. **Make the bucket.** In the staging project, under Storage, "New bucket":
+   name it `documents`, public **off**. The details are in section 5a below;
+   nothing else about it needs deciding.
+2. **Give the API a storage credential.** Copy a **service** key from the
+   project's API settings — never the anon key, which the browser holds and
+   which storage does not fence — into `.env.staging` as
+   `SUPABASE_STORAGE_KEY`, and set `STORAGE_PROVIDER=supabase` in the same
+   file. `SUPABASE_URL` must be there too, naming the project the bucket sits
+   in; the store cannot be reached without it. That replaces the `local`
+   stopgap that has been standing in, and its `STORAGE_DIR` line can go: a
+   folder on the laptop was never where staging's documents belong — and the
+   upload command in step 3 refuses to run in that state rather than filing
+   eight files on the laptop while staging's rows point at nothing.
+3. **Put the wording in the bucket**, from the repository, once:
+
+   ```bash
+   node --env-file=.env.staging --import tsx scripts/upload-consent-wording.mjs
+   ```
+
+   It prints one line per file — the key, the size, and whether it was uploaded
+   or was already there — and uploads nothing the second time. Until it has
+   run, the eight consent wording rows on staging point at nothing, which shows
+   the moment anyone opens a consent.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
@@ -190,6 +262,23 @@ committed (`*.seed.sql` is ignored).
 
 Either way, keep that identity key with the API's secrets; the API needs the
 same one to open the seeded Emirates IDs.
+
+**Then the wording's bytes**, which neither route carries. Both write eight
+`document` rows naming eight storage keys; the files themselves travel
+separately, and until they are in the bucket every consent points at nothing.
+Once the bucket exists (section 5a) and `.env.staging` names the store, one
+command files them, from the repository:
+
+```bash
+node --env-file=.env.staging --import tsx scripts/upload-consent-wording.mjs
+```
+
+On a laptop, where `.env` already says everything, it is `pnpm seed:wording`.
+Either way it reads each wording row through the API's own connection, refuses
+any file whose sha256 no longer matches the row that points at it, writes
+nothing over anything, and prints one line per file: the key, the size, and
+whether it was uploaded or was already there. Running it twice uploads nothing
+the second time, so it is safe to repeat if a run is interrupted.
 
 ## 4. The sign-in accounts
 
@@ -265,23 +354,36 @@ a client, `tenant/<tenantId>/practice/<documentId>` for a document with no
 client. They are made of ids alone, so a key says nothing about whose file it
 is.
 
-**The consent wording has to be uploaded once, by hand, whichever route
-seeded the rows.** `pnpm seed` writes those eight files into the local folder
-and nowhere else, deliberately — it holds no storage credential and never
-reaches a bucket — so pointing it at a hosted database fills the rows and
-leaves the bytes on the laptop. It says so on the way past: seeding a
-non-local database prints the same warning this section carries. The rendered
-seed script carries only the rows either way: each consent wording document row holds a `storage_key` and
-the sha256 of its file, and the bytes travel separately. After applying a
-rendered seed to a hosted project, upload each file in `docs/CONSENT` (all
-but `README.md`) into the `documents` bucket at exactly the `storage_key` its
-row names — the script's own header repeats this. Until that is done the rows
-exist and point at nothing, which is visible the moment anyone opens a
-consent. The mapping is stable: the seed's document ids are fixed, so
-`select purpose, locale, storage_key from document where kind = 'consent_text'
-order by purpose, locale` gives the list to work from. Until each file is in
-the bucket at exactly its row's `storage_key`, `exists()` answers false for it
-and anyone opening a consent sees nothing behind the wording.
+**The consent wording has to be uploaded once, whichever route seeded the
+rows.** `pnpm seed` writes those eight files into the local folder and nowhere
+else, deliberately — it holds no storage credential and never reaches a bucket
+— so pointing it at a hosted database fills the rows and leaves the bytes on
+the laptop. It says so on the way past: seeding a non-local database prints the
+same warning this section carries. The rendered seed script carries only the
+rows either way: each consent wording document row holds a `storage_key` and
+the sha256 of its file, and the bytes travel separately. Until they are in the
+bucket at exactly the key each row names, `exists()` answers false and anyone
+opening a consent sees nothing behind the wording.
+
+One command does it, from the repository, once the bucket exists and
+`.env.staging` names the store (`STORAGE_PROVIDER=supabase` and
+`SUPABASE_STORAGE_KEY`):
+
+```bash
+node --env-file=.env.staging --import tsx scripts/upload-consent-wording.mjs
+```
+
+It reads each wording row, refuses any file whose sha256 differs from the row
+that points at it — the row is what a recorded consent points at, and a changed
+text is a new version and a new row, never new bytes at an old key — writes
+nothing over anything, and prints one line per file. Running it twice uploads
+nothing the second time.
+
+By hand is still possible and the mapping is stable, since the seed's document
+ids are fixed: `select purpose, locale, storage_key from document where kind =
+'consent_text' order by purpose, locale` gives the list, and each file in
+`docs/CONSENT` (all but `README.md`) goes to exactly the `storage_key` its row
+names.
 
 ## 6. The app's build settings
 
