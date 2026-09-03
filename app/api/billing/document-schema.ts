@@ -121,3 +121,32 @@ export type SendOption = z.infer<typeof SendOption>;
 
 export const SendOptionsResponse = z.object({ contacts: z.array(SendOption) });
 export type SendOptionsResponse = z.infer<typeof SendOptionsResponse>;
+
+/**
+ * What the practitioner's stop card shows, and the whole of what leaves the API
+ * for it (`app/api/billing/stop-balance.ts`).
+ *
+ * Deliberately not a subset of `BalanceResponse` expressed with `.pick()`: the
+ * boundary is the point, and a shape derived from the wide one would follow it
+ * the next time a field was added to the console's answer. This is written out
+ * so that widening it is a decision somebody makes here.
+ */
+export const StopServiceBalance = z.object({
+  /** The service by what it is — "nf-session" — never by an id. */
+  serviceTypeCode: z.string(),
+  /** The 3 in "Session 3 of 15". */
+  delivered: z.number().int().nonnegative(),
+  /** The 15. Everything the family still owns, delivered or not. */
+  purchased: z.number().int().nonnegative(),
+  /** Usable today: available, and not past its expiry. */
+  remaining: z.number().int().nonnegative(),
+});
+export type StopServiceBalance = z.infer<typeof StopServiceBalance>;
+
+export const StopBalanceResponse = z.object({
+  clientId: z.uuid(),
+  services: z.array(StopServiceBalance),
+  /** Charged less paid, in fils. Positive is owed to the practice. */
+  outstandingFils: z.number().int(),
+});
+export type StopBalanceResponse = z.infer<typeof StopBalanceResponse>;
