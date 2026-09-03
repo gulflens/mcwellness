@@ -1,5 +1,5 @@
-export { resolveVat } from './vat';
-export type { VatResolution, VatSetting } from './vat';
+export { resolveSaleVat, resolveVat } from './vat';
+export type { Supplier, VatResolution, VatSetting, VatTreatment } from './vat';
 export { currentPriceFor, validateNewPrice } from './price';
 export type { NewPriceApproval, NewPriceRefusal, Price } from './price';
 export { allocateEntitlements, standaloneTotalFils } from './allocation';
