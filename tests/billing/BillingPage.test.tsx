@@ -178,3 +178,34 @@ describe('BillingPage', () => {
     );
   });
 });
+
+describe('the money screen’s four sections', () => {
+  it('opens on Prices, and asks for nothing else until another section is opened', async () => {
+    const { fetchImpl } = mount(OWNER, { body: PRICES });
+    await screen.findByText('Neurofeedback session');
+    const asked = (fetchImpl as unknown as { mock: { calls: [unknown][] } }).mock.calls.map(
+      (call) => String(call[0]),
+    );
+    expect(asked).toContain('/api/billing/prices');
+    // The packages, balances and invoices sections cost nothing until opened.
+    expect(asked.some((url) => url.startsWith('/api/billing/packages'))).toBe(false);
+    expect(asked.some((url) => url.startsWith('/api/billing/invoices'))).toBe(false);
+  });
+
+  it('marks the section the reader is on', async () => {
+    mount(OWNER, { body: PRICES });
+    const prices = await screen.findByRole('button', { name: 'Prices' });
+    expect(prices.getAttribute('aria-current')).toBe('page');
+    expect(
+      screen.getByRole('button', { name: 'Packages' }).getAttribute('aria-current'),
+    ).toBeNull();
+  });
+
+  it('puts "Add price" away when the reader moves off the price list', async () => {
+    mount(OWNER, { body: PRICES });
+    await screen.findByRole('button', { name: 'Add price' });
+    fireEvent.click(screen.getByRole('button', { name: 'Balances' }));
+    expect(screen.queryByRole('button', { name: 'Add price' })).toBeNull();
+    expect(screen.getByText('Find a client to see what they have left.')).toBeTruthy();
+  });
+});

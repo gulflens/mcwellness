@@ -17,8 +17,24 @@ import { fils } from '@domain/shared';
  * thing on every row belongs to the column, not the cell).
  */
 
-/** A non-negative amount with an optional one- or two-digit fraction: "0", "120", "12.3", "12.34". */
-const AED_INPUT = /^(\d+)(?:\.(\d{1,2}))?$/;
+/**
+ * A non-negative AED amount with an optional one- or two-digit fraction,
+ * written plainly or with thousands separators: "0", "120", "12.3", "12.34",
+ * "12,150.00".
+ *
+ * **Grouping is accepted because this file writes it.** `formatFils` returns
+ * "12,150.00", and two drawers put that figure straight back into a field the
+ * person may then submit unchanged: the package drawer offers the contents'
+ * total as the list price, and the payment drawer offers the outstanding
+ * amount. A parser that refused a comma refused its own output, so a founder
+ * building the practice's Silver programme was told to "enter both prices in
+ * AED" about the very figure the screen had just handed her.
+ *
+ * Only well-formed grouping passes — "1,234.56" yes, "12,34" and "1,23,456"
+ * no — so a European decimal comma is still refused outright rather than
+ * quietly read as a thousands separator and paid a hundredfold.
+ */
+const AED_INPUT = /^(\d+|[1-9]\d{0,2}(?:,\d{3})+)(?:\.(\d{1,2}))?$/;
 
 /**
  * The `price.unit_price_fils` column is Postgres `integer` (int4); this is
@@ -65,31 +81,39 @@ export function previewVat(
 }
 
 /**
- * Parses an AED amount typed by a person (e.g. "12.34") into an exact
- * integer number of fils (1234). The whole and fractional parts are read as
- * integers directly and only ever added, never produced by multiplying a
- * decimal — so a value such as "0.1" or "0.2" converts exactly. Returns
- * `null` for anything that is not a non-negative amount with at most two
- * decimal places (empty input, a negative sign, more than two decimals, a
- * thousands separator), and for an amount above `AED_MAX_FILS` — the
- * database column's own ceiling, checked here rather than left to a 400 the
- * caller can only show as "something went wrong".
+ * The exact number of fils an AED string names, or `null` when it is not an
+ * AED amount at all. The whole and fractional parts are read as integers and
+ * only ever added, never produced by multiplying a decimal — so "0.1"
+ * converts to 10 exactly, where `0.1 * 100` drifts to 10.000000000000002 in
+ * IEEE 754. The column's own ceiling is not applied here: the two callers
+ * below differ only in what they do about it.
  */
-export function parseAedToFils(input: string): number | null {
+function readAedFils(input: string): number | null {
   const match = AED_INPUT.exec(input.trim());
   if (!match) {
     return null;
   }
-  const whole = match[1] ?? '0';
-  const fraction = (match[2] ?? '').padEnd(2, '0');
-  const wholeAed = Number(whole);
-  const fractionFils = Number(fraction);
+  const wholeAed = Number((match[1] ?? '0').replaceAll(',', ''));
+  const fractionFils = Number((match[2] ?? '').padEnd(2, '0'));
   if (!Number.isSafeInteger(wholeAed)) {
     return null;
   }
-  const wholeFils = wholeAed * 100;
-  const total = wholeFils + fractionFils;
-  if (!Number.isSafeInteger(total) || total > AED_MAX_FILS) {
+  const total = wholeAed * 100 + fractionFils;
+  return Number.isSafeInteger(total) ? total : null;
+}
+
+/**
+ * Parses an AED amount typed by a person, or offered by this file's own
+ * `formatFils` ("12.34", "12,150.00"), into an exact integer number of fils.
+ * Returns `null` for anything that is not a non-negative amount with at most
+ * two decimal places (empty input, a negative sign, more than two decimals,
+ * misplaced grouping), and for an amount above `AED_MAX_FILS` — the database
+ * column's own ceiling, checked here rather than left to a 400 the caller can
+ * only show as "something went wrong".
+ */
+export function parseAedToFils(input: string): number | null {
+  const total = readAedFils(input);
+  if (total === null || total > AED_MAX_FILS) {
     return null;
   }
   return total;
@@ -99,20 +123,9 @@ export function parseAedToFils(input: string): number | null {
  * True only for the one shape of `parseAedToFils` returning `null` that
  * deserves its own message: a well-formed AED amount that exceeds
  * `AED_MAX_FILS`. Every other `null` (empty input, letters, a negative sign,
- * a thousands separator) is the generic "not a price" case instead.
+ * misplaced grouping) is the generic "not a price" case instead.
  */
 export function isAedAmountTooLarge(input: string): boolean {
-  const match = AED_INPUT.exec(input.trim());
-  if (!match) {
-    return false;
-  }
-  const whole = match[1] ?? '0';
-  const fraction = (match[2] ?? '').padEnd(2, '0');
-  const wholeAed = Number(whole);
-  const fractionFils = Number(fraction);
-  if (!Number.isSafeInteger(wholeAed)) {
-    return false;
-  }
-  const total = wholeAed * 100 + fractionFils;
-  return Number.isSafeInteger(total) && total > AED_MAX_FILS;
+  const total = readAedFils(input);
+  return total !== null && total > AED_MAX_FILS;
 }

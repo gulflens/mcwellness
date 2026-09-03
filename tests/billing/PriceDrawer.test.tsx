@@ -153,20 +153,37 @@ describe('PriceDrawer', () => {
     expect(posted[0]?.unitPriceFils).toBe(30);
   });
 
-  it("requires a reason between 1 and 200 characters, in plain words, through the field's own error slot, and sends nothing until it has one", async () => {
+  it("requires a reason worth reading, through the field's own error slot, and sends nothing until it has one", async () => {
     const { posted, onCreated } = mount({ body: { price: CREATED_PRICE }, status: 201 });
     await fillPriceAndDate('120');
     fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
     const reasonField = screen.getByLabelText('Why this price changes');
-    expect(await screen.findByText('Say why this price is changing.')).toBeTruthy();
+    expect(await screen.findByText('Say why in at least 8 characters.')).toBeTruthy();
     expect(reasonField.getAttribute('aria-invalid')).toBe('true');
     expect(posted).toHaveLength(0);
     expect(onCreated).not.toHaveBeenCalled();
 
-    fireEvent.change(reasonField, { target: { value: 'x'.repeat(201) } });
+    // Eight characters of one letter is a required field being filled in
+    // rather than answered, and it is refused the same way an empty one is.
+    fireEvent.change(reasonField, { target: { value: 'xxxxxxxxxx' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    expect(await screen.findByText('Say why in at least 8 characters.')).toBeTruthy();
+    expect(posted).toHaveLength(0);
+
+    fireEvent.change(reasonField, { target: { value: 'Repricing for the new year. '.repeat(10) } });
     fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
     expect(await screen.findByText('Keep the reason to 200 characters or fewer.')).toBeTruthy();
     expect(posted).toHaveLength(0);
+  });
+
+  it('moves focus to the field that is wrong, so a refusal is noticed without looking', async () => {
+    mount({ body: { price: CREATED_PRICE }, status: 201 });
+    await fillPriceAndDate('120');
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    await screen.findByText('Say why in at least 8 characters.');
+    // The message is bound to the field through aria-describedby, so moving
+    // here says the field and then says the reason.
+    expect(document.activeElement).toBe(screen.getByLabelText('Why this price changes'));
   });
 
   it('clears a field error as soon as the field changes, before it is corrected', async () => {
@@ -174,10 +191,10 @@ describe('PriceDrawer', () => {
     await fillPriceAndDate('120');
     fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
     const reasonField = screen.getByLabelText('Why this price changes');
-    await screen.findByText('Say why this price is changing.');
+    await screen.findByText('Say why in at least 8 characters.');
 
     fireEvent.change(reasonField, { target: { value: 'x' } });
-    await waitFor(() => expect(screen.queryByText('Say why this price is changing.')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Say why in at least 8 characters.')).toBeNull());
     expect(reasonField.getAttribute('aria-invalid')).toBeNull();
   });
 

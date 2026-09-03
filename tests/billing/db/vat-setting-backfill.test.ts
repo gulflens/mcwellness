@@ -112,8 +112,8 @@ beforeAll(async () => {
 
   const files = listMigrationFiles(await readdir(MIGRATIONS_DIR));
   const before400 = files.filter((f) => f.number < 400);
-  const the400 = files.find((f) => f.number === 400);
-  if (!the400) {
+  const from400 = files.filter((f) => f.number >= 400);
+  if (!from400.some((f) => f.number === 400)) {
     throw new Error('db/migrations/400_billing_catalogue.sql is missing.');
   }
 
@@ -127,7 +127,11 @@ beforeAll(async () => {
     [TENANT_ID],
   );
 
-  await applyMigrationFile(owner, the400.filename);
+  // 400 first, which is what this test is about; then the rest of the
+  // billing range, so the policies applied below have every table they name.
+  for (const file of from400) {
+    await applyMigrationFile(owner, file.filename);
+  }
   await applyPolicies(owner);
 
   await owner.query(

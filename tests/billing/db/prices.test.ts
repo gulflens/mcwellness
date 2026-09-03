@@ -87,6 +87,30 @@ function serviceTypeId(code: string): string {
   return service.id;
 }
 
+/**
+ * What the seed left on the price list, read once at the start.
+ *
+ * The seed used to carry no prices at all, and three assertions below were
+ * written against that emptiness. It carries the practice's own figures now
+ * (`shared-zone-round-15`), so those assertions are written against what the
+ * seed provides instead: a first price for a service the seed never priced
+ * supersedes nothing, and one for a service it did priced supersedes that
+ * row. Both readings are correct, and the suite passes whichever seed the
+ * database in front of it happens to hold — neither pull request can break
+ * the other by merging first.
+ */
+let seededPrices: PricesResponse['prices'] = [];
+
+function seededPriceFor(code: string): PricesResponse['prices'][number] | undefined {
+  const id = serviceTypeId(code);
+  return seededPrices.find((price) => price.serviceTypeId === id);
+}
+
+/** The id a first price written today would supersede: the seed's, or none. */
+function supersededBy(code: string): string | null {
+  return seededPriceFor(code)?.id ?? null;
+}
+
 beforeAll(async () => {
   owner = await freshDatabase();
   await applySeed(owner, data, deriveIdentityKeys(Buffer.alloc(32, 7)));
@@ -109,6 +133,8 @@ beforeAll(async () => {
     verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }),
     now: NOW,
   });
+  const listed = await call('GET', '/api/billing/prices', authIdOf(0));
+  seededPrices = ((await listed.json()) as PricesResponse).prices;
 });
 
 afterAll(async () => {
@@ -132,11 +158,34 @@ describe('GET /api/billing/service-types', () => {
   });
 });
 
-describe('GET /api/billing/prices before any price is set', () => {
-  it('is empty rather than an error', async () => {
+describe('GET /api/billing/prices, whatever the seed left there', () => {
+  it('answers with the list, and an empty practice is an empty list rather than an error', async () => {
     const res = await call('GET', '/api/billing/prices', authIdOf(0));
     expect(res.status).toBe(200);
-    expect(((await res.json()) as PricesResponse).prices).toEqual([]);
+    const { prices } = (await res.json()) as PricesResponse;
+    expect(Array.isArray(prices)).toBe(true);
+    // One row per service at most, VAT stamped and the total adding up: true
+    // of the practice's own seeded list and vacuously true of an empty one.
+    for (const price of prices) {
+      expect(price.grossFils).toBe(price.unitPriceFils + price.vatFils);
+      expect(price.vatRateBasisPoints).toBe(500);
+      expect(price.amendmentReason.length).toBeGreaterThan(0);
+    }
+    expect(new Set(prices.map((p) => p.serviceTypeId)).size).toBe(prices.length);
+  });
+
+  it("shows the practice's own figures once the seed carries them", async () => {
+    // Skipped, not failed, against the older seed: this asserts the founder's
+    // decision of 2026-09-03, which only the seeded database can show.
+    const session = seededPriceFor('nf-session');
+    if (!session) {
+      expect(seededPrices).toEqual([]);
+      return;
+    }
+    expect(session.unitPriceFils).toBe(70_000);
+    expect(session.vatFils).toBe(3_500);
+    expect(seededPriceFor('brain-map')?.unitPriceFils).toBe(82_500);
+    expect(seededPriceFor('consultation')?.unitPriceFils).toBe(0);
   });
 });
 
@@ -165,7 +214,9 @@ describe('POST /api/billing/prices', () => {
     expect(body.price.vatFils).toBe(4_500);
     expect(body.price.grossFils).toBe(94_500);
     expect(body.price.validFrom).toBe(SEED_TODAY);
-    expect(body.price.supersedesId).toBeNull();
+    // Null on a practice that had no price for this service, and the seeded
+    // row's id on one that did: a price supersedes whatever it replaces.
+    expect(body.price.supersedesId).toBe(supersededBy('nf-session'));
     expect(body.price.amendmentReason).toBe('Setting the launch price.');
 
     const { rows } = await owner.query<{ n: number }>(
@@ -224,7 +275,7 @@ describe('POST /api/billing/prices', () => {
     });
     expect(first.status).toBe(201);
     const firstBody = (await first.json()) as CreatePriceResponse;
-    expect(firstBody.price.supersedesId).toBeNull();
+    expect(firstBody.price.supersedesId).toBe(supersededBy('results-call'));
     expect(firstBody.price.amendmentReason).toBe('Initial price for results calls.');
 
     const second = await call('POST', '/api/billing/prices', authIdOf(0), {

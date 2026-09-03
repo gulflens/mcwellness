@@ -6,10 +6,14 @@ import {
   VatRateResponse,
   type PriceRow,
   type ServiceTypeOption,
+  isRealText,
+  MINIMUM_REASON,
 } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
+import { focusFirstInvalid } from './refusal';
+import { useDrawer } from './useDrawer';
 import { AED_MAX_FILS, formatFils, isAedAmountTooLarge, parseAedToFils, previewVat } from './money';
 
 /**
@@ -83,6 +87,7 @@ export function PriceDrawer({
   onCreated: (price: PriceRow) => void;
 }) {
   const { apiFetch } = useAuth();
+  const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const [serviceTypes, setServiceTypes] = useState<ServiceTypesState>({ kind: 'loading' });
@@ -95,18 +100,7 @@ export function PriceDrawer({
   const [busy, setBusy] = useState(false);
   const [vatRate, setVatRate] = useState<VatRateState>({ kind: 'loading' });
 
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previous?.focus();
-    };
-  }, [onClose]);
+  useDrawer(drawerRef, closeRef, onClose);
 
   useEffect(() => {
     let live = true;
@@ -191,13 +185,24 @@ export function PriceDrawer({
       errors.validFrom = 'Choose the date this price takes effect.';
     }
     const trimmedReason = reason.trim();
-    if (trimmedReason.length < 1) {
-      errors.reason = 'Say why this price is changing.';
+    if (!isRealText(trimmedReason)) {
+      // The server refuses a reason that says nothing (app/api/billing/schema.ts);
+      // saying so here means the person is told which field, not handed a
+      // generic failure after the round trip.
+      errors.reason = `Say why in at least ${MINIMUM_REASON} characters.`;
     } else if (trimmedReason.length > 200) {
       errors.reason = 'Keep the reason to 200 characters or fewer.';
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0 || parsedFils === null) {
+      focusFirstInvalid(
+        [
+          errors.service ? 'price-service' : null,
+          errors.price ? 'price-amount' : null,
+          errors.validFrom ? 'price-valid-from' : null,
+          errors.reason ? 'price-reason' : null,
+        ].filter((id): id is string => id !== null),
+      );
       return;
     }
 
@@ -249,7 +254,13 @@ export function PriceDrawer({
   }
 
   return (
-    <aside className="drawer" role="dialog" aria-labelledby="price-drawer-title">
+    <aside
+      ref={drawerRef}
+      className="drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="price-drawer-title"
+    >
       <header className="drawer__header">
         <div className="drawer__title">
           <h2 id="price-drawer-title">Add price</h2>

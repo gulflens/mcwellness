@@ -72,8 +72,58 @@ describe('parseAedToFils', () => {
     expect(parseAedToFils('12.345')).toBeNull();
   });
 
-  it('refuses a thousands separator', () => {
-    expect(parseAedToFils('1,234.56')).toBeNull();
+  it('reads back a grouped figure, which is what formatFils writes', () => {
+    // The bug this test pins: the package drawer offers the contents' total
+    // as the list price and the payment drawer offers the outstanding
+    // amount, both through formatFils, and both were then refused on submit
+    // because the parser would not read its own output. A founder building
+    // the practice's Silver programme was told to "enter both prices in AED"
+    // about the figure the screen had just handed her.
+    expect(parseAedToFils('1,234.56')).toBe(123_456);
+    expect(parseAedToFils('12,150.00')).toBe(1_215_000);
+    expect(parseAedToFils('1,215,000')).toBe(121_500_000);
+  });
+
+  it('reads back every figure formatFils writes, exactly', () => {
+    for (const amountFils of [0, 5, 999, 90_000, 123_456, 1_032_500, 1_997_500, 3_130_000]) {
+      expect(parseAedToFils(formatFils(amountFils))).toBe(amountFils);
+    }
+  });
+
+  it('refuses everything that merely looks like a number', () => {
+    // A parser that reads money is a place where "nearly a number" must be
+    // refused outright rather than coerced into a figure somebody is then
+    // charged. Each of these has a plausible way of arriving: a copy from a
+    // spreadsheet, an Arabic keyboard, a paste that brought its spaces with
+    // it, a European price list.
+    expect(parseAedToFils('١٢٣')).toBeNull(); // Arabic-Indic digits
+    expect(parseAedToFils('12\u00a0150.00')).toBeNull(); // a non-breaking space
+    expect(parseAedToFils('12\u2009150.00')).toBeNull(); // a thin space
+    expect(parseAedToFils('12 150.00')).toBeNull(); // a plain space as a separator
+    expect(parseAedToFils('1.000,50')).toBeNull(); // German grouping
+    expect(parseAedToFils('1e3')).toBeNull();
+    expect(parseAedToFils('1E3')).toBeNull();
+    expect(parseAedToFils('12.')).toBeNull(); // a trailing dot
+    expect(parseAedToFils('.5')).toBeNull(); // a leading dot
+    expect(parseAedToFils('+5')).toBeNull();
+    expect(parseAedToFils('5 ')).toBe(500); // trailing whitespace is trimmed, not rejected
+    expect(parseAedToFils('Infinity')).toBeNull();
+    expect(parseAedToFils('NaN')).toBeNull();
+    // Beyond what a double can count exactly: refused rather than rounded to
+    // a figure nobody typed.
+    expect(parseAedToFils('99999999999999999999')).toBeNull();
+    expect(isAedAmountTooLarge('99999999999999999999')).toBe(false);
+  });
+
+  it('refuses grouping that is not grouping', () => {
+    // A European decimal comma must never be read as a separator and paid a
+    // hundredfold: "12,34" is not AED 1,234.
+    expect(parseAedToFils('12,34')).toBeNull();
+    expect(parseAedToFils('1,23,456')).toBeNull();
+    expect(parseAedToFils('1,2345')).toBeNull();
+    expect(parseAedToFils(',123')).toBeNull();
+    expect(parseAedToFils('1,')).toBeNull();
+    expect(parseAedToFils('0,123')).toBeNull();
   });
 
   it('accepts the int4 column maximum exactly', () => {
@@ -104,6 +154,12 @@ describe('isAedAmountTooLarge', () => {
     expect(isAedAmountTooLarge('')).toBe(false);
     expect(isAedAmountTooLarge('abc')).toBe(false);
     expect(isAedAmountTooLarge('-5')).toBe(false);
+    expect(isAedAmountTooLarge('12,34')).toBe(false);
+  });
+
+  it('reads a grouped figure the same way the parser does', () => {
+    expect(isAedAmountTooLarge('21,474,836.47')).toBe(false);
+    expect(isAedAmountTooLarge('21,474,836.48')).toBe(true);
   });
 });
 
