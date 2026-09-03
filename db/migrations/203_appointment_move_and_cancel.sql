@@ -154,10 +154,13 @@ begin
           and p.user_id = app.current_actor_id()
           and p.status = 'active'
      )
-     -- A visit that is already over is not one to call off. Completing,
-     -- cancelling or moving it again is the coordinator's to settle from the
-     -- calendar, not this door's.
-     and a.status in ('proposed', 'confirmed', 'checked_in');
+     -- A visit still owed, and no other. Already delivered, already called
+     -- off, already missed or already moved is a fact about a day that has
+     -- passed. 'checked_in' is left out too, and deliberately: the
+     -- practitioner is inside the house and how that visit ends is the
+     -- session's to say — completed, or a no-show — not a cancellation
+     -- written underneath an open session.
+     and a.status in ('proposed', 'confirmed');
   get diagnostics v_updated = row_count;
   return v_updated = 1;
 end

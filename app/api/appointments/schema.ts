@@ -183,3 +183,97 @@ export const ConflictResponse = z.object({
   requestId: z.string().nullable(),
 });
 export type ConflictResponse = z.infer<typeof ConflictResponse>;
+
+// ---------------------------------------------------------------------------
+// Moving a visit, and calling one off
+// ---------------------------------------------------------------------------
+
+/**
+ * Moving a visit to a new arrival window, on the same day or another one
+ * (docs/SPEC/scheduling-manual.md sections 2 and 3). Only the window moves:
+ * the client, the service, the place, the delivery mode and the practitioner
+ * all carry over, and reassigning a visit to somebody else is its own action
+ * the same section names separately.
+ *
+ * The window end is not sent. It is always the start plus forty-five minutes
+ * (`windowFor`, domain/scheduling/window.ts), and a wire that could disagree
+ * with the rule is a wire that eventually does.
+ */
+export const MoveAppointmentRequest = z.object({
+  windowStart: z.iso.datetime(),
+  travelBufferMinutes: z.number().int().min(15).max(90).optional(),
+});
+export type MoveAppointmentRequest = z.infer<typeof MoveAppointmentRequest>;
+
+/**
+ * What a move leaves behind: the appointment that now stands, and the one it
+ * replaced. Both, because the household was promised the old window and the
+ * screen that just moved it should be able to say what it moved from without
+ * asking again.
+ */
+export const MoveAppointmentResponse = z.object({
+  appointment: AppointmentRow,
+  movedFrom: z.object({
+    id: z.uuid(),
+    windowStart: z.iso.datetime(),
+    windowEnd: z.iso.datetime(),
+  }),
+});
+export type MoveAppointmentResponse = z.infer<typeof MoveAppointmentResponse>;
+
+/**
+ * The reasons a person may give when calling a visit off. A subset of the
+ * database's own `appointment_cancellation_reason`: `consent_withdrawn` is
+ * absent because no one chooses it — it is written by
+ * `app.cancel_future_appointments` when a consent goes, for a whole client at
+ * once, and offering it here would let a coordinator cancel one visit as
+ * though a consent had been withdrawn when none had.
+ */
+export const CANCELLATION_REASONS = [
+  'client_request',
+  'practice_request',
+  'unfit_to_attend',
+] as const;
+export type CancellationReason = (typeof CANCELLATION_REASONS)[number];
+
+export const CancelAppointmentRequest = z.object({
+  reason: z.enum(CANCELLATION_REASONS),
+});
+export type CancelAppointmentRequest = z.infer<typeof CancelAppointmentRequest>;
+
+/**
+ * What calling a visit off cost.
+ *
+ * `status` is the answer the notice rule gave (domain/scheduling's
+ * `cancellationStatusFor`), and `noticeHours` is the figure it was given, so
+ * a screen can say "inside the practice's 24 hours" rather than "late".
+ *
+ * `creditConsumed` is observed, not inferred. Billing's own trigger
+ * (404_billing_consumption.sql) fires on `cancelled_late` and takes a credit
+ * if the client has one; this route reads back whether it found one, so a
+ * late cancellation against a client with no credits left says so honestly
+ * instead of claiming a charge that never happened.
+ *
+ * `waiverEntitlementId` is the credit that was taken, and the id billing's
+ * own waiver route needs: `POST /api/billing/entitlements/:id/waiver`. Null
+ * whenever nothing was taken, so a screen never offers to give back what was
+ * never charged.
+ */
+export const CancelAppointmentResponse = z.object({
+  id: z.uuid(),
+  status: z.enum(['cancelled', 'cancelled_late']),
+  reason: z.enum(CANCELLATION_REASONS),
+  noticeHours: z.number().int().nonnegative(),
+  creditConsumed: z.boolean(),
+  waiverEntitlementId: z.uuid().nullable(),
+});
+export type CancelAppointmentResponse = z.infer<typeof CancelAppointmentResponse>;
+
+/** Why a move or a cancellation was refused before any rule was consulted. */
+export const APPOINTMENT_ACTION_CODES = [
+  'invalid_request',
+  'appointment_not_found',
+  'appointment_settled',
+  'reason_required',
+] as const;
+export type AppointmentActionCode = (typeof APPOINTMENT_ACTION_CODES)[number];
