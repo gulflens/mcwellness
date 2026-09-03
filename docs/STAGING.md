@@ -117,6 +117,20 @@ trunk reseeds staging before the first feature that does (a fresh render with
   open the laptop's address on the same Wi-Fi from the iPad, sign in as
   the owner through Supabase Auth, and go to "Check in": MW-000005,
   neurofeedback session, home.
+- **Staging carries no prices yet, and must be brought up to them.** The
+  seed now writes the practice's own figures — a price for each service the
+  practice charges for, and the Silver, Gold and Platinum programmes with
+  their contents, their list price and their launch price (trunk round 15,
+  `docs/CHANGE-REQUESTS/billing-03.md` section 2). Staging was seeded before
+  they existed, so its price list and its bundle catalogue are both empty and
+  the money screens there show nothing. Two ways out, and the trunk records
+  which was taken: reseed staging from a fresh `pnpm seed:sql` render after
+  clearing the practice — the same reseed the sealed identifiers above
+  already owe — or, to keep the demo's own rows, apply just the price,
+  package, package_component and package_price statements from a render,
+  which reference nothing but the tenant and the service types already
+  there. Either way it waits on billing's migration 401, without which the
+  three package tables do not exist on staging at all.
 
 ## 1. The project
 

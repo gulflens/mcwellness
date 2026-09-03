@@ -81,15 +81,20 @@ afterAll(async () => {
 });
 
 describe('GET /api/billing/prices', () => {
-  it('answers the seeded owner with the practice prices (an empty list, before any exist)', async () => {
+  it("answers the seeded owner with the practice's own price list", async () => {
     const res = await call('GET', '/api/billing/prices', authIdOf(0));
     expect(res.status).toBe(200);
     const body = (await res.json()) as PricesResponse;
     expect(Array.isArray(body.prices)).toBe(true);
-    // The seed writes no price rows (db/seed/generate.ts), so a fresh
-    // practice's list is empty rather than absent — mountBilling answering
-    // 200 with a real shape either way is what this proves.
-    expect(body.prices).toEqual([]);
+    // The seed writes the practice's own figures (db/seed/generate.ts), so
+    // this route answers a real list on a fresh practice. What is proved here
+    // is that mountBilling is mounted and answers 200 with a real shape; the
+    // figures themselves are tests/db/seed.test.ts's.
+    expect(body.prices).toHaveLength(data.prices.length);
+    for (const price of body.prices) {
+      expect(price.vatRateBasisPoints).toBe(500);
+      expect(price.grossFils).toBe(price.unitPriceFils + price.vatFils);
+    }
   });
 });
 

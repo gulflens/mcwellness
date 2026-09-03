@@ -25,6 +25,10 @@ const SEED_TABLES = [
   'app_user',
   'user_role',
   'service_type',
+  'price',
+  'package',
+  'package_component',
+  'package_price',
   'practitioner',
   'credential',
   'location',
@@ -59,6 +63,10 @@ describe('the synthetic seed', () => {
       app_user: data.users.length,
       user_role: data.roles.length,
       service_type: data.serviceTypes.length,
+      price: data.prices.length,
+      package: data.packages.length,
+      package_component: data.packages.reduce((n, p) => n + p.components.length, 0),
+      package_price: data.packages.length,
       practitioner: data.practitioners.length,
       credential: data.credentials.length,
       location: data.locations.length,
@@ -72,6 +80,43 @@ describe('the synthetic seed', () => {
       expect(counts[table], table).toBe(n);
     }
     expect(await isSeeded(owner)).toBe(true);
+  });
+
+  it('stamps every price with the VAT the tenant trigger set, never a typed figure', async () => {
+    // CLAUDE.md rule 6. The generator is pure and reads no database, so the
+    // rate it carries is proved here against the row app.default_vat_setting()
+    // wrote when the tenant was inserted, rather than trusted.
+    const { rows: setting } = await owner.query<{ version: number; rate: number }>(
+      'select version, rate_basis_points as rate from vat_setting where tenant_id = $1',
+      [SEED_TENANT_ID],
+    );
+    expect(setting).toHaveLength(1);
+    const { rows: stamped } = await owner.query<{ version: number; rate: number; n: number }>(
+      'select vat_setting_version as version, vat_rate_basis_points as rate, count(*)::int as n ' +
+        'from (select vat_setting_version, vat_rate_basis_points from price ' +
+        'union all select vat_setting_version, vat_rate_basis_points from package_price) as stamped ' +
+        'group by 1, 2',
+    );
+    expect(stamped).toHaveLength(1);
+    expect(stamped[0]?.version).toBe(setting[0]?.version);
+    expect(stamped[0]?.rate).toBe(setting[0]?.rate);
+    expect(stamped[0]?.n).toBe(data.prices.length + data.packages.length);
+  });
+
+  it("lists each programme's contents against the practice's own price list", async () => {
+    // The screen shows the list price beside what the bundle sells for, and
+    // warns when the parts do not add up to the first. The seed must not be
+    // the thing that raises that warning.
+    const { rows } = await owner.query<{ code: string; list: number; total: number }>(
+      'select p.code, p.list_price_fils as list, ' +
+        'sum(c.quantity * pr.unit_price_fils)::int as total ' +
+        'from package p ' +
+        'join package_component c on c.package_id = p.id ' +
+        'join price pr on pr.service_type_id = c.service_type_id ' +
+        'group by p.code, p.list_price_fils order by p.list_price_fils',
+    );
+    expect(rows.map((r) => r.code)).toEqual(['silver', 'gold', 'platinum']);
+    for (const row of rows) expect(row.total, row.code).toBe(row.list);
   });
 
   it('refuses to seed a second time and adds nothing', async () => {
