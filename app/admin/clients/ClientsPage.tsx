@@ -274,7 +274,7 @@ export function ClientsPage() {
           rowKey={(row) => row.id}
           empty={
             state.response.note === 'schedule'
-              ? 'You see the clients on your schedule, and there is no schedule yet. The scheduling work brings it.'
+              ? 'This list shows the clients you are booked with. You have no visits booked.'
               : 'No clients match.'
           }
         />

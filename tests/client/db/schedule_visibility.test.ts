@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '../../../app/api/_middleware/db';
 import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
 import { createApi } from '../../../app/api/create-api';
+import type { ClientListResponse } from '../../../app/api/clients/schema';
 import {
   AUTH,
   IDS,
@@ -36,6 +37,9 @@ const SECRET = 'test-secret-that-unlocks-nothing-0123456789';
 const ISSUER = 'http://localhost:54321/auth/v1';
 const KEY = new TextEncoder().encode(SECRET);
 
+const IDLE_PRACTITIONER_USER = '00000000-0000-4000-8000-0000000000a7';
+const IDLE_PRACTITIONER = '00000000-0000-4000-8000-0000000000b7';
+const IDLE_PRACTITIONER_AUTH = '00000000-0000-4000-8000-0000000000ad';
 const SCHEDULED_CLIENT = '00000000-0000-4000-8000-0000000000c7';
 const UNSCHEDULED_CLIENT = '00000000-0000-4000-8000-0000000000c8';
 const LOCATION = '00000000-0000-4000-8000-0000000000d7';
@@ -64,6 +68,12 @@ async function read(clientId: string, requestId: string): Promise<Response> {
   });
 }
 
+async function list(sub: string, requestId?: string): Promise<ClientListResponse> {
+  const headers = new Headers({ authorization: `Bearer ${await mint(sub)}` });
+  if (requestId) headers.set('x-request-id', requestId);
+  return (await (await api.request('/api/clients', { headers })).json()) as ClientListResponse;
+}
+
 async function refusedRows(clientId: string): Promise<number> {
   const { rows } = await owner.query<{ n: number }>(
     "select count(*)::int as n from audit_log where action = 'refused' and entity_id = $1",
@@ -84,6 +94,15 @@ beforeAll(async () => {
     roles: ['practitioner'],
   });
   await seedPractitioner(owner, IDS.tenantA, MORE_IDS.practitionerA, MORE_IDS.practitionerUserA);
+  // A second practitioner who is booked with nobody.
+  await seedUser(owner, {
+    id: IDLE_PRACTITIONER_USER,
+    tenantId: IDS.tenantA,
+    authId: IDLE_PRACTITIONER_AUTH,
+    displayName: 'Synthetic Practitioner Two',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, IDLE_PRACTITIONER, IDLE_PRACTITIONER_USER);
   await seedServiceType(owner, IDS.tenantA, MORE_IDS.serviceTypeA, 'neurofeedback');
   await seedClient(owner, IDS.tenantA, SCHEDULED_CLIENT, IDS.ownerA, 'Meadow');
   await seedClient(owner, IDS.tenantA, UNSCHEDULED_CLIENT, IDS.ownerA, 'Orchard');
@@ -114,6 +133,29 @@ describe('a practitioner and the client record', () => {
     const res = await read(SCHEDULED_CLIENT, '00000000-0000-4000-8000-0000000000f7');
     expect(res.status).toBe(200);
     expect(await refusedRows(SCHEDULED_CLIENT)).toBe(0);
+  });
+
+  it('lists exactly the clients they are booked with, and nothing else', async () => {
+    const requestId = '00000000-0000-4000-8000-0000000000f9';
+    const res = await list(AUTH.practitionerA, requestId);
+    // The practice holds two clients; this practitioner holds a visit with one.
+    expect(res.clients.map((c) => c.id)).toEqual([SCHEDULED_CLIENT]);
+    expect(res.note).toBe('schedule');
+
+    // Audited per client seen, the same as any other list read (audit.md section 5).
+    const { rows } = await owner.query<{ n: number }>(
+      "select count(*)::int as n from audit_log where action = 'list' and entity_type = 'client' " +
+        'and request_id = $1 and entity_id = $2',
+      [requestId, SCHEDULED_CLIENT],
+    );
+    expect(rows[0]?.n).toBe(1);
+  });
+
+  it('answers a practitioner booked with nobody an empty list, and says which kind of empty', async () => {
+    const res = await list(IDLE_PRACTITIONER_AUTH);
+    expect(res.clients).toHaveLength(0);
+    // Not "nobody matches" but "you are booked with nobody": the screen says so.
+    expect(res.note).toBe('schedule');
   });
 
   it('is refused a client they hold no visit with, and the attempt is audited', async () => {

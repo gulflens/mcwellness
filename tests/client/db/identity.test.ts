@@ -262,6 +262,22 @@ describe('capturing an Emirates ID on create', () => {
     expect(res.status).toBe(503);
   });
 
+  it('leaves no audit row on the missing-key refusal, because a 5xx is rolled back', async () => {
+    const requestId = '00000000-0000-4000-8000-0000000000f4';
+    const res = await lookup(apiWithoutKeys, AUTH.ownerA, emiratesId(10), requestId);
+    expect(res.status).toBe(503);
+    // The request-context fence rolls back every response of 500 or above, so nothing
+    // written on this branch survives — which is why the route does not pretend to
+    // write one. Pinned so a later attempt to "fix the missing audit row" finds this
+    // test rather than adding a call that is quietly discarded
+    // (docs/CHANGE-REQUESTS/client-record-02.md).
+    const { rows } = await owner.query<{ n: number }>(
+      'select count(*)::int as n from audit_log where request_id = $1',
+      [requestId],
+    );
+    expect(rows[0]?.n).toBe(0);
+  });
+
   it('refuses cleanly, not a crash, when the identity keys are not configured', async () => {
     const res = await request(apiWithoutKeys, AUTH.ownerA, '/api/clients', {
       method: 'POST',

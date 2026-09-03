@@ -281,9 +281,23 @@ core schema.
 ## Five smaller notes for the trunk
 
 - **An audit row for a search that found nobody has `client_id` null.**
-  `POST /api/clients/lookup` writes one `list` row with the request id as its
-  entity and a null `client_id` when it matches no one, so the trail records
-  the search itself. The discriminator for those rows is therefore
+  `POST /api/clients/lookup` writes one `list` row with a null `client_id`
+  when it names nobody — matching no one, or refused by role — so the trail
+  records the search itself. **One branch cannot be recorded:** the
+  missing-key answer is a 503, and the request-context fence rolls back every
+  response of 500 or above, so an audit row written there would never commit.
+  The route therefore does not write one, and a test pins the absence so a
+  later "fix" does not add a call that is silently discarded. Nothing is
+  disclosed on that path — no client, and no word on whether the number is on
+  file — and the fault is a misconfigured deployment rather than a suspect
+  caller; answering 200 to make the row commit would tell a machine the
+  deployment was fine when it is not. If the trunk wants that branch audited,
+  it needs a way to write an audit row outside the request's transaction, which
+  is the shared zone's to design. Its entity
+  is a fresh `randomUUID()`, deliberately not the caller's own `x-request-id`,
+  which a signed-in actor could otherwise have pointed at any uuid they chose;
+  the request id still reaches `request_id`. The discriminator for those rows
+  is therefore
   `action = 'list' and client_id is null`, which holds only because
   `logReads`'s other caller always sets `clientId` to the client's own id. A
   later "reads per client" aggregation that assumes every `list` row names a

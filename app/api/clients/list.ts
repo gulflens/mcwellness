@@ -168,11 +168,15 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     if (!query.success) {
       return c.json({ error: 'bad_request', requestId }, 400);
     }
-    // A practitioner lists only the clients on their schedule; there is no
-    // schedule yet, so the honest answer is an empty table with a note.
-    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance')) {
-      return c.json(ClientListResponse.parse({ clients: [], note: 'schedule' }));
-    }
+    // A practitioner lists only the clients on their own schedule. This used to answer
+    // them an unconditional empty list, which was honest while
+    // app.client_visible_to_practitioner was a stub: there was no schedule to consult.
+    // Migration 201 gives it the real window, so the query below now runs under the
+    // read policies that call it and comes back with exactly the clients this
+    // practitioner is booked with — audited per client like any other list read. The
+    // note still travels, because an empty table means something different to them
+    // than to an admin: not "nobody matches" but "you are booked with nobody".
+    const scheduleScoped = !hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance');
     // The floor under the browser's own rule (app/admin/clients/ClientsPage.tsx), so a
     // hand-written request cannot quietly put an identity number in a query string
     // either. By the time this runs the proxy has already logged the URL, which is why
@@ -202,7 +206,11 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     const clients = toClientRows(page, isoDateIn(now(), PRACTICE_TIME_ZONE));
     await logListed(c.get('db'), clients);
     return c.json(
-      ClientListResponse.parse({ clients, note: null, ...(truncated ? { truncated: true } : {}) }),
+      ClientListResponse.parse({
+        clients,
+        note: scheduleScoped ? 'schedule' : null,
+        ...(truncated ? { truncated: true } : {}),
+      }),
     );
   });
 
@@ -235,7 +243,15 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     if (identityKeys === undefined) {
       // No key, no fingerprint. An empty list would read as "no such client", which
       // would be a lie about the practice rather than about the deployment.
-      await logSearched(c.get('db'));
+      //
+      // Deliberately not audited, because it cannot be: the request-context fence
+      // rolls back every response of 500 or above (app/api/_middleware/request-context.ts),
+      // so an audit row written here would never be committed, and a logSearched call
+      // on this branch would read as a promise the code does not keep. Nothing was
+      // disclosed on this path either — no client, and no word on whether the number
+      // is on file — and the deployment is misconfigured rather than the caller
+      // suspect. Recorded in docs/CHANGE-REQUESTS/client-record-02.md rather than
+      // papered over by answering 200 to a deployment that cannot answer at all.
       return c.json({ error: 'emirates_id_unavailable', requestId }, 503);
     }
     const { rows } = await c
