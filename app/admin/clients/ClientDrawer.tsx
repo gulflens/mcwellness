@@ -12,6 +12,7 @@ import { LocationsTab } from './LocationsTab';
 import { OverviewTab } from './OverviewTab';
 import { Tabs, TabPanel, type Tab } from './Tabs';
 import { canSeeFullRecord, canWriteGoals, canWriteRecord } from './clientAccess';
+import { clientHeadingName } from './contactName';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { useClientRecord } from './useClientRecord';
 
@@ -88,9 +89,14 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
       <header className="drawer__header">
         <div className="drawer__title">
           <h2 id="drawer-title">
-            {client.givenName} {client.familyName}
+            {erased
+              ? clientHeadingName('Erased client', 'Erased client')
+              : clientHeadingName(client.givenName, client.familyName)}
           </h2>
-          {client.givenNameAr ? (
+          {/* The Arabic pair goes with the Latin one: an erased record has
+              neither, and the row this drawer was opened from still carries
+              the name the erasure has just taken away. */}
+          {!erased && client.givenNameAr ? (
             <p className="small muted" lang="ar" dir="rtl">
               {client.givenNameAr} {client.familyNameAr}
             </p>

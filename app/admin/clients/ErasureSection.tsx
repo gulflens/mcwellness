@@ -161,6 +161,14 @@ export function ErasureSection({
   const [letterUrl, setLetterUrl] = useState<string | null>(null);
   const [whatsAppUrl, setWhatsAppUrl] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  // Set once this panel has erased the record itself. From that moment it
+  // renders what the act answered and asks the server nothing further: the
+  // person who pressed the button may be an admin, and an admin may not read
+  // an erased record back (docs/SPEC/client-record.md section 2). Without it
+  // the drawer taking the erasure reason — which it does, so an owner is not
+  // bounced to the reason prompt — would change this component's headers and
+  // send it straight back for a list it is no longer allowed to have.
+  const [settled, setSettled] = useState(false);
 
   const headers = useCallback(
     (extra?: Record<string, string>): Record<string, string> => ({
@@ -192,6 +200,7 @@ export function ErasureSection({
   }, [fetchRequests]);
 
   useEffect(() => {
+    if (settled) return;
     let live = true;
     void fetchRequests().then((next) => {
       if (live) setState(next);
@@ -199,7 +208,7 @@ export function ErasureSection({
     return () => {
       live = false;
     };
-  }, [fetchRequests]);
+  }, [fetchRequests, settled]);
 
   async function ask(): Promise<void> {
     setBusy(true);
@@ -258,6 +267,7 @@ export function ErasureSection({
       // Straight from the answer, and nothing is asked of the server again:
       // this person may no longer be allowed to read what they have just done.
       setState({ kind: 'ready', requests: [body.request] });
+      setSettled(true);
       onErased?.(reason);
     } catch {
       setError(PERFORM_ERROR);
