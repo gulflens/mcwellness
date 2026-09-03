@@ -27,12 +27,19 @@ export function GoalsTab({
   record,
   onChanged,
   mayWrite,
+  erased = false,
 }: {
   clientId: string;
   record: ClientRecordResponse;
   onChanged: () => void;
   /** False for a role the goal routes would refuse: read the goals, change nothing. */
   mayWrite: boolean;
+  /**
+   * Whether this record has been erased. Passed rather than read from
+   * `record.status`, because the drawer knows it one act before the record
+   * does (app/admin/clients/ClientDrawer.tsx).
+   */
+  erased?: boolean;
 }) {
   const { apiFetch } = useAuth();
   const categories = useGoalCategories();
@@ -92,6 +99,12 @@ export function GoalsTab({
 
   return (
     <div className="tab-section">
+      {erased || record.status === 'erased' ? (
+        <Note tone="attention">
+          This record has been erased. The goals below have kept their category and lost what was
+          written beside them.
+        </Note>
+      ) : null}
       {record.goals.length === 0 ? (
         <Note>No goals yet.</Note>
       ) : (

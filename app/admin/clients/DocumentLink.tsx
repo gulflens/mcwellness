@@ -31,10 +31,29 @@ export function DocumentLink({
   clientId,
   documentId,
   label,
+  reason,
+  downloadName,
+  variant = 'quiet',
 }: {
   clientId: string;
   documentId: string;
   label: string;
+  /**
+   * What the file should be called when it is saved. Carried on the anchor the
+   * fallback offers, so a person can find it again in their downloads folder;
+   * the store's own headers decide the rest, and a cross-origin bucket may
+   * ignore it, which is why the name is also said on screen where it matters.
+   */
+  downloadName?: string;
+  /** The weight of the button. Quiet inside a list of documents, secondary where it is the action. */
+  variant?: 'primary' | 'secondary' | 'quiet';
+  /**
+   * The reason the drawer was opened with, for a record that has been erased:
+   * the link route asks for one exactly as the record itself does
+   * (docs/SPEC/client-record.md section 8). Absent everywhere else, which is
+   * every other document on every other record.
+   */
+  reason?: string;
 }) {
   const { apiFetch } = useAuth();
   const [busy, setBusy] = useState(false);
@@ -46,7 +65,9 @@ export function DocumentLink({
     setError(null);
     setBlockedUrl(null);
     try {
-      const res = await apiFetch(`/api/clients/${clientId}/documents/${documentId}/link`);
+      const res = await apiFetch(`/api/clients/${clientId}/documents/${documentId}/link`, {
+        headers: reason ? { 'x-reason': reason } : undefined,
+      });
       if (!res.ok) {
         setError(
           res.status === 503 ? 'The document store cannot be reached.' : 'That file did not open.',
@@ -70,7 +91,7 @@ export function DocumentLink({
   return (
     <span className="document-link">
       <Button
-        variant="quiet"
+        variant={variant}
         onClick={() => void open()}
         disabled={busy}
         aria-label={`${label}, opens in a new tab`}
@@ -80,7 +101,7 @@ export function DocumentLink({
       {blockedUrl ? (
         <span className="small" role="status">
           Your browser stopped the file opening.{' '}
-          <a href={blockedUrl} target="_blank" rel="noopener noreferrer">
+          <a href={blockedUrl} download={downloadName} target="_blank" rel="noopener noreferrer">
             Open it in a new tab
           </a>
         </span>

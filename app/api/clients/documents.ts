@@ -270,10 +270,22 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
     // a `consent` of this very client names it, so the door opens onto the
     // wording somebody signed and never the practice's filing cabinet, and
     // db/policies/client/readers.sql is the floor underneath saying the same.
+    //
+    // The third shape is the erasure's own confirmation letter, and it is
+    // admitted for the same reason and on the same terms: it is a practice
+    // document (`client_id` null — the client it is about has been erased and
+    // has no record left to file anything against, migration 104), and it is
+    // opened only where an `erasure_request` of this very client names it as
+    // its letter. Nobody browses the practice's letters through a client's
+    // path; a household's own confirmation opens where the household's record
+    // is.
     const { rows } = await db.query<{ storage_key: string; client_id: string | null }>(
       'select storage_key, client_id from document where id = $1 and (client_id = $2 or ' +
         "(client_id is null and kind = 'consent_text' and exists (select 1 from consent cs " +
-        'where cs.text_document_id = document.id and cs.client_id = $2)))',
+        'where cs.text_document_id = document.id and cs.client_id = $2)) or ' +
+        "(client_id is null and kind = 'erasure_letter' and exists (" +
+        'select 1 from erasure_request er where er.letter_document_id = document.id ' +
+        'and er.client_id = $2)))',
       [documentId, clientId],
     );
     const row = rows[0];

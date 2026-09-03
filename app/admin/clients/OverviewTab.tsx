@@ -4,8 +4,10 @@ import type { ClientRecordResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ActivationSummary } from './ActivationSummary';
+import { ErasureSection } from './ErasureSection';
 import { contactName } from './contactName';
 import { canActivate, practiceToday, toActivationRecord } from './activation';
+import { canAskForErasure, canErase } from './clientAccess';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   self: 'Self',
@@ -44,13 +46,20 @@ export function OverviewTab({
   record,
   onChanged,
   mayWrite,
+  reason,
+  onErased,
 }: {
   record: ClientRecordResponse;
   onChanged: () => void;
   /** False for a role the status route would refuse: the gate is shown, Activate is not. */
   mayWrite: boolean;
+  /** The reason an erased record was opened with, passed on to the routes that ask for one. */
+  reason?: string;
+  /** Told when this record has just been erased, with the reason it was erased with. */
+  onErased?: (reason: string) => void;
 }) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, session } = useAuth();
+  const actor = session.status === 'signed-in' ? session.actor : null;
   const primaryLocation = record.locations.find((l) => l.isPrimary) ?? record.locations[0] ?? null;
   const age = record.dateOfBirth ? ageOn(record.dateOfBirth, practiceToday()) : null;
   const gate = useMemo(() => canActivate(toActivationRecord(record), practiceToday()), [record]);
@@ -152,6 +161,13 @@ export function OverviewTab({
           </dd>
         </div>
       </dl>
+      <ErasureSection
+        record={record}
+        reason={reason}
+        mayAsk={canAskForErasure(actor)}
+        mayErase={canErase(actor)}
+        onErased={onErased}
+      />
     </div>
   );
 }

@@ -8,8 +8,14 @@ import {
   DEFAULT_SIGNED_URL_TTL_SECONDS,
   clientDocumentKey,
   isoDateIn,
+  practiceDocumentKey,
   type Actor,
 } from '../../../domain/shared';
+// By its own path: the seam's retention arithmetic is not in the shared
+// barrel, and domain/shared is the trunk's to export from, not this stream's
+// (docs/SPEC/OWNERSHIP.md). Browser-safe either way — it is the same file
+// clientDocumentKey comes from.
+import { documentRetentionUntil } from '../../../domain/shared/storage';
 import type { ServerStorageProvider } from '../_middleware/storage';
 import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { Db } from '../_middleware/request-context';
@@ -151,6 +157,94 @@ export async function fileClientDocument(
       sizeBytes: stored.size,
     },
   };
+}
+
+/**
+ * Files one document the practice holds about nobody: `client_id` null, keyed
+ * `tenant/<t>/practice/<d>`. The erasure's confirmation letter is filed this
+ * way, and it has to be — the client it is about has just been erased, and a
+ * letter filed against an erased record would be a letter nobody may open
+ * (db/policies/client/readers.sql closes that door to everyone but the owner
+ * and the lead practitioner, and only with a reason). It belongs to the
+ * erasure request instead, which names it.
+ *
+ * The bytes are the platform's own rendering rather than an upload, so there
+ * is no signature check here and `mimeType` is the caller's to state: the four
+ * magic numbers `bytesMatchMimeType` knows are the four kinds of file a person
+ * may send us, and the letter is markdown, as the consent wording is. Bytes
+ * first and the row second, exactly as `fileClientDocument` does it and for
+ * the same reason.
+ *
+ * `retentionUntil` comes from `documentRetentionUntil` — five years from
+ * upload, the practice-document rule — because this letter follows no client's
+ * activity: there is no longer a client whose activity to follow.
+ */
+export async function filePracticeDocument(
+  db: Db,
+  storage: ServerStorageProvider,
+  actor: Actor,
+  input: { kind: string; bytes: Uint8Array; mimeType: string; isImmutable: boolean; now: Date },
+): Promise<FiledDocument> {
+  const stored = await putPracticeDocumentBytes(storage, actor, input);
+  await recordPracticeDocument(db, actor, { ...input, ...stored });
+  return stored;
+}
+
+/**
+ * The first half on its own: the bytes into the store, and the key and
+ * fingerprint that name them.
+ *
+ * Split out because **a bucket call must not happen between two audited
+ * writes**. Every audited write takes the audit chain's lock — the hash chain
+ * is a sequence, so it is written one transaction at a time — and a request
+ * that puts an object in the middle of its transaction holds that lock for as
+ * long as the vendor takes to answer, which serialises every other audited
+ * write in the practice behind a network call. The erasure therefore puts the
+ * letter's bytes before it touches a single audited row, and records the row
+ * afterwards. An erasure that then fails leaves an object nothing points at,
+ * which is the orphan the seam already accepts and prefers to the alternative.
+ */
+export async function putPracticeDocumentBytes(
+  storage: ServerStorageProvider,
+  actor: Actor,
+  input: { bytes: Uint8Array; mimeType: string },
+): Promise<FiledDocument> {
+  const documentId = randomUUID();
+  const storageKey = practiceDocumentKey(actor.tenantId, documentId);
+  const stored = await storage.put(storageKey, input.bytes, input.mimeType);
+  return { id: documentId, storageKey, sha256: stored.sha256, sizeBytes: stored.size };
+}
+
+/** The second half: the row that names bytes already in the store. */
+export async function recordPracticeDocument(
+  db: Db,
+  actor: Actor,
+  input: {
+    id: string;
+    storageKey: string;
+    sha256: string;
+    kind: string;
+    mimeType: string;
+    isImmutable: boolean;
+    now: Date;
+  },
+): Promise<void> {
+  await db.query(
+    'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256, ' +
+      "uploaded_by, retention_until, is_immutable) values ($1, $2, null, $3, $4, $5, decode($6, 'hex'), " +
+      '$7, $8, $9)',
+    [
+      input.id,
+      actor.tenantId,
+      input.kind,
+      input.storageKey,
+      input.mimeType,
+      input.sha256,
+      actor.userId,
+      documentRetentionUntil(input.kind, input.now),
+      input.isImmutable,
+    ],
+  );
 }
 
 /**

@@ -69,10 +69,20 @@ type ListState =
 export function DocumentsTab({
   clientId,
   mayWrite,
+  erased = false,
+  reason,
 }: {
   clientId: string;
   /** False for a role the upload route would refuse: the list, and nothing else. */
   mayWrite: boolean;
+  /**
+   * Whether the record has been erased. What is left in this list is what tax
+   * law kept — invoices and credit notes — and nothing more may be filed here
+   * (docs/SPEC/client-record.md section 8).
+   */
+  erased?: boolean;
+  /** The reason the drawer was opened with, which an erased record's routes ask for. */
+  reason?: string;
 }) {
   const { apiFetch } = useAuth();
   const [state, setState] = useState<ListState>({ kind: 'loading' });
@@ -92,14 +102,16 @@ export function DocumentsTab({
   // useClientRecord does, and a drawer closed mid-flight sets nothing.
   const load = useCallback(async (): Promise<ListState> => {
     try {
-      const res = await apiFetch(`/api/clients/${clientId}/documents`);
+      const res = await apiFetch(`/api/clients/${clientId}/documents`, {
+        headers: reason ? { 'x-reason': reason } : undefined,
+      });
       if (!res.ok) return { kind: 'error' };
       const body = ClientDocumentListResponse.parse(await res.json());
       return { kind: 'ready', documents: body.documents };
     } catch {
       return { kind: 'error' };
     }
-  }, [apiFetch, clientId]);
+  }, [apiFetch, clientId, reason]);
 
   useEffect(() => {
     let live = true;
@@ -168,6 +180,12 @@ export function DocumentsTab({
 
   return (
     <div className="tab-section">
+      {erased ? (
+        <Note tone="attention">
+          This record has been erased. What is left here is what tax law keeps — invoices and credit
+          notes — and nothing more can be filed against it.
+        </Note>
+      ) : null}
       {/* tone="attention" carries role="status": a row appearing in a table is
           not a confirmation for somebody who cannot see it appear. */}
       {filed ? <Note tone="attention">{filed}</Note> : null}
@@ -235,7 +253,7 @@ export function DocumentsTab({
         )
       ) : null}
 
-      {mayWrite ? (
+      {mayWrite && !erased ? (
         <div className="drawer__form">
           <h3 className="drawer__section">File a document</h3>
           <Select
