@@ -15,6 +15,7 @@ import {
   MORE_IDS,
   asApiRole,
   freshDatabase,
+  rejectsWith,
   seedClient,
   seedContact,
   seedCredential,
@@ -246,6 +247,15 @@ beforeAll(async () => {
     validFrom: '2020-01-01',
     validTo: null,
     canExecuteSession: true,
+  });
+
+  // A client contact, for the deny case on the policy read.
+  await seedUser(owner, {
+    id: MORE_IDS.contactUserA,
+    tenantId: IDS.tenantA,
+    authId: AUTH.contactA,
+    displayName: 'Synthetic Contact',
+    roles: ['client_contact'],
   });
 
   // Kind `referral`, not `consent_text`: what this stands in for is any
@@ -772,6 +782,161 @@ describe('POST /api/appointments/:id/cancel', () => {
     );
     expect(res.status).toBe(404);
     expect((await statusOf(APPT_WITHDRAWAL_FUTURE)).status).toBe('confirmed');
+  });
+});
+
+describe("the practice's cancellation policy", () => {
+  it('answers the two figures the practice actually holds', async () => {
+    const res = await call(AUTH.ownerA, 'GET', '/api/appointments/settings');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ noticeHours: 24, unfitFeeFils: 15000 });
+  });
+
+  it('lets a practitioner read it: a notice period is a promise, not a secret', async () => {
+    // They need it — the cancel path quotes it back — and the row policy says
+    // the same (db/policies/scheduling/scheduling_setting_access.sql).
+    const res = await call(AUTH.practitionerA, 'GET', '/api/appointments/settings');
+    expect(res.status).toBe(200);
+  });
+
+  it("refuses a client contact, who is told the policy in the practice's own words", async () => {
+    const res = await call(AUTH.contactA, 'GET', '/api/appointments/settings');
+    expect(res.status).toBe(403);
+  });
+
+  it("shows another practice its own figures and never this one's", async () => {
+    // Tenant B has its own settings row, created with its tenant; the read is
+    // scoped by app.current_tenant_id() and by tenant_isolation beneath it.
+    await owner.query('commit');
+    await owner.query('update scheduling_setting set notice_hours = 6 where tenant_id = $1', [
+      IDS.tenantB,
+    ]);
+    try {
+      const mine = await call(AUTH.ownerA, 'GET', '/api/appointments/settings');
+      expect((await mine.json()).noticeHours).toBe(24);
+      const theirs = await call(AUTH_OWNER_B, 'GET', '/api/appointments/settings');
+      expect((await theirs.json()).noticeHours).toBe(6);
+    } finally {
+      await owner.query('update scheduling_setting set notice_hours = 24 where tenant_id = $1', [
+        IDS.tenantB,
+      ]);
+      await owner.query('begin');
+    }
+  });
+
+  it('lets the owner change it, and records why', async () => {
+    await owner.query('commit');
+    try {
+      const res = await call(
+        AUTH.ownerA,
+        'PATCH',
+        '/api/appointments/settings',
+        { noticeHours: 48 },
+        'The founder asked for two days.',
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ noticeHours: 48, unfitFeeFils: 15000 });
+
+      const { rows } = await owner.query<{ reason: string; changed_fields: string[] }>(
+        "select reason, changed_fields from audit_log where entity_type = 'scheduling_setting' " +
+          "and action = 'update' order by occurred_at desc limit 1",
+      );
+      expect(rows[0]?.reason).toBe('The founder asked for two days.');
+      expect(rows[0]?.changed_fields).toContain('notice_hours');
+    } finally {
+      await owner.query('update scheduling_setting set notice_hours = 24 where tenant_id = $1', [
+        IDS.tenantA,
+      ]);
+      await owner.query('begin');
+    }
+  });
+
+  it('refuses a practitioner, at the route and at the row policy alike', async () => {
+    const res = await call(
+      AUTH.practitionerA,
+      'PATCH',
+      '/api/appointments/settings',
+      { noticeHours: 1 },
+      'Trying it on.',
+    );
+    expect(res.status).toBe(403);
+
+    // And beneath the route: the same write, made directly as a practitioner,
+    // matches no row at all (scheduling_setting_write is restrictive, so it
+    // narrows tenant_isolation rather than replacing it).
+    await asApiRole(
+      owner,
+      IDS.tenantA,
+      async () => {
+        const updated = await owner.query('update scheduling_setting set notice_hours = 1');
+        expect(updated.rowCount).toBe(0);
+      },
+      'practitioner',
+    );
+    // Unchanged, whichever way it was asked.
+    const { rows } = await owner.query<{ notice_hours: number }>(
+      'select notice_hours from scheduling_setting where tenant_id = $1',
+      [IDS.tenantA],
+    );
+    expect(rows[0]?.notice_hours).toBe(24);
+  });
+
+  it('refuses a change with no reason, and one that changes nothing', async () => {
+    const noReason = await call(
+      AUTH.ownerA,
+      'PATCH',
+      '/api/appointments/settings',
+      { noticeHours: 48 },
+      null,
+    );
+    expect(noReason.status).toBe(400);
+    expect((await noReason.json()).code).toBe('reason_required');
+
+    const empty = await call(AUTH.ownerA, 'PATCH', '/api/appointments/settings', {}, 'Nothing.');
+    expect(empty.status).toBe(400);
+    expect((await empty.json()).code).toBe('invalid_request');
+  });
+
+  it('refuses a figure outside what the column will hold', async () => {
+    const res = await call(
+      AUTH.ownerA,
+      'PATCH',
+      '/api/appointments/settings',
+      { noticeHours: 400 },
+      'A typo.',
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('invalid_request');
+  });
+
+  it("gives no practice a way to reach another practice's row", async () => {
+    // Not a route test: the row is addressed by the caller's own tenant, so
+    // there is no id to aim elsewhere. This is the floor beneath that —
+    // an update as tenant B touches nothing of tenant A's, whatever it asks.
+    await asApiRole(owner, IDS.tenantB, async () => {
+      const updated = await owner.query('update scheduling_setting set notice_hours = 1');
+      expect(updated.rowCount).toBe(1);
+    });
+    const { rows } = await owner.query<{ notice_hours: number }>(
+      'select notice_hours from scheduling_setting where tenant_id = $1',
+      [IDS.tenantA],
+    );
+    expect(rows[0]?.notice_hours).toBe(24);
+  });
+
+  it('grants no practice the power to create or remove a policy row', async () => {
+    // 202 grants app_role select and update and nothing else, so the one row a
+    // practice has is the row it keeps: there is no path to two notice periods
+    // or to none.
+    // Each inside its own savepoint: a refused statement aborts the
+    // transaction, and the second would otherwise fail for that reason rather
+    // than for its own.
+    await asApiRole(owner, IDS.tenantA, async () => {
+      await rejectsWith(owner, '42501', 'insert into scheduling_setting (tenant_id) values ($1)', [
+        IDS.tenantA,
+      ]);
+      await rejectsWith(owner, '42501', 'delete from scheduling_setting');
+    });
   });
 });
 

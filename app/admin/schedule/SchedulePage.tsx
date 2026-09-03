@@ -6,11 +6,13 @@ import {
   type DeliveryMode,
 } from '../../api/appointments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { canOpenSettings } from '../../shell/adminAccess';
 import { Button, Field, Note, PageHeader } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from './appointmentStatus';
 import { CancelAppointmentDrawer } from './CancelAppointmentDrawer';
+import { CancellationPolicyDrawer } from './CancellationPolicyDrawer';
 import { MoveAppointmentDrawer } from './MoveAppointmentDrawer';
 import { NewAppointmentDrawer } from './NewAppointmentDrawer';
 import { ScheduleClientDrawer } from './ScheduleClientDrawer';
@@ -47,7 +49,7 @@ type State =
   | { kind: 'ready'; appointments: readonly AppointmentRow[] };
 
 export function SchedulePage() {
-  const { apiFetch } = useAuth();
+  const { apiFetch, session } = useAuth();
   // The day lives in the address, so the week view can hand a day back and a
   // reload or a shared link opens on the same one. A date is not personal
   // data (.claude/rules/ui.md forbids putting a person in a query string, not
@@ -64,6 +66,12 @@ export function SchedulePage() {
   const [acting, setActing] = useState<{ kind: 'move' | 'cancel'; row: AppointmentRow } | null>(
     null,
   );
+  const [policyOpen, setPolicyOpen] = useState(false);
+  // The two figures the cancel drawer quotes are the owner's and an admin's to
+  // change — the same audience the practice's own identity has, and the same
+  // one `scheduling_setting_write` admits beneath the route.
+  const canEditPolicy =
+    session.status === 'signed-in' && canOpenSettings(session.actor, new Date());
 
   useEffect(() => {
     let live = true;
@@ -103,6 +111,7 @@ export function SchedulePage() {
   const openAction = useCallback((kind: 'move' | 'cancel', row: AppointmentRow) => {
     setDrawerOpen(false);
     setSelectedClient(null);
+    setPolicyOpen(false);
     setActing({ kind, row });
   }, []);
 
@@ -231,6 +240,20 @@ export function SchedulePage() {
         <Link className="link schedule__week-link" to={`/admin/schedule/week?date=${date}`}>
           See the week
         </Link>
+        {canEditPolicy ? (
+          <Button
+            variant="quiet"
+            className="schedule__policy-button"
+            onClick={() => {
+              setDrawerOpen(false);
+              setSelectedClient(null);
+              setActing(null);
+              setPolicyOpen(true);
+            }}
+          >
+            Cancellation policy
+          </Button>
+        ) : null}
       </div>
       {state.kind === 'loading' ? <Note>Loading the day's appointments.</Note> : null}
       {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
@@ -262,6 +285,9 @@ export function SchedulePage() {
             reload();
           }}
         />
+      ) : null}
+      {policyOpen ? (
+        <CancellationPolicyDrawer onClose={() => setPolicyOpen(false)} onSaved={reload} />
       ) : null}
       {acting?.kind === 'cancel' ? (
         <CancelAppointmentDrawer

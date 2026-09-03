@@ -216,3 +216,9 @@
   font-weight: var(--w-medium);
   overflow-wrap: anywhere;
 }
+
+/* The way into the practice's own cancellation policy, on the same baseline as
+   the date field and the link to the week. */
+.schedule__policy-button {
+  align-self: end;
+}
