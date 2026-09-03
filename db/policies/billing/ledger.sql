@@ -217,3 +217,33 @@ drop policy if exists tenant_isolation on public.payment_receipt_series;
 create policy tenant_isolation on public.payment_receipt_series for all to app_role
   using (tenant_id = app.current_tenant_id())
   with check (tenant_id = app.current_tenant_id());
+
+------------------------------------------------------------------------------
+-- 6. Rendered invoices and receipts (407_billing_rendered_document.sql).
+--
+--    The same audience as the invoice book itself: whoever may read what the
+--    document says may see that it exists. The bytes are a separate question —
+--    `document`'s own read policy (db/policies/client/readers.sql) decides who
+--    may be handed a signed link, and it is narrower: finance may read the
+--    ledger but not a client's filing, so a coordinator who records money sees
+--    the receipt row and the route refuses them the link.
+--
+--    Insert is granted to nobody. A row arrives only through
+--    app.file_billing_document, which is security definer and writes as the
+--    practice, and nothing ever updates or deletes one.
+------------------------------------------------------------------------------
+drop policy if exists tenant_isolation on public.billing_document;
+create policy tenant_isolation on public.billing_document for all to app_role
+  using (tenant_id = app.current_tenant_id())
+  with check (tenant_id = app.current_tenant_id());
+
+drop policy if exists ledger_readers on public.billing_document;
+create policy ledger_readers on public.billing_document
+  as restrictive for select to app_role using (
+    app.client_erasure_gate(app.client_status_for(client_id)) and (
+      app.actor_has_role('owner') or app.actor_has_role('admin')
+      or app.actor_has_role('lead_practitioner') or app.actor_has_role('finance')
+      or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
+      or (app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id))
+    )
+  );
