@@ -387,11 +387,44 @@ describe('app.audit_redact drops a fixed set of keys outright (audit.md section 
     });
   });
 
-  it('still withholds every value inside an erasure, nested rules and all', async () => {
+  it('drops the number an erasure request was made from, keeping what the request says', async () => {
+    // erasure_request.requested_by_phone (the client-record stream's migration
+    // 104) is recorded in clear on purpose — the erasure has not happened yet
+    // — and would otherwise sit in the trail for its own five years, which is
+    // the retention the column is written to escape (migration 906).
+    expect(
+      await redact({
+        requested_by_phone: '+971500000000',
+        reason: 'The household asked in writing.',
+        status: 'recorded',
+      }),
+    ).toEqual({ reason: 'The household asked in writing.', status: 'recorded' });
+  });
+
+  it('drops the requester\u2019s number beside the coordinates and the Emirates ID columns', async () => {
+    expect(
+      await redact({
+        requested_by_phone: '+971500000000',
+        checked_in_point: 'POINT(1 1)',
+        checked_out_point: 'POINT(2 2)',
+        emirates_id_encrypted: 'nope',
+        emirates_id_hash: 'nope',
+        note: 'kept',
+      }),
+    ).toEqual({ note: 'kept' });
+  });
+
+  it('still withholds every value inside an erasure, nested rules and dropped keys alike', async () => {
     await rolledBack(client, async () => {
       await client.query('select app.begin_erasure()');
-      expect(await redact({ payload: { note: 'anything' }, seq: 6 })).toEqual({
+      // Inside an erasure the row is withheld rather than filtered: every key
+      // is named and every value is gone, a dropped key included. The two
+      // rules do not compete, and 906 left this branch untouched.
+      expect(
+        await redact({ payload: { note: 'anything' }, requested_by_phone: '+971500000000', seq: 6 }),
+      ).toEqual({
         payload: '[withheld: erasure]',
+        requested_by_phone: '[withheld: erasure]',
         seq: '[withheld: erasure]',
       });
       await client.query('select app.end_erasure()');
