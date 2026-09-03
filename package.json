@@ -17,7 +17,7 @@
     "audit:migrations": "node scripts/audit-migrations.mjs",
     "worktree:add": "node scripts/worktree.mjs add",
     "worktree:remove": "node scripts/worktree.mjs remove",
-    "audit:deps": "pnpm audit --prod --audit-level=high",
+    "audit:deps": "node scripts/audit-deps.mjs",
     "build": "vite build",
     "test": "vitest run",
     "test:watch": "vitest",
