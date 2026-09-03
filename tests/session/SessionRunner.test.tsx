@@ -41,6 +41,10 @@ const provider: AuthProvider = {
   onChange: () => () => undefined,
 };
 
+/** A shell with nobody signed in: no token, so AuthContext settles signed-out. */
+const signedOutProvider: AuthProvider = { ...provider, getAccessToken: async () => null };
+const failingFetch = (async () => new Response('{}', { status: 401 })) as unknown as typeof fetch;
+
 const SERVICE: ServiceTypeOption = {
   id: SERVICE_TYPE_ID,
   code: 'nf-session',
@@ -60,7 +64,7 @@ const VISIT: RunnerVisit = {
   number: 12,
   of: 30,
   serviceTypeId: SERVICE_TYPE_ID,
-  photoConsent: false,
+  photoConsent: 'refused',
   lastSeq: 1,
   shareLocation: false,
 };
@@ -79,16 +83,22 @@ function mount(
     visit?: Partial<RunnerVisit>;
     service?: ServiceTypeOption | null;
     eventsOk?: boolean;
+    /** What POST /close answers: 200, or a status the runner must triage. */
+    closeStatus?: number;
+    store?: ReturnType<typeof createMemoryStore>;
   } = {},
 ) {
   const posted: Posted[] = [];
-  const store = createMemoryStore();
+  const store = options.store ?? createMemoryStore();
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
     if (init?.method === 'POST') {
       posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
       if (url.endsWith('/close')) {
+        if (options.closeStatus && options.closeStatus !== 200) {
+          return json({ error: 'forbidden', requestId: null }, options.closeStatus);
+        }
         return json({
           status: 'closed',
           sessionId: SESSION_ID,
@@ -136,14 +146,29 @@ function mount(
   return { ...utils, posted, store };
 }
 
+/** Ending takes two taps now: the first arms the control, the second ends it. */
+function endSession() {
+  fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Tap again to end' }));
+}
+
 /** Walks pre-flight and signal, leaving the run screen on screen. */
-async function reachRun() {
-  const mounted = mount();
+async function reachRun(options: Parameters<typeof mount>[0] = {}) {
+  const mounted = mount(options);
   await screen.findByRole('heading', { name: 'Before you start' });
   fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
   fireEvent.change(await screen.findByLabelText('Site'), { target: { value: 'Cz' } });
   fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
   await screen.findByRole('button', { name: 'End session' });
+  return mounted;
+}
+
+/** Walks the whole visit as far as the summary. */
+async function reachSummary(options: Parameters<typeof mount>[0] = {}) {
+  const mounted = await reachRun(options);
+  endSession();
+  fireEvent.click(await screen.findByRole('button', { name: 'See the summary' }));
+  await screen.findByRole('heading', { name: 'Summary' });
   return mounted;
 }
 
@@ -244,10 +269,23 @@ describe('the run', () => {
   });
 });
 
-describe('after the session', () => {
-  it('offers the setup photo only when the household has agreed to one', async () => {
+describe('ending the session', () => {
+  it('takes two taps, with the clock still showing between them', async () => {
     await reachRun();
     fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+    // Armed, not ended: the run screen is still here and so is the timer.
+    expect(screen.getByText('Tap again to end the session. It cannot be restarted.')).toBeTruthy();
+    expect(screen.getByText('elapsed')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tap again to end' }));
+    expect(await screen.findByRole('heading', { name: 'After the session' })).toBeTruthy();
+  });
+});
+
+describe('after the session', () => {
+  it('never offers the camera, and says the household has not agreed when that is why', async () => {
+    await reachRun();
+    endSession();
     await screen.findByRole('heading', { name: 'After the session' });
 
     expect(screen.queryByRole('button', { name: 'Take a photo' })).toBeNull();
@@ -258,27 +296,57 @@ describe('after the session', () => {
     ).toBeTruthy();
   });
 
-  it('offers the camera when consent is active', async () => {
-    mount({ visit: { photoConsent: true } });
-    await screen.findByRole('heading', { name: 'Before you start' });
-    fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
-    fireEvent.change(await screen.findByLabelText('Site'), { target: { value: 'Cz' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'End session' }));
+  it('says it cannot check, rather than that they refused, on a resume with no signal', async () => {
+    await reachRun({ visit: { photoConsent: 'unknown' } });
+    endSession();
+    await screen.findByRole('heading', { name: 'After the session' });
 
-    expect(await screen.findByRole('button', { name: 'Take a photo' })).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This device cannot check whether the household has agreed to photographs until it is back online.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/has not agreed to photographs/)).toBeNull();
+  });
+
+  it('holds the practitioner to what the photo is for', async () => {
+    await reachRun({ visit: { photoConsent: 'given' } });
+    endSession();
+    expect(
+      await screen.findByText('The sensor placement only: not the face, and not the room.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Take a photo' })).toBeNull();
   });
 
   it('asks for one reading of the whole session when none was taken during it', async () => {
     await reachRun();
-    fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+    endSession();
     expect(await screen.findByLabelText('Time in reward')).toBeTruthy();
     expect(screen.getByLabelText('Artefact')).toBeTruthy();
   });
 
+  it('files no reading at all when nobody moved the sliders', async () => {
+    const { posted } = await reachSummary();
+    // An untouched slider is not a measurement: no telemetry event, and the
+    // summary says so rather than reporting a quality of zero.
+    expect(kinds(posted)).not.toContain('telemetry_chunk');
+    expect(screen.getByText('Session quality').nextElementSibling?.textContent).toBe(
+      'Not recorded',
+    );
+  });
+
+  it('files the reading once the practitioner has actually moved one', async () => {
+    const { posted } = await reachRun();
+    endSession();
+    fireEvent.change(await screen.findByLabelText('Time in reward'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'See the summary' }));
+
+    await waitFor(() => expect(kinds(posted)).toContain('telemetry_chunk'));
+  });
+
   it('treats nothing to note as an answer that clears the rest', async () => {
     await reachRun();
-    fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+    endSession();
     fireEvent.click(await screen.findByRole('button', { name: 'Fatigue' }));
     fireEvent.click(screen.getByRole('button', { name: 'Nothing to note' }));
 
@@ -293,13 +361,9 @@ describe('after the session', () => {
 
 describe('the summary and the check-out', () => {
   it('shows what is about to be recorded, then closes the visit on one confirmation', async () => {
-    const { posted } = await reachRun();
-    fireEvent.click(screen.getByRole('button', { name: 'End session' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'See the summary' }));
-
-    await screen.findByRole('heading', { name: 'Summary' });
+    const { posted } = await reachSummary();
     expect(screen.getByText('Sleep last night')).toBeTruthy();
-    expect(screen.getByLabelText('Parking, in fils')).toBeTruthy();
+    expect(screen.getByLabelText('Parking, in dirhams')).toBeTruthy();
     expect(screen.getByLabelText('Salik crossings')).toBeTruthy();
     expect(screen.getByLabelText('Anything about getting in')).toBeTruthy();
 
@@ -314,6 +378,100 @@ describe('the summary and the check-out', () => {
     });
     expect(close.body.visitActuals).toMatchObject({ salikCrossings: 2, parkingCostFils: 0 });
     expect(await screen.findByRole('heading', { name: 'Checked out' })).toBeTruthy();
+  });
+
+  it('says the same numbers the record was given', async () => {
+    // The sliders nobody moved still file their midpoint, so the summary
+    // must say that midpoint and not "not asked" (design review, item 4).
+    const { posted } = await reachSummary();
+    const filed = posted
+      .flatMap((call) => (call.body.events as { kind: string; payload: unknown }[]) ?? [])
+      .filter((event) => event.kind === 'rating_recorded')
+      .map(
+        (event) => event.payload as { phase: string; answers: { key: string; value: number }[] },
+      );
+
+    expect(filed.find((p) => p.phase === 'pre')?.answers).toEqual([{ key: 'sleep', value: 5 }]);
+    expect(filed.find((p) => p.phase === 'post')?.answers).toEqual([{ key: 'sleep', value: 5 }]);
+    expect(screen.getByText('Sleep last night').nextElementSibling?.textContent).toBe('5 to 5');
+  });
+
+  it('names the setup and the session as the two different measurements they are', async () => {
+    await reachSummary();
+    expect(screen.getByText('Signal at setup')).toBeTruthy();
+    expect(screen.getByText('Session quality')).toBeTruthy();
+    expect(screen.queryByText('Signal')).toBeNull();
+  });
+
+  it('takes parking in dirhams and files it in fils', async () => {
+    const { posted } = await reachSummary();
+    fireEvent.change(screen.getByLabelText('Parking, in dirhams'), { target: { value: '7.50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+
+    const close = await waitFor(() => {
+      const call = posted.find((c) => c.url.endsWith('/close'));
+      expect(call).toBeTruthy();
+      return call!;
+    });
+    expect(close.body.visitActuals).toMatchObject({ parkingCostFils: 750 });
+  });
+
+  it('drains the queue before it posts the close, so the first attempt is the one that lands', async () => {
+    const { posted } = await reachSummary();
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    await screen.findByRole('heading', { name: 'Checked out' });
+
+    // Exactly one close, and every event went before it: no waiting thirty
+    // seconds under copy that says the phone can be put away.
+    const closes = posted.filter((call) => call.url.endsWith('/close'));
+    expect(closes).toHaveLength(1);
+    const lastEventCall = posted.findLastIndex((call) => !call.url.endsWith('/close'));
+    expect(lastEventCall).toBeLessThan(posted.indexOf(closes[0]!));
+  });
+
+  it('stops and says so when the server will never accept the close', async () => {
+    await reachSummary({ closeStatus: 403 });
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+
+    expect(await screen.findByRole('heading', { name: 'Not checked out' })).toBeTruthy();
+    expect(
+      screen.getByText(
+        'This visit could not be checked out. Nothing is lost — ask the practice to close it.',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Back to Today' })).toBeTruthy();
+  });
+
+  it('keeps waiting, and keeps the calm copy, when the close is worth retrying', async () => {
+    await reachSummary({ closeStatus: 503 });
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+
+    expect(await screen.findByRole('heading', { name: 'Checking out' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Not checked out' })).toBeNull();
+  });
+});
+
+describe('what the device keeps', () => {
+  it('empties itself when the practitioner signs out', async () => {
+    const store = createMemoryStore();
+    const { rerender } = mount({ store });
+    await screen.findByRole('heading', { name: 'Before you start' });
+    fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
+    await waitFor(async () => expect(await store.readOpenVisit()).not.toBeNull());
+
+    // The shell drops the session; nothing of the household stays behind.
+    rerender(
+      <AuthProviderBoundary provider={signedOutProvider} fetchImpl={failingFetch}>
+        <SessionRunner
+          visit={VISIT}
+          service={SERVICE}
+          onFinished={() => undefined}
+          createStore={async () => store}
+        />
+      </AuthProviderBoundary>,
+    );
+    await waitFor(async () => expect(await store.readOpenVisit()).toBeNull());
+    expect(await store.pending()).toEqual([]);
   });
 });
 
