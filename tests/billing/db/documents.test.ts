@@ -431,3 +431,136 @@ describe('sending a document to a family', () => {
     expect(sent.handoffUrl).toBeTruthy();
   });
 });
+
+describe('a receipt takes the practice from the invoice it settles', () => {
+  /** Registers the practice for VAT, as the Practice settings screen would. */
+  async function setRegistration(on: boolean): Promise<void> {
+    const user = h.data.users[SEEDED.owner];
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, false), set_config('app.actor_id', $2, false), " +
+        "set_config('app.actor_roles', 'owner,admin,finance', false), " +
+        "set_config('app.request_id', $3, false), set_config('app.reason', '', false)",
+      [h.data.tenant.id, user?.id ?? null, REQUEST_ID],
+    );
+    await h.owner.query('update tenant set vat_registered = $2, vat_trn = $3 where id = $1', [
+      h.data.tenant.id,
+      on,
+      on ? '100000000000003' : null,
+    ]);
+  }
+
+  async function pageOf(documentId: string): Promise<string> {
+    const { rows } = await h.owner.query<{ storage_key: string }>(
+      'select storage_key from document where id = $1',
+      [documentId],
+    );
+    const bytes = await h.storage.read?.(rows[0]?.storage_key ?? '');
+    if (!bytes) throw new Error('The store holds nothing at that key.');
+    return extractAll(new Uint8Array(bytes));
+  }
+
+  it('does not borrow a later invoice’s VAT registration', async () => {
+    // The fault the compliance review found: a receipt read the household's
+    // *newest* invoice for its supplier snapshot. Money taken before the
+    // practice registered would then re-render carrying a VAT registration
+    // number it did not hold on the day.
+    const clientId = h.clientId(12);
+    await setRegistration(false);
+    const invoiceId = await deliverVisit(clientId);
+    const paid = await h.call('POST', '/api/billing/payments', SEEDED.owner, {
+      clientId,
+      method: 'cash',
+      amountFils: 70_000,
+      invoiceId,
+    });
+    const payment = (await paid.json()) as RecordPaymentResponse;
+
+    // The practice registers, and is invoiced again. The old receipt must not
+    // move.
+    await setRegistration(true);
+    await deliverVisit(clientId);
+
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      paymentId: payment.payment.id,
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as CreateDocumentResponse;
+    const page = await pageOf(body.document.id);
+
+    expect(page).not.toContain('100000000000003');
+    expect(page).not.toContain('VAT registration number');
+    await setRegistration(false);
+  });
+
+  it('falls back to the nearest invoice on or before the day, for money on account', async () => {
+    const clientId = h.clientId(13);
+    await setRegistration(false);
+    await deliverVisit(clientId);
+
+    // Recorded straight onto the table so the money arrives *after* the invoice
+    // the fallback should find: the payment route reads the injected clock and
+    // the charge trigger reads the database's, and this test is about the rule
+    // rather than about that difference.
+    const { rows } = await h.owner.query<{ id: string }>(
+      'insert into payment (tenant_id, client_id, method, amount_fils, received_at) ' +
+        "values ($1, $2, 'cash', 10000, now()) returning id",
+      [h.data.tenant.id, clientId],
+    );
+    const paymentId = rows[0]?.id;
+
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, { paymentId });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as CreateDocumentResponse;
+    const page = await pageOf(body.document.id);
+
+    expect(page).toContain('on account');
+    // And under the registration that was in force, not a later one.
+    expect(page).not.toContain('100000000000003');
+  });
+
+  it('refuses a receipt for money that arrived before any invoice existed', async () => {
+    // There is nothing that says who the practice was on that day, and a
+    // receipt rendered under a guess is worse than no receipt.
+    const clientId = h.clientId(15);
+    const { rows } = await h.owner.query<{ id: string }>(
+      'insert into payment (tenant_id, client_id, method, amount_fils, received_at) ' +
+        "values ($1, $2, 'cash', 5000, now()) returning id",
+      [h.data.tenant.id, clientId],
+    );
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      paymentId: rows[0]?.id,
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('a filed document is never replaced by different bytes', () => {
+  it('refuses to put back a re-render that does not match what was filed', async () => {
+    const clientId = h.clientId(14);
+    const invoiceId = await deliverVisit(clientId);
+    const created = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
+    const body = (await created.json()) as CreateDocumentResponse;
+    const { rows } = await h.owner.query<{ storage_key: string }>(
+      'select storage_key from document where id = $1',
+      [body.document.id],
+    );
+    const key = rows[0]?.storage_key ?? '';
+    await h.storage.delete(key);
+
+    // Something the document was rendered from moves. Nothing in the platform
+    // does this — an invoice grants no update — but a hand-written change is
+    // exactly what the hash on the row is there to catch.
+    await h.owner.query('update client set given_name = $2 where id = $1', [clientId, 'Renamed']);
+
+    const res = await h.call(
+      'GET',
+      `/api/billing/documents/${body.document.id}/link`,
+      SEEDED.owner,
+    );
+    // Writing the new bytes under the old row's key would replace a filed
+    // financial document with a different one.
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code?: string }).code).toBe('document_bytes_differ');
+    expect(await h.storage.exists(key)).toBe(false);
+  });
+});
