@@ -31,3 +31,5 @@ coverage/
 
 # The local document store (STORAGE_DIR, docs/SEAMS.md): real bytes, never in git.
 .storage/
+# The staging demo's stopgap file store when STORAGE_PROVIDER=local (docs/STAGING.md)
+.storage-staging/

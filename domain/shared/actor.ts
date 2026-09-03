@@ -160,6 +160,8 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'billing.price.write':
       // The price list; the service catalogue itself stays with the owner and an admin.
       return hasRole(actor, 'owner', 'admin', 'finance');
+    // billing.invoice.read is narrower than ledger_readers on purpose today (office roles only); the client
+    // portal will widen it to a contact for their own client, as billing.balance.read is.
     case 'billing.package.read':
     case 'billing.invoice.read':
     case 'billing.refund.read':

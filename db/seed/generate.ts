@@ -9,7 +9,7 @@ import { at, seededRandom } from './random';
  * prices and its three programmes, twenty clients with contacts, home
  * locations and consents. Pure: the same options give the same
  * output, byte for byte. Every value is inside the reserved fake ranges
- * (.claude/rules/testing.md): ids of the form 0000000K-0000-4000-8000-*, phones
+ * (.claude/rules/testing.md): ids of the form 0000000K-0000-4000-8000-*, phones (or `000000KK-...` for a two-character kind such as the billing catalogue's `d0` to `d3`)
  * +971 50 000 1xxx, emails at example.com, Emirates IDs 784-1900-*, names from
  * ./names.ts. Nothing here describes a real person.
  */
