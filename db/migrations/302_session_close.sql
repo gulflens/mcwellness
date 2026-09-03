@@ -115,10 +115,24 @@ alter table public.session
       closed_at is null
       or status in ('completed', 'no_show', 'cancelled_late', 'cancelled', 'aborted')
     ),
+  -- A completed visit must always be closed. The writer need not say so: the
+  -- stamp trigger in section 2 fills closed_at in when a row becomes
+  -- completed without one, so this constraint states the invariant rather
+  -- than dictating the shape of everybody's UPDATE statement. That matters
+  -- because completion is a transition other streams depend on and one of
+  -- them — billing (404) — hangs a trigger on the plain
+  -- `update session set status = 'completed'` this stream promised it.
   add constraint session_completed_is_closed
     check (status <> 'completed' or closed_at is not null),
+  -- Naming a closer without a close is nonsense, so that stays refused. The
+  -- reverse is not: a close may be stamped by the transition itself, and a
+  -- transaction that did not name a person did not have one to name. This
+  -- was a biconditional until the completion contract was tested end to end,
+  -- and the biconditional made closed_by a *requirement* of completing a
+  -- visit — which the close route satisfies and a plain status update
+  -- cannot. The actor is on the audit row either way (095_actor.sql).
   add constraint session_closed_by_with_closed_at
-    check ((closed_at is null) = (closed_by is null)),
+    check (closed_by is null or closed_at is not null),
   add constraint session_ends_after_it_starts
     check (ended_at is null or started_at is null or ended_at >= started_at);
 
@@ -141,13 +155,69 @@ create index session_client_service_completed_idx
   where status = 'completed';
 
 ------------------------------------------------------------------------------
--- 2. Immutability after close (section 4.1, CLAUDE.md rule 7).
+-- 2. The close stamps itself, then freezes.
+--
+-- Two triggers, and the order they fire in is load-bearing. Postgres fires
+-- same-event, same-timing triggers in name order, so on an update of session
+-- the sequence is: close_stamps_itself, then refuse_update_after_close, then
+-- set_updated_at (300). The names were chosen for that and should not be
+-- changed casually.
+--
+-- 2a. The stamp. `session_completed_is_closed` says a completed visit is a
+-- closed one; this is what makes that true for any writer rather than only
+-- for app/api/sessions/close.ts, which sets all three columns itself.
+--
+-- The contract this stream owes billing (404_billing_consumption.sql) is that
+-- the transition to 'completed' happens once, atomically, on a plain row
+-- update their trigger can hang off. A writer holding that contract writes
+-- `update session set status = 'completed'` and nothing else — no closed_at,
+-- because closed_at is this stream's column and its own business. Before this
+-- trigger existed that statement failed a check constraint, which is this
+-- stream breaking a promise it made and calling the other stream wrong for
+-- believing it.
+--
+-- So the transition carries the moment with it. now() is the transaction's
+-- own clock, which is the same single reading of it that close.ts takes.
+-- closed_by is deliberately NOT invented here: app.actor_id is a hint from a
+-- caller, and a guess at who closed a visit written into the record as fact
+-- is worse than a null beside an audit row that names the actor honestly.
+------------------------------------------------------------------------------
+create function app.session_stamp_close() returns trigger
+language plpgsql
+set search_path = pg_catalog, pg_temp
+as $$
+begin
+  if new.status = 'completed' and new.closed_at is null then
+    new.closed_at := now();
+  end if;
+  return new;
+end
+$$;
+revoke execute on function app.session_stamp_close() from public;
+
+create trigger close_stamps_itself before insert or update on public.session
+  for each row execute function app.session_stamp_close();
+alter table public.session enable always trigger close_stamps_itself;
+
+------------------------------------------------------------------------------
+-- 2b. Immutability after close (section 4.1, CLAUDE.md rule 7).
 --
 -- A trigger that raises, not a policy that hides: a policy would make the
 -- update disappear silently and report success, which is the one thing a
 -- record of a visit must never do. `enable always`, so
 -- session_replication_role = replica cannot switch it off, matching the audit
 -- triggers' own treatment in 070.
+--
+-- One thing it does not raise on: an update that would change nothing. A
+-- device that has been offline through the close replays its outbox, and a
+-- trigger on the completion may see the same statement twice; neither is an
+-- attempt to alter the record, and refusing a write that alters nothing
+-- teaches callers to fear a no-op. Such an update is skipped rather than
+-- applied — returning null leaves the frozen row byte-identical, updated_at
+-- included, which is what "immutable" ought to mean — and the caller is told
+-- the truth by a row count of zero rather than a success for a change that
+-- did not happen. The comparison runs only for rows already closed, so the
+-- ordinary path never pays for it.
 --
 -- The amendment path (a new session row with supersedes_id and
 -- amendment_reason, authored from the admin console) is deliberately NOT
@@ -164,13 +234,19 @@ language plpgsql security definer
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  if old.closed_at is not null
-     and not exists (select 1 from app.erasure_active where txid = txid_current()) then
-    raise exception 'session % is closed and cannot be changed; correct it with a new version',
-      old.id
-      using errcode = 'restrict_violation';
+  if old.closed_at is null
+     or exists (select 1 from app.erasure_active where txid = txid_current()) then
+    return new;
   end if;
-  return new;
+  -- to_jsonb rather than `new is not distinct from old`: the row carries a
+  -- geography column, and this comparison must not depend on which types
+  -- happen to have an equality operator today.
+  if to_jsonb(new) is not distinct from to_jsonb(old) then
+    return null;
+  end if;
+  raise exception 'session % is closed and cannot be changed; correct it with a new version',
+    old.id
+    using errcode = 'restrict_violation';
 end
 $$;
 revoke execute on function app.session_refuse_update_after_close() from public;
@@ -291,6 +367,8 @@ grant execute on function app.complete_appointment_for_session(uuid) to app_role
 --   drop function if exists app.session_event_refuse_after_close();
 --   drop trigger if exists refuse_update_after_close on public.session;
 --   drop function if exists app.session_refuse_update_after_close();
+--   drop trigger if exists close_stamps_itself on public.session;
+--   drop function if exists app.session_stamp_close();
 --   drop index if exists session_client_service_completed_idx;
 --   drop index if exists session_supersedes_idx;
 --   drop index if exists session_closed_by_idx;
