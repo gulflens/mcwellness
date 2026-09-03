@@ -20,7 +20,7 @@ import {
   type DocumentBytes,
 } from './record-schema';
 import { logRefused } from './refused';
-import { retirePhotoEvidence } from './withdrawal';
+import { photoEvidenceToRemove, removePhotoBytes } from './withdrawal';
 
 /**
  * Recording and withdrawing consent (docs/SPEC/client-record.md sections 2
@@ -438,15 +438,25 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // being taken back, so the photographs go with it (./withdrawal.ts
     // explains what "go" can and cannot mean today). The counts travel back so
     // the console can say what happened rather than imply it.
+    //
+    // Two steps, in this order, deliberately: everything that touches the
+    // database first, then the bytes. Deleting bytes cannot be rolled back,
+    // and this route used to delete them in the middle of a transaction that
+    // could still fail — which would have left the consent alive and the
+    // family's photographs gone. `removePhotoBytes` is the last act of the
+    // handler and never throws, so nothing after it can undo the withdrawal.
     const photographs =
       row.purpose === 'photo_video'
-        ? await retirePhotoEvidence(db, c.get('storage'), clientId)
-        : { removed: 0, stillOnFile: 0 };
+        ? await photoEvidenceToRemove(db, c.get('storage'), clientId)
+        : { keys: [], stillOnFile: 0 };
+    const removed = await removePhotoBytes(c.get('storage'), photographs.keys);
     return c.json(
       WithdrawConsentResponse.parse({
         id: consentId,
-        photographsRemoved: photographs.removed,
-        photographsStillOnFile: photographs.stillOnFile,
+        photographsRemoved: removed,
+        // A key the store refused is still on file, and saying so is better
+        // than a number that implies otherwise.
+        photographsStillOnFile: photographs.stillOnFile + (photographs.keys.length - removed),
       }),
     );
   });

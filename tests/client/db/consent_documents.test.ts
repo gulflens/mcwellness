@@ -999,10 +999,7 @@ describe('who these routes turn away', () => {
     );
     const wordingId = rows[0]?.text_document_id ?? '';
     const before = await auditRows(wordingId, 'read');
-    const own = await request(
-      CONTACT_AUTH,
-      `/api/clients/${ADULT_ID}/documents/${wordingId}/link`,
-    );
+    const own = await request(CONTACT_AUTH, `/api/clients/${ADULT_ID}/documents/${wordingId}/link`);
     expect(own.status).toBe(200);
     // Signed through the same seam and audited before it is signed, like any
     // other document. The row names no client, because a practice wording has
@@ -1024,7 +1021,7 @@ describe('who these routes turn away', () => {
 });
 
 describe('withdrawing a consent', () => {
-  it('will not go without a reason, and takes effect at once when it has one', async () => {
+  it('refuses a photo_video consent recorded against another purpose’s wording', async () => {
     const recorded = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
       method: 'POST',
       body: JSON.stringify({
@@ -1103,6 +1100,23 @@ describe('withdrawing a consent', () => {
     // The permission is gone and so are the bytes, with the read recorded.
     expect(await storage.exists(photoKey)).toBe(false);
     expect(await auditRows(photoId, 'read')).toBe(1);
+
+    // The consent itself: withdrawn, dated, and the reason on the trail.
+    // Section 7 says a withdrawal takes effect immediately, and "immediately"
+    // is a row that says so rather than a screen that says so.
+    const consent = await owner.query<{ status: string; withdrawn_at: Date | null }>(
+      'select status, withdrawn_at from consent where id = $1',
+      [id],
+    );
+    expect(consent.rows[0]?.status).toBe('withdrawn');
+    expect(consent.rows[0]?.withdrawn_at).not.toBeNull();
+    const trail = await owner.query<{ action: string; reason: string | null }>(
+      "select action, reason from audit_log where entity_type = 'consent' and entity_id = $1 " +
+        'order by occurred_at desc limit 1',
+      [id],
+    );
+    expect(trail.rows[0]?.action).toBe('update');
+    expect(trail.rows[0]?.reason).toBe('The household asked us to stop taking photographs.');
   });
 });
 
