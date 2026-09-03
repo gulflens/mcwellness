@@ -64,3 +64,17 @@ export const SendDocumentResponse = z.object({
   message: z.string(),
 });
 export type SendDocumentResponse = z.infer<typeof SendDocumentResponse>;
+
+/**
+ * The three figures on the money screen (docs/SPEC/billing.md section 4.1).
+ * Fils, like every other amount that crosses this boundary, so no screen ever
+ * does arithmetic on money.
+ */
+export const MonthlyMoneyResponse = z.object({
+  /** YYYY-MM. */
+  month: z.string(),
+  cashCollectedFils: z.number().int().nonnegative(),
+  revenueRecognisedFils: z.number().int().nonnegative(),
+  deferredNetFils: z.number().int().nonnegative(),
+});
+export type MonthlyMoneyResponse = z.infer<typeof MonthlyMoneyResponse>;

@@ -27,6 +27,8 @@ export type {
   EntitlementStatus,
   ServiceBalance,
 } from './balance';
+export { monthlyMoney } from './recognition';
+export type { CollectedPayment, LedgerCredit, MonthlyMoney } from './recognition';
 export { refundOnTermination } from './refund';
 export type { DeliveredCount, RefundLine, RefundQuote, SingleRate } from './refund';
 export {
