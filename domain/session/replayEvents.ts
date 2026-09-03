@@ -1,11 +1,5 @@
 import { parseEventPayload } from './events';
-import type {
-  GeoPoint,
-  SessionEvent,
-  SessionProjection,
-  TelemetrySample,
-  SessionPhase,
-} from './types';
+import type { SessionEvent, SessionProjection, TelemetrySample, SessionPhase } from './types';
 
 /**
  * Folds a session's event stream into its current projection
@@ -73,7 +67,6 @@ export function replayEvents(events: readonly SessionEvent[]): SessionProjection
         startedAt: null,
         endedAt: null,
         checkedOutAt: null,
-        checkedOutPoint: null,
       };
       continue;
     }
@@ -156,14 +149,12 @@ export function replayEvents(events: readonly SessionEvent[]): SessionProjection
         break;
       }
       case 'checked_out': {
-        const payload = parseEventPayload('checked_out', event.payload);
-        if (!payload) break;
-        const point: GeoPoint | null = payload.point;
+        // No payload to read: the check-out coordinate is session-level, not
+        // an event field (see CheckedOutPayload in ./events.ts).
         projection = {
           ...projection,
           phase: laterPhase(projection.phase, 'checked_out'),
           checkedOutAt: event.deviceAt,
-          checkedOutPoint: point,
         };
         break;
       }

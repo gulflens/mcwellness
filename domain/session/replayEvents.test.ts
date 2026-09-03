@@ -103,7 +103,7 @@ function wholeVisit(): SessionEvent[] {
       },
       59,
     ),
-    event(11, 'checked_out', { point: { lat: 25.2, lng: 55.27 } }, 59),
+    event(11, 'checked_out', {}, 59),
   ];
 }
 
@@ -159,7 +159,6 @@ describe('replayEvents', () => {
       startedAt: null,
       endedAt: null,
       checkedOutAt: null,
-      checkedOutPoint: null,
     });
   });
 
@@ -177,7 +176,6 @@ describe('replayEvents', () => {
       startedAt: '2026-09-03T06:36:00.000Z',
       endedAt: '2026-09-03T06:58:00.000Z',
       checkedOutAt: '2026-09-03T06:59:00.000Z',
-      checkedOutPoint: { lat: 25.2, lng: 55.27 },
     });
     expect(projection?.signal?.sites).toEqual([{ site: 'Cz', quality: 0.82 }]);
     expect(projection?.telemetry).toHaveLength(2);

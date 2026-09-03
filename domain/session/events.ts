@@ -168,12 +168,19 @@ export type SessionEndedPayload = z.infer<typeof SessionEndedPayload>;
 
 /**
  * The practitioner has confirmed the summary and is leaving (section 3.6).
- * The point rides only when sharing was switched on at check-in; a decline
- * is a null, never a block (section 7).
+ *
+ * No coordinate here, and that is the point of it. The check-out position is
+ * a session-level fact recorded once on the session row, exactly as
+ * check-in's own is (app/api/sessions/checkin.ts), because a coordinate
+ * inside an event payload is a coordinate the audit trail's redaction cannot
+ * see: 080_audit_triggers.sql inspects top-level values only, so a nested
+ * `point` would be copied into audit_log.new_values in full and kept for
+ * five years in an append-only table. Section 7 is explicit that the door
+ * coordinate is proof of attendance and not tracking, and that it is never
+ * copied into the audit trail; keeping it out of the event log is this
+ * stream's half of making that true.
  */
-export const CheckedOutPayload = z.object({
-  point: EventGeoPoint.nullable(),
-});
+export const CheckedOutPayload = z.object({});
 export type CheckedOutPayload = z.infer<typeof CheckedOutPayload>;
 
 /** Every payload schema, by kind. One table, so nothing can drift out of step. */

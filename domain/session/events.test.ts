@@ -134,12 +134,23 @@ describe('photo_captured', () => {
   });
 });
 
+describe('checked_out', () => {
+  it('carries no coordinate at all: the check-out point is session-level', () => {
+    // A coordinate nested inside a payload is one the audit trail's redaction
+    // cannot see (080_audit_triggers.sql inspects top-level values only), so
+    // this payload has no room for one. Zod strips what it does not declare.
+    expect(EVENT_PAYLOAD_SCHEMAS.checked_out.parse({ point: { lat: 25.2, lng: 55.27 } })).toEqual(
+      {},
+    );
+  });
+});
+
 describe('parseEventPayload', () => {
   it('returns null for a malformed payload rather than throwing', () => {
-    expect(parseEventPayload('checked_out', { point: { lat: 200, lng: 0 } })).toBeNull();
+    expect(parseEventPayload('rating_recorded', { phase: 'sideways', answers: [] })).toBeNull();
   });
 
   it('parses a good payload of the kind asked for', () => {
-    expect(parseEventPayload('checked_out', { point: null })).toEqual({ point: null });
+    expect(parseEventPayload('checked_out', {})).toEqual({});
   });
 });

@@ -118,5 +118,4 @@ export type SessionProjection = {
   startedAt: string | null;
   endedAt: string | null;
   checkedOutAt: string | null;
-  checkedOutPoint: GeoPoint | null;
 };
