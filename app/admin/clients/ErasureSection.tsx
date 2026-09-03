@@ -261,10 +261,10 @@ export function ErasureSection({
               </div>
               {performed.filesPending > 0 ? (
                 <div className="record-facts__row">
-                  <dt>Files still to remove</dt>
+                  <dt>Files not yet confirmed gone</dt>
                   <dd className="numeric">
-                    {performed.filesPending}. The store did not answer; they are removed when it
-                    does.
+                    {performed.filesPending}. They were removed as this record was erased; the store
+                    is asked again afterwards, and this clears when it answers.
                   </dd>
                 </div>
               ) : null}

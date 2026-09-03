@@ -531,7 +531,14 @@ export const ErasureRequestRecord = z.object({
       documentsKept: z.number().int().nonnegative(),
     })
     .nullable(),
-  /** How many files the store has not yet confirmed gone. Zero once swept. */
+  /**
+   * How many of the erased documents' files nothing has yet confirmed gone.
+   * The request's own after-commit hook removes them, but it runs with no
+   * database and cannot strike them off (docs/SEAMS.md), so this stays at
+   * what the erasure found until the sweep asks the store and clears it
+   * (app/api/clients/erasure-file-sweep.ts). It is "not yet confirmed", never
+   * "still there".
+   */
   filesPending: z.number().int().nonnegative(),
 });
 export type ErasureRequestRecord = z.infer<typeof ErasureRequestRecord>;

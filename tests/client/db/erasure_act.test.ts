@@ -496,6 +496,44 @@ describe('what is left of an erased record', () => {
     }
   });
 
+  it('hands its own erasure record to the same short list, and asks them why', async () => {
+    // The admin who performed it is refused the record and refused this with
+    // it; the lead practitioner is asked why, as everywhere else.
+    const refused = await request(api, ADMIN_AUTH, `/api/clients/${MAIN.client}/erasure-requests`, {
+      headers: { 'x-reason': 'Checking my own work.' },
+    });
+    expect(refused.status).toBe(403);
+
+    const noReason = await request(api, LEAD_AUTH, `/api/clients/${MAIN.client}/erasure-requests`);
+    expect(noReason.status).toBe(400);
+    expect((await noReason.json()).error).toBe('reason_required');
+
+    const read = await request(api, LEAD_AUTH, `/api/clients/${MAIN.client}/erasure-requests`, {
+      headers: { 'x-reason': 'Answering the household about their erasure.' },
+    });
+    expect(read.status).toBe(200);
+    const body = (await read.json()) as {
+      requests: { performedAt: string | null; notifyPhone: string | null; filesPending: number }[];
+    };
+    expect(body.requests).toHaveLength(1);
+    expect(body.requests[0]?.performedAt).toBeTruthy();
+    // The one contact detail that outlives the erasure, and the only way the
+    // confirmation can still be sent (migration 104).
+    expect(body.requests[0]?.notifyPhone).toBe('+971500000042');
+    // One, and the file is already gone: the after-commit hook removed the
+    // bytes and had no database to say so with. The count means "not yet
+    // confirmed", and the sweep is what confirms it.
+    expect(body.requests[0]?.filesPending).toBe(1);
+
+    // Reading it is itself a read, and the trail says so.
+    const listed = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where entity_type = 'erasure_request' " +
+        "and action = 'list' and client_id = $1",
+      [MAIN.client],
+    );
+    expect(Number(listed.rows[0]?.n)).toBeGreaterThan(0);
+  });
+
   it('is in no list, and answers to no search by its own record number', async () => {
     const list = await request(api, ADMIN_AUTH, '/api/clients');
     expect(list.status).toBe(200);
