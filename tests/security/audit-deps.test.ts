@@ -62,6 +62,10 @@ describe('audit:deps reads the report', () => {
     expect(readDocument('No known vulnerabilities found\n')).toBeNull();
     expect(readDocument('{ not json }')).toBeNull();
     expect(readDocument('{"metadata":{}}')).toBeNull();
+    // Counts that are not numbers are not a report: an empty object must not
+    // read as a clean one.
+    expect(readDocument('{"metadata":{"vulnerabilities":{}}}')).toBeNull();
+    expect(readDocument('{"metadata":{"vulnerabilities":{"high":"1","critical":0}}}')).toBeNull();
   });
 });
 

@@ -14,8 +14,9 @@
 // Only an outage is excused; a 4xx from the registry, a missing lockfile, or
 // anything else of our own making is not.
 //
-// AUDIT_DEPS_STRICT=true makes an outage fail too, for the scheduled run
-// (.github/workflows/audit.yml) whose whole purpose is to notice one.
+// AUDIT_DEPS_STRICT=true makes an outage fail too, and a clean exit with no
+// report, for the scheduled run (.github/workflows/audit.yml) whose whole
+// purpose is to notice a week in which nothing was audited.
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -56,12 +57,13 @@ export function readDocument(stdout) {
     return null;
   }
   const counts = parsed?.metadata?.vulnerabilities;
-  if (counts && typeof counts === 'object') {
-    return {
-      kind: 'report',
-      high: Number(counts.high) || 0,
-      critical: Number(counts.critical) || 0,
-    };
+  if (
+    counts &&
+    typeof counts === 'object' &&
+    typeof counts.high === 'number' &&
+    typeof counts.critical === 'number'
+  ) {
+    return { kind: 'report', high: counts.high, critical: counts.critical };
   }
   const error = parsed?.error;
   if (error && typeof error === 'object') {
@@ -105,11 +107,17 @@ function main() {
   const strict = process.env.AUDIT_DEPS_STRICT === 'true';
   switch (verdict) {
     case 'clean':
-      console.log(
-        readDocument(stdout)?.kind === 'report'
-          ? 'audit:deps: no high or critical advisory applies to a production dependency.'
-          : 'audit:deps: pnpm audit exited cleanly without a report.',
-      );
+      if (readDocument(stdout)?.kind === 'report') {
+        console.log('audit:deps: no high or critical advisory applies to a production dependency.');
+        return;
+      }
+      console.log('audit:deps: pnpm audit exited cleanly without a report.');
+      if (strict) {
+        console.error(
+          'audit:deps: AUDIT_DEPS_STRICT is set, and a run that audited nothing fails.',
+        );
+        process.exit(1);
+      }
       return;
     case 'advisory':
       process.stdout.write(stdout);
