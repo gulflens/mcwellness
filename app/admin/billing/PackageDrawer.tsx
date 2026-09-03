@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { isoDateIn } from '@domain/shared/actor';
 import { PackageResponse, type PackageRow } from '../../api/billing/ledger-schema';
-import { PricesResponse, type PriceRow } from '../../api/billing/schema';
+import {
+  isRealText,
+  MINIMUM_REASON,
+  PricesResponse,
+  type PriceRow,
+} from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
+import { focusFirstInvalid } from './refusal';
+import { useDrawer } from './useDrawer';
 import { AED_MAX_FILS, formatFils, isAedAmountTooLarge, parseAedToFils } from './money';
 
 /**
@@ -62,6 +69,7 @@ export function PackageDrawer({
   onCreated: (created: PackageRow) => void;
 }) {
   const { apiFetch } = useAuth();
+  const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const [prices, setPrices] = useState<PricesState>({ kind: 'loading' });
@@ -80,18 +88,7 @@ export function PackageDrawer({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previous?.focus();
-    };
-  }, [onClose]);
+  useDrawer(drawerRef, closeRef, onClose);
 
   useEffect(() => {
     let live = true;
@@ -146,9 +143,24 @@ export function PackageDrawer({
         : 'Enter both prices in AED, such as 10325.00.';
     }
     const trimmedReason = reason.trim();
-    if (trimmedReason.length < 1) errors.reason = 'Say why this is the price.';
+    if (!isRealText(trimmedReason)) {
+      errors.reason = `Say why in at least ${MINIMUM_REASON} characters.`;
+    }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0 || saleFils === null || listFils === null) return;
+    if (Object.keys(errors).length > 0 || saleFils === null || listFils === null) {
+      // In the order the fields sit on screen, so focus moves to the first
+      // thing wrong rather than the first thing checked.
+      focusFirstInvalid(
+        [
+          errors.name ? 'package-name' : null,
+          errors.code ? 'package-code' : null,
+          errors.contents ? 'quantity-first' : null,
+          errors.price ? 'package-sale-price' : null,
+          errors.reason ? 'package-reason' : null,
+        ].filter((id): id is string => id !== null),
+      );
+      return;
+    }
 
     setBusy(true);
     try {
@@ -198,7 +210,13 @@ export function PackageDrawer({
   }
 
   return (
-    <aside className="drawer" role="dialog" aria-labelledby="package-drawer-title">
+    <aside
+      ref={drawerRef}
+      className="drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="package-drawer-title"
+    >
       <header className="drawer__header">
         <div className="drawer__title">
           <h2 id="package-drawer-title">Add package</h2>

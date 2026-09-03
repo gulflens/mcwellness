@@ -192,3 +192,28 @@ create policy exception_resolvers on public.billing_exception
   with check (
     app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('finance')
   );
+
+------------------------------------------------------------------------------
+-- 5. The receipt counter (405_billing_receipt.sql). Moved only through
+--    app.next_receipt_number(), which is security definer, so app_role is
+--    granted nothing on the table at all — not even select, so nobody can
+--    read or set another practice's next number. Row security is enabled all
+--    the same, so a future grant cannot quietly open it.
+------------------------------------------------------------------------------
+do $$
+declare
+  has_api_roles boolean := exists (select 1 from pg_roles where rolname = 'anon')
+                       and exists (select 1 from pg_roles where rolname = 'authenticated');
+begin
+  alter table public.payment_receipt_series enable row level security;
+  revoke all on public.payment_receipt_series from public;
+  if has_api_roles then
+    revoke all on public.payment_receipt_series from anon, authenticated;
+  end if;
+end
+$$;
+
+drop policy if exists tenant_isolation on public.payment_receipt_series;
+create policy tenant_isolation on public.payment_receipt_series for all to app_role
+  using (tenant_id = app.current_tenant_id())
+  with check (tenant_id = app.current_tenant_id());

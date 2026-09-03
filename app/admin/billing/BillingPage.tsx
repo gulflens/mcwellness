@@ -58,9 +58,27 @@ type State =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; response: PricesResponse };
 
+/** The section named in the address bar, or the first one. */
+function sectionFromHash(): SectionKey {
+  const named = window.location.hash.replace(/^#/, '');
+  return SECTIONS.some((entry) => entry.key === named) ? (named as SectionKey) : 'prices';
+}
+
 export function BillingPage() {
   const { apiFetch, session } = useAuth();
-  const [section, setSection] = useState<SectionKey>('prices');
+  // In the address bar, so a reload — or a link sent to a colleague — lands
+  // on the section the person was looking at rather than back on Prices.
+  const [section, setSectionState] = useState<SectionKey>(sectionFromHash);
+  const setSection = useCallback((next: SectionKey) => {
+    setSectionState(next);
+    window.history.replaceState(null, '', `#${next}`);
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setSectionState(sectionFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Names the service and the new price once a save succeeds (the design
@@ -170,12 +188,19 @@ export function BillingPage() {
     <section className="page">
       <PageHeader
         title="Billing"
+        // Always an element, never null: the header's action space is the
+        // same height whether or not it holds a button, so the tabs beneath
+        // stay where they are as the reader moves between sections. They used
+        // to shift by 6px on every change, which is exactly enough to make a
+        // person doubt they clicked the thing they clicked.
         action={
-          section === 'prices' && canWrite ? (
-            <Button variant="secondary" onClick={openDrawer}>
-              Add price
-            </Button>
-          ) : null
+          <span className="header-action">
+            {section === 'prices' && canWrite ? (
+              <Button variant="secondary" onClick={openDrawer}>
+                Add price
+              </Button>
+            ) : null}
+          </span>
         }
       />
 

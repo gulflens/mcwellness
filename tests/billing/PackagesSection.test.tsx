@@ -146,6 +146,30 @@ describe('PackagesSection', () => {
     ).toBeTruthy();
   });
 
+  it('keeps the row\u2019s action in the first column, where a narrow screen can still reach it', async () => {
+    // The action used to sit in a column of its own at the far end of a table
+    // that needed about 1,600px, so at 1024 — and at 1440 — it was off-screen
+    // with no way to scroll a table that had no visible scrollbar. The first
+    // column is the one the shell pins when the table scrolls sideways.
+    mount(OWNER, [SILVER]);
+    const sell = await screen.findByRole('button', { name: 'Sell to a client' });
+    const cell = sell.closest('td');
+    expect(cell).toBeTruthy();
+    expect(cell?.parentElement?.firstElementChild).toBe(cell);
+  });
+
+  it('lets the contents and the price reason take a second line rather than widening the table', async () => {
+    mount(OWNER, [SILVER]);
+    const contents = await screen.findByText(
+      '1 × Consultation, 2 × Brain map (QEEG), 15 × Neurofeedback session',
+    );
+    // `white-space` inherits, so a cell that holds a sentence sets it back.
+    expect(contents.className).toContain('cell-wrap');
+    expect(screen.getByText("Launch pricing, ends on the founder's word.").className).toContain(
+      'cell-wrap',
+    );
+  });
+
   it('opens the sell drawer against the package that was clicked', async () => {
     mount(OWNER, [SILVER]);
     fireEvent.click(await screen.findByRole('button', { name: 'Sell to a client' }));

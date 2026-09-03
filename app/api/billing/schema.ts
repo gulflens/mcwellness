@@ -67,15 +67,44 @@ export const IsoDate = z
     );
   }, 'Dates must be a real calendar date.');
 
+/**
+ * Why something was done, in enough words to be worth reading a year later.
+ *
+ * A reason of one character passed every check while saying nothing: "x",
+ * ".", "aaaaaaaa". These appear on price changes, waivers and extensions —
+ * the three places where somebody gave money away or took a charge back — and
+ * the whole purpose of the field is that a person later can see what
+ * happened. So: at least eight characters after trimming, and not the same
+ * character repeated, which is what a required field collects when nobody
+ * means to fill it in.
+ */
+export const MINIMUM_REASON = 8;
+
+export function isRealText(value: string): boolean {
+  if (value.length < MINIMUM_REASON) {
+    return false;
+  }
+  const withoutSpaces = value.replace(/\s/g, '');
+  if (withoutSpaces.length < MINIMUM_REASON) {
+    return false;
+  }
+  return new Set(withoutSpaces).size > 1;
+}
+
 export const CreatePriceInput = z.object({
   serviceTypeId: z.uuid(),
   unitPriceFils: z.number().int().nonnegative().max(INT4_MAX),
   validFrom: IsoDate,
   /** Why: required on every price, including a service's first. */
+  /**
+   * Why, in enough words to be worth reading a year later. The same rule the
+   * ledger's own reasons carry (app/api/billing/ledger-schema.ts): eight
+   * characters of real text, not one, and not the same character repeated.
+   */
   amendmentReason: z
     .string()
     .transform((value) => cleanText(value, 200))
-    .refine((value) => value.length >= 1, 'A reason is required.'),
+    .refine(isRealText, `A reason is at least ${MINIMUM_REASON} characters, and says something.`),
 });
 export type CreatePriceInput = z.infer<typeof CreatePriceInput>;
 

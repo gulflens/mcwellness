@@ -32,6 +32,8 @@ const NOW = () => new Date('2026-09-02T08:00:00.000Z');
 const KEY_ONE = '00000000-0000-4000-8000-0000000d0001';
 const KEY_TWO = '00000000-0000-4000-8000-0000000d0002';
 const KEY_THREE = '00000000-0000-4000-8000-0000000d0003';
+const KEY_FOUR = '00000000-0000-4000-8000-0000000d0004';
+const KEY_FIVE = '00000000-0000-4000-8000-0000000d0005';
 
 let h: Harness;
 let silverId: string;
@@ -124,6 +126,56 @@ describe('selling the same package twice under one key', () => {
   });
 });
 
+describe('three presses at once, under one key', () => {
+  it('answers all three the same way, and sells once', async () => {
+    // Not a retry after an answer: three requests in flight together. Two of
+    // them find nothing under the key, insert, and collide on the unique
+    // index. Without the recovery both were told the sale had failed — a 500
+    // apiece — while the sale had in fact gone through.
+    const body = {
+      packageId: silverId,
+      clientId: h.clientId(4),
+      purchasedOn: SEED_TODAY,
+    };
+    const answers = await Promise.all(
+      [0, 1, 2].map(() =>
+        h.call('POST', '/api/billing/package-purchases', SEEDED.owner, body, {
+          'idempotency-key': KEY_FOUR,
+        }),
+      ),
+    );
+    expect(answers.map((res) => res.status)).toEqual([201, 201, 201]);
+
+    const bodies = (await Promise.all(answers.map((res) => res.json()))) as SellPackageResponse[];
+    expect(new Set(bodies.map((b) => b.purchase.id)).size).toBe(1);
+    expect(new Set(bodies.map((b) => b.invoiceReference)).size).toBe(1);
+    expect(await rowCount('package_purchase', 4)).toBe(1);
+    expect(await rowCount('invoice', 4)).toBe(1);
+    expect(await rowCount('entitlement', 4)).toBe(18);
+  });
+
+  it('records one payment for three presses, and says so three times', async () => {
+    const body = {
+      clientId: h.clientId(5),
+      method: 'cash' as const,
+      amountFils: 50_000,
+    };
+    const answers = await Promise.all(
+      [0, 1, 2].map(() =>
+        h.call('POST', '/api/billing/payments', SEEDED.owner, body, {
+          'idempotency-key': KEY_FIVE,
+        }),
+      ),
+    );
+    expect(answers.map((res) => res.status)).toEqual([201, 201, 201]);
+
+    const bodies = (await Promise.all(answers.map((res) => res.json()))) as RecordPaymentResponse[];
+    expect(new Set(bodies.map((b) => b.payment.id)).size).toBe(1);
+    expect(bodies.every((b) => b.payment.amountFils === 50_000)).toBe(true);
+    expect(await rowCount('payment', 5)).toBe(1);
+  });
+});
+
 describe('recording the same payment twice under one key', () => {
   it('records it once and answers the same thing both times', async () => {
     const body = {
@@ -146,6 +198,49 @@ describe('recording the same payment twice under one key', () => {
 
     expect(two.payment.id).toBe(one.payment.id);
     expect(await rowCount('payment', 2)).toBe(1);
+  });
+
+  it('gives the payment a receipt number a coordinator can quote', async () => {
+    // "Recorded" is not something a family can be told. When they ring
+    // tomorrow to ask what was received, this is what the coordinator reads
+    // out — and it is its own sequence, not the invoice book's, because a
+    // payment settles a tax invoice and is not one (405_billing_receipt.sql).
+    const res = await h.call('POST', '/api/billing/payments', SEEDED.owner, {
+      clientId: h.clientId(6),
+      method: 'transfer' as const,
+      amountFils: 25_000,
+      reference: 'FT26090299',
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as RecordPaymentResponse;
+    expect(body.payment.receiptReference).toMatch(/^RCP-\d{6}$/);
+
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(distinct receipt_reference)::text as n from payment where receipt_number is not null',
+    );
+    const total = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from payment where receipt_number is not null',
+    );
+    // One number each, and no two the same.
+    expect(rows[0]?.n).toBe(total.rows[0]?.n);
+  });
+
+  it('refuses a reason that says nothing, wherever a reason is asked for', async () => {
+    const res = await h.call('POST', `/api/billing/packages/${silverId}/price`, SEEDED.owner, {
+      amountFils: 900_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'x',
+    });
+    expect(res.status).toBe(400);
+
+    const repeated = await h.call('POST', `/api/billing/packages/${silverId}/price`, SEEDED.owner, {
+      amountFils: 900_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'xxxxxxxxxx',
+    });
+    // Eight characters of one letter is a required field being filled in, not
+    // answered.
+    expect(repeated.status).toBe(400);
   });
 
   it('refuses a reference that is a sentence rather than a bank reference', async () => {

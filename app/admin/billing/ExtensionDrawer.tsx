@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { ExtendPurchaseResponse, type PurchaseRow } from '../../api/billing/ledger-schema';
+import { isRealText, MINIMUM_REASON } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
+import { focusFirstInvalid } from './refusal';
+import { useDrawer } from './useDrawer';
 import { formatDate } from './BillingPage';
 
 /**
@@ -39,6 +42,7 @@ export function ExtensionDrawer({
   onExtended: (summary: string) => void;
 }) {
   const { apiFetch } = useAuth();
+  const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const runsTo = purchase.extendedTo ?? purchase.expiresOn;
@@ -49,18 +53,7 @@ export function ExtensionDrawer({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previous?.focus();
-    };
-  }, [onClose]);
+  useDrawer(drawerRef, closeRef, onClose);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -75,13 +68,22 @@ export function ExtensionDrawer({
     } else {
       setDateError(undefined);
     }
-    if (reason.trim().length < 1) {
-      setReasonError('Say why this programme is being extended.');
+    if (!isRealText(reason.trim())) {
+      setReasonError(
+        `Say why this programme is being extended, in at least ${MINIMUM_REASON} characters.`,
+      );
       refused = true;
     } else {
       setReasonError(undefined);
     }
-    if (refused) return;
+    if (refused) {
+      focusFirstInvalid([
+        dateError !== undefined || !/^\d{4}-\d{2}-\d{2}$/.test(extendedTo) || extendedTo <= runsTo
+          ? 'extension-date'
+          : 'extension-reason',
+      ]);
+      return;
+    }
 
     setBusy(true);
     try {
@@ -120,7 +122,13 @@ export function ExtensionDrawer({
   }
 
   return (
-    <aside className="drawer" role="dialog" aria-labelledby="extension-drawer-title">
+    <aside
+      ref={drawerRef}
+      className="drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="extension-drawer-title"
+    >
       <header className="drawer__header">
         <div className="drawer__title">
           <h2 id="extension-drawer-title">Give them longer</h2>

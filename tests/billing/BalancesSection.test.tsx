@@ -125,6 +125,7 @@ function mount(body: Record<string, unknown>, canWrite = true) {
             receivedAt: '2026-09-02T08:00:00.000Z',
             reference: null,
             invoiceId: null,
+            receiptReference: 'RCP-000004',
           },
         },
         201,
@@ -159,7 +160,9 @@ describe('giving a family longer', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Give them longer' }));
     fireEvent.click(screen.getByRole('button', { name: 'Extend it' }));
     expect(await screen.findByText('Choose the date it should run to.')).toBeTruthy();
-    expect(screen.getByText('Say why this programme is being extended.')).toBeTruthy();
+    expect(
+      screen.getByText('Say why this programme is being extended, in at least 8 characters.'),
+    ).toBeTruthy();
   });
 
   it('refuses a date that gives the family less time than they have', async () => {
@@ -167,7 +170,7 @@ describe('giving a family longer', () => {
     await findClient();
     fireEvent.click(await screen.findByRole('button', { name: 'Give them longer' }));
     fireEvent.change(screen.getByLabelText('Runs to'), { target: { value: '2027-01-01' } });
-    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'A hospital stay.' } });
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'A long hospital stay.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Extend it' }));
     expect(await screen.findByText(/Choose a date after 2 Sept 2027/)).toBeTruthy();
   });
@@ -237,6 +240,49 @@ describe('BalancesSection', () => {
     expect(screen.getByText('Forfeited')).toBeTruthy();
   });
 
+  it('marks a sixty-day warning as something to notice, not as another loading line', async () => {
+    mount(balance({ expiryWarning: 'sixty_days' }));
+    await findClient();
+    const note = await screen.findByText(/under two months away/);
+    // The tone is the assertion: rendered muted this read exactly like
+    // "Loading the balance", which is the one thing an expiry must not do.
+    expect(note.className).toContain('note--attention');
+    expect(note.getAttribute('role')).toBe('status');
+  });
+
+  it('marks a thirty-day warning the same way', async () => {
+    mount(balance({ expiryWarning: 'thirty_days' }));
+    await findClient();
+    const note = await screen.findByText(/under a month away/);
+    expect(note.className).toContain('note--attention');
+    expect(note.getAttribute('role')).toBe('status');
+  });
+
+  it('says a programme has run out, and says it as something wrong now', async () => {
+    mount(balance({ expiryWarning: 'expired' }));
+    await findClient();
+    const note = await screen.findByText('Ran out on 2 Sept 2027.');
+    expect(note.className).toContain('note--critical');
+    expect(note.getAttribute('role')).toBe('alert');
+  });
+
+  it('counts a mixed holding in credits, and says what they are', async () => {
+    // Thirteen credits is twelve sessions and a brain map. Calling the total
+    // "sessions" was wrong on the one screen where a family's own count is
+    // the thing being read.
+    mount(balance());
+    await findClient();
+    expect(await screen.findByText('Credits left')).toBeTruthy();
+    expect(screen.getByText('12 × Neurofeedback session, 1 × Brain map (QEEG)')).toBeTruthy();
+  });
+
+  it('says which figures carry VAT and which do not', async () => {
+    mount(balance());
+    await findClient();
+    expect(await screen.findByText('Charged, with VAT (AED)')).toBeTruthy();
+    expect(screen.getByText('Value left, before VAT (AED)')).toBeTruthy();
+  });
+
   it('says in words how long the credits have left, at sixty days', async () => {
     mount(balance({ nextExpiryOn: '2026-10-20', expiryWarning: 'sixty_days' }));
     await findClient();
@@ -275,7 +321,9 @@ describe('BalancesSection', () => {
     await findClient();
     fireEvent.click(await screen.findByRole('button', { name: 'Record a payment' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Record the payment' }));
-    expect(await screen.findByText('AED 735.00 recorded from Hazel Harbour.')).toBeTruthy();
+    expect(
+      await screen.findByText('AED 735.00 recorded from Hazel Harbour, receipt RCP-000004.'),
+    ).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

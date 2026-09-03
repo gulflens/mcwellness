@@ -37,14 +37,49 @@ const INSERT_SQL =
   'insert into payment (tenant_id, client_id, method, amount_fils, received_at, reference, ' +
   'invoice_id, idempotency_key, created_by) ' +
   'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, app.current_actor_id()) ' +
-  'returning id, received_at';
+  'returning id, client_id, method, amount_fils, received_at, reference, invoice_id, ' +
+  'receipt_reference';
 
 const REPLAY_SQL =
-  'select id, client_id, method, amount_fils, received_at, reference, invoice_id ' +
-  'from payment where tenant_id = app.current_tenant_id() and idempotency_key = $1';
+  'select id, client_id, method, amount_fils, received_at, reference, invoice_id, ' +
+  'receipt_reference from payment where tenant_id = app.current_tenant_id() ' +
+  'and idempotency_key = $1';
 
 /** The practice opened in 2024; a payment before that is a mistyped year. */
 const EARLIEST_RECEIVED_AT = Date.UTC(2024, 0, 1);
+
+/** Postgres: unique_violation. Here, always the idempotency key. */
+function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+  );
+}
+
+type PaymentDbRow = {
+  id: string;
+  client_id: string;
+  method: 'cash' | 'transfer' | 'link';
+  amount_fils: number;
+  received_at: string;
+  reference: string | null;
+  invoice_id: string | null;
+  receipt_reference: string | null;
+};
+
+function asResponse(row: PaymentDbRow): RecordPaymentResponse {
+  return RecordPaymentResponse.parse({
+    payment: {
+      id: row.id,
+      clientId: row.client_id,
+      method: row.method,
+      amountFils: row.amount_fils,
+      receivedAt: new Date(row.received_at).toISOString(),
+      reference: row.reference,
+      invoiceId: row.invoice_id,
+      receiptReference: row.receipt_reference,
+    },
+  });
+}
 
 export function mountPayments(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.post('/api/billing/payments', async (c) => {
@@ -71,31 +106,10 @@ export function mountPayments(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const db = c.get('db');
 
     if (idempotencyKey !== null) {
-      const seen = await db.query<{
-        id: string;
-        client_id: string;
-        method: 'cash' | 'transfer' | 'link';
-        amount_fils: number;
-        received_at: string;
-        reference: string | null;
-        invoice_id: string | null;
-      }>(REPLAY_SQL, [idempotencyKey]);
+      const seen = await db.query<PaymentDbRow>(REPLAY_SQL, [idempotencyKey]);
       const already = seen.rows[0];
       if (already) {
-        return c.json(
-          RecordPaymentResponse.parse({
-            payment: {
-              id: already.id,
-              clientId: already.client_id,
-              method: already.method,
-              amountFils: already.amount_fils,
-              receivedAt: new Date(already.received_at).toISOString(),
-              reference: already.reference,
-              invoiceId: already.invoice_id,
-            },
-          }),
-          201,
-        );
+        return c.json(asResponse(already), 201);
       }
     }
 
@@ -127,33 +141,44 @@ export function mountPayments(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: 'received_too_old', requestId }, 400);
     }
 
-    const inserted = await db.query<{ id: string; received_at: string }>(INSERT_SQL, [
-      input.clientId,
-      input.method,
-      input.amountFils,
-      receivedAt,
-      input.reference ?? null,
-      input.invoiceId ?? null,
-      idempotencyKey,
-    ]);
+    // Two presses at the same moment both read no payment for the key and
+    // both go on to insert one. The second blocks on the unique index until
+    // the first commits, then fails on it — a 500 telling a coordinator that
+    // money they had in fact recorded had not been. The savepoint is what
+    // lets this route recover: a failed statement poisons the transaction
+    // otherwise, and the transaction belongs to the middleware, not here.
+    if (idempotencyKey !== null) {
+      await db.query('savepoint payment_attempt');
+    }
+    let inserted;
+    try {
+      inserted = await db.query<PaymentDbRow>(INSERT_SQL, [
+        input.clientId,
+        input.method,
+        input.amountFils,
+        receivedAt,
+        input.reference ?? null,
+        input.invoiceId ?? null,
+        idempotencyKey,
+      ]);
+    } catch (error) {
+      if (idempotencyKey === null || !isDuplicateKey(error)) {
+        throw error;
+      }
+      await db.query('rollback to savepoint payment_attempt');
+      const replay = await db.query<PaymentDbRow>(REPLAY_SQL, [idempotencyKey]);
+      const already = replay.rows[0];
+      if (!already) {
+        throw error;
+      }
+      return c.json(asResponse(already), 201);
+    }
+
     const row = inserted.rows[0];
     if (!row) {
       throw new Error('Insert of a payment did not return an id.');
     }
 
-    return c.json(
-      RecordPaymentResponse.parse({
-        payment: {
-          id: row.id,
-          clientId: input.clientId,
-          method: input.method,
-          amountFils: input.amountFils,
-          receivedAt: new Date(row.received_at).toISOString(),
-          reference: input.reference ?? null,
-          invoiceId: input.invoiceId ?? null,
-        },
-      }),
-      201,
-    );
+    return c.json(asResponse(row), 201);
   });
 }

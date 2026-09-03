@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { PackagesResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
@@ -27,6 +27,19 @@ function contentsOf(row: PackageRow): string {
   return row.components
     .map((component) => `${component.quantity} × ${component.serviceTypeName}`)
     .join(', ');
+}
+
+/**
+ * Text in a table cell that is allowed to take a second line.
+ *
+ * The shell's `.ledger td` is `nowrap`, which is right for a figure and wrong
+ * for a sentence: the contents of a programme and the reason behind its price
+ * are both sentences, and holding them on one line pushed this table past
+ * 1,600px — so at 1024 and even at 1440 the action at the end of the row was
+ * off-screen entirely. White space inherits, so a block child sets it back.
+ */
+function Wrapped({ children }: { children: ReactNode }) {
+  return <span className="cell-wrap">{children}</span>;
 }
 
 export function PackagesSection({ canWrite }: { canWrite: boolean }) {
@@ -58,6 +71,10 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
       {
         key: 'name',
         header: 'Package',
+        // The row's own action lives here, in the first column, rather than
+        // in one of its own at the far end: the first column is the one the
+        // shell pins when the table scrolls sideways, so "Sell to a client"
+        // is reachable at every width instead of only on a wide screen.
         render: (row) => (
           <span className="name">
             <span>{row.name}</span>
@@ -66,10 +83,32 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
                 {row.nameAr}
               </span>
             ) : null}
+            {canWrite ? (
+              row.sellable ? (
+                <button
+                  type="button"
+                  className="button button--quiet cell-action"
+                  onClick={() => {
+                    setNote(null);
+                    setSelling(row);
+                  }}
+                >
+                  Sell to a client
+                </button>
+              ) : (
+                <span className="small muted cell-action">
+                  {row.status === 'inactive' ? 'Withdrawn' : 'Needs a price for every service'}
+                </span>
+              )
+            ) : null}
           </span>
         ),
       },
-      { key: 'contents', header: 'Contents', render: (row) => contentsOf(row) },
+      {
+        key: 'contents',
+        header: 'Contents',
+        render: (row) => <Wrapped>{contentsOf(row)}</Wrapped>,
+      },
       {
         key: 'list',
         header: 'List (AED)',
@@ -90,7 +129,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           row.currentPrice ? (
             <span className="name">
               <span className="numeric">{formatFils(row.currentPrice.amountFils)}</span>
-              <span className="small muted">{row.currentPrice.amendmentReason}</span>
+              <span className="small muted cell-wrap">{row.currentPrice.amendmentReason}</span>
             </span>
           ) : (
             'Not on sale'
@@ -123,33 +162,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         render: (row) => (row.currentPrice ? formatDate(row.currentPrice.validFrom) : '—'),
       },
     ];
-    if (!canWrite) {
-      return base;
-    }
-    return [
-      ...base,
-      {
-        key: 'sell',
-        header: 'Sell',
-        render: (row) =>
-          row.sellable ? (
-            <button
-              type="button"
-              className="button button--quiet"
-              onClick={() => {
-                setNote(null);
-                setSelling(row);
-              }}
-            >
-              Sell to a client
-            </button>
-          ) : (
-            <span className="small muted">
-              {row.status === 'inactive' ? 'Withdrawn' : 'Needs a price for every service'}
-            </span>
-          ),
-      },
-    ];
+    return base;
   }, [canWrite]);
 
   const drifted =

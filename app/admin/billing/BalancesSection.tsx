@@ -7,6 +7,7 @@ import {
 import type { ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
+import { BillingNote } from './BillingNote';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate } from './BillingPage';
 import { ClientPicker } from './ClientPicker';
@@ -28,10 +29,24 @@ import { PaymentDrawer } from './PaymentDrawer';
  * complaint, not an accounting event.
  */
 
-const WARNINGS: Record<string, (on: string) => string> = {
-  sixty_days: (on) => `Runs out on ${formatDate(on)}, under two months away.`,
-  thirty_days: (on) => `Runs out on ${formatDate(on)}, under a month away.`,
-  expired: (on) => `Ran out on ${formatDate(on)}.`,
+/**
+ * What to say about an expiry, and how loudly.
+ *
+ * Rendered in the default tone these read like "Loading the balance" — the
+ * same grey, the same weight, on a screen where every other line is a state
+ * nobody has to act on. Sixty and thirty days want noticing without being
+ * wrong yet; a programme that has already run out is wrong now.
+ */
+const WARNINGS: Record<string, { tone: 'attention' | 'critical'; say: (on: string) => string }> = {
+  sixty_days: {
+    tone: 'attention',
+    say: (on) => `Runs out on ${formatDate(on)}, under two months away.`,
+  },
+  thirty_days: {
+    tone: 'attention',
+    say: (on) => `Runs out on ${formatDate(on)}, under a month away.`,
+  },
+  expired: { tone: 'critical', say: (on) => `Ran out on ${formatDate(on)}.` },
 };
 
 /**
@@ -127,7 +142,7 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
       },
       {
         key: 'value',
-        header: 'Value left (AED)',
+        header: 'Value left, before VAT (AED)',
         numeric: true,
         align: 'end',
         render: (row) => formatFils(row.remainingValueNetFils),
@@ -143,9 +158,17 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
   );
 
   const balance = showing === 'ready' && state.kind === 'ready' ? state.balance : null;
+  // "13 sessions, 1 brain map": what the mixed total above is made of.
+  const remainingBreakdown = balance
+    ? balance.services
+        .filter((service) => service.remaining > 0)
+        .map((service) => `${service.remaining} × ${service.serviceTypeName}`)
+        .join(', ')
+    : '';
+  const warningFor = balance ? WARNINGS[balance.expiryWarning] : undefined;
   const warning =
-    balance && balance.nextExpiryOn && WARNINGS[balance.expiryWarning]
-      ? WARNINGS[balance.expiryWarning]?.(balance.nextExpiryOn)
+    balance && balance.nextExpiryOn && warningFor
+      ? { tone: warningFor.tone, text: warningFor.say(balance.nextExpiryOn) }
       : null;
 
   return (
@@ -169,11 +192,16 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
         <>
           <dl className="figures">
             <div className="figures__item">
-              <dt>Sessions left</dt>
+              {/* A programme holds sessions, brain maps and a consultation,
+                  so the total across them is credits — the ledger's word for
+                  a mixed count. The line beneath says what they actually are,
+                  in the words a family uses. */}
+              <dt>Credits left</dt>
               <dd className="numeric">{balance.remaining}</dd>
+              {remainingBreakdown ? <dd className="small muted">{remainingBreakdown}</dd> : null}
             </div>
             <div className="figures__item">
-              <dt>Charged (AED)</dt>
+              <dt>Charged, with VAT (AED)</dt>
               <dd className="numeric">{formatFils(balance.chargedFils)}</dd>
             </div>
             <div className="figures__item">
@@ -186,7 +214,7 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
             </div>
           </dl>
 
-          {warning ? <Note>{warning}</Note> : null}
+          {warning ? <BillingNote tone={warning.tone}>{warning.text}</BillingNote> : null}
 
           {canWrite ? (
             <div className="section__actions">

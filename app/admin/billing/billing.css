@@ -224,3 +224,58 @@
 .purchases__item:last-child {
   border-block-end: 0;
 }
+
+/*
+  A table cell that holds a sentence rather than a figure.
+
+  The shell's `.ledger td` is `nowrap`, which is correct for money and wrong
+  for prose: holding a programme's contents and the reason behind its price on
+  one line each pushed the packages table past 1,600px, so at 1024 — and even
+  at 1440 — the row's own action sat off the right-hand edge where nobody
+  could reach it. White space inherits, so the cell keeps its default and the
+  text inside it takes a second line.
+*/
+.cell-wrap {
+  display: block;
+  white-space: normal;
+  max-inline-size: 22rem;
+}
+
+/*
+  The row's action, beneath the name it acts on. It sits in the first column
+  on purpose: that is the column the shell pins when the table scrolls
+  sideways, so the action is reachable at every width.
+*/
+.cell-action {
+  margin-block-start: var(--s-1);
+}
+
+/* The breakdown beneath a mixed total: eighteen credits is fifteen sessions,
+   two brain maps and a consultation, and the second sentence is the one a
+   family would recognise. */
+.price-preview__row--contents {
+  justify-content: flex-start;
+  padding-block-start: 0;
+}
+
+/*
+  REMOVE ON REBASE. The trunk's pull request 44 adds this same rule to
+  app/shell/shell.css beside .note--critical; this is the identical
+  declaration, here only so an expiry warning is not the colour of "Loading"
+  in the days before that merges. Delete this block, and
+  app/admin/billing/BillingNote.tsx with it.
+*/
+.note--attention {
+  color: var(--attention);
+}
+
+/*
+  The header's action space, held open whether or not there is a button in it.
+  Without this the section tabs moved 6px every time the reader changed
+  section, because the header lost its only child and collapsed.
+*/
+.header-action {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--row);
+}

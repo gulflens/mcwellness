@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { isoDateIn } from '@domain/shared/actor';
 import {
   PAYMENT_METHODS,
@@ -12,6 +12,7 @@ import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { ClientPicker } from './ClientPicker';
 import { useAttemptKey } from './attempt';
+import { useDrawer } from './useDrawer';
 import { formatFils } from './money';
 
 /**
@@ -50,6 +51,7 @@ export function SellPackageDrawer({
   onSold: (summary: string) => void;
 }) {
   const { apiFetch } = useAuth();
+  const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const [client, setClient] = useState<ClientRow | null>(null);
@@ -68,21 +70,21 @@ export function SellPackageDrawer({
    */
   const keyFor = useAttemptKey();
 
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previous?.focus();
-    };
-  }, [onClose]);
+  useDrawer(drawerRef, closeRef, onClose);
 
   const price = bundle.currentPrice;
   const credits = bundle.components.reduce((total, component) => total + component.quantity, 0);
+  /**
+   * "15 sessions, 2 brain maps, 1 consultation".
+   *
+   * The total on its own said "18 sessions", which is not what a family is
+   * buying: eighteen credits, fifteen of which are sessions. A credit is the
+   * ledger's word and belongs to the mixed total; a session is the family's
+   * word and belongs to the sessions.
+   */
+  const contents = bundle.components
+    .map((component) => `${component.quantity} × ${component.serviceTypeName}`)
+    .join(', ');
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -156,7 +158,13 @@ export function SellPackageDrawer({
   }
 
   return (
-    <aside className="drawer" role="dialog" aria-labelledby="sell-drawer-title">
+    <aside
+      ref={drawerRef}
+      className="drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sell-drawer-title"
+    >
       <header className="drawer__header">
         <div className="drawer__title">
           <h2 id="sell-drawer-title">Sell {bundle.name}</h2>
@@ -194,8 +202,11 @@ export function SellPackageDrawer({
 
           <div className="price-preview">
             <div className="price-preview__row">
-              <span className="small muted">Sessions</span>
+              <span className="small muted">Credits</span>
               <span className="numeric">{credits}</span>
+            </div>
+            <div className="price-preview__row price-preview__row--contents">
+              <span className="small muted">{contents}</span>
             </div>
             <div className="price-preview__row">
               <span className="small muted">Price</span>

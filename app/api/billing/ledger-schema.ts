@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { cleanText } from '../_middleware/text';
-import { IsoDate } from './schema';
+import { IsoDate, isRealText, MINIMUM_REASON } from './schema';
 
 /**
  * The shapes the packages, sales, payments, balance, invoice and refund
@@ -21,7 +21,7 @@ const Fils = z.number().int().nonnegative().max(INT4_MAX);
 const Reason = z
   .string()
   .transform((value) => cleanText(value, 200))
-  .refine((value) => value.length >= 1, 'A reason is required.');
+  .refine(isRealText, `A reason is at least ${MINIMUM_REASON} characters, and says something.`);
 
 /**
  * A bank transfer reference or a payment link's own id, and nothing else.
@@ -209,6 +209,13 @@ export const PaymentRow = z.object({
   receivedAt: z.string(),
   reference: z.string().nullable(),
   invoiceId: z.uuid().nullable(),
+  /**
+   * "RCP-000004" — the number a coordinator can quote when a family rings to
+   * ask what was received (405_billing_receipt.sql). Its own sequence, not
+   * the invoice book's: a payment settles a tax invoice, it is not one.
+   * Null only on a payment recorded before that migration.
+   */
+  receiptReference: z.string().nullable(),
 });
 export type PaymentRow = z.infer<typeof PaymentRow>;
 

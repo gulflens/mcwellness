@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import {
   PAYMENT_METHODS,
   RecordPaymentResponse,
@@ -9,6 +9,8 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { useAttemptKey } from './attempt';
+import { focusFirstInvalid } from './refusal';
+import { useDrawer } from './useDrawer';
 import { AED_MAX_FILS, formatFils, isAedAmountTooLarge, parseAedToFils } from './money';
 
 /**
@@ -45,6 +47,7 @@ export function PaymentDrawer({
   onRecorded: (summary: string) => void;
 }) {
   const { apiFetch } = useAuth();
+  const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // Offered as this file's own formatter writes it, grouping and all: the
@@ -67,18 +70,7 @@ export function PaymentDrawer({
    */
   const keyFor = useAttemptKey();
 
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previous?.focus();
-    };
-  }, [onClose]);
+  useDrawer(drawerRef, closeRef, onClose);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -90,6 +82,7 @@ export function PaymentDrawer({
           ? `Enter an amount of AED ${formatFils(AED_MAX_FILS)} or less.`
           : 'Enter the amount in AED, such as 1084.13.',
       );
+      focusFirstInvalid(['payment-amount']);
       return;
     }
     setAmountError(undefined);
@@ -100,6 +93,7 @@ export function PaymentDrawer({
     const trimmedReference = reference.trim();
     if (trimmedReference && !/^[A-Za-z0-9][A-Za-z0-9 /.:#-]{0,39}$/.test(trimmedReference)) {
       setReferenceError('A reference is letters, digits, spaces and - / . : # only.');
+      focusFirstInvalid(['payment-reference']);
       return;
     }
     setReferenceError(undefined);
@@ -122,9 +116,14 @@ export function PaymentDrawer({
       });
       if (res.status === 201) {
         const body = RecordPaymentResponse.parse(await res.json());
+        // The receipt number, because "recorded" is not something a family can
+        // be told. When they ring tomorrow to ask what was received against
+        // what, this is the thing the coordinator reads out.
         onRecorded(
           `AED ${formatFils(body.payment.amountFils)} recorded from ${client.givenName} ` +
-            `${client.familyName}.`,
+            `${client.familyName}` +
+            (body.payment.receiptReference ? `, receipt ${body.payment.receiptReference}` : '') +
+            '.',
         );
         return;
       }
@@ -145,7 +144,13 @@ export function PaymentDrawer({
   }
 
   return (
-    <aside className="drawer" role="dialog" aria-labelledby="payment-drawer-title">
+    <aside
+      ref={drawerRef}
+      className="drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="payment-drawer-title"
+    >
       <header className="drawer__header">
         <div className="drawer__title">
           <h2 id="payment-drawer-title">Record a payment</h2>

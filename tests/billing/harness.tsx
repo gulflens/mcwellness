@@ -57,10 +57,10 @@ export function mountWith(me: unknown, element: ReactElement, routes: Route) {
     }
     throw new Error(`Unexpected fetch: ${url}`);
   }) as unknown as typeof fetch;
-  render(
+  const { unmount } = render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
       {element}
     </AuthProviderBoundary>,
   );
-  return { fetchImpl, requests };
+  return { fetchImpl, requests, unmount };
 }

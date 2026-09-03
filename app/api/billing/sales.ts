@@ -68,6 +68,13 @@ const INSERT_PURCHASE_SQL =
 /** The practice opened in 2024; a sale before that is a mistyped year. */
 const EARLIEST_SALE_ON = '2024-01-01';
 
+/** Postgres: unique_violation. Here, always the idempotency key. */
+function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+  );
+}
+
 const REPLAY_SQL =
   'select p.id, p.client_id, p.package_id, p.package_name, p.package_name_ar, p.purchased_on, ' +
   'p.net_fils, p.vat_fils, p.list_price_fils, p.expires_on, p.extended_to, p.extension_reason, ' +
@@ -257,24 +264,50 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
 
     const expiresOn = expiryOn(input.purchasedOn, bundle.expiryMonths);
 
-    const purchase = await db.query<{
-      id: string;
-      expires_on: string;
-      status: PurchaseRow['status'];
-    }>(INSERT_PURCHASE_SQL, [
-      input.clientId,
-      bundle.id,
-      bundle.name,
-      bundle.nameAr,
-      input.purchasedOn,
-      price.amountFils,
-      vat.vatFils,
-      price.vatRateBasisPoints,
-      version,
-      bundle.listPriceFils,
-      expiresOn,
-      idempotencyKey,
-    ]);
+    // Two presses at the same moment both read no purchase for the key, and
+    // both go on to insert one. The second blocks on the unique index until
+    // the first commits and then fails on it — which, without this, surfaced
+    // as a 500 telling a coordinator that a sale which had in fact gone
+    // through had failed. The savepoint is what makes the recovery possible:
+    // a failed statement poisons the whole transaction otherwise, and this
+    // request's transaction belongs to the middleware, not to this route.
+    if (idempotencyKey !== null) {
+      await db.query('savepoint sale_attempt');
+    }
+    let purchase;
+    try {
+      purchase = await db.query<{
+        id: string;
+        expires_on: string;
+        status: PurchaseRow['status'];
+      }>(INSERT_PURCHASE_SQL, [
+        input.clientId,
+        bundle.id,
+        bundle.name,
+        bundle.nameAr,
+        input.purchasedOn,
+        price.amountFils,
+        vat.vatFils,
+        price.vatRateBasisPoints,
+        version,
+        bundle.listPriceFils,
+        expiresOn,
+        idempotencyKey,
+      ]);
+    } catch (error) {
+      if (idempotencyKey === null || !isDuplicateKey(error)) {
+        throw error;
+      }
+      await db.query('rollback to savepoint sale_attempt');
+      // The transaction that won has committed by now — it held the index
+      // entry this one waited on — so its rows are readable here.
+      const replay = await replaySale(db, idempotencyKey);
+      if (!replay) {
+        throw error;
+      }
+      return c.json(replay, 201);
+    }
+
     const purchaseId = purchase.rows[0]?.id;
     if (!purchaseId) {
       throw new Error('Insert of a package purchase did not return an id.');

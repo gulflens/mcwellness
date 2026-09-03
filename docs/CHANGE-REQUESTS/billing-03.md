@@ -19,6 +19,7 @@ screens need in order to show a figure this pull request now computes.
 | 4 | `app/therapist/**` (scheduling) | "Session 3 of 15" and what is owed, on the stop card | nothing |
 | 5 | `app/api/appointments/**` (scheduling) | Call the notice-period rule when a visit is called off | the late-cancellation charge never fires until it lands |
 | 6 | `app/admin/clients/**` (client-record) | Clear a payment reference when a client is erased | nothing; a gap in the erasure until it lands |
+| 7 | `app/shell/components/**` | A drawer primitive that holds focus, if the shell ever grows one | nothing |
 
 > **Items 1 and 2 are in flight.** The trunk's pull request 43
 > (`shared-zone-round-15`) carries both, with the floors this file asked for
@@ -628,7 +629,26 @@ trigger charges it.
 
 ---
 
-## 7. Not a request: what the dashboard will need, and why it is not here
+## 7. A drawer primitive that holds focus (shell)
+
+**What.** If `app/shell/components/` ever grows a drawer, it should carry the
+three things a dialog needs and none of billing's five drawers had until this
+round: `aria-modal`, `inert` on everything behind it, and a tab cycle inside.
+
+**Why.** A drawer that does not hold focus is a drawer a keyboard cannot use.
+Shift+Tab from the close button landed on the page behind, where the rows were
+still reachable and still read aloud — so the person was editing one thing and
+hearing another. Billing has written this once, in
+`app/admin/billing/useDrawer.ts`, and every one of its drawers uses it; the
+shell is welcome to take that file wholesale if it wants the primitive, in
+which case billing deletes its copy and imports.
+
+Nothing is blocked. This is a note that five drawers in one stream solved a
+problem every stream will meet, and where the solution is.
+
+---
+
+## 8. Not a request: what the dashboard will need, and why it is not here
 
 `docs/SPEC/billing.md` section 4.1 asks for three figures side by side — cash
 collected, revenue recognised, and the deferred revenue balance, the
