@@ -383,6 +383,18 @@ describe('a visit called off inside the notice period', () => {
     expect(rows[1]?.allocated_net_fils).toBe(rows[0]?.allocated_net_fils);
   });
 
+  it('says why in the audit trail, not only in the column', async () => {
+    // A waiver is a decision somebody made about money, and the trail is
+    // where a decision lives (docs/SPEC/audit.md section 5). The route stamps
+    // the reason itself rather than trusting a header the browser may not
+    // have sent.
+    const { rows } = await h.owner.query<{ reason: string | null }>(
+      "select reason from audit_log where entity_type = 'entitlement' and action = 'update' " +
+        'order by occurred_at desc limit 1',
+    );
+    expect(rows[0]?.reason).toBe('The family had an emergency; the practice let it go.');
+  });
+
   it('puts the family back where they were', async () => {
     const res = await h.call('GET', `/api/billing/clients/${h.clientId(0)}/balance`, SEEDED.owner);
     const body = (await res.json()) as BalanceResponse;
