@@ -39,6 +39,13 @@ export const ScheduleIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const TodayIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="10" cy="10" r="7.25" />
+    <path d="M10 5.75V10l2.75 1.75" />
+  </Icon>
+);
+
 export const SessionsIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M2.5 10h3l2-5 3 10 2.5-7 1.5 2h3" />

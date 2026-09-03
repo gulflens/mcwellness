@@ -23,3 +23,13 @@ export function canOpenBilling(actor: Actor, now: Date): boolean {
 export function canOpenSchedule(actor: Actor, now: Date): boolean {
   return canActor(actor, { type: 'appointment.list', scope: 'practice' }, {}, now);
 }
+
+/**
+ * Matches the `/today/check-in` gate in App.tsx: who may cross to the
+ * practitioner's side. An owner who also treats holds `lead_practitioner`
+ * alongside owner, so the console offers them "Today"; an admin-only or
+ * finance account never sees it.
+ */
+export function canOpenToday(actor: Pick<Actor, 'roles'>): boolean {
+  return actor.roles.includes('practitioner') || actor.roles.includes('lead_practitioner');
+}
