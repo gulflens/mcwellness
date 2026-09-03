@@ -219,6 +219,23 @@ to a fresh local database; the audit chain verifies over 638 rows; the
 owner's demo rows intact. The file store still runs as the local stopgap
 until the operator's three steps above are done.
 
+## What was done on 2026-09-03, fourth pass: the practice's identity
+
+After pull request 49, migration 905 was applied to staging through
+Supabase's migration tool with its bookkeeping row (38 rows now, every one
+with a checksum; it carries no policy statements). Under the owner's own
+actor settings the practice's registration facts were entered on the
+tenant row from its licence and its Federal Tax Authority certificate:
+legal name in English and Arabic, the Meydan Free Zone licence number and
+its expiry, the corporate-tax registration number, the registered address
+as the tenant's own location row, and VAT registration recorded as "not
+registered" (no VAT certificate is among the practice's documents). The
+identity guard was proved to refuse the same change from a lead
+practitioner. `tenant` and `invoice` fingerprint byte-identical to a fresh
+local database; the audit chain verifies over 641 rows. These facts are
+the practice's own public registration data; they live on staging's tenant
+row and in the operator's documents, never in the repository or the seed.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
