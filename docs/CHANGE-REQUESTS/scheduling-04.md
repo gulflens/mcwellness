@@ -410,9 +410,10 @@ WhatsApp in Phase 2"), and the practitioner finds out when their Today next
 loads.
 
 Both drawers now say so on their face rather than leaving it to be discovered
-— "The household still has to be told the new window, and the practitioner
-sees it on their next Today" — which is the honest interim and not the
-destination. A notification is its own piece of work with its own decisions
+— the Move drawer with "The household still has to be told the new window, and
+the practitioner sees it on their next Today", the Cancel drawer with "The
+household still has to be told the visit is off, and the practitioner sees it
+on their next Today" — which is the honest interim and not the destination. A notification is its own piece of work with its own decisions
 (which changes are worth an interruption, to whom, and through what), and
 section 10 of the manual puts client notifications out of scope for this phase
 on purpose. Recorded here so that the silence is a decision somebody made

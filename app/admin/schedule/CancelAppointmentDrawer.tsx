@@ -366,6 +366,11 @@ export function CancelAppointmentDrawer({
                 />
               </div>
 
+              <Note>
+                The household still has to be told the visit is off, and the practitioner sees it on
+                their next Today.
+              </Note>
+
               {policy === 'loading' ? (
                 <Note>Reading the practice&rsquo;s notice period.</Note>
               ) : null}

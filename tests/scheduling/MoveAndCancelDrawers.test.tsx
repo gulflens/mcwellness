@@ -269,6 +269,13 @@ describe('CancelAppointmentDrawer', () => {
     expect(
       await screen.findByText(/outside the practice’s 24 hours’ notice, so the client keeps/),
     ).toBeTruthy();
+    // Calling a visit off tells nobody either, and this drawer says so just as
+    // the Move drawer does.
+    expect(
+      screen.getByText(
+        /The household still has to be told the visit is off, and the practitioner sees it on their next Today\./,
+      ),
+    ).toBeTruthy();
   });
 
   it('names the consequence before the coordinator confirms', async () => {
