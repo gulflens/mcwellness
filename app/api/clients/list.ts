@@ -1,6 +1,8 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { ageOn, canActor, hasRole, isoDateIn } from '../../../domain/shared';
+import { normaliseEmiratesId } from '../../../domain/shared/emirates-id';
+import { emiratesIdHash } from '../../../domain/shared/identity';
 import { logReads } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
@@ -12,6 +14,13 @@ import { logRefused } from './refused';
  * signed-in person, so the database limits the rows to their practice. Every
  * listed client is recorded as a read. Seeded by the trunk in PR 5; owned by
  * the client-record worktree from there (docs/SPEC/OWNERSHIP.md).
+ *
+ * `q` shaped like an Emirates ID (15 digits, starting 784, hyphens allowed —
+ * client-record.md section 4.1) is never matched against a name or an MRN:
+ * it is hashed with the same keyed HMAC db/seed/apply.ts and
+ * emirates-id-capture.ts use and looked up by that fingerprint instead
+ * (00-data-model.md section 1). The identity number itself never reaches a
+ * log, an audit payload or this file's own SQL text — only its hash does.
  */
 
 import { CLIENT_STATUSES as STATUSES, ClientListResponse, type ClientRow } from './schema';
@@ -64,12 +73,36 @@ const SQL =
   // without a second, count-only query.
   'order by c.mrn limit $4';
 
+// The hash lookup: at most one contact per tenant can carry a given
+// fingerprint (contact's own unique (tenant_id, emirates_id_hash)), so this
+// finds at most one client — never a text match against name or MRN columns.
+const ID_SQL =
+  'select c.id, c.mrn, c.given_name, c.family_name, c.given_name_ar, c.family_name_ar, ' +
+  'c.date_of_birth, c.status, ct.relationship as contact_relationship, ct.phone as contact_phone, ' +
+  'l.emirate ' +
+  'from client c ' +
+  'join contact idc on idc.client_id = c.id and idc.emirates_id_hash = $2 ' +
+  'left join contact ct on ct.id = c.primary_contact_id ' +
+  'left join location l on l.id = c.primary_location_id ' +
+  'where ($1::client_status is null or c.status = $1::client_status) ' +
+  "and ($3::boolean or c.status <> 'erased') " +
+  'order by c.mrn limit $4';
+
 function escapeLike(q: string): string {
   return q.replace(/[\\%_]/g, '\\$&');
 }
 
 function likePattern(escaped: string): string {
   return `%${escaped}%`;
+}
+
+/** The fifteen normalised digits when `q` is shaped like an Emirates ID; null otherwise. */
+function emiratesIdShapeOf(q: string): string | null {
+  try {
+    return normaliseEmiratesId(q);
+  } catch {
+    return null;
+  }
 }
 
 export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -92,6 +125,14 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance')) {
       return c.json(ClientListResponse.parse({ clients: [], note: 'schedule' }));
     }
+    // A query shaped like an Emirates ID is never text-searched: it is hashed and looked
+    // up by fingerprint instead (see the module comment). Without identityKeys configured
+    // (a deployment that has not set IDENTITY_KEY) there is no key to hash with, so this
+    // falls through to the ordinary text search below, same as any other query — a search
+    // that finds nothing among names and record numbers rather than a route that errors.
+    const identityKeys = c.get('identityKeys');
+    const emiratesIdDigits = query.data.q ? emiratesIdShapeOf(query.data.q) : null;
+
     // Below the minimum, the term is dropped rather than searched (see
     // MIN_SEARCH_LENGTH above): the unfiltered first page comes back, same as
     // when `q` is absent. Measured on the escaped form, not the raw one: a
@@ -100,14 +141,24 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     // literal punctuation, not "everything" — so it still searches.
     const escaped = query.data.q ? escapeLike(query.data.q) : null;
     const search = escaped && escaped.length >= MIN_SEARCH_LENGTH ? escaped : null;
-    const { rows } = await c
-      .get('db')
-      .query<Row>(SQL, [
-        query.data.status ?? null,
-        search ? likePattern(search) : null,
-        hasRole(actor, 'owner', 'lead_practitioner'),
-        PAGE_SIZE + 1,
-      ]);
+    const { rows } =
+      emiratesIdDigits !== null && identityKeys !== undefined
+        ? await c
+            .get('db')
+            .query<Row>(ID_SQL, [
+              query.data.status ?? null,
+              emiratesIdHash(emiratesIdDigits, identityKeys),
+              hasRole(actor, 'owner', 'lead_practitioner'),
+              PAGE_SIZE + 1,
+            ])
+        : await c
+            .get('db')
+            .query<Row>(SQL, [
+              query.data.status ?? null,
+              search ? likePattern(search) : null,
+              hasRole(actor, 'owner', 'lead_practitioner'),
+              PAGE_SIZE + 1,
+            ]);
     const truncated = rows.length > PAGE_SIZE;
     const page = truncated ? rows.slice(0, PAGE_SIZE) : rows;
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
