@@ -57,6 +57,8 @@ const KEY = new TextEncoder().encode(SECRET);
 // (.claude/rules/testing.md); the 6xxx block is this file's, distinct from
 // appointments.test.ts's 5xxx.
 const AUTH_OWNER_B = '00000000-0000-4000-8000-000000006001';
+const AUTH_FINANCE = '00000000-0000-4000-8000-000000006124';
+const FINANCE_USER = '00000000-0000-4000-8000-000000006125';
 const AUTH_PRACTITIONER_C = '00000000-0000-4000-8000-000000006002';
 const PRACTITIONER_C = '00000000-0000-4000-8000-000000006003';
 const PRACTITIONER_C_USER = '00000000-0000-4000-8000-000000006004';
@@ -247,6 +249,15 @@ beforeAll(async () => {
     validFrom: '2020-01-01',
     validTo: null,
     canExecuteSession: true,
+  });
+
+  // Finance: records money, arranges nothing (scheduling-manual.md section 2).
+  await seedUser(owner, {
+    id: FINANCE_USER,
+    tenantId: IDS.tenantA,
+    authId: AUTH_FINANCE,
+    displayName: 'Synthetic Finance',
+    roles: ['finance'],
   });
 
   // A client contact, for the deny case on the policy read.
@@ -513,6 +524,13 @@ describe('POST /api/appointments/:id/move', () => {
     expect(res.status).toBe(403);
   });
 
+  it('refuses finance, who record money without arranging the day', async () => {
+    const res = await call(AUTH_FINANCE, 'POST', `/api/appointments/${APPT_MOVE_OK}/move`, {
+      windowStart: hoursFromNow(100).toISOString(),
+    });
+    expect(res.status).toBe(403);
+  });
+
   it("shows another practice's owner nothing to move", async () => {
     const res = await call(AUTH_OWNER_B, 'POST', `/api/appointments/${APPT_MOVE_OK}/move`, {
       windowStart: hoursFromNow(100).toISOString(),
@@ -771,6 +789,20 @@ describe('POST /api/appointments/:id/cancel', () => {
       [body.waiverEntitlementId],
     );
     expect(rows[0]?.status).toBe('waived');
+  });
+
+  it('refuses finance here too', async () => {
+    // scheduling-manual.md section 2 names the owner, an admin, a lead
+    // practitioner and a practitioner; finance is absent from that table on
+    // purpose, and is refused before any appointment is read.
+    const res = await call(
+      AUTH_FINANCE,
+      'POST',
+      `/api/appointments/${APPT_WITHDRAWAL_FUTURE}/cancel`,
+      { reason: 'client_request' },
+    );
+    expect(res.status).toBe(403);
+    expect((await statusOf(APPT_WITHDRAWAL_FUTURE)).status).toBe('confirmed');
   });
 
   it("shows another practice's owner nothing to cancel", async () => {

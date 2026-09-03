@@ -54,8 +54,14 @@ export function mountAppointmentSettings(api: Hono<ApiEnv>): void {
     const row = rows[0];
     // 202 gives every practice this row and never lets it be deleted, so the
     // fallback is for a database mid-migration rather than for ordinary life.
-    // The same figures app/api/appointments/cancel.ts falls back to, so a
-    // screen and the route it calls can never disagree about them.
+    // Both figures fall back to what a new practice starts with
+    // (domain/scheduling/cancellation.ts) and to nothing else: a fee of zero
+    // here would have had a screen tell a coordinator the practice charges
+    // nothing for a wasted journey, which is a different claim from "the
+    // policy could not be read" and not one this route is in a position to
+    // make (schema review of this pull request, low 3). The notice period
+    // falls back to the same figure app/api/appointments/cancel.ts does, so a
+    // screen and the route it calls cannot disagree about it.
     return c.json(
       SchedulingSettingsResponse.parse({
         noticeHours: row?.notice_hours ?? DEFAULT_NOTICE_HOURS,

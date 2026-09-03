@@ -144,6 +144,27 @@ create unique index appointment_one_move_per_source
 --    domain/scheduling/cancellation.ts is where this one is written and
 --    tested. What this function will not do is take any other status, or
 --    touch any other column, or reach a stop that is not the caller's own.
+--
+--    **What that means for the notice rule, said plainly.** This function does
+--    not compare `window_start` to `now()` against the practice's own
+--    `notice_hours` and does not re-derive `cancelled_late` for itself, so a
+--    caller who reached it directly with a hand-written statement could call a
+--    visit off inside the notice period as a plain `cancelled` and dodge the
+--    charge. Three things stand where that check would be, and they are worth
+--    naming rather than leaving to be assumed:
+--
+--      1. `app/api/appointments/cancel.ts` is the only caller, it reads
+--         `scheduling_setting.notice_hours` and runs `cancellationStatusFor`,
+--         and no route anywhere takes a status from a request body.
+--      2. Reaching this function directly needs the ability to run arbitrary
+--         SQL as `app_role`, which is a larger thing than a dodged charge.
+--      3. Putting the rule here as well would put the practice's cancellation
+--         policy in two places, in two languages, and the day they disagreed
+--         the database would be the one nobody thought to look at.
+--
+--    The one moment-based rule that *is* enforced here is the arrival-window
+--    check above, and it is here because it is not arithmetic over a setting:
+--    it is a fact about whether an event can have happened yet.
 ------------------------------------------------------------------------------
 create function app.cancel_own_appointment(
   p_appointment_id uuid,
