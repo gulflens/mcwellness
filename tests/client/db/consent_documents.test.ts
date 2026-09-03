@@ -737,3 +737,71 @@ describe('withdrawing a consent', () => {
     expect(await auditRows(photoId, 'read')).toBe(1);
   });
 });
+
+describe('a client enrolled, signed and activated', () => {
+  it('goes lead to active once every consent is recorded on screen', async () => {
+    // The whole path the task brief asks for, end to end: a lead with a date
+    // of birth and a verified location, every consent `requiredConsents` names
+    // recorded through the route with a signature filed, and then the status
+    // change that could not have happened before this pull request.
+    const clientId = '00000000-0000-4000-8000-000000000141';
+    const contactId = '00000000-0000-4000-8000-000000000142';
+    const locationId = '00000000-0000-4000-8000-000000000143';
+    await owner.query(
+      'insert into client (id, tenant_id, mrn, given_name, family_name, date_of_birth, ' +
+        "preferred_locale, status, created_by) values ($1, $2, 'MW-000141', 'Rowan', 'Valley', " +
+        "'1994-02-02', 'en', 'lead', $3)",
+      [clientId, IDS.tenantA, IDS.ownerA],
+    );
+    await owner.query(
+      'insert into contact (id, tenant_id, client_id, given_name, family_name, relationship, ' +
+        "is_legal_guardian, can_consent, phone) values ($1, $2, $3, 'Rowan', 'Valley', 'self', " +
+        "false, true, '+971500000031')",
+      [contactId, IDS.tenantA, clientId],
+    );
+    await owner.query(
+      'insert into location (id, tenant_id, owner_type, owner_id, label, emirate, ' +
+        "entrance_point, created_by) values ($1, $2, 'client', $3, 'home', 'DXB', " +
+        "extensions.st_geogfromtext('SRID=4326;POINT(55.27 25.20)'), $4)",
+      [locationId, IDS.tenantA, clientId, IDS.ownerA],
+    );
+
+    // An adult at home needs participation and home_visit, and no guardian.
+    const tooSoon = await request(ADMIN_AUTH, `/api/clients/${clientId}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ to: 'active' }),
+    });
+    expect(tooSoon.status).toBe(400);
+    expect((await tooSoon.json()) as { missing: string[] }).toMatchObject({
+      missing: ['consent:home_visit', 'consent:participation'],
+    });
+
+    for (const [purpose, wording] of [
+      ['participation', WORDING_PARTICIPATION],
+      ['home_visit', WORDING_HOME_VISIT],
+    ] as const) {
+      const recorded = await request(ADMIN_AUTH, `/api/clients/${clientId}/consents`, {
+        method: 'POST',
+        body: JSON.stringify({
+          purpose,
+          givenByContactId: contactId,
+          textDocumentId: wording,
+          method: 'app_signature',
+          evidence: { mimeType: 'image/png', bytesBase64: PNG_BASE64 },
+        }),
+      });
+      expect(recorded.status).toBe(201);
+    }
+
+    const activated = await request(ADMIN_AUTH, `/api/clients/${clientId}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ to: 'active' }),
+    });
+    expect(activated.status).toBe(200);
+    const { rows } = await owner.query<{ status: string }>(
+      'select status from client where id = $1',
+      [clientId],
+    );
+    expect(rows[0]?.status).toBe('active');
+  });
+});
