@@ -58,6 +58,14 @@ const WELL_AHEAD: AppointmentRow = {
   windowEnd: new Date(Date.now() + 96 * 3_600_000 + 45 * 60_000).toISOString(),
 };
 
+/** One the practitioner is standing at: the window opened an hour ago. */
+const AT_THE_DOOR: AppointmentRow = {
+  ...APPOINTMENT,
+  id: '0000000a-0000-4000-8000-000000000104',
+  windowStart: new Date(Date.now() - 3_600_000).toISOString(),
+  windowEnd: new Date(Date.now() - 3_600_000 + 45 * 60_000).toISOString(),
+};
+
 /** And one inside it. */
 const IMMINENT: AppointmentRow = {
   ...APPOINTMENT,
@@ -111,9 +119,14 @@ describe('MoveAppointmentDrawer', () => {
     expect(screen.getByText(/Iris Cliff/)).toBeTruthy();
     expect((screen.getByLabelText('New date') as HTMLInputElement).value).toBe('2026-09-10');
     expect((screen.getByLabelText('New start time') as HTMLInputElement).value).toBe('09:00');
-    // Moving a visit tells nobody: the screen says so rather than leaving it
-    // to be discovered.
-    expect(screen.getByText('The household still has to be told the new window.')).toBeTruthy();
+    // Moving a visit tells nobody — not the household, and not the
+    // practitioner driving there — and the screen says so rather than leaving
+    // it to be discovered.
+    expect(
+      screen.getByText(
+        /The household still has to be told the new window, and the practitioner sees it on their next Today\./,
+      ),
+    ).toBeTruthy();
   });
 
   it('will not move a visit to the time it already has, or without a reason', () => {
@@ -256,13 +269,13 @@ describe('CancelAppointmentDrawer', () => {
   it('warns about a visit that could not go ahead at the door however much notice there was, and names the fee', async () => {
     mount(
       <CancelAppointmentDrawer
-        appointment={WELL_AHEAD}
+        appointment={AT_THE_DOOR}
         onClose={() => undefined}
         onCancelled={() => undefined}
       />,
       settingsAnd(() => new Response('not found', { status: 404 })),
     );
-    await screen.findByText(/outside the practice’s 24 hours’ notice/);
+    await screen.findByText(/inside the practice's 24 hours' notice/);
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'unfit_to_attend' } });
     expect(
       await screen.findByText(
@@ -272,6 +285,33 @@ describe('CancelAppointmentDrawer', () => {
     // The practice's own figure, formatted by the one money formatter, and
     // honest about the fact that nothing charges it on its own.
     expect(screen.getByText(/The practice’s fee for this is AED 150\.00\./)).toBeTruthy();
+  });
+
+  it('refuses "could not go ahead at the door" for a visit nobody has driven to yet', async () => {
+    mount(
+      <CancelAppointmentDrawer
+        appointment={WELL_AHEAD}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      settingsAnd(() => new Response('not found', { status: 404 })),
+    );
+    await screen.findByText(/outside the practice’s 24 hours’ notice/);
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'unfit_to_attend' } });
+    // Said before anything is typed, and the action closed off with it: the
+    // route and the database refuse this too, and being told at the end would
+    // be being told too late.
+    expect(
+      await screen.findByText(
+        /A visit can only be recorded as unable to go ahead once its arrival window has opened\./,
+      ),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('What happened?'), { target: { value: 'No answer.' } });
+    expect(
+      (screen.getByRole('button', { name: 'Call off this visit' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    // And the fee is not named for a thing that cannot be recorded.
+    expect(screen.queryByText(/The practice’s fee for this is/)).toBeNull();
   });
 
   it('sends the chosen reason and reports that a session was used', async () => {
