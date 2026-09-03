@@ -1,5 +1,6 @@
 import { Button } from '../../shell/components/Controls';
 import { SIGNAL_THRESHOLD, SignalDots } from './SignalDots';
+import { PercentSlider } from './Slider';
 import type { SiteReading } from './steps';
 
 /**
@@ -55,27 +56,13 @@ export function SignalStep({
                 onChange={(event) => onChange(index, { ...site, site: event.target.value })}
               />
             </div>
-            <div className="field site__quality">
-              <label className="field__label" htmlFor={`quality-${index}`}>
-                Quality
-              </label>
-              <div className="rating__row">
-                <input
-                  id={`quality-${index}`}
-                  type="range"
-                  className="rating__slider"
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={Math.round(site.quality * 100)}
-                  onChange={(event) =>
-                    onChange(index, { ...site, quality: Number(event.target.value) / 100 })
-                  }
-                />
-                <output className="rating__value numeric" htmlFor={`quality-${index}`}>
-                  {Math.round(site.quality * 100)}
-                </output>
-              </div>
+            <div className="site__quality">
+              <PercentSlider
+                id={`quality-${index}`}
+                label="Quality"
+                value={Math.round(site.quality * 100)}
+                onChange={(value) => onChange(index, { ...site, quality: value / 100 })}
+              />
             </div>
           </li>
         ))}

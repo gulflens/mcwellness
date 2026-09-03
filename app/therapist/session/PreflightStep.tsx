@@ -1,10 +1,11 @@
 import { Button } from '../../shell/components/Controls';
-import type { Answers, ServiceSettings } from './steps';
+import { Slider } from './Slider';
+import { midpoint, type Answers, type ServiceSettings } from './steps';
 
 /**
  * Pre-flight (docs/SPEC/session-capture.md section 3.2): the checklist the
  * practice set for this service as large toggles, then the before-session
- * questions on 0-10 sliders. One decision at the end of it — everything is
+ * questions on 0-to-10 sliders. One decision at the end of it — everything is
  * ready, or it is not.
  *
  * A practice that has set no checklist and no questions gets neither, and
@@ -46,7 +47,14 @@ export function PreflightStep({
                   onChange={(event) => onToggle(item.key, event.target.checked)}
                 />
                 <span className="check__box" aria-hidden="true" />
-                <span className="check__label">{item.labelEn}</span>
+                <span className="check__label">
+                  {item.labelEn}
+                  {item.labelAr ? (
+                    <span className="check__label-ar small muted" lang="ar" dir="rtl">
+                      {item.labelAr}
+                    </span>
+                  ) : null}
+                </span>
               </label>
             </li>
           ))}
@@ -57,26 +65,13 @@ export function PreflightStep({
         <section className="ratings">
           <h2>How are they today?</h2>
           {service.ratingQuestions.map((question) => (
-            <div className="rating" key={question.key}>
-              <label className="rating__label" htmlFor={`pre-${question.key}`}>
-                {question.labelEn}
-              </label>
-              <div className="rating__row">
-                <input
-                  id={`pre-${question.key}`}
-                  type="range"
-                  className="rating__slider"
-                  min={question.min}
-                  max={question.max}
-                  step={1}
-                  value={answers[question.key] ?? Math.round((question.min + question.max) / 2)}
-                  onChange={(event) => onAnswer(question.key, Number(event.target.value))}
-                />
-                <output className="rating__value numeric" htmlFor={`pre-${question.key}`}>
-                  {answers[question.key] ?? Math.round((question.min + question.max) / 2)}
-                </output>
-              </div>
-            </div>
+            <Slider
+              key={question.key}
+              id={`pre-${question.key}`}
+              question={question}
+              value={answers[question.key] ?? midpoint(question)}
+              onChange={(value) => onAnswer(question.key, value)}
+            />
           ))}
         </section>
       ) : null}

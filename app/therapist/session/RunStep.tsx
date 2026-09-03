@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../../shell/components/Controls';
 import { SignalDots } from './SignalDots';
+import { PercentSlider } from './Slider';
 import type { Reading } from './steps';
 
 /**
@@ -16,7 +17,18 @@ import type { Reading } from './steps';
  * writes a chunk a minute. A visit where nobody opens it records nothing per
  * minute and is asked for one summary at the end instead, which is the other
  * half of the same sentence in section 3.4.
+ *
+ * Ending takes two taps. The first arms it and the second does it, with the
+ * clock still running and still visible between them: a phone held in one
+ * hand with a child climbing on the practitioner is a phone that gets
+ * tapped by accident, and ending a session is not undoable — the event is
+ * written, and the run is over. A two-step control rather than a dialogue,
+ * because a dialogue covers the timer and takes the decision off the screen
+ * it belongs to.
  */
+
+/** How long the armed state waits before it forgets it was armed. */
+const ARMED_MS = 5000;
 
 function elapsed(fromMs: number, nowMs: number): string {
   const seconds = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
@@ -45,11 +57,20 @@ export function RunStep({
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState(false);
 
   useEffect(() => {
     const tick = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
+
+  // A control left armed by a pocket is a control that ends the next session
+  // the practitioner touches. It disarms itself.
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), ARMED_MS);
+    return () => clearTimeout(timer);
+  }, [armed]);
 
   const draft = reading ?? { artefactPercent: 0, timeInRewardPercent: 0 };
 
@@ -72,50 +93,18 @@ export function RunStep({
 
       {open ? (
         <section className="run__reading">
-          <div className="rating">
-            <label className="rating__label" htmlFor="reading-reward">
-              Time in reward
-            </label>
-            <div className="rating__row">
-              <input
-                id="reading-reward"
-                type="range"
-                className="rating__slider"
-                min={0}
-                max={100}
-                step={5}
-                value={draft.timeInRewardPercent}
-                onChange={(event) =>
-                  onReading({ ...draft, timeInRewardPercent: Number(event.target.value) })
-                }
-              />
-              <output className="rating__value numeric" htmlFor="reading-reward">
-                {draft.timeInRewardPercent}
-              </output>
-            </div>
-          </div>
-          <div className="rating">
-            <label className="rating__label" htmlFor="reading-artefact">
-              Artefact
-            </label>
-            <div className="rating__row">
-              <input
-                id="reading-artefact"
-                type="range"
-                className="rating__slider"
-                min={0}
-                max={100}
-                step={5}
-                value={draft.artefactPercent}
-                onChange={(event) =>
-                  onReading({ ...draft, artefactPercent: Number(event.target.value) })
-                }
-              />
-              <output className="rating__value numeric" htmlFor="reading-artefact">
-                {draft.artefactPercent}
-              </output>
-            </div>
-          </div>
+          <PercentSlider
+            id="reading-reward"
+            label="Time in reward"
+            value={draft.timeInRewardPercent}
+            onChange={(value) => onReading({ ...draft, timeInRewardPercent: value })}
+          />
+          <PercentSlider
+            id="reading-artefact"
+            label="Artefact"
+            value={draft.artefactPercent}
+            onChange={(value) => onReading({ ...draft, artefactPercent: value })}
+          />
           <Button className="step__secondary" onClick={() => setOpen(false)}>
             Hide the reading
           </Button>
@@ -127,8 +116,15 @@ export function RunStep({
       )}
 
       <div className="step__dock">
-        <Button variant="primary" className="step__primary" onClick={onEnd}>
-          End session
+        {armed ? (
+          <p className="note small">Tap again to end the session. It cannot be restarted.</p>
+        ) : null}
+        <Button
+          variant="primary"
+          className="step__primary"
+          onClick={() => (armed ? onEnd() : setArmed(true))}
+        >
+          {armed ? 'Tap again to end' : 'End session'}
         </Button>
       </div>
     </div>

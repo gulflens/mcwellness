@@ -1,23 +1,34 @@
-import { useRef, useState } from 'react';
 import { OBSERVATION_CHIPS } from '@domain/session';
 import { Button } from '../../shell/components/Controls';
-import { preparePhoto, type PreparedPhoto } from './photo';
-import type { Answers, Observations, Reading, ServiceSettings } from './steps';
+import { PercentSlider, Slider } from './Slider';
+import {
+  midpoint,
+  type Answers,
+  type Observations,
+  type PhotoConsent,
+  type Reading,
+  type ServiceSettings,
+} from './steps';
 
 /**
  * End and post (docs/SPEC/session-capture.md section 3.5): the same
  * questions as before, the structured observations as chips with a note
- * beside them, and the optional setup photo.
+ * beside them, and what became of the setup photo.
  *
- * The photo is offered only when the household's `photo_video` consent is
- * active, and when it is not the screen says so plainly rather than hiding
- * the control and leaving the practitioner wondering. The server refuses one
- * either way (app/api/sessions/events.ts): the screen is the courtesy, the
- * database is the boundary.
+ * The photo has three states, not two. `given` would offer the camera;
+ * `refused` says the household has not agreed; `unknown` — a visit resumed
+ * with no signal — says the device cannot check, because telling a
+ * practitioner a family refused something nobody has asked them is a lie
+ * about a person. Today all three end in no camera: there is nowhere to put
+ * the bytes until the trunk's storage seam lands
+ * (app/api/sessions/photo-availability.ts,
+ * docs/CHANGE-REQUESTS/session-capture-02.md section 2), and offering to
+ * take a photograph that is then thrown away is worse than not offering.
  *
  * The summary reading appears only when nothing was recorded during the run
  * — section 3.4's "Phase 1 accepts a single end-of-session summary if
- * per-minute data isn't available".
+ * per-minute data isn't available" — and files nothing until the
+ * practitioner actually moves it.
  */
 
 const CHIP_LABELS: Record<string, string> = {
@@ -28,8 +39,13 @@ const CHIP_LABELS: Record<string, string> = {
   other: 'Something else',
 };
 
-const PHOTO_BLOCKED =
+const PHOTO_PROMISE = 'The sensor placement only: not the face, and not the room.';
+const PHOTO_REFUSED =
   'This household has not agreed to photographs, so no photo can be taken. The practice can ask them.';
+const PHOTO_UNKNOWN =
+  'This device cannot check whether the household has agreed to photographs until it is back online.';
+const PHOTO_UNAVAILABLE =
+  'Setup photos are not being taken yet. The practice will say when they are.';
 
 export function PostStep({
   service,
@@ -39,10 +55,9 @@ export function PostStep({
   onObservations,
   needsSummaryReading,
   summaryReading,
+  summaryReadingTaken,
   onSummaryReading,
   photoConsent,
-  photo,
-  onPhoto,
   onContinue,
 }: {
   service: ServiceSettings;
@@ -52,15 +67,11 @@ export function PostStep({
   onObservations: (observations: Observations) => void;
   needsSummaryReading: boolean;
   summaryReading: Reading;
+  summaryReadingTaken: boolean;
   onSummaryReading: (reading: Reading) => void;
-  photoConsent: boolean;
-  photo: PreparedPhoto | null;
-  onPhoto: (photo: PreparedPhoto | null) => void;
+  photoConsent: PhotoConsent;
   onContinue: () => void;
 }) {
-  const fileInput = useRef<HTMLInputElement>(null);
-  const [photoNote, setPhotoNote] = useState<string | null>(null);
-
   const toggleChip = (chip: string) => {
     const has = observations.chips.includes(chip);
     // "Nothing to note" is an answer, not a filter: choosing it clears the
@@ -73,17 +84,6 @@ export function PostStep({
     onObservations({ ...observations, chips: next });
   };
 
-  const takePhoto = async (file: File | undefined) => {
-    if (!file) return;
-    const prepared = await preparePhoto(file);
-    if (!prepared) {
-      setPhotoNote('That photo could not be prepared on this device. Try again.');
-      return;
-    }
-    setPhotoNote(null);
-    onPhoto(prepared);
-  };
-
   return (
     <div className="step">
       <h1>After the session</h1>
@@ -91,26 +91,13 @@ export function PostStep({
       {service.ratingQuestions.length > 0 ? (
         <section className="ratings">
           {service.ratingQuestions.map((question) => (
-            <div className="rating" key={question.key}>
-              <label className="rating__label" htmlFor={`post-${question.key}`}>
-                {question.labelEn}
-              </label>
-              <div className="rating__row">
-                <input
-                  id={`post-${question.key}`}
-                  type="range"
-                  className="rating__slider"
-                  min={question.min}
-                  max={question.max}
-                  step={1}
-                  value={answers[question.key] ?? Math.round((question.min + question.max) / 2)}
-                  onChange={(event) => onAnswer(question.key, Number(event.target.value))}
-                />
-                <output className="rating__value numeric" htmlFor={`post-${question.key}`}>
-                  {answers[question.key] ?? Math.round((question.min + question.max) / 2)}
-                </output>
-              </div>
-            </div>
+            <Slider
+              key={question.key}
+              id={`post-${question.key}`}
+              question={question}
+              value={answers[question.key] ?? midpoint(question)}
+              onChange={(value) => onAnswer(question.key, value)}
+            />
           ))}
         </section>
       ) : null}
@@ -118,62 +105,31 @@ export function PostStep({
       {needsSummaryReading ? (
         <section className="ratings">
           <h2>The session as a whole</h2>
-          <div className="rating">
-            <label className="rating__label" htmlFor="summary-reward">
-              Time in reward
-            </label>
-            <div className="rating__row">
-              <input
-                id="summary-reward"
-                type="range"
-                className="rating__slider"
-                min={0}
-                max={100}
-                step={5}
-                value={summaryReading.timeInRewardPercent}
-                onChange={(event) =>
-                  onSummaryReading({
-                    ...summaryReading,
-                    timeInRewardPercent: Number(event.target.value),
-                  })
-                }
-              />
-              <output className="rating__value numeric" htmlFor="summary-reward">
-                {summaryReading.timeInRewardPercent}
-              </output>
-            </div>
-          </div>
-          <div className="rating">
-            <label className="rating__label" htmlFor="summary-artefact">
-              Artefact
-            </label>
-            <div className="rating__row">
-              <input
-                id="summary-artefact"
-                type="range"
-                className="rating__slider"
-                min={0}
-                max={100}
-                step={5}
-                value={summaryReading.artefactPercent}
-                onChange={(event) =>
-                  onSummaryReading({
-                    ...summaryReading,
-                    artefactPercent: Number(event.target.value),
-                  })
-                }
-              />
-              <output className="rating__value numeric" htmlFor="summary-artefact">
-                {summaryReading.artefactPercent}
-              </output>
-            </div>
-          </div>
+          <PercentSlider
+            id="summary-reward"
+            label="Time in reward"
+            value={summaryReading.timeInRewardPercent}
+            onChange={(value) =>
+              onSummaryReading({ ...summaryReading, timeInRewardPercent: value })
+            }
+          />
+          <PercentSlider
+            id="summary-artefact"
+            label="Artefact"
+            value={summaryReading.artefactPercent}
+            onChange={(value) => onSummaryReading({ ...summaryReading, artefactPercent: value })}
+          />
+          {summaryReadingTaken ? null : (
+            <p className="note small">
+              Leave these alone if you did not read them. Nothing is recorded until you move one.
+            </p>
+          )}
         </section>
       ) : null}
 
       <section>
-        <h2>What did you see?</h2>
-        <div className="chips">
+        <h2 id="observations-heading">What did you see?</h2>
+        <div className="chips" role="group" aria-labelledby="observations-heading">
           {OBSERVATION_CHIPS.map((chip) => {
             const on = observations.chips.includes(chip);
             return (
@@ -206,30 +162,14 @@ export function PostStep({
 
       <section>
         <h2>Setup photo</h2>
-        {photoConsent ? (
-          <>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="visually-hidden"
-              onChange={(event) => void takePhoto(event.target.files?.[0])}
-            />
-            <Button className="step__secondary" onClick={() => fileInput.current?.click()}>
-              {photo ? 'Take it again' : 'Take a photo'}
-            </Button>
-            {photo ? (
-              <p className="note small">
-                Photo ready, <span className="numeric">{Math.round(photo.sizeBytes / 1024)}</span>{' '}
-                kB.
-              </p>
-            ) : null}
-            {photoNote ? <p className="note note--critical small">{photoNote}</p> : null}
-          </>
-        ) : (
-          <p className="note small">{PHOTO_BLOCKED}</p>
-        )}
+        <p className="note small">{PHOTO_PROMISE}</p>
+        <p className="note small">
+          {photoConsent === 'refused'
+            ? PHOTO_REFUSED
+            : photoConsent === 'unknown'
+              ? PHOTO_UNKNOWN
+              : PHOTO_UNAVAILABLE}
+        </p>
       </section>
 
       <div className="step__dock">

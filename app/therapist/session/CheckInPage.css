@@ -161,3 +161,17 @@
 .checkin__resume-line {
   margin: 0;
 }
+
+/* The offer holds its own space before the answer arrives, so nothing on
+   this face moves under the practitioner's thumb when it does. */
+.checkin__resume:empty {
+  padding: 0;
+  border: 0;
+  min-block-size: var(--s-16);
+}
+
+/* Every control on this face meets the practitioner floor, the quiet ones
+   included. */
+.checkin__dismiss {
+  min-block-size: var(--tap);
+}

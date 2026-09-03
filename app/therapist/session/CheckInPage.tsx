@@ -199,8 +199,11 @@ function visitFromOpen(open: {
     number: open.number,
     of: open.of,
     serviceTypeId: open.serviceTypeId,
-    photoConsent: open.photoConsent,
+    photoConsent: open.photoConsent ? 'given' : 'refused',
     lastSeq: open.lastSeq,
+    // Conservative after a resume: the practitioner is told below that
+    // sharing is off, rather than having a position taken they did not
+    // switch on for this half of the visit.
     shareLocation: false,
   };
 }
@@ -302,9 +305,10 @@ export function CheckInPage() {
                 number: note.number,
                 of: note.of,
                 serviceTypeId: note.serviceTypeId,
-                // Unknown offline, and the safer answer is no: the server
-                // refuses a photo without consent either way.
-                photoConsent: false,
+                // The device could not ask. Not "they refused": the screen
+                // says it cannot check rather than putting words in a
+                // family's mouth (design review, item 5).
+                photoConsent: 'unknown',
                 // The device's own high-water mark: an offline resume cannot
                 // ask the server where it got to, so it picks up from what it
                 // last wrote rather than from one.
@@ -447,7 +451,7 @@ export function CheckInPage() {
           number: 1,
           of: null,
           serviceTypeId,
-          photoConsent: parsed.data.photoConsent,
+          photoConsent: parsed.data.photoConsent ? 'given' : 'refused',
           lastSeq: 1,
           shareLocation,
         });
@@ -504,24 +508,39 @@ export function CheckInPage() {
           </Button>
           <h1>Check in</h1>
 
-          {resume.kind === 'offered' ? (
-            <section className="checkin__resume">
-              <p className="checkin__resume-line">
-                Resume session for {resume.visit.clientLabel}, started{' '}
-                <span className="numeric">{formatCheckedInTime(resume.visit.checkedInAt)}</span>.
-              </p>
-              <Button
-                variant="primary"
-                className="checkin__primary"
-                onClick={() => setRunning(resume.visit)}
-              >
-                Resume
-              </Button>
-              <Button variant="quiet" onClick={() => setResume({ kind: 'dismissed' })}>
-                Check in someone else instead
-              </Button>
-            </section>
-          ) : null}
+          {/* The offer keeps its own space from the first paint, so it does
+              not shove the form down the screen when the answer arrives
+              (design review, item 11). It is the only primary on this face
+              while it stands: the form's own Check in drops to secondary
+              below, so the practitioner is never asked to choose between two
+              equally loud actions. */}
+          <section className="checkin__resume" aria-live="polite">
+            {resume.kind === 'offered' ? (
+              <>
+                <p className="checkin__resume-line">
+                  Resume session for {resume.visit.clientLabel}, started{' '}
+                  <span className="numeric">{formatCheckedInTime(resume.visit.checkedInAt)}</span>.
+                </p>
+                <p className="small muted">
+                  Sharing your location is off after a resume. The visit is recorded either way.
+                </p>
+                <Button
+                  variant="primary"
+                  className="checkin__primary"
+                  onClick={() => setRunning(resume.visit)}
+                >
+                  Resume
+                </Button>
+                <Button
+                  variant="quiet"
+                  className="checkin__dismiss"
+                  onClick={() => setResume({ kind: 'dismissed' })}
+                >
+                  Check in someone else instead
+                </Button>
+              </>
+            ) : null}
+          </section>
           <div className="checkin__form">
             <div className="field">
               <label htmlFor="checkin-record-number" className="field__label">
@@ -643,7 +662,7 @@ export function CheckInPage() {
 
             <div className="checkin__dock">
               <Button
-                variant="primary"
+                variant={resume.kind === 'offered' ? 'secondary' : 'primary'}
                 className="checkin__primary"
                 disabled={!canSubmit}
                 onClick={() => void submit()}

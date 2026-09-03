@@ -10,16 +10,20 @@ import { SignalStep, meanQuality } from './SignalStep';
 import { SummaryStep } from './SummaryStep';
 import { Outbox, type PostEvents } from './outbox/outbox';
 import {
+  PRUNE_AFTER_DAYS,
   createOutboxStore,
   requestPersistentStorage,
   type OutboxRecord,
   type OutboxStore,
 } from './outbox/store';
-import type { PreparedPhoto } from './photo';
 import {
   deltas,
+  midpoint,
+  seedAnswers,
   type Answers,
+  type GeoPoint,
   type Observations,
+  type PhotoConsent,
   type Reading,
   type ServiceSettings,
   type SiteReading,
@@ -37,11 +41,13 @@ import './SessionRunner.css';
  * and in a car park, and the only difference the practitioner sees is a
  * quiet line saying how much is still waiting to sync.
  *
- * The one thing that does need a connection is the very last step. Closing
- * a visit is a server-side transaction (section 4) — the entitlement, the
- * appointment, the audit — so a check-out taken offline is queued like
- * everything else and the close is retried until it lands. The screen says
- * exactly that, calmly, and the practitioner may walk away from it.
+ * The one thing that does need a connection is the very last step. Closing a
+ * visit is a server-side transaction (section 4) — the appointment, the
+ * audit, and the credit the billing stream consumes — and the server will
+ * not close a visit whose check-out it has not received. So the summary's
+ * confirmation drains the outbox first and only then posts the close; when
+ * that cannot be done it says so and keeps trying, and when the server
+ * refuses outright it says that instead and stops.
  *
  * The runner reads no clock but the device's own, which is the only clock
  * there is in a living room with no signal.
@@ -59,24 +65,38 @@ export type RunnerVisit = {
   number: number;
   of: number | null;
   serviceTypeId: string;
-  photoConsent: boolean;
+  /**
+   * Whether the household has agreed to photographs — or, on a resume with
+   * no signal, that the device could not find out. Three answers, because
+   * "we cannot check" is not "they said no" (design review, item 5).
+   */
+  photoConsent: PhotoConsent;
   /** The last seq the server holds, so a resumed visit does not reuse one. */
   lastSeq: number;
   /** Whether the practitioner shared their position at the door (section 3.6). */
   shareLocation: boolean;
 };
 
-type Step = 'preflight' | 'signal' | 'run' | 'post' | 'summary' | 'finishing' | 'done';
+type Step = 'preflight' | 'signal' | 'run' | 'post' | 'summary' | 'finishing' | 'blocked' | 'done';
 
 const EMPTY_SETTINGS: ServiceSettings = { preflightChecklist: [], ratingQuestions: [] };
 
+const CLOSE_BLOCKED =
+  'This visit could not be checked out. Nothing is lost — ask the practice to close it.';
+
 /**
- * How the outbox reaches this API, and how it reads the answer. The
- * distinction that matters is between "try again" and "never": a refusal the
- * server will repeat forever must not be retried every thirty seconds for
- * the rest of the day.
+ * How the outbox reaches this API, and how it reads the answer. Three
+ * distinctions matter: a failure worth waiting on, a refusal that never
+ * changes, and a batch refused for its size, which goes again in pieces.
+ *
+ * `point` is the check-out coordinate, and it rides beside the batch rather
+ * than inside an event — session-level, exactly as check-in carries its own
+ * (domain/session/events.ts explains why a coordinate must never sit in an
+ * event payload). It is sent only with the batch that carries the check-out,
+ * and it is held in memory only: a device that reloads before the flush
+ * records no position, which is the safe way round.
  */
-export function postEventsVia(apiFetch: ApiFetch): PostEvents {
+export function postEventsVia(apiFetch: ApiFetch, readPoint: () => GeoPoint | null): PostEvents {
   return async (sessionId, records) => {
     const events = records.map((record) => ({
       id: record.id,
@@ -85,16 +105,18 @@ export function postEventsVia(apiFetch: ApiFetch): PostEvents {
       deviceAt: record.deviceAt,
       payload: record.payload,
     }));
+    const point = events.some((event) => event.kind === 'checked_out') ? readPoint() : null;
     let res: Response;
     try {
       res = await apiFetch(`/api/sessions/${sessionId}/events`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ events }),
+        body: JSON.stringify(point === null ? { events } : { events, point }),
       });
     } catch {
       return 'retry';
     }
+    if (res.status === 413) return 'too-large';
     // The visit is closed, gone, or not this practitioner's, or the batch is
     // malformed: none of those change by waiting.
     if (res.status === 400 || res.status === 403 || res.status === 404 || res.status === 409) {
@@ -107,17 +129,13 @@ export function postEventsVia(apiFetch: ApiFetch): PostEvents {
   };
 }
 
-function midpoint(min: number, max: number): number {
-  return Math.round((min + max) / 2);
-}
-
 /** A single position read, or null. A refusal is never a block (section 7). */
-function readPosition(): Promise<{ lat: number; lng: number } | null> {
+function readPosition(): Promise<GeoPoint | null> {
   const geolocation = typeof navigator === 'undefined' ? undefined : navigator.geolocation;
   if (!geolocation) return Promise.resolve(null);
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (value: { lat: number; lng: number } | null) => {
+    const finish = (value: GeoPoint | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(deadman);
@@ -144,7 +162,7 @@ export function SessionRunner({
   /** Injected in tests, where IndexedDB does not exist. */
   createStore?: () => Promise<OutboxStore>;
 }) {
-  const { apiFetch } = useAuth();
+  const { apiFetch, session } = useAuth();
   const settings: ServiceSettings = service ?? EMPTY_SETTINGS;
 
   const [outbox, setOutbox] = useState<Outbox | null>(null);
@@ -152,21 +170,31 @@ export function SessionRunner({
   const [durable, setDurable] = useState(true);
   const [step, setStep] = useState<Step>('preflight');
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const [preAnswers, setPreAnswers] = useState<Answers>({});
-  const [postAnswers, setPostAnswers] = useState<Answers>({});
+  // Seeded with the value each slider actually shows, so the summary and the
+  // record agree: an answer nobody moved is still the answer that is filed
+  // (design review, item 4).
+  const [preAnswers, setPreAnswers] = useState<Answers>(() =>
+    seedAnswers(settings.ratingQuestions),
+  );
+  const [postAnswers, setPostAnswers] = useState<Answers>(() =>
+    seedAnswers(settings.ratingQuestions),
+  );
   const [sites, setSites] = useState<SiteReading[]>([{ site: '', quality: 0.8 }]);
   const [reading, setReading] = useState<Reading | null>(null);
   const [summaryReading, setSummaryReading] = useState<Reading>({
     artefactPercent: 0,
     timeInRewardPercent: 0,
   });
+  // An untouched slider is not a measurement (design review, item 2). Until
+  // the practitioner moves one of these two, no telemetry is written at all
+  // and the visit honestly has no session quality.
+  const [summaryReadingTaken, setSummaryReadingTaken] = useState(false);
   const [observations, setObservations] = useState<Observations>({
     chips: [],
     tolerance: null,
     engagement: null,
     note: '',
   });
-  const [photo, setPhoto] = useState<PreparedPhoto | null>(null);
   const [actuals, setActuals] = useState<VisitActuals>({
     parkingCostFils: 0,
     salikCrossings: 0,
@@ -186,6 +214,9 @@ export function SessionRunner({
   useEffect(() => {
     readingRef.current = reading;
   }, [reading]);
+  // The check-out coordinate, held only until the batch carrying the
+  // check-out is posted. Never written to the device, never in an event.
+  const pointRef = useRef<GeoPoint | null>(null);
 
   // One store and one outbox for the life of this visit on this device. It
   // opens asynchronously, so anything written before it is ready waits in
@@ -198,7 +229,16 @@ export function SessionRunner({
       const store = await createStore();
       if (!live) return;
       void requestPersistentStorage();
-      const next = new Outbox(store, postEventsVia(apiFetch));
+      // Whose device this is, and nothing older than a week (section 7 and
+      // the compliance review): a store claimed by somebody else is wiped
+      // before it is used, and a visit that has not synced in seven days is
+      // not going to.
+      await store.claim(userIdOf(session));
+      await store.prune(PRUNE_AFTER_DAYS, new Date());
+      const next = new Outbox(
+        store,
+        postEventsVia(apiFetch, () => pointRef.current),
+      );
       const unsubscribe = next.subscribe((state) => {
         setPending(state.pending);
         setDurable(state.durable);
@@ -217,7 +257,19 @@ export function SessionRunner({
       live = false;
       stop?.();
     };
+    // `session` is read once, for whose store this is; re-reading it on every
+    // auth refresh would re-open the store mid-visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiFetch, createStore]);
+
+  // Signing out empties the device. The queue holds ratings, chips and the
+  // note the practitioner typed, and the open-visit note holds a given name:
+  // a signed-out phone keeps nothing of anybody
+  // (.claude/rules/compliance.md, section 7).
+  useEffect(() => {
+    if (session.status !== 'signed-out' || !outbox) return;
+    void outbox.forgetEverything();
+  }, [outbox, session.status]);
 
   // The note the next reload reads. Rewritten as the visit moves, so its own
   // record of how far the seq has got stays true.
@@ -281,7 +333,7 @@ export function SessionRunner({
     return () => clearInterval(tick);
   }, [step, write]);
 
-  const quality = useMemo(() => meanQuality(sites), [sites]);
+  const setupQuality = useMemo(() => meanQuality(sites), [sites]);
 
   const finishPreflight = useCallback(() => {
     void write('observation_recorded', {
@@ -296,7 +348,7 @@ export function SessionRunner({
         phase: 'pre',
         answers: settings.ratingQuestions.map((question) => ({
           key: question.key,
-          value: preAnswers[question.key] ?? midpoint(question.min, question.max),
+          value: preAnswers[question.key] ?? midpoint(question),
         })),
       });
     }
@@ -308,11 +360,11 @@ export function SessionRunner({
       sites: sites
         .filter((site) => site.site.trim().length > 0)
         .map((site) => ({ site: site.site.trim(), quality: site.quality })),
-      overridden: quality !== null && quality < 0.6,
+      overridden: setupQuality !== null && setupQuality < 0.6,
     });
     setStartedAtMs(Date.now());
     setStep('run');
-  }, [quality, sites, write]);
+  }, [setupQuality, sites, write]);
 
   const endRun = useCallback(() => {
     const started = startedAtMs ?? Date.now();
@@ -327,7 +379,7 @@ export function SessionRunner({
         phase: 'post',
         answers: settings.ratingQuestions.map((question) => ({
           key: question.key,
-          value: postAnswers[question.key] ?? midpoint(question.min, question.max),
+          value: postAnswers[question.key] ?? midpoint(question),
         })),
       });
     }
@@ -338,8 +390,10 @@ export function SessionRunner({
       engagement: observations.engagement,
       note: observations.note.trim().length > 0 ? observations.note.trim() : null,
     });
-    if (telemetry.length === 0) {
-      // Section 3.4's other half: one chunk covering the whole run.
+    // Section 3.4's other half: one chunk covering the whole run — but only
+    // if somebody actually took the reading. A slider nobody touched is not
+    // a measurement of anything.
+    if (telemetry.length === 0 && summaryReadingTaken) {
       const seconds = Math.max(
         1,
         Math.round(((endedAtMs ?? Date.now()) - (startedAtMs ?? Date.now())) / 1000),
@@ -359,28 +413,27 @@ export function SessionRunner({
         timeInRewardPercent: sample.timeInRewardPercent,
       });
     }
-    if (photo) {
-      void write('photo_captured', {
-        mimeType: photo.mimeType,
-        sizeBytes: photo.sizeBytes,
-        sha256: photo.sha256,
-      });
-    }
     setStep('summary');
   }, [
     endedAtMs,
     observations,
-    photo,
     postAnswers,
     settings.ratingQuestions,
     startedAtMs,
     summaryReading,
+    summaryReadingTaken,
     telemetry.length,
     write,
   ]);
 
-  const closeVisit = useCallback(async (): Promise<boolean> => {
-    await outbox?.flush();
+  /**
+   * Posts the close. 'closed' when it landed, 'wait' when it could not be
+   * reached and is worth trying again, 'refused' when the server will never
+   * take it — the same three answers the outbox reads, for the same reason:
+   * a practitioner standing in a hallway must not be told to put the phone
+   * away while something loops for ever behind the copy.
+   */
+  const postClose = useCallback(async (): Promise<'closed' | 'wait' | 'refused'> => {
     try {
       const res = await apiFetch(`/api/sessions/${visit.sessionId}/close`, {
         method: 'POST',
@@ -396,31 +449,58 @@ export function SessionRunner({
           },
         }),
       });
-      if (!res.ok) return false;
-      return CloseResponse.safeParse(await res.json().catch(() => null)).success;
+      if (res.ok) {
+        return CloseResponse.safeParse(await res.json().catch(() => null)).success
+          ? 'closed'
+          : 'refused';
+      }
+      // 403 and 404 never change. 400 is a body this device will keep
+      // sending. 409 does change — it is what the server says while the
+      // check-out has not arrived — so that one waits.
+      if (res.status === 400 || res.status === 403 || res.status === 404) return 'refused';
+      return 'wait';
     } catch {
-      return false;
+      return 'wait';
     }
-  }, [actuals, apiFetch, outbox, visit.sessionId]);
+  }, [actuals, apiFetch, visit.sessionId]);
+
+  /**
+   * Drains first, then closes. The order is the whole point: the server
+   * closes a visit only when it already holds the check-out event (section
+   * 2), so posting the close over a queue that has not gone yet answers 409
+   * and leaves the practitioner waiting thirty seconds for a retry that was
+   * always going to be needed.
+   */
+  const closeVisit = useCallback(async (): Promise<'closed' | 'wait' | 'refused'> => {
+    if (outbox && !(await outbox.drain())) return 'wait';
+    return postClose();
+  }, [outbox, postClose]);
 
   const confirm = useCallback(async () => {
     setStep('finishing');
-    const point = visit.shareLocation ? await readPosition() : null;
-    await write('checked_out', { point });
-    if (await closeVisit()) {
+    pointRef.current = visit.shareLocation ? await readPosition() : null;
+    await write('checked_out', {});
+    const outcome = await closeVisit();
+    if (outcome === 'closed') {
       await outbox?.rememberOpenVisit(null);
       setStep('done');
+      return;
     }
+    if (outcome === 'refused') setStep('blocked');
   }, [closeVisit, outbox, visit.shareLocation, write]);
 
   // The close is the one thing that needs the network. It is retried on the
-  // outbox's own beat rather than asking the practitioner to stand there.
+  // outbox's own beat rather than asking the practitioner to stand there —
+  // but only while it is worth retrying.
   useEffect(() => {
     if (step !== 'finishing') return;
     const retry = async () => {
-      if (await closeVisit()) {
+      const outcome = await closeVisit();
+      if (outcome === 'closed') {
         await outbox?.rememberOpenVisit(null);
         setStep('done');
+      } else if (outcome === 'refused') {
+        setStep('blocked');
       }
     };
     const timer = setInterval(() => void retry(), CLOSE_RETRY_MS);
@@ -436,12 +516,12 @@ export function SessionRunner({
     startedAtMs !== null && endedAtMs !== null
       ? Math.round((endedAtMs - startedAtMs) / 1000)
       : null;
-  const score = scoreSignalQuality(telemetry);
+  const sessionQuality = scoreSignalQuality(telemetry);
 
   return (
     <div className="ground" data-ground="dark">
       <main className={step === 'run' ? 'runner runner--full' : 'runner plain plain--instrument'}>
-        {step !== 'done' ? (
+        {step !== 'done' && step !== 'blocked' ? (
           <p className="sync" role="status">
             {pending === 0
               ? 'Everything on this visit is saved.'
@@ -479,7 +559,7 @@ export function SessionRunner({
             clientLabel={visit.clientLabel}
             number={visit.number}
             of={visit.of}
-            quality={quality}
+            quality={setupQuality}
             startedAtMs={startedAtMs}
             reading={reading}
             onReading={setReading}
@@ -496,10 +576,12 @@ export function SessionRunner({
             onObservations={setObservations}
             needsSummaryReading={telemetry.length === 0}
             summaryReading={summaryReading}
-            onSummaryReading={setSummaryReading}
+            summaryReadingTaken={summaryReadingTaken}
+            onSummaryReading={(next) => {
+              setSummaryReading(next);
+              setSummaryReadingTaken(true);
+            }}
             photoConsent={visit.photoConsent}
-            photo={photo}
-            onPhoto={setPhoto}
             onContinue={finishPost}
           />
         ) : null}
@@ -507,7 +589,8 @@ export function SessionRunner({
         {step === 'summary' ? (
           <SummaryStep
             durationSeconds={durationSeconds}
-            signalQuality={score}
+            setupQuality={setupQuality}
+            sessionQuality={sessionQuality}
             ratingDeltas={deltas(settings.ratingQuestions, preAnswers, postAnswers)}
             observations={observations}
             actuals={actuals}
@@ -526,6 +609,18 @@ export function SessionRunner({
           </div>
         ) : null}
 
+        {step === 'blocked' ? (
+          <div className="step">
+            <h1>Not checked out</h1>
+            <p className="note note--critical">{CLOSE_BLOCKED}</p>
+            <div className="step__dock">
+              <Button variant="primary" className="step__primary" onClick={onFinished}>
+                Back to Today
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {step === 'done' ? (
           <div className="step">
             <h1>Checked out</h1>
@@ -540,4 +635,9 @@ export function SessionRunner({
       </main>
     </div>
   );
+}
+
+/** Whose device this is. A signed-out shell claims nothing, and wipes instead. */
+function userIdOf(session: ReturnType<typeof useAuth>['session']): string {
+  return session.status === 'signed-in' ? session.actor.userId : 'signed-out';
 }
