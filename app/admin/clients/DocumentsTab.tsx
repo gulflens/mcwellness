@@ -84,6 +84,7 @@ export function DocumentsTab({
   // naming a file that has already been filed.
   const [chooserKey, setChooserKey] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
+  const [filed, setFiled] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Fetching and setting are separate so the effect below never calls
@@ -113,6 +114,7 @@ export function DocumentsTab({
   async function choose(chosen: File | null): Promise<void> {
     setFileError(null);
     setFileWarning(null);
+    setFiled(null);
     setFile(null);
     if (!chosen) return;
     const prepared = await compressToFit(chosen, MAX_DOCUMENT_BYTES);
@@ -138,6 +140,7 @@ export function DocumentsTab({
         }),
       });
       if (res.status === 201) {
+        setFiled(`${KIND_LABELS[kind] ?? kind} filed.`);
         setFile(null);
         setFileWarning(null);
         setChooserKey((key) => key + 1);
@@ -165,6 +168,9 @@ export function DocumentsTab({
 
   return (
     <div className="tab-section">
+      {/* tone="attention" carries role="status": a row appearing in a table is
+          not a confirmation for somebody who cannot see it appear. */}
+      {filed ? <Note tone="attention">{filed}</Note> : null}
       {state.kind === 'loading' ? <Note>Loading the documents.</Note> : null}
       {state.kind === 'error' ? (
         <Note tone="critical">The documents could not be loaded. Try again.</Note>

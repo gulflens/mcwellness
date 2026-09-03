@@ -580,6 +580,25 @@ describe('DocumentsTab', () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   });
 
+  it('confirms a filing out loud, and forgets the file it filed', async () => {
+    mount(<DocumentsTab clientId={CLIENT_ID} mayWrite />);
+    await screen.findByText('Nothing filed against this client yet.');
+    const input = document.querySelector('#document-file') as HTMLInputElement;
+    const file = new File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], 'referral.pdf', {
+      type: 'application/pdf',
+    });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    fireEvent.change(input);
+    await screen.findByText('Ready to file: referral.pdf');
+
+    fireEvent.click(screen.getByRole('button', { name: 'File document' }));
+    // A row appearing in a table is not a confirmation to somebody who cannot
+    // see it appear, and the input went on naming a file already filed.
+    const said = await screen.findByText('Referral letter filed.');
+    expect(said.getAttribute('role')).toBe('status');
+    expect(screen.queryByText('Ready to file: referral.pdf')).toBeNull();
+  });
+
   it('warns against an identity document before anything is chosen', async () => {
     mount(<DocumentsTab clientId={CLIENT_ID} mayWrite />);
     expect(

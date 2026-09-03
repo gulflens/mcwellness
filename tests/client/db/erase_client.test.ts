@@ -53,8 +53,8 @@ beforeAll(async () => {
   // only by its relationship is still the ordinary case everywhere else.
   // Migration 102 exists to clear these, so the fixture has to carry them.
   await owner.query(
-    "update contact set given_name = 'Wren', family_name = 'Alpha', " +
-      "given_name_ar = 'رين', family_name_ar = 'ألفا' where id = $1",
+    "update contact set given_name = 'Willow', family_name = 'Meadow', " +
+      "given_name_ar = 'صفصاف', family_name_ar = 'مرج' where id = $1",
     [IDS.contactA],
   );
   await owner.query(
