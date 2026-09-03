@@ -65,7 +65,7 @@ beforeAll(async () => {
 
   await client.query(
     'insert into package (id, tenant_id, code, name, list_price_fils) ' +
-      "values ($1, $2, 'silver', 'Silver', 1215000)",
+      "values ($1, $2, 'silver-under-test', 'Silver', 1215000)",
     [PACKAGE_ID, IDS.tenantA],
   );
   await client.query(

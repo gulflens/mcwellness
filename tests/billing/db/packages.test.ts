@@ -6,7 +6,15 @@ import type {
   SellPackageResponse,
 } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
-import { SEEDED, setPracticePrices, silverInput, startHarness, type Harness } from './support';
+import {
+  GOLD_CODE,
+  SEEDED,
+  setPracticePrices,
+  silverInput,
+  SILVER_CODE,
+  startHarness,
+  type Harness,
+} from './support';
 
 /**
  * The bundle catalogue and a sale, end to end: the practice's own Silver
@@ -28,10 +36,24 @@ afterAll(async () => {
 });
 
 describe('the bundle catalogue', () => {
-  it('is empty before the practice adds one', async () => {
+  it('holds whatever the practice sells, and nothing this suite has not added yet', async () => {
+    // The seed carries the practice's own three programmes on one database
+    // and nothing at all on another, so what is asserted is the invariant
+    // that holds either way: the catalogue reads, every bundle in it is
+    // priced coherently, and the one this suite is about to create is not
+    // there yet.
     const res = await h.call('GET', '/api/billing/packages', SEEDED.owner);
     expect(res.status).toBe(200);
-    expect(((await res.json()) as PackagesResponse).packages).toEqual([]);
+    const { packages } = (await res.json()) as PackagesResponse;
+    expect(packages.some((p) => p.code === SILVER_CODE)).toBe(false);
+    for (const bundle of packages) {
+      expect(bundle.listPriceFils).toBeGreaterThanOrEqual(0);
+      if (bundle.currentPrice) {
+        expect(bundle.currentPrice.grossFils).toBe(
+          bundle.currentPrice.amountFils + bundle.currentPrice.vatFils,
+        );
+      }
+    }
   });
 
   it('refuses a practitioner, who neither sees nor sets what the practice sells', async () => {
@@ -71,7 +93,9 @@ describe('the bundle catalogue', () => {
 
   it('adds VAT on top of the net launch price, at the rate in force', async () => {
     const res = await h.call('GET', '/api/billing/packages', SEEDED.owner);
-    const silver = ((await res.json()) as PackagesResponse).packages[0];
+    const silver = ((await res.json()) as PackagesResponse).packages.find(
+      (p) => p.code === SILVER_CODE,
+    );
     expect(silver?.currentPrice?.vatRateBasisPoints).toBe(500);
     expect(silver?.currentPrice?.vatFils).toBe(51_625); // 5% of 1,032,500
     expect(silver?.currentPrice?.grossFils).toBe(1_084_125);
@@ -79,7 +103,9 @@ describe('the bundle catalogue', () => {
 
   it('lists the contents with what each costs on its own', async () => {
     const res = await h.call('GET', '/api/billing/packages', SEEDED.owner);
-    const silver = ((await res.json()) as PackagesResponse).packages[0];
+    const silver = ((await res.json()) as PackagesResponse).packages.find(
+      (p) => p.code === SILVER_CODE,
+    );
     expect(
       silver?.components.map((c) => [c.serviceTypeCode, c.quantity, c.standaloneNetFils]),
     ).toEqual([
@@ -116,7 +142,7 @@ describe('the bundle catalogue', () => {
     const input = silverInput(h, SEED_TODAY);
     const res = await h.call('POST', '/api/billing/packages', SEEDED.admin, {
       ...input,
-      code: 'gold',
+      code: GOLD_CODE,
       name: 'Gold',
       nameAr: 'الذهبية',
       listPriceFils: 1_997_500,
@@ -150,7 +176,7 @@ describe('the bundle catalogue', () => {
   it('appends a new price rather than editing the one a family was shown', async () => {
     const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
     const silver = ((await list.json()) as PackagesResponse).packages.find(
-      (p) => p.code === 'silver',
+      (p) => p.code === SILVER_CODE,
     );
     const res = await h.call('POST', `/api/billing/packages/${silver?.id}/price`, SEEDED.owner, {
       amountFils: 1_100_000,
@@ -161,7 +187,7 @@ describe('the bundle catalogue', () => {
     // Dated in the future, so today's list still shows the launch price.
     const after = await h.call('GET', '/api/billing/packages', SEEDED.owner);
     const stillSilver = ((await after.json()) as PackagesResponse).packages.find(
-      (p) => p.code === 'silver',
+      (p) => p.code === SILVER_CODE,
     );
     expect(stillSilver?.currentPrice?.amountFils).toBe(1_032_500);
 
@@ -175,7 +201,7 @@ describe('the bundle catalogue', () => {
   it('refuses to backdate a price a family may already have been quoted', async () => {
     const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
     const silver = ((await list.json()) as PackagesResponse).packages.find(
-      (p) => p.code === 'silver',
+      (p) => p.code === SILVER_CODE,
     );
     const res = await h.call('POST', `/api/billing/packages/${silver?.id}/price`, SEEDED.owner, {
       amountFils: 900_000,
@@ -193,7 +219,7 @@ describe('selling a Silver package', () => {
   beforeAll(async () => {
     const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
     const silver = ((await list.json()) as PackagesResponse).packages.find(
-      (p) => p.code === 'silver',
+      (p) => p.code === SILVER_CODE,
     );
     if (!silver) throw new Error('Silver was not created.');
     silverId = silver.id;

@@ -23,6 +23,32 @@ const Reason = z
   .transform((value) => cleanText(value, 200))
   .refine((value) => value.length >= 1, 'A reason is required.');
 
+/**
+ * A bank transfer reference or a payment link's own id, and nothing else.
+ *
+ * Not free text, and the column agrees (402_billing_document.sql). `payment`
+ * grants no update and no delete, `app.erase_client` does not reach it yet
+ * (docs/CHANGE-REQUESTS/billing-03.md asks for that), and whatever is written
+ * here is copied verbatim into the audit trail — so a field a person could
+ * type a sentence into would be a place for a family's private circumstances
+ * to outlive their record. Forty characters of the alphabet a bank reference
+ * is actually made of is longer than any UAE format the practice will meet.
+ */
+const PaymentReference = z
+  .string()
+  .transform((value) => cleanText(value, 40))
+  .refine(
+    (value) => /^[A-Za-z0-9][A-Za-z0-9 /.:#-]{0,39}$/.test(value),
+    'A reference is letters, digits, spaces and - / . : # only.',
+  );
+
+/**
+ * An idempotency key, sent as the `Idempotency-Key` header. The drawer makes
+ * one when the person presses the button, so the same press retried is the
+ * same sale or the same payment — once.
+ */
+export const IdempotencyKey = z.uuid();
+
 // ---------------------------------------------------------------------------
 // The bundle catalogue
 // ---------------------------------------------------------------------------
@@ -127,11 +153,7 @@ export const SellPackageInput = z.object({
     .object({
       method: z.enum(PAYMENT_METHODS),
       amountFils: Fils.refine((v) => v > 0, 'A payment is more than nothing.'),
-      reference: z
-        .string()
-        .transform((v) => cleanText(v, 120))
-        .nullable()
-        .optional(),
+      reference: PaymentReference.nullable().optional(),
     })
     .optional(),
 });
@@ -174,11 +196,7 @@ export const RecordPaymentInput = z.object({
   amountFils: Fils.refine((v) => v > 0, 'A payment is more than nothing.'),
   /** When the money arrived, as an instant. Defaults to now when absent. */
   receivedAt: z.iso.datetime().optional(),
-  reference: z
-    .string()
-    .transform((v) => cleanText(v, 120))
-    .nullable()
-    .optional(),
+  reference: PaymentReference.nullable().optional(),
   invoiceId: z.uuid().nullable().optional(),
 });
 export type RecordPaymentInput = z.infer<typeof RecordPaymentInput>;
@@ -214,6 +232,9 @@ export const ServiceBalanceRow = z.object({
   remaining: z.number().int().nonnegative(),
   lapsed: z.number().int().nonnegative(),
   remainingValueNetFils: z.number().int().nonnegative(),
+  /** Earned, and still owed in sessions (docs/SPEC/billing.md section 4.1). */
+  recognisedNetFils: z.number().int().nonnegative(),
+  deferredNetFils: z.number().int().nonnegative(),
   nextExpiryOn: z.string().nullable(),
   expiryWarning: z.enum(EXPIRY_WARNINGS),
 });
@@ -225,6 +246,16 @@ export const BalanceResponse = z.object({
   delivered: z.number().int().nonnegative(),
   remaining: z.number().int().nonnegative(),
   remainingValueNetFils: z.number().int().nonnegative(),
+  /**
+   * The two halves of what a package sale really was: what the practice has
+   * earned by delivering, and what it still owes in sessions. Cash is not
+   * revenue (docs/SPEC/billing.md section 4.1), and the dashboard that puts
+   * these side by side across every client is a later piece of work — but
+   * the figures come from the ledger as it already stands, so building it
+   * needs no schema change and no backfill.
+   */
+  recognisedNetFils: z.number().int().nonnegative(),
+  deferredNetFils: z.number().int().nonnegative(),
   nextExpiryOn: z.string().nullable(),
   expiryWarning: z.enum(EXPIRY_WARNINGS),
   /** Charged less paid, in fils. Positive is owed to the practice. */
@@ -289,6 +320,23 @@ export const RefundQuoteResponse = z.object({
   quoteOnly: z.literal(true),
 });
 export type RefundQuoteResponse = z.infer<typeof RefundQuoteResponse>;
+
+/**
+ * Extending a programme's expiry: the coordinator's discretion, with a reason
+ * (docs/SPEC/billing.md section 4.3, and the founder's decision of
+ * 2026-09-03). The new date must be later than the one it replaces — an
+ * "extension" that shortens the time a family has is not an extension, and
+ * taking time away from a prepaid programme is not something a reason makes
+ * acceptable.
+ */
+export const ExtendPurchaseInput = z.object({
+  extendedTo: IsoDate,
+  reason: Reason,
+});
+export type ExtendPurchaseInput = z.infer<typeof ExtendPurchaseInput>;
+
+export const ExtendPurchaseResponse = z.object({ purchase: PurchaseRow });
+export type ExtendPurchaseResponse = z.infer<typeof ExtendPurchaseResponse>;
 
 export const WaiveEntitlementInput = z.object({ reason: Reason });
 export type WaiveEntitlementInput = z.infer<typeof WaiveEntitlementInput>;

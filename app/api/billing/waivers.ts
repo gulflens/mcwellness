@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { scrubReason } from '../_middleware/request-context';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayWaive } from './access';
 import { WaiveEntitlementInput, WaiveEntitlementResponse } from './ledger-schema';
@@ -66,6 +67,11 @@ export function mountWaivers(api: Hono<ApiEnv>, now: () => Date = () => new Date
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const entitlementId = c.req.param('id');
+    // An id from the path, checked as a uuid before it reaches a query, the
+    // way the invoice book checks its own filter.
+    if (!/^[0-9a-f-]{36}$/i.test(entitlementId)) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
     const body = WaiveEntitlementInput.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
@@ -83,6 +89,13 @@ export function mountWaivers(api: Hono<ApiEnv>, now: () => Date = () => new Date
     if (credit.consumption_kind === 'session') {
       return c.json({ error: 'conflict', code: 'session_delivered', requestId }, 409);
     }
+
+    // Why the charge was forgiven belongs in the audit trail, not only in the
+    // column: the two rows this writes are an `update` and an `insert` the
+    // trigger stamps with `app.reason`, and the route is the authority on
+    // that reason (docs/SPEC/audit.md section 5), not a header the browser
+    // may or may not have sent.
+    await db.query("select set_config('app.reason', $1, true)", [scrubReason(body.data.reason)]);
 
     await db.query(WAIVE_SQL, [credit.id, body.data.reason]);
     const replacement = await db.query<{ id: string }>(REPLACEMENT_SQL, [

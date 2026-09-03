@@ -47,6 +47,20 @@ export type ServiceBalance = {
   lapsed: number;
   /** What the remaining credits are worth at the rate they were allocated at. */
   remainingValueNetFils: Fils;
+  /**
+   * What has been earned: the allocated value of every credit already used
+   * up, delivered or forfeited. Cash was taken for these and the obligation
+   * behind them is discharged (docs/SPEC/billing.md section 4.1, IFRS 15).
+   */
+  recognisedNetFils: Fils;
+  /**
+   * What is still owed in sessions: the allocated value of every credit not
+   * yet used. This is the contract liability — the number section 4.1 says
+   * to watch the way you would watch a debt — and it includes a credit that
+   * has run out of time, because until the practice writes one off it is
+   * still a promise it made.
+   */
+  deferredNetFils: Fils;
   /** The soonest a usable credit runs out, and what to say about it. */
   nextExpiryOn: IsoDate | null;
   expiryWarning: ExpiryWarning;
@@ -58,6 +72,9 @@ export type ClientBalance = {
   delivered: number;
   remaining: number;
   remainingValueNetFils: Fils;
+  /** Across every service: earned, and still owed in sessions. */
+  recognisedNetFils: Fils;
+  deferredNetFils: Fils;
   /** The soonest expiry among every usable credit the client holds. */
   nextExpiryOn: IsoDate | null;
   expiryWarning: ExpiryWarning;
@@ -100,6 +117,8 @@ export function balanceFor(
         remaining: 0,
         lapsed: 0,
         remainingValueNetFils: fils(0),
+        recognisedNetFils: fils(0),
+        deferredNetFils: fils(0),
         nextExpiryOn: null,
         expiryWarning: 'none',
       };
@@ -113,12 +132,16 @@ export function balanceFor(
       } else {
         service.forfeited += 1;
       }
+      service.recognisedNetFils = fils(service.recognisedNetFils + entitlement.allocatedNetFils);
       continue;
     }
     if (entitlement.status === 'expired') {
       service.lapsed += 1;
+      service.deferredNetFils = fils(service.deferredNetFils + entitlement.allocatedNetFils);
       continue;
     }
+    // Available on paper, used or not: the practice still owes the visit.
+    service.deferredNetFils = fils(service.deferredNetFils + entitlement.allocatedNetFils);
     // Available on the row. Whether it is really usable is a question about
     // today, not about the column: nothing sweeps expiry dates nightly, so
     // the reading is done here rather than trusted to a job that may not have run.
@@ -142,10 +165,14 @@ export function balanceFor(
   let delivered = 0;
   let remaining = 0;
   let remainingValue = 0;
+  let recognised = 0;
+  let deferred = 0;
   for (const service of services) {
     delivered += service.delivered;
     remaining += service.remaining;
     remainingValue += service.remainingValueNetFils;
+    recognised += service.recognisedNetFils;
+    deferred += service.deferredNetFils;
     if (service.remaining > 0) {
       nextExpiryOn = earlier(nextExpiryOn, service.nextExpiryOn);
     }
@@ -156,6 +183,8 @@ export function balanceFor(
     delivered,
     remaining,
     remainingValueNetFils: fils(remainingValue),
+    recognisedNetFils: fils(recognised),
+    deferredNetFils: fils(deferred),
     nextExpiryOn,
     expiryWarning: remaining > 0 ? expiryWarningFor(nextExpiryOn, today) : 'none',
   };

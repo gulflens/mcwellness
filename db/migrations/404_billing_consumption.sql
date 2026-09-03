@@ -85,7 +85,7 @@ create unique index billing_exception_one_per_appointment
   on billing_exception (tenant_id, appointment_id) where appointment_id is not null;
 create trigger set_updated_at before update on billing_exception
   for each row execute function app.set_updated_at();
-create trigger audit_row after insert or update on public.billing_exception
+create trigger audit_row after insert or update or delete on public.billing_exception
   for each row execute function app.audit_row();
 alter table public.billing_exception enable always trigger audit_row;
 
@@ -176,6 +176,7 @@ as $$
 declare
   v_today          date := (now() at time zone 'Asia/Dubai')::date;
   v_entitlement_id uuid;
+  v_attempt        integer;
 begin
   -- Already accounted for. An ordinary replay stops here; two at once are
   -- stopped by entitlement_one_per_session and invoice_one_per_session.
@@ -184,14 +185,31 @@ begin
     return null;
   end if;
 
-  v_entitlement_id := app.oldest_available_entitlement(new.client_id, new.service_type_id, v_today);
-  if v_entitlement_id is not null then
+  -- Take a credit, or find there is none to take. Three things make this safe
+  -- under two visits completing at the same moment:
+  --   1. app.oldest_available_entitlement locks the row it returns and skips
+  --      one another transaction is holding, so the two visits are handed two
+  --      different credits.
+  --   2. `and status = 'available'` on the update is the second lock. If the
+  --      row moved between the read and the write, no row is updated and this
+  --      falls through to the charge rather than overwriting a consumption
+  --      that has already happened — the fault this shape exists to prevent,
+  --      where one credit paid for two visits and the second was never
+  --      invoiced at all.
+  --   3. A miss is re-read once before giving up, because the credit that
+  --      moved may not have been the only one.
+  for v_attempt in 1..2 loop
+    v_entitlement_id :=
+      app.oldest_available_entitlement(new.client_id, new.service_type_id, v_today);
+    exit when v_entitlement_id is null;
     update public.entitlement
        set status = 'consumed', consumption_kind = 'session',
            consumed_by_session_id = new.id, consumed_at = now()
-     where id = v_entitlement_id;
-    return null;
-  end if;
+     where id = v_entitlement_id and status = 'available';
+    if found then
+      return null;
+    end if;
+  end loop;
 
   if app.charge_single_visit(new.client_id, new.service_type_id, new.id, v_today) is null then
     insert into public.billing_exception (
@@ -208,10 +226,23 @@ end
 $$;
 revoke execute on function app.billing_on_session_completed() from public;
 
-create trigger billing_on_completed after insert or update on public.session
+-- Two triggers, not one, and keyed on the *transition* rather than the state.
+-- OLD cannot be read in an insert trigger's WHEN clause, so the two cases are
+-- declared separately: a session written straight in as completed is a visit
+-- becoming completed and is charged, while an update that leaves a completed
+-- session completed — correcting a note a week later — is not a second visit
+-- and must not be a second charge. It also means a session already completed
+-- when this migration ran is never charged at today's price by a later edit:
+-- nothing here backfills, deliberately, because a price from months ago is
+-- not a price this can invent.
+create trigger billing_on_completed after insert on public.session
   for each row when (new.status = 'completed')
   execute function app.billing_on_session_completed();
 alter table public.session enable always trigger billing_on_completed;
+create trigger billing_on_completing after update on public.session
+  for each row when (new.status = 'completed' and old.status is distinct from 'completed')
+  execute function app.billing_on_session_completed();
+alter table public.session enable always trigger billing_on_completing;
 
 ------------------------------------------------------------------------------
 -- 4. A visit called off too late, or not attended, consumes one too
@@ -227,6 +258,7 @@ as $$
 declare
   v_today          date := (now() at time zone 'Asia/Dubai')::date;
   v_entitlement_id uuid;
+  v_attempt        integer;
   v_kind           public.entitlement_consumption :=
     case new.status when 'cancelled_late' then 'late_cancellation' else 'no_show' end;
 begin
@@ -235,14 +267,19 @@ begin
     return null;
   end if;
 
-  v_entitlement_id := app.oldest_available_entitlement(new.client_id, new.service_type_id, v_today);
-  if v_entitlement_id is not null then
+  -- The same three guards as the session trigger above, for the same reason.
+  for v_attempt in 1..2 loop
+    v_entitlement_id :=
+      app.oldest_available_entitlement(new.client_id, new.service_type_id, v_today);
+    exit when v_entitlement_id is null;
     update public.entitlement
        set status = 'consumed', consumption_kind = v_kind,
            consumed_by_appointment_id = new.id, consumed_at = now()
-     where id = v_entitlement_id;
-    return null;
-  end if;
+     where id = v_entitlement_id and status = 'available';
+    if found then
+      return null;
+    end if;
+  end loop;
 
   -- No credit to take. Nothing is invoiced on the practice's own initiative
   -- here — charging a family for a visit they never had is a decision, not a
@@ -260,10 +297,17 @@ end
 $$;
 revoke execute on function app.billing_on_appointment_charged() from public;
 
-create trigger billing_on_charged after insert or update on public.appointment
+-- The same split, for the same reason: a visit that was already called off
+-- late does not become newly called off because somebody edited the row.
+create trigger billing_on_charged after insert on public.appointment
   for each row when (new.status in ('cancelled_late', 'no_show'))
   execute function app.billing_on_appointment_charged();
 alter table public.appointment enable always trigger billing_on_charged;
+create trigger billing_on_charging after update on public.appointment
+  for each row when (new.status in ('cancelled_late', 'no_show')
+                     and old.status is distinct from new.status)
+  execute function app.billing_on_appointment_charged();
+alter table public.appointment enable always trigger billing_on_charging;
 
 ------------------------------------------------------------------------------
 -- 5. billing_ledger — what a household has been charged and what it has paid,
@@ -325,8 +369,10 @@ $$;
 --   revoke select, insert, update on public.billing_exception from app_role;
 --   revoke select on app.billing_ledger from app_role;
 --   drop view if exists app.billing_ledger;
+--   drop trigger if exists billing_on_charging on public.appointment;
 --   drop trigger if exists billing_on_charged on public.appointment;
 --   drop function if exists app.billing_on_appointment_charged();
+--   drop trigger if exists billing_on_completing on public.session;
 --   drop trigger if exists billing_on_completed on public.session;
 --   drop function if exists app.billing_on_session_completed();
 --   drop function if exists app.charge_single_visit(uuid, uuid, uuid, date);

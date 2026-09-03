@@ -154,6 +154,8 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
             remaining: service.remaining,
             lapsed: service.lapsed,
             remainingValueNetFils: service.remainingValueNetFils,
+            recognisedNetFils: service.recognisedNetFils,
+            deferredNetFils: service.deferredNetFils,
             nextExpiryOn: service.nextExpiryOn,
             expiryWarning: service.expiryWarning,
           };
@@ -161,6 +163,8 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
         delivered: balance.delivered,
         remaining: balance.remaining,
         remainingValueNetFils: balance.remainingValueNetFils,
+        recognisedNetFils: balance.recognisedNetFils,
+        deferredNetFils: balance.deferredNetFils,
         nextExpiryOn: balance.nextExpiryOn,
         expiryWarning: balance.expiryWarning,
         outstandingFils: outstandingBalanceFils(

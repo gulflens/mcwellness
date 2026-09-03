@@ -54,6 +54,9 @@ export function mountRefundQuotes(api: Hono<ApiEnv>, now: () => Date = () => new
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const purchaseId = c.req.param('id');
+    if (!/^[0-9a-f-]{36}$/i.test(purchaseId)) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
     const db = c.get('db');
 
     const purchase = await db.query<{ id: string; client_id: string; net_fils: number }>(

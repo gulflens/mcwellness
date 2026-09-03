@@ -175,29 +175,53 @@ export async function readPackages(db: Db, today: string): Promise<PackageRow[]>
 }
 
 /**
- * Appends a price row for a bundle: the same append-only discipline the
- * service price list has (domain/billing/price.ts's validateNewPrice — today
- * or later, and strictly after the row it supersedes), with VAT resolved from
- * the setting in force on its own valid_from and stamped.
+ * Whether a bundle price may be written, and what VAT it carries — decided
+ * before anything is inserted.
+ *
+ * The same append-only discipline the service price list has
+ * (domain/billing/price.ts's validateNewPrice — today or later, and strictly
+ * after the row it supersedes), with VAT resolved from the setting in force
+ * on its own valid_from and stamped.
+ *
+ * **Checking is separate from writing, and that separation is the point.**
+ * Creating a bundle writes the package, its components and its first price;
+ * when the price was refused at the end of that sequence, the route returned
+ * a 400 and the request-context middleware — which commits anything below a
+ * 500 — committed the package and components anyway. The founder was told
+ * "a price cannot take effect before today" and left with a nameless bundle
+ * holding her chosen code, so trying again answered "that code is taken".
+ * Now the date and the VAT setting are settled before the first insert, and
+ * a refusal happens with nothing written.
  *
  * Returns a refusal code rather than a sentence: the domain's own reason text
  * never reaches a screen unmediated.
  */
-async function appendPackagePrice(
+type PriceRefusal = { ok: false; code: string; status: 400 | 422 };
+type PriceApproval = {
+  ok: true;
+  supersedesId: string | null;
+  rateBasisPoints: number;
+  settingVersion: number;
+};
+
+async function checkPackagePrice(
   db: Db,
-  packageId: string,
-  input: { amountFils: number; validFrom: string; amendmentReason: string },
+  packageId: string | null,
+  input: { validFrom: string },
   today: string,
-): Promise<{ ok: true; id: string } | { ok: false; code: string; status: 400 | 422 }> {
-  const existing = await db.query<{ id: string; amount_fils: number; valid_from: string }>(
-    LATEST_PRICE_SQL,
-    [packageId],
-  );
+): Promise<PriceApproval | PriceRefusal> {
+  // A package that does not exist yet has no price to supersede, and the
+  // check is the same one with `current` null.
+  const existing = packageId
+    ? await db.query<{ id: string; amount_fils: number; valid_from: string }>(LATEST_PRICE_SQL, [
+        packageId,
+      ])
+    : { rows: [] as { id: string; amount_fils: number; valid_from: string }[] };
   const currentRow = existing.rows[0];
   const current: Price | null = currentRow
     ? {
         id: currentRow.id,
-        serviceTypeId: packageId,
+        serviceTypeId: packageId ?? '',
         unitPriceFils: fils(currentRow.amount_fils),
         validFrom: currentRow.valid_from,
       }
@@ -225,11 +249,25 @@ async function appendPackagePrice(
   if (!rate) {
     return { ok: false, status: 422, code: 'no_vat_setting' };
   }
-  const resolution = resolveVat(fils(input.amountFils), {
+  return {
+    ok: true,
+    supersedesId: current?.id ?? null,
     rateBasisPoints: rate.rate_basis_points,
-    version: rate.version,
-  });
+    settingVersion: rate.version,
+  };
+}
 
+/** Writes the row `checkPackagePrice` has already approved. */
+async function insertPackagePrice(
+  db: Db,
+  packageId: string,
+  input: { amountFils: number; validFrom: string; amendmentReason: string },
+  approval: PriceApproval,
+): Promise<string> {
+  const resolution = resolveVat(fils(input.amountFils), {
+    rateBasisPoints: approval.rateBasisPoints,
+    version: approval.settingVersion,
+  });
   const inserted = await db.query<{ id: string }>(
     'insert into package_price (tenant_id, package_id, amount_fils, vat_rate_basis_points, ' +
       'vat_setting_version, valid_from, supersedes_id, amendment_reason, created_by) ' +
@@ -241,7 +279,7 @@ async function appendPackagePrice(
       resolution.rateBasisPoints,
       resolution.settingVersion,
       input.validFrom,
-      current?.id ?? null,
+      approval.supersedesId,
       input.amendmentReason,
     ],
   );
@@ -249,7 +287,7 @@ async function appendPackagePrice(
   if (!id) {
     throw new Error('Insert of a package price did not return an id.');
   }
-  return { ok: true, id };
+  return id;
 }
 
 export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -302,6 +340,13 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'conflict', code: 'code_taken', requestId }, 409);
     }
 
+    // Before the first insert, not after the last one: a refused price must
+    // leave no package behind holding the code the founder wanted.
+    const approval = await checkPackagePrice(db, null, input.price, today);
+    if (!approval.ok) {
+      return c.json({ error: 'bad_request', code: approval.code, requestId }, approval.status);
+    }
+
     const inserted = await db.query<{ id: string }>(
       'insert into package (tenant_id, code, name, name_ar, list_price_fils, expiry_months, created_by) ' +
         'values (app.current_tenant_id(), $1, $2, $3, $4, $5, app.current_actor_id()) returning id',
@@ -320,12 +365,7 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       );
     }
 
-    const price = await appendPackagePrice(db, packageId, input.price, today);
-    if (!price.ok) {
-      // The whole request runs in one transaction (the request-context
-      // middleware), so returning here leaves no half-made package behind.
-      return c.json({ error: 'bad_request', code: price.code, requestId }, price.status);
-    }
+    await insertPackagePrice(db, packageId, input.price, approval);
 
     const packages = await readPackages(db, today);
     const created = packages.find((row) => row.id === packageId);
@@ -342,6 +382,9 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const packageId = c.req.param('id');
+    if (!/^[0-9a-f-]{36}$/i.test(packageId)) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
     const body = AddPackagePriceInput.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
@@ -356,10 +399,11 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
 
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
-    const price = await appendPackagePrice(db, packageId, body.data, today);
-    if (!price.ok) {
-      return c.json({ error: 'bad_request', code: price.code, requestId }, price.status);
+    const approval = await checkPackagePrice(db, packageId, body.data, today);
+    if (!approval.ok) {
+      return c.json({ error: 'bad_request', code: approval.code, requestId }, approval.status);
     }
+    await insertPackagePrice(db, packageId, body.data, approval);
     const packages = await readPackages(db, today);
     const updated = packages.find((row) => row.id === packageId);
     if (!updated) {

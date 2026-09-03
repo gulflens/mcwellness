@@ -5,7 +5,14 @@ import type {
   WaiveEntitlementResponse,
 } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
-import { SEEDED, setPracticePrices, silverInput, startHarness, type Harness } from './support';
+import {
+  SEEDED,
+  setPracticePrices,
+  silverInput,
+  SILVER_CODE,
+  startHarness,
+  type Harness,
+} from './support';
 
 /**
  * The two status changes that cost a family something: a visit delivered, and
@@ -108,7 +115,7 @@ beforeAll(async () => {
   if (created.status !== 201) throw new Error('Silver could not be created.');
   const list = await h.call('GET', '/api/billing/packages', SEEDED.owner);
   const silver = ((await list.json()) as PackagesResponse).packages.find(
-    (p) => p.code === 'silver',
+    (p) => p.code === SILVER_CODE,
   );
   if (!silver) throw new Error('Silver is missing.');
   silverId = silver.id;

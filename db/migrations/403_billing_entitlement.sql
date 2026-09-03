@@ -84,6 +84,12 @@ create table package_purchase (
   extension_reason       text check (length(btrim(extension_reason)) between 1 and 200),
   status                 package_purchase_status not null default 'active',
   invoice_id             uuid,
+  -- The same request twice is the same sale once. The drawer generates this
+  -- when the person presses the button; a retry or a double tap replays the
+  -- original answer rather than writing a second purchase, a second invoice
+  -- number, a second set of credits and a second payment into four tables
+  -- that grant no delete.
+  idempotency_key        uuid,
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now(),
   created_by             uuid references app_user (id),
@@ -95,6 +101,7 @@ create table package_purchase (
   ),
   constraint package_purchase_expires_after_purchase check (expires_on > purchased_on),
   unique (tenant_id, id),
+  unique (tenant_id, idempotency_key),
   foreign key (tenant_id, client_id) references client (tenant_id, id),
   foreign key (tenant_id, package_id) references package (tenant_id, id),
   foreign key (tenant_id, vat_setting_version) references vat_setting (tenant_id, version),
@@ -108,7 +115,7 @@ create index package_purchase_invoice_idx on package_purchase (invoice_id);
 create index package_purchase_created_by_idx on package_purchase (created_by);
 create trigger set_updated_at before update on package_purchase
   for each row execute function app.set_updated_at();
-create trigger audit_row after insert or update on public.package_purchase
+create trigger audit_row after insert or update or delete on public.package_purchase
   for each row execute function app.audit_row();
 alter table public.package_purchase enable always trigger audit_row;
 
@@ -211,7 +218,7 @@ create unique index entitlement_one_replacement
   on entitlement (tenant_id, replaces_entitlement_id) where replaces_entitlement_id is not null;
 create trigger set_updated_at before update on entitlement
   for each row execute function app.set_updated_at();
-create trigger audit_row after insert or update on public.entitlement
+create trigger audit_row after insert or update or delete on public.entitlement
   for each row execute function app.audit_row();
 alter table public.entitlement enable always trigger audit_row;
 
@@ -232,32 +239,46 @@ as $$
 declare
   -- Read through jsonb rather than a column reference: one function serves
   -- two tables that do not share a column name for the purchase.
-  v_row         jsonb := to_jsonb(new);
-  v_purchase_id uuid := case tg_table_name
-                          when 'entitlement' then (v_row ->> 'package_purchase_id')::uuid
-                          else (v_row ->> 'id')::uuid
-                        end;
+  v_new         jsonb := to_jsonb(new);
+  v_old         jsonb := case when tg_op = 'UPDATE' then to_jsonb(old) else null end;
+  -- Both sides of a move. A credit detached from a purchase, or moved to
+  -- another one, leaves the purchase it came from short: checking only the
+  -- purchase named on the new row would let that under-allocation through
+  -- unnoticed, so the purchase it left is checked as well.
+  v_purchase_ids uuid[];
+  v_purchase_id uuid;
   v_paid        integer;
   v_allocated   integer;
 begin
-  if v_purchase_id is null then
-    return null;                                   -- a single visit, not a package
+  if tg_table_name = 'entitlement' then
+    v_purchase_ids := array[
+      (v_new ->> 'package_purchase_id')::uuid,
+      case when v_old is null then null else (v_old ->> 'package_purchase_id')::uuid end
+    ];
+  else
+    v_purchase_ids := array[(v_new ->> 'id')::uuid];
   end if;
-  select net_fils into v_paid from public.package_purchase where id = v_purchase_id;
-  if v_paid is null then
-    return null;                                   -- the purchase is gone; nothing to check
-  end if;
-  select coalesce(sum(allocated_net_fils), 0) into v_allocated
-    from public.entitlement
-   -- A waived credit is excluded and its replacement counted in its place, so
-   -- the total still comes to what was paid after a coordinator forgives a
-   -- late cancellation.
-   where package_purchase_id = v_purchase_id and status <> 'waived';
-  if v_allocated <> v_paid then
-    raise exception
-      'The credits for this purchase total % fils, but % fils was paid.', v_allocated, v_paid
-      using errcode = 'check_violation';
-  end if;
+
+  foreach v_purchase_id in array v_purchase_ids loop
+    if v_purchase_id is null then
+      continue;                                    -- a single visit, not a package
+    end if;
+    select net_fils into v_paid from public.package_purchase where id = v_purchase_id;
+    if v_paid is null then
+      continue;                                    -- the purchase is gone; nothing to check
+    end if;
+    select coalesce(sum(allocated_net_fils), 0) into v_allocated
+      from public.entitlement
+     -- A waived credit is excluded and its replacement counted in its place, so
+     -- the total still comes to what was paid after a coordinator forgives a
+     -- late cancellation.
+     where package_purchase_id = v_purchase_id and status <> 'waived';
+    if v_allocated <> v_paid then
+      raise exception
+        'The credits for this purchase total % fils, but % fils was paid.', v_allocated, v_paid
+        using errcode = 'check_violation';
+    end if;
+  end loop;
   return null;
 end
 $$;
@@ -311,19 +332,38 @@ alter table public.package_component enable always trigger guard_package_compone
 create function app.oldest_available_entitlement(
   p_client_id uuid, p_service_type_id uuid, p_on date
 ) returns uuid
-language sql stable security definer
+language sql volatile security definer
 set search_path = pg_catalog, pg_temp
 as $$
-  select id from public.entitlement
-   where tenant_id = app.current_tenant_id()
-     and client_id = p_client_id
-     and service_type_id = p_service_type_id
-     and status = 'available'
-     and (expires_on is null or expires_on >= p_on)
+  select e.id from public.entitlement e
+    -- A purchase the coordinator extended runs to the new date. Two readers
+    -- of one expiry must not disagree: domain/billing/balance.ts counts a
+    -- credit as remaining while the extension holds, and this must find the
+    -- same credit, or the balance would promise a session that a delivered
+    -- visit could not find and the family would be invoiced for it a second
+    -- time.
+    left join public.package_purchase pp
+      on pp.tenant_id = e.tenant_id and pp.id = e.package_purchase_id
+   where e.tenant_id = app.current_tenant_id()
+     and e.client_id = p_client_id
+     and e.service_type_id = p_service_type_id
+     and e.status = 'available'
+     and (coalesce(pp.extended_to, e.expires_on) is null
+          or coalesce(pp.extended_to, e.expires_on) >= p_on)
    -- Oldest first, so the credit closest to running out is the one used, and
    -- a client never loses a credit to expiry while a newer one is spent.
-   order by expires_on nulls last, created_at, id
+   order by coalesce(pp.extended_to, e.expires_on) nulls last, e.created_at, e.id
    limit 1
+   -- The read is the lock. Two visits for the same client and service
+   -- completing at the same moment would otherwise both read the same credit
+   -- id, and the second update would overwrite the first: one credit spent
+   -- twice, and the second visit never invoiced, because only one row exists
+   -- and entitlement_one_per_session never fires. Locking the row this
+   -- returns, and skipping one another transaction already holds, hands the
+   -- second visit the next credit — or none, which charges it properly.
+   -- `of e`: the purchase is the nullable side of the join and cannot be
+   -- locked, and does not need to be.
+   for no key update of e skip locked
 $$;
 revoke execute on function app.oldest_available_entitlement(uuid, uuid, date) from public;
 grant execute on function app.oldest_available_entitlement(uuid, uuid, date) to app_role;

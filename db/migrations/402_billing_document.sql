@@ -22,6 +22,26 @@
 -- decide how a rendered document attaches to a row nobody may update — most
 -- likely its own small table, so the invoice stays append-only.
 --
+-- **Which kinds are written today.** `session` (a delivered visit with no
+-- credit left, 404) and `package` (a programme sold, app/api/billing/sales.ts).
+-- `statement` is in the enum and nothing writes one: a monthly statement is
+-- a later piece, and naming it now costs nothing while adding an enum value
+-- later is its own migration. A **payment receipt is deliberately not a
+-- kind**: a receipt acknowledges money against an invoice that already
+-- exists, so it is a rendering of `payment`, and it belongs to the same
+-- pull request as the PDF. Nothing here should be read as reserving a place
+-- for it.
+--
+-- **The supplier's identity is snapshotted.** A UAE tax invoice must carry
+-- the supplier's legal name, its TRN and its address, and this row can never
+-- be updated, so it cannot be backfilled after the fact: an invoice issued
+-- before the practice recorded its TRN would be missing it for ever. The
+-- three columns are filled by a before-insert trigger rather than by each
+-- caller, because there are already two callers (the sale route and
+-- app.charge_single_visit) and forgetting in one of them would not be
+-- visible until an invoice was rendered. Renaming the practice next year
+-- leaves every invoice already issued saying what it said.
+--
 -- **VAT.** Every line carries the rate and the `vat_setting` version that
 -- produced it, stamped at write time from the price it came from, never
 -- typed (CLAUDE.md rule 6, billing.md section 5.1). The invoice's own totals
@@ -64,7 +84,7 @@ comment on table public.invoice_number_series is
 create index invoice_number_series_created_by_idx on invoice_number_series (created_by);
 create trigger set_updated_at before update on invoice_number_series
   for each row execute function app.set_updated_at();
-create trigger audit_row after insert or update on public.invoice_number_series
+create trigger audit_row after insert or update or delete on public.invoice_number_series
   for each row execute function app.audit_row();
 alter table public.invoice_number_series enable always trigger audit_row;
 
@@ -127,11 +147,19 @@ create table invoice (
   reference              text generated always as ('INV-' || lpad(number::text, 6, '0')) stored,
   kind                   invoice_kind not null,
   issued_on              date not null,
-  -- What this invoice is for. Exactly one of the two is set for a sale; a
-  -- statement sets neither. Typed columns with real foreign keys rather than
-  -- one polymorphic source_id, so a row can never point at nothing.
+  -- What this invoice is for, and the kind says which. A session invoice
+  -- names a session, a package invoice names a purchase, a statement names
+  -- neither; before, the constraint only refused *both*, so a package
+  -- invoice naming nothing at all was accepted and rendered as a bill for
+  -- an unnamed thing.
   session_id             uuid,
   package_purchase_id    uuid,  -- bound by a foreign key in 403, once the table exists
+  -- The practice as it was on the day, for the FTA. Filled by the trigger
+  -- below from the tenant and its studio address; never typed by a caller,
+  -- and never updated, because this row never is.
+  supplier_legal_name    text not null,
+  supplier_trn           text,
+  supplier_address       text,
   net_fils               integer not null check (net_fils >= 0),
   vat_fils               integer not null check (vat_fils >= 0),
   gross_fils             integer not null check (gross_fils >= 0),
@@ -141,8 +169,12 @@ create table invoice (
   updated_at             timestamptz not null default now(),
   created_by             uuid references app_user (id),
   constraint invoice_totals_agree check (gross_fils = net_fils + vat_fils),
-  constraint invoice_source_is_singular check (
-    (session_id is null) or (package_purchase_id is null)
+  constraint invoice_source_matches_kind check (
+    case kind
+      when 'session' then session_id is not null and package_purchase_id is null
+      when 'package' then package_purchase_id is not null and session_id is null
+      when 'statement' then session_id is null and package_purchase_id is null
+    end
   ),
   unique (tenant_id, number),
   unique (tenant_id, id),
@@ -161,7 +193,7 @@ create unique index invoice_one_per_session
   on invoice (tenant_id, session_id) where session_id is not null;
 create trigger set_updated_at before update on invoice
   for each row execute function app.set_updated_at();
-create trigger audit_row after insert on public.invoice
+create trigger audit_row after insert or update or delete on public.invoice
   for each row execute function app.audit_row();
 alter table public.invoice enable always trigger audit_row;
 
@@ -218,7 +250,7 @@ create index invoice_line_package_idx on invoice_line (package_id);
 create index invoice_line_created_by_idx on invoice_line (created_by);
 create trigger set_updated_at before update on invoice_line
   for each row execute function app.set_updated_at();
-create trigger audit_row after insert on public.invoice_line
+create trigger audit_row after insert or update or delete on public.invoice_line
   for each row execute function app.audit_row();
 alter table public.invoice_line enable always trigger audit_row;
 
@@ -232,14 +264,29 @@ create table payment (
   method        payment_method not null,
   amount_fils   integer not null check (amount_fils > 0),
   received_at   timestamptz not null,
-  -- A transfer reference, a link's own id, or the note a practitioner wrote
-  -- at the door. Never a card number: nothing here ever holds one.
-  reference     text check (length(btrim(reference)) between 1 and 120),
+  -- A transfer reference or a payment link's own id, and nothing else. Never
+  -- a card number, and no longer a free-text note: this column has no update
+  -- and no delete grant, app.erase_client does not reach it (billing-03.md
+  -- asks client-record to add it), and it lands verbatim in the audit trail,
+  -- so anything a person could type into it would outlive the record it
+  -- belongs to. Letters, digits, space, hyphen, slash, full stop, hash and
+  -- colon are what a bank reference is made of; forty characters is longer
+  -- than any of the UAE bank formats the practice will meet.
+  reference     text check (
+                  reference ~ '^[A-Za-z0-9][A-Za-z0-9 /.:#-]{0,39}$'
+                  and btrim(reference) = reference
+                ),
   invoice_id    uuid,
+  -- The same request twice is the same payment once. A drawer generates this
+  -- when the person presses the button, so a retry, a double tap or a lost
+  -- response replays the original rather than taking the money twice into a
+  -- table with no delete.
+  idempotency_key uuid,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   created_by    uuid references app_user (id),
   unique (tenant_id, id),
+  unique (tenant_id, idempotency_key),
   foreign key (tenant_id, client_id) references client (tenant_id, id),
   -- A payment settles one of its own client's invoices, or none at all.
   foreign key (tenant_id, invoice_id, client_id) references invoice (tenant_id, id, client_id)
@@ -251,9 +298,44 @@ create index payment_invoice_idx on payment (invoice_id);
 create index payment_created_by_idx on payment (created_by);
 create trigger set_updated_at before update on payment
   for each row execute function app.set_updated_at();
-create trigger audit_row after insert on public.payment
+create trigger audit_row after insert or update or delete on public.payment
   for each row execute function app.audit_row();
 alter table public.payment enable always trigger audit_row;
+
+------------------------------------------------------------------------------
+-- 5. The supplier's identity, stamped at the moment an invoice is allocated.
+--    Before insert, so every caller gets it without asking and none can
+--    forget; security definer, so it can read the tenant row whatever role
+--    is closing the visit. A value already supplied is left alone, which is
+--    what lets a later migration or a correction pass its own snapshot in.
+------------------------------------------------------------------------------
+create function app.stamp_invoice_supplier() returns trigger
+language plpgsql security definer
+set search_path = pg_catalog, pg_temp
+as $$
+declare
+  v_name    text;
+  v_trn     text;
+  v_address text;
+begin
+  if new.supplier_legal_name is not null then
+    return new;
+  end if;
+  select t.legal_name, t.trn, l.display_address
+    into v_name, v_trn, v_address
+    from public.tenant t
+    left join public.location l on l.id = t.location_id
+   where t.id = new.tenant_id;
+  new.supplier_legal_name := v_name;
+  new.supplier_trn        := coalesce(new.supplier_trn, v_trn);
+  new.supplier_address    := coalesce(new.supplier_address, v_address);
+  return new;
+end
+$$;
+revoke execute on function app.stamp_invoice_supplier() from public;
+create trigger stamp_supplier before insert on public.invoice
+  for each row execute function app.stamp_invoice_supplier();
+alter table public.invoice enable always trigger stamp_supplier;
 
 ------------------------------------------------------------------------------
 -- Privileges and row security. All three business tables are append-only:
@@ -297,6 +379,8 @@ insert into invoice_number_series (tenant_id) select id from tenant
 --   drop table if exists payment;
 --   drop trigger if exists audit_row on public.invoice_line;
 --   drop table if exists invoice_line;
+--   drop trigger if exists stamp_supplier on public.invoice;
+--   drop function if exists app.stamp_invoice_supplier();
 --   drop trigger if exists audit_row on public.invoice;
 --   drop table if exists invoice;
 --   drop trigger if exists audit_row on public.invoice_number_series;

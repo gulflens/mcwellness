@@ -138,7 +138,7 @@ create index package_price_package_idx on package_price (tenant_id, package_id, 
 create index package_price_created_by_idx on package_price (created_by);
 create trigger set_updated_at before update on package_price
   for each row execute function app.set_updated_at();
-create trigger audit_row after insert or update on public.package_price
+create trigger audit_row after insert or update or delete on public.package_price
   for each row execute function app.audit_row();
 alter table public.package_price enable always trigger audit_row;
 

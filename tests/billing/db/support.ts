@@ -146,9 +146,21 @@ export async function setPracticePrices(h: Harness, validFrom: string): Promise<
 }
 
 /** Silver, as the founder priced it: list AED 12,150, launch AED 10,325. */
+/**
+ * The codes these suites create under.
+ *
+ * Not `silver` and `gold`: the seed carries the practice's own three
+ * programmes now (`shared-zone-round-15`), and a bundle code is unique per
+ * practice, so a fixture using the real code would collide with the seeded
+ * row on one database and not the other. Suffixed, the suites hold against
+ * both seeds, and the figures asserted are still the founder's own.
+ */
+export const SILVER_CODE = 'silver-under-test';
+export const GOLD_CODE = 'gold-under-test';
+
 export function silverInput(h: Harness, validFrom: string) {
   return {
-    code: 'silver',
+    code: SILVER_CODE,
     name: 'Silver',
     nameAr: 'الفضية',
     listPriceFils: 1_215_000,
