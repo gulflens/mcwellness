@@ -9,10 +9,13 @@
   chrome rule.
 */
 
+/* A column that fills the viewport, so the dock below can be pushed to the
+   bottom of it whether or not the content above happens to overflow. */
 .runner {
   display: flex;
   flex-direction: column;
   gap: var(--s-5);
+  min-block-size: 100dvh;
 }
 
 /* The run screen is full-bleed: no page padding competing with the numbers
@@ -37,16 +40,30 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-6);
+  flex: 1 1 auto;
+  min-block-size: 0;
 }
 
+/* Three headings within a step of each other shout at one another on the
+   post screen: the practitioner scale lifts h1 to 40px and h2 to 31px, which
+   is a heading and very nearly another heading. A section heading inside a
+   step is the smaller step down. */
 .step h2 {
   margin: 0;
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  color: var(--ink-2);
 }
 
-/* The primary action stays in the thumb zone however much stacks above it. */
+/* The primary action stays in the thumb zone however much stacks above it —
+   and when nothing does. `position: sticky` only reaches the bottom of the
+   viewport once there is something to scroll, so a pre-flight with two
+   checklist items left the primary in the top third of a phone; the margin
+   is what pushes the dock down inside a step that fills the screen. */
 .step__dock {
   position: sticky;
   inset-block-end: 0;
+  margin-block-start: auto;
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -113,8 +130,20 @@
 }
 
 .check__label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
   font-size: var(--t-body);
   line-height: var(--lh-body);
+}
+
+/* Arabic sits under its English, at the small step, shaped and read right to
+   left rather than laid out as though it were English
+   (docs/DESIGN-BRIEF.md section 4.1). */
+.check__label-ar,
+.rating__label-ar,
+.summary__label-ar {
+  display: block;
 }
 
 /* Sliders: a wide track and a wide value, both readable in bad light. */
@@ -344,47 +373,4 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-
-/* The dock is the thumb zone, on every step, whether or not the content
-   above it happens to overflow. `position: sticky` only reaches the bottom
-   of the viewport once there is something to scroll; a pre-flight with two
-   checklist items left the primary action in the top third of a phone
-   (design review, item 8). The step is a column that fills the viewport and
-   the dock is its last child, pushed down by a spacer that grows. */
-.runner {
-  min-block-size: 100dvh;
-}
-
-.step {
-  flex: 1 1 auto;
-  min-block-size: 0;
-}
-
-.step__dock {
-  margin-block-start: auto;
-}
-
-/* Three headings within a step of each other shout at one another on the
-   post screen: the practitioner scale lifts h1 to 40px and h2 to 31px, which
-   is a heading and very nearly another heading. A section heading inside a
-   step is the smaller step down (design review, item 9). */
-.step h2 {
-  font-size: var(--t-h3);
-  line-height: var(--lh-h3);
-  color: var(--ink-2);
-}
-
-/* Arabic sits under its English, at the small step, shaped and read right to
-   left rather than laid out as though it were English. */
-.rating__label-ar,
-.check__label-ar,
-.summary__label-ar {
-  display: block;
-}
-
-.check__label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
 }
