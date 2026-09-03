@@ -1,8 +1,8 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { ageOn, canActor, hasRole, isoDateIn } from '../../../domain/shared';
-import { normaliseEmiratesId } from '../../../domain/shared/emirates-id';
 import { emiratesIdHash } from '../../../domain/shared/identity';
+import { isEmiratesIdShaped, wholeEmiratesIdDigits } from './emirates-id-shape';
 import { logReads } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -107,31 +107,6 @@ function likePattern(escaped: string): string {
   return `%${escaped}%`;
 }
 
-/** The fifteen normalised digits, or null when the input is not shaped like one. */
-function emiratesIdShapeOf(value: string): string | null {
-  try {
-    return normaliseEmiratesId(value);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * A `q` that is an identity number, whole or half-typed: digits, spaces and
- * hyphens only, opening 784. This route refuses it rather than searching it —
- * the lookup below is where an identity number belongs, and the refusal is
- * the floor under the browser's own rule (app/admin/clients/ClientsPage.tsx),
- * so a hand-written request cannot quietly put one in a query string either.
- * By the time this runs the proxy has already logged the URL, which is why
- * the browser must never send one; this makes the contract explicit rather
- * than leaving it to a comment. A record number is safe: MRNs read MW-000001.
- */
-function looksLikeAnIdentityNumber(q: string): boolean {
-  const bare = q.replace(/[\s-]/g, '');
-  if (!/^[0-9]+$/.test(bare)) return false;
-  return bare.length < 3 ? '784'.startsWith(bare) : bare.startsWith('784');
-}
-
 function toClientRows(rows: readonly Row[], today: string): ClientRow[] {
   return rows.map((r) => ({
     id: r.id,
@@ -180,7 +155,12 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance')) {
       return c.json(ClientListResponse.parse({ clients: [], note: 'schedule' }));
     }
-    if (query.data.q && looksLikeAnIdentityNumber(query.data.q)) {
+    // The floor under the browser's own rule (app/admin/clients/ClientsPage.tsx), so a
+    // hand-written request cannot quietly put an identity number in a query string
+    // either. By the time this runs the proxy has already logged the URL, which is why
+    // the browser must never send one; this makes the contract explicit rather than
+    // leaving it to a comment.
+    if (query.data.q && isEmiratesIdShaped(query.data.q)) {
       return c.json({ error: 'bad_request', code: 'use_lookup', requestId }, 400);
     }
     // Below the minimum, the term is dropped rather than searched (see
@@ -218,7 +198,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     const bodyJson = await c.req.json().catch(() => null);
     const body = LookupBody.safeParse(bodyJson);
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
-    const digits = emiratesIdShapeOf(body.data.emiratesId);
+    const digits = wholeEmiratesIdDigits(body.data.emiratesId);
     if (digits === null) {
       // The shape, not the checksum: a mistyped digit is a search that finds nothing,
       // which is the truth, and not a lecture about a number the practice may not hold.

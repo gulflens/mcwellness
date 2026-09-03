@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { normaliseEmiratesId } from '@domain/shared';
+import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
@@ -43,32 +43,16 @@ const LOAD_ERROR = 'The client list could not be loaded. Try again.';
 const IDENTITY_UNAVAILABLE =
   'Searching by Emirates ID is not set up on this installation yet. Search by name or record number.';
 
-/** The fifteen digits when the term is shaped like an Emirates ID; null otherwise. */
-function emiratesIdShapeOf(term: string): string | null {
-  if (!term) return null;
-  try {
-    return normaliseEmiratesId(term);
-  } catch {
-    return null;
-  }
-}
-
 /**
- * An Emirates ID half-typed. Digits, spaces and hyphens only, opening 784,
- * and not yet the full fifteen: the shape a search box is in on its way to an
- * identity number. It must never be sent as a text search, because the
- * fourteenth keystroke would put fourteen of the fifteen digits in a query
- * string — which is the very thing the lookup route below exists to avoid,
- * and would have been leaked long before the last digit switched transport.
- * A record number is never mistaken for one: MRNs read MW-000001, and the
- * digits alone would have to reach 784,000 clients to collide.
+ * An Emirates ID half typed: shaped like one, but not yet whole. It must
+ * never be sent as a text search, because the fourteenth keystroke would put
+ * fourteen of the fifteen digits in a query string — the very thing the
+ * lookup route exists to avoid, leaked long before the last digit switched
+ * transport. The shape rule itself lives beside the route that enforces the
+ * same one (app/api/clients/emirates-id-shape.ts).
  */
 function isPartialEmiratesId(term: string): boolean {
-  const bare = term.replace(/[\s-]/g, '');
-  if (!/^[0-9]+$/.test(bare)) return false;
-  // "7", "78", "784" and anything longer that still opens 784.
-  const opensWith784 = bare.length < 3 ? '784'.startsWith(bare) : bare.startsWith('784');
-  return opensWith784 && bare.length !== 15;
+  return isEmiratesIdShaped(term) && wholeEmiratesIdDigits(term) === null;
 }
 
 /**
@@ -87,7 +71,7 @@ export function searchRequest(
   query: string,
 ): { url: string; init?: RequestInit } | 'partial-emirates-id' {
   const term = query.trim();
-  const digits = emiratesIdShapeOf(term);
+  const digits = wholeEmiratesIdDigits(term);
   if (digits !== null) {
     return {
       url: '/api/clients/lookup',
