@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BalanceResponse, type ServiceBalanceRow } from '../../api/billing/ledger-schema';
+import {
+  BalanceResponse,
+  type PurchaseRow,
+  type ServiceBalanceRow,
+} from '../../api/billing/ledger-schema';
 import type { ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate } from './BillingPage';
 import { ClientPicker } from './ClientPicker';
+import { ExtensionDrawer } from './ExtensionDrawer';
 import { formatFils } from './money';
 import { PaymentDrawer } from './PaymentDrawer';
 
@@ -44,6 +49,7 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
   const [client, setClient] = useState<ClientRow | null>(null);
   const [state, setState] = useState<State>({ kind: 'idle' });
   const [payingOpen, setPayingOpen] = useState(false);
+  const [extending, setExtending] = useState<PurchaseRow | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   const clientId = client?.id ?? null;
@@ -197,11 +203,11 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
           ) : null}
 
           <Table
-            caption="What this client has left"
+            caption="Sessions this client has left"
             columns={columns}
             rows={balance.services}
             rowKey={(row) => row.serviceTypeId}
-            empty="This client holds no credits yet."
+            empty="No sessions remaining yet."
           />
 
           {balance.purchases.length > 0 ? (
@@ -216,14 +222,47 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                         Bought {formatDate(purchase.purchasedOn)}, runs to{' '}
                         {formatDate(purchase.extendedTo ?? purchase.expiresOn)}
                       </span>
+                      {purchase.extendedTo && purchase.extensionReason ? (
+                        // What was first agreed, and why it moved: an
+                        // extension is a decision somebody made, and the
+                        // record should say so without being asked.
+                        <span className="small muted">
+                          Extended from {formatDate(purchase.expiresOn)}. {purchase.extensionReason}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="numeric">{formatFils(purchase.grossFils)}</span>
+                    {canWrite &&
+                    purchase.status !== 'refunded' &&
+                    purchase.status !== 'cancelled' ? (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setNote(null);
+                          setExtending(purchase);
+                        }}
+                      >
+                        Give them longer
+                      </Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {extending ? (
+        <ExtensionDrawer
+          purchase={extending}
+          onClose={() => setExtending(null)}
+          onExtended={(summary) => {
+            setExtending(null);
+            setNote(summary);
+            load();
+          }}
+        />
       ) : null}
 
       {payingOpen && client ? (

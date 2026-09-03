@@ -13,11 +13,21 @@ screens need in order to show a figure this pull request now computes.
 
 | # | Where | What | Blocks |
 |---|---|---|---|
-| 1 | `domain/shared/actor.ts` | Eight billing actions with their role floors | nothing |
-| 2 | `db/seed/**` | The practice's prices, and its three programmes | nothing; the money screens are empty until it lands |
+| 1 | `domain/shared/actor.ts` | Eight billing actions with their role floors | nothing — **being applied** on `shared-zone-round-15` |
+| 2 | `db/seed/**` | The practice's prices, and its three programmes | nothing — **being applied** on `shared-zone-round-15` |
 | 3 | `app/admin/clients/OverviewTab.tsx` (client-record) | A balance panel on the client record | nothing |
 | 4 | `app/therapist/**` (scheduling) | "Session 3 of 15" and what is owed, on the stop card | nothing |
 | 5 | `app/api/appointments/**` (scheduling) | Call the notice-period rule when a visit is called off | the late-cancellation charge never fires until it lands |
+| 6 | `app/admin/clients/**` (client-record) | Clear a payment reference when a client is erased | nothing; a gap in the erasure until it lands |
+
+> **Items 1 and 2 are in flight.** The trunk's pull request 43
+> (`shared-zone-round-15`) carries both, with the floors this file asked for
+> and the practice's own figures. This branch is written to work either way
+> and was run against that branch's seed and actions to prove it: the access
+> wrappers ask for each action by name when the trunk knows it and fall back
+> otherwise, and the billing fixtures no longer assume an unpriced,
+> bundle-less database. Whichever pull request merges first, neither breaks
+> the other.
 
 ---
 
@@ -117,6 +127,14 @@ courtesy pretending to be a boundary.
 +      return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(action.clientId);
      default: {
 ```
+
+**Nine wrappers, eight actions.** Extending a programme's expiry
+(`POST /api/billing/package-purchases/:id/extension`, added after the review)
+asks for `billing.waiver.write` rather than a name of its own. It is the same
+decision as a waiver — a coordinator forgiving a charge the practice's own
+policy had already made — and a ninth name would be inventing a distinction
+nobody has asked for. If you would rather it had one, say so and billing will
+use it.
 
 **What billing changes when it lands.** `app/api/billing/access.ts` keeps all
 eight wrapper functions — the routes should name what they are doing, not the
@@ -464,7 +482,53 @@ set and what the arithmetic in `domain/billing/allocation.ts` divides.
 
 ---
 
-## 3. A balance panel on the client record's Overview (client-record)
+## 3. Clear a payment reference when a client is erased (client-record)
+
+**What.** In `app.erase_client` (`db/migrations/100_client_record.sql`), clear
+`payment.reference` alongside the other free-text fields it already clears.
+
+**Why.** `payment` grants neither update nor delete, so nothing in the API can
+reach that column once it is written; `app.erase_client` is security definer
+and runs as the table owner, so it can. Financial records outlive an erasure
+by five years (CLAUDE.md rule 8) and the row itself must stay — but a
+reference is not part of the financial record in the way an amount is, and
+until this lands it is the one string on a client's money that survives their
+erasure.
+
+Billing has already narrowed what can get in there: as of this pull request
+the column takes a bank transfer reference or a payment link's id and nothing
+else (letters, digits and `- / . : #`, forty characters), in the column and in
+the schema, so the field can no longer hold a sentence about a family. This
+request closes the other half.
+
+**Diff.**
+
+```diff
+--- a/db/migrations/100_client_record.sql
++++ b/db/migrations/100_client_record.sql
+@@ step 4, beside the goals
+     with cleared as (
+       update public.goal
+          set description = ''
+        where client_id = p_client_id
+       returning id
+     )
+     select count(*) into v_goals_cleared from cleared;
++
++    -- 4b. Payments: the amount, the method and the date are the financial
++    --     record and stay (CLAUDE.md rule 8, five years regardless). The
++    --     reference is a bank string that identifies a person's account, so
++    --     it goes the way every other free-text field here goes. The table
++    --     grants no update to app_role; this function runs as its owner.
++    update public.payment set reference = null where client_id = p_client_id;
+```
+
+The erasure summary may want a count beside the others; billing has no view on
+whether that is worth a line.
+
+---
+
+## 4. A balance panel on the client record's Overview (client-record)
 
 **What.** On `app/admin/clients/OverviewTab.tsx`, add rows to the existing
 `record-facts` list showing what the client holds and what they owe.
@@ -499,7 +563,7 @@ already sees Overview, and this is exactly the tab they are there for.
 
 ---
 
-## 4. "Session 3 of 15" and what is owed, on the practitioner's stop card (scheduling)
+## 5. "Session 3 of 15" and what is owed, on the practitioner's stop card (scheduling)
 
 **What.** When the day sheet's stop card exists, put two facts on it: which
 session of the programme this is, and whether anything is owed at the door.
@@ -509,7 +573,7 @@ the ledger exists to be able to say, and the person who needs it is the one
 driving to the house. Cash at the door is section 6's reconciliation risk: a
 practitioner who does not know a balance is outstanding cannot collect it.
 
-**How.** The same route as item 3,
+**How.** The same route as item 4,
 `GET /api/billing/clients/:clientId/balance`. A practitioner may call it: the
 action allows the role and `app.client_visible_to_practitioner` scopes it to a
 client on their own schedule — ninety days back, thirty forward, confirmed
@@ -523,7 +587,7 @@ route.
 
 ---
 
-## 5. Calling the notice-period rule when a visit is called off (scheduling)
+## 6. Calling the notice-period rule when a visit is called off (scheduling)
 
 **What.** In whichever route cancels an appointment, ask
 `isLateCancellation` from `domain/billing` and write `cancelled_late` rather
@@ -561,3 +625,29 @@ import.
 
 **A no-show** needs no rule: `no_show` is already a status, and the same
 trigger charges it.
+
+---
+
+## 7. Not a request: what the dashboard will need, and why it is not here
+
+`docs/SPEC/billing.md` section 4.1 asks for three figures side by side — cash
+collected, revenue recognised, and the deferred revenue balance, the
+obligation the practice is carrying in sessions it owes. Section 8 asks for
+six more. **None of that is in this pull request**, and the ledger view
+(`app.billing_ledger`) is charges and payments only.
+
+That is deliberate: a dashboard is a screen with a shape somebody has to
+decide, and no one has. But the arithmetic behind it is already here and needs
+no schema change when the time comes. Every credit carries the share of the
+price it was sold at (`entitlement.allocated_net_fils`, allocated per section
+4.2), so:
+
+- **revenue recognised** is that column summed over consumed credits, and
+- **deferred revenue** is the same column summed over the credits still
+  unspent — including the ones that ran out of time, because until the
+  practice writes one off it is still a promise it made.
+
+`GET /api/billing/clients/:clientId/balance` answers both today, per service
+and in total (`recognisedNetFils`, `deferredNetFils`), computed by
+`domain/billing/balanceFor` and tested there. A practice-wide dashboard is the
+same two sums without the client predicate.

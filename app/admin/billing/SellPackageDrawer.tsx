@@ -59,6 +59,14 @@ export function SellPackageDrawer({
   const [clientError, setClientError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * One key per attempt at this, made when the drawer opens and kept until it
+   * succeeds. A retry of the same press — the button tapped twice, a lost
+   * response, a phone that changed network — carries the same key and replays
+   * the first answer instead of writing the whole thing again into tables that
+   * grant no delete (402_billing_document.sql).
+   */
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -93,7 +101,7 @@ export function SellPackageDrawer({
     try {
       const res = await apiFetch('/api/billing/package-purchases', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
         body: JSON.stringify({
           packageId: bundle.id,
           clientId: client.id,
@@ -182,7 +190,7 @@ export function SellPackageDrawer({
 
           <div className="price-preview">
             <div className="price-preview__row">
-              <span className="small muted">Credits</span>
+              <span className="small muted">Sessions</span>
               <span className="numeric">{credits}</span>
             </div>
             <div className="price-preview__row">

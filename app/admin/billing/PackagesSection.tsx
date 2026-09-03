@@ -82,8 +82,19 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         header: 'Price now',
         numeric: true,
         align: 'end',
+        // The figure and why it is the figure. A price list where "AED
+        // 10,325" sits alone invites the question this column already holds
+        // the answer to — the reason is written on the row when the founder
+        // sets it, and reading it should not need a second screen.
         render: (row) =>
-          row.currentPrice ? formatFils(row.currentPrice.amountFils) : 'Not on sale',
+          row.currentPrice ? (
+            <span className="name">
+              <span className="numeric">{formatFils(row.currentPrice.amountFils)}</span>
+              <span className="small muted">{row.currentPrice.amendmentReason}</span>
+            </span>
+          ) : (
+            'Not on sale'
+          ),
       },
       {
         key: 'vat',

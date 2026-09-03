@@ -55,8 +55,17 @@ export function PaymentDrawer({
   const [method, setMethod] = useState<PaymentMethod>('transfer');
   const [reference, setReference] = useState('');
   const [amountError, setAmountError] = useState<string | undefined>();
+  const [referenceError, setReferenceError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * One key per attempt at this, made when the drawer opens and kept until it
+   * succeeds. A retry of the same press — the button tapped twice, a lost
+   * response, a phone that changed network — carries the same key and replays
+   * the first answer instead of writing the whole thing again into tables that
+   * grant no delete (402_billing_document.sql).
+   */
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -85,16 +94,26 @@ export function PaymentDrawer({
     }
     setAmountError(undefined);
 
+    // The same alphabet the column allows (402_billing_document.sql): a bank
+    // reference, not a sentence. Refused here so the person is told what is
+    // wrong with the field rather than shown a generic failure.
+    const trimmedReference = reference.trim();
+    if (trimmedReference && !/^[A-Za-z0-9][A-Za-z0-9 /.:#-]{0,39}$/.test(trimmedReference)) {
+      setReferenceError('A reference is letters, digits, spaces and - / . : # only.');
+      return;
+    }
+    setReferenceError(undefined);
+
     setBusy(true);
     try {
       const res = await apiFetch('/api/billing/payments', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
         body: JSON.stringify({
           clientId: client.id,
           method,
           amountFils,
-          reference: reference.trim() || null,
+          reference: trimmedReference || null,
         }),
       });
       if (res.status === 201) {
@@ -176,10 +195,14 @@ export function PaymentDrawer({
             id="payment-reference"
             label="Reference"
             type="text"
-            maxLength={120}
+            maxLength={40}
             value={reference}
-            onChange={(e) => setReference(e.target.value)}
-            hint="A transfer reference or the note taken at the door. Optional, and never a card number."
+            onChange={(e) => {
+              setReference(e.target.value);
+              setReferenceError(undefined);
+            }}
+            error={referenceError}
+            hint="The transfer reference or the payment link's own id. Optional, never a card number, and not a place for a note about the family."
           />
 
           <p className="small muted">

@@ -102,6 +102,18 @@ function mount(body: Record<string, unknown>, canWrite = true) {
   return mountWith(OWNER, <BalancesSection canWrite={canWrite} />, (url, init) => {
     if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
     if (url === `/api/billing/clients/${CLIENT_ID}/balance`) return json(body);
+    if (url.endsWith('/extension') && init?.method === 'POST') {
+      return json(
+        {
+          purchase: {
+            ...(body.purchases as Record<string, unknown>[])[0],
+            extendedTo: '2028-03-01',
+            extensionReason: 'A long hospital stay over the winter.',
+          },
+        },
+        201,
+      );
+    }
     if (url === '/api/billing/payments' && init?.method === 'POST') {
       return json(
         {
@@ -126,6 +138,66 @@ async function findClient() {
   fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'Harbour' } });
   fireEvent.click(await screen.findByRole('button', { name: /Hazel Harbour/ }));
 }
+
+describe('giving a family longer', () => {
+  it('offers it against a package the practice sold', async () => {
+    mount(balance());
+    await findClient();
+    expect(await screen.findByRole('button', { name: 'Give them longer' })).toBeTruthy();
+  });
+
+  it('offers it to nobody who may not record money', async () => {
+    mount(balance(), false);
+    await findClient();
+    await screen.findByText('Silver');
+    expect(screen.queryByRole('button', { name: 'Give them longer' })).toBeNull();
+  });
+
+  it('asks for a date and a reason, and will not take one without the other', async () => {
+    mount(balance());
+    await findClient();
+    fireEvent.click(await screen.findByRole('button', { name: 'Give them longer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Extend it' }));
+    expect(await screen.findByText('Choose the date it should run to.')).toBeTruthy();
+    expect(screen.getByText('Say why this programme is being extended.')).toBeTruthy();
+  });
+
+  it('refuses a date that gives the family less time than they have', async () => {
+    mount(balance());
+    await findClient();
+    fireEvent.click(await screen.findByRole('button', { name: 'Give them longer' }));
+    fireEvent.change(screen.getByLabelText('Runs to'), { target: { value: '2027-01-01' } });
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'A hospital stay.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Extend it' }));
+    expect(await screen.findByText(/Choose a date after 2 Sept 2027/)).toBeTruthy();
+  });
+
+  it('says what it did, naming the new date', async () => {
+    mount(balance());
+    await findClient();
+    fireEvent.click(await screen.findByRole('button', { name: 'Give them longer' }));
+    fireEvent.change(screen.getByLabelText('Runs to'), { target: { value: '2028-03-01' } });
+    fireEvent.change(screen.getByLabelText('Why'), {
+      target: { value: 'A long hospital stay over the winter.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Extend it' }));
+    expect(await screen.findByText('Silver now runs to 1 Mar 2028.')).toBeTruthy();
+  });
+
+  it('shows the date first agreed, and why it moved, once it has', async () => {
+    const purchases = [
+      {
+        ...(balance().purchases[0] as Record<string, unknown>),
+        extendedTo: '2028-03-01',
+        extensionReason: 'A long hospital stay over the winter.',
+      },
+    ];
+    mount(balance({ purchases }));
+    await findClient();
+    expect(await screen.findByText(/Extended from 2 Sept 2027/)).toBeTruthy();
+    expect(screen.getByText(/A long hospital stay over the winter/)).toBeTruthy();
+  });
+});
 
 describe('BalancesSection', () => {
   it('asks for a client before it shows anything', () => {
