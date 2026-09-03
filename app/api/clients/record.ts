@@ -229,9 +229,6 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     // canViewClient's client_contact branch checks ctx.contactClientIds, which only this
     // route knows how to resolve: the clients their own contact rows point at. Read under
     // row security as the caller, so this never sees another practice's contacts.
-    // scheduledClientIds is always empty: app.client_visible_to_practitioner
-    // (100_client_record.sql) has no schedule to consult yet, and this context mirrors
-    // that honestly rather than guessing.
     const contactClientIds = hasRole(actor, 'client_contact')
       ? (
           await db.query<{ client_id: string }>(
@@ -240,10 +237,32 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
           )
         ).rows.map((r) => r.client_id)
       : [];
+    // And its practitioner branch checks ctx.scheduledClientIds. This asks the database
+    // the same question the row policies ask, rather than keeping a second copy of the
+    // rule here: app.client_visible_to_practitioner is what six restrictive read
+    // policies call, so the API and the policies cannot disagree about who is on whose
+    // schedule. It answered false for everyone while no schedule existed; migration 201
+    // (the scheduling stream) gives it the real window, and the moment it does, a
+    // practitioner holding a visit with this client would otherwise have been refused by
+    // this route and audited for it while the database was saying yes
+    // (docs/CHANGE-REQUESTS/scheduling-03.md item 3).
+    //
+    // Asked only for a practitioner, and only about the one client being opened: this is
+    // an access check, not a list, and nothing else needs the answer.
+    const scheduledClientIds =
+      hasRole(actor, 'practitioner') &&
+      (
+        await db.query<{ visible: boolean }>(
+          'select app.client_visible_to_practitioner($1) as visible',
+          [clientId],
+        )
+      ).rows[0]?.visible === true
+        ? [clientId]
+        : [];
     const view = canViewClient(
       actor,
       { id: clientId, tenantId: actor.tenantId, status },
-      { scheduledClientIds: [], contactClientIds },
+      { scheduledClientIds, contactClientIds },
       now(),
     );
     if (!view.ok) {
