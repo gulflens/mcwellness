@@ -7,6 +7,7 @@ import {
   rejectsWith,
   rolledBack,
   seedClient,
+  seedLocation,
   seedTenant,
 } from './helpers';
 
@@ -28,6 +29,8 @@ let owner: pg.Client;
 const TENANT = IDS.tenantA;
 const OWNER = IDS.ownerA;
 const CLIENT = IDS.clientA;
+const STUDIO = IDS.locationA;
+const CLIENT_HOME = IDS.locationB;
 // Fifteen digits in the reserved synthetic shape; never a real registration.
 const VAT_TRN = '100000000000003';
 
@@ -35,6 +38,15 @@ beforeAll(async () => {
   owner = await freshDatabase();
   await seedTenant(owner, TENANT, OWNER, 'Synthetic Studio A');
   await seedClient(owner, TENANT, CLIENT, OWNER, 'Harbour');
+  await seedLocation(owner, TENANT, CLIENT_HOME, CLIENT, OWNER);
+  // The practice's own address, the one app.stamp_invoice_supplier copies.
+  await owner.query(
+    'insert into location (id, tenant_id, owner_type, owner_id, label, emirate, ' +
+      "entrance_point, display_address, created_by) values ($1, $2, 'tenant', $2, 'studio', " +
+      "'DXB', extensions.st_geogfromtext('SRID=4326;POINT(55.26 25.19)'), $3, $4)",
+    [STUDIO, TENANT, 'Unit 1, Synthetic Tower, Dubai', OWNER],
+  );
+  await owner.query('update tenant set location_id = $1 where id = $2', [STUDIO, TENANT]);
 });
 
 afterAll(async () => {
@@ -146,10 +158,87 @@ describe('who may change it', () => {
   });
 });
 
+describe('the practice’s own address', () => {
+  // db/policies/client/writers.sql admits a lead practitioner to every
+  // location's insert and update, which is right for a household's address and
+  // wrong for the one every invoice is issued from.
+  it('refuses a lead practitioner the address an invoice is stamped from', async () => {
+    await rolledBack(owner, async () => {
+      await asApiRole(
+        owner,
+        TENANT,
+        async () => {
+          await rejectsWith(
+            owner,
+            '42501',
+            'update location set display_address = $1 where id = $2',
+            ['Somewhere Else, Dubai', STUDIO],
+          );
+          await rejectsWith(
+            owner,
+            '42501',
+            'insert into location (tenant_id, owner_type, owner_id, label, emirate, ' +
+              "entrance_point, display_address) values ($1, 'tenant', $1, 'studio', 'DXB', " +
+              "extensions.st_geogfromtext('SRID=4326;POINT(55.3 25.3)'), 'A second studio')",
+            [TENANT],
+          );
+        },
+        'lead_practitioner',
+      );
+    });
+    const { rows } = await owner.query<{ display_address: string }>(
+      'select display_address from location where id = $1',
+      [STUDIO],
+    );
+    expect(rows[0]?.display_address).toBe('Unit 1, Synthetic Tower, Dubai');
+  });
+
+  it('lets an owner and an admin change it', async () => {
+    for (const roles of ['owner', 'admin']) {
+      await rolledBack(owner, async () => {
+        await asApiRole(
+          owner,
+          TENANT,
+          async () => {
+            await owner.query('update location set display_address = $1 where id = $2', [
+              'Unit 2, Synthetic Tower, Dubai',
+              STUDIO,
+            ]);
+          },
+          roles,
+        );
+      });
+    }
+  });
+
+  it('leaves a household’s own address exactly where it was', async () => {
+    // The guard is narrow on purpose: guard_location_notes (100) still decides
+    // everything about a client's location, and a lead practitioner may edit one.
+    await rolledBack(owner, async () => {
+      await asApiRole(
+        owner,
+        TENANT,
+        async () => {
+          await owner.query('update location set display_address = $1 where id = $2', [
+            'Villa 3, Synthetic Gardens, Dubai',
+            CLIENT_HOME,
+          ]);
+        },
+        'lead_practitioner',
+      );
+    });
+  });
+});
+
 describe('what an invoice keeps of it', () => {
   const ISSUE =
     'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, gross_fils) ' +
     "values ($1, $2, $3, 'statement', current_date, 0, 0, 0)";
+  /** A caller passing its own supplier snapshot, which skips the stamping. */
+  const ISSUE_SUPPLIED =
+    'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, ' +
+    'gross_fils, supplier_legal_name, supplier_vat_registered, supplier_vat_trn) ' +
+    "values ($1, $2, $3, 'statement', current_date, 0, 0, 0, $4, $5, $6)";
 
   it('stamps the practice as it stands, and never moves it again', async () => {
     await rolledBack(owner, async () => {
@@ -193,6 +282,36 @@ describe('what an invoice keeps of it', () => {
         [TENANT],
       );
       expect(after[0]).toEqual({ name: 'Synthetic Studio A', registered: true });
+    });
+  });
+
+  it('refuses a supplier VAT number that is not fifteen digits, however it arrives', async () => {
+    await rolledBack(owner, async () => {
+      // Stamped: the tenant's own bad value can never exist (905's constraint
+      // on tenant.vat_trn), so the case that matters is a caller supplying one.
+      await rejectsWith(owner, '23514', ISSUE_SUPPLIED, [
+        TENANT,
+        CLIENT,
+        3,
+        'Synthetic Studio A',
+        true,
+        '1234',
+      ]);
+    });
+  });
+
+  it('refuses a VAT number on an invoice whose supplier was not registered', async () => {
+    // The path that skips the stamp — supplier_legal_name already supplied —
+    // is held to the same rule as the stamped one.
+    await rolledBack(owner, async () => {
+      await rejectsWith(owner, '23514', ISSUE_SUPPLIED, [
+        TENANT,
+        CLIENT,
+        4,
+        'Synthetic Studio A',
+        false,
+        VAT_TRN,
+      ]);
     });
   });
 

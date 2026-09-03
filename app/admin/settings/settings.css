@@ -23,6 +23,20 @@
   padding-block-start: var(--s-2);
 }
 
+/*
+  The saved-note live region. It is always in the document so a screen reader
+  has something to announce into, and it carries its own gap so the note never
+  sits flush against the first heading beneath it. Empty, it collapses to
+  nothing: :empty takes the margin away with it.
+*/
+.practice__status {
+  margin-block-end: var(--s-6);
+}
+
+.practice__status:empty {
+  margin-block-end: 0;
+}
+
 /* What the practice currently says it is: read down, not across. */
 .practice {
   display: flex;

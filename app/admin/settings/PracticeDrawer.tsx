@@ -29,6 +29,11 @@ const COORDINATES_MESSAGE =
   'The first address recorded needs its map coordinates, so a practitioner can be sent to it.';
 const GENERIC_MESSAGE = 'The practice details could not be saved. Try again.';
 const CHECK_MESSAGE = 'Check the details above, then try again.';
+const VAT_TRN_REQUIRED_MESSAGE =
+  'A VAT registration needs the number that will be printed on invoices.';
+const VAT_TRN_LENGTH_MESSAGE = `A VAT registration number is ${VAT_TRN_DIGITS} digits.`;
+const ADDRESS_FOR_COORDINATES_MESSAGE =
+  'Give the address these coordinates belong to, or clear them.';
 
 type FieldErrors = {
   legalName?: string;
@@ -137,10 +142,7 @@ export function PracticeDrawer({
     }
     const typedVatTrn = vatTrn.replace(/\s/g, '');
     if (vatRegistered && !new RegExp(`^\\d{${VAT_TRN_DIGITS}}$`).test(typedVatTrn)) {
-      errors.vatTrn =
-        typedVatTrn.length === 0
-          ? 'A VAT registration needs the number that will be printed on invoices.'
-          : `A VAT registration number is ${VAT_TRN_DIGITS} digits.`;
+      errors.vatTrn = typedVatTrn.length === 0 ? VAT_TRN_REQUIRED_MESSAGE : VAT_TRN_LENGTH_MESSAGE;
     }
     const typedAddress = displayAddress.trim();
     if (hasAddressOnRecord && typedAddress.length === 0) {
@@ -160,6 +162,12 @@ export function PracticeDrawer({
     }
     if (typedAddress.length > 0 && !hasAddressOnRecord && (lat === null || lat === false)) {
       errors.latitude = COORDINATES_MESSAGE;
+    }
+    // The other way round: coordinates typed with no address and none on
+    // record used to be dropped on the floor, because there was no address row
+    // to hang them on and the form sent none. Refuse instead of discarding.
+    if (typedAddress.length === 0 && !hasAddressOnRecord && (lat !== null || lng !== null)) {
+      errors.displayAddress = ADDRESS_FOR_COORDINATES_MESSAGE;
     }
     if (reason.trim().length === 0) {
       errors.reason = REASON_MESSAGE;
@@ -215,6 +223,11 @@ export function PracticeDrawer({
           setFormError(REASON_MESSAGE);
           return;
         }
+        if (body?.code === 'vat_trn_required') {
+          setFieldErrors((prev) => ({ ...prev, vatTrn: VAT_TRN_REQUIRED_MESSAGE }));
+          setFormError(VAT_TRN_REQUIRED_MESSAGE);
+          return;
+        }
         setFormError(body?.code === 'coordinates_required' ? COORDINATES_MESSAGE : CHECK_MESSAGE);
         return;
       }
@@ -250,6 +263,11 @@ export function PracticeDrawer({
       </header>
       <div className="drawer__body">
         <form className="drawer__form" onSubmit={(e) => void submit(e)}>
+          <p className="small muted">
+            The legal name and a reason are required. Everything else is optional, and a
+            registration number is asked for only if the VAT switch is on.
+          </p>
+
           <Field
             id={FIELD_IDS.legalName}
             label="Legal name"
@@ -266,7 +284,7 @@ export function PracticeDrawer({
 
           <Field
             id="practice-legal-name-ar"
-            label="Legal name in Arabic"
+            label="Legal name in Arabic (optional)"
             type="text"
             lang="ar"
             dir="rtl"
@@ -277,7 +295,7 @@ export function PracticeDrawer({
 
           <Field
             id="practice-licence-number"
-            label="Trade licence number"
+            label="Trade licence number (optional)"
             type="text"
             maxLength={60}
             value={licenceNumber}
@@ -286,7 +304,7 @@ export function PracticeDrawer({
 
           <Field
             id="practice-licensing-authority"
-            label="Licensing authority"
+            label="Licensing authority (optional)"
             hint="The department or free zone that issued the licence."
             type="text"
             maxLength={120}
@@ -296,7 +314,7 @@ export function PracticeDrawer({
 
           <Field
             id="practice-licence-expires"
-            label="Licence expires"
+            label="Licence expires (optional)"
             type="date"
             value={licenceExpiresOn}
             onChange={(e) => setLicenceExpiresOn(e.target.value)}
@@ -304,7 +322,7 @@ export function PracticeDrawer({
 
           <Field
             id={FIELD_IDS.displayAddress}
-            label="Registered address"
+            label={hasAddressOnRecord ? 'Registered address' : 'Registered address (optional)'}
             hint="Printed on invoices as the supplier's address."
             type="text"
             maxLength={300}
@@ -332,7 +350,7 @@ export function PracticeDrawer({
           <div className="coordinate-pair">
             <Field
               id={FIELD_IDS.latitude}
-              label="Latitude"
+              label="Latitude (optional)"
               type="text"
               inputMode="decimal"
               value={latitude}
@@ -344,7 +362,7 @@ export function PracticeDrawer({
             />
             <Field
               id={FIELD_IDS.longitude}
-              label="Longitude"
+              label="Longitude (optional)"
               type="text"
               inputMode="decimal"
               value={longitude}
@@ -358,7 +376,7 @@ export function PracticeDrawer({
 
           <Field
             id={FIELD_IDS.taxRegistrationNumber}
-            label="Tax registration number"
+            label="Tax registration number (optional)"
             hint="The corporate tax registration the practice holds. Not the VAT number."
             type="text"
             maxLength={40}
@@ -373,9 +391,11 @@ export function PracticeDrawer({
           <label className="vat-switch-row">
             <span className="vat-switch-copy">
               <span>Registered for VAT</span>
-              <span className="small muted">
-                Invoices carry VAT only while this is on; the number printed as a VAT number is the
-                one entered here.
+              <span className="small muted" id="practice-vat-consequence">
+                This records the registration and the number it was issued under. Turning it off
+                removes the number from the record. It does not change what an invoice charges: VAT
+                is worked out from the practice&rsquo;s standard rate today, whichever way this is
+                set.
               </span>
             </span>
             <span className={vatRegistered ? 'vat-switch vat-switch--on' : 'vat-switch'}>
@@ -384,6 +404,7 @@ export function PracticeDrawer({
                 type="checkbox"
                 className="vat-switch__input"
                 aria-label="Registered for VAT"
+                aria-describedby="practice-vat-consequence"
                 checked={vatRegistered}
                 onChange={(e) => {
                   setVatRegistered(e.target.checked);
@@ -399,7 +420,7 @@ export function PracticeDrawer({
             <Field
               id={FIELD_IDS.vatTrn}
               label="VAT registration number"
-              hint={`${VAT_TRN_DIGITS} digits, as issued by the Federal Tax Authority.`}
+              hint={`${VAT_TRN_DIGITS} digits, as issued by the Federal Tax Authority. Required while the switch above is on.`}
               type="text"
               inputMode="numeric"
               maxLength={40}

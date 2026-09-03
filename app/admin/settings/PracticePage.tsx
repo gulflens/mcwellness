@@ -115,11 +115,15 @@ export function PracticePage() {
         }
       />
 
-      {savedNote ? (
-        <div role="status">
-          <Note>{savedNote}</Note>
-        </div>
-      ) : null}
+      {/*
+        Always rendered, never mounted on demand: a live region has to exist
+        before the text lands in it or a screen reader announces nothing. The
+        wrapper carries the gap itself, so the note never sits flush against
+        the "Identity" heading beneath it.
+      */}
+      <div role="status" className="practice__status">
+        {savedNote ? <Note>{savedNote}</Note> : null}
+      </div>
       {state.kind === 'loading' ? <Note>Loading the practice details.</Note> : null}
       {state.kind === 'error' ? (
         <Note tone="critical">The practice details could not be loaded. Try again.</Note>
@@ -177,11 +181,12 @@ export function PracticePage() {
                 {practice.vatTrn ? <span className="numeric">{practice.vatTrn}</span> : null}
               </Fact>
             </dl>
-            {practice.vatRegistered ? null : (
-              <p className="small muted">
-                Invoices carry no VAT while the practice is not registered for it.
-              </p>
-            )}
+            <p className="small muted">
+              The tax registration number is the practice&rsquo;s corporate-tax number, not its VAT
+              number. Recording a VAT registration does not change what an invoice charges: VAT is
+              worked out from the practice&rsquo;s standard rate today, whichever way the switch is
+              set.
+            </p>
           </section>
         </div>
       ) : null}

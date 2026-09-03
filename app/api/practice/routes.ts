@@ -17,7 +17,8 @@ import { Practice, PracticeResponse, UpdatePracticeInput } from './schema';
  * route.
  *
  * **Why a reason is required.** Editing what a tax invoice says the supplier
- * is, is a sensitive action (docs/SPEC/audit.md section 9): every save
+ * is, is one of the actions that deserve extra ceremony (docs/SPEC/audit.md
+ * section 6 — section 9 is the trail's own screens): every save
  * carries `X-Reason`, which the fence stamps onto the transaction and the
  * audit trigger records with the row it changed. The trail is the trigger's;
  * this route only insists there is something in it.

@@ -42,12 +42,41 @@ export function useDrawer(
     // Everything that is not this drawer: the rail, the page, the section
     // beneath it. `inert` is the whole guarantee; the cycle below is the
     // courtesy.
-    const behind = [...document.body.children].filter(
-      (element): element is HTMLElement =>
-        element instanceof HTMLElement && !element.contains(drawer.current),
-    );
-    for (const element of behind) {
-      element.inert = true;
+    //
+    // Walked up the tree, sibling by sibling, rather than taken off
+    // `document.body.children` — which is where this started and where it did
+    // nothing at all. The app renders inside `#root`, so the only child of
+    // `body` that does not contain the drawer is a stray script tag: the rail
+    // stayed focusable with the drawer open, which is the whole thing `inert`
+    // was there to prevent (design review, round 20). Marking the siblings at
+    // every level from the drawer up to `body` leaves exactly the drawer's own
+    // ancestors live, which is what the attribute is for.
+    const behind: HTMLElement[] = [];
+    // Walked downwards from `body`, level by level: at each one, the single
+    // child that contains the drawer is stepped into and every other child is
+    // marked. Downwards rather than up from the drawer so that what is
+    // mutated is read off the document rather than off the ref, which is what
+    // `react-hooks/immutability` asks for and is no harder to read.
+    for (let level: HTMLElement | null = document.body; level !== null;) {
+      let holdsTheDrawer: HTMLElement | null = null;
+      for (const child of level.children) {
+        if (!(child instanceof HTMLElement)) {
+          continue;
+        }
+        if (drawer.current !== null && child.contains(drawer.current)) {
+          holdsTheDrawer = child;
+          continue;
+        }
+        // `!child.inert` so a drawer opened above another drawer does not
+        // un-inert, on the way out, what the first one had already marked.
+        if (!child.inert) {
+          child.inert = true;
+          behind.push(child);
+        }
+      }
+      // `contains` counts an element as containing itself: stop at the drawer
+      // rather than stepping into it and marking its own controls inert.
+      level = holdsTheDrawer === drawer.current ? null : holdsTheDrawer;
     }
 
     const onKey = (event: KeyboardEvent) => {

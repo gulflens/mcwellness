@@ -83,7 +83,12 @@ const saves = (calls: Call[]) =>
   calls.filter((call) => call.url === '/api/practice' && call.init?.method === 'PATCH');
 
 async function openTheDrawer(): Promise<void> {
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit details' }));
+  // The button is on the page from the first paint and disabled until the
+  // details arrive, so the header does not change height under the reader.
+  // Wait for it to mean something before pressing it.
+  const button = await screen.findByRole('button', { name: 'Edit details' });
+  await waitFor(() => expect(button).toHaveProperty('disabled', false));
+  fireEvent.click(button);
   await screen.findByRole('dialog', { name: 'Practice details' });
 }
 
@@ -92,15 +97,16 @@ function type(label: string | RegExp, value: string): void {
 }
 
 describe('Practice settings — what it shows', () => {
-  it('reads the practice back, and says plainly that VAT is off', async () => {
+  it('reads the practice back, and says what the VAT setting does and does not do', async () => {
     mount();
     expect(await screen.findByText('Synthetic Wellness Studio')).toBeTruthy();
     expect(screen.getByText('SYN-000000')).toBeTruthy();
     expect(screen.getByText('31 Dec 2027')).toBeTruthy();
     expect(screen.getByText('No')).toBeTruthy();
-    expect(
-      screen.getByText('Invoices carry no VAT while the practice is not registered for it.'),
-    ).toBeTruthy();
+    // The two things this group must not leave a reader to guess: which tax
+    // number this is, and that recording a registration charges nothing.
+    expect(screen.getByText(/corporate-tax number, not/)).toBeTruthy();
+    expect(screen.getByText(/does not change what an invoice/)).toBeTruthy();
   });
 
   it('says nothing is recorded rather than showing a gap', async () => {
@@ -170,7 +176,7 @@ describe('Practice settings — the save', () => {
     const { calls } = mount(() => json({ practice: saved }));
     await openTheDrawer();
     type('Legal name', 'Synthetic Wellness Studio FZ-LLC');
-    type('Trade licence number', 'SYN-000001');
+    type('Trade licence number (optional)', 'SYN-000001');
     type('Why this changes', 'The licence was reissued under the new legal name.');
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
 
@@ -205,6 +211,71 @@ describe('Practice settings — the save', () => {
   });
 });
 
+describe('Practice settings — the address', () => {
+  it('refuses coordinates with no address rather than dropping them', async () => {
+    // With nothing on record the form used to send address: null, and typed
+    // coordinates went nowhere without a word (design review, round 20).
+    const bare = { ...PRACTICE, address: null };
+    const calls: Call[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return String(input) === '/api/me'
+        ? json({
+            userId: '00000002-0000-4000-8000-000000000010',
+            displayName: 'Hazel Harbour',
+            tenantId: '00000001-0000-4000-8000-000000000001',
+            roles: ['admin'],
+            capabilities: [],
+          })
+        : json({ practice: bare });
+    }) as unknown as typeof fetch;
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <PracticePage />
+      </AuthProviderBoundary>,
+    );
+
+    await openTheDrawer();
+    type('Latitude (optional)', '25.19');
+    type('Longitude (optional)', '55.26');
+    type('Why this changes', 'Recording where the studio is.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(
+      await screen.findByText('Give the address these coordinates belong to, or clear them.'),
+    ).toBeTruthy();
+    expect(saves(calls)).toHaveLength(0);
+  });
+
+  it('asks for the coordinates when the first address is recorded', async () => {
+    const bare = { ...PRACTICE, address: null };
+    const calls: Call[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return String(input) === '/api/me'
+        ? json({
+            userId: '00000002-0000-4000-8000-000000000010',
+            displayName: 'Hazel Harbour',
+            tenantId: '00000001-0000-4000-8000-000000000001',
+            roles: ['admin'],
+            capabilities: [],
+          })
+        : json({ practice: bare });
+    }) as unknown as typeof fetch;
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <PracticePage />
+      </AuthProviderBoundary>,
+    );
+
+    await openTheDrawer();
+    type('Registered address (optional)', 'Unit 1, Synthetic Tower, Dubai');
+    type('Why this changes', 'Recording the studio address.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(await screen.findByText(/needs its map coordinates/)).toBeTruthy();
+    expect(saves(calls)).toHaveLength(0);
+  });
+});
+
 describe('Practice settings — the VAT switch', () => {
   it('asks for the number the moment the switch goes on, and sends nothing until it has one', async () => {
     const { calls } = mount();
@@ -235,6 +306,20 @@ describe('Practice settings — the VAT switch', () => {
       vatRegistered: true,
       vatTrn: '100000000000003',
     });
+  });
+
+  it('says what the switch does, and binds that sentence to the control', async () => {
+    mount();
+    await openTheDrawer();
+    const control = screen.getByLabelText('Registered for VAT');
+    const described = control.getAttribute('aria-describedby');
+    expect(described).toBe('practice-vat-consequence');
+    const sentence = document.getElementById(described ?? '');
+    // The three things a person needs before touching it: what it records,
+    // what turning it off costs them, and what it does not do.
+    expect(sentence?.textContent).toContain('records the registration');
+    expect(sentence?.textContent).toContain('removes the number from the record');
+    expect(sentence?.textContent).toContain('does not change what an invoice charges');
   });
 
   it('drops the number when the switch goes off, so nothing is printed as a VAT number', async () => {

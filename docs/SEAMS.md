@@ -186,8 +186,11 @@ What the fence guarantees:
   so a store that would not answer is an operational fact, not this request's
   refusal.
 
-What it does not give you: a database. By the time the work runs, `c.get('db')`
-is a connection that belongs to somebody else. Anything that must be written
+What it does not give you: a database. By the time the work runs, the
+connection is back in the pool and may already be serving another request, so
+**the handle published as `c.get('db')` stops working the moment the request
+ends** — a query through it rejects with a plain error rather than quietly
+running inside somebody else's transaction. Anything that must be written
 belongs in the transaction; anything that cannot be unwritten belongs here.
 
 `c.get('afterCommit')` is published by the request-context middleware, so it

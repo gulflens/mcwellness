@@ -152,9 +152,20 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
 
     const client = await pool.connect();
     let inTransaction = false;
+    // Once the connection is back in the pool it belongs to whoever the pool
+    // hands it to next, which may already be another request in flight. So
+    // the wrapper published as c.get('db') stops working the moment it is
+    // handed back: a route that closed over it, or after-commit work that
+    // reaches for it out of habit, gets a plain error rather than somebody
+    // else's transaction (security review, round 20).
+    let handedBack = false;
     // Work to run once this transaction has committed, and never if it has
     // not (docs/SEAMS.md, "After the commit"). Registered by routes below.
     const afterCommit: AfterCommitWork[] = [];
+    const handBack = (destroy?: true): void => {
+      handedBack = true;
+      client.release(destroy);
+    };
     try {
       await client.query('begin');
       inTransaction = true;
@@ -168,7 +179,7 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
         // Unknown, suspended and archived people get the same answer.
         await client.query('rollback');
         inTransaction = false;
-        client.release();
+        handBack();
         return forbidden(c, requestId);
       }
       const resolved = ResolvedActorRow.parse(row);
@@ -191,10 +202,23 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
       // sandbox: raw SQL could still commit or change a setting, so routes are
       // reviewed; what the fence guarantees is the database role and the stamp.
       c.set('db', {
-        query: <R extends pg.QueryResultRow = pg.QueryResultRow>(
+        // async, so a handle used after the fact rejects rather than throwing
+        // synchronously out of something whose type promises a promise.
+        query: async <R extends pg.QueryResultRow = pg.QueryResultRow>(
           text: string,
           params?: unknown[],
-        ) => client.query<R>(text, params),
+        ) => {
+          if (handedBack) {
+            // Never the statement, never a parameter: this throws where a
+            // caller can log it, and both can carry a client's own values.
+            throw new Error(
+              "This request's database connection has been returned to the pool. " +
+                'Work registered with afterCommit runs after the transaction is over ' +
+                'and cannot query (docs/SEAMS.md).',
+            );
+          }
+          return client.query<R>(text, params);
+        },
       });
       c.set('requestId', requestId);
       c.set('afterCommit', (work: AfterCommitWork) => {
@@ -216,7 +240,7 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
       }
       await client.query(failed ? 'rollback' : 'commit');
       inTransaction = false;
-      client.release();
+      handBack();
       // Only now, and only on a commit: a rolled-back request leaves nothing
       // behind for this work to be consistent with.
       if (!failed && afterCommit.length > 0) {
@@ -227,7 +251,7 @@ export function withRequestContext({ pool, verifier }: RequestContextDeps) {
         await client.query('rollback').catch(() => undefined);
       }
       // The connection may be in an unknown state: let the pool discard it.
-      client.release(true);
+      handBack(true);
       throw error;
     }
   });

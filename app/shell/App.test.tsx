@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from './auth/AuthContext';
@@ -198,6 +198,42 @@ describe('App — /admin/settings/practice', () => {
       'href',
       expect.stringContaining('/admin/settings/practice'),
     );
+  });
+
+  it('takes the rest of the console out of reach while the drawer is open', async () => {
+    // The drawer's `inert` used to be a no-op: it read document.body.children,
+    // and the app renders inside #root, so nothing behind it was ever marked
+    // and a rail link could take focus from an open drawer (design review,
+    // round 20). jsdom implements `inert` as a property and not as behaviour,
+    // so the mechanism is asserted directly, and the focus cycle beside it.
+    mount(ADMIN, '/admin/settings/practice');
+    const edit = await screen.findByRole('button', { name: 'Edit details' });
+    // Disabled until the details land: pressing it before then does nothing.
+    await waitFor(() => expect(edit).toHaveProperty('disabled', false));
+    fireEvent.click(edit);
+    const drawer = await screen.findByRole('dialog', { name: 'Practice details' });
+
+    const rail = document.querySelector<HTMLElement>('.rail');
+    const main = document.querySelector<HTMLElement>('.admin__main');
+    expect(rail?.inert).toBe(true);
+    // The drawer's own ancestors stay live, or the drawer would be inert too.
+    expect(main?.inert).toBeFalsy();
+    expect(drawer.inert).toBeFalsy();
+    // Everything else on the page behind it is not.
+    expect(document.querySelector<HTMLElement>('.page__header')?.inert).toBe(true);
+    expect(document.querySelector<HTMLElement>('.practice')?.inert).toBe(true);
+
+    // Tab does not walk out of the drawer.
+    const close = screen.getByRole('button', { name: 'Close' });
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(drawer.contains(document.activeElement)).toBe(true);
+
+    // And it all comes back when the drawer closes.
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await screen.findByRole('button', { name: 'Edit details' });
+    expect(rail?.inert).toBeFalsy();
+    expect(document.querySelector<HTMLElement>('.practice')?.inert).toBeFalsy();
   });
 
   it('never offers finance a Settings link its own route would refuse', async () => {
