@@ -642,6 +642,62 @@ describe('closing a visit', () => {
     ).rejects.toMatchObject({ code: '23001' });
   });
 
+  it('lets a write that would change nothing alone, rather than refusing it', async () => {
+    const visit = await seedVisit('25');
+    await flush(visit, wholeVisit(visit));
+    await post(`/api/sessions/${visit.sessionId}/close`, visit.authSub, NO_ACTUALS);
+
+    const before = await owner.query<{ updated_at: Date; closed_at: Date }>(
+      'select updated_at, closed_at from session where id = $1',
+      [visit.sessionId],
+    );
+
+    // A device that was offline through the close replays its outbox, and
+    // billing's trigger sits on this exact statement (404). It alters
+    // nothing, so it is neither an amendment to refuse nor a change to
+    // apply: no rows, and the frozen record untouched.
+    const replay = await owner.query("update session set status = 'completed' where id = $1", [
+      visit.sessionId,
+    ]);
+    expect(replay.rowCount).toBe(0);
+
+    const after = await owner.query<{ updated_at: Date; closed_at: Date }>(
+      'select updated_at, closed_at from session where id = $1',
+      [visit.sessionId],
+    );
+    expect(after.rows[0]).toEqual(before.rows[0]);
+
+    // And a real change is still refused, so the exemption is for no-ops only.
+    await expect(
+      owner.query("update session set status = 'aborted' where id = $1", [visit.sessionId]),
+    ).rejects.toMatchObject({ code: '23001' });
+  });
+
+  it('carries a close with the completion, for a writer who names no closed_at', async () => {
+    const visit = await seedVisit('26');
+    await flush(visit, wholeVisit(visit));
+
+    // The contract with billing (404_billing_consumption.sql): completing a
+    // visit is a plain status update on this stream's own table, and every
+    // column the close needs is this stream's to fill in.
+    await owner.query("update session set status = 'completed' where id = $1", [visit.sessionId]);
+
+    const { rows } = await owner.query<{
+      status: string;
+      closed_at: Date | null;
+      closed_by: string | null;
+    }>('select status, closed_at, closed_by from session where id = $1', [visit.sessionId]);
+    expect(rows[0]!.status).toBe('completed');
+    expect(rows[0]!.closed_at).not.toBeNull();
+    // Nobody was named, so nobody is recorded. The audit row has the actor.
+    expect(rows[0]!.closed_by).toBeNull();
+
+    // Stamped, therefore frozen: the transition is the close.
+    await expect(
+      owner.query("update session set observations = '{}'::jsonb where id = $1", [visit.sessionId]),
+    ).rejects.toMatchObject({ code: '23001' });
+  });
+
   it('refuses a setup photo while there is nowhere to put the bytes, and files no document', async () => {
     const visit = await seedVisit('15', { photoConsent: true });
     const flushed = (await (
