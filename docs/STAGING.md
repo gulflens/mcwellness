@@ -206,6 +206,8 @@ SUPABASE_JWKS_URL=https://<ref>.supabase.co/auth/v1/.well-known/jwks.json
 SUPABASE_JWT_SECRET=                       # empty: the placeholder is refused outside development
 API_DATABASE_URL=postgresql://mcwellness_api.<ref>:<api role password>@aws-0-<region>.pooler.supabase.com:6543/postgres
 IDENTITY_KEY=<the key from step 3>
+STORAGE_PROVIDER=supabase             # or "local"; unset, the API refuses to start on staging
+SUPABASE_STORAGE_KEY=<the project's service role key>   # never the anon key
 SERVE_APP=true
 HOST=<what the reverse proxy reaches>
 TRUSTED_PROXY_HOPS=<the number of proxies in front, exactly>
@@ -215,6 +217,47 @@ The API verifies tokens against the project's published keys (the JWKS URL),
 so it needs no shared secret. The pooler connection is the transaction pooler
 on port 6543 with the role name suffixed by the project reference; the API
 refuses any other role name at startup.
+
+`STORAGE_PROVIDER` has no default outside development: the API says so at
+startup and stops, rather than quietly writing the practice's documents to a
+folder on the server. It is checked when the API starts and the project is
+not reached until a document call is made, so a bucket that is missing or
+down never stops the API from starting — a call against it answers 503
+`storage_unavailable` (docs/SEAMS.md).
+
+## 5a. The documents bucket
+
+One bucket, in the same project, **once**, from the dashboard under Storage,
+"New bucket":
+
+- Name: `documents`
+- Public: **off**. Nothing in it is ever served from a public URL; the API
+  signs a link good for five minutes when someone needs to see a file.
+- File size limit and allowed MIME types: leave as they are for now.
+- Versioning, if the project offers it: on. A document is never rewritten in
+  the ordinary course of things, and a version history costs nothing.
+
+No storage policies are needed: the API reaches the bucket with the service
+credential and is the only thing that does. The browser never holds a storage
+credential, and `SUPABASE_ANON_KEY` is never `SUPABASE_STORAGE_KEY`.
+
+Keys inside the bucket are built by the platform and never by hand:
+`tenant/<tenantId>/client/<clientId>/<documentId>` for anything filed against
+a client, `tenant/<tenantId>/practice/<documentId>` for a document with no
+client. They are made of ids alone, so a key says nothing about whose file it
+is.
+
+**The consent wording has to be uploaded once, by hand.** `pnpm seed` writes
+those eight files into the local folder, but a rendered seed script carries
+only the rows: each consent wording document row holds a `storage_key` and
+the sha256 of its file, and the bytes travel separately. After applying a
+rendered seed to a hosted project, upload each file in `docs/CONSENT` (all
+but `README.md`) into the `documents` bucket at exactly the `storage_key` its
+row names — the script's own header repeats this. Until that is done the rows
+exist and point at nothing, which is visible the moment anyone opens a
+consent. The mapping is stable: the seed's document ids are fixed, so
+`select purpose, locale, storage_key from document where kind = 'consent_text'
+order by purpose, locale` gives the list to work from.
 
 ## 6. The app's build settings
 
