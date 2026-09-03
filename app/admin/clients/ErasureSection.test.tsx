@@ -206,7 +206,12 @@ describe('a record that has been erased', () => {
   });
 
   it('hands the number to WhatsApp only when the button is pressed, and never to the page', async () => {
-    const open = vi.fn(() => ({}) as Window);
+    const open = vi.fn((url: string, target?: string, features?: string) => {
+      void target;
+      void features;
+      void url;
+      return {} as Window;
+    });
     vi.stubGlobal('open', open);
     mount(
       <ErasureSection
@@ -230,7 +235,12 @@ describe('a record that has been erased', () => {
   });
 
   it('drafts the message in the household’s own language', async () => {
-    const open = vi.fn(() => ({}) as Window);
+    const open = vi.fn((url: string, target?: string, features?: string) => {
+      void target;
+      void features;
+      void url;
+      return {} as Window;
+    });
     vi.stubGlobal('open', open);
     mount(
       <ErasureSection

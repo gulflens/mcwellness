@@ -175,7 +175,11 @@ export function ErasureSection({
         `/api/clients/${record.id}/erasure-requests/${requestId}/execute`,
         {
           method: 'POST',
-          headers: headers({ 'x-reason': eraseReason.trim() }),
+          // The act carries no body of its own — the reason is a header, never
+          // a query string — but every POST says what it is sending
+          // (app/api/_middleware/security.ts answers 415 otherwise).
+          headers: headers({ 'content-type': 'application/json', 'x-reason': eraseReason.trim() }),
+          body: '{}',
         },
       );
       if (!res.ok) {

@@ -12,6 +12,7 @@ import type {
 } from '../../../app/api/clients/record-schema';
 import { luhnCheckDigit } from '../../../db/seed/generate';
 import { deriveIdentityKeys } from '../../../domain/shared/identity';
+import { isoDateIn } from '../../../domain/shared';
 import { IDS, AUTH, freshDatabase, seedTenant, seedUser } from '../../db/helpers';
 
 /**
@@ -405,7 +406,12 @@ describe('who may search by identity number', () => {
 
 describe('a date of birth is in the past', () => {
   it('refuses one in the future on create and on edit, naming the field', async () => {
-    const future = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    // Tomorrow in the practice's own day, not in UTC. A day added to the UTC
+    // clock is still today in Dubai for the four hours after midnight there,
+    // so this refused nothing and failed between 00:00 and 04:00 local.
+    const tomorrow = new Date(`${isoDateIn(new Date(), 'Asia/Dubai')}T00:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const future = tomorrow.toISOString().slice(0, 10);
     const created = await request(api, AUTH.ownerA, '/api/clients', {
       method: 'POST',
       body: JSON.stringify({
