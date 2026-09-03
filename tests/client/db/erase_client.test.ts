@@ -48,6 +48,15 @@ beforeAll(async () => {
     [IDS.clientA],
   );
   await seedContact(owner, IDS.tenantA, IDS.contactA, IDS.clientA, 'x-erase-test-1');
+  // The four name columns migration 101 added, set here rather than in
+  // seedContact: tests/db/helpers.ts is the shared zone, and a contact known
+  // only by its relationship is still the ordinary case everywhere else.
+  // Migration 102 exists to clear these, so the fixture has to carry them.
+  await owner.query(
+    "update contact set given_name = 'Willow', family_name = 'Meadow', " +
+      "given_name_ar = 'صفصاف', family_name_ar = 'مرج' where id = $1",
+    [IDS.contactA],
+  );
   await owner.query(
     "insert into app_user (id, tenant_id, display_name, status) values ($1, $2, 'Household Portal', 'active')",
     [PORTAL_USER, IDS.tenantA],
@@ -175,8 +184,8 @@ describe('app.erase_client', () => {
       });
 
       const contact = await owner.query(
-        'select phone, email, whatsapp_opt_in, emirates_id_encrypted, emirates_id_hash, user_id ' +
-          'from contact where id = $1',
+        'select phone, email, whatsapp_opt_in, emirates_id_encrypted, emirates_id_hash, user_id, ' +
+          'given_name, family_name, given_name_ar, family_name_ar from contact where id = $1',
         [IDS.contactA],
       );
       expect(contact.rows[0]).toMatchObject({
@@ -186,6 +195,13 @@ describe('app.erase_client', () => {
         emirates_id_encrypted: null,
         emirates_id_hash: null,
         user_id: null,
+        // Migration 102: nulled rather than given a placeholder, because a
+        // contact's name is nullable by construction and what remains — the
+        // relationship — is not personal data.
+        given_name: null,
+        family_name: null,
+        given_name_ar: null,
+        family_name_ar: null,
       });
 
       const portalUser = await owner.query(

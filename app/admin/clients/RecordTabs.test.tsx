@@ -37,6 +37,10 @@ const record: ClientRecordResponse = {
   contacts: [
     {
       id: CONTACT_ID,
+      givenName: 'Iris',
+      familyName: 'Creek',
+      givenNameAr: 'سوسن',
+      familyNameAr: 'خور',
       relationship: 'mother',
       isLegalGuardian: true,
       canConsent: true,
@@ -89,7 +93,8 @@ describe('OverviewTab', () => {
     // en-GB, not the stored ISO form, and the age named rather than left as a number.
     expect(await screen.findByText(/01\/04\/2015 \(age \d+\)/)).toBeTruthy();
     expect(screen.getByText('Female')).toBeTruthy();
-    expect(screen.getByText('Mother')).toBeTruthy();
+    // The contact's own name leads, with the relationship after it (CR-07).
+    expect(screen.getByText('Iris Creek (mother)')).toBeTruthy();
     expect(screen.getByText('+971500000061')).toBeTruthy();
     // A lead with no location and no consent cannot be activated, and is told so.
     expect(screen.getByText('A location with a verified pin')).toBeTruthy();
@@ -104,14 +109,18 @@ describe('OverviewTab', () => {
 
 describe('ConsentTab', () => {
   it("names a minor's guardian consent among what is needed, and says none is on file", async () => {
-    mount(<ConsentTab record={record} />);
-    // Born 2015: a minor, so the guardian's consent is required as well as participation.
-    expect(await screen.findByText("Guardian's consent for a minor")).toBeTruthy();
+    mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={() => undefined} mayWrite />);
+    // Born 2015: a minor, so the guardian's consent is required as well as
+    // taking part, and both are named in plain words.
+    expect(await screen.findByText("Guardian's consent for a child")).toBeTruthy();
     expect(screen.getByText('Participation')).toBeTruthy();
-    expect(screen.getAllByText('Not yet recorded').length).toBeGreaterThan(0);
-    expect(screen.getByText('No consent recorded yet.')).toBeTruthy();
-    // Plain words, and no repository vocabulary on a screen.
-    expect(screen.getByText('Recording consent arrives with documents.')).toBeTruthy();
+    expect(screen.getAllByText('Needed before this client can be activated').length).toBe(3);
+    // The optional purposes are listed too, below the required ones, so a
+    // person never has to wonder where photographs are recorded.
+    expect(screen.getByText('Photographs and video')).toBeTruthy();
+    // Three optional purposes, each saying nothing is on file without
+    // implying anything is owed.
+    expect(screen.getAllByText('Not recorded').length).toBe(3);
   });
 });
 

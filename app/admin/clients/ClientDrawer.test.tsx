@@ -48,6 +48,10 @@ const record = {
       relationship: 'self',
       isLegalGuardian: false,
       canConsent: true,
+      givenName: 'Laurel',
+      familyName: 'Meadow',
+      givenNameAr: 'لوريل',
+      familyNameAr: 'مرج',
       canReceiveReports: true,
       canPay: true,
       phone: '+971500001105',
@@ -71,6 +75,9 @@ function mount(recordBody: unknown = record, me: unknown = ADMIN) {
     }
     if (url === '/api/clients/goal-categories') {
       return json({ categories: [] });
+    }
+    if (url === `/api/clients/${client.id}/documents`) {
+      return json({ documents: [] });
     }
     if (url.startsWith(`/api/clients/${client.id}/timeline`)) {
       return json({ events: [], nextBefore: null, hasMore: false });
@@ -143,14 +150,23 @@ describe('ClientDrawer', () => {
     expect(document.activeElement).toBe(overviewTab);
   });
 
-  it('shows the Documents placeholder and the read-only Consent note', async () => {
+  it('lists the documents on file and every consent purpose', async () => {
     mount();
     await screen.findByRole('tablist');
     fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
-    expect(await screen.findByText('Uploading and filing documents arrives soon.')).toBeTruthy();
+    // Nothing filed against this fixture, said plainly rather than as an empty
+    // table, and the way to file one is on the same screen.
+    expect(await screen.findByText('Nothing filed against this client yet.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'File document' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Consent' }));
-    expect(await screen.findByText('No consent recorded yet.')).toBeTruthy();
+    // Every purpose, with the ones activation needs first and each saying
+    // where it stands.
+    expect(await screen.findByText('Participation')).toBeTruthy();
+    expect(screen.getByText('Photographs and video')).toBeTruthy();
+    expect(
+      screen.getAllByText('Needed before this client can be activated').length,
+    ).toBeGreaterThan(0);
   });
 
   it('shows finance the three tabs it may read, and no more', async () => {

@@ -1,0 +1,65 @@
+/**
+ * What the first bytes of a file say it is, checked against what the caller
+ * says it is.
+ *
+ * A route that files whatever bytes it is handed under whatever media type it
+ * is told is a route that will one day hold an HTML page called `image/png`,
+ * and a signed link to it is a link a browser may render. The store's own
+ * answers narrow that — the folder implementation serves everything as
+ * `application/octet-stream` with `content-disposition: attachment` — but the
+ * bucket serves the type the row records, so the check belongs where the row
+ * is written.
+ *
+ * Deliberately small: four magic numbers, one question, no parsing. It says
+ * whether the bytes are consistent with the declared type, never what the
+ * file contains.
+ */
+
+/** The media types this platform will hold as evidence or as a filed document. */
+export const KNOWN_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/pdf',
+] as const;
+export type KnownMimeType = (typeof KNOWN_MIME_TYPES)[number];
+
+export function isKnownMimeType(value: string): value is KnownMimeType {
+  return (KNOWN_MIME_TYPES as readonly string[]).includes(value);
+}
+
+function startsWith(bytes: Uint8Array, signature: readonly number[]): boolean {
+  if (bytes.length < signature.length) return false;
+  return signature.every((byte, index) => bytes[index] === byte);
+}
+
+/** `RIFF....WEBP`: the four-byte size between the two words is the file's own. */
+function isWebp(bytes: Uint8Array): boolean {
+  return (
+    startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
+    bytes.length >= 12 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  );
+}
+
+/**
+ * Whether `bytes` are consistent with `mimeType`. False for an unknown type,
+ * so a caller cannot get past this by naming something it does not check.
+ */
+export function bytesMatchMimeType(bytes: Uint8Array, mimeType: string): boolean {
+  switch (mimeType) {
+    case 'image/png':
+      return startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    case 'image/jpeg':
+      return startsWith(bytes, [0xff, 0xd8, 0xff]);
+    case 'image/webp':
+      return isWebp(bytes);
+    case 'application/pdf':
+      return startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d]);
+    default:
+      return false;
+  }
+}

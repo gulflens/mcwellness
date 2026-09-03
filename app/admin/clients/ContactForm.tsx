@@ -84,6 +84,13 @@ export function ContactForm({
 }) {
   const { apiFetch } = useAuth();
   const editing = contact !== undefined;
+  // Optional throughout: a lead is one name and one phone
+  // (docs/SPEC/client-record.md section 3), and a contact known only by their
+  // relationship predates the name columns (migration 101, CR-07).
+  const [givenName, setGivenName] = useState(contact?.givenName ?? '');
+  const [familyName, setFamilyName] = useState(contact?.familyName ?? '');
+  const [givenNameAr, setGivenNameAr] = useState(contact?.givenNameAr ?? '');
+  const [familyNameAr, setFamilyNameAr] = useState(contact?.familyNameAr ?? '');
   const [relationship, setRelationship] = useState(contact?.relationship ?? '');
   const [isLegalGuardian, setIsLegalGuardian] = useState(contact?.isLegalGuardian ?? false);
   const [canConsent, setCanConsent] = useState(contact?.canConsent ?? false);
@@ -174,6 +181,16 @@ export function ContactForm({
     // so a blank field is omitted there and cleared here.
     const trimmedPhone = normalisePhone(phone.trim());
     const trimmedEmail = email.trim();
+    // The same dialect difference applies to the name: on an edit a cleared
+    // field means null, on a create it means "not given" and is omitted.
+    const names = { givenName, familyName, givenNameAr, familyNameAr };
+    const nameFields = editing
+      ? Object.fromEntries(Object.entries(names).map(([key, value]) => [key, value.trim() || null]))
+      : Object.fromEntries(
+          Object.entries(names)
+            .filter(([, value]) => value.trim() !== '')
+            .map(([key, value]) => [key, value.trim()]),
+        );
     const contactDetails = editing
       ? { phone: trimmedPhone || null, email: trimmedEmail || null }
       : {
@@ -191,6 +208,7 @@ export function ContactForm({
           method: editing ? 'PATCH' : 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
+            ...nameFields,
             relationship,
             isLegalGuardian,
             canConsent,
@@ -239,6 +257,43 @@ export function ContactForm({
 
   return (
     <form className="drawer__form" onSubmit={(e) => void submit(e)}>
+      {/* A given name and a family name are one name, so they sit on one line
+          — the pair in each script together, as the client's own form already
+          does. Four full-width fields in a column read as four unrelated
+          questions and pushed everything that matters below the fold. */}
+      <div className="field-row">
+        <Field
+          id="contact-given-name"
+          label="Given name (optional)"
+          value={givenName}
+          onChange={(e) => setGivenName(e.target.value)}
+          hint="Who to ask for at the door, and who a consent was given by."
+        />
+        <Field
+          id="contact-family-name"
+          label="Family name (optional)"
+          value={familyName}
+          onChange={(e) => setFamilyName(e.target.value)}
+        />
+      </div>
+      <div className="field-row">
+        <Field
+          id="contact-given-name-ar"
+          label="Given name (Arabic, optional)"
+          lang="ar"
+          dir="rtl"
+          value={givenNameAr}
+          onChange={(e) => setGivenNameAr(e.target.value)}
+        />
+        <Field
+          id="contact-family-name-ar"
+          label="Family name (Arabic, optional)"
+          lang="ar"
+          dir="rtl"
+          value={familyNameAr}
+          onChange={(e) => setFamilyNameAr(e.target.value)}
+        />
+      </div>
       <Select
         id="contact-relationship"
         label="Relationship to the client"

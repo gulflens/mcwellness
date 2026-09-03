@@ -58,6 +58,10 @@ type ClientRow = {
 
 type ContactRow = {
   id: string;
+  given_name: string | null;
+  family_name: string | null;
+  given_name_ar: string | null;
+  family_name_ar: string | null;
   relationship: Contact['relationship'];
   is_legal_guardian: boolean;
   can_consent: boolean;
@@ -92,6 +96,13 @@ type ConsentRow = {
   withdrawn_at: Date | null;
   expires_at: Date | null;
   method: Consent['method'];
+  signature_document_id: string | null;
+  text_document_id: string;
+  wording_version: string | null;
+  wording_status: Consent['wordingStatus'];
+  witnessed_by_user_id: string | null;
+  witnessed_by_name: string | null;
+  withdrawal_reason: string | null;
 };
 
 type GoalRow = {
@@ -114,7 +125,8 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
   if (!row) return null;
 
   const contacts = await db.query<ContactRow>(
-    'select id, relationship, is_legal_guardian, can_consent, can_receive_reports, can_pay, ' +
+    'select id, given_name, family_name, given_name_ar, family_name_ar, relationship, ' +
+      'is_legal_guardian, can_consent, can_receive_reports, can_pay, ' +
       'phone, email, whatsapp_opt_in, (emirates_id_hash is not null) as has_emirates_id ' +
       'from contact where client_id = $1 order by created_at',
     [clientId],
@@ -129,9 +141,30 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
       'from location where owner_type = $2 and owner_id = $1 order by is_primary desc, created_at',
     [clientId, 'client'],
   );
+  // The wording joins in because a consent that could name only its signature
+  // was half a record: the Consent tab showed what a person drew and never
+  // what they had read. `document` is read under row security as the caller
+  // like everything else here, and a practice wording is admitted to staff and
+  // to a contact of a client whose consent names it
+  // (db/policies/client/readers.sql). The witness joins in for the same
+  // reason: a verbal re-confirmation files no document, so who heard it is the
+  // whole of the evidence.
   const consents = await db.query<ConsentRow>(
-    'select id, purpose, status, given_by_contact_id, given_at, withdrawn_at, expires_at, method ' +
-      'from consent where client_id = $1 order by created_at desc',
+    'select c.id, c.purpose, c.status, c.given_by_contact_id, c.given_at, c.withdrawn_at, ' +
+      'c.expires_at, c.method, c.signature_document_id, c.text_document_id, ' +
+      'w.version as wording_version, w.status as wording_status, ' +
+      'c.witnessed_by_user_id, u.display_name as witnessed_by_name, wr.reason as withdrawal_reason ' +
+      'from consent c left join document w on w.id = c.text_document_id ' +
+      'left join app_user u on u.id = c.witnessed_by_user_id ' +
+      // The reason a consent went, from the trail. A lateral join rather than
+      // a column, because the reason belongs to the act and not to the row,
+      // and audit_log's own read policy decides who sees it: for a
+      // practitioner or a contact this simply comes back null.
+      'left join lateral (select a.reason from audit_log a ' +
+      "where a.entity_type = 'consent' and a.entity_id = c.id and a.action = 'update' " +
+      "and c.status = 'withdrawn' and a.reason is not null " +
+      'order by a.occurred_at desc limit 1) wr on true ' +
+      'where c.client_id = $1 order by c.created_at desc',
     [clientId],
   );
   const goals = await db.query<GoalRow>(
@@ -155,6 +188,10 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
     status: row.status,
     contacts: contacts.rows.map((c) => ({
       id: c.id,
+      givenName: c.given_name,
+      familyName: c.family_name,
+      givenNameAr: c.given_name_ar,
+      familyNameAr: c.family_name_ar,
       relationship: c.relationship,
       isLegalGuardian: c.is_legal_guardian,
       canConsent: c.can_consent,
@@ -187,6 +224,13 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
       withdrawnAt: c.withdrawn_at ? c.withdrawn_at.toISOString() : null,
       expiresAt: c.expires_at ? c.expires_at.toISOString() : null,
       method: c.method,
+      signatureDocumentId: c.signature_document_id,
+      textDocumentId: c.text_document_id,
+      wordingVersion: c.wording_version,
+      wordingStatus: c.wording_status,
+      witnessedByUserId: c.witnessed_by_user_id,
+      witnessedByName: c.witnessed_by_name,
+      withdrawalReason: c.withdrawal_reason,
     })),
     goals: goals.rows.map((g) => ({
       id: g.id,
@@ -364,13 +408,19 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
       ],
     );
     await db.query(
-      'insert into contact (id, tenant_id, client_id, relationship, is_legal_guardian, ' +
+      'insert into contact (id, tenant_id, client_id, given_name, family_name, ' +
+        'given_name_ar, family_name_ar, relationship, is_legal_guardian, ' +
         'can_consent, can_receive_reports, can_pay, phone, email, emirates_id_encrypted, ' +
-        'emirates_id_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+        'emirates_id_hash) ' +
+        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)',
       [
         contactId,
         tenantId,
         clientId,
+        body.data.contact.givenName ? cleanText(body.data.contact.givenName, 100) : null,
+        body.data.contact.familyName ? cleanText(body.data.contact.familyName, 100) : null,
+        body.data.contact.givenNameAr ? cleanText(body.data.contact.givenNameAr, 100) : null,
+        body.data.contact.familyNameAr ? cleanText(body.data.contact.familyNameAr, 100) : null,
         body.data.contact.relationship,
         body.data.contact.isLegalGuardian,
         body.data.contact.canConsent,

@@ -4,6 +4,7 @@ import type { ClientRecordResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ActivationSummary } from './ActivationSummary';
+import { contactName } from './contactName';
 import { canActivate, practiceToday, toActivationRecord } from './activation';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -122,7 +123,11 @@ export function OverviewTab({
               <ul className="record-facts__list">
                 {record.contacts.map((contact) => (
                   <li key={contact.id}>
-                    <span>{RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship}</span>
+                    <span>
+                      {contactName(contact)
+                        ? `${contactName(contact)} (${(RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship).toLowerCase()})`
+                        : (RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship)}
+                    </span>
                     {contact.phone ? <span className="numeric muted">{contact.phone}</span> : null}
                   </li>
                 ))}
