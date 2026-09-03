@@ -30,7 +30,7 @@ export const CLIENT_RECORD_STATUSES = ['lead', 'active', 'paused', 'closed'] as 
 
 const Name = z.string().min(1).max(100);
 const FreeText = z.string().min(1).max(2000);
-const Phone = z.string().regex(E164, 'A phone number is E.164, e.g. +971501234567.');
+const Phone = z.string().regex(E164, 'A phone number is E.164, e.g. +971500001234.');
 // Raw form, digits and hyphens: validated and normalised server-side by
 // domain/client's validateEmiratesId (15 digits, starts 784, Luhn check
 // digit), never required (docs/SPEC/00-data-model.md section 3).

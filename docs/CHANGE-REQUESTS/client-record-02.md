@@ -67,10 +67,25 @@ notes assume a proxy in front of it.
 
 So a term shaped like an Emirates ID goes instead to
 `POST /api/clients/lookup` with the number in the request body — same role
-gate, same audit row per client seen, same response shape as the list. `?q=`
-is unchanged and still searches names and record numbers; an identity number
-typed into it is ordinary text that matches nothing, which the database test
-pins. Nothing in the shared zone changed for this, and nothing is being asked
+gate, same audit row per client seen, same response shape as the list.
+
+Three things make that hold rather than merely intend it:
+
+- The search box sends **nothing at all** while the number is half typed. A
+  person types slower than the 150 ms debounce, so without this the box would
+  have emitted `?q=784`, `?q=7841900`, … up to fourteen of the fifteen digits
+  before the last keystroke switched transport — the leak the route exists to
+  prevent, arriving one keystroke early. A line under the box says so.
+- `GET /api/clients` **refuses** a `q` that is an identity number, whole or
+  half-typed, rather than searching it: the floor under the browser's rule, so
+  a hand-written request cannot put one in a query string either. A record
+  number is never mistaken for one (MRNs read `MW-000001`).
+- A lookup that finds **nobody** is audited too. `logReads` writes one row per
+  client returned and nothing when there are none, so without this the trail
+  could not answer "who searched for whose identity number and was told
+  nothing".
+
+Nothing in the shared zone changed for any of it, and nothing is being asked
 of the trunk: it is recorded because it is a deliberate departure from the
 brief that a reviewer should see stated rather than discover.
 
@@ -114,6 +129,25 @@ Also this worktree's own, and deliberately not built here: withdrawing a
 consent. `POST /api/clients/:id/consents/:consentId/withdraw` exists and takes
 its reason header, but a withdrawal without a way to record one in the first
 place would be a screen for undoing something the console cannot do.
+
+---
+
+## Two smaller notes for the trunk
+
+- **The vendor register names the Platform, not the consumer map.**
+  `docs/COMPLIANCE/approved-vendors.md` lists "Google Maps Platform …
+  coordinates only, never names". The "Open in Google Maps" link this pull
+  request ships is `www.google.com/maps`, a person-clicked link carrying a
+  household's coordinates (`rel="noreferrer noopener"`, so no referrer and no
+  automatic request). Covered in substance, not in wording: widen that line
+  before v1, or fold it into whatever CR-05 settles.
+- **Neither `POST /api/clients` nor `POST /api/clients/:id/contacts` takes an
+  idempotency key.** A retried create whose first attempt succeeded now
+  answers `409` with "This Emirates ID is already on file" — true, but the
+  caller's own row is what it collided with. Harmless today (the console is
+  online-only and the wizard does not retry), and it becomes real when the
+  practitioner app's outbox replays a create. The right fix is an idempotency
+  key on the write routes, which is a shape decision wider than this stream.
 
 ---
 

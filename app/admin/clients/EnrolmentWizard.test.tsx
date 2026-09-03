@@ -46,7 +46,7 @@ function baseRecord(overrides: Partial<Record<string, unknown>> = {}) {
         canConsent: false,
         canReceiveReports: true,
         canPay: false,
-        phone: '+971500009011',
+        phone: '+971500000058',
         email: null,
         whatsappOptIn: false,
         hasEmiratesId: false,
@@ -71,7 +71,7 @@ function completeRecord() {
         canConsent: true,
         canReceiveReports: true,
         canPay: true,
-        phone: '+971500009011',
+        phone: '+971500000058',
         email: null,
         whatsappOptIn: false,
         hasEmiratesId: false,
@@ -151,7 +151,7 @@ async function fillIdentity() {
   fireEvent.change(screen.getByLabelText('Relationship to the client'), {
     target: { value: 'self' },
   });
-  fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971500009011' } });
+  fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971500000058' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
 }
 
@@ -176,7 +176,7 @@ describe('EnrolmentWizard', () => {
     expect(JSON.parse(String(postCall?.init?.body))).toMatchObject({
       givenName: 'Laurel',
       familyName: 'Meadow',
-      contact: { relationship: 'self', phone: '+971500009011' },
+      contact: { relationship: 'self', phone: '+971500000058' },
     });
     // Contacts, the second step, is reached automatically.
     expect(await screen.findByRole('button', { name: 'Add contact' })).toBeTruthy();

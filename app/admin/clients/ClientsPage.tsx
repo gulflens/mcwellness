@@ -54,6 +54,24 @@ function emiratesIdShapeOf(term: string): string | null {
 }
 
 /**
+ * An Emirates ID half-typed. Digits, spaces and hyphens only, opening 784,
+ * and not yet the full fifteen: the shape a search box is in on its way to an
+ * identity number. It must never be sent as a text search, because the
+ * fourteenth keystroke would put fourteen of the fifteen digits in a query
+ * string — which is the very thing the lookup route below exists to avoid,
+ * and would have been leaked long before the last digit switched transport.
+ * A record number is never mistaken for one: MRNs read MW-000001, and the
+ * digits alone would have to reach 784,000 clients to collide.
+ */
+function isPartialEmiratesId(term: string): boolean {
+  const bare = term.replace(/[\s-]/g, '');
+  if (!/^[0-9]+$/.test(bare)) return false;
+  // "7", "78", "784" and anything longer that still opens 784.
+  const opensWith784 = bare.length < 3 ? '784'.startsWith(bare) : bare.startsWith('784');
+  return opensWith784 && bare.length !== 15;
+}
+
+/**
  * An Emirates ID is never put in the address: it goes to POST
  * /api/clients/lookup in a request body, where no proxy's access log can pick
  * it up (.claude/rules/ui.md; app/api/clients/list.ts says the same from the
@@ -64,7 +82,10 @@ function emiratesIdShapeOf(term: string): string | null {
  * number names at most one client, and filtering it away would answer "no
  * such client" to someone holding that person's card.
  */
-function searchRequest(status: string, query: string): { url: string; init?: RequestInit } {
+export function searchRequest(
+  status: string,
+  query: string,
+): { url: string; init?: RequestInit } | 'partial-emirates-id' {
   const term = query.trim();
   const digits = emiratesIdShapeOf(term);
   if (digits !== null) {
@@ -77,6 +98,9 @@ function searchRequest(status: string, query: string): { url: string; init?: Req
       },
     };
   }
+  // Nothing is sent at all until the number is whole. The table keeps whatever it
+  // was showing, and a line under the box says what is still wanted.
+  if (isPartialEmiratesId(term)) return 'partial-emirates-id';
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   if (term) params.set('q', term);
@@ -115,6 +139,7 @@ export function ClientsPage() {
   useEffect(() => {
     let live = true;
     const request = searchRequest(status, query);
+    if (request === 'partial-emirates-id') return;
     const timer = setTimeout(() => {
       void apiFetch(request.url, request.init)
         .then(async (res) => {
@@ -193,6 +218,7 @@ export function ClientsPage() {
   );
 
   const count = state.kind === 'ready' ? state.response.clients.length : null;
+  const partialEmiratesId = isPartialEmiratesId(query.trim());
 
   return (
     <section className="page">
@@ -222,6 +248,11 @@ export function ClientsPage() {
           placeholder="Name, record number or Emirates ID"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          hint={
+            partialEmiratesId
+              ? 'Keep typing: an Emirates ID is fifteen digits, and none of it is searched until it is whole.'
+              : undefined
+          }
         />
         <Select
           id="client-status"

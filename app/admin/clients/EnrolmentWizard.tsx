@@ -109,7 +109,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
     if (!familyName.trim()) errors.familyName = "Enter the client's family name.";
     if (!relationship) errors.relationship = "Choose the contact's relationship to the client.";
     const trimmedPhone = phone.trim();
-    if (!trimmedPhone) errors.phone = 'Enter a phone number, e.g. +971501234567.';
+    if (!trimmedPhone) errors.phone = 'Enter a phone number, e.g. +971500001234.';
     const trimmedEmiratesId = emiratesId.trim();
     if (trimmedEmiratesId && !validateEmiratesId(trimmedEmiratesId).ok) {
       errors.emiratesId = 'Enter fifteen digits starting 784, or leave this blank.';
@@ -152,7 +152,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
       if (res.status === 409) {
         setIdentityErrors((prev) => ({
           ...prev,
-          emiratesId: 'This Emirates ID is already on file for another contact.',
+          emiratesId: 'This Emirates ID is already on file.',
         }));
         return;
       }
@@ -341,7 +341,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
               id="wizard-phone"
               label="Phone"
               type="tel"
-              placeholder="+971501234567"
+              placeholder="+971500001234"
               value={phone}
               onChange={(e) => {
                 setPhone(e.target.value);

@@ -58,10 +58,16 @@ async function request(
 }
 
 /** The lookup route: the identity number travels in the body, never in the URL. */
-async function lookup(target: typeof api, sub: string, emiratesId: string): Promise<Response> {
+async function lookup(
+  target: typeof api,
+  sub: string,
+  emiratesId: string,
+  requestId?: string,
+): Promise<Response> {
   return request(target, sub, '/api/clients/lookup', {
     method: 'POST',
     body: JSON.stringify({ emiratesId }),
+    ...(requestId ? { headers: { 'x-request-id': requestId } } : {}),
   });
 }
 
@@ -113,7 +119,7 @@ describe('capturing an Emirates ID on create', () => {
         body: JSON.stringify({
           givenName: 'Juniper',
           familyName: 'Quarry',
-          contact: { relationship: 'self', phone: '+971500009101', emiratesId: identity },
+          contact: { relationship: 'self', phone: '+971500000050', emiratesId: identity },
         }),
       })
     ).json()) as CreateClientResponse;
@@ -148,12 +154,17 @@ describe('capturing an Emirates ID on create', () => {
     ).json()) as ClientListResponse;
     expect(noMatch.clients).toHaveLength(0);
 
-    // The same digits in the ordinary search are text, and match no name or record
-    // number: an identity number never travels in a query string (.claude/rules/ui.md).
-    const asText = (await (
-      await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(digits)}`)
-    ).json()) as ClientListResponse;
-    expect(asText.clients).toHaveLength(0);
+    // The ordinary search refuses an identity number outright rather than searching
+    // it, whole or half-typed: one never travels in a query string
+    // (.claude/rules/ui.md), and the route is the floor under the browser's own rule.
+    for (const term of [digits, digits.slice(0, 14), '784', '78']) {
+      const asText = await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(term)}`);
+      expect(asText.status).toBe(400);
+      expect(((await asText.json()) as { code?: string }).code).toBe('use_lookup');
+    }
+    // A record number is not mistaken for one.
+    const byMrn = await request(api, AUTH.ownerA, '/api/clients?q=MW-0');
+    expect(byMrn.status).toBe(200);
   });
 
   it('refuses a checksum that fails, and a duplicate on a second contact', async () => {
@@ -162,7 +173,7 @@ describe('capturing an Emirates ID on create', () => {
       body: JSON.stringify({
         givenName: 'Rowan',
         familyName: 'Lagoon',
-        contact: { relationship: 'self', phone: '+971500009102', emiratesId: '784-1900-0000000-0' },
+        contact: { relationship: 'self', phone: '+971500000051', emiratesId: '784-1900-0000000-0' },
       }),
     });
     expect(bad.status).toBe(400);
@@ -175,7 +186,7 @@ describe('capturing an Emirates ID on create', () => {
         body: JSON.stringify({
           givenName: 'Hazel',
           familyName: 'Summit',
-          contact: { relationship: 'self', phone: '+971500009103', emiratesId: shared },
+          contact: { relationship: 'self', phone: '+971500000052', emiratesId: shared },
         }),
       })
     ).json()) as CreateClientResponse;
@@ -186,11 +197,61 @@ describe('capturing an Emirates ID on create', () => {
       body: JSON.stringify({
         givenName: 'Basil',
         familyName: 'Summit',
-        contact: { relationship: 'self', phone: '+971500009104', emiratesId: shared },
+        contact: { relationship: 'self', phone: '+971500000053', emiratesId: shared },
       }),
     });
     expect(second.status).toBe(409);
     expect(((await second.json()) as { code?: string }).code).toBe('emirates_id_in_use');
+  });
+
+  it('records seeing the client it found, the same as listing one does', async () => {
+    const identity = emiratesId(8);
+    const created = (await (
+      await request(api, AUTH.ownerA, '/api/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          givenName: 'Clover',
+          familyName: 'Harbour',
+          contact: { relationship: 'self', phone: '+971500000057', emiratesId: identity },
+        }),
+      })
+    ).json()) as CreateClientResponse;
+
+    const requestId = '00000000-0000-4000-8000-0000000000f1';
+    const found = (await (
+      await lookup(api, AUTH.ownerA, identity, requestId)
+    ).json()) as ClientListResponse;
+    expect(found.clients.map((c) => c.id)).toEqual([created.id]);
+
+    const { rows } = await owner.query<{ n: number }>(
+      "select count(*)::int as n from audit_log where action = 'list' and entity_type = 'client' " +
+        'and request_id = $1 and actor_id = $2 and client_id = entity_id and entity_id = $3',
+      [requestId, IDS.ownerA, created.id],
+    );
+    expect(rows[0]?.n).toBe(1);
+
+    // And the number itself is nowhere in what the trail kept.
+    const { rows: payloads } = await owner.query<{ n: number }>(
+      'select count(*)::int as n from audit_log ' +
+        'where request_id = $1 and (new_values::text like $2 or old_values::text like $2)',
+      [requestId, `%${identity.replace(/\D/g, '')}%`],
+    );
+    expect(payloads[0]?.n).toBe(0);
+  });
+
+  it('records a search that found nobody, not only one that found someone', async () => {
+    const requestId = '00000000-0000-4000-8000-0000000000f2';
+    const empty = (await (
+      await lookup(api, AUTH.ownerA, emiratesId(9), requestId)
+    ).json()) as ClientListResponse;
+    expect(empty.clients).toHaveLength(0);
+
+    const { rows } = await owner.query<{ n: number }>(
+      "select count(*)::int as n from audit_log where action = 'list' and entity_type = 'client' " +
+        'and request_id = $1 and actor_id = $2',
+      [requestId, IDS.ownerA],
+    );
+    expect(rows[0]?.n).toBe(1);
   });
 
   it('says so, rather than answering an empty list, when the identity keys are missing', async () => {
@@ -207,7 +268,7 @@ describe('capturing an Emirates ID on create', () => {
       body: JSON.stringify({
         givenName: 'Willow',
         familyName: 'Ridge',
-        contact: { relationship: 'self', phone: '+971500009105', emiratesId: emiratesId(4) },
+        contact: { relationship: 'self', phone: '+971500000054', emiratesId: emiratesId(4) },
       }),
     });
     expect(res.status).toBe(503);
@@ -227,7 +288,7 @@ describe('capturing an Emirates ID on a contact add or edit', () => {
         body: JSON.stringify({
           givenName: 'Saffron',
           familyName: 'Orchard',
-          contact: { relationship: 'self', phone: '+971500009106' },
+          contact: { relationship: 'self', phone: '+971500000055' },
         }),
       })
     ).json()) as CreateClientResponse;
@@ -238,7 +299,7 @@ describe('capturing an Emirates ID on a contact add or edit', () => {
         method: 'POST',
         body: JSON.stringify({
           relationship: 'mother',
-          phone: '+971500009107',
+          phone: '+971500000056',
           emiratesId: firstId,
         }),
       })

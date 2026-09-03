@@ -19,7 +19,7 @@ type FieldErrors = { relationship?: string; phone?: string; emiratesId?: string 
 
 const GENERIC_ERROR = 'This contact could not be saved. Try again.';
 const FORBIDDEN_ERROR = "You don't have permission to change this client's contacts.";
-const IN_USE_ERROR = 'This Emirates ID is already on file for another contact.';
+const IN_USE_ERROR = 'This Emirates ID is already on file.';
 const UNAVAILABLE_ERROR =
   'The identity service is not configured yet, so an Emirates ID cannot be saved right now.';
 
@@ -196,7 +196,7 @@ export function ContactForm({
         id="contact-phone"
         label="Phone"
         type="tel"
-        placeholder="+971501234567"
+        placeholder="+971500001234"
         value={phone}
         onChange={(e) => setPhone(e.target.value)}
       />

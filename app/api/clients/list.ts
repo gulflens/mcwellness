@@ -24,8 +24,9 @@ import { logRefused } from './refused';
  * request body it reaches only this route, which hashes it with the same
  * keyed HMAC that sealed it and looks the client up by that fingerprint. The
  * number never enters this file's SQL text, a log, or an audit payload; only
- * its 32 bytes do. `?q=` still searches names and record numbers, and an
- * identity number typed into it is simply text that matches nothing.
+ * its 32 bytes do. `?q=` still searches names and record numbers, and refuses
+ * an identity number outright — whole or half-typed — rather than searching
+ * it, so no caller can put one in a query string by accident or otherwise.
  */
 
 import { CLIENT_STATUSES as STATUSES, ClientListResponse, type ClientRow } from './schema';
@@ -115,6 +116,22 @@ function emiratesIdShapeOf(value: string): string | null {
   }
 }
 
+/**
+ * A `q` that is an identity number, whole or half-typed: digits, spaces and
+ * hyphens only, opening 784. This route refuses it rather than searching it —
+ * the lookup below is where an identity number belongs, and the refusal is
+ * the floor under the browser's own rule (app/admin/clients/ClientsPage.tsx),
+ * so a hand-written request cannot quietly put one in a query string either.
+ * By the time this runs the proxy has already logged the URL, which is why
+ * the browser must never send one; this makes the contract explicit rather
+ * than leaving it to a comment. A record number is safe: MRNs read MW-000001.
+ */
+function looksLikeAnIdentityNumber(q: string): boolean {
+  const bare = q.replace(/[\s-]/g, '');
+  if (!/^[0-9]+$/.test(bare)) return false;
+  return bare.length < 3 ? '784'.startsWith(bare) : bare.startsWith('784');
+}
+
 function toClientRows(rows: readonly Row[], today: string): ClientRow[] {
   return rows.map((r) => ({
     id: r.id,
@@ -162,6 +179,9 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     // schedule yet, so the honest answer is an empty table with a note.
     if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance')) {
       return c.json(ClientListResponse.parse({ clients: [], note: 'schedule' }));
+    }
+    if (query.data.q && looksLikeAnIdentityNumber(query.data.q)) {
+      return c.json({ error: 'bad_request', code: 'use_lookup', requestId }, 400);
     }
     // Below the minimum, the term is dropped rather than searched (see
     // MIN_SEARCH_LENGTH above): the unfiltered first page comes back, same as
@@ -220,7 +240,16 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
         hasRole(actor, 'owner', 'lead_practitioner'),
       ]);
     const clients = toClientRows(rows, isoDateIn(now(), PRACTICE_TIME_ZONE));
-    await logListed(c.get('db'), clients);
+    if (clients.length === 0) {
+      // A search that found nobody is still a search by somebody's identity number,
+      // and the trail owes an answer to "who looked, and for what" even when the
+      // answer was nothing (audit.md section 5). No client to name, so the request
+      // id stands in as the entity, the same convention a refused collection action
+      // uses (logRefused above).
+      await logReads(c.get('db'), 'client', [{ id: requestId, clientId: null }], 'list');
+    } else {
+      await logListed(c.get('db'), clients);
+    }
     return c.json(ClientListResponse.parse({ clients, note: null }));
   });
 }

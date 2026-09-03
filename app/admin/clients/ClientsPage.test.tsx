@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
-import { ClientsPage } from './ClientsPage';
+import { ClientsPage, searchRequest } from './ClientsPage';
 
 afterEach(cleanup);
 
@@ -62,6 +62,34 @@ function mount(matches: (typeof row)[] = [], lookupStatus = 200) {
   return calls;
 }
 
+/**
+ * Every prefix of an identity number, judged one at a time. A person types
+ * slower than the 150 ms debounce, so in real use each prefix is its own
+ * request: asserting on the decision itself, rather than on what a burst of
+ * synthetic keystrokes happens to coalesce into, is what actually pins this.
+ */
+describe('searchRequest', () => {
+  it('asks for nothing at all until an Emirates ID is whole', () => {
+    for (let i = 1; i < EMIRATES_ID.length; i += 1) {
+      const prefix = EMIRATES_ID.slice(0, i);
+      expect(searchRequest('', prefix)).toBe('partial-emirates-id');
+    }
+    const whole = searchRequest('', EMIRATES_ID);
+    expect(whole).not.toBe('partial-emirates-id');
+    expect(typeof whole === 'object' ? whole.url : null).toBe('/api/clients/lookup');
+  });
+
+  it('still searches a name, a record number and its bare digits', () => {
+    for (const term of ['Juniper', 'MW-000031', '000031', '']) {
+      const request = searchRequest('', term);
+      expect(typeof request === 'object' ? request.url.startsWith('/api/clients?') : false).toBe(
+        term !== '',
+      );
+    }
+    expect(searchRequest('', '')).toEqual({ url: '/api/clients' });
+  });
+});
+
 describe('ClientsPage search', () => {
   it('looks an Emirates ID up through the body, never through the address', async () => {
     const calls = mount([row]);
@@ -80,6 +108,28 @@ describe('ClientsPage search', () => {
     });
     expect(calls.every((c) => !c.url.includes('784'))).toBe(true);
     expect(await screen.findByRole('button', { name: 'Juniper Quarry' })).toBeTruthy();
+  });
+
+  it('says so, and sends nothing, while an Emirates ID is half typed', async () => {
+    const calls = mount([row]);
+    await screen.findByRole('table');
+    const before = calls.length;
+
+    fireEvent.change(screen.getByLabelText('Search'), {
+      target: { value: EMIRATES_ID.slice(0, 14) },
+    });
+    expect(
+      await screen.findByText(
+        'Keep typing: an Emirates ID is fifteen digits, and none of it is searched until it is whole.',
+      ),
+    ).toBeTruthy();
+    // Well past the 150 ms debounce, and still nothing has gone out.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(calls.length).toBe(before);
+
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: EMIRATES_ID } });
+    await waitFor(() => expect(calls.length).toBeGreaterThan(before));
+    expect(calls.slice(before).every((c) => c.url === '/api/clients/lookup')).toBe(true);
   });
 
   it('searches names and record numbers through the ordinary query', async () => {
