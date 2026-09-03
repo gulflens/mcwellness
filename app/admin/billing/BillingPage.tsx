@@ -5,30 +5,53 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, PageHeader } from '../../shell/components/Controls';
 import { Table, type Column } from '../../shell/components/Table';
 import './billing.css';
+import { BalancesSection } from './BalancesSection';
+import { InvoicesSection } from './InvoicesSection';
 import { formatFils } from './money';
+import { PackagesSection } from './PackagesSection';
 import { PriceDrawer } from './PriceDrawer';
 
 /**
- * The admin console's price list (docs/SPEC/billing.md: what the practice
- * sells and for how much), in the shape ClientsPage.tsx set: a page header,
- * loading and error notes, a table, and a right-side drawer to add a row.
- * Only the price in force today is shown, one row per active service — the
- * same rule `app/api/billing/prices.ts` enforces server-side.
+ * The admin console's money screen, in the shape ClientsPage.tsx set: a page
+ * header, loading and error notes, tables, and a right-side drawer to write
+ * something.
+ *
+ * Four sections, one at a time. Prices is what the practice charges for a
+ * single visit; Packages is what it charges for a programme; Balances is what
+ * one family has left and owes; Invoices is the book. Each fetches only when
+ * it is opened — the screen asks for nothing it is not showing, so opening
+ * Billing costs one request, as it always did.
+ *
+ * Every figure on this screen is formatted by `money.ts` and by nothing else,
+ * and every figure it formats was computed on the server: no screen in this
+ * codebase does arithmetic on money.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
+const SECTIONS = [
+  { key: 'prices', label: 'Prices' },
+  { key: 'packages', label: 'Packages' },
+  { key: 'balances', label: 'Balances' },
+  { key: 'invoices', label: 'Invoices' },
+] as const;
+type SectionKey = (typeof SECTIONS)[number]['key'];
+
 // A date like RecordTimeline's own (app/admin/audit/RecordTimeline.tsx):
 // Intl, en-GB, the practice's own time zone, never the raw "YYYY-MM-DD" the
 // API sends. `validFrom` is a calendar date, not a timestamp, so the format
-// is the compact "2 Sep 2026" a table row wants, not the timeline's full
-// weekday heading.
+// is the compact "2 Sept 2026" a table row wants.
 const dateFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: PRACTICE_TIME_ZONE,
   day: 'numeric',
   month: 'short',
   year: 'numeric',
 });
+
+/** A date-only value is read at the practice's midnight, not UTC's. */
+export function formatDate(isoDate: string): string {
+  return dateFormat.format(new Date(`${isoDate}T00:00:00+04:00`));
+}
 
 type State =
   | { kind: 'loading' }
@@ -37,6 +60,7 @@ type State =
 
 export function BillingPage() {
   const { apiFetch, session } = useAuth();
+  const [section, setSection] = useState<SectionKey>('prices');
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Names the service and the new price once a save succeeds (the design
@@ -72,8 +96,10 @@ export function BillingPage() {
   }, [apiFetch]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (section === 'prices') {
+      load();
+    }
+  }, [load, section]);
 
   const columns = useMemo<Column<PriceRow>[]>(
     () => [
@@ -118,8 +144,7 @@ export function BillingPage() {
         key: 'validFrom',
         header: 'Effective from',
         numeric: true,
-        // A date-only value is read at the practice's midnight, not UTC's.
-        render: (row) => dateFormat.format(new Date(`${row.validFrom}T00:00:00+04:00`)),
+        render: (row) => formatDate(row.validFrom),
       },
     ],
     [],
@@ -146,30 +171,53 @@ export function BillingPage() {
       <PageHeader
         title="Billing"
         action={
-          canWrite ? (
+          section === 'prices' && canWrite ? (
             <Button variant="secondary" onClick={openDrawer}>
               Add price
             </Button>
           ) : null
         }
       />
-      {successNote ? (
-        <div role="status">
-          <Note>{successNote}</Note>
-        </div>
+
+      <nav className="sections" aria-label="Billing sections">
+        {SECTIONS.map((entry) => (
+          <button
+            key={entry.key}
+            type="button"
+            className={`sections__tab${section === entry.key ? ' sections__tab--current' : ''}`}
+            aria-current={section === entry.key ? 'page' : undefined}
+            onClick={() => setSection(entry.key)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </nav>
+
+      {section === 'prices' ? (
+        <>
+          {successNote ? (
+            <div role="status">
+              <Note>{successNote}</Note>
+            </div>
+          ) : null}
+          {state.kind === 'loading' ? <Note>Loading the price list.</Note> : null}
+          {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
+          {state.kind === 'ready' ? (
+            <Table
+              caption="Current prices"
+              columns={columns}
+              rows={state.response.prices}
+              rowKey={(row) => row.id}
+              empty="No prices are set yet."
+            />
+          ) : null}
+          {drawerOpen ? <PriceDrawer onClose={closeDrawer} onCreated={onCreated} /> : null}
+        </>
       ) : null}
-      {state.kind === 'loading' ? <Note>Loading the price list.</Note> : null}
-      {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
-      {state.kind === 'ready' ? (
-        <Table
-          caption="Current prices"
-          columns={columns}
-          rows={state.response.prices}
-          rowKey={(row) => row.id}
-          empty="No prices are set yet."
-        />
-      ) : null}
-      {drawerOpen ? <PriceDrawer onClose={closeDrawer} onCreated={onCreated} /> : null}
+
+      {section === 'packages' ? <PackagesSection canWrite={canWrite} /> : null}
+      {section === 'balances' ? <BalancesSection canWrite={canWrite} /> : null}
+      {section === 'invoices' ? <InvoicesSection /> : null}
     </section>
   );
 }
