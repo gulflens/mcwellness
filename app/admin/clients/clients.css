@@ -1,0 +1,244 @@
+/*
+  The client-record module's own rules, layered on the shell's shared
+  vocabulary (app/shell/shell.css, app/shell/tokens.css — the shared zone,
+  which this worktree does not edit). Tokens only, logical properties only
+  (.claude/rules/ui.md, DESIGN.md), reused across the drawer's tabs and the
+  enrolment wizard rather than forked per screen.
+*/
+
+/* A real tab strip (task brief item 1): the ledger's own rhythm, an
+   underline on the selected tab rather than a filled pill (DESIGN-BRIEF's
+   Do's and Don'ts: no colour-only meaning). */
+.tabs {
+  display: flex;
+  gap: var(--s-4);
+  border-block-end: var(--hairline) solid var(--rule);
+  margin-block-end: var(--s-4);
+  overflow-x: auto;
+}
+
+.tabs__tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-block-end: 2px solid transparent;
+  /* The console's own tap floor (docs/DESIGN-BRIEF.md section 6.2), not a
+     padding that happens to look right. */
+  min-block-size: var(--tap);
+  padding-block: var(--s-2);
+  color: var(--slate);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tabs__tab:hover {
+  color: var(--ink);
+}
+
+.tabs__tab--selected {
+  color: var(--ink);
+  font-weight: var(--w-medium);
+  border-block-end-color: var(--ink);
+}
+
+.tabs__panel {
+  outline: none;
+}
+
+.tab-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* What is still missing before a lead can be activated: a quiet list, shown
+   on every enrolment step and on the drawer's Overview. Never a banner. */
+.activation-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--paper);
+}
+
+.activation-summary p {
+  margin: 0;
+}
+
+/* Overview's demographic pairs: a plain definition list, not a table
+   (heterogeneous content, docs/DESIGN-BRIEF.md section 6.2). */
+.record-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.record-facts__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.record-facts__row dt {
+  color: var(--slate);
+  font-size: var(--t-small);
+}
+
+.record-facts__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+/* Contacts, locations, goals and consent: each entity's own row, a
+   lightweight cousin of the ledger table for content too heterogeneous for
+   columns (docs/DESIGN-BRIEF.md section 6.2). */
+.record-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.record-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--paper);
+}
+
+.record-row__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.record-row__actions {
+  display: flex;
+  gap: var(--s-3);
+}
+
+.record-row__flags {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.record-row__reason {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-block-start: var(--s-2);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.drawer__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.drawer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-3);
+  padding-block-start: var(--s-2);
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-block-size: var(--row);
+  cursor: pointer;
+}
+
+.field-row {
+  display: flex;
+  gap: var(--s-3);
+}
+
+.field-row .field {
+  flex: 1 1 0;
+}
+
+.field__input--textarea {
+  min-block-size: 5rem;
+  resize: vertical;
+  font: inherit;
+}
+
+.coordinate-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.coordinate-fields__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.verify-pin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+}
+
+/* The enrolment wizard's own step breadcrumb: plain words, current step in
+   weight, not colour (DESIGN-BRIEF's Do's and Don'ts). */
+.wizard__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+  padding: 0;
+  margin: 0 0 var(--s-4);
+  list-style: none;
+}
+
+.wizard__step-name {
+  color: var(--slate);
+}
+
+.wizard__step-name--current {
+  color: var(--ink);
+  font-weight: var(--w-medium);
+}
+
+.wizard__step-name--locked {
+  color: var(--rule);
+}
+
+.wizard__step-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.wizard__nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-3);
+  padding-block-start: var(--s-3);
+  border-block-start: var(--hairline) solid var(--rule);
+}
