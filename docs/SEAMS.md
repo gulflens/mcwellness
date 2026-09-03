@@ -1,0 +1,159 @@
+# Seams — the capabilities that live outside this codebase
+
+Anything the platform cannot do by itself — hold files, send a message, work
+out a drive time — sits behind one interface with two implementations: the
+real one, and a deterministic fallback that needs no vendor and no network.
+A test proves the platform still works with the real one switched off.
+
+This is not a preference. It is what lets the practice keep working when a
+vendor is down, what lets the whole suite run on a laptop with no accounts,
+and what keeps a vendor swap a change in one folder rather than a rewrite.
+
+Every seam here is also a row in `docs/COMPLIANCE/approved-vendors.md`: a
+capability that sends personal data anywhere is approved before it exists.
+
+| Seam | Interface | Real | Fallback | Chosen by |
+|---|---|---|---|---|
+| Documents | `domain/shared/storage.ts` | Supabase Storage, private bucket `documents` | a folder on this machine | `STORAGE_PROVIDER` |
+
+---
+
+## Documents (the storage seam)
+
+**The interface** — `domain/shared/storage.ts`, browser-safe, four calls:
+
+```
+put(key, bytes, mimeType, { overwrite? }) -> { sha256, size }
+getSignedUrl(key, ttlSeconds) -> url
+delete(key)
+exists(key)
+```
+
+**A document is written once.** `overwrite` is **false by default on both
+implementations**, and a second write to a key that already holds an object is
+refused with `StorageConflictError`, which the API answers as **409
+`document_exists`** — the store answered, and its answer was no, which is not
+an outage. The bytes behind a filed consent, a signed report or a piece of
+consent wording are the evidence of what a person was shown and agreed to, and
+a store that quietly accepts a second write over the first is a store where
+that evidence can be changed after the fact. Neither implementation checks and
+then writes: the bucket is asked with `x-upsert: false` and answers 409, the
+folder opens with `O_EXCL`, so there is no window between the two. A caller
+that genuinely means to replace an object — a retry that knows the first
+attempt half-finished — passes `overwrite: true` and means it.
+
+**How long the bytes are kept.** `documentRetentionUntil(kind, uploadedAt)`,
+next to the seam in `domain/shared/storage.ts`, is the one piece of
+arithmetic: five years from upload for a practice document, written to
+`document.retention_until` at upload. It answers **null for a `consent_text`
+document**, which is exempt from that clock — it is kept until no `consent`
+references it and the last referencing client's own retention has expired
+(`docs/SPEC/00-data-model.md` section 3, migration 903). So **a deletion job
+must check what still references a document before it calls `storage.delete`**:
+deleting on `retention_until` alone would take a wording out from under a
+consent that is still live, and null there means "not on an upload clock",
+never "keep forever".
+
+**Every route that signs a link calls `auditDocumentRead(db, document)` first**
+(`app/api/_middleware/storage/audit.ts`). A signed link is a read whether or
+not the bytes are ever fetched: handing someone the means to open a client's
+file is the act worth recording. Signing is the only place the trail can be
+written — the folder implementation serves its own bytes from ahead of the
+authentication fence, where there is no actor to name, and the bucket's bytes
+never reach this API at all — so the rule belongs to the seam rather than to
+any one route. The helper takes the document and nothing else: the actor, the
+roles, the reason and the request id all come off the transaction's own
+settings inside the SQL, so no caller can attribute a read to someone else.
+
+Every file the practice holds is a `document` row (`docs/SPEC/00-data-model.md`
+section 3) whose `storage_key` names the bytes. Nothing else knows how those
+bytes are stored: no route, no job and no seed talks to a vendor directly.
+
+**Keys** are opaque paths, built by the two helpers in the same file and never
+by hand:
+
+```
+tenant/<tenantId>/client/<clientId>/<documentId>    anything filed against a client
+tenant/<tenantId>/practice/<documentId>             a document with no client
+```
+
+A key is made of ids and nothing else. It never carries a name, a record
+number or what the document says, so a key that leaks says nothing about
+whose file it is. `isValidStorageKey` refuses a leading slash, an empty
+segment, `.`, `..`, a backslash, a control character and percent-encoding,
+and the local implementation resolves the path and checks it again — a key
+cannot climb out of the folder even if that check is ever loosened.
+
+**The real implementation** — `app/api/_middleware/storage/supabase.ts`.
+One private bucket named `documents` in the project `SUPABASE_URL` names.
+Private always: nothing is ever served from a public URL, every fetch goes
+through a signed URL good for five minutes by default and an hour at the very
+most. The credential is `SUPABASE_STORAGE_KEY`, a service credential — never
+the anon key, which the browser holds and which storage does not fence the
+way row security fences the database. **One variable, with no fallback**: the
+API does not stand `SUPABASE_SERVICE_ROLE_KEY` in when it is absent, because a
+variable whose whole purpose is to say "this credential may write documents"
+means nothing if another one is used instead, and the old fallback silently
+handed storage the widest credential in the project to a deployment that had
+only ever configured the database. A blank or whitespace-only value is read as
+absent. When the value is a JWT it names its own role, and one claiming `anon`
+is refused by name at startup rather than on the first upload someone attempts
+weeks later; the newer key formats are not JWTs and claim nothing, so nothing
+is guessed from them.
+
+**The fallback** — `app/api/_middleware/storage/local-disk.ts`. A folder,
+`STORAGE_DIR`, `.storage/` by default and git-ignored. **It must sit outside
+the repository, or be git-ignored inside it**: the default is both, and a
+`STORAGE_DIR` pointed somewhere tracked is how a practice's documents end up
+in a commit. Every read and every write also asks the filesystem where the
+path really leads (`realpath`), not only where its name says it does, so a
+symlink planted in the folder by anything sharing the machine cannot make the
+store read `/etc` or write over something it does not own. Same semantics: bytes
+in, sha256 out, a signed URL that expires, delete, exists. Its signed URLs
+point back at the API's own `GET /api/storage/:key`, mounted only when this
+implementation is the one chosen. That route sits ahead of the authentication
+fence because the signature in the link is its authorisation: an unsigned,
+tampered, expired or unknown link is a flat 404, never a hint that the key
+exists. The signing secret is fresh random at startup, so a link never
+outlives the process that issued it and no new secret enters the environment.
+
+**Choosing one** — `STORAGE_PROVIDER=local|supabase`.
+
+- On a laptop and in the tests (`APP_ENV=development` or `test`) the fallback
+  is the default and needs no setting.
+- Anywhere else the choice is explicit or the API refuses to start, with a
+  message saying so. Silently writing a practice's documents to a server's
+  own disk is how documents go missing.
+
+Nothing reaches the network until a call is made, so a project that is down
+or misconfigured cannot stop the API from starting. A call against it fails
+as `StorageUnavailableError`, which the API answers as **503
+`storage_unavailable`** — an outage in the store, plainly, rather than an
+internal error in the record it belongs to.
+
+**Using it from a route**: `c.get('storage')`, the way `c.get('db')` and
+`c.get('identityKeys')` work. `createApi` publishes it when it is given one.
+
+**The forced-fallback test** — `app/api/storage-seam.test.ts`. With the real
+implementation disabled, the whole document path runs: put a document, sign a
+link, fetch exactly those bytes back. With the real implementation selected
+but unreachable, the API starts, answers its health check, and refuses a
+document call with a clean 503. `app/api/_middleware/storage/seam.test.ts`
+covers the choice itself, including every way of choosing wrong.
+
+---
+
+## Adding a seam
+
+1. Write the interface in `domain/shared/`, browser-safe: types and pure
+   helpers, no Node built-in, no vendor SDK.
+2. Write both implementations under `app/api/_middleware/<seam>/`, server-only.
+   The real one reaches nothing at construction time.
+3. Choose between them from one environment variable, with the fallback as the
+   default on a laptop and an explicit choice required everywhere else.
+4. Give the failure of the real one its own error type and one clean status
+   code. A vendor's message never reaches a caller: it can name a document or
+   a person.
+5. Write the forced-fallback test before the seam is used anywhere.
+6. Add the row to the table above, and the vendor to
+   `docs/COMPLIANCE/approved-vendors.md`.

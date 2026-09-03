@@ -2,9 +2,8 @@
 
 | Vendor | Purpose | Data it receives | Region | Approved |
 |---|---|---|---|---|
-| Supabase Cloud, production project | Auth, Postgres, Storage | All client data | Owner's choice (the previous app runs in ap-south-1, Mumbai) | ✅ once created |
-| Supabase Cloud, staging project `mcwellness` (`ajjkvjtqxktkgrvcrzkh`, Mumbai `ap-south-1`, Pro plan) | Auth, Postgres, Storage for staging | Synthetic data only; created 2026-09-02 | Approved 2026-09-02 (owner) |
-| Supabase Cloud, staging project | Staging | Synthetic only, never client data | Same | ✅ staging only |
+| Supabase Cloud, production project | Auth, Postgres, Storage (the private `documents` bucket) | All client data. The bucket holds signed consents, session and QEEG reports, setup photos and practitioner certificates; a storage key is made of ids alone and never a name or a record number | Owner's choice (the previous app runs in ap-south-1, Mumbai) | ✅ once created |
+| Supabase Cloud, staging project `mcwellness` (`ajjkvjtqxktkgrvcrzkh`, Pro plan) | Auth, Postgres, and Storage for staging: one private bucket `documents` holding the practice's files (docs/SEAMS.md) | Synthetic data only; created 2026-09-02. Bucket contents are documents; a storage key is made of ids alone and never a name or a record number | Mumbai, ap-south-1 (outside the UAE) | Approved 2026-09-02 (owner); the bucket confirmed in trunk round 14, 2026-09-03 |
 | GitHub | Source code, CI | Code; the CI database holds only the synthetic rows the tests create | US | ✅ code and synthetic tests only |
 | Google Maps Platform | Distance matrix, geocoding, and the practitioner's navigation hand-off | Coordinates only, never names or identities; the hand-off sends a client's entrance coordinates only on the practitioner's deliberate tap (operator decision 2026-09-03) | Global | Approved for coordinates; no name, record number or identity may accompany them |
 | Payment gateway | TBD | Amount, reference, payer contact | TBD | ❌ not yet |

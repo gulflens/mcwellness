@@ -221,7 +221,14 @@ The audit log holds personal data. It lives with the rest of the client data, en
 
 Add a hook that fails the build on any `console.log`, `logger.info` or error-reporter call whose argument can contain a client entity. Enforce it mechanically.
 
-`app.audit_redact` (080_audit_triggers.sql, restated by 098_erasure_guard.sql) drops a fixed set of keys outright rather than redacting them: `emirates_id_encrypted`, `emirates_id_hash` and `checked_in_point` today — coordinates must not outlive an erasure inside the immutable log any more than the Emirates ID columns do. A stream that adds a column needing the same treatment cannot add to this list itself, since it lives in the trunk's migration range: it goes through `docs/CHANGE-REQUESTS/` like any other shared-zone change (docs/SPEC/OWNERSHIP.md).
+`app.audit_redact` (080_audit_triggers.sql, restated by 098_erasure_guard.sql and again by 904_audit_redact_nested.sql) drops a fixed set of keys outright rather than redacting them: `emirates_id_encrypted`, `emirates_id_hash`, `checked_in_point` and `checked_out_point` — coordinates must not outlive an erasure inside the immutable log any more than the Emirates ID columns do. A stream that adds a column needing the same treatment cannot add to this list itself, since it lives in the trunk's migration range: it goes through `docs/CHANGE-REQUESTS/` like any other shared-zone change (docs/SPEC/OWNERSHIP.md).
+
+Both rules reach **inside a jsonb object value**, at any depth (migration 904, after the review of the session-capture pull request found them looking only at top-level values):
+
+- a key named `point` or `location_point` inside an object is dropped, the same treatment the two coordinate columns get — `session_event.payload` carries exactly that coordinate under exactly that name;
+- a string longer than 200 characters inside an object is replaced by its own length, the same sentence the top level has always used, so a thousand characters of free text written into a payload are no longer logged verbatim while the identical text in a plain column is not.
+
+**Arrays are not descended into.** The jsonb arrays in this schema hold settings, not personal data (`service_type.preflight_checklist` is the only one today). A stream that means to put free text or a coordinate inside a jsonb array must raise it here first, the way these two rules were raised.
 
 ---
 

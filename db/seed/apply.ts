@@ -186,6 +186,9 @@ export async function applySeed(
         duration_minutes: s.durationMinutes,
         requires_certification: s.requiresCertification,
         delivery_modes: s.deliveryModes,
+        // jsonb columns (migration 901): the text of the array, which Postgres casts.
+        preflight_checklist: JSON.stringify(s.preflightChecklist),
+        rating_questions: JSON.stringify(s.ratingQuestions),
         created_by: owner,
       });
     }
@@ -242,6 +245,12 @@ export async function applySeed(
     }
 
     for (const d of data.documents) {
+      // retention_until is deliberately absent, and so null. A practice
+      // document is otherwise kept five years from upload
+      // (domain/shared/storage.ts, migration 903), but consent wording is
+      // exempt from that clock: it is kept while any consent still points at
+      // it and the last of those clients is still within their own retention.
+      // Null here means "not on an upload clock", never "nobody computed it".
       await insert(
         'document',
         {
@@ -249,6 +258,10 @@ export async function applySeed(
           tenant_id: t.id,
           client_id: null,
           kind: d.kind,
+          purpose: d.purpose,
+          locale: d.locale,
+          version: d.version,
+          status: d.status,
           storage_key: d.storageKey,
           mime_type: d.mimeType,
           sha256: d.sha256Hex,

@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { identityKeysFromEnv } from '../../app/api/_middleware/identity-key';
+import { localDiskStorage } from '../../app/api/_middleware/storage';
 import {
   applyPolicies,
   connect,
@@ -44,7 +46,55 @@ try {
           'Locally, pnpm seed --fresh rebuilds it.',
       );
     } else {
-      console.log(describeSeed(await applySeed(client, generateSeed(), keys)));
+      const data = generateSeed();
+      // The consent wording's bytes go in first, so no document row ever points
+      // at a key with nothing behind it. Deliberately the local implementation
+      // of the storage seam and not whatever STORAGE_PROVIDER says: seeding
+      // fills a laptop, and a hosted bucket is filled by the operator's own
+      // upload (docs/STAGING.md).
+      const storage = localDiskStorage();
+      for (const document of data.documents) {
+        // A wording is written once and never replaced (docs/SEAMS.md): the
+        // bytes behind a filed consent are the evidence of what a person was
+        // shown. `pnpm seed --fresh` rebuilds the database but not the folder,
+        // so a key that is already there is the same run's own work — proved
+        // by its fingerprint, not assumed — and is left exactly as it is.
+        // Anything else stops the seed rather than being written over.
+        const existing = await storage.read(document.storageKey);
+        if (existing !== null) {
+          const found = createHash('sha256').update(existing).digest('hex');
+          if (found !== document.sha256Hex) {
+            throw new Error(
+              `${document.file} is already filed with different bytes; nothing was seeded. ` +
+                'Clear the store (STORAGE_DIR) and seed again.',
+            );
+          }
+          continue;
+        }
+        const stored = await storage.put(document.storageKey, document.bytes, document.mimeType, {
+          overwrite: false,
+        });
+        if (stored.sha256 !== document.sha256Hex) {
+          throw new Error(`${document.file} changed while it was being filed; nothing was seeded.`);
+        }
+      }
+      console.log(
+        `Filed ${data.documents.length} consent wording files in the ${storage.describe()}.`,
+      );
+      if (!local) {
+        // The rows are about to name storage keys in a bucket this command
+        // never touched, and a row pointing at nothing is only visible when
+        // someone opens a consent. The rendered-SQL route carries this
+        // warning in its own header; seeding a hosted project directly must
+        // carry it too, or the two routes differ in the one way that matters.
+        console.warn(
+          "This database is not local, but the bytes went into this machine's folder. " +
+            `Upload each file in docs/CONSENT to the "documents" bucket at exactly the ` +
+            'storage_key its row names, or every consent points at nothing ' +
+            '(docs/STAGING.md section 5a).',
+        );
+      }
+      console.log(describeSeed(await applySeed(client, data, keys)));
     }
   } finally {
     await client.end();

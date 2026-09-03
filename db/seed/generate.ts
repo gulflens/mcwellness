@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+import { practiceDocumentKey } from '../../domain/shared/storage';
+import { CONSENT_TEXT_MIME_TYPE, loadConsentTexts, type ConsentText } from './consent-text';
 import { FAMILY_NAMES, GIVEN_NAMES, type Name } from './names';
 import { at, seededRandom } from './random';
 
@@ -37,6 +38,8 @@ export type SeedUser = {
   preferredLocale: 'en' | 'ar';
 };
 export type SeedRole = { id: string; userId: string; role: RoleKind };
+export type ChecklistItem = { key: string; label_en: string; label_ar: string };
+export type RatingQuestion = ChecklistItem & { min: 0; max: 10 };
 export type SeedServiceType = {
   id: string;
   code: string;
@@ -45,6 +48,10 @@ export type SeedServiceType = {
   durationMinutes: number;
   requiresCertification: string | null;
   deliveryModes: DeliveryMode[];
+  /** What the practitioner confirms at the door (migration 901, session-capture.md 3.2). */
+  preflightChecklist: ChecklistItem[];
+  /** The 0-to-10 questions asked before the session and again after it. */
+  ratingQuestions: RatingQuestion[];
 };
 export type SeedPractitioner = {
   id: string;
@@ -111,16 +118,29 @@ export type SeedContact = {
 export type SeedDocument = {
   id: string;
   purpose: ConsentPurpose;
+  locale: 'en' | 'ar';
+  version: string;
+  status: 'draft' | 'approved';
   kind: 'consent_text';
   storageKey: string;
   mimeType: string;
   sha256Hex: string;
+  /** The file this row is the record of, and its bytes, for whoever puts them in the store. */
+  file: string;
+  bytes: Buffer;
 };
 export type SeedConsent = {
   id: string;
   clientId: string;
   givenByContactId: string;
   purpose: ConsentPurpose;
+  /**
+   * The consent record's OWN version, counting amendments of this consent:
+   * every seeded one is a first giving, so every one is 1. It is not the
+   * wording's version, which this row carries only as the pointer
+   * `textDocumentId` — the document row holds `version` ('0.1-draft' today)
+   * and the two never need to agree (docs/SPEC/00-data-model.md section 3).
+   */
   version: 1;
   textDocumentId: string;
   status: 'active' | 'withdrawn';
@@ -142,7 +162,12 @@ export type SeedData = {
   documents: SeedDocument[];
   consents: SeedConsent[];
 };
-export type SeedOptions = { seed?: number; today?: string };
+export type SeedOptions = {
+  seed?: number;
+  today?: string;
+  /** The wording files. Read from docs/CONSENT unless a test hands its own in. */
+  consentTexts?: ConsentText[];
+};
 
 export const SEED_DEFAULT = 20_260_902;
 export const SEED_TODAY = '2026-09-02';
@@ -165,7 +190,10 @@ const EMIRATES: readonly { code: Emirate; name: string; centre: Point }[] = [
   { code: 'FUJ', name: 'Fujairah', centre: { lng: 56.33, lat: 25.12 } },
 ];
 
-const SERVICES: readonly Omit<SeedServiceType, 'id'>[] = [
+/** A service as the catalogue lists it; its session settings are attached below. */
+type SeedServiceDefinition = Omit<SeedServiceType, 'id' | 'preflightChecklist' | 'ratingQuestions'>;
+
+const SERVICES: readonly SeedServiceDefinition[] = [
   {
     code: 'discovery-call',
     name: 'Discovery call',
@@ -216,6 +244,46 @@ const SERVICES: readonly Omit<SeedServiceType, 'id'>[] = [
   },
 ];
 
+/**
+ * Drafts, and marked as drafts: the practice edits both lists in the app once
+ * Settings can (session-capture.md sections 3.2 and 3.5 name exactly these).
+ * They sit on the neurofeedback session only — a consultation has no
+ * electrodes to check — and every other seeded service starts with none, the
+ * way a real catalogue starts.
+ */
+const NF_PREFLIGHT: readonly ChecklistItem[] = [
+  { key: 'identity', label_en: 'Client identity confirmed', label_ar: 'تم التأكد من هوية العميل' },
+  {
+    key: 'guardian_present',
+    label_en: 'Guardian present, if the client is under 18',
+    label_ar: 'وجود الوصي إذا كان العميل دون الثامنة عشرة',
+  },
+  {
+    // The minor-participation wording promises the child's own agreement
+    // ("A child's 'no' ends the session", section 2), and a promise nothing
+    // records is a promise nobody can show was kept. Beside the guardian's
+    // presence because that is the order the door is worked in.
+    key: 'child_assents',
+    label_en: 'For a child: they agreed to take part today',
+    label_ar: 'للطفل: وافق على المشاركة اليوم',
+  },
+  {
+    key: 'environment',
+    label_en: 'Environment suitable: quiet, seated, well lit',
+    label_ar: 'البيئة مناسبة: هادئة، والعميل جالس، وإضاءة جيدة',
+  },
+  {
+    key: 'equipment',
+    label_en: 'Sensors and consumables ready',
+    label_ar: 'المستشعرات والمستلزمات جاهزة',
+  },
+];
+const NF_RATINGS: readonly RatingQuestion[] = [
+  { key: 'sleep', label_en: 'Sleep last night', label_ar: 'النوم الليلة الماضية', min: 0, max: 10 },
+  { key: 'focus', label_en: 'Focus today', label_ar: 'التركيز اليوم', min: 0, max: 10 },
+  { key: 'mood', label_en: 'Mood now', label_ar: 'المزاج الآن', min: 0, max: 10 },
+];
+
 const CONSENT_PURPOSES: readonly ConsentPurpose[] = [
   'participation',
   'minor_participation',
@@ -229,7 +297,7 @@ const ADULT_AGES = [22, 27, 31, 34, 38, 41, 44, 47, 50, 53, 56, 58] as const;
 const MINOR_AGES = [8, 9, 11, 12, 14, 15, 16, 17] as const;
 const ARABIC_FIRST = new Set([2, 5, 8, 11, 14, 17, 19, 20]);
 const PHOTO_CONSENT = new Set([5, 6, 17]);
-const MARKETING_WITHDRAWN = 7;
+const WITHDRAWN_PHOTO_CONSENT = 7;
 const SECOND_PARENT = new Set([13, 17, 19]);
 
 /** +971 50 000 1xxx: the reserved synthetic block. Tests keep 0001 to 0099. */
@@ -353,6 +421,9 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     id: seedId('4', i + 1),
     ...service,
     deliveryModes: [...service.deliveryModes],
+    preflightChecklist:
+      service.code === 'nf-session' ? NF_PREFLIGHT.map((item) => ({ ...item })) : [],
+    ratingQuestions: service.code === 'nf-session' ? NF_RATINGS.map((item) => ({ ...item })) : [],
   }));
   const service = (code: string): SeedServiceType => {
     const found = serviceTypes.find((s) => s.code === code);
@@ -452,21 +523,47 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     ...row,
   }));
 
-  // The consent wording, one document per purpose, version 1. A practice
-  // document: no client, immutable, with the fingerprint of its synthetic text.
-  const documents: SeedDocument[] = CONSENT_PURPOSES.map((purpose, i) => ({
-    id: seedId('a', i + 1),
-    purpose,
-    kind: 'consent_text',
-    storageKey: `consent-text/${purpose}/v1.md`,
-    mimeType: 'text/markdown',
-    sha256Hex: createHash('sha256')
-      .update(`Synthetic consent wording for ${purpose}, version 1.`)
-      .digest('hex'),
-  }));
-  const wording = (purpose: ConsentPurpose): SeedDocument => {
-    const found = documents.find((d) => d.purpose === purpose);
-    if (!found) throw new Error(`No wording for ${purpose}.`);
+  // The consent wording: one practice document per file in docs/CONSENT — no
+  // client, immutable, carrying the file's own version and status and the
+  // fingerprint of its actual bytes. The text is the practice's real words,
+  // not a synthetic stand-in: a person signs the version they were shown.
+  const documents: SeedDocument[] = (options.consentTexts ?? loadConsentTexts()).map((text) => {
+    const purpose = text.purpose as ConsentPurpose;
+    if (!CONSENT_PURPOSES.includes(purpose)) {
+      throw new Error(
+        `${text.file} names the consent purpose "${text.purpose}", which does not exist.`,
+      );
+    }
+    // Keyed by what the wording IS, not by where it sat in the directory
+    // listing: purpose, then language. Numbering by position meant adding a
+    // ninth file — a research wording, say — silently renumbered every
+    // wording sorting after it, and with it the storage key of each and the
+    // text_document_id every seeded consent points at. Two digits per
+    // purpose, one for the language: 11 is participation in English, 42
+    // photo_video in Arabic.
+    const id = seedId(
+      'a',
+      (CONSENT_PURPOSES.indexOf(purpose) + 1) * 10 + (text.locale === 'en' ? 1 : 2),
+    );
+    return {
+      id,
+      purpose,
+      locale: text.locale,
+      version: text.version,
+      status: text.status,
+      kind: 'consent_text' as const,
+      storageKey: practiceDocumentKey(SEED_TENANT_ID, id),
+      mimeType: CONSENT_TEXT_MIME_TYPE,
+      sha256Hex: text.sha256Hex,
+      file: text.file,
+      bytes: text.bytes,
+    };
+  });
+  /** The wording a person reading in this language was shown. */
+  const wording = (purpose: ConsentPurpose, locale: 'en' | 'ar'): SeedDocument => {
+    const found = documents.find((d) => d.purpose === purpose && d.locale === locale);
+    if (!found)
+      throw new Error(`No ${locale} wording for ${purpose}; docs/CONSENT has no such file.`);
     return found;
   };
 
@@ -594,16 +691,20 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       const purposes: ConsentPurpose[] = ['participation', 'home_visit'];
       if (minor) purposes.push('minor_participation');
       if (PHOTO_CONSENT.has(n)) purposes.push('photo_video');
-      if (n === MARKETING_WITHDRAWN) purposes.push('marketing');
+      // One household changed its mind about photographs: an optional consent,
+      // given and then withdrawn, so the seed carries that shape too.
+      if (n === WITHDRAWN_PHOTO_CONSENT) purposes.push('photo_video');
       for (const purpose of purposes) {
-        const withdrawn = purpose === 'marketing';
+        const withdrawn = n === WITHDRAWN_PHOTO_CONSENT && purpose === 'photo_video';
         consents.push({
           id: seedId('b', ++consentCount),
           clientId,
           givenByContactId: consentingContactId,
           purpose,
+          // A first giving, never an amendment: see SeedConsent.version.
           version: 1,
-          textDocumentId: wording(purpose).id,
+          // The wording in the language this household reads: the version they were shown.
+          textDocumentId: wording(purpose, arabicFirst ? 'ar' : 'en').id,
           status: withdrawn ? 'withdrawn' : 'active',
           givenAt,
           withdrawnAt: withdrawn ? `${today}T08:00:00+04:00` : null,

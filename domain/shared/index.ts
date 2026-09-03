@@ -14,4 +14,14 @@ export {
   normaliseEmiratesId,
   toLatinDigits,
 } from './emirates-id';
+export {
+  assertValidStorageKey,
+  clientDocumentKey,
+  DEFAULT_SIGNED_URL_TTL_SECONDS,
+  isValidStorageKey,
+  MAX_SIGNED_URL_TTL_SECONDS,
+  practiceDocumentKey,
+  StorageUnavailableError,
+} from './storage';
+export type { StorageProvider, StoredObject } from './storage';
 export * from './dates';

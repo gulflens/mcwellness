@@ -12,6 +12,13 @@ import {
   type RequestContextDeps,
 } from './_middleware/request-context';
 import {
+  isStorageConflict,
+  isStorageUnavailable,
+  mountLocalStorage,
+  withStorage,
+  type ServerStorageProvider,
+} from './_middleware/storage';
+import {
   jsonOnly,
   noStore,
   payloadTooLarge,
@@ -37,6 +44,10 @@ import { mountSessions } from './sessions/checkin';
  * acting and why), the identity keys context (when configured — after the
  * fence, so no route ahead of authentication can ever see it), the
  * per-person budget, and the routes.
+ *
+ * The document store (docs/SEAMS.md) is the one dependency published ahead of
+ * the fence: the local implementation's signed URLs point back at this API's
+ * own /api/storage route, whose authorisation is the signature in the link.
  */
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
@@ -57,6 +68,8 @@ export type ApiOptions = RequestContextDeps & {
   keyOf?: (c: Context) => string | null;
   /** The Emirates ID keys (domain/shared/identity). Absent: no route can read c.get('identityKeys'). */
   identityKeys?: IdentityKeys;
+  /** The document store (domain/shared/storage, docs/SEAMS.md). Absent: no route can read c.get('storage'). */
+  storage?: ServerStorageProvider;
 };
 
 export function createApi(deps: ApiOptions): Hono<ApiEnv> {
@@ -70,6 +83,21 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     }
     // A database message can carry row values; only the shape of the failure is logged.
     const requestId = c.get('requestId') ?? c.res.headers.get('X-Request-Id') ?? null;
+    // A store that is down is not a bug in the record it belongs to: it says
+    // so. The message is logged here, unlike a database's: every one of them
+    // is written in domain/shared/storage.ts and its implementations, none
+    // names a key or echoes a vendor's body, and without it an outage and a
+    // refusal are the same line in the log.
+    if (isStorageUnavailable(error)) {
+      console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
+      return c.json({ error: 'storage_unavailable', requestId }, 503);
+    }
+    // Something is already filed under that key and the caller did not ask to
+    // replace it. Not an outage, and not an internal error: a plain refusal.
+    if (isStorageConflict(error)) {
+      console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
+      return c.json({ error: 'document_exists', requestId }, 409);
+    }
     console.error(
       JSON.stringify({ requestId, name: error.name, code: (error as { code?: string }).code }),
     );
@@ -77,6 +105,11 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   });
 
   api.use('*', securityHeaders(deps.appEnv, { supabaseUrl: deps.supabaseUrl }));
+  // Ahead of the fence, unlike identityKeys: the local store's own signed-URL
+  // route below carries its authorisation in the link and has no session.
+  if (deps.storage) {
+    api.use('*', withStorage(deps.storage));
+  }
   api.use('/api/*', noStore);
   // Budgets first, so a flood of oversized or malformed bodies is limited too.
   api.use(
@@ -100,6 +133,11 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // Public, registered before the fence. The payload carries nothing
   // environment-specific on purpose.
   api.get('/api/health', (c) => c.json({ ok: true, service: 'mcwellness-api' }));
+  // Only when the local implementation is the one chosen: it is the only one
+  // whose signed URLs point back here (app/api/_middleware/storage).
+  if (deps.storage) {
+    mountLocalStorage(api, deps.storage);
+  }
   if (deps.devSession) {
     api.use(
       '/api/dev/*',
