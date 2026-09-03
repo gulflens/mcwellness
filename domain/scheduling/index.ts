@@ -1,4 +1,4 @@
-export { WINDOW_MINUTES, windowFor } from './window';
+export { WINDOW_MINUTES, formatArrivalWindow, windowFor } from './window';
 export type { ArrivalWindow } from './window';
 export { checkConflicts, CLIENT_OVERLAP_MESSAGE, PRACTITIONER_OVERLAP_MESSAGE } from './conflicts';
 export type {
@@ -11,6 +11,17 @@ export type {
 } from './conflicts';
 export { APPOINTMENT_STATUSES, SETTLED_STATUSES, isSettled } from './status';
 export type { AppointmentStatus } from './status';
+export {
+  ALWAYS_LATE_REASONS,
+  CANCELLATION_REASONS,
+  DEFAULT_NOTICE_HOURS,
+  DEFAULT_UNFIT_FEE_FILS,
+  NEVER_LATE_REASONS,
+  cancellationStatusFor,
+  isLateCancellation,
+  reasonCanBeGivenAt,
+} from './cancellation';
+export type { CancellableAppointment, CancellationReason } from './cancellation';
 export { PRACTICE_TIME_ZONE, currentStopIndex, practiceDate, stopPhases } from './day';
 export type { DayStop, StopPhase } from './day';
 export { directionsUrl, navigationTarget } from './navigation';

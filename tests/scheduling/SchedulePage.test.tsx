@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { plainText } from './support';
 import { SchedulePage } from '../../app/admin/schedule/SchedulePage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
@@ -33,10 +35,15 @@ const appointment = {
   location: { id: '00000008-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
 };
 
-function renderPage(fetchImpl: typeof fetch) {
+/** The day the screen opens on lives in the address, so the week view can
+ * hand a day back; a router is what supplies that, and the two links out of
+ * the toolbar need one anyway. */
+function renderPage(fetchImpl: typeof fetch, date = '2026-09-10') {
   return render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <SchedulePage />
+      <MemoryRouter initialEntries={[`/admin/schedule?date=${date}`]}>
+        <SchedulePage />
+      </MemoryRouter>
     </AuthProviderBoundary>,
   );
 }
@@ -60,7 +67,7 @@ describe('SchedulePage', () => {
     expect(screen.getByRole('cell', { name: 'Standard session' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'Home' })).toBeTruthy();
     expect(screen.getByText('Confirmed')).toBeTruthy();
-    expect(screen.getByText('09:00–09:45')).toBeTruthy();
+    expect(screen.getByText('09:00–09:45', plainText)).toBeTruthy();
     expect(screen.getByText('1 appointment')).toBeTruthy();
   });
 

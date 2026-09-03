@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   directionsUrl,
+  formatArrivalWindow,
   isSettled,
   navigationTarget,
   practiceDate,
@@ -11,6 +12,8 @@ import {
   type StopPhase,
 } from '@domain/scheduling';
 import { DayStopListResponse, type DayStop } from '../../api/appointments/schema';
+import { StopBalanceResponse } from '../../api/billing/document-schema';
+import { formatFils } from '../../admin/billing/money';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ChevronIcon } from '../../shell/components/Icons';
@@ -93,13 +96,6 @@ const CRITICAL_STATUSES: readonly AppointmentStatus[] = [
   'no_show',
 ] as const;
 
-const TIME_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  timeZone: PRACTICE_TIME_ZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
 const DAY_FORMAT = new Intl.DateTimeFormat('en-GB', {
   timeZone: PRACTICE_TIME_ZONE,
   weekday: 'long',
@@ -121,8 +117,15 @@ const LOAD_ERROR = 'Your day could not be loaded. Check your connection, then tr
 
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; stops: readonly DayStop[] };
 
+/**
+ * The window, in the practice's zone and in that order in both languages:
+ * `formatArrivalWindow` isolates the range so an Arabic name beside it cannot
+ * reverse the two clock times (domain/scheduling/window.ts). The admin
+ * console's own screens call the same function through
+ * app/admin/schedule/windows.ts.
+ */
 function formatWindow(windowStart: string, windowEnd: string): string {
-  return `${TIME_FORMAT.format(new Date(windowStart))}–${TIME_FORMAT.format(new Date(windowEnd))}`;
+  return formatArrivalWindow(new Date(windowStart), new Date(windowEnd), PRACTICE_TIME_ZONE);
 }
 
 /**
@@ -160,6 +163,73 @@ function navigateHref(location: DayStop['location']): string {
   );
 }
 
+/**
+ * What the practitioner is told about the money at the door
+ * (docs/CHANGE-REQUESTS/billing-03.md item 5, docs/SPEC/billing.md
+ * section 1: "Session 3 of 15" is the thing the ledger exists to be able to
+ * say, and the person who needs it is the one driving there).
+ *
+ * `unavailable` is not an error state. Billing may decline for a perfectly
+ * correct reason — a client outside this practitioner's own schedule window
+ * answers 404 rather than an empty balance — and a red alert at somebody's
+ * front door about a figure the visit does not depend on would be the wrong
+ * shape of noise. It says one calm line and the stop stands.
+ *
+ * **The narrow route, deliberately.** This reads
+ * `GET /api/billing/clients/:clientId/stop-balance` and never the console's
+ * `/balance`. The two have the same permission and the same audit row; what
+ * differs is the size of the answer. The full one carries the practice's
+ * commercial position — every purchase with its net, its VAT and its list
+ * price, the reason somebody extended one, invoice ids, recognised and
+ * deferred figures — and none of that has any business in a phone standing at
+ * a family's front door. The narrow one answers per service a code and three
+ * counts, plus one outstanding figure, which is the whole of what this card
+ * says (compliance review of this pull request; billing built the route for
+ * it).
+ */
+type StopBalance = { kind: 'unavailable' } | { kind: 'ready'; balance: StopBalanceResponse };
+
+/**
+ * Which session of the programme this one is.
+ *
+ * Counted against the stop's own service, because a household on a bundle
+ * holds sessions of several kinds and "3 of 15" means three of the fifteen
+ * neurofeedback sessions, not three of everything they bought. A visit still
+ * to be delivered is the one after the last delivered; a visit already
+ * delivered is already counted, so it is that count itself. Null when the
+ * household holds no bundle for this service at all — a single visit is not
+ * session one of one, it is simply a visit.
+ */
+function sessionOfProgramme(
+  balance: StopBalanceResponse,
+  serviceTypeCode: string,
+  settled: boolean,
+): string | null {
+  // Matched by code: the stop-card route answers by what a service is, never
+  // by an id (app/api/billing/document-schema.ts's StopServiceBalance).
+  const service = balance.services.find((row) => row.serviceTypeCode === serviceTypeCode);
+  if (!service || service.purchased === 0) {
+    return null;
+  }
+  const ordinal = settled ? service.delivered : service.delivered + 1;
+  return `Session ${Math.min(ordinal, service.purchased)} of ${service.purchased}`;
+}
+
+/**
+ * What the household owes, in words a person can act on at a door. The
+ * currency is named once, beside the figure, rather than assumed
+ * (app/admin/billing/money.ts writes the figure bare).
+ */
+function owedLine(outstandingFils: number): string {
+  if (outstandingFils > 0) {
+    return `AED ${formatFils(outstandingFils)} owed`;
+  }
+  if (outstandingFils < 0) {
+    return `AED ${formatFils(-outstandingFils)} in credit`;
+  }
+  return 'Nothing owed';
+}
+
 function fetchDay(apiFetch: ApiFetch, date: string): Promise<State> {
   return apiFetch(`/api/appointments?date=${date}&scope=own`)
     .then(async (res) => {
@@ -174,10 +244,14 @@ function fetchDay(apiFetch: ApiFetch, date: string): Promise<State> {
 function Stop({
   stop,
   phase,
+  balance,
   onCheckIn,
 }: {
   stop: DayStop;
   phase: StopPhase;
+  /** Null while billing has not answered yet: the line appears when it does,
+   * rather than a placeholder standing in for it. */
+  balance: StopBalance | null;
   onCheckIn: (stop: DayStop) => void;
 }) {
   const name = shortName(stop.client.givenName, stop.client.familyInitial);
@@ -215,11 +289,34 @@ function Stop({
     </>
   );
 
+  const programme =
+    balance?.kind === 'ready'
+      ? sessionOfProgramme(balance.balance, stop.serviceType.code, settled)
+      : null;
+
   const detail = (
     <div className="stop__detail">
       {age ? <div className="small muted numeric">{age}</div> : null}
       <div className="small muted">{stop.serviceType.name}</div>
       <div className="small muted">{describePlace(stop.location)}</div>
+      {/* The slot is here from the first paint, empty, and keeps its height.
+          Billing answers a moment after the day does, and a line appearing
+          under a thumb pushes Navigate and Check in down by the height of it —
+          so the tap that was aimed at one lands on the other, at a front door,
+          which is the worst place in this app for a control to move (design
+          review of this pull request). */}
+      <div className="stop__money small numeric" aria-live="polite">
+        {balance === null ? null : balance.kind === 'unavailable' ? (
+          <span className="muted">Balance unavailable</span>
+        ) : (
+          <>
+            {programme ? <span className="muted">{programme}</span> : null}
+            <span className={balance.balance.outstandingFils > 0 ? 'stop__owed' : 'muted'}>
+              {owedLine(balance.balance.outstandingFils)}
+            </span>
+          </>
+        )}
+      </div>
       {settled ? null : (
         <div className="stop__actions">
           {/* The visible word is one of several identical ones down the
@@ -282,6 +379,23 @@ export function TodayPage() {
   const [now, setNow] = useState(() => new Date());
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
+  const [balances, setBalances] = useState<Record<string, StopBalance>>({});
+  // Which day each household's balance was last asked for. A ref rather than
+  // state, because it decides whether to make a request and must not itself
+  // cause a render: one fetch per household per day, so refreshing the day
+  // sheet does not re-ask a question already answered, and a new day does.
+  //
+  // An entry is removed again when the request does not produce an answer, so
+  // a failure is asked again on the next reload rather than remembered as
+  // though it had been answered.
+  const askedOn = useRef(new Map<string, string>());
+  // Whether this screen is still on screen at all. Deliberately not a flag per
+  // effect run: an answer is keyed by household and day, both of which are
+  // checked before it is asked for, so it is just as good whichever run of the
+  // effect asked for it. Dropping it because the effect re-ran — which happens
+  // on every reload of the day — lost the answer for good, since the request
+  // had already been recorded as made (compliance review of this pull request).
+  const onScreen = useRef(true);
 
   // The day is derived from the clock, never frozen at mount: a screen left
   // open overnight asks for the new day, not yesterday's.
@@ -314,6 +428,55 @@ export function TodayPage() {
       live = false;
     };
   }, [apiFetch, date, reloadToken]);
+
+  // The money at the door, one household at a time. Every request is its own,
+  // so a household billing declines does not take the others down with it,
+  // and no stop waits on another stop's answer.
+  useEffect(
+    () => () => {
+      onScreen.current = false;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (state.kind !== 'ready') {
+      return;
+    }
+    for (const stop of state.stops) {
+      const clientId = stop.clientId;
+      if (askedOn.current.get(clientId) === date) {
+        continue;
+      }
+      askedOn.current.set(clientId, date);
+      void apiFetch(`/api/billing/clients/${clientId}/stop-balance`)
+        .then(async (res) => {
+          if (!onScreen.current) return;
+          if (!res.ok) {
+            // A refusal is an answer, and stays remembered: asking again on
+            // every reload would be a request per reload for a household this
+            // practitioner is not entitled to ask about.
+            setBalances((all) => ({ ...all, [clientId]: { kind: 'unavailable' } }));
+            return;
+          }
+          const parsed = StopBalanceResponse.safeParse(await res.json());
+          setBalances((all) => ({
+            ...all,
+            [clientId]: parsed.success
+              ? { kind: 'ready', balance: parsed.data }
+              : { kind: 'unavailable' },
+          }));
+        })
+        .catch(() => {
+          // A connection that failed is not an answer. Forget that it was
+          // asked, so the next reload asks again.
+          askedOn.current.delete(clientId);
+          if (onScreen.current) {
+            setBalances((all) => ({ ...all, [clientId]: { kind: 'unavailable' } }));
+          }
+        });
+    }
+  }, [apiFetch, date, state]);
 
   const checkIn = useCallback(
     (stop: DayStop) => {
@@ -374,6 +537,7 @@ export function TodayPage() {
                 key={stop.id}
                 stop={stop}
                 phase={phases[index] ?? 'later'}
+                balance={balances[stop.clientId] ?? null}
                 onCheckIn={checkIn}
               />
             ))}

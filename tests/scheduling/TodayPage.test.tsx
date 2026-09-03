@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { plainText } from './support';
 import type { DayStop } from '../../app/api/appointments/schema';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
@@ -46,9 +47,12 @@ const dubai = (hour: string) => new Date(`${TODAY}T${hour}+04:00`).toISOString()
 const plus45 = (iso: string) => new Date(new Date(iso).getTime() + 45 * 60_000).toISOString();
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
 
+const CLIENT = '00000009-0000-4000-8000-000000000301';
+
 function stop(overrides: Partial<DayStop> & { id: string }): DayStop {
   const windowStart = overrides.windowStart ?? dubai('09:00:00');
   return {
+    clientId: CLIENT,
     windowStart,
     windowEnd: plus45(windowStart),
     status: 'confirmed',
@@ -61,7 +65,11 @@ function stop(overrides: Partial<DayStop> & { id: string }): DayStop {
       familyInitialAr: null,
       age: 9,
     },
-    serviceType: { id: '00000009-0000-4000-8000-000000000103', name: 'Standard session' },
+    serviceType: {
+      id: '00000009-0000-4000-8000-000000000103',
+      code: 'nf-session',
+      name: 'Standard session',
+    },
     location: {
       id: '00000009-0000-4000-8000-000000000104',
       label: 'home',
@@ -73,11 +81,62 @@ function stop(overrides: Partial<DayStop> & { id: string }): DayStop {
   };
 }
 
+/**
+ * A balance exactly as `GET /api/billing/clients/:id/stop-balance` answers it
+ * — per service a code and three counts, and one outstanding figure, and
+ * nothing else. Written out in full rather than trimmed from the console's
+ * shape, because the size of this body is the point: if the card ever starts
+ * reading a field the narrow route does not send, this fixture stops
+ * compiling with it.
+ */
+function balanceBody(
+  overrides: {
+    purchased?: number;
+    delivered?: number;
+    outstandingFils?: number;
+    serviceTypeCode?: string;
+  } = {},
+) {
+  const purchased = overrides.purchased ?? 15;
+  const delivered = overrides.delivered ?? 2;
+  return {
+    clientId: CLIENT,
+    services: [
+      {
+        serviceTypeCode: overrides.serviceTypeCode ?? 'nf-session',
+        purchased,
+        delivered,
+        remaining: purchased - delivered,
+      },
+    ],
+    outstandingFils: overrides.outstandingFils ?? 0,
+  };
+}
+
 function dayOf(...appointments: DayStop[]): typeof fetch {
+  return dayWithBalance({ appointments });
+}
+
+/** The day, and whatever billing says about the households on it. */
+function dayWithBalance({
+  appointments,
+  balance,
+  balanceStatus = 200,
+}: {
+  appointments: DayStop[];
+  balance?: ReturnType<typeof balanceBody>;
+  balanceStatus?: number;
+}): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.startsWith('/api/appointments?')) {
       return new Response(JSON.stringify({ appointments }), { status: 200 });
+    }
+    if (url.includes('/stop-balance')) {
+      if (balanceStatus !== 200) {
+        return new Response(JSON.stringify({ error: 'not_found' }), { status: balanceStatus });
+      }
+      return new Response(JSON.stringify(balance ?? balanceBody()), { status: 200 });
     }
     return new Response('not found', { status: 404 });
   }) as unknown as typeof fetch;
@@ -117,14 +176,14 @@ describe('TodayPage', () => {
   it("asks only for the caller's own day, for today in the practice's zone", async () => {
     const fetchImpl = dayOf(stop({ id: '00000009-0000-4000-8000-000000000201' }));
     renderPage(fetchImpl);
-    await screen.findByText('09:00–09:45');
+    await screen.findByText('09:00–09:45', plainText);
     const calls = (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     expect(calls.some((call) => String(call[0]).includes(`date=${TODAY}&scope=own`))).toBe(true);
   });
 
   it('shows the window, the first name and family initial, the age, the service and the place', async () => {
     renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000202' })));
-    expect(await screen.findByText('09:00–09:45')).toBeTruthy();
+    expect(await screen.findByText('09:00–09:45', plainText)).toBeTruthy();
     expect(screen.getByText('Iris C.')).toBeTruthy();
     expect(screen.getByText('9 years old')).toBeTruthy();
     expect(screen.getByText('Standard session')).toBeTruthy();
@@ -301,7 +360,7 @@ describe('TodayPage', () => {
   it('asks again when the practitioner comes back to the screen', async () => {
     const fetchImpl = dayOf(stop({ id: '00000009-0000-4000-8000-000000000213' }));
     renderPage(fetchImpl);
-    await screen.findByText('09:00–09:45');
+    await screen.findByText('09:00–09:45', plainText);
     const dayCalls = () =>
       (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((call) =>
         String(call[0]).startsWith('/api/appointments?'),
@@ -330,5 +389,141 @@ describe('TodayPage', () => {
     renderPage(dayOf());
     expect(await screen.findByText('Today needs a connection.')).toBeTruthy();
     expect(screen.queryByText(/next piece of work/)).toBeNull();
+  });
+});
+
+describe('TodayPage, the money at the door', () => {
+  it('says which session of the programme this is, and that nothing is owed', async () => {
+    renderPage(
+      dayWithBalance({
+        appointments: [stop({ id: '00000009-0000-4000-8000-000000000401' })],
+        balance: balanceBody({ purchased: 15, delivered: 2, outstandingFils: 0 }),
+      }),
+    );
+    // Two delivered, so the one being driven to is the third.
+    expect(await screen.findByText('Session 3 of 15')).toBeTruthy();
+    expect(screen.getByText('Nothing owed')).toBeTruthy();
+  });
+
+  it('names what is owed, so cash at the door is not missed', async () => {
+    renderPage(
+      dayWithBalance({
+        appointments: [stop({ id: '00000009-0000-4000-8000-000000000402' })],
+        balance: balanceBody({ outstandingFils: 70000 }),
+      }),
+    );
+    expect(await screen.findByText('AED 700.00 owed')).toBeTruthy();
+  });
+
+  it('counts a delivered visit as itself rather than as the next one', async () => {
+    renderPage(
+      dayWithBalance({
+        appointments: [stop({ id: '00000009-0000-4000-8000-000000000403', status: 'completed' })],
+        balance: balanceBody({ purchased: 15, delivered: 3 }),
+      }),
+    );
+    expect(await screen.findByText('Session 3 of 15')).toBeTruthy();
+  });
+
+  it('says nothing about a programme the household is not on', async () => {
+    renderPage(
+      dayWithBalance({
+        appointments: [stop({ id: '00000009-0000-4000-8000-000000000404' })],
+        balance: balanceBody({ purchased: 0, delivered: 0, outstandingFils: 0 }),
+      }),
+    );
+    // A single visit is not session one of one.
+    expect(await screen.findByText('Nothing owed')).toBeTruthy();
+    expect(screen.queryByText(/^Session /)).toBeNull();
+  });
+
+  it('does not move the actions under the thumb when the balance arrives', async () => {
+    // The structural half of the promise: the slot the balance lands in is
+    // present from the first paint and in the same place in the stop, so the
+    // buttons beneath it do not shift when billing answers. The height it
+    // keeps while empty is today.css's own min-block-size.
+    let release: (() => void) | undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(
+          JSON.stringify({ appointments: [stop({ id: '00000009-0000-4000-8000-000000000409' })] }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/stop-balance')) {
+        await held;
+        return new Response(JSON.stringify(balanceBody()), { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const { container } = renderPage(fetchImpl);
+    await screen.findByText('Iris C.');
+
+    const shape = () =>
+      [...(container.querySelector('.stop__detail')?.children ?? [])].map(
+        (child) => child.className,
+      );
+    const before = shape();
+    // The slot is already there, and empty.
+    expect(before).toContain('stop__money small numeric');
+    expect(container.querySelector('.stop__money')?.textContent).toBe('');
+
+    release?.();
+    await screen.findByText('Nothing owed');
+    // The same children in the same order: the money line filled in where it
+    // already was, and nothing below it moved.
+    expect(shape()).toEqual(before);
+  });
+
+  it('says so calmly when billing will not answer, and the stop still stands', async () => {
+    renderPage(
+      dayWithBalance({
+        appointments: [stop({ id: '00000009-0000-4000-8000-000000000405' })],
+        balanceStatus: 404,
+      }),
+    );
+    const unavailable = await screen.findByText('Balance unavailable');
+    // Muted, not an alert: billing declining is not a fault at somebody's door.
+    expect(unavailable.getAttribute('role')).toBeNull();
+    expect(screen.getByText('Iris C.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Check in Iris C.' })).toBeTruthy();
+  });
+
+  it('asks billing once per household, however many stops that household has', async () => {
+    const fetchImpl = dayWithBalance({
+      appointments: [
+        stop({ id: '00000009-0000-4000-8000-000000000406', windowStart: dubai('09:00:00') }),
+        stop({ id: '00000009-0000-4000-8000-000000000407', windowStart: dubai('14:00:00') }),
+      ],
+    });
+    renderPage(fetchImpl);
+    // Two stops, one household: the line appears twice and the question is
+    // asked once.
+    expect(await screen.findAllByText('Nothing owed')).toHaveLength(2);
+    await waitFor(() => {
+      const calls = (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+      const balanceCalls = calls.filter((call) => String(call[0]).includes('/stop-balance'));
+      expect(balanceCalls).toHaveLength(1);
+    });
+  });
+
+  it('never puts the record number in the address it asks billing on', async () => {
+    const fetchImpl = dayWithBalance({
+      appointments: [stop({ id: '00000009-0000-4000-8000-000000000408' })],
+    });
+    renderPage(fetchImpl);
+    await screen.findByText('Nothing owed');
+    const calls = (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    const balanceCall = calls.find((call) => String(call[0]).includes('/stop-balance'));
+    expect(String(balanceCall?.[0])).toBe(`/api/billing/clients/${CLIENT}/stop-balance`);
+    expect(String(balanceCall?.[0])).not.toContain('MW-');
+    // Never the console's wide route: that body is the practice's commercial
+    // position and does not belong on a phone at a front door.
+    expect(calls.some((call) => /\/balance$/.test(String(call[0])))).toBe(false);
   });
 });

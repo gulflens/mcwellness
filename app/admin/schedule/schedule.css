@@ -88,3 +88,137 @@
     'tnum' 1,
     'lnum' 1;
 }
+
+/* The day view's own row actions: two quiet buttons, kept on one line and
+   pushed to the row's end so the column reads as one edge rather than as
+   ragged text. Logical properties throughout, so an Arabic layout mirrors it
+   without a second rule. */
+.schedule__row-actions {
+  display: flex;
+  gap: var(--s-2);
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+/* The way through to the week. A link, not a button: it goes somewhere, and
+   the toolbar's one control is the date. */
+.schedule__week-link {
+  align-self: end;
+  min-block-size: var(--row);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The week: seven days across, and seven days across. Not a grid of time slots
+   — the practice runs at most a handful of visits a day, so a column of the
+   day's stops in time order says more than an hour scale mostly made of blank
+   space.
+
+   The columns do not fold. A week that reflows into 3 + 3 + 1 is not a week:
+   the reader loses the one thing they came for, which is Monday-to-Sunday side
+   by side, and a laptop at 1024px got exactly that (design review of this pull
+   request). What gives instead is how much each stop says — below the width at
+   which a service and a practitioner still fit, the columns keep their places
+   and the rows go terse, showing the window and the name only. The dropped
+   facts are a click away on the day itself, which the heading links to.
+
+   One phone-sized exception: below 640px seven columns are four characters
+   wide and the screen is not a week at all, so it becomes a list. The console
+   is a desk tool (docs/DESIGN-BRIEF.md) and this is the edge, not the case. */
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+@media (max-width: 640px) {
+  .week {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The terser row: what identifies a stop stays — the window, and the name in
+   both scripts, because a name is not a detail — and the practitioner and the
+   service stand down so seven columns keep their places. */
+@media (max-width: 1100px) {
+  .week__aside {
+    display: none;
+  }
+}
+
+/* Today, marked. A week is read to find where one is in it, and a column that
+   looks like the other six makes the reader count dates to find out (design
+   review). A hairline and a heavier heading, no hue: colour on this screen
+   belongs to the status chips. */
+.week__day--today .week__heading {
+  font-weight: var(--w-medium);
+  color: var(--ink);
+  border-block-end-color: var(--ink);
+}
+
+.week__day--today {
+  border-inline-start: var(--hairline) solid var(--ink);
+  padding-inline-start: var(--s-2);
+  margin-inline-start: calc(var(--s-2) * -1);
+}
+
+.week__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-inline-size: 0;
+}
+
+.week__heading {
+  margin: 0;
+  padding-block-end: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+}
+
+.week__empty {
+  margin: 0;
+  padding-block: var(--s-2);
+}
+
+.week__stops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One visit. A bordered block rather than a card: hairline, no shadow, no
+   lift — the ledger's vocabulary, in a column instead of a row. */
+.week__stop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  min-inline-size: 0;
+}
+
+.week__window {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
+}
+
+.week__name {
+  font-weight: var(--w-medium);
+  overflow-wrap: anywhere;
+}
+
+/* The way into the practice's own cancellation policy, on the same baseline as
+   the date field and the link to the week. */
+.schedule__policy-button {
+  align-self: end;
+}

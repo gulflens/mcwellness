@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { windowFor } from '@domain/scheduling';
 import { ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import {
   AppointmentOptionsResponse,
   AppointmentRow,
   ConflictResponse,
   type BadRequestCode,
-  type ConflictIssue,
   type DeliveryMode,
 } from '../../api/appointments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
+import { localConflictMessage } from './conflictMessages';
+import { composeWindowStart, windowEndForTime } from './windows';
 
 /**
  * The right-side "new appointment" drawer (docs/SPEC/scheduling-manual.md
@@ -23,9 +23,6 @@ import { CloseIcon } from '../../shell/components/Icons';
  * it unlocks last. Never a modal (DESIGN.md "The Beside Rule"): fixed to the
  * inline end, over the ledger, no scrim.
  */
-
-const PRACTICE_UTC_OFFSET = '+04:00'; // Asia/Dubai carries no daylight-saving change (matches
-// the same constant, independently kept, in app/api/appointments/list.ts, options.ts and create.ts).
 
 /** `location.label` is the place's category, not a free-text address
  * (docs/SPEC/00-data-model.md section 3): 'studio' is the practice's one
@@ -47,23 +44,6 @@ function deliveryModeOf(locationLabel: string): DeliveryMode {
   return locationLabel === 'studio' ? 'studio' : 'home';
 }
 
-/** The arrival window's end, shown as the start time is typed, computed by
- * `domain/scheduling`'s own `windowFor` rather than a locally-mirrored
- * constant. The reference date is arbitrary — only the wall-clock time
- * carries meaning here — so wrapping past midnight lands on the next day
- * harmlessly; a session starting that late is out of scope. */
-function addMinutes(time: string): string {
-  const [hours, mins] = time.split(':').map(Number);
-  const { end } = windowFor(new Date(2000, 0, 1, hours ?? 0, mins ?? 0));
-  const hh = String(end.getHours()).padStart(2, '0');
-  const mm = String(end.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
-}
-
-function composeWindowStart(date: string, time: string): string {
-  return new Date(`${date}T${time}:00${PRACTICE_UTC_OFFSET}`).toISOString();
-}
-
 /** A 400 sends only a `code`; this is this screen's own plain-language line
  * for each one, naming the problem and the way out (craft-floor's "errors
  * name the problem and the recovery"), not just the problem alone. */
@@ -80,43 +60,6 @@ const BAD_REQUEST_MESSAGES: Partial<Record<BadRequestCode, string>> = {
   location_not_found: 'This location could not be found. Choose a different one.',
   invalid_request: 'Something on the form is missing or invalid. Check each step and try again.',
 };
-
-/** `POST /api/appointments` sends a ready-made sentence per issue on a 409
- * (`domain/scheduling/conflicts.ts`), but that sentence is the server's own
- * wording and is never rendered directly here: every code below gets this
- * screen's own local sentence, naming the problem and the way out, the same
- * as the 400 codes above. `consent_missing` is the one exception that still
- * reads something out of the server's message — the purpose the consent is
- * for — because the coordinator needs to know which consent to go and
- * obtain, not just that one is missing (docs/CHANGE-REQUESTS/scheduling-02.md
- * section 4). */
-const CONFLICT_MESSAGES: Record<Exclude<ConflictIssue['code'], 'consent_missing'>, string> = {
-  practitioner_overlap:
-    'This practitioner is already booked close to this time. Choose a different time or practitioner.',
-  client_overlap: 'This client already has an appointment at this time. Choose a different time.',
-  credential_invalid:
-    'This practitioner is not certified for this service on this date. Choose a different practitioner.',
-  client_inactive:
-    "This client's record is not active. Reactivate the client's record before booking.",
-};
-
-/** The three purposes `requiredConsentPurposes` (create.ts) can ask for,
- * named the way a coordinator asking a family for consent would say them,
- * not the database's own purpose codes. */
-const CONSENT_PURPOSE_LABELS: Record<string, string> = {
-  participation: 'participation',
-  minor_participation: 'guardian',
-  home_visit: 'home visit',
-};
-
-function localConflictMessage(issue: ConflictIssue): string {
-  if (issue.code === 'consent_missing') {
-    const purpose = /\(([a-z_]+)\)/i.exec(issue.message)?.[1] ?? null;
-    const label = (purpose && CONSENT_PURPOSE_LABELS[purpose]) || 'required';
-    return `The client's ${label} consent is missing. Ask the family for it before booking.`;
-  }
-  return CONFLICT_MESSAGES[issue.code];
-}
 
 type Issue = { code: string; message: string };
 
@@ -527,7 +470,7 @@ export function NewAppointmentDrawer({
                 !timeStepEnabled
                   ? 'Choose a location and a practitioner first'
                   : startTime
-                    ? `Arrival window ${startTime}–${addMinutes(startTime)}`
+                    ? `Arrival window ${startTime}–${windowEndForTime(startTime)}`
                     : undefined
               }
             />
