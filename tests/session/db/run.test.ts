@@ -40,6 +40,13 @@ const ISSUER = 'http://localhost:54321/auth/v1';
 const KEY = new TextEncoder().encode(SECRET);
 
 const SERVICE_TYPE = '00000000-0000-4000-8000-0000000000f1';
+/**
+ * The coordinate a practitioner shares at the door, when they share one.
+ * A point in the middle of Dubai and nobody's address: what matters about it
+ * here is only that it is recorded, and then that it is nowhere in the audit
+ * trail.
+ */
+const DOOR = { lat: 25.2, lng: 55.27 };
 const DOCUMENT = '00000000-0000-4000-8000-000000003001';
 const SHA = 'c'.repeat(64);
 /** Family names from db/seed/names.ts, one per scenario. */
@@ -100,7 +107,7 @@ type Visit = {
  */
 async function seedVisit(
   scenario: string,
-  options: { photoConsent?: boolean } = {},
+  options: { photoConsent?: boolean; sharePoint?: boolean } = {},
 ): Promise<Visit> {
   const userId = id(scenario, 1);
   const authSub = id(scenario, 2);
@@ -178,7 +185,7 @@ async function seedVisit(
   const sessionId = id(scenario, 20);
   const res = await post(`/api/sessions/${sessionId}/events`, authSub, {
     clientId,
-    point: null,
+    point: options.sharePoint ? DOOR : null,
     events: [
       {
         id: id(scenario, 21),
@@ -211,8 +218,18 @@ async function get(path: string, authSub: string): Promise<Response> {
 
 type WireEvent = { id: string; seq: number; kind: string; deviceAt: string; payload: unknown };
 
-function flush(visit: Visit, events: WireEvent[]): Promise<Response> {
-  return post(`/api/sessions/${visit.sessionId}/events`, visit.authSub, { events });
+function flush(
+  visit: Visit,
+  events: WireEvent[],
+  point?: { lat: number; lng: number },
+): Promise<Response> {
+  // The check-out coordinate rides beside the batch, never inside an event
+  // (domain/session/events.ts): session-level, exactly as check-in's own is.
+  return post(
+    `/api/sessions/${visit.sessionId}/events`,
+    visit.authSub,
+    point === undefined ? { events } : { events, point },
+  );
 }
 
 /**
@@ -292,7 +309,8 @@ function wholeVisit(visit: Visit, options: { photo?: boolean } = {}): WireEvent[
     seq: 10,
     kind: 'checked_out',
     deviceAt: at(13),
-    payload: { point: null },
+    // Nothing at all: CheckedOutPayload holds no coordinate, by design.
+    payload: {},
   });
   return events;
 }
@@ -606,42 +624,84 @@ describe('closing a visit', () => {
     ).rejects.toMatchObject({ code: '23001' });
   });
 
-  it('files the setup photo as a document when the household has consented', async () => {
+  it('refuses a setup photo while there is nowhere to put the bytes, and files no document', async () => {
     const visit = await seedVisit('15', { photoConsent: true });
     const flushed = (await (
       await flush(visit, wholeVisit(visit, { photo: true }))
     ).json()) as EventsResponse;
-    expect(flushed.refused).toEqual([]);
+
+    // Consent is not the refusal here: this household agreed. The bytes have
+    // nowhere to go until the trunk's storage seam lands
+    // (app/api/sessions/photo-availability.ts,
+    // docs/CHANGE-REQUESTS/session-capture-02.md section 2), and a document
+    // row against a key nothing ever uploads to is a record of a photograph
+    // that does not exist. So the event is refused by name, the device stops
+    // asking, and everything else in the same batch still lands.
+    expect(flushed.refused).toEqual([
+      { id: id('15', 38), reason: 'photo_storage_unavailable' },
+    ]);
+    expect(flushed.acknowledged).toHaveLength(8);
 
     const body = (await (
       await post(`/api/sessions/${visit.sessionId}/close`, visit.authSub, NO_ACTUALS)
     ).json()) as CloseResponse;
-    expect(body.setupPhotoDocumentId).not.toBeNull();
+    expect(body.setupPhotoDocumentId).toBeNull();
 
-    const document = await owner.query<{
-      kind: string;
-      storage_key: string;
-      mime_type: string;
-      is_immutable: boolean;
-      client_id: string;
-    }>('select kind, storage_key, mime_type, is_immutable, client_id from document where id = $1', [
-      body.setupPhotoDocumentId,
+    const documents = await owner.query<{ n: string }>(
+      "select count(*)::text as n from document where kind = 'setup_photo' and storage_key = $1",
+      [`sessions/${visit.sessionId}/setup-photo.jpg`],
+    );
+    expect(documents.rows[0]!.n).toBe('0');
+  });
+
+  it('refuses a close for an id that is not a visit, without poisoning its own refusal', async () => {
+    const visit = await seedVisit('17');
+
+    // audit_log.entity_id is a uuid column. An unvalidated ':id' reached
+    // logRefusal, failed on that type, aborted the request's transaction and
+    // took the refusal it was meant to record down with it — so the one
+    // record of a bad request was the one thing the bad request destroyed.
+    const res = await post('/api/sessions/not-a-uuid/close', visit.authSub, NO_ACTUALS);
+    expect(res.status).toBe(400);
+
+    // The visit it was not about is untouched, and the transaction that
+    // refused is still a transaction that could have written.
+    const { rows } = await owner.query<{ status: string }>(
+      'select status from session where id = $1',
+      [visit.sessionId],
+    );
+    expect(rows[0]!.status).toBe('in_progress');
+  });
+
+  it('writes one close when two devices ask at the same moment', async () => {
+    const visit = await seedVisit('18');
+    await flush(visit, wholeVisit(visit));
+
+    // Both requests read an open visit; only one may update a row. Without
+    // `closed_at is null` in the predicate and a rowCount check on the
+    // answer, the loser wrote a second session_closed audit row and returned
+    // a close time it had invented.
+    const [a, b] = await Promise.all([
+      post(`/api/sessions/${visit.sessionId}/close`, visit.authSub, NO_ACTUALS),
+      post(`/api/sessions/${visit.sessionId}/close`, visit.authSub, NO_ACTUALS),
     ]);
-    expect(document.rows[0]).toMatchObject({
-      kind: 'setup_photo',
-      // The server derives the key from the session's own id; nothing the
-      // device sent can name where the photo goes.
-      storage_key: `sessions/${visit.sessionId}/setup-photo.jpg`,
-      mime_type: 'image/jpeg',
-      is_immutable: true,
-      client_id: visit.clientId,
-    });
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const first = (await a.json()) as CloseResponse;
+    const second = (await b.json()) as CloseResponse;
+    expect(second.closedAt).toBe(first.closedAt);
+    expect(second.signalQualityScore).toBe(first.signalQualityScore);
 
-    // The bytes are not here yet: the API's 64 KB body cap and the trunk's
-    // StorageProvider (shared-zone round 14) are both named in
-    // docs/CHANGE-REQUESTS/session-capture-02.md. This asserts the row and
-    // the key convention the upload will put the bytes under; the drill in
-    // the pull request body is what proves the file itself once that lands.
+    const audit = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'session_closed' and entity_id = $1",
+      [visit.sessionId],
+    );
+    expect(audit.rows[0]!.n).toBe('1');
+
+    const actuals = await owner.query<{ n: string }>(
+      'select count(*)::text as n from visit_actuals where session_id = $1',
+      [visit.sessionId],
+    );
+    expect(actuals.rows[0]!.n).toBe('1');
   });
 
   it('never lets a second device open a visit while one is already open', async () => {
@@ -665,5 +725,104 @@ describe('closing a visit', () => {
     expect((await res.json()) as { reasons: string[] }).toMatchObject({
       reasons: ['already_checked_in'],
     });
+  });
+});
+
+
+describe('the coordinate at the door', () => {
+  it('records the check-out point on the session, and nowhere the audit trail can keep it', async () => {
+    const visit = await seedVisit('19', { sharePoint: true });
+    const flushed = (await (
+      await flush(visit, wholeVisit(visit), DOOR)
+    ).json()) as EventsResponse;
+    expect(flushed.refused).toEqual([]);
+
+    const session = await owner.query<{ in_point: boolean; out_point: boolean }>(
+      'select checked_in_point is not null as in_point, ' +
+        'checked_out_point is not null as out_point from session where id = $1',
+      [visit.sessionId],
+    );
+    expect(session.rows[0]).toEqual({ in_point: true, out_point: true });
+
+    // Not inside an event. The stream is the source of truth and it is
+    // append-only: a coordinate written there could never be taken out again,
+    // and 080_audit_triggers.sql copies a payload into the trail wholesale.
+    const events = await owner.query<{ n: string }>(
+      "select count(*)::text as n from session_event where session_id = $1 and payload ? 'point'",
+      [visit.sessionId],
+    );
+    expect(events.rows[0]!.n).toBe('0');
+
+    // And nowhere in the trail itself, at any depth: migration 904 drops
+    // checked_in_point and checked_out_point outright and strips a `point`
+    // key from inside any jsonb object it copies. Section 7 is explicit that
+    // the door coordinate is never copied into the audit trail; this is the
+    // assertion that it is not. Asked as keys rather than as text, because
+    // `appointment_id` contains the letters of `point` and a substring
+    // search would have called this passing when it was not looking.
+    const trail = await owner.query<{ n: string; offending: string }>(
+      'select count(*)::text as n, ' +
+        "count(*) filter (where new_values ?| $2 or old_values ?| $2 " +
+        "or jsonb_path_exists(coalesce(new_values, '{}'::jsonb), '$.**.point') " +
+        "or jsonb_path_exists(coalesce(old_values, '{}'::jsonb), '$.**.point'))::text " +
+        'as offending ' +
+        'from audit_log where entity_id = $1 ' +
+        'or entity_id in (select id from session_event where session_id = $1)',
+      [visit.sessionId, ['point', 'location_point', 'checked_in_point', 'checked_out_point']],
+    );
+    expect(Number(trail.rows[0]!.n)).toBeGreaterThan(0);
+    expect(trail.rows[0]!.offending).toBe('0');
+  });
+
+  it('strips a coordinate out of an event payload even if one somehow reaches the table', async () => {
+    // The route cannot write this — CheckedOutPayload has no room for a
+    // coordinate and zod strips what it does not declare — so this goes in
+    // as the owner, behind the route's back, to prove the second guard
+    // rather than only the first. Migration 904 reaches inside a jsonb
+    // object at any depth; before it, a nested `point` was copied into
+    // audit_log.new_values in full and kept for five years in an
+    // append-only table.
+    const visit = await seedVisit('21', { sharePoint: true });
+    const eventId = id('21', 70);
+    await owner.query(
+      'insert into session_event (id, tenant_id, session_id, client_id, practitioner_id, seq, ' +
+        "kind, payload, device_at) values ($1, $2, $3, $4, $5, 2, 'telemetry_chunk', " +
+        '$6::jsonb, now())',
+      [
+        eventId,
+        IDS.tenantA,
+        visit.sessionId,
+        visit.clientId,
+        visit.practitionerId,
+        JSON.stringify({ seconds: 60, where: { point: DOOR } }),
+      ],
+    );
+
+    const { rows } = await owner.query<{ new_values: Record<string, unknown> }>(
+      'select new_values from audit_log where entity_id = $1',
+      [eventId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.new_values).toMatchObject({ payload: { seconds: 60, where: {} } });
+  });
+
+  it('refuses a check-out coordinate on a visit nobody shared one for', async () => {
+    // The practitioner declined at the door, and a decline is for the visit,
+    // not for the moment. Held by the server rather than trusted from the
+    // device: a device that sends one anyway is refused by name.
+    const visit = await seedVisit('20');
+    const flushed = (await (
+      await flush(visit, wholeVisit(visit), DOOR)
+    ).json()) as EventsResponse;
+    expect(flushed.refused).toEqual([
+      { id: id('20', 39), reason: 'location_not_shared_at_check_in' },
+    ]);
+
+    const session = await owner.query<{ in_point: boolean; out_point: boolean }>(
+      'select checked_in_point is not null as in_point, ' +
+        'checked_out_point is not null as out_point from session where id = $1',
+      [visit.sessionId],
+    );
+    expect(session.rows[0]).toEqual({ in_point: false, out_point: false });
   });
 });
