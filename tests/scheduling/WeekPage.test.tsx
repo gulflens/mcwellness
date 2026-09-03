@@ -40,8 +40,8 @@ function appointmentOn(date: string, id: string): AppointmentRow {
       id: '0000000b-0000-4000-8000-000000000001',
       givenName: 'Iris',
       familyName: 'Cliff',
-      givenNameAr: null,
-      familyNameAr: null,
+      givenNameAr: 'إيريس',
+      familyNameAr: 'كليف',
     },
     practitioner: { id: '0000000b-0000-4000-8000-000000000002', displayName: 'Cedar Ridge' },
     serviceType: { id: '0000000b-0000-4000-8000-000000000003', name: 'Standard session' },
@@ -96,6 +96,11 @@ describe('WeekPage', () => {
     expect(screen.getByText('Cedar Ridge')).toBeTruthy();
     expect(screen.getByText('Standard session, Home')).toBeTruthy();
     expect(screen.getByText('Confirmed')).toBeTruthy();
+    // And the Arabic name, in its own script and direction, as every other
+    // screen in the console renders it.
+    const arabic = screen.getByText('إيريس كليف');
+    expect(arabic.getAttribute('lang')).toBe('ar');
+    expect(arabic.getAttribute('dir')).toBe('rtl');
   });
 
   it('says plainly which days hold nothing', async () => {

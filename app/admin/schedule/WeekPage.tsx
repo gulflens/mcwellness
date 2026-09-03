@@ -161,6 +161,17 @@ export function WeekPage() {
                       <span className="week__name">
                         {row.client.givenName} {row.client.familyName}
                       </span>
+                      {/* The Arabic name beneath the Latin one, exactly as the
+                          day view and the clients table render it. A week that
+                          dropped it would be the one screen in the console
+                          where a household written in Arabic is not
+                          (docs/DESIGN-BRIEF.md, and the compliance review of
+                          this pull request). */}
+                      {row.client.givenNameAr ? (
+                        <span className="small muted" lang="ar" dir="rtl">
+                          {row.client.givenNameAr} {row.client.familyNameAr}
+                        </span>
+                      ) : null}
                       <span className="small muted">{row.practitioner.displayName}</span>
                       <span className="small muted">
                         {row.serviceType.name}, {DELIVERY_LABELS[row.deliveryMode]}

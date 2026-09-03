@@ -127,7 +127,11 @@ export const DayStop = z.object({
     familyInitialAr: z.string().nullable(),
     age: z.number().int().min(0).nullable(),
   }),
-  serviceType: z.object({ id: z.uuid(), name: z.string() }),
+  // The code as well as the name: billing's stop-card balance answers per
+  // service by code and never by id (`StopBalanceResponse`), because an id on
+  // a doorstep phone is one more thing that can leak. So the card matches on
+  // the code, and needs it here to do that.
+  serviceType: z.object({ id: z.uuid(), code: z.string(), name: z.string() }),
   location: z.object({
     id: z.uuid(),
     label: z.string(),

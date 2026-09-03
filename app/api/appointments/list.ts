@@ -79,6 +79,7 @@ type PracticeRow = BaseRow & {
 };
 
 type OwnRow = BaseRow & {
+  service_type_code: string;
   client_mrn: string;
   client_given_name: string;
   client_given_name_ar: string | null;
@@ -108,7 +109,7 @@ const PRACTICE_COLUMNS =
 // app/api/clients/record.ts makes of a location. left(...) is the family
 // initial: one character, in whichever script the name is written.
 const OWN_COLUMNS =
-  ', c.mrn as client_mrn, c.given_name as client_given_name, ' +
+  ', st.code as service_type_code, c.mrn as client_mrn, c.given_name as client_given_name, ' +
   'c.given_name_ar as client_given_name_ar, ' +
   'left(c.family_name, 1) as client_family_initial, ' +
   'left(c.family_name_ar, 1) as client_family_initial_ar, ' +
@@ -223,7 +224,11 @@ function toDayStop(r: OwnRow, today: string): DayStop {
       familyInitialAr: r.client_family_initial_ar,
       age: r.client_date_of_birth === null ? null : ageOn(r.client_date_of_birth, today),
     },
-    serviceType: { id: r.service_type_id, name: r.service_type_name },
+    serviceType: {
+      id: r.service_type_id,
+      code: r.service_type_code,
+      name: r.service_type_name,
+    },
     location: {
       id: r.location_id,
       label: r.location_label,

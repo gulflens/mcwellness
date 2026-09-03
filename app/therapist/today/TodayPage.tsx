@@ -11,7 +11,7 @@ import {
   type StopPhase,
 } from '@domain/scheduling';
 import { DayStopListResponse, type DayStop } from '../../api/appointments/schema';
-import { BalanceResponse } from '../../api/billing/ledger-schema';
+import { StopBalanceResponse } from '../../api/billing/document-schema';
 import { formatFils } from '../../admin/billing/money';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
@@ -173,8 +173,20 @@ function navigateHref(location: DayStop['location']): string {
  * answers 404 rather than an empty balance — and a red alert at somebody's
  * front door about a figure the visit does not depend on would be the wrong
  * shape of noise. It says one calm line and the stop stands.
+ *
+ * **The narrow route, deliberately.** This reads
+ * `GET /api/billing/clients/:clientId/stop-balance` and never the console's
+ * `/balance`. The two have the same permission and the same audit row; what
+ * differs is the size of the answer. The full one carries the practice's
+ * commercial position — every purchase with its net, its VAT and its list
+ * price, the reason somebody extended one, invoice ids, recognised and
+ * deferred figures — and none of that has any business in a phone standing at
+ * a family's front door. The narrow one answers per service a code and three
+ * counts, plus one outstanding figure, which is the whole of what this card
+ * says (compliance review of this pull request; billing built the route for
+ * it).
  */
-type StopBalance = { kind: 'unavailable' } | { kind: 'ready'; balance: BalanceResponse };
+type StopBalance = { kind: 'unavailable' } | { kind: 'ready'; balance: StopBalanceResponse };
 
 /**
  * Which session of the programme this one is.
@@ -188,11 +200,13 @@ type StopBalance = { kind: 'unavailable' } | { kind: 'ready'; balance: BalanceRe
  * session one of one, it is simply a visit.
  */
 function sessionOfProgramme(
-  balance: BalanceResponse,
-  serviceTypeId: string,
+  balance: StopBalanceResponse,
+  serviceTypeCode: string,
   settled: boolean,
 ): string | null {
-  const service = balance.services.find((row) => row.serviceTypeId === serviceTypeId);
+  // Matched by code: the stop-card route answers by what a service is, never
+  // by an id (app/api/billing/document-schema.ts's StopServiceBalance).
+  const service = balance.services.find((row) => row.serviceTypeCode === serviceTypeCode);
   if (!service || service.purchased === 0) {
     return null;
   }
@@ -276,7 +290,7 @@ function Stop({
 
   const programme =
     balance?.kind === 'ready'
-      ? sessionOfProgramme(balance.balance, stop.serviceType.id, settled)
+      ? sessionOfProgramme(balance.balance, stop.serviceType.code, settled)
       : null;
 
   const detail = (
@@ -361,7 +375,18 @@ export function TodayPage() {
   // state, because it decides whether to make a request and must not itself
   // cause a render: one fetch per household per day, so refreshing the day
   // sheet does not re-ask a question already answered, and a new day does.
+  //
+  // An entry is removed again when the request does not produce an answer, so
+  // a failure is asked again on the next reload rather than remembered as
+  // though it had been answered.
   const askedOn = useRef(new Map<string, string>());
+  // Whether this screen is still on screen at all. Deliberately not a flag per
+  // effect run: an answer is keyed by household and day, both of which are
+  // checked before it is asked for, so it is just as good whichever run of the
+  // effect asked for it. Dropping it because the effect re-ran — which happens
+  // on every reload of the day — lost the answer for good, since the request
+  // had already been recorded as made (compliance review of this pull request).
+  const onScreen = useRef(true);
 
   // The day is derived from the clock, never frozen at mount: a screen left
   // open overnight asks for the new day, not yesterday's.
@@ -398,25 +423,34 @@ export function TodayPage() {
   // The money at the door, one household at a time. Every request is its own,
   // so a household billing declines does not take the others down with it,
   // and no stop waits on another stop's answer.
+  useEffect(
+    () => () => {
+      onScreen.current = false;
+    },
+    [],
+  );
+
   useEffect(() => {
     if (state.kind !== 'ready') {
       return;
     }
-    let live = true;
     for (const stop of state.stops) {
       const clientId = stop.clientId;
       if (askedOn.current.get(clientId) === date) {
         continue;
       }
       askedOn.current.set(clientId, date);
-      void apiFetch(`/api/billing/clients/${clientId}/balance`)
+      void apiFetch(`/api/billing/clients/${clientId}/stop-balance`)
         .then(async (res) => {
-          if (!live) return;
+          if (!onScreen.current) return;
           if (!res.ok) {
+            // A refusal is an answer, and stays remembered: asking again on
+            // every reload would be a request per reload for a household this
+            // practitioner is not entitled to ask about.
             setBalances((all) => ({ ...all, [clientId]: { kind: 'unavailable' } }));
             return;
           }
-          const parsed = BalanceResponse.safeParse(await res.json());
+          const parsed = StopBalanceResponse.safeParse(await res.json());
           setBalances((all) => ({
             ...all,
             [clientId]: parsed.success
@@ -425,14 +459,14 @@ export function TodayPage() {
           }));
         })
         .catch(() => {
-          if (live) {
+          // A connection that failed is not an answer. Forget that it was
+          // asked, so the next reload asks again.
+          askedOn.current.delete(clientId);
+          if (onScreen.current) {
             setBalances((all) => ({ ...all, [clientId]: { kind: 'unavailable' } }));
           }
         });
     }
-    return () => {
-      live = false;
-    };
   }, [apiFetch, date, state]);
 
   const checkIn = useCallback(

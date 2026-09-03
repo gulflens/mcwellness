@@ -64,7 +64,11 @@ function stop(overrides: Partial<DayStop> & { id: string }): DayStop {
       familyInitialAr: null,
       age: 9,
     },
-    serviceType: { id: '00000009-0000-4000-8000-000000000103', name: 'Standard session' },
+    serviceType: {
+      id: '00000009-0000-4000-8000-000000000103',
+      code: 'nf-session',
+      name: 'Standard session',
+    },
     location: {
       id: '00000009-0000-4000-8000-000000000104',
       label: 'home',
@@ -77,16 +81,19 @@ function stop(overrides: Partial<DayStop> & { id: string }): DayStop {
 }
 
 /**
- * A balance as `GET /api/billing/clients/:id/balance` answers it, cut to the
- * fields the stop card reads. The rest of `BalanceResponse` is filled in
- * because the screen parses the whole shape, not because the card uses it.
+ * A balance exactly as `GET /api/billing/clients/:id/stop-balance` answers it
+ * — per service a code and three counts, and one outstanding figure, and
+ * nothing else. Written out in full rather than trimmed from the console's
+ * shape, because the size of this body is the point: if the card ever starts
+ * reading a field the narrow route does not send, this fixture stops
+ * compiling with it.
  */
 function balanceBody(
   overrides: {
     purchased?: number;
     delivered?: number;
     outstandingFils?: number;
-    serviceTypeId?: string;
+    serviceTypeCode?: string;
   } = {},
 ) {
   const purchased = overrides.purchased ?? 15;
@@ -95,33 +102,13 @@ function balanceBody(
     clientId: CLIENT,
     services: [
       {
-        serviceTypeId: overrides.serviceTypeId ?? '00000009-0000-4000-8000-000000000103',
-        serviceTypeCode: 'nf-session',
-        serviceTypeName: 'Standard session',
-        serviceTypeNameAr: null,
+        serviceTypeCode: overrides.serviceTypeCode ?? 'nf-session',
         purchased,
         delivered,
-        forfeited: 0,
         remaining: purchased - delivered,
-        lapsed: 0,
-        remainingValueNetFils: 0,
-        recognisedNetFils: 0,
-        deferredNetFils: 0,
-        nextExpiryOn: null,
-        expiryWarning: 'none',
       },
     ],
-    delivered,
-    remaining: purchased - delivered,
-    remainingValueNetFils: 0,
-    recognisedNetFils: 0,
-    deferredNetFils: 0,
-    nextExpiryOn: null,
-    expiryWarning: 'none',
     outstandingFils: overrides.outstandingFils ?? 0,
-    chargedFils: 0,
-    paidFils: 0,
-    purchases: [],
   };
 }
 
@@ -144,7 +131,7 @@ function dayWithBalance({
     if (url.startsWith('/api/appointments?')) {
       return new Response(JSON.stringify({ appointments }), { status: 200 });
     }
-    if (url.startsWith('/api/billing/clients/')) {
+    if (url.includes('/stop-balance')) {
       if (balanceStatus !== 200) {
         return new Response(JSON.stringify({ error: 'not_found' }), { status: balanceStatus });
       }
@@ -476,7 +463,7 @@ describe('TodayPage, the money at the door', () => {
     expect(await screen.findAllByText('Nothing owed')).toHaveLength(2);
     await waitFor(() => {
       const calls = (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-      const balanceCalls = calls.filter((call) => String(call[0]).includes('/balance'));
+      const balanceCalls = calls.filter((call) => String(call[0]).includes('/stop-balance'));
       expect(balanceCalls).toHaveLength(1);
     });
   });
@@ -488,8 +475,11 @@ describe('TodayPage, the money at the door', () => {
     renderPage(fetchImpl);
     await screen.findByText('Nothing owed');
     const calls = (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls;
-    const balanceCall = calls.find((call) => String(call[0]).includes('/balance'));
-    expect(String(balanceCall?.[0])).toBe(`/api/billing/clients/${CLIENT}/balance`);
+    const balanceCall = calls.find((call) => String(call[0]).includes('/stop-balance'));
+    expect(String(balanceCall?.[0])).toBe(`/api/billing/clients/${CLIENT}/stop-balance`);
     expect(String(balanceCall?.[0])).not.toContain('MW-');
+    // Never the console's wide route: that body is the practice's commercial
+    // position and does not belong on a phone at a front door.
+    expect(calls.some((call) => /\/balance$/.test(String(call[0])))).toBe(false);
   });
 });
