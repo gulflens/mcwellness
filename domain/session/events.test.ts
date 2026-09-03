@@ -116,7 +116,6 @@ describe('photo_captured', () => {
   it('refuses a photo above the one-megabyte ceiling section 7 sets', () => {
     expect(
       PhotoCapturedPayload.safeParse({
-        storageKey: 'sessions/x/setup-photo.jpg',
         mimeType: 'image/jpeg',
         sizeBytes: 1024 * 1024 + 1,
         sha256: SHA,
@@ -127,7 +126,6 @@ describe('photo_captured', () => {
   it('refuses a digest that is not a sha256', () => {
     expect(
       PhotoCapturedPayload.safeParse({
-        storageKey: 'sessions/x/setup-photo.jpg',
         mimeType: 'image/jpeg',
         sizeBytes: 1000,
         sha256: 'not-a-digest',

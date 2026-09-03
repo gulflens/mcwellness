@@ -9,12 +9,17 @@ import {
 import { hasRole } from '@domain/shared';
 import { logRefusal } from './audit';
 import type { ApiEnv } from '../_middleware/request-context';
-import { CheckInRequest, CheckInResponse } from './schema';
+import { appendEvents } from './events';
+import { mountClose } from './close';
+import { mountOpenSession } from './open';
+import { CheckInRequest, CheckInResponse, SessionEventsRequest } from './schema';
+import { resolvePractitioner } from './session-row';
 import { mountServiceTypes } from './service-types';
 
 /**
  * mountSessions mounts every route this stream owns: POST
- * /api/sessions/:id/events below, and GET /api/sessions/service-types
+ * /api/sessions/:id/events below, GET /api/sessions/open (./open.ts), POST
+ * /api/sessions/:id/close (./close.ts) and GET /api/sessions/service-types
  * (./service-types.ts).
  *
  * POST /api/sessions/:id/events — the offline outbox's server side
@@ -22,11 +27,17 @@ import { mountServiceTypes } from './service-types';
  * queued events here, keyed by their own client-generated ids, and the
  * server folds them into the session row.
  *
- * This pull request accepts only the visit's opening event and stops at
- * check-in: signal check, run, end, close and their event kinds arrive with
- * their own screens. Not mounted in app/api/create-api.ts yet — see
- * docs/CHANGE-REQUESTS/session-capture-01.md; the database tests mount it
- * directly on the Hono instance createApi returns.
+ * One path, two branches, because the outbox has one address to post to:
+ *
+ * - a batch carrying `session_started` **opens** the visit, and runs the
+ *   check-in gate below — the consent, credential and booking checks section
+ *   3.1 puts at the door. It is online-only by design: those checks happen on
+ *   the server, at execution time, never from a cached answer
+ *   (.claude/rules/compliance.md), and section 3.1 names an offline check-in
+ *   as a Phase 2 intention rather than something this ships.
+ * - every other batch **appends** to a visit already open (./events.ts), and
+ *   that half is what works with no signal: the practitioner checks in at the
+ *   door with a bar of reception and the rest of the visit queues locally.
  *
  * Every refusal — wrong role, no practitioner row, someone else's session,
  * an unverified or foreign client or service type, the gate, or a genuine
@@ -47,7 +58,6 @@ const Params = z.object({ id: z.uuid() });
 const DEVICE_CLOCK_WINDOW_MS = 15 * 60 * 1000;
 
 type ExistingSessionRow = { id: string; checked_in_at: Date; practitioner_id: string };
-type PractitionerRow = { id: string };
 type ServiceTypeRow = { id: string };
 // Mirrors app.checkin_context's return row (db/migrations/301_checkin_context.sql):
 // deliberately narrower than the client table itself — no name, no contact
@@ -64,6 +74,8 @@ type CheckinContextRow = {
 
 export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   mountServiceTypes(api, now);
+  mountOpenSession(api);
+  mountClose(api, now);
 
   api.post('/api/sessions/:id/events', async (c) => {
     const actor = c.get('actor');
@@ -82,7 +94,27 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'forbidden', requestId }, 403);
     }
 
-    const parsed = CheckInRequest.safeParse(await c.req.json().catch(() => null));
+    const body: unknown = await c.req.json().catch(() => null);
+    const batch = SessionEventsRequest.safeParse(body);
+    if (!batch.success) {
+      return c.json({ error: 'bad_request', requestId }, 400);
+    }
+
+    const practitionerId = await resolvePractitioner(db, actor.userId);
+    if (!practitionerId) {
+      await logRefusal(db, 'session', sessionId, null, ['no_practitioner_row']);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+
+    // No opening event in the batch: this belongs to a visit already open,
+    // and the rest of the flush is ./events.ts's.
+    if (!batch.data.events.some((event) => event.kind === 'session_started')) {
+      return appendEvents(c, sessionId, practitionerId, batch.data.events, now);
+    }
+
+    // Opening a visit is the narrower shape: exactly one of clientId and
+    // clientMrn, and a payload with no practitioner id in it.
+    const parsed = CheckInRequest.safeParse(body);
     if (!parsed.success) {
       return c.json({ error: 'bad_request', requestId }, 400);
     }
@@ -106,16 +138,6 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       // Nothing is verified yet at this point, so the refusal names no client.
       await logRefusal(db, 'session', sessionId, null, ['device_clock_out_of_range']);
       return c.json({ error: 'bad_request', requestId, detail: 'device_clock_out_of_range' }, 400);
-    }
-
-    const practitioner = await db.query<PractitionerRow>(
-      "select id from practitioner where user_id = $1 and tenant_id = app.current_tenant_id() and status = 'active'",
-      [actor.userId],
-    );
-    const practitionerId = practitioner.rows[0]?.id;
-    if (!practitionerId) {
-      await logRefusal(db, 'session', sessionId, null, ['no_practitioner_row']);
-      return c.json({ error: 'forbidden', requestId }, 403);
     }
 
     // Idempotent replay: the outbox may deliver the same event more than
@@ -231,6 +253,28 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json(CheckInResponse.parse({ status: 'blocked', reasons: gate.reasons }), 422);
     }
 
+    // Which booked visit this check-in belongs to. app.checkin_context (301)
+    // has already proved one exists — that is what its `found` means — but
+    // it hands back no id, so the row is read here instead. An ordinary
+    // select, not another definer door: a practitioner may read their own
+    // appointments (db/policies/scheduling/appointment_access.sql), and this
+    // asks for exactly the row that policy already shows them. Null is not a
+    // failure; a session with no appointment simply closes without one to
+    // flip (app.complete_appointment_for_session, 302).
+    const appointment = await db.query<{ id: string }>(
+      'select a.id from appointment a ' +
+        'where a.tenant_id = app.current_tenant_id() and a.client_id = $1 ' +
+        'and a.practitioner_id = $2 ' +
+        "and a.status in ('proposed', 'confirmed', 'checked_in') " +
+        "and a.window_start < ((date_trunc('day', now() at time zone 'Asia/Dubai')::date + 1)" +
+        "::timestamp at time zone 'Asia/Dubai') " +
+        "and a.window_end > ((date_trunc('day', now() at time zone 'Asia/Dubai')::date)" +
+        "::timestamp at time zone 'Asia/Dubai') " +
+        'order by a.window_start limit 1',
+      [clientId, practitionerId],
+    );
+    const appointmentId = appointment.rows[0]?.id ?? null;
+
     // No clientId, no point: those are recorded on the session row directly
     // below, never duplicated into the event's own payload (see
     // domain/session/types.ts's SessionStartedPayload).
@@ -261,10 +305,11 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     try {
       await db.query(
         'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
-          'delivery_mode, location_id, checked_in_at, checked_in_point, created_by) values ' +
+          'delivery_mode, location_id, checked_in_at, checked_in_point, created_by, ' +
+          'appointment_id) values ' +
           '($1, app.current_tenant_id(), $2, $3, $4, $5, $6, $7, ' +
           'case when $8::float8 is null then null else extensions.st_geogfromtext(' +
-          "'SRID=4326;POINT(' || $8::float8 || ' ' || $9::float8 || ')') end, $10)",
+          "'SRID=4326;POINT(' || $8::float8 || ' ' || $9::float8 || ')') end, $10, $11)",
         [
           sessionId,
           clientId,
@@ -276,6 +321,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
           parsed.data.point?.lng ?? null,
           parsed.data.point?.lat ?? null,
           actor.userId,
+          appointmentId,
         ],
       );
       // Never a silent no-op: on conflict do nothing exists only for a

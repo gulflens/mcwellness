@@ -78,7 +78,7 @@ function wholeVisit(): SessionEvent[] {
       },
       37,
     ),
-    event(7, 'session_ended', {}, 58),
+    event(7, 'session_ended', { startedAt: '2026-09-03T06:36:00.000Z' }, 58),
     event(8, 'rating_recorded', { phase: 'post', answers: [{ key: 'sleep', value: 8 }] }, 59),
     event(
       9,
@@ -131,7 +131,9 @@ describe('replayEvents', () => {
   });
 
   it('has no projection for a stream that never opened a visit', () => {
-    expect(replayEvents([event(9, 'session_ended', {}, 40)])).toBeNull();
+    expect(
+      replayEvents([event(9, 'session_ended', { startedAt: '2026-09-03T06:36:00.000Z' }, 40)]),
+    ).toBeNull();
   });
 
   it('has no projection when the opening event is malformed', () => {
@@ -154,6 +156,7 @@ describe('replayEvents', () => {
       telemetry: [],
       observations: null,
       photo: null,
+      startedAt: null,
       endedAt: null,
       checkedOutAt: null,
       checkedOutPoint: null,
@@ -171,6 +174,7 @@ describe('replayEvents', () => {
       preRating: [{ key: 'sleep', value: 6 }],
       postRating: [{ key: 'sleep', value: 8 }],
       observations: { chips: ['fatigue'], tolerance: 8, engagement: 7, note: null },
+      startedAt: '2026-09-03T06:36:00.000Z',
       endedAt: '2026-09-03T06:58:00.000Z',
       checkedOutAt: '2026-09-03T06:59:00.000Z',
       checkedOutPoint: { lat: 25.2, lng: 55.27 },

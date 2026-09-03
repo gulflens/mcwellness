@@ -136,11 +136,15 @@ export type ObservationRecordedPayload = z.infer<typeof ObservationRecordedPaylo
  * the API's body cap is 64 KB (app/api/create-api.ts) and a compressed photo
  * is up to 1 MB, so the device holds the bytes in its own outbox and the
  * upload door is its own request. Until the trunk's StorageProvider lands
- * (round 14), the close route writes the document row against this key and
- * the bytes follow — see docs/CHANGE-REQUESTS/session-capture-02.md.
+ * (round 14), the close route writes the document row and the bytes follow —
+ * see docs/CHANGE-REQUESTS/session-capture-02.md.
+ *
+ * No storage key here on purpose. A key supplied by a caller is a key that
+ * can name another visit's object; the server derives it from the session's
+ * own id and this mime type instead, so the only thing a device can say
+ * about where its photo goes is nothing at all.
  */
 export const PhotoCapturedPayload = z.object({
-  storageKey: z.string().min(1).max(200),
   mimeType: z.enum(['image/jpeg', 'image/webp', 'image/png']),
   sizeBytes: z
     .number()
@@ -151,8 +155,15 @@ export const PhotoCapturedPayload = z.object({
 });
 export type PhotoCapturedPayload = z.infer<typeof PhotoCapturedPayload>;
 
-/** The run has stopped. When it stopped is the event's own device_at. */
-export const SessionEndedPayload = z.object({});
+/**
+ * The run has stopped. When it stopped is the event's own device_at; when it
+ * began is carried here, because the run screen is the only thing that knows
+ * — the visit opened at check-in, minutes earlier, and section 3.4's elapsed
+ * timer starts when the practitioner starts training, not when they arrived.
+ */
+export const SessionEndedPayload = z.object({
+  startedAt: z.iso.datetime(),
+});
 export type SessionEndedPayload = z.infer<typeof SessionEndedPayload>;
 
 /**
@@ -183,22 +194,40 @@ if (MISSING.length > 0) {
   throw new Error(`No payload schema for session event kind(s): ${MISSING.join(', ')}`);
 }
 
-/** One event as the device queues it and the server receives it. */
-export const SessionEventEnvelope = z.discriminatedUnion(
-  'kind',
-  SESSION_EVENT_KINDS.map((kind) =>
-    z.object({
-      /** Client-generated; the idempotency key, in the outbox and in replay alike. */
-      id: z.uuid(),
-      seq: z.number().int().positive(),
-      kind: z.literal(kind),
-      /** ISO 8601 from the device's own clock, never the server's receipt time. */
-      deviceAt: z.iso.datetime(),
-      payload: EVENT_PAYLOAD_SCHEMAS[kind],
-    }),
-  ) as unknown as [z.ZodObject, z.ZodObject, ...z.ZodObject[]],
-);
+/**
+ * One event as the device queues it. Written out one call per kind rather
+ * than mapped over SESSION_EVENT_KINDS: a mapped array is a `ZodObject[]`,
+ * and a union built from it infers every payload as `unknown`, which is the
+ * checking this exists to do. The MissingKind line below is what keeps the
+ * list honest — a kind added to the vocabulary and forgotten here fails to
+ * compile.
+ */
+const envelopeFor = <K extends SessionEventKind>(kind: K) =>
+  z.object({
+    /** Client-generated; the idempotency key, in the outbox and in replay alike. */
+    id: z.uuid(),
+    seq: z.number().int().positive(),
+    kind: z.literal(kind),
+    /** ISO 8601 from the device's own clock, never the server's receipt time. */
+    deviceAt: z.iso.datetime(),
+    payload: EVENT_PAYLOAD_SCHEMAS[kind],
+  });
+
+export const SessionEventEnvelope = z.discriminatedUnion('kind', [
+  envelopeFor('session_started'),
+  envelopeFor('signal_checked'),
+  envelopeFor('telemetry_chunk'),
+  envelopeFor('rating_recorded'),
+  envelopeFor('observation_recorded'),
+  envelopeFor('photo_captured'),
+  envelopeFor('session_ended'),
+  envelopeFor('checked_out'),
+]);
 export type SessionEventEnvelope = z.infer<typeof SessionEventEnvelope>;
+
+type MissingKind = Exclude<SessionEventKind, SessionEventEnvelope['kind']>;
+const NO_MISSING_KIND: MissingKind[] = [];
+void NO_MISSING_KIND;
 
 /**
  * Parses one event of a known kind, returning null rather than throwing: a

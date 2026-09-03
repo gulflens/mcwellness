@@ -110,6 +110,12 @@ export type SessionProjection = {
   telemetry: readonly TelemetrySample[];
   observations: PostObservations | null;
   photo: PhotoCapturedPayload | null;
+  /**
+   * When the training itself began: what `session_ended` reported, or — for a
+   * visit whose end event has not arrived — the earliest telemetry chunk, so
+   * a phone lost mid-run still leaves a record with a shape.
+   */
+  startedAt: string | null;
   endedAt: string | null;
   checkedOutAt: string | null;
   checkedOutPoint: GeoPoint | null;

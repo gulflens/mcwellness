@@ -48,6 +48,13 @@ alter table public.session
   -- The pre-flight checklist as the practitioner left it: an array of
   -- { key, done }, keys from service_type.preflight_checklist (section 3.2).
   add column preflight               jsonb not null default '[]'::jsonb,
+  -- The signal check the practitioner entered from the amplifier's own
+  -- software (section 3.3): { sites: [{ site, quality }], overridden, at }.
+  -- Not in 00-data-model.md's sketch of this table, which names the derived
+  -- signal_quality_score and not the reading behind it; the reading is what
+  -- section 3.3 asks a person to type, and a score with no working shown is
+  -- a number nobody can check.
+  add column signal_check            jsonb,
   -- The 0-10 answers, before and after: an array of { key, value }
   -- (section 3.2, section 3.5).
   add column pre_rating              jsonb not null default '[]'::jsonb,
@@ -264,6 +271,7 @@ grant execute on function app.complete_appointment_for_session(uuid) to app_role
 --     drop column if exists telemetry,
 --     drop column if exists post_rating,
 --     drop column if exists pre_rating,
+--     drop column if exists signal_check,
 --     drop column if exists preflight,
 --     drop column if exists checked_out_point,
 --     drop column if exists checked_out_at,

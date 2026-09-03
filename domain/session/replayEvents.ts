@@ -70,6 +70,7 @@ export function replayEvents(events: readonly SessionEvent[]): SessionProjection
         telemetry,
         observations: null,
         photo: null,
+        startedAt: null,
         endedAt: null,
         checkedOutAt: null,
         checkedOutPoint: null,
@@ -121,6 +122,11 @@ export function replayEvents(events: readonly SessionEvent[]): SessionProjection
       case 'telemetry_chunk': {
         const payload = parseEventPayload('telemetry_chunk', event.payload);
         if (!payload) break;
+        // A run whose end event has not arrived still began somewhere: the
+        // earliest chunk stands in until session_ended says exactly when.
+        if (projection.startedAt === null || event.deviceAt < projection.startedAt) {
+          projection = { ...projection, startedAt: event.deviceAt };
+        }
         telemetry.push({
           seconds: payload.seconds,
           artefactPercent: payload.artefactPercent,
@@ -138,8 +144,15 @@ export function replayEvents(events: readonly SessionEvent[]): SessionProjection
         break;
       }
       case 'session_ended': {
-        projection = { ...projection, phase: laterPhase(projection.phase, 'ended') };
-        projection = { ...projection, endedAt: event.deviceAt };
+        const payload = parseEventPayload('session_ended', event.payload);
+        if (!payload) break;
+        projection = {
+          ...projection,
+          phase: laterPhase(projection.phase, 'ended'),
+          // The run screen's own reading wins over the telemetry fallback.
+          startedAt: payload.startedAt,
+          endedAt: event.deviceAt,
+        };
         break;
       }
       case 'checked_out': {
