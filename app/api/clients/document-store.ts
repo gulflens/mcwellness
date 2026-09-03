@@ -8,8 +8,14 @@ import {
   DEFAULT_SIGNED_URL_TTL_SECONDS,
   clientDocumentKey,
   isoDateIn,
+  practiceDocumentKey,
   type Actor,
 } from '../../../domain/shared';
+// By its own path: the seam's retention arithmetic is not in the shared
+// barrel, and domain/shared is the trunk's to export from, not this stream's
+// (docs/SPEC/OWNERSHIP.md). Browser-safe either way — it is the same file
+// clientDocumentKey comes from.
+import { documentRetentionUntil } from '../../../domain/shared/storage';
 import type { ServerStorageProvider } from '../_middleware/storage';
 import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { Db } from '../_middleware/request-context';
@@ -150,6 +156,59 @@ export async function fileClientDocument(
       sha256: stored.sha256,
       sizeBytes: stored.size,
     },
+  };
+}
+
+/**
+ * Files one document the practice holds about nobody: `client_id` null, keyed
+ * `tenant/<t>/practice/<d>`. The erasure's confirmation letter is filed this
+ * way, and it has to be — the client it is about has just been erased, and a
+ * letter filed against an erased record would be a letter nobody may open
+ * (db/policies/client/readers.sql closes that door to everyone but the owner
+ * and the lead practitioner, and only with a reason). It belongs to the
+ * erasure request instead, which names it.
+ *
+ * The bytes are the platform's own rendering rather than an upload, so there
+ * is no signature check here and `mimeType` is the caller's to state: the four
+ * magic numbers `bytesMatchMimeType` knows are the four kinds of file a person
+ * may send us, and the letter is markdown, as the consent wording is. Bytes
+ * first and the row second, exactly as `fileClientDocument` does it and for
+ * the same reason.
+ *
+ * `retentionUntil` comes from `documentRetentionUntil` — five years from
+ * upload, the practice-document rule — because this letter follows no client's
+ * activity: there is no longer a client whose activity to follow.
+ */
+export async function filePracticeDocument(
+  db: Db,
+  storage: ServerStorageProvider,
+  actor: Actor,
+  input: { kind: string; bytes: Uint8Array; mimeType: string; isImmutable: boolean; now: Date },
+): Promise<FiledDocument> {
+  const documentId = randomUUID();
+  const storageKey = practiceDocumentKey(actor.tenantId, documentId);
+  const stored = await storage.put(storageKey, input.bytes, input.mimeType);
+  await db.query(
+    'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256, ' +
+      "uploaded_by, retention_until, is_immutable) values ($1, $2, null, $3, $4, $5, decode($6, 'hex'), " +
+      '$7, $8, $9)',
+    [
+      documentId,
+      actor.tenantId,
+      input.kind,
+      storageKey,
+      input.mimeType,
+      stored.sha256,
+      actor.userId,
+      documentRetentionUntil(input.kind, input.now),
+      input.isImmutable,
+    ],
+  );
+  return {
+    id: documentId,
+    storageKey,
+    sha256: stored.sha256,
+    sizeBytes: stored.size,
   };
 }
 
