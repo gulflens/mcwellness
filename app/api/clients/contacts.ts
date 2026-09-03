@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import type { ApiEnv } from '../_middleware/request-context';
+import { cleanText } from '../_middleware/text';
 import { canWriteClientRecord } from './access';
 import { rejectedFields } from './bad-request';
 import { captureEmiratesId, emiratesIdInUse } from './emirates-id-capture';
@@ -72,14 +73,22 @@ export function mountContacts(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
 
     await db.query(
-      'insert into contact (id, tenant_id, client_id, relationship, is_legal_guardian, ' +
+      'insert into contact (id, tenant_id, client_id, given_name, family_name, ' +
+        'given_name_ar, family_name_ar, relationship, is_legal_guardian, ' +
         'can_consent, can_receive_reports, can_pay, phone, email, whatsapp_opt_in, ' +
         'emirates_id_encrypted, emirates_id_hash) ' +
-        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)',
       [
         contactId,
         actor.tenantId,
         clientId,
+        // Optional, never required: a lead is one name and one phone
+        // (docs/SPEC/client-record.md section 3), and the name belongs to the
+        // contact, not to whether the record can be saved.
+        body.data.givenName ? cleanText(body.data.givenName, 100) : null,
+        body.data.familyName ? cleanText(body.data.familyName, 100) : null,
+        body.data.givenNameAr ? cleanText(body.data.givenNameAr, 100) : null,
+        body.data.familyNameAr ? cleanText(body.data.familyNameAr, 100) : null,
         body.data.relationship,
         body.data.isLegalGuardian,
         body.data.canConsent,
@@ -143,6 +152,14 @@ export function mountContacts(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       sets.push(`${column} = $${values.length}`);
     };
     const d = body.data;
+    if (d.givenName !== undefined)
+      push('given_name', d.givenName ? cleanText(d.givenName, 100) : null);
+    if (d.familyName !== undefined)
+      push('family_name', d.familyName ? cleanText(d.familyName, 100) : null);
+    if (d.givenNameAr !== undefined)
+      push('given_name_ar', d.givenNameAr ? cleanText(d.givenNameAr, 100) : null);
+    if (d.familyNameAr !== undefined)
+      push('family_name_ar', d.familyNameAr ? cleanText(d.familyNameAr, 100) : null);
     if (d.relationship !== undefined) push('relationship', d.relationship);
     if (d.isLegalGuardian !== undefined) push('is_legal_guardian', d.isLegalGuardian);
     if (d.canConsent !== undefined) push('can_consent', d.canConsent);

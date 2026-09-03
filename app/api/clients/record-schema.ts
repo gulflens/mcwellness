@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CLIENT_UPLOAD_KINDS, KNOWN_MIME_TYPES } from '../../../domain/client';
 import { isoDateIn } from '../../../domain/shared';
 
 /**
@@ -55,6 +56,13 @@ const DateOfBirth = z.iso
 
 export const Contact = z.object({
   id: z.uuid(),
+  // Nullable throughout: a contact known only by its relationship predates the
+  // name columns (db/migrations/101_contact_name.sql) and a lead is still one
+  // name and one phone (docs/SPEC/client-record.md section 3).
+  givenName: z.string().nullable(),
+  familyName: z.string().nullable(),
+  givenNameAr: z.string().nullable(),
+  familyNameAr: z.string().nullable(),
   relationship: z.enum(RELATIONSHIPS),
   isLegalGuardian: z.boolean(),
   canConsent: z.boolean(),
@@ -92,6 +100,13 @@ export const Consent = z.object({
   withdrawnAt: z.string().nullable(),
   expiresAt: z.string().nullable(),
   method: z.enum(CONSENT_METHODS),
+  /**
+   * The evidence of what was signed: the PNG the pad rendered, or the
+   * photographed paper form. Null for a `verbal_witnessed` re-confirmation,
+   * which files nothing, and for the consents the seed wrote before there was
+   * anywhere to keep a file.
+   */
+  signatureDocumentId: z.uuid().nullable(),
 });
 export type Consent = z.infer<typeof Consent>;
 
@@ -133,6 +148,10 @@ export const CreateClientBody = z.object({
   dateOfBirth: DateOfBirth.optional(),
   referralSource: z.string().max(200).optional(),
   contact: z.object({
+    givenName: Name.optional(),
+    familyName: Name.optional(),
+    givenNameAr: Name.optional(),
+    familyNameAr: Name.optional(),
     relationship: z.enum(RELATIONSHIPS),
     phone: Phone,
     email: z.email().optional(),
@@ -165,6 +184,10 @@ export const StatusChangeBody = z.object({ to: z.enum(CLIENT_RECORD_STATUSES) })
 export type StatusChangeBody = z.infer<typeof StatusChangeBody>;
 
 export const CreateContactBody = z.object({
+  givenName: Name.optional(),
+  familyName: Name.optional(),
+  givenNameAr: Name.optional(),
+  familyNameAr: Name.optional(),
   relationship: z.enum(RELATIONSHIPS),
   isLegalGuardian: z.boolean().default(false),
   canConsent: z.boolean().default(false),
@@ -179,6 +202,10 @@ export type CreateContactBody = z.infer<typeof CreateContactBody>;
 
 export const UpdateContactBody = z
   .object({
+    givenName: Name.nullable(),
+    familyName: Name.nullable(),
+    givenNameAr: Name.nullable(),
+    familyNameAr: Name.nullable(),
     relationship: z.enum(RELATIONSHIPS),
     isLegalGuardian: z.boolean(),
     canConsent: z.boolean(),
@@ -239,12 +266,152 @@ export const UpdateGoalBody = z
   .partial();
 export type UpdateGoalBody = z.infer<typeof UpdateGoalBody>;
 
+/**
+ * The bytes a document upload may carry, and why the number is what it is.
+ *
+ * Every body on this API is JSON (app/api/_middleware/security.ts's jsonOnly)
+ * and capped at `BODY_LIMIT_BYTES`, 64 KiB, in the shared zone
+ * (app/api/create-api.ts). Base64 costs four characters for every three
+ * bytes, so the file itself can be three quarters of whatever the envelope —
+ * the ids, the kind, the media type — leaves behind. `document-limits.test.ts`
+ * imports both constants and pins the arithmetic, so raising the body cap
+ * without raising this, or the reverse, fails rather than silently wastes the
+ * room.
+ *
+ * 45 KiB is enough for a signature drawn on screen several times over and
+ * tight for a photographed A4 form, which is why the console compresses an
+ * image before it sends one and says so.
+ * docs/CHANGE-REQUESTS/client-record-03.md asks for the larger cap this
+ * really wants.
+ */
+export const DOCUMENT_ENVELOPE_ALLOWANCE_BYTES = 4 * 1024;
+export const MAX_DOCUMENT_BYTES = 45 * 1024;
+/** The longest `bytesBase64` may be, padding included. */
+export const MAX_DOCUMENT_BASE64_LENGTH = Math.ceil(MAX_DOCUMENT_BYTES / 3) * 4;
+
+// Standard base64, padded, no line breaks: what btoa and Buffer.toString('base64')
+// produce. The URL-safe alphabet is deliberately not accepted — one encoding in,
+// so a caller cannot smuggle bytes past a length check by choosing the other.
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/** Bytes on their way in: what they are, and the file itself. */
+export const DocumentBytes = z.object({
+  mimeType: z.enum(KNOWN_MIME_TYPES),
+  bytesBase64: z
+    .string()
+    .min(1)
+    .max(MAX_DOCUMENT_BASE64_LENGTH, 'That file is too large to file here.')
+    .regex(BASE64, 'That file did not arrive intact.'),
+});
+export type DocumentBytes = z.infer<typeof DocumentBytes>;
+
+export const CONSENT_TEXT_STATUSES = ['draft', 'approved'] as const;
+
+/**
+ * A link the storage seam signed. Two shapes, both legitimate: the bucket
+ * hands back its own absolute `https:` URL, and the folder implementation
+ * hands back an app-relative path at this API's own `/api/storage` route,
+ * which is what a laptop and every test see (docs/SEAMS.md). Anything else —
+ * `javascript:`, `data:`, a bare host — is refused rather than rendered.
+ *
+ * A key is made of ids and nothing else, so a signed link never carries a
+ * name, a record number or what a document says (.claude/rules/ui.md, no
+ * personal data in a URL).
+ */
+const SignedUrl = z
+  .string()
+  .min(1)
+  .refine((value) => value.startsWith('https://') || value.startsWith('/api/'), {
+    message: "A signed link is the store's own URL or this API's own path.",
+  });
+
+/**
+ * The wording a person is about to sign (docs/SPEC/client-record.md section
+ * 7). The text itself is fetched from `textUrl`, a short-lived signed link
+ * through the storage seam, never inlined here and never in an audit payload.
+ */
+export const ConsentWordingResponse = z.object({
+  id: z.uuid(),
+  purpose: z.enum(CONSENT_PURPOSES),
+  locale: z.enum(['en', 'ar']),
+  version: z.string(),
+  status: z.enum(CONSENT_TEXT_STATUSES),
+  mimeType: z.string(),
+  textUrl: SignedUrl,
+  /** Seconds the link is good for, so the screen can say when it went stale. */
+  expiresInSeconds: z.number().int().positive(),
+});
+export type ConsentWordingResponse = z.infer<typeof ConsentWordingResponse>;
+
+export const ClientDocument = z.object({
+  id: z.uuid(),
+  kind: z.string(),
+  mimeType: z.string(),
+  uploadedAt: z.string(),
+  uploadedByName: z.string().nullable(),
+  retentionUntil: z.string().nullable(),
+  isImmutable: z.boolean(),
+});
+export type ClientDocument = z.infer<typeof ClientDocument>;
+
+export const ClientDocumentListResponse = z.object({ documents: z.array(ClientDocument) });
+export type ClientDocumentListResponse = z.infer<typeof ClientDocumentListResponse>;
+
+export const DocumentLinkResponse = z.object({
+  url: SignedUrl,
+  expiresInSeconds: z.number().int().positive(),
+});
+export type DocumentLinkResponse = z.infer<typeof DocumentLinkResponse>;
+
+export const UploadDocumentBody = z.object({
+  kind: z.enum(CLIENT_UPLOAD_KINDS),
+  file: DocumentBytes,
+});
+export type UploadDocumentBody = z.infer<typeof UploadDocumentBody>;
+
+/** The ways a document upload is refused, each with its own sentence on screen. */
+export const DOCUMENT_ERROR_CODES = [
+  'identity_document',
+  'system_written',
+  'unknown_kind',
+  'bytes_do_not_match_type',
+  'document_too_large',
+  'storage_unavailable',
+] as const;
+export type DocumentErrorCode = (typeof DOCUMENT_ERROR_CODES)[number];
+
+/** The ways recording a consent is refused beyond a plain bad request. */
+export const CONSENT_ERROR_CODES = [
+  'wording_not_found',
+  'wording_retired',
+  'wording_superseded',
+  'wording_wrong_purpose',
+  'wording_wrong_locale',
+  'contact_may_not_consent',
+  'guardian_required',
+  'evidence_required',
+  'evidence_not_accepted',
+  'bytes_do_not_match_type',
+  'storage_unavailable',
+] as const;
+export type ConsentErrorCode = (typeof CONSENT_ERROR_CODES)[number];
+
 export const RecordConsentBody = z.object({
   purpose: z.enum(CONSENT_PURPOSES),
   givenByContactId: z.uuid(),
   textDocumentId: z.uuid(),
   method: z.enum(CONSENT_METHODS),
   expiresAt: z.iso.datetime({ offset: true }).optional(),
+  /**
+   * What was signed: the PNG the pad rendered for `app_signature`, the
+   * photographed or scanned form for `paper_scan`. Optional in the shape and
+   * required by the route for both of those methods
+   * (docs/CHANGE-REQUESTS/client-record-02.md, "What the fourth pull request
+   * must add"): a consent recorded with nothing attached would attest to
+   * evidence that does not exist. `verbal_witnessed` carries none, and is
+   * refused if it tries.
+   */
+  evidence: DocumentBytes.optional(),
 });
 export type RecordConsentBody = z.infer<typeof RecordConsentBody>;
 

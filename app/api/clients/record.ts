@@ -58,6 +58,10 @@ type ClientRow = {
 
 type ContactRow = {
   id: string;
+  given_name: string | null;
+  family_name: string | null;
+  given_name_ar: string | null;
+  family_name_ar: string | null;
   relationship: Contact['relationship'];
   is_legal_guardian: boolean;
   can_consent: boolean;
@@ -92,6 +96,7 @@ type ConsentRow = {
   withdrawn_at: Date | null;
   expires_at: Date | null;
   method: Consent['method'];
+  signature_document_id: string | null;
 };
 
 type GoalRow = {
@@ -114,7 +119,8 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
   if (!row) return null;
 
   const contacts = await db.query<ContactRow>(
-    'select id, relationship, is_legal_guardian, can_consent, can_receive_reports, can_pay, ' +
+    'select id, given_name, family_name, given_name_ar, family_name_ar, relationship, ' +
+      'is_legal_guardian, can_consent, can_receive_reports, can_pay, ' +
       'phone, email, whatsapp_opt_in, (emirates_id_hash is not null) as has_emirates_id ' +
       'from contact where client_id = $1 order by created_at',
     [clientId],
@@ -130,8 +136,8 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
     [clientId, 'client'],
   );
   const consents = await db.query<ConsentRow>(
-    'select id, purpose, status, given_by_contact_id, given_at, withdrawn_at, expires_at, method ' +
-      'from consent where client_id = $1 order by created_at desc',
+    'select id, purpose, status, given_by_contact_id, given_at, withdrawn_at, expires_at, ' +
+      'method, signature_document_id from consent where client_id = $1 order by created_at desc',
     [clientId],
   );
   const goals = await db.query<GoalRow>(
@@ -155,6 +161,10 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
     status: row.status,
     contacts: contacts.rows.map((c) => ({
       id: c.id,
+      givenName: c.given_name,
+      familyName: c.family_name,
+      givenNameAr: c.given_name_ar,
+      familyNameAr: c.family_name_ar,
       relationship: c.relationship,
       isLegalGuardian: c.is_legal_guardian,
       canConsent: c.can_consent,
@@ -187,6 +197,7 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
       withdrawnAt: c.withdrawn_at ? c.withdrawn_at.toISOString() : null,
       expiresAt: c.expires_at ? c.expires_at.toISOString() : null,
       method: c.method,
+      signatureDocumentId: c.signature_document_id,
     })),
     goals: goals.rows.map((g) => ({
       id: g.id,
@@ -364,13 +375,19 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
       ],
     );
     await db.query(
-      'insert into contact (id, tenant_id, client_id, relationship, is_legal_guardian, ' +
+      'insert into contact (id, tenant_id, client_id, given_name, family_name, ' +
+        'given_name_ar, family_name_ar, relationship, is_legal_guardian, ' +
         'can_consent, can_receive_reports, can_pay, phone, email, emirates_id_encrypted, ' +
-        'emirates_id_hash) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+        'emirates_id_hash) ' +
+        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)',
       [
         contactId,
         tenantId,
         clientId,
+        body.data.contact.givenName ? cleanText(body.data.contact.givenName, 100) : null,
+        body.data.contact.familyName ? cleanText(body.data.contact.familyName, 100) : null,
+        body.data.contact.givenNameAr ? cleanText(body.data.contact.givenNameAr, 100) : null,
+        body.data.contact.familyNameAr ? cleanText(body.data.contact.familyNameAr, 100) : null,
         body.data.contact.relationship,
         body.data.contact.isLegalGuardian,
         body.data.contact.canConsent,

@@ -81,11 +81,26 @@ create policy client_record_readers on public.consent as restrictive for select 
 -- case location.sql already has for a tenant- or practitioner-owned location:
 -- visible to the same four staff roles who work from it, never finance, never
 -- a client contact reading someone else's practice, whether erased or not.
+--
+-- One arm was added on 2026-09-03 (docs/CHANGE-REQUESTS/trunk-notes.md round
+-- 14, item 6, addressed to this stream): a client contact may read the consent
+-- wording their own client's consent points at. A person is entitled to a copy
+-- of what they agreed to, and until this the one reader with the strongest
+-- claim was the only one shut out — the wording is a practice document, and
+-- the branch above gives practice documents to staff alone. It is deliberately
+-- narrow: kind 'consent_text' only, and only a version a `consent` of their own
+-- client actually names, so it opens the wording somebody signed and never the
+-- practice's filing cabinet. The subquery reads `consent` under that table's
+-- own policies, which is what keeps it honest and is safe from SQLSTATE 42P17:
+-- consent's read policy calls two security-definer helpers and never queries
+-- `document` back.
 drop policy if exists client_record_readers on public.document;
 create policy client_record_readers on public.document as restrictive for select to app_role using (
   case when client_id is null then
     app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
     or app.actor_has_role('practitioner')
+    or (app.actor_has_role('client_contact') and kind = 'consent_text'
+        and exists (select 1 from public.consent cs where cs.text_document_id = document.id))
   else
     app.client_erasure_gate(app.client_status_for(client_id)) and (
       app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
