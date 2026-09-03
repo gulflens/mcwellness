@@ -186,6 +186,9 @@ export async function applySeed(
         duration_minutes: s.durationMinutes,
         requires_certification: s.requiresCertification,
         delivery_modes: s.deliveryModes,
+        // jsonb columns (migration 901): the text of the array, which Postgres casts.
+        preflight_checklist: JSON.stringify(s.preflightChecklist),
+        rating_questions: JSON.stringify(s.ratingQuestions),
         created_by: owner,
       });
     }
@@ -249,6 +252,10 @@ export async function applySeed(
           tenant_id: t.id,
           client_id: null,
           kind: d.kind,
+          purpose: d.purpose,
+          locale: d.locale,
+          version: d.version,
+          status: d.status,
           storage_key: d.storageKey,
           mime_type: d.mimeType,
           sha256: d.sha256Hex,

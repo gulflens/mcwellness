@@ -94,6 +94,9 @@ export async function renderSeedSql(
     `-- The synthetic practice, rendered ${new Date().toISOString()} for a ${options.target} database ` +
     `(APP_ENV=${process.env.APP_ENV ?? 'unset'}). Apply it whole: it opens and commits its own transaction, ` +
     'refuses a database that already holds a practice, and stops if applied statement by statement. ' +
-    'Sealed values open only under the identity key of the environment it was rendered with.';
+    'Sealed values open only under the identity key of the environment it was rendered with.\n' +
+    '-- The consent wording rows carry a storage key and a sha256: the bytes themselves travel ' +
+    'separately, and the files in docs/CONSENT must be uploaded to the documents bucket at exactly ' +
+    'those keys, or a wording row will point at nothing (docs/STAGING.md).';
   return `${header}\n${statements.join('\n')}\n`;
 }

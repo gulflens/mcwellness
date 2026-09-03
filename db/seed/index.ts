@@ -1,4 +1,5 @@
 import { identityKeysFromEnv } from '../../app/api/_middleware/identity-key';
+import { localDiskStorage } from '../../app/api/_middleware/storage';
 import {
   applyPolicies,
   connect,
@@ -44,7 +45,23 @@ try {
           'Locally, pnpm seed --fresh rebuilds it.',
       );
     } else {
-      console.log(describeSeed(await applySeed(client, generateSeed(), keys)));
+      const data = generateSeed();
+      // The consent wording's bytes go in first, so no document row ever points
+      // at a key with nothing behind it. Deliberately the local implementation
+      // of the storage seam and not whatever STORAGE_PROVIDER says: seeding
+      // fills a laptop, and a hosted bucket is filled by the operator's own
+      // upload (docs/STAGING.md).
+      const storage = localDiskStorage();
+      for (const document of data.documents) {
+        const stored = await storage.put(document.storageKey, document.bytes, document.mimeType);
+        if (stored.sha256 !== document.sha256Hex) {
+          throw new Error(`${document.file} changed while it was being filed; nothing was seeded.`);
+        }
+      }
+      console.log(
+        `Filed ${data.documents.length} consent wording files in the ${storage.describe()}.`,
+      );
+      console.log(describeSeed(await applySeed(client, data, keys)));
     }
   } finally {
     await client.end();
