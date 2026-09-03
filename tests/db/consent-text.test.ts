@@ -160,6 +160,33 @@ describe('the seeded consent wording', () => {
       ).rejects.toThrow('document_consent_text_all_or_none');
     });
   });
+
+  it('refuses a wording that names none of the four (migration 907)', async () => {
+    // The completeness check migration 902 deferred while two scheduling
+    // fixtures still filed a bare consent_text row. Both now file a referral
+    // (docs/CHANGE-REQUESTS/scheduling-04.md section 10), so a wording that
+    // says nothing about which consent it is for, in what language, at what
+    // version and whether the lawyer has seen it, is refused outright.
+    await rolledBack(owner, async () => {
+      await expect(
+        owner.query(
+          'insert into document (tenant_id, kind, storage_key, mime_type, sha256) ' +
+            "values ($1, 'consent_text', 'k3', 'text/markdown', $2)",
+          [data.tenant.id, Buffer.alloc(32, 3)],
+        ),
+      ).rejects.toThrow('document_consent_text_is_complete');
+    });
+  });
+
+  it('still accepts every other kind with none of the four', async () => {
+    await rolledBack(owner, async () => {
+      await owner.query(
+        'insert into document (tenant_id, kind, storage_key, mime_type, sha256) ' +
+          "values ($1, 'referral', 'k4', 'application/pdf', $2)",
+        [data.tenant.id, Buffer.alloc(32, 4)],
+      );
+    });
+  });
 });
 
 describe('the session settings on a service', () => {
