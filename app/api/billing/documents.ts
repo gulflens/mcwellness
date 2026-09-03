@@ -12,10 +12,10 @@ import {
   documentRetentionUntil,
   DEFAULT_SIGNED_URL_TTL_SECONDS,
 } from '../../../domain/shared/storage';
+import { logAction } from '../_middleware/audit';
 import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayReadInvoices } from './access';
-import { logSensitiveAction } from './audit';
 import {
   CreateDocumentInput,
   CreateDocumentResponse,
@@ -320,7 +320,7 @@ const CONTACT_SQL =
  * family's contact details.
  *
  * **Recorded as the sensitive act it is**, with the contact's id and the
- * channel, and never the telephone number or the address (`./audit.ts`).
+ * channel, and never the telephone number or the address (`app/api/_middleware/audit.ts`).
  *
  * **The contact must belong to this document's own client.** Checked against
  * the row rather than trusted from the body: a contact id from another
@@ -409,7 +409,7 @@ export function mountDocumentSending(
       outcome = sent.delivered ? sent : { delivered: false, channel: 'email', handoffUrl: url };
     }
 
-    await logSensitiveAction(
+    await logAction(
       db,
       'send',
       { type: 'document', id: documentId, clientId: row.client_id },

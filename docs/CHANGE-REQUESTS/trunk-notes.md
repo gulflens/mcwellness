@@ -295,6 +295,10 @@ is on a branch.
 ### 1. After the merges of 51, 52 and 54
 
 Pull request 51 is `client-record-5`, 52 is `scheduling-3`, 54 is `billing-3`.
+51 and 54 were merged on 2026-09-04, and this round took `logSensitiveAction`
+(`app/api/billing/audit.ts`, billing-04 request 4's interim copy) out with the
+merge, re-pointing `app/api/billing/documents.ts` at the shared `logAction`.
+Everything in the table is now round 24's, the moment 52 is on `main`.
 
 | What | Asked in | Waits on | Why it cannot be done first |
 |---|---|---|---|
