@@ -55,6 +55,27 @@ the decision being asked for.
 
 ---
 
+## A decision taken here, not asked for: the Emirates ID never enters a URL
+
+The task brief asked for the list's `?q=` to match an Emirates ID and look
+the client up by its keyed hash. It is looked up by its keyed hash, and it is
+not `?q=`. `.claude/rules/ui.md` and the security review's fourth check both
+say no personal data in a URL path or query string, and an identity number is
+the most sensitive identifier the practice holds: a query string is written
+into every reverse proxy's access log on the way, and the app's own deployment
+notes assume a proxy in front of it.
+
+So a term shaped like an Emirates ID goes instead to
+`POST /api/clients/lookup` with the number in the request body — same role
+gate, same audit row per client seen, same response shape as the list. `?q=`
+is unchanged and still searches names and record numbers; an identity number
+typed into it is ordinary text that matches nothing, which the database test
+pins. Nothing in the shared zone changed for this, and nothing is being asked
+of the trunk: it is recorded because it is a deliberate departure from the
+brief that a reviewer should see stated rather than discover.
+
+---
+
 ## What the fourth pull request must add to record consent
 
 The task brief asked this pull request to record `participation` consent (and

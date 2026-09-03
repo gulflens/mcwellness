@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '../../../app/api/_middleware/db';
 import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
 import { createApi } from '../../../app/api/create-api';
-import { mountClientRecord } from '../../../app/api/clients/mount';
 import type { ClientListResponse } from '../../../app/api/clients/schema';
 import type {
   ClientRecordResponse,
@@ -58,6 +57,14 @@ async function request(
   return target.request(path, { ...init, headers });
 }
 
+/** The lookup route: the identity number travels in the body, never in the URL. */
+async function lookup(target: typeof api, sub: string, emiratesId: string): Promise<Response> {
+  return request(target, sub, '/api/clients/lookup', {
+    method: 'POST',
+    body: JSON.stringify({ emiratesId }),
+  });
+}
+
 /** 784-1900-NNNNNNN-C, the reserved synthetic range, with a real Luhn check digit. */
 function emiratesId(seq: number): string {
   const digits = `7841900${String(seq).padStart(7, '0')}`;
@@ -87,10 +94,9 @@ beforeAll(async () => {
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
   const verifier = createTokenVerifier({ issuer: ISSUER, secret: SECRET });
+  // createApi mounts the list, the lookup and the record routes itself (PR 31).
   api = createApi({ pool, verifier, identityKeys: deriveIdentityKeys(Buffer.alloc(32, 9)) });
-  mountClientRecord(api);
   apiWithoutKeys = createApi({ pool, verifier });
-  mountClientRecord(apiWithoutKeys);
 });
 
 afterAll(async () => {
@@ -130,21 +136,24 @@ describe('capturing an Emirates ID on create', () => {
     expect(detail.contacts[0]?.hasEmiratesId).toBe(true);
     expect(JSON.stringify(detail)).not.toContain(digits);
 
-    const found = (await (
-      await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(identity)}`)
-    ).json()) as ClientListResponse;
+    const found = (await (await lookup(api, AUTH.ownerA, identity)).json()) as ClientListResponse;
     expect(found.clients.map((c) => c.id)).toEqual([created.id]);
 
-    // Without the hyphens, and without the hyphens but with a different last group, both behave.
-    const foundBare = (await (
-      await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(digits)}`)
-    ).json()) as ClientListResponse;
+    // Hyphens or none, the same fingerprint.
+    const foundBare = (await (await lookup(api, AUTH.ownerA, digits)).json()) as ClientListResponse;
     expect(foundBare.clients.map((c) => c.id)).toEqual([created.id]);
 
     const noMatch = (await (
-      await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(emiratesId(2))}`)
+      await lookup(api, AUTH.ownerA, emiratesId(2))
     ).json()) as ClientListResponse;
     expect(noMatch.clients).toHaveLength(0);
+
+    // The same digits in the ordinary search are text, and match no name or record
+    // number: an identity number never travels in a query string (.claude/rules/ui.md).
+    const asText = (await (
+      await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(digits)}`)
+    ).json()) as ClientListResponse;
+    expect(asText.clients).toHaveLength(0);
   });
 
   it('refuses a checksum that fails, and a duplicate on a second contact', async () => {
@@ -182,6 +191,14 @@ describe('capturing an Emirates ID on create', () => {
     });
     expect(second.status).toBe(409);
     expect(((await second.json()) as { code?: string }).code).toBe('emirates_id_in_use');
+  });
+
+  it('says so, rather than answering an empty list, when the identity keys are missing', async () => {
+    const res = await request(apiWithoutKeys, AUTH.ownerA, '/api/clients/lookup', {
+      method: 'POST',
+      body: JSON.stringify({ emiratesId: emiratesId(7) }),
+    });
+    expect(res.status).toBe(503);
   });
 
   it('refuses cleanly, not a crash, when the identity keys are not configured', async () => {
@@ -249,11 +266,11 @@ describe('capturing an Emirates ID on a contact add or edit', () => {
     );
     // The old identity number no longer finds this client; the new one does.
     const staleSearch = (await (
-      await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(firstId)}`)
+      await lookup(api, AUTH.ownerA, firstId)
     ).json()) as ClientListResponse;
     expect(staleSearch.clients).toHaveLength(0);
     const freshSearch = (await (
-      await request(api, AUTH.ownerA, `/api/clients?q=${encodeURIComponent(secondId)}`)
+      await lookup(api, AUTH.ownerA, secondId)
     ).json()) as ClientListResponse;
     expect(freshSearch.clients.map((c) => c.id)).toEqual([created.id]);
     expect(afterEdit[0]?.emirates_id_hash).not.toBeNull();

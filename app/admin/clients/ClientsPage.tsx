@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { normaliseEmiratesId } from '@domain/shared';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
@@ -38,6 +39,45 @@ type State =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; response: ClientListResponse };
 
+const LOAD_ERROR = 'The client list could not be loaded. Try again.';
+const IDENTITY_UNAVAILABLE =
+  'Searching by Emirates ID is not set up on this installation yet. Search by name or record number.';
+
+/**
+ * An Emirates ID is never put in the address: it goes to POST
+ * /api/clients/lookup in a request body, where no proxy's access log can
+ * pick it up (.claude/rules/ui.md; app/api/clients/list.ts says the same
+ * from the other side). Anything else is the ordinary `?q=` search over
+ * names and record numbers.
+ */
+function emiratesIdShapeOf(term: string): string | null {
+  if (!term) return null;
+  try {
+    return normaliseEmiratesId(term);
+  } catch {
+    return null;
+  }
+}
+
+function searchRequest(status: string, query: string): { url: string; init?: RequestInit } {
+  const term = query.trim();
+  const digits = emiratesIdShapeOf(term);
+  if (digits !== null) {
+    return {
+      url: '/api/clients/lookup',
+      init: {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ emiratesId: digits }),
+      },
+    };
+  }
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (term) params.set('q', term);
+  return { url: `/api/clients${params.size > 0 ? `?${params.toString()}` : ''}` };
+}
+
 export function ClientsPage() {
   const { apiFetch } = useAuth();
   const [status, setStatus] = useState<string>('');
@@ -69,23 +109,22 @@ export function ClientsPage() {
 
   useEffect(() => {
     let live = true;
-    const params = new URLSearchParams();
-    if (status) params.set('status', status);
-    if (query.trim()) params.set('q', query.trim());
-    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const request = searchRequest(status, query);
     const timer = setTimeout(() => {
-      void apiFetch(`/api/clients${suffix}`)
+      void apiFetch(request.url, request.init)
         .then(async (res) => {
           if (!live) return;
           if (!res.ok) {
-            setState({ kind: 'error', message: 'The client list could not be loaded. Try again.' });
+            setState({
+              kind: 'error',
+              message: res.status === 503 ? IDENTITY_UNAVAILABLE : LOAD_ERROR,
+            });
             return;
           }
           setState({ kind: 'ready', response: ClientListResponse.parse(await res.json()) });
         })
         .catch(() => {
-          if (live)
-            setState({ kind: 'error', message: 'The client list could not be loaded. Try again.' });
+          if (live) setState({ kind: 'error', message: LOAD_ERROR });
         });
     }, 150);
     return () => {

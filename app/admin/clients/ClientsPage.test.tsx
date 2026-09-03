@@ -38,11 +38,16 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function mount(matches: (typeof row)[] = []) {
-  const urls: string[] = [];
-  const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+function mount(matches: (typeof row)[] = [], lookupStatus = 200) {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    urls.push(url);
+    calls.push({ url, init });
+    if (url === '/api/clients/lookup') {
+      return lookupStatus === 200
+        ? json({ clients: matches, note: null })
+        : json({ error: 'emirates_id_unavailable' }, lookupStatus);
+    }
     if (url.startsWith('/api/clients')) {
       const q = new URL(url, 'http://localhost').searchParams.get('q');
       return json({ clients: q ? matches : [], note: null });
@@ -54,25 +59,50 @@ function mount(matches: (typeof row)[] = []) {
       <ClientsPage />
     </AuthProviderBoundary>,
   );
-  return urls;
+  return calls;
 }
 
 describe('ClientsPage search', () => {
-  it('sends an Emirates ID as the search term, unchanged, and shows what it finds', async () => {
-    const urls = mount([row]);
+  it('looks an Emirates ID up through the body, never through the address', async () => {
+    const calls = mount([row]);
     await screen.findByRole('table');
 
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: EMIRATES_ID } });
 
-    await waitFor(() =>
-      expect(urls.some((u) => u === `/api/clients?q=${encodeURIComponent(EMIRATES_ID)}`)).toBe(
-        true,
-      ),
-    );
-    // The hashing is the server's (app/api/clients/list.ts, proved in
-    // tests/client/db/identity.test.ts): the browser sends the digits it was given and
-    // never reformats, splits or truncates them on the way.
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/clients/lookup')).toBe(true));
+    const lookup = calls.find((c) => c.url === '/api/clients/lookup');
+    expect(lookup?.init?.method).toBe('POST');
+    // Normalised to its fifteen digits, and nowhere near a query string
+    // (.claude/rules/ui.md: no personal data in a URL). The hashing is the server's,
+    // proved in tests/client/db/identity.test.ts.
+    expect(JSON.parse(String(lookup?.init?.body))).toEqual({
+      emiratesId: EMIRATES_ID.replace(/-/g, ''),
+    });
+    expect(calls.every((c) => !c.url.includes('784'))).toBe(true);
     expect(await screen.findByRole('button', { name: 'Juniper Quarry' })).toBeTruthy();
+  });
+
+  it('searches names and record numbers through the ordinary query', async () => {
+    const calls = mount([row]);
+    await screen.findByRole('table');
+
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Juniper' } });
+
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/clients?q=Juniper')).toBe(true));
+    expect(calls.every((c) => c.url !== '/api/clients/lookup')).toBe(true);
+  });
+
+  it('says an installation without identity keys cannot search by Emirates ID', async () => {
+    mount([], 503);
+    await screen.findByRole('table');
+
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: EMIRATES_ID } });
+
+    expect(
+      await screen.findByText(
+        'Searching by Emirates ID is not set up on this installation yet. Search by name or record number.',
+      ),
+    ).toBeTruthy();
   });
 
   it('offers the enrolment wizard from the page header, and closes it again', async () => {
