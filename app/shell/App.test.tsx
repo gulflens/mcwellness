@@ -124,6 +124,17 @@ describe('App — /admin/billing and /admin/schedule', () => {
     expect(await screen.findByRole('heading', { name: 'Schedule' })).toBeTruthy();
   });
 
+  it('lets an admin reach the week, behind the same rule as the day', async () => {
+    mount(ADMIN, '/admin/schedule/week');
+    expect(await screen.findByRole('heading', { name: 'Week' })).toBeTruthy();
+  });
+
+  it('sends a practitioner home instead of the week', async () => {
+    mount(PRACTITIONER, '/admin/schedule/week');
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Week' })).toBeNull();
+  });
+
   it("shows the rail's Billing and Schedule links for an admin", async () => {
     mount(ADMIN, '/admin/clients');
     expect(await screen.findByRole('link', { name: 'Billing' })).toHaveProperty(
