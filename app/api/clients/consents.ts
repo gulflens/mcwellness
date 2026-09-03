@@ -222,6 +222,17 @@ function checkEvidence(
   if (method === 'app_signature') {
     // The pad renders a PNG at a fixed size and nothing else does; a JPEG here
     // means the bytes did not come from the pad.
+    //
+    // **Any PNG is accepted, and that is deliberate.** "A typed name is not a
+    // signature" is a rule of the screen — app/admin/clients/SignaturePad.tsx
+    // keeps the button disabled until an actual stroke exists and offers the
+    // paper form to anyone who cannot draw one — and it stays there, because
+    // the screen is the only place a person draws. This route cannot tell a
+    // drawn stroke from a rendered name and should not pretend to: what it
+    // holds is the image, which is the evidence, and a rule invented here out
+    // of pixel statistics would refuse a real signature sooner or later. It is
+    // written down in docs/CHANGE-REQUESTS/client-record-03.md rather than
+    // left to be discovered.
     if (evidence.mimeType !== 'image/png') return { ok: false, code: 'evidence_not_accepted' };
     return { ok: true, file: evidence, kind: CONSENT_SIGNATURE_KIND };
   }

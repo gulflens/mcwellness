@@ -171,25 +171,93 @@ for.
 
 ---
 
-## CR-11: `consent.version` no longer means anything
+## CR-11: withdrawn — `consent.version` does mean something
 
-**What.** Either drop `consent.version`, or say what it counts.
+**Struck on 2026-09-03, in the fourth pull request's fix round.** This asked
+the trunk to drop `consent.version` or say what it counts, on the reading that
+a wording's version is a string on `document` and the integer could therefore
+hold nothing. That reading was wrong: the data model already defines the
+column, and asking the trunk to remove a column this stream had simply not
+found a use for is not a change request. Nothing was done to it and nothing
+should be. Left here rather than deleted because a request that was answered
+by reading the specification more carefully is worth showing once.
 
-**Why.** The column is `integer not null check (version >= 1)` and its comment
-reads "of the consent wording" (`db/migrations/060_client.sql`). But a
-wording's version is a string from the file's own front matter — `0.1-draft`
-today — and migration 902 put it on `document.version` where it belongs, with
-`consent.text_document_id` naming the exact row. So the integer cannot hold the
-thing it claims to hold, and every route writes `1`.
+---
 
-That is not a bug this pull request introduced and it is not one it should fix
-on its own initiative: an always-1 column is harmless, and inventing a meaning
-for it — the client's own nth consent for this purpose, say — would put a
-second, disagreeing answer next to `text_document_id`.
+## CR-12: a route cannot do anything after its transaction commits
 
-**Preferred:** drop it, and let `text_document_id` be the answer. If it is
-wanted for an export or a document template, say what it counts and this stream
-will write it.
+**What.** A way for a route to hand `app/api/_middleware/request-context.ts` a
+piece of work to run **after** the commit — a list of callbacks on the context,
+run once `commit` has returned, before the response goes back.
+
+**Why.** Deleting bytes cannot be rolled back and a transaction can be.
+Withdrawing `photo_video` consent removes the household's setup photographs
+(`app/api/clients/withdrawal.ts`), and until this fix round it did so in the
+middle of the request's own transaction: any failure afterwards rolled the
+withdrawal back, and the consent came back to life with the photographs
+already gone. That has been narrowed as far as this worktree can narrow it —
+every database statement finishes first, the removal is the handler's last act,
+and it never throws — but the commit itself belongs to the shared middleware,
+so a connection that dies between the last statement and `commit` still leaves
+the same mismatch.
+
+The erasure deletion job (CR-09's second case) will want the same hook for the
+same reason, and so will anything else that touches a store.
+
+**Shape.** `c.get('afterCommit')(fn)`, or a `c.set('afterCommit', [...])` the
+middleware drains — the trunk's call. What matters is that it runs after the
+commit and that a throw inside it cannot turn a committed request into a
+rollback, because there is nothing left to roll back.
+
+**Nothing in this pull request waits on it.** The ordering above is honest and
+tested; the hook makes the last few milliseconds honest too.
+
+---
+
+## CR-13: a retention job must ask what still references a file
+
+**Who.** Whoever writes retention and the erasure deletion job (the fifth pull
+request, and later).
+
+**What.** Do not delete a document on `retention_until` alone.
+
+**Why.** Two kinds of document now carry `retention_until` null, meaning "not
+on an upload clock" and never "nobody computed it":
+
+1. **Consent wording** (`consent_text`), which migration 903 already records:
+   it is kept until no `consent` references it and the last referencing
+   client's own retention has expired.
+2. **Consent evidence** — the signature image and the photographed paper form
+   — which this fix round moved onto the same rule. It used to be filed with
+   five years on it *and* immutable, and migration 903 freezes an immutable row
+   the moment it exists, `retention_until` included. So the date could never be
+   moved on, and a consent still live in year six would have been evidenced by
+   a file already marked for deletion in year five: the record deleting the
+   proof of the agreement it is still acting on.
+
+Both are in `domain/client/documentKinds.ts` (`CONSENT_EVIDENCE_KINDS`) and in
+`app/api/clients/document-store.ts`, which is the one place either is written.
+
+---
+
+## CR-14: the seed writes no contact names
+
+**Who.** Whoever owns `db/seed` (not this worktree).
+
+**What.** Give the seeded contacts a given name and a family name, from
+`db/seed/names.ts` like every other synthetic person.
+
+**Why.** Migration 101 gave `contact` its four name columns and every screen
+that lists a contact now shows one — the Contacts tab, the Overview's key
+contacts, the consent giver, "Given by" on a recorded consent. The seed
+predates the column, so on a seeded database every one of those reads
+"Unnamed contact, mother", which makes a screen built to identify a person
+look broken. Nothing in the application is wrong; the fixtures are simply
+older than the field.
+
+The consent screens do not fall over without it — a contact known only by its
+relationship is a real case (101: "a contact known only by relationship
+predates this column") — so this is a fixture fix, not a defect.
 
 ---
 
@@ -219,6 +287,26 @@ What that leaves open is narrow: a practitioner editing `kind` or
 route will. If the trunk wants it closed anyway, the fix belongs in 903's
 trigger — where the message can still be said — rather than in a policy.
 
+### A typed name is not a signature, and the route does not try to prove it
+
+`POST /api/clients/:id/consents` accepts **any** PNG as `app_signature`
+evidence. It checks the media type and that the bytes are what they claim to
+be, and it does not — cannot — ask whether somebody drew them.
+
+The rule itself is real and it is enforced, on the screen:
+`app/admin/clients/SignaturePad.tsx` keeps the button disabled until an actual
+stroke exists, says under the pad that a typed name on its own is not a
+signature, and points at the paper form for anyone who cannot draw one. That
+is where the rule belongs, because the screen is the only place in this system
+where a person draws anything.
+
+Putting it in the route as well would mean inventing a test — ink coverage,
+stroke count, some statistic over pixels — that no specification asks for and
+that would eventually refuse a real signature from somebody with an unsteady
+hand or a small screen. What the route holds is the image, and the image is
+the evidence. Stated here rather than left as a gap a later reviewer finds and
+files.
+
 ### Recording a consent supersedes the one it replaces
 
 `POST /api/clients/:id/consents` marks the active consent for that purpose
@@ -244,6 +332,16 @@ housekeeping for the next signature to tidy away.
 - **Rendering a PDF inline.** A filed PDF opens in a new tab through its signed
   link. An inline viewer is a dependency and a decision about what the console
   shows without asking, and neither is this pull request's to take.
+- **Saying that a photograph is part of an issued report.** Withdrawing
+  `photo_video` removes the setup photographs, and the Documents tab now says
+  a photograph was removed rather than offering a link that cannot open. What
+  it does not say is whether that photograph had already gone out in a report,
+  which is the thing a household would most want to know and the practice
+  would most need to answer. Reports are not this worktree's
+  (docs/SPEC/OWNERSHIP.md) and nothing here can see what one contains, so it is
+  named as unbuilt rather than approximated. When reports exist, "this
+  photograph appears in a report issued on ..." is a line on the same row.
+
 - **The client's own view of a consent they signed.** The read policy now
   admits it (round 14's trunk note 6) but `app/client/**` is the client-portal
   worktree's. The door is open for them.

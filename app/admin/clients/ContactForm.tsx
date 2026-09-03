@@ -257,35 +257,43 @@ export function ContactForm({
 
   return (
     <form className="drawer__form" onSubmit={(e) => void submit(e)}>
-      <Field
-        id="contact-given-name"
-        label="Given name (optional)"
-        value={givenName}
-        onChange={(e) => setGivenName(e.target.value)}
-        hint="Who to ask for at the door, and who a consent was given by."
-      />
-      <Field
-        id="contact-family-name"
-        label="Family name (optional)"
-        value={familyName}
-        onChange={(e) => setFamilyName(e.target.value)}
-      />
-      <Field
-        id="contact-given-name-ar"
-        label="Given name (Arabic, optional)"
-        lang="ar"
-        dir="rtl"
-        value={givenNameAr}
-        onChange={(e) => setGivenNameAr(e.target.value)}
-      />
-      <Field
-        id="contact-family-name-ar"
-        label="Family name (Arabic, optional)"
-        lang="ar"
-        dir="rtl"
-        value={familyNameAr}
-        onChange={(e) => setFamilyNameAr(e.target.value)}
-      />
+      {/* A given name and a family name are one name, so they sit on one line
+          — the pair in each script together, as the client's own form already
+          does. Four full-width fields in a column read as four unrelated
+          questions and pushed everything that matters below the fold. */}
+      <div className="field-row">
+        <Field
+          id="contact-given-name"
+          label="Given name (optional)"
+          value={givenName}
+          onChange={(e) => setGivenName(e.target.value)}
+          hint="Who to ask for at the door, and who a consent was given by."
+        />
+        <Field
+          id="contact-family-name"
+          label="Family name (optional)"
+          value={familyName}
+          onChange={(e) => setFamilyName(e.target.value)}
+        />
+      </div>
+      <div className="field-row">
+        <Field
+          id="contact-given-name-ar"
+          label="Given name (Arabic, optional)"
+          lang="ar"
+          dir="rtl"
+          value={givenNameAr}
+          onChange={(e) => setGivenNameAr(e.target.value)}
+        />
+        <Field
+          id="contact-family-name-ar"
+          label="Family name (Arabic, optional)"
+          lang="ar"
+          dir="rtl"
+          value={familyNameAr}
+          onChange={(e) => setFamilyNameAr(e.target.value)}
+        />
+      </div>
       <Select
         id="contact-relationship"
         label="Relationship to the client"
