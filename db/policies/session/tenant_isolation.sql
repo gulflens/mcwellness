@@ -11,3 +11,8 @@ drop policy if exists tenant_isolation on public.session_event;
 create policy tenant_isolation on public.session_event for all to app_role
   using (tenant_id = app.current_tenant_id())
   with check (tenant_id = app.current_tenant_id());
+
+drop policy if exists tenant_isolation on public.visit_actuals;
+create policy tenant_isolation on public.visit_actuals for all to app_role
+  using (tenant_id = app.current_tenant_id())
+  with check (tenant_id = app.current_tenant_id());

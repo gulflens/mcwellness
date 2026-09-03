@@ -171,9 +171,15 @@ describe('a delivered visit consumes a credit', () => {
     ]);
   });
 
-  it('takes nothing more when a visit is reopened and closed again', async () => {
-    await h.owner.query("update session set status = 'in_progress' where id = $1", [sessionId]);
-    await completeSession(sessionId);
+  it('refuses to reopen a closed visit, so nothing can be taken twice that way', async () => {
+    // A completed session is immutable from its close (session-capture.md
+    // section 4; migration 302's freeze). Replay safety does not need a
+    // reopening: the unique index on consumed_by_session_id already makes a
+    // repeated completion a no-op (the test above). Applied by the trunk from
+    // docs/CHANGE-REQUESTS/session-capture-02.md section 10.
+    await expect(
+      h.owner.query("update session set status = 'in_progress' where id = $1", [sessionId]),
+    ).rejects.toThrow();
     expect(await creditsFor(h.clientId(0), 'nf-session')).toEqual([
       { status: 'available', consumption_kind: null, n: 14 },
       { status: 'consumed', consumption_kind: 'session', n: 1 },

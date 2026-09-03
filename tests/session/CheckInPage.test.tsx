@@ -24,7 +24,7 @@ const SERVICE_A = {
   id: '00000004-0000-4000-8000-000000000001',
   code: 'nf-session',
   name: 'Neurofeedback session',
-  nameAr: null,
+  nameAr: 'جلسة نيوروفيدباك',
 };
 
 const provider: AuthProvider = {
@@ -52,6 +52,8 @@ function mount(
     onServiceTypes?: (callIndex: number) => Response;
     /** Router state the day sheet hands over when a stop's Check in is tapped. */
     state?: { record?: unknown };
+    /** What GET /api/sessions/open answers: a visit already open, or none. */
+    openSession?: unknown;
   } = {},
 ) {
   const services = options.services ?? [SERVICE_A];
@@ -60,6 +62,9 @@ function mount(
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
+    if (url === '/api/sessions/open') {
+      return json({ session: options.openSession ?? null });
+    }
     if (url === '/api/sessions/service-types') {
       const index = serviceTypesCalls;
       serviceTypesCalls += 1;
@@ -157,6 +162,17 @@ describe('CheckInPage', () => {
     expect(calls[0]?.body.clientMrn).toBe('MW-000123');
   });
 
+  it('shows the chosen service in both languages, the Arabic marked as Arabic', async () => {
+    // A native <option> holds no markup, so the Arabic name cannot be marked
+    // or laid out inside one; it sits beneath the picker instead, the way
+    // every checklist item and question on the runner carries its own.
+    mount();
+    await ready();
+    const arabic = await screen.findByText('جلسة نيوروفيدباك');
+    expect(arabic.getAttribute('lang')).toBe('ar');
+    expect(arabic.getAttribute('dir')).toBe('rtl');
+  });
+
   it('lists the caller’s certified services, and explains an empty list', async () => {
     mount({ services: [SERVICE_A] });
     expect(await screen.findByRole('option', { name: 'Neurofeedback session' })).toBeTruthy();
@@ -192,7 +208,7 @@ describe('CheckInPage', () => {
     expect(serviceTypeCalls).toBe(2);
   });
 
-  it('shows a confirmation with the time on a successful check-in', async () => {
+  it('hands straight over to the session once the visit is open', async () => {
     mount({
       onPost: () =>
         json(
@@ -207,8 +223,10 @@ describe('CheckInPage', () => {
     await ready();
     enterRecordNumber('MW-000123');
     clickCheckIn();
-    expect(await screen.findByRole('heading', { name: 'Checked in' })).toBeTruthy();
-    expect(screen.getByText('10:32')).toBeTruthy();
+    // A check-in is not a destination: the practitioner is standing at the
+    // door and the next thing they need is the pre-flight checklist, not a
+    // receipt they have to tap past.
+    expect(await screen.findByRole('heading', { name: 'Before you start' })).toBeTruthy();
   });
 
   const REASONS: Array<[string, string]> = [
@@ -325,7 +343,7 @@ describe('CheckInPage', () => {
     clickCheckIn();
     await screen.findByText('That check-in could not be completed. Try again.');
     clickCheckIn('Try again');
-    await screen.findByRole('heading', { name: 'Checked in' });
+    await screen.findByRole('heading', { name: 'Before you start' });
 
     expect(calls.length).toBe(2);
     expect(calls[1]?.url).toBe(calls[0]?.url);
@@ -470,5 +488,102 @@ describe('the record number the day sheet hands over', () => {
     mount();
     await ready();
     expect((screen.getByLabelText('Record number') as HTMLInputElement).value).toBe('');
+  });
+});
+
+/**
+ * The resume offer (docs/SPEC/session-capture.md section 2): "on restart the
+ * app offers 'resume session for Client L., started 14:32'". It is the first
+ * thing on the screen, because a practitioner whose phone died mid-visit has
+ * one thing to do and typing a record number again is not it.
+ */
+describe('CheckInPage, resuming a visit', () => {
+  const OPEN = {
+    id: '00000000-0000-4000-8000-000000009001',
+    clientGivenName: 'Rowan',
+    clientFamilyInitial: 'M',
+    serviceTypeId: SERVICE_A.id,
+    serviceName: 'Neurofeedback session',
+    deliveryMode: 'home',
+    checkedInAt: '2026-09-02T10:32:00.000Z',
+    phase: 'in_progress',
+    number: 12,
+    of: 30,
+    lastSeq: 6,
+    photoConsent: false,
+  };
+
+  it('offers the visit the practitioner left open, by name and by the time it started', async () => {
+    mount({ openSession: OPEN });
+    expect(await screen.findByText(/Resume session for Rowan M\., started/)).toBeTruthy();
+    expect(screen.getByText('14:32')).toBeTruthy();
+  });
+
+  it('goes back into that visit rather than starting a new one', async () => {
+    const { calls } = mount({ openSession: OPEN });
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
+    expect(await screen.findByRole('heading', { name: 'Before you start' })).toBeTruthy();
+    // Resuming posts no check-in: the visit is already open on the server.
+    expect(calls.filter((call) => call.url.endsWith('/events')).length).toBe(0);
+  });
+
+  it('lets the practitioner set the offer aside and check somebody else in', async () => {
+    mount({ openSession: OPEN });
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in someone else instead' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull());
+    expect(screen.getByLabelText('Record number')).toBeTruthy();
+  });
+
+  it('offers nothing when no visit is open', async () => {
+    mount();
+    await ready();
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+  });
+
+  it('does not paint the form until it knows whether there is a visit to resume', async () => {
+    // The offer belongs above the form, so an offer that arrived after the
+    // form would push the record number, the service and the primary action
+    // down the screen under a thumb already reaching for them. The face
+    // waits instead, and says what it is waiting for.
+    mount({ openSession: OPEN });
+    expect(screen.getByText('Checking whether you have a visit already open.')).toBeTruthy();
+    expect(screen.queryByLabelText('Record number')).toBeNull();
+
+    expect(await screen.findByRole('button', { name: 'Resume' })).toBeTruthy();
+  });
+
+  it('is the only loud action while it stands, and says sharing is off', async () => {
+    mount({ openSession: OPEN });
+    const resume = await screen.findByRole('button', { name: 'Resume' });
+    expect(resume.className).toContain('button--primary');
+    // One primary on the face: the form's own action steps back rather than
+    // asking the practitioner to choose between two equally loud buttons.
+    expect(screen.getByRole('button', { name: 'Check in' }).className).toContain(
+      'button--secondary',
+    );
+
+    // A resumed visit cannot know what was switched on at the door, so it
+    // shares nothing and says so rather than leaving the practitioner to
+    // wonder (docs/SPEC/session-capture.md section 3.6).
+    expect(
+      screen.getByText(
+        'Sharing your location is off after a resume. The visit is recorded either way.',
+      ),
+    ).toBeTruthy();
+
+    // And the quiet way out meets the practitioner tap floor.
+    expect(
+      screen.getByRole('button', { name: 'Check in someone else instead' }).className,
+    ).toContain('checkin__dismiss');
+  });
+
+  it('gives the form its own single primary once the offer is set aside', async () => {
+    mount({ openSession: OPEN });
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in someone else instead' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Check in' }).className).toContain(
+        'button--primary',
+      ),
+    );
   });
 });

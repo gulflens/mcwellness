@@ -427,6 +427,10 @@ describe('POST /api/sessions/:id/events', () => {
     expect(body).toEqual({
       status: 'checked_in',
       sessionId: SESSION_HAPPY,
+      // No photo_video consent on this fixture, so the runner never offers
+      // the camera (app/therapist/session/PostStep.tsx). The server refuses
+      // a photo event either way.
+      photoConsent: false,
       checkedInAt: FIXED_NOW,
     });
 
@@ -476,6 +480,7 @@ describe('POST /api/sessions/:id/events', () => {
     expect(await res.json()).toEqual({
       status: 'checked_in',
       sessionId: SESSION_BY_MRN,
+      photoConsent: false,
       checkedInAt: FIXED_NOW,
     });
 
@@ -553,6 +558,7 @@ describe('POST /api/sessions/:id/events', () => {
     expect(await res.json()).toEqual({
       status: 'checked_in',
       sessionId: SESSION_HAPPY,
+      photoConsent: false,
       checkedInAt: FIXED_NOW,
     });
     const after = await owner.query('select count(*)::int as n from session_event where id = $1', [

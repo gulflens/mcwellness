@@ -31,3 +31,31 @@ export async function logRefusal(
     [entityType, entityId, clientId, reasons.join(', ')],
   );
 }
+
+/**
+ * Records a semantic action the schema does not express (docs/SPEC/audit.md
+ * section 5 layer 3, section 6): `session_closed` is the one this module
+ * raises, and section 4 makes it sensitive, so it carries the request id and
+ * whatever reason the caller sent — exactly the columns logRead writes, with
+ * the action named rather than fixed at 'read'.
+ *
+ * The trigger on `session` already logs the update itself. This row is the
+ * other half: an update to a row is what changed, and this is what it meant.
+ */
+export async function logSensitive(
+  db: Db,
+  action: string,
+  entityType: string,
+  entityId: string,
+  clientId: string | null,
+): Promise<void> {
+  await db.query(
+    'insert into audit_log (tenant_id, actor_id, actor_type, actor_role, action, entity_type, ' +
+      'entity_id, client_id, reason, request_id) values (' +
+      "app.current_tenant_id(), nullif(current_setting('app.actor_id', true), '')::uuid, 'user', " +
+      "nullif(current_setting('app.actor_roles', true), ''), $1, $2, $3, $4, " +
+      "nullif(current_setting('app.reason', true), ''), " +
+      "nullif(current_setting('app.request_id', true), '')::uuid)",
+    [action, entityType, entityId, clientId],
+  );
+}

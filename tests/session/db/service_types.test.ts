@@ -204,3 +204,89 @@ describe('GET /api/sessions/service-types', () => {
     expect(res.status).toBe(403);
   });
 });
+
+/**
+ * The two settings columns the session runner reads from a service
+ * (docs/SPEC/session-capture.md sections 3.2 and 3.5): the pre-flight
+ * checklist and the 0-10 questions.
+ *
+ * **Both belong to the trunk**, landing with shared-zone round 14 on
+ * `service_type` — a core table this stream may not add a column to. So this
+ * suite adds them to its own database, here, exactly as round 14 declares
+ * them, and proves the route reads that shape. When round 14 merges, delete
+ * the two `alter table` statements below and nothing else changes: the
+ * assertions are written against the landed shape, not against this fixture.
+ *
+ * The test above it is the other half of the same contract — before round
+ * 14, on a database with no such columns, the route answers with empty
+ * arrays rather than failing, which is why every assertion there passes
+ * unchanged.
+ */
+describe('the service settings the session runner reads', () => {
+  beforeAll(async () => {
+    await owner.query(
+      "alter table service_type add column if not exists preflight_checklist jsonb not null default '[]'::jsonb",
+    );
+    await owner.query(
+      "alter table service_type add column if not exists rating_questions jsonb not null default '[]'::jsonb",
+    );
+    await owner.query(
+      'update service_type set preflight_checklist = $2::jsonb, rating_questions = $3::jsonb where id = $1',
+      [
+        SERVICE_VALID_A,
+        JSON.stringify([
+          {
+            key: 'identity_confirmed',
+            label_en: 'Client identity confirmed',
+            label_ar: 'تم تأكيد هوية العميل',
+          },
+          {
+            key: 'environment_suitable',
+            label_en: 'Environment suitable',
+            label_ar: 'البيئة مناسبة',
+          },
+        ]),
+        JSON.stringify([
+          {
+            key: 'sleep',
+            label_en: 'Sleep last night',
+            label_ar: 'النوم الليلة الماضية',
+            min: 0,
+            max: 10,
+          },
+        ]),
+      ],
+    );
+  });
+
+  it('serves the checklist and the questions the practice has set for a service', async () => {
+    const res = await getServiceTypes(AUTH.practitionerA);
+    const body = (await res.json()) as ServiceTypesResponse;
+    const service = body.serviceTypes.find((s) => s.id === SERVICE_VALID_A);
+    expect(service?.preflightChecklist).toEqual([
+      {
+        key: 'identity_confirmed',
+        labelEn: 'Client identity confirmed',
+        labelAr: 'تم تأكيد هوية العميل',
+      },
+      { key: 'environment_suitable', labelEn: 'Environment suitable', labelAr: 'البيئة مناسبة' },
+    ]);
+    expect(service?.ratingQuestions).toEqual([
+      {
+        key: 'sleep',
+        labelEn: 'Sleep last night',
+        labelAr: 'النوم الليلة الماضية',
+        min: 0,
+        max: 10,
+      },
+    ]);
+  });
+
+  it('gives a service the practice has set nothing for an empty checklist, not a failure', async () => {
+    const res = await getServiceTypes(AUTH.practitionerA);
+    const body = (await res.json()) as ServiceTypesResponse;
+    const service = body.serviceTypes.find((s) => s.id === SERVICE_VALID_B);
+    expect(service?.preflightChecklist).toEqual([]);
+    expect(service?.ratingQuestions).toEqual([]);
+  });
+});
