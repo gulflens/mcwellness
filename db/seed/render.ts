@@ -43,7 +43,7 @@ export function literal(value: unknown): string {
  * is never scanned again and a value that itself contains "$1" stays intact.
  *
  * One of the seed's statements does carry dollar-quoting: the block that fills
- * in the contact names (apply.ts) is written between $fill$ and $names$ tags.
+ * in the contact names (apply.ts) is written between (the contact insert chooses its column list in SQL inside a dollar-quoted block; `inline` still only matches `$` followed by digits, so a dollar-quote tag is never mistaken for a parameter)
  * That is safe here because only a dollar sign followed by digits is replaced,
  * and neither tag is numeric — a rule this file's own tests hold, and one any
  * future tag must keep. The statement carries no placeholders of its own
