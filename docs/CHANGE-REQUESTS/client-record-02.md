@@ -6,8 +6,9 @@ landed on `main` before it opened (pull request 31, "feat(api): mount the
 client-record routes"), so every route the screens call is reachable, and
 CR-04 turned out to need nothing at all — see below.
 
-What follows is one decision for the operator, one request for the trunk, the
-one place this pull request departed from its brief, and the list of what it
+What follows is two requests for the trunk (a map key for the operator to
+decide, and a name column for a contact), one request now applied, the one
+place this pull request departed from its brief, and the list of what it
 deliberately left for the fourth.
 
 ---
@@ -56,7 +57,17 @@ the decision being asked for.
 
 ---
 
-## CR-06: fold Arabic-Indic digits inside `normaliseEmiratesId`
+## CR-06: applied
+
+Pull request 36 folded Arabic-Indic digits inside `normaliseEmiratesId` and
+exported `toLatinDigits` from the shared barrel. This stream's own copy of the
+fold is gone; `app/api/clients/emirates-id-shape.ts` re-exports the trunk's.
+The shape rule itself — "is this term an Emirates ID being typed" — still
+lives in that file, and moving it to `domain/shared/emirates-id.ts` beside the
+normaliser is agreed for the fourth pull request rather than done here. The
+request as it was asked is kept below for the record.
+
+### CR-06 as asked: fold Arabic-Indic digits inside `normaliseEmiratesId`
 
 **What.** Two lines in `domain/shared/emirates-id.ts`, so the normaliser reads
 an Emirates ID typed in Arabic-Indic (U+0660-0669) or Extended Arabic-Indic
@@ -212,7 +223,62 @@ place would be a screen for undoing something the console cannot do.
 
 ---
 
-## Three smaller notes for the trunk
+## CR-07: a contact has no name
+
+**What.** Two pairs of columns on `contact`: `given_name`, `family_name`, and
+their Arabic counterparts, all nullable.
+
+**Why.** `contact` (db/migrations/060_client.sql) carries a relationship, four
+permission flags, a phone, an email and an optional identity number — and no
+name. So every screen that shows a contact shows "Mother" and never who: the
+record's Contacts tab, the Overview's key contacts, the enrolment summary.
+That is awkward on a list of three, and it is a real problem in two places:
+
+- **Consent.** A `minor_participation` consent is valid only because a legal
+  guardian gave it — `canActivate` checks exactly that — and the record cannot
+  say which person that was. "Given by: Mother" is not an identification, and
+  a household can hold two contacts with the same relationship.
+- **Arriving at the door.** The practitioner's brief names the household by
+  the client. Who to ask for is the contact, and there is nobody to ask for.
+
+`app_user` has `display_name`, but a contact who does not sign in has no
+`app_user` row at all: `contact.user_id` is nullable precisely because most
+never will.
+
+**Proposed migration** (the trunk's own range; nullable, so no backfill, and
+no default, so nothing invents a name):
+
+```sql
+-- 9NN_contact_name.sql
+-- Needs 060 (contact).
+alter table contact
+  add column given_name      text,
+  add column family_name     text,
+  add column given_name_ar   text,
+  add column family_name_ar  text;
+
+comment on column contact.given_name is
+  'The person to ask for at the door, and the person a consent was given by. '
+  'Nullable: a contact known only by relationship predates this column.';
+```
+
+Four columns rather than one `full_name`, matching `client`, which splits both
+and carries both scripts; the console would render the Arabic pair with
+`lang="ar" dir="rtl"` as it already does for a client's.
+
+**What this stream would do once it lands.** Add the two Latin fields to the
+contact form and to the enrolment wizard's first step — optional, never
+required, since a lead is still one name and one phone (section 3) — show the
+name beside the relationship wherever a contact is listed, and name the giver
+on a consent row. None of it is built here: inventing a name column for a core
+person in this stream's own migration range would put an identity outside the
+core schema.
+
+**Nothing in this pull request waits on it.**
+
+---
+
+## Five smaller notes for the trunk
 
 - **An audit row for a search that found nobody has `client_id` null.**
   `POST /api/clients/lookup` writes one `list` row with the request id as its
@@ -224,13 +290,22 @@ place would be a screen for undoing something the console cannot do.
   client would bucket them as null. Worth a sentence in `docs/SPEC/audit.md`
   (audit-ui's file, not this stream's) so the assumption is written down
   rather than inferred.
+- **Geolocation was blocked by the app's own permissions policy.**
+  `app/api/_middleware/security.ts` sends `geolocation=()`, so "Use my current
+  position" on the Locations tab could never have worked in the served app: it
+  would have taken the refusal path every time, which is at least graceful
+  rather than broken. The trunk has fixed this (`geolocation=(self)`, pull
+  request 37); it is not on `main` at the time of writing, so it is recorded
+  here as resolved elsewhere rather than outstanding. Nothing in this stream
+  changes for it.
 - **The vendor register names the Platform, not the consumer map.**
   `docs/COMPLIANCE/approved-vendors.md` lists "Google Maps Platform …
   coordinates only, never names". The "Open in Google Maps" link this pull
   request ships is `www.google.com/maps`, a person-clicked link carrying a
   household's coordinates (`rel="noreferrer noopener"`, so no referrer and no
   automatic request). Covered in substance, not in wording: widen that line
-  before v1, or fold it into whatever CR-05 settles.
+  before v1, or fold it into whatever CR-05 settles. **With the operator**, who
+  holds the register; pending their word.
 - **Neither `POST /api/clients` nor `POST /api/clients/:id/contacts` takes an
   idempotency key.** A retried create whose first attempt succeeded now
   answers `409` with "This Emirates ID is already on file" — true, but the
