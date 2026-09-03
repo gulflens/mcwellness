@@ -2,6 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { renderDocument, type MoneyDocument } from '../../../domain/billing/document';
 import {
+  draftMessage,
+  whatsAppHandoff,
+  type DocumentSender,
+  type SendOutcome,
+} from '../../../domain/billing/sending';
+import {
   clientDocumentKey,
   documentRetentionUntil,
   DEFAULT_SIGNED_URL_TTL_SECONDS,
@@ -9,14 +15,18 @@ import {
 import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayReadInvoices } from './access';
+import { logSensitiveAction } from './audit';
 import {
   CreateDocumentInput,
   CreateDocumentResponse,
   DocumentLinkResponse,
+  SendDocumentInput,
+  SendDocumentResponse,
 } from './document-schema';
 import { invoiceDocument, receiptDocument } from './document-source';
 import { documentFonts } from './fonts';
 import { isUuid } from './ids';
+import { documentSender } from './sending';
 
 /**
  * `POST /api/billing/documents` — render an invoice or a receipt and file it.
@@ -251,4 +261,127 @@ async function documentBehind(
     return row.invoice_id ? ((await invoiceDocument(db, row.invoice_id))?.document ?? null) : null;
   }
   return row.payment_id ? ((await receiptDocument(db, row.payment_id))?.document ?? null) : null;
+}
+
+const CONTACT_SQL =
+  'select id, client_id, phone, email, whatsapp_opt_in from contact ' +
+  'where tenant_id = app.current_tenant_id() and id = $1 and client_id = $2';
+
+/**
+ * `POST /api/billing/documents/:id/send` — put a document in front of a family.
+ *
+ * **A hand-off, not a broadcast.** WhatsApp answers with a `wa.me` link the
+ * person opens and presses send in; email answers through the sending seam,
+ * whose only implementation today hands the link back for the share sheet
+ * (`domain/billing/sending.ts`). Either way the practice is the one who sends,
+ * which is how it works now and is what keeps an unapproved vendor out of a
+ * family's contact details.
+ *
+ * **Recorded as the sensitive act it is**, with the contact's id and the
+ * channel, and never the telephone number or the address (`./audit.ts`).
+ *
+ * **The contact must belong to this document's own client.** Checked against
+ * the row rather than trusted from the body: a contact id from another
+ * household would otherwise send one family's invoice to another.
+ */
+export function mountDocumentSending(
+  api: Hono<ApiEnv>,
+  now: () => Date = () => new Date(),
+  sender: DocumentSender = documentSender(),
+): void {
+  api.post('/api/billing/documents/:id/send', async (c) => {
+    const actor = c.get('actor');
+    const requestId = c.get('requestId');
+    if (!mayReadInvoices(actor, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const documentId = c.req.param('id');
+    if (!isUuid(documentId)) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const storage = c.get('storage');
+    if (!storage) {
+      return c.json({ error: 'storage_unavailable', requestId }, 503);
+    }
+    const body = SendDocumentInput.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+
+    const db = c.get('db');
+    const found = await db.query<FiledRow>(KIND_SQL, [documentId]);
+    const row = found.rows[0];
+    if (!row) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+
+    const contacts = await db.query<{
+      id: string;
+      phone: string | null;
+      email: string | null;
+      whatsapp_opt_in: boolean;
+    }>(CONTACT_SQL, [body.data.contactId, row.client_id]);
+    const contact = contacts.rows[0];
+    if (!contact) {
+      // Another household's contact, or none. Not found, never a refusal that
+      // confirms whose it is.
+      return c.json({ error: 'not_found', code: 'contact_not_found', requestId }, 404);
+    }
+
+    // Handing over the means to open a client's document is a read, and it is
+    // recorded before the link is signed, every time (docs/SEAMS.md).
+    await auditDocumentRead(db, { id: documentId, clientId: row.client_id });
+    const url = await storage.getSignedUrl(row.storage_key, DEFAULT_SIGNED_URL_TTL_SECONDS);
+
+    const practice = await db.query<{ supplier_legal_name: string }>(
+      'select supplier_legal_name from invoice where tenant_id = app.current_tenant_id() ' +
+        'and client_id = $1 order by number desc limit 1',
+      [row.client_id],
+    );
+    const message = draftMessage({
+      kind: row.kind,
+      reference: row.reference ?? '',
+      practiceName: practice.rows[0]?.supplier_legal_name ?? '',
+      url,
+    });
+
+    let outcome: SendOutcome;
+    if (body.data.channel === 'whatsapp') {
+      if (!contact.whatsapp_opt_in) {
+        // The household said no to WhatsApp. That answer is the whole point of
+        // the column and it is not the sender's to overrule.
+        return c.json({ error: 'unprocessable', code: 'no_whatsapp_opt_in', requestId }, 422);
+      }
+      const handoff = contact.phone ? whatsAppHandoff(contact.phone, message) : null;
+      if (!handoff) {
+        return c.json({ error: 'unprocessable', code: 'no_usable_number', requestId }, 422);
+      }
+      outcome = { delivered: false, channel: 'whatsapp', handoffUrl: handoff };
+    } else {
+      if (!contact.email) {
+        return c.json({ error: 'unprocessable', code: 'no_email', requestId }, 422);
+      }
+      const sent = await sender.sendDocument({ to: contact.email, message });
+      // The fallback sends nothing and hands the document's own link back, which
+      // is what a person shares from their own mail app.
+      outcome = sent.delivered ? sent : { delivered: false, channel: 'email', handoffUrl: url };
+    }
+
+    await logSensitiveAction(
+      db,
+      'send',
+      { type: 'document', id: documentId, clientId: row.client_id },
+      // The contact's id and the channel. Never the number, never the address.
+      { channel: outcome.channel, contactId: contact.id, delivered: String(outcome.delivered) },
+    );
+
+    return c.json(
+      SendDocumentResponse.parse({
+        channel: outcome.channel,
+        delivered: outcome.delivered,
+        ...(outcome.delivered ? {} : { handoffUrl: outcome.handoffUrl }),
+        message: message.text,
+      }),
+    );
+  });
 }

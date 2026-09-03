@@ -4,6 +4,7 @@ import { extractAll } from '../../../domain/billing/document';
 import type {
   CreateDocumentResponse,
   DocumentLinkResponse,
+  SendDocumentResponse,
 } from '../../../app/api/billing/document-schema';
 import type { RecordPaymentResponse } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
@@ -291,5 +292,142 @@ describe('opening a document', () => {
       SEEDED.owner,
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe('sending a document to a family', () => {
+  /** A contact of that client who has said yes to WhatsApp. */
+  async function whatsAppContactOf(clientId: string): Promise<string> {
+    await h.owner.query(
+      'update contact set whatsapp_opt_in = true where client_id = $1 and phone is not null',
+      [clientId],
+    );
+    const { rows } = await h.owner.query<{ id: string }>(
+      'select id from contact where client_id = $1 and whatsapp_opt_in order by id limit 1',
+      [clientId],
+    );
+    const id = rows[0]?.id;
+    if (!id) throw new Error('That client has no contact to send to.');
+    return id;
+  }
+
+  it('hands back a WhatsApp link with the message already written', async () => {
+    const clientId = h.clientId(6);
+    const invoiceId = await deliverVisit(clientId);
+    const created = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
+    const body = (await created.json()) as CreateDocumentResponse;
+    const contactId = await whatsAppContactOf(clientId);
+
+    const res = await h.call(
+      'POST',
+      `/api/billing/documents/${body.document.id}/send`,
+      SEEDED.owner,
+      { channel: 'whatsapp', contactId },
+      { 'x-reason': 'Sending the invoice to the family.' },
+    );
+    expect(res.status).toBe(200);
+    const sent = (await res.json()) as SendDocumentResponse;
+
+    // The practice sends it: the platform composes, the person presses send.
+    expect(sent.delivered).toBe(false);
+    expect(sent.handoffUrl).toMatch(/^https:\/\/wa\.me\/\d+\?text=/);
+    expect(sent.message).toContain(body.document.reference);
+  });
+
+  it('records the send with the contact’s id and never their number', async () => {
+    const clientId = h.clientId(7);
+    const invoiceId = await deliverVisit(clientId);
+    const created = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
+    const body = (await created.json()) as CreateDocumentResponse;
+    const contactId = await whatsAppContactOf(clientId);
+    await h.call('POST', `/api/billing/documents/${body.document.id}/send`, SEEDED.owner, {
+      channel: 'whatsapp',
+      contactId,
+    });
+
+    const { rows } = await h.owner.query<{ new_values: Record<string, string>; client_id: string }>(
+      "select new_values, client_id from audit_log where action = 'send' " +
+        "and entity_type = 'document' and entity_id = $1",
+      [body.document.id],
+    );
+    const entry = rows[0];
+    if (!entry) throw new Error('The send was not recorded.');
+    expect(entry.client_id).toBe(clientId);
+    expect(entry.new_values.contactId).toBe(contactId);
+    expect(entry.new_values.channel).toBe('whatsapp');
+
+    // The trail is kept five years and read by people with no business knowing
+    // how to reach a family: the number and the address stay out of it.
+    const { rows: contact } = await h.owner.query<{ phone: string; email: string }>(
+      'select phone, email from contact where id = $1',
+      [contactId],
+    );
+    const written = JSON.stringify(entry.new_values);
+    expect(written).not.toContain(contact[0]?.phone ?? 'no-phone');
+    expect(written).not.toContain(contact[0]?.email ?? 'no-email');
+  });
+
+  it('will not send on WhatsApp to a household that did not opt in', async () => {
+    const clientId = h.clientId(8);
+    const invoiceId = await deliverVisit(clientId);
+    const created = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
+    const body = (await created.json()) as CreateDocumentResponse;
+    await h.owner.query('update contact set whatsapp_opt_in = false where client_id = $1', [
+      clientId,
+    ]);
+    const { rows } = await h.owner.query<{ id: string }>(
+      'select id from contact where client_id = $1 order by id limit 1',
+      [clientId],
+    );
+
+    const res = await h.call(
+      'POST',
+      `/api/billing/documents/${body.document.id}/send`,
+      SEEDED.owner,
+      { channel: 'whatsapp', contactId: rows[0]?.id },
+    );
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { code?: string }).code).toBe('no_whatsapp_opt_in');
+  });
+
+  it('refuses a contact who belongs to another household', async () => {
+    const invoiceId = await deliverVisit(h.clientId(9));
+    const created = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
+    const body = (await created.json()) as CreateDocumentResponse;
+    const contactId = await whatsAppContactOf(h.clientId(10));
+
+    const res = await h.call(
+      'POST',
+      `/api/billing/documents/${body.document.id}/send`,
+      SEEDED.owner,
+      { channel: 'whatsapp', contactId },
+    );
+    // One family's invoice must never go to another's, and the check is against
+    // the document's own client rather than the caller's word for it.
+    expect(res.status).toBe(404);
+  });
+
+  it('hands the link back for the share sheet when there is no email vendor', async () => {
+    // The forced-fallback path, end to end: no vendor is approved, so email
+    // composes the message and gives the person the link to send themselves.
+    const clientId = h.clientId(11);
+    const invoiceId = await deliverVisit(clientId);
+    const created = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
+    const body = (await created.json()) as CreateDocumentResponse;
+    const { rows } = await h.owner.query<{ id: string }>(
+      'select id from contact where client_id = $1 and email is not null order by id limit 1',
+      [clientId],
+    );
+
+    const res = await h.call(
+      'POST',
+      `/api/billing/documents/${body.document.id}/send`,
+      SEEDED.owner,
+      { channel: 'email', contactId: rows[0]?.id },
+    );
+    expect(res.status).toBe(200);
+    const sent = (await res.json()) as SendDocumentResponse;
+    expect(sent.delivered).toBe(false);
+    expect(sent.handoffUrl).toBeTruthy();
   });
 });
