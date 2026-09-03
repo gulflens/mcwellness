@@ -60,6 +60,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
   const { apiFetch } = useAuth();
   const closeRef = useRef<HTMLButtonElement>(null);
   const [step, setStep] = useState<Step>('identity');
+  const [furthestStep, setFurthestStep] = useState<Step>('identity');
   const [created, setCreated] = useState<CreateClientResponse | null>(null);
   const { state, refetch } = useClientRecord(created?.id ?? null);
 
@@ -88,6 +89,12 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
       previous?.focus();
     };
   }, []);
+
+  /** The one way the step moves, so the high-water mark can never drift from it. */
+  function goTo(next: Step) {
+    setStep(next);
+    setFurthestStep((seen) => (STEPS.indexOf(next) > STEPS.indexOf(seen) ? next : seen));
+  }
 
   function clearIdentityError(key: keyof IdentityFieldErrors) {
     setIdentityErrors((prev) => (prev[key] === undefined ? prev : { ...prev, [key]: undefined }));
@@ -135,7 +142,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
       if (res.status === 201) {
         const body = (await res.json()) as CreateClientResponse;
         setCreated(body);
-        setStep('contacts');
+        goTo('contacts');
         return;
       }
       if (res.status === 403) {
@@ -204,6 +211,9 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
   }
 
   const stepIndex = STEPS.indexOf(step);
+  // The furthest step reached, not the current one: stepping back to Contacts must not
+  // put Goals out of reach again, since the lead already holds whatever was saved there.
+  const furthest = Math.max(stepIndex, STEPS.indexOf(furthestStep));
   // Never back past 'contacts' (index 1): identity is a one-time, submit-only step in
   // this pull request, matching the breadcrumb's own floor above.
   const canGoBack = stepIndex > 1;
@@ -232,20 +242,20 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
             // Identity is a one-time, submit-only step in this pull request (no route
             // yet edits it from here): once it has created the lead, index 0 is a plain
             // label, not a step to revisit. Every later step is reachable once reached.
-            const reachable = created !== null && index > 0 && index <= stepIndex;
+            const reachable = created !== null && index > 0 && index <= furthest;
             return (
               <li
                 key={s}
                 className={[
                   'wizard__step-name',
                   s === step ? 'wizard__step-name--current' : null,
-                  index > stepIndex && created === null ? 'wizard__step-name--locked' : null,
+                  index > furthest ? 'wizard__step-name--locked' : null,
                 ]
                   .filter(Boolean)
                   .join(' ')}
               >
                 {reachable ? (
-                  <button type="button" className="link" onClick={() => setStep(s)}>
+                  <button type="button" className="link" onClick={() => goTo(s)}>
                     {STEP_LABELS[s]}
                   </button>
                 ) : (
@@ -440,15 +450,12 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
               <Button
                 variant="secondary"
                 disabled={!canGoBack}
-                onClick={() => setStep(STEPS[stepIndex - 1] ?? 'identity')}
+                onClick={() => goTo(STEPS[stepIndex - 1] ?? 'identity')}
               >
                 Back
               </Button>
               {canGoNext ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => setStep(STEPS[stepIndex + 1] ?? 'summary')}
-                >
+                <Button variant="secondary" onClick={() => goTo(STEPS[stepIndex + 1] ?? 'summary')}>
                   Next
                 </Button>
               ) : null}

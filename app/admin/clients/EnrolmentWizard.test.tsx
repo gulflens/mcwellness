@@ -214,6 +214,20 @@ describe('EnrolmentWizard', () => {
     await waitFor(() => expect(onDone).toHaveBeenCalled());
   });
 
+  it('keeps a step reachable once it has been reached, even after stepping back', async () => {
+    mountWithRecord(baseRecord());
+    await fillIdentity();
+    await goToSummary();
+    await screen.findByText('Still to complete');
+
+    // Back to Contacts, three steps behind: Goals must not become unreachable again,
+    // because the lead already holds whatever was saved there.
+    fireEvent.click(screen.getByRole('button', { name: 'Contacts' }));
+    await screen.findByRole('button', { name: 'Add contact' });
+    fireEvent.click(screen.getByRole('button', { name: 'Goals' }));
+    expect(await screen.findByRole('button', { name: 'Add goal' })).toBeTruthy();
+  });
+
   it('leaves a real lead at any step: Finish later closes without losing what was saved', async () => {
     const { onDone } = mountWithRecord(baseRecord());
     await fillIdentity();
