@@ -11,6 +11,15 @@ export type {
 } from './conflicts';
 export { APPOINTMENT_STATUSES, SETTLED_STATUSES, isSettled } from './status';
 export type { AppointmentStatus } from './status';
+export {
+  ALWAYS_LATE_REASONS,
+  CANCELLATION_REASONS,
+  DEFAULT_NOTICE_HOURS,
+  NEVER_LATE_REASONS,
+  cancellationStatusFor,
+  isLateCancellation,
+} from './cancellation';
+export type { CancellableAppointment, CancellationReason } from './cancellation';
 export { PRACTICE_TIME_ZONE, currentStopIndex, practiceDate, stopPhases } from './day';
 export type { DayStop, StopPhase } from './day';
 export { directionsUrl, navigationTarget } from './navigation';

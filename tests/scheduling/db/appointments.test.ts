@@ -124,12 +124,24 @@ async function call(sub: string, method: string, path: string, body?: unknown): 
   });
 }
 
-/** One shared consent document: "the exact wording shown" need not differ per client. */
-async function seedConsentDocument(client: pg.Client): Promise<void> {
+/**
+ * One shared document for every consent below to point at: `text_document_id`
+ * is a plain foreign key to `document`, and these tests are about booking, not
+ * about the practice's published wording.
+ *
+ * Kind `referral`, not `consent_text`, at the trunk's ask
+ * (docs/CHANGE-REQUESTS/trunk-notes.md, round 14, item 1). A `consent_text`
+ * row is the practice's own wording and migration 902 gives it five columns of
+ * its own — purpose, locale, version, status, retired_at — which the trunk
+ * means to require together with a check constraint. It cannot add that
+ * constraint while two fixtures across an ownership line file a bare wording
+ * row, so this stands down to the honest stand-in instead.
+ */
+async function seedReferralDocument(client: pg.Client): Promise<void> {
   await client.query(
     'insert into document (id, tenant_id, kind, storage_key, mime_type, sha256, created_by) ' +
-      "values ($1, $2, 'consent_text', 'consent-text-v1', 'text/plain', " +
-      "sha256('consent-text-v1'::bytea), $3)",
+      "values ($1, $2, 'referral', 'referral-v1', 'text/plain', " +
+      "sha256('referral-v1'::bytea), $3)",
     [CONSENT_DOC, IDS.tenantA, IDS.ownerA],
   );
 }
@@ -282,7 +294,7 @@ beforeAll(async () => {
     roles: ['finance'],
   });
 
-  await seedConsentDocument(owner);
+  await seedReferralDocument(owner);
 
   await seedConsentingClient(owner, IDS.clientA, 'Alpha', CONTACT_A, IDS.locationA, [
     'participation',

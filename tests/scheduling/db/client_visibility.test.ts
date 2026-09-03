@@ -228,10 +228,14 @@ beforeAll(async () => {
   await seedClient(owner, IDS.tenantA, CLIENT_TODAY, IDS.ownerA, 'Today');
   await seedContact(owner, IDS.tenantA, CONTACT_TODAY, CLIENT_TODAY, 'x-visibility-today');
   await seedLocation(owner, IDS.tenantA, LOCATION_TODAY, CLIENT_TODAY, IDS.ownerA);
+  // Kind `referral`, not `consent_text`, at the trunk's ask
+  // (docs/CHANGE-REQUESTS/trunk-notes.md, round 14, item 1): what this stands
+  // in for is any document a consent can point at, not the practice's own
+  // published wording, which migration 902 gives five columns of its own.
   await owner.query(
     'insert into document (id, tenant_id, kind, storage_key, mime_type, sha256, created_by) ' +
-      "values ($1, $2, 'consent_text', 'consent-text-v1', 'text/plain', " +
-      "sha256('consent-text-v1'::bytea), $3)",
+      "values ($1, $2, 'referral', 'referral-v1', 'text/plain', " +
+      "sha256('referral-v1'::bytea), $3)",
     [CONSENT_DOC, IDS.tenantA, IDS.ownerA],
   );
   await owner.query(
