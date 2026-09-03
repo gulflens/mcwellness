@@ -72,6 +72,11 @@ function mount(node: React.ReactNode, calls: { url: string; init?: RequestInit }
     const url = String(input);
     if (url === '/api/me') return json(ADMIN);
     calls.push({ url, init });
+    if (url.endsWith('/erasure-requests')) {
+      // Overview carries the erasure section, which asks this on mount. No
+      // request has been recorded for this client, which is the ordinary case.
+      return json({ requests: [] });
+    }
     if (url === '/api/clients/goal-categories') {
       return json({
         categories: [{ id: CATEGORY_ID, code: 'sleep', name: 'Sleep', nameAr: null }],

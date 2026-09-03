@@ -255,3 +255,49 @@ describe('switching the registration on', () => {
     expect(unchanged.line_rate).toBe(0);
   });
 });
+
+describe('the ways round the rule, all closed', () => {
+  it('refuses an invoice that names its own supplier and says nothing about the registration', async () => {
+    // app.stamp_invoice_supplier returns early when a caller supplies
+    // supplier_legal_name, leaving supplier_vat_registered exactly as the caller
+    // left it. A first draft of the guard read that null as "says nothing" and
+    // let it through, which is how VAT gets onto an invoice from a practice that
+    // holds no registration.
+    await unregisterForVat();
+    await expect(
+      h.owner.query(
+        'insert into invoice (tenant_id, client_id, number, kind, issued_on, ' +
+          'supplier_legal_name, net_fils, vat_fils, gross_fils) values ($1, $2, 9101, ' +
+          "'statement', $3, 'Somebody Else', 10000, 500, 10500)",
+        [h.data.tenant.id, h.clientId(3), SEED_TODAY],
+      ),
+    ).rejects.toThrow(/not registered/i);
+  });
+
+  it('refuses a line that carries VAT under an invoice that carries none', async () => {
+    // Nothing tied a line's rate to its header, and the rendered document reads
+    // the lines: the totals could be zero and honest while every line beneath
+    // them printed five per cent.
+    await unregisterForVat();
+    const invoice = await h.owner.query<{ id: string }>(
+      'insert into invoice (tenant_id, client_id, number, kind, issued_on, ' +
+        "net_fils, vat_fils, gross_fils) values ($1, $2, 9102, 'statement', $3, " +
+        '10000, 0, 10000) returning id',
+      [h.data.tenant.id, h.clientId(3), SEED_TODAY],
+    );
+    const { rows } = await h.owner.query<{ version: number }>(
+      'select version from vat_setting where tenant_id = $1 order by version desc limit 1',
+      [h.data.tenant.id],
+    );
+
+    await expect(
+      h.owner.query(
+        'insert into invoice_line (tenant_id, invoice_id, client_id, line_no, description, ' +
+          'quantity, unit_net_fils, net_fils, vat_rate_basis_points, vat_setting_version, ' +
+          "vat_fils, gross_fils) values ($1, $2, $3, 1, 'A visit', 1, 10000, 10000, 500, " +
+          '$4, 500, 10500)',
+        [h.data.tenant.id, invoice.rows[0]?.id, h.clientId(3), rows[0]?.version],
+      ),
+    ).rejects.toThrow(/not registered/i);
+  });
+});

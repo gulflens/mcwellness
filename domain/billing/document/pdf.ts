@@ -295,13 +295,19 @@ export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string)
   const used: Used = new Map();
   const contents = pages.map((page) => contentOf(page, fonts, resourceOf, used));
 
+  // Only the faces this document actually drew with. A receipt in English sets
+  // no Arabic, and embedding the Arabic face anyway put ninety kilobytes of
+  // unread outlines into every one — on a document the practice sends over a
+  // telephone connection to a family.
+  const embedded = slots.filter((slot) => (used.get(slot)?.size ?? 0) > 0);
+
   // Object numbering, decided up front so references can be written as they go.
   // 1 catalogue, 2 page tree, then a page and a content stream each, then five
   // objects per face.
   const pageObjectAt = 3;
   const fontObjectAt = pageObjectAt + pages.length * 2;
   const fontObject = new Map<FontSlot, number>(
-    slots.map((slot, index) => [slot, fontObjectAt + index * 5]),
+    embedded.map((slot, index) => [slot, fontObjectAt + index * 5]),
   );
 
   const objects: string[] = [];
@@ -311,7 +317,7 @@ export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string)
     return objects.length; // object numbers are one-based
   };
 
-  const fontResources = slots
+  const fontResources = embedded
     .map((slot) => `/${resourceOf.get(slot)} ${fontObject.get(slot)} 0 R`)
     .join(' ');
 
@@ -332,7 +338,7 @@ export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string)
     push(`<< /Length ${ascii(stream).length} >>\nstream\n${stream}\nendstream`);
   });
 
-  for (const slot of slots) {
+  for (const slot of embedded) {
     const font = fonts[slot];
     const glyphs = used.get(slot) ?? new Map<number, number>();
     const base = fontObject.get(slot) ?? 0;

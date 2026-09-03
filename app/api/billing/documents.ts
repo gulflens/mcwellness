@@ -65,7 +65,7 @@ import { documentSender } from './sending';
  */
 
 const KIND_SQL =
-  'select bd.id, bd.kind, bd.client_id, bd.document_id, d.storage_key, ' +
+  'select bd.id, bd.kind, bd.client_id, bd.document_id, d.storage_key, d.sha256, ' +
   'coalesce(i.reference, p.receipt_reference) as reference ' +
   'from billing_document bd join document d on d.id = bd.document_id ' +
   'left join invoice i on i.id = bd.invoice_id ' +
@@ -82,6 +82,8 @@ type FiledRow = {
   client_id: string;
   document_id: string;
   storage_key: string;
+  /** The fingerprint of the bytes that were filed. A re-render must match it. */
+  sha256: Buffer;
   reference: string | null;
 };
 
@@ -159,10 +161,36 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
     // else happens to the client's file (CLAUDE.md rule 8).
     const retentionUntil = documentRetentionUntil(kind, now());
 
-    await db.query(
-      'select app.file_billing_document($1::billing_document_kind, $2, $3, $4, $5, $6)',
+    // The id the *function* settled on, which is not always the one just
+    // generated: a second request racing the first finds its row and is handed
+    // that document back. Answering the generated id there would name a
+    // document no row carries and would put bytes under a key nothing points at.
+    const filedRow = await db.query<{ document_id: string }>(
+      'select app.file_billing_document($1::billing_document_kind, $2, $3, $4, $5, $6) ' +
+        'as document_id',
       [kind, source.sourceId, documentId, key, sha256, retentionUntil],
     );
+    const filedId = filedRow.rows[0]?.document_id;
+    if (!filedId) {
+      throw new Error('Filing a billing document did not return an id.');
+    }
+    if (filedId !== documentId) {
+      // The other request won. Its document is the document; nothing of this
+      // request's is written, and no bytes are put under a key it invented.
+      const existing = await db.query<FiledRow>(KIND_SQL, [filedId]);
+      const found = existing.rows[0];
+      return c.json(
+        CreateDocumentResponse.parse({
+          document: {
+            id: filedId,
+            kind: found?.kind ?? kind,
+            reference: found?.reference ?? source.document.reference,
+            clientId: source.clientId,
+          },
+        }),
+        200,
+      );
+    }
 
     c.get('afterCommit')(async () => {
       const stored = await storage.put(key, bytes, 'application/pdf');
@@ -213,16 +241,30 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
 
     // A put that never ran leaves a row pointing at bytes that are not there.
     // Rendering is deterministic, so the fix is to render the same document
-    // again rather than to lose it. The hash on the row is what proves the two
-    // renderings are the same file, and it is checked here.
+    // again rather than to lose it — but only if it *is* the same document.
+    //
+    // The hash on the row is what decides. A re-render whose fingerprint differs
+    // is not a repair: something the document was rendered from has moved since
+    // it was filed, and writing the new bytes under the old row's key would
+    // replace a filed financial document with a different one and leave the row
+    // asserting a hash for bytes that no longer match it. So it is refused, and
+    // the mismatch is logged with the request id and nothing else — a key and a
+    // hash both name a client's document.
     if (!(await storage.exists(row.storage_key))) {
       const remade = await documentBehind(db, documentId, row.kind);
-      if (remade) {
-        const bytes = renderDocument(remade, documentFonts());
-        c.get('afterCommit')(async () => {
-          await storage.put(row.storage_key, bytes, 'application/pdf', { overwrite: true });
-        });
+      if (!remade) {
+        return c.json({ error: 'not_found', requestId }, 404);
       }
+      const bytes = renderDocument(remade, documentFonts());
+      if (createHash('sha256').update(bytes).digest('hex') !== row.sha256.toString('hex')) {
+        console.error(
+          JSON.stringify({ requestId, name: 'DocumentWouldNotMatchWhatWasFiled', documentId }),
+        );
+        return c.json({ error: 'conflict', code: 'document_bytes_differ', requestId }, 409);
+      }
+      c.get('afterCommit')(async () => {
+        await storage.put(row.storage_key, bytes, 'application/pdf', { overwrite: true });
+      });
     }
 
     // Handing somebody the means to open a client's file is the read worth

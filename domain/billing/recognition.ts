@@ -45,8 +45,14 @@ export type MonthlyMoney = {
    */
   revenueRecognisedFils: Fils;
   /**
-   * What is still owed in sessions, as at the end of the month: the allocated
-   * value of every credit not yet used up. A contract liability, not income.
+   * What is still owed in sessions **as things stand**: the allocated value of
+   * every credit not yet used up. A contract liability, not income.
+   *
+   * A position, not a period — which is why it does not move with `month`. It
+   * answers "what does the practice owe now", and asking about January gives
+   * the same figure as asking about June, because the credits outstanding are
+   * the credits outstanding. Reading it as "deferred at the end of that month"
+   * would be wrong, and the comment used to say exactly that.
    *
    * A credit past its expiry date is still counted here, and deliberately:
    * until the practice writes one off it is a promise it has made, and a

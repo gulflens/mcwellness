@@ -5,6 +5,15 @@ export type { ConsentGiver, ConsentRefusal, ConsentSubject } from './canGiveCons
 export { canTransition } from './canTransition';
 export { canViewClient } from './canViewClient';
 export { computeRetentionUntil } from './computeRetentionUntil';
+export { KEPT_THROUGH_ERASURE_KINDS, isKeptThroughErasure } from './erasureKeeps';
+export {
+  ERASURE_LETTER_KIND,
+  ERASURE_LETTER_MIME_TYPE,
+  formatLetterDate,
+  parseErasureLetterTemplate,
+  renderErasureLetter,
+} from './erasureLetter';
+export type { ErasureLetterLocale, ErasureLetterTemplate } from './erasureLetter';
 export {
   CLIENT_UPLOAD_KINDS,
   CONSENT_EVIDENCE_KINDS,

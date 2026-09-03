@@ -21,3 +21,18 @@ export function canWriteClientRecord(actor: Actor, clientId: string, now: Date):
 export function canWriteGoal(actor: Actor): boolean {
   return hasRole(actor, 'owner', 'lead_practitioner');
 }
+
+/**
+ * Performing an erasure: the owner and an admin (docs/SPEC/client-record.md
+ * section 8, "Admin action"). Deliberately narrower than `app.erase_client`,
+ * which also admits the lead practitioner — the database is the floor and the
+ * floor may be wider than the door.
+ */
+export function canPerformErasure(actor: Actor): boolean {
+  return hasRole(actor, 'owner', 'admin');
+}
+
+/** Recording that a household asked to be forgotten: the three who write the record. */
+export function canRecordErasureRequest(actor: Actor): boolean {
+  return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+}

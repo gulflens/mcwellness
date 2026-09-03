@@ -12,6 +12,7 @@ import { LocationsTab } from './LocationsTab';
 import { OverviewTab } from './OverviewTab';
 import { Tabs, TabPanel, type Tab } from './Tabs';
 import { canSeeFullRecord, canWriteGoals, canWriteRecord } from './clientAccess';
+import { clientHeadingName } from './contactName';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { useClientRecord } from './useClientRecord';
 
@@ -51,12 +52,23 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
   // next. Every client opens on Overview.
   const [tab, setTab] = useState<string>(DEFAULT_TAB);
   const [reason, setReason] = useState('');
+  // Set the moment this record is erased from the Overview tab, and not by
+  // asking the server: the person who pressed the button may be an admin, and
+  // an admin may not open an erased record (docs/SPEC/client-record.md section
+  // 2). A refetch would answer 403 and this drawer would say the record could
+  // not be loaded, immediately after an irreversible act succeeded. So the
+  // drawer takes the fact from the panel that did it — the status it shows,
+  // and the reason its own routes now ask for.
+  const [erasedHere, setErasedHere] = useState(false);
   const { state, refetch } = useClientRecord(client.id);
   const { session } = useAuth();
   const actor = session.status === 'signed-in' ? session.actor : null;
   const now = new Date();
-  const mayWrite = canWriteRecord(actor, now);
-  const mayWriteGoals = canWriteGoals(actor);
+  const erased = erasedHere || (state.kind === 'ready' && state.record.status === 'erased');
+  // Nothing is written to an erased record, by anyone: the routes refuse it
+  // and the policies refuse it under them, so no tab offers it either.
+  const mayWrite = canWriteRecord(actor, now) && !erased;
+  const mayWriteGoals = canWriteGoals(actor) && !erased;
   const tabs = canSeeFullRecord(actor) ? ALL_TABS : FINANCE_TABS;
 
   useEffect(() => {
@@ -77,9 +89,14 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
       <header className="drawer__header">
         <div className="drawer__title">
           <h2 id="drawer-title">
-            {client.givenName} {client.familyName}
+            {erased
+              ? clientHeadingName('Erased client', 'Erased client')
+              : clientHeadingName(client.givenName, client.familyName)}
           </h2>
-          {client.givenNameAr ? (
+          {/* The Arabic pair goes with the Latin one: an erased record has
+              neither, and the row this drawer was opened from still carries
+              the name the erasure has just taken away. */}
+          {!erased && client.givenNameAr ? (
             <p className="small muted" lang="ar" dir="rtl">
               {client.givenNameAr} {client.familyNameAr}
             </p>
@@ -90,7 +107,9 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 not leave the header still saying "lead" against a row the list fetched
                 before the change. */}
             <ClientStatusChip
-              status={state.kind === 'ready' ? state.record.status : client.status}
+              status={
+                erased ? 'erased' : state.kind === 'ready' ? state.record.status : client.status
+              }
             />
           </p>
         </div>
@@ -135,44 +154,62 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
             <TabPanel id="overview" idPrefix="client" selected={tab}>
               <OverviewTab
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
+                reason={reason.trim() || undefined}
+                onErased={(erasureReason) => {
+                  setErasedHere(true);
+                  // The reason it was erased with becomes the reason this
+                  // drawer holds, so an owner or a lead practitioner reading
+                  // the record afterwards is not bounced to the reason prompt
+                  // for a record they are standing in front of.
+                  if (!reason.trim()) setReason(erasureReason);
+                }}
               />
             </TabPanel>
             <TabPanel id="contacts" idPrefix="client" selected={tab}>
               <ContactsTab
                 clientId={client.id}
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
+                erased={erased}
               />
             </TabPanel>
             <TabPanel id="locations" idPrefix="client" selected={tab}>
               <LocationsTab
                 clientId={client.id}
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
+                erased={erased}
               />
             </TabPanel>
             <TabPanel id="consent" idPrefix="client" selected={tab}>
               <ConsentTab
                 clientId={client.id}
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
+                erased={erased}
               />
             </TabPanel>
             <TabPanel id="goals" idPrefix="client" selected={tab}>
               <GoalsTab
                 clientId={client.id}
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWriteGoals}
+                erased={erased}
               />
             </TabPanel>
             <TabPanel id="documents" idPrefix="client" selected={tab}>
-              <DocumentsTab clientId={client.id} mayWrite={mayWrite} />
+              <DocumentsTab
+                clientId={client.id}
+                mayWrite={mayWrite}
+                erased={erased}
+                reason={reason.trim() || undefined}
+              />
             </TabPanel>
           </>
         ) : null}

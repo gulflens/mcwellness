@@ -35,7 +35,8 @@
 -- store.
 --
 -- Needs: 010 (tenant), 020 (app_user), 060 (client, document), 080
--- (app.audit_row), 095 (app.actor_has_role), 100 (app.current_actor_id),
+-- (app.audit_row), 099 (the tenant-scoped keys this table's composite foreign
+-- keys reference on client and document), 100 (app.current_actor_id),
 -- 402 (invoice, payment).
 
 create type billing_document_kind as enum ('invoice', 'receipt');

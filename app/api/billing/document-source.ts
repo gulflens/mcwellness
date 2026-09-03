@@ -16,11 +16,19 @@ import type { Db } from '../_middleware/request-context';
  * year's address. A document must keep saying what it said.
  *
  * A **receipt** has no supplier columns of its own — a payment is not an
- * invoice and does not carry a snapshot — so it takes the practice from the
- * invoice it settles. A payment made against no invoice at all is the one case
- * with nothing to read: it takes the practice's identity from the most recent
- * invoice that household was issued, and when there is none the receipt is
- * refused rather than rendered under a guess.
+ * invoice and does not carry a snapshot — so it takes the practice from **the
+ * invoice it settles**. That is not interchangeable with "the household's most
+ * recent invoice", which is what this read until the compliance review caught
+ * it: a receipt for money taken before the practice registered for VAT would
+ * re-render under a later invoice's snapshot and print a VAT registration
+ * number the practice did not hold on the day. The settled invoice is the one
+ * document that says who the practice was at that moment.
+ *
+ * A payment made against no invoice at all — a family paying something off
+ * account — has nothing of its own to read, so it falls back to the latest
+ * invoice issued **at or before the day the money arrived**, which is the
+ * nearest thing to a snapshot of that moment. When there is none, the receipt
+ * is refused rather than rendered under a guess.
  */
 
 const INVOICE_SQL =
@@ -46,13 +54,25 @@ const PAYMENT_SQL =
   'left join invoice i on i.id = p.invoice_id ' +
   'where p.tenant_id = app.current_tenant_id() and p.id = $1';
 
-/** The practice as some invoice of this household's recorded it, for a receipt. */
-const FALLBACK_SUPPLIER_SQL =
-  'select supplier_legal_name, supplier_legal_name_ar, supplier_address, ' +
+const SUPPLIER_COLUMNS =
+  'supplier_legal_name, supplier_legal_name_ar, supplier_address, ' +
   'supplier_licence_number, supplier_licensing_authority, supplier_trn, ' +
-  'supplier_vat_registered, supplier_vat_trn from invoice ' +
-  'where tenant_id = app.current_tenant_id() and client_id = $1 ' +
-  'order by number desc limit 1';
+  'supplier_vat_registered, supplier_vat_trn';
+
+/** The snapshot on the invoice this payment settles. The first thing asked for. */
+const SETTLED_SUPPLIER_SQL =
+  `select ${SUPPLIER_COLUMNS} from invoice ` +
+  'where tenant_id = app.current_tenant_id() and id = $1';
+
+/**
+ * For a payment that settles nothing: the latest invoice issued at or before
+ * the day the money arrived. Never simply the latest — an invoice issued after
+ * the payment can say the practice was registered when it was not.
+ */
+const NEAREST_SUPPLIER_SQL =
+  `select ${SUPPLIER_COLUMNS} from invoice ` +
+  'where tenant_id = app.current_tenant_id() and client_id = $1 and issued_on <= $2::date ' +
+  'order by issued_on desc, number desc limit 1';
 
 type SupplierColumns = {
   supplier_legal_name: string;
@@ -168,7 +188,11 @@ export async function receiptDocument(
   const row = found.rows[0];
   if (!row || row.receipt_reference === null) return null;
 
-  const supplierRow = await db.query<SupplierColumns>(FALLBACK_SUPPLIER_SQL, [row.client_id]);
+  // The invoice it settles, or — settling none — the nearest one issued on or
+  // before the day the money arrived.
+  const supplierRow = row.invoice_id
+    ? await db.query<SupplierColumns>(SETTLED_SUPPLIER_SQL, [row.invoice_id])
+    : await db.query<SupplierColumns>(NEAREST_SUPPLIER_SQL, [row.client_id, row.received_on]);
   const supplier = supplierRow.rows[0];
   // Nothing to say who issued it. Better no receipt than one that names the
   // practice from a row that was never snapshotted.

@@ -44,6 +44,7 @@ export function InvoicesSection() {
     clientId: string;
     reference: string;
   } | null>(null);
+  const [sendingOn, setSendingOn] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -72,9 +73,20 @@ export function InvoicesSection() {
 
   async function startSending(row: InvoiceRow) {
     setError(null);
-    const document_ = row.documentId ? { id: row.documentId } : await ensure({ invoiceId: row.id });
-    if (!document_) return;
-    setSending({ documentId: document_.id, clientId: row.clientId, reference: row.reference });
+    // The same busy state Open PDF has, and for the same reason: on a row whose
+    // document has not been made yet this renders it and uploads it, which is
+    // not instant, and a button that does nothing visible for a second is a
+    // button somebody presses twice.
+    setSendingOn(row.id);
+    try {
+      const document_ = row.documentId
+        ? { id: row.documentId }
+        : await ensure({ invoiceId: row.id });
+      if (!document_) return;
+      setSending({ documentId: document_.id, clientId: row.clientId, reference: row.reference });
+    } finally {
+      setSendingOn(null);
+    }
   }
 
   const registered = state.kind === 'ready' ? state.response.practiceVatRegistered : false;
@@ -138,8 +150,12 @@ export function InvoicesSection() {
             >
               {busyOn === row.id ? 'Opening…' : 'Open PDF'}
             </Button>
-            <Button variant="quiet" onClick={() => void startSending(row)}>
-              Send
+            <Button
+              variant="quiet"
+              disabled={sendingOn === row.id}
+              onClick={() => void startSending(row)}
+            >
+              {sendingOn === row.id ? 'Preparing…' : 'Send'}
             </Button>
           </span>
         ),
@@ -149,7 +165,7 @@ export function InvoicesSection() {
     // rebuilds when the registration or a busy row changes, which is what the
     // buttons read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [registered, busyOn],
+    [registered, busyOn, sendingOn],
   );
 
   return (

@@ -86,3 +86,44 @@ describe('knowing what is Arabic', () => {
     expect(isArabic(0x0037)).toBe(false);
   });
 });
+
+describe('punctuation that has a mirror image', () => {
+  it('turns a bracket round in a right-to-left run', () => {
+    // A bracket is a role, not a shape: the one that opens is on the side the
+    // reading starts from. Untouched, "(نعم)" comes out inside-out.
+    const drawn = String.fromCodePoint(...forDrawing('(نعم)'));
+    expect(drawn.startsWith('(')).toBe(true);
+    expect(drawn.endsWith(')')).toBe(true);
+  });
+
+  it('leaves a bracket round a Latin stretch alone', () => {
+    // "(20)" is read left to right wherever it sits, so its brackets are not
+    // reversed and not mirrored.
+    expect(String.fromCodePoint(...forDrawing('(20)'))).toBe('(20)');
+  });
+});
+
+describe('a very long line', () => {
+  it('shapes and orders two hundred thousand characters without falling over', () => {
+    // The shaper walked backwards from every letter to find its neighbour, which
+    // was quadratic in marks, and built the drawing order by spreading a run
+    // into unshift, which blew the call stack. Both are on the path that renders
+    // a client's financial record, from a string somebody typed.
+    const line = 'جلسة نيوروفيدباك '.repeat(12_000);
+    expect(line.length).toBeGreaterThan(200_000);
+    const drawn = forDrawing(line);
+    expect(drawn.length).toBeGreaterThan(100_000);
+  });
+
+  it('shapes twenty thousand vowel marks in a row in linear time', () => {
+    const marks = `ب${'َ'.repeat(20_000)}ح`;
+    const started = Date.now();
+    const shaped = shape([...marks].map((c) => c.codePointAt(0) ?? 0));
+    // Not a benchmark, a shape check: the quadratic version took minutes here.
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(shaped).toHaveLength(20_002);
+    // And the join still reaches past the marks: initial beh, final hah.
+    expect(shaped[0]?.toString(16).toUpperCase()).toBe('FE91');
+    expect(shaped[shaped.length - 1]?.toString(16).toUpperCase()).toBe('FEA2');
+  });
+});

@@ -32,7 +32,18 @@ export const WORDS = {
 
   licenceNumber: { en: 'Licence number', ar: 'رقم الرخصة' },
   licensingAuthority: { en: 'Licensing authority', ar: 'جهة الترخيص' },
-  taxRegistrationNumber: { en: 'Tax registration number', ar: 'رقم التسجيل الضريبي' },
+  /**
+   * The **corporate-tax** registration, named at length so it cannot be read as
+   * the other one. "Tax registration number" / "رقم التسجيل الضريبي" is the exact
+   * phrase the Federal Tax Authority uses for a VAT TRN, so printing the
+   * corporate-tax number under it says the practice holds a registration it does
+   * not — the misstatement `tenant.trn` and `invoice.supplier_trn` carry column
+   * comments to prevent, undone by the label.
+   */
+  corporateTaxNumber: {
+    en: 'Corporate tax registration number',
+    ar: 'رقم التسجيل في ضريبة الشركات',
+  },
   vatRegistrationNumber: {
     en: 'VAT registration number',
     ar: 'رقم التسجيل في ضريبة القيمة المضافة',
@@ -93,6 +104,43 @@ export const NOT_REGISTERED_BASIS: Phrase = {
   ar: 'المنشأة غير مسجلة في ضريبة القيمة المضافة، ولذلك لا تُحتسب أي ضريبة على هذا المستند.',
 };
 
+/**
+ * What a receipt says at the foot of the page.
+ *
+ * **A receipt makes no tax statement, in either direction.** It carried
+ * `SIMPLIFIED_BASIS` until the compliance review caught it, which meant a
+ * registered practice's receipt described itself as a simplified *tax invoice* —
+ * a document it is not, under a heading that says so two hundred points above.
+ * The opposite footer would be no better: a receipt acknowledges money that
+ * arrived, and what tax was charged is a fact about the invoice it settles, not
+ * about the act of paying.
+ *
+ * So the footer says what the document is and what the money was: the method,
+ * the day, and the invoice it settles or that it was taken on account. The
+ * amounts and the dates are already on the page; saying them again in a sentence
+ * is what makes the page readable to somebody who is not reading a table.
+ */
+export function receiptBasis(input: {
+  method: 'cash' | 'transfer' | 'link';
+  receivedOn: string;
+  /** The same day, with an Arabic month name (`arabicDocumentDate`). */
+  receivedOnAr: string;
+  settlesReference: string | null;
+}): Phrase {
+  const against = input.settlesReference;
+  return {
+    en:
+      `Received by ${WORDS[input.method].en.toLowerCase()} on ` +
+      `${formatDocumentDate(input.receivedOn)}, ` +
+      `${against ? `against invoice ${against}` : 'on account'}. ` +
+      'This is a receipt for money received, not a tax invoice.',
+    ar:
+      `استُلم بواسطة ${WORDS[input.method].ar} بتاريخ ${input.receivedOnAr}، ` +
+      `${against ? `سداداً للفاتورة ${against}` : 'على الحساب'}. ` +
+      'هذا إيصال باستلام مبلغ وليس فاتورة ضريبية.',
+  };
+}
+
 /** The wordmark at the top of the page. */
 export const WORDMARK = 'McWellness';
 
@@ -128,6 +176,44 @@ export function formatDocumentDate(isoDate: string): string {
   if (!year || !day || name === undefined) {
     // Never guess at a date on a financial document: show exactly what the row
     // holds and let a person see that it is wrong.
+    return isoDate;
+  }
+  return `${Number(day)} ${name} ${year}`;
+}
+
+const MONTHS_AR = [
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
+];
+
+/**
+ * The same day, for the Arabic side of the page: "2 سبتمبر 2026".
+ *
+ * An English month name inside an Arabic sentence is not a bilingual document,
+ * it is an English one with Arabic around it — the design review's finding on
+ * the receipt's footer.
+ *
+ * **The digits stay Western**, and that is a choice rather than an oversight.
+ * Every figure on these documents — the amounts, the invoice number, the
+ * record number — is set in Western digits, on both sides of the page, because
+ * they are the same figures read by both readers. Arabic-Indic digits in one
+ * sentence and Western ones in the table above it would be the inconsistency,
+ * not the fix. This is also how bilingual invoices are set across the Gulf.
+ */
+export function arabicDocumentDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-');
+  const name = MONTHS_AR[Number(month) - 1];
+  if (!year || !day || name === undefined) {
     return isoDate;
   }
   return `${Number(day)} ${name} ${year}`;

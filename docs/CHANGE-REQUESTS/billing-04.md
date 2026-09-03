@@ -18,6 +18,9 @@ Federal Tax Authority.
 | 3 | `docs/SEAMS.md`, `docs/COMPLIANCE/approved-vendors.md` | The sending seam, and what it does *not* send | nothing |
 | 4 | `app/api/_middleware/audit.ts` | A general `logAction`, so billing's copy can go | nothing |
 | 5 | `app/admin/settings/**` (trunk) | The practice's logo as a document the owner can replace | nothing — the wordmark stands until then |
+| 6 | `app/admin/settings/**` (trunk) | Relabel the corporate-tax number, as the document now does | nothing |
+| 7 | `db/migrations/1xx` (client-record) | Erasure keeps a filed invoice: the rule, written down | nothing — pull request 51 already holds them back |
+| 8 | this stream, a later round | Two things review found and this round did not fix | nothing; both stated below |
 
 ---
 
@@ -213,3 +216,112 @@ since the table grants no update, which is why the rendered document hangs off
 for request 1's reason — the column is on a table the trunk has since extended —
 and a merged migration is never edited, so it is noted here rather than left for
 somebody to wire up in good faith.
+
+---
+
+## 6. Relabel the corporate-tax number on the Practice screens
+
+**What.** In `app/admin/settings/PracticePage.tsx` and
+`app/admin/settings/PracticeDrawer.tsx`, and in `app/api/practice/schema.ts`'s
+field label if it carries one:
+
+```diff
+-              <Fact label="Tax registration number">
++              <Fact label="Corporate tax registration number">
+```
+
+```diff
+-            label="Tax registration number (optional)"
++            label="Corporate tax registration number (optional)"
+-      errors.taxRegistrationNumber = 'A tax registration number is letters, digits and hyphens.';
++      errors.taxRegistrationNumber =
++        'A corporate tax registration number is letters, digits and hyphens.';
+```
+
+**Why.** "Tax registration number" is the exact phrase the Federal Tax Authority
+uses for a **VAT** TRN. `tenant.trn` is the practice's corporate-tax
+registration, and both `tenant.trn` and `invoice.supplier_trn` carry column
+comments saying it must never be printed as a VAT number — which the label
+undoes, on the one screen where the owner types it in and could reasonably
+conclude she has just recorded her VAT registration. The rendered document was
+fixed in this pull request (`domain/billing/document/strings.ts`,
+`WORDS.corporateTaxNumber`); the screens are the trunk's.
+
+The field name in the API payload (`taxRegistrationNumber`) can stay: renaming a
+wire field is a change with no reader, and the two screens are where a person
+reads anything.
+
+---
+
+## 7. An erasure keeps a filed invoice — the rule, written down
+
+**The rule, which is what this request is for.** *A document named by
+`billing_document` is a financial record. It is kept for five years from the day
+it was filed, and an erasure does not delete it or the bytes behind it.* CLAUDE.md
+rule 8 says financial records keep five years regardless; `docs/SPEC/00-data-model.md`
+section 7 says an erasure "deletes documents from storage" and that "invoices keep
+what tax law requires for their 5 years". Those two sentences meet on exactly
+these rows, and until now nothing said which won.
+
+**What it means for `app.erase_client`** (`db/migrations/100_client_record.sql`,
+client-record's): a document with a `billing_document` row pointing at it is
+skipped — not deleted, and its `storage_key` not added to
+`storage_keys_to_delete`. Client-record's pull request 51 already holds them back
+by reference, which is the same outcome; this records *why*, so that a later
+round tidying the erasure does not remove the exemption as dead weight.
+
+**And what it means for this stream's schema.** `billing_document`'s foreign key
+to `document` deliberately carries no `on delete` clause. That is not an
+oversight: an erasure that tried to delete such a document would abort on the
+reference, which is a loud failure rather than a quiet loss of a tax record.
+`on delete cascade` would be exactly wrong — it would make the erasure succeed
+by taking the invoice with it.
+
+**The test that proves it.** `tests/billing/db/erasure.test.ts` erases a client
+who has a filed invoice and asserts the erasure succeeds and the document
+survives. It is skipped until pull request 51 is on `main`, and says so where it
+is skipped; unskipping it is one line.
+
+---
+
+## 8. Two things review found that this round did not fix
+
+Both are stated here rather than left in a comment, because both are decisions
+somebody should take rather than defects somebody forgot.
+
+**The takings figure changes with who asks.** `GET /api/billing/summary` reads
+`payment` and `entitlement` under row security, and `db/policies/billing/ledger.sql`
+puts every client-scoped read behind `app.client_erasure_gate` — so an erased
+client's money is visible to the owner and the lead practitioner and not to
+finance or an admin. Cash collected, revenue recognised and the deferred balance
+are therefore *smaller for finance than for the owner* on any month containing an
+erased household.
+
+**That is not intended, and it is the wrong answer for a takings figure.** What
+the practice earned in a month is one number; a total that depends on who is
+looking is not a total. The erasure gate is right for a *client's* row — an
+erased household should not be listed to a coordinator — and wrong for an
+aggregate that names nobody. The fix is a security-definer aggregate that reads
+the ledger whole and answers three integers naming no client, which is what
+CLAUDE.md rule 8 ("financial records keep five years regardless") points at
+anyway. It is a migration and a route change, not a comment, so it is not
+smuggled into a fix round.
+
+**Copied Arabic comes back unusable.** The renderer shapes Arabic into
+presentation forms and reverses it before writing (`domain/billing/document/arabic.ts`),
+and the `/ToUnicode` map is built from the glyphs actually drawn — so text
+selected out of an Arabic run arrives reversed and spelt in the FE70 block
+rather than in the letters somebody would search for. The English half copies
+correctly. The fix is to record, per drawn glyph, the logical character it came
+from and map *that* into `/ToUnicode`, which is a change to the writer alone. It
+is written up in `domain/billing/document/extract.ts` so nobody reads that
+extractor as a promise about the clipboard.
+
+**And one thing that is intended.** `invoice.supplied_on` (migration 406) exists
+and nothing writes it. A single visit is supplied on the day it is invoiced, so
+the column is correctly null there; a package sold in January and delivered
+through May is the case that needs it, and **the tax point on a prepaid package
+is the open question `docs/SPEC/billing.md` section 5.3 sends to the tax
+adviser**. Writing a date before that answer exists would be inventing the
+answer. The column is there so that the day the adviser replies is a route
+change and not a migration on an append-only table.

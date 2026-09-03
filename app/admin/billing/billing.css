@@ -103,8 +103,19 @@
 
 .figures__item dd {
   margin: 0;
+}
+
+/* The figure itself. Only the first: a second dd is a note about the figure —
+   "Paid for, not yet delivered" — and it was being set at heading size, which
+   made a caption shout louder than the number it explains. */
+.figures__item dd:first-of-type {
   font-size: var(--t-h2);
   line-height: var(--lh-h2);
+}
+
+.figures__item dd + dd {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
 }
 
 .figures__heading {
