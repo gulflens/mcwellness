@@ -21,9 +21,11 @@
 -- transition to 'completed' happens once, atomically, and can be depended on.
 --
 -- Needs: 010 (tenant), 020 (app_user, for closed_by), 060 (document, for the
--- setup photo), 080 (app.audit_row, already on session from 300), 200
--- (appointment, for the visit this session fulfils and for the close's own
--- status flip) and 300 (session, session_event).
+-- setup photo), 080 (app.audit_row, already on session from 300), 095
+-- (app.current_actor_id, which the appointment door below calls), 098
+-- (app.erasure_active, which the immutability guard must not stand in front
+-- of), 200 (appointment, for the visit this session fulfils and for the
+-- close's own status flip) and 300 (session, session_event).
 
 ------------------------------------------------------------------------------
 -- 1. The visit's own body.
@@ -40,10 +42,21 @@ alter table public.session
   add column ended_at                timestamptz,
   add column checked_out_at          timestamptz,
   -- Recorded at check-out only when sharing was switched on at check-in
-  -- (section 3.6), under exactly the rule 300's checked_in_point carries:
-  -- proof of attendance, the practitioner's own scope plus the practice's
-  -- oversight roles, the session's own retention, never copied into the
-  -- audit trail.
+  -- (section 3.6), under the rule 300's checked_in_point carries: proof of
+  -- attendance, the practitioner's own scope plus the practice's oversight
+  -- roles, the session's own retention.
+  --
+  -- It is NOT yet excluded from the audit trail. 098_erasure_guard.sql's
+  -- redaction names checked_in_point and nothing else, so until the trunk's
+  -- migration 904 adds this column to that list, a check-out coordinate
+  -- reaches audit_log.new_values in full. Written down here rather than
+  -- assumed: an earlier draft of this comment claimed the exclusion already
+  -- applied, which was false, and a false comment about where personal data
+  -- goes is worse than no comment. This stream's own half of the fix — never
+  -- letting the coordinate ride inside session_event.payload, where the
+  -- redaction cannot see it at all — is done: the check-out point is carried
+  -- session-level, exactly as check-in carries its own, and
+  -- CheckedOutPayload holds no point.
   add column checked_out_point       extensions.geography(point, 4326),
   -- The pre-flight checklist as the practitioner left it: an array of
   -- { key, done }, keys from service_type.preflight_checklist (section 3.2).
@@ -91,12 +104,19 @@ alter table public.session
     check ((version = 1 and supersedes_id is null) or amendment_reason is not null),
   add constraint session_signal_quality_range
     check (signal_quality_score is null or signal_quality_score between 0 and 1),
-  -- A closed session is a completed one, and a completed one is closed. The
-  -- two columns are one fact recorded twice (status is the vocabulary the
-  -- rest of the schema reads; closed_at is the moment), so they may never
-  -- disagree.
-  add constraint session_closed_is_completed
-    check ((closed_at is null) = (status <> 'completed')),
+  -- closed_at is the moment a visit stopped being writable, and every
+  -- terminal status can reach it: an aborted visit (a lost phone, closed by
+  -- an admin with a reason) and a no-show are as finished as a completed one,
+  -- and the immutability trigger below freezes whichever of them sets it. A
+  -- completed visit must always be closed; the others may be closed and,
+  -- until the admin console that settles them exists, are not.
+  add constraint session_closed_is_settled
+    check (
+      closed_at is null
+      or status in ('completed', 'no_show', 'cancelled_late', 'cancelled', 'aborted')
+    ),
+  add constraint session_completed_is_closed
+    check (status <> 'completed' or closed_at is not null),
   add constraint session_closed_by_with_closed_at
     check ((closed_at is null) = (closed_by is null)),
   add constraint session_ends_after_it_starts
@@ -105,7 +125,8 @@ alter table public.session
 comment on column public.session.checked_out_point is
   'Proof the practitioner was at the door when they checked out, recorded only when '
   'sharing was switched on at check-in. Same reach and retention as checked_in_point '
-  '(300_session.sql); dropped from the audit trail unconditionally (098_erasure_guard.sql).';
+  '(300_session.sql). Pending exclusion from the audit trail: 098_erasure_guard.sql '
+  'names checked_in_point only, and the trunk migration 904 adds this one.';
 
 -- Foreign keys Postgres does not index for us, and the two reads the day
 -- sheet and the close route actually make.
@@ -133,12 +154,18 @@ create index session_client_service_completed_idx
 -- opened here: it inserts, it does not update, so this guard never stands in
 -- its way and nothing about it needs an exception.
 ------------------------------------------------------------------------------
+-- security definer, so the guard can see app.erasure_active, which app_role
+-- holds no grant on at all (098_erasure_guard.sql). Erasure runs as the
+-- owner through app.erase_client and must be able to reach these columns: a
+-- record frozen against its own author is right, and a record frozen against
+-- a person's right to be forgotten is not.
 create function app.session_refuse_update_after_close() returns trigger
-language plpgsql
+language plpgsql security definer
 set search_path = pg_catalog, pg_temp
 as $$
 begin
-  if old.closed_at is not null then
+  if old.closed_at is not null
+     and not exists (select 1 from app.erasure_active where txid = txid_current()) then
     raise exception 'session % is closed and cannot be changed; correct it with a new version',
       old.id
       using errcode = 'restrict_violation';
@@ -146,6 +173,7 @@ begin
   return new;
 end
 $$;
+revoke execute on function app.session_refuse_update_after_close() from public;
 
 create trigger refuse_update_after_close before update on public.session
   for each row execute function app.session_refuse_update_after_close();
@@ -158,7 +186,8 @@ alter table public.session enable always trigger refuse_update_after_close;
 -- The route answers this as a plain refusal the device can stop retrying on.
 -- security definer, so the lookup below reads the session row itself rather
 -- than whatever row security would have shown the caller: a guard that fails
--- open because it could not see what it was guarding is not a guard.
+-- open because it could not see what it was guarding is not a guard. The
+-- same erasure exemption as above, for the same reason.
 create function app.session_event_refuse_after_close() returns trigger
 language plpgsql security definer
 set search_path = pg_catalog, pg_temp
@@ -166,6 +195,9 @@ as $$
 declare
   v_closed_at timestamptz;
 begin
+  if exists (select 1 from app.erasure_active where txid = txid_current()) then
+    return new;
+  end if;
   select s.closed_at into v_closed_at from public.session s where s.id = new.session_id;
   if v_closed_at is not null then
     raise exception 'session % is closed and accepts no further events', new.session_id
@@ -174,6 +206,7 @@ begin
   return new;
 end
 $$;
+revoke execute on function app.session_event_refuse_after_close() from public;
 
 create trigger refuse_event_after_close before insert on public.session_event
   for each row execute function app.session_event_refuse_after_close();
@@ -221,6 +254,9 @@ begin
      and s.tenant_id = app.current_tenant_id()
      and p.tenant_id = app.current_tenant_id()
      and p.user_id = app.current_actor_id()
+     -- A suspended or archived practitioner is not who this door opens for,
+     -- any more than they are who checkin.ts's own lookup opens for.
+     and p.status = 'active'
      and s.closed_at is not null;
 
   if v_appointment_id is null then
@@ -231,7 +267,15 @@ begin
      set status = 'completed'
    where a.id = v_appointment_id
      and a.tenant_id = app.current_tenant_id()
-     and a.status in ('proposed', 'confirmed', 'checked_in');
+     -- 'confirmed' and 'checked_in' only, not 'proposed'. The schema review
+     -- of this pull request asked for the narrower set while the scheduling
+     -- stream has not answered the question in
+     -- docs/CHANGE-REQUESTS/session-capture-02.md section 3b (its own two
+     -- doors disagree about whether a proposed appointment counts). Narrow
+     -- is the safe side of that disagreement: a proposed visit nobody
+     -- confirmed is not one this door completes, and the coordinator can
+     -- still settle it from the calendar.
+     and a.status in ('confirmed', 'checked_in');
   get diagnostics v_updated = row_count;
   return v_updated = 1;
 end
@@ -253,7 +297,8 @@ grant execute on function app.complete_appointment_for_session(uuid) to app_role
 --   alter table public.session
 --     drop constraint if exists session_ends_after_it_starts,
 --     drop constraint if exists session_closed_by_with_closed_at,
---     drop constraint if exists session_closed_is_completed,
+--     drop constraint if exists session_completed_is_closed,
+--     drop constraint if exists session_closed_is_settled,
 --     drop constraint if exists session_signal_quality_range,
 --     drop constraint if exists session_amendment_reason_with_version,
 --     drop constraint if exists session_version_positive,

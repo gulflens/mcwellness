@@ -42,6 +42,22 @@
 -- consent, are the same answer — false — for the same reason found = false is
 -- one answer in app.checkin_context.
 ------------------------------------------------------------------------------
+-- Three narrowings beyond "an active consent row exists", each from the
+-- security and compliance review of pull request 41:
+--
+--  * the session must still be open. A door that serves a closed visit is a
+--    door into a record nobody is standing in front of any more.
+--  * the practitioner must be active. A suspended account keeps no reach.
+--  * for a minor, the consent must have been given by a contact who may
+--    actually give it. `contact.can_consent` is the practice's own record of
+--    who that is (00-data-model.md section 3); a photograph of a child
+--    agreed to by somebody with no standing to agree is not consent, and
+--    this is the same shape of check canCheckIn already makes when it takes
+--    `isMinor` from app.checkin_context. Minority is judged on today's date
+--    in the practice's own zone, matching that function exactly.
+--    For an adult the contact rule does not apply: an adult client may
+--    consent for themselves, and the practice records that as it records
+--    every other consent.
 create function app.session_consent_active(p_session_id uuid, p_purpose text)
 returns boolean
 language sql stable security definer
@@ -51,14 +67,30 @@ as $$
     select 1
       from public.session s
       join public.practitioner p on p.id = s.practitioner_id
+      join public.client cl on cl.id = s.client_id and cl.tenant_id = s.tenant_id
       join public.consent c on c.client_id = s.client_id and c.tenant_id = s.tenant_id
+      join public.contact ct on ct.id = c.given_by_contact_id and ct.tenant_id = c.tenant_id
      where s.id = p_session_id
        and s.tenant_id = app.current_tenant_id()
+       and s.closed_at is null
+       and s.status = 'in_progress'
        and p.tenant_id = app.current_tenant_id()
        and p.user_id = app.current_actor_id()
+       and p.status = 'active'
        and c.status = 'active'
        and (c.expires_at is null or c.expires_at > now())
        and c.purpose::text = p_purpose
+       and (
+         -- An adult: the consent stands on its own.
+         cl.date_of_birth is not null
+         and cl.date_of_birth
+             <= ((date_trunc('day', now() at time zone 'Asia/Dubai'))::date
+                 - interval '18 years')::date
+         -- A minor, or a client with no date of birth on file (which
+         -- canCheckIn already treats as a minor by default): the contact who
+         -- gave it must be one the practice records as able to.
+         or ct.can_consent
+       )
   )
 $$;
 revoke execute on function app.session_consent_active(uuid, text) from public;
@@ -77,6 +109,10 @@ grant execute on function app.session_consent_active(uuid, text) to app_role;
 -- three lifetimes of one, and a client with an implausible history cannot
 -- turn one screen into an unbounded read.
 ------------------------------------------------------------------------------
+-- Narrowed the same way as the door above: it serves the visit the
+-- practitioner is standing in, so the session must still be open and the
+-- practitioner must be active. "Session 12 of 30" is a line on a running
+-- screen; nothing else has any business asking this.
 create function app.session_history_for(p_session_id uuid)
 returns table (
   id              uuid,
@@ -93,8 +129,11 @@ as $$
     join public.session h on h.client_id = s.client_id and h.tenant_id = s.tenant_id
    where s.id = p_session_id
      and s.tenant_id = app.current_tenant_id()
+     and s.closed_at is null
+     and s.status = 'in_progress'
      and p.tenant_id = app.current_tenant_id()
      and p.user_id = app.current_actor_id()
+     and p.status = 'active'
    order by h.checked_in_at, h.id
    limit 500
 $$;
