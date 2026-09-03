@@ -109,8 +109,29 @@ const FROM_AND_WHERE =
 
 const ORDER = 'order by a.window_start';
 
+// A cancelled visit is not a stop: nobody drives to it, and the day sheet is
+// the list of doors still to knock on plus the ones already knocked on. The
+// coordinator's own screen keeps them — a cancellation is a fact the ledger
+// shows — which is why only the own scope carries this predicate.
+//
+// It also keeps the join above honest. app.client_visible_to_practitioner
+// (201) opens a client's record to a practitioner for every appointment
+// except a cancellation, so without this the `join client` would drop exactly
+// these rows anyway, silently and only sometimes — a client with a second,
+// live visit inside the window would still be visible, and the same cancelled
+// stop would then appear. Filtering here makes it one deliberate rule rather
+// than an emergent property of two. (An erased client's stop still disappears
+// through that join, and should: erasure outranks a day sheet.)
+const OWN_STATUS_FILTER = "and a.status not in ('cancelled', 'cancelled_late') ";
+
 const PRACTICE_SQL = COLUMNS + FROM_AND_WHERE + ORDER;
-const OWN_SQL = COLUMNS + OWN_COLUMNS + FROM_AND_WHERE + 'and a.practitioner_id = $3 ' + ORDER;
+const OWN_SQL =
+  COLUMNS +
+  OWN_COLUMNS +
+  FROM_AND_WHERE +
+  'and a.practitioner_id = $3 ' +
+  OWN_STATUS_FILTER +
+  ORDER;
 
 /** The caller's own practitioner row, or null when they are not one. */
 const PRACTITIONER_SQL =

@@ -199,8 +199,8 @@ describe('TodayPage', () => {
   });
 
   it('offers no drive and no check-in for a visit already settled', async () => {
-    renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000208', status: 'cancelled' })));
-    expect(await screen.findByText('Cancelled')).toBeTruthy();
+    renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000208', status: 'completed' })));
+    expect(await screen.findByText('Done')).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Navigate/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Check in/ })).toBeNull();
   });

@@ -67,6 +67,11 @@ const LOCATION_LABELS: Record<string, string> = {
  * scanned across; a practitioner reads one column at arm's length and only
  * needs telling when the status changes what they do. `confirmed` is the
  * ordinary case and says nothing at all.
+ *
+ * The two cancelled statuses are covered even though the own scope does not
+ * send them today (app/api/appointments/list.ts drops a cancelled visit from
+ * a day sheet): a map with a hole in it is a worse thing to hand a component
+ * than a map with a branch that rarely fires.
  */
 const STOP_NOTES: Partial<Record<AppointmentStatus, string>> = {
   proposed: 'Not yet confirmed with the client',

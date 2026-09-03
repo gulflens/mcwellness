@@ -57,6 +57,10 @@ const CLIENT_SOMEONE_ELSE = '00000000-0000-4000-8000-000000007016';
 const LOCATION_SOMEONE_ELSE = '00000000-0000-4000-8000-000000007017';
 const APPOINTMENT_SOMEONE_ELSE = '00000000-0000-4000-8000-000000007018';
 
+const CLIENT_CALLED_OFF = '00000000-0000-4000-8000-000000007019';
+const LOCATION_CALLED_OFF = '00000000-0000-4000-8000-000000007020';
+const APPOINTMENT_CALLED_OFF = '00000000-0000-4000-8000-000000007021';
+
 // The clock the API is given, fixed so nothing here can turn over midnight
 // mid-run. The Dubai calendar date is read straight from Intl rather than from
 // domain/scheduling, so the fixture does not lean on the code it checks.
@@ -211,6 +215,23 @@ beforeAll(async () => {
     'confirmed',
   ]);
 
+  // A visit of the first practitioner's own, called off: theirs, today, and
+  // still not a stop on their day sheet.
+  await seedClient(owner, IDS.tenantA, CLIENT_CALLED_OFF, IDS.ownerA, 'CalledOff');
+  await seedLocation(owner, IDS.tenantA, LOCATION_CALLED_OFF, CLIENT_CALLED_OFF, IDS.ownerA);
+  const calledOffStart = dubaiTime('15:00:00');
+  await owner.query(APPOINTMENT_INSERT_SQL, [
+    APPOINTMENT_CALLED_OFF,
+    IDS.tenantA,
+    CLIENT_CALLED_OFF,
+    PRACTITIONER_ONE,
+    SERVICE_TYPE,
+    LOCATION_CALLED_OFF,
+    calledOffStart,
+    plus45(calledOffStart),
+    'cancelled',
+  ]);
+
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
@@ -262,6 +283,17 @@ describe("GET /api/appointments?scope=own — the practitioner's own day", () =>
     expect(await appointmentsFrom(res)).toEqual([]);
   });
 
+  it('leaves a cancelled visit off the day sheet, deliberately and not by accident', async () => {
+    const own = await appointmentsFrom(
+      await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`),
+    );
+    expect(own.map((a) => a.id)).not.toContain(APPOINTMENT_CALLED_OFF);
+    // The coordinator's own screen keeps it: a cancellation is a fact the
+    // ledger shows, and only the own scope drops it.
+    const practice = await appointmentsFrom(await list(AUTH.ownerA, `date=${TODAY}`));
+    expect(practice.map((a) => a.id)).toContain(APPOINTMENT_CALLED_OFF);
+  });
+
   it('is refused for finance, the same as the practice scope', async () => {
     expect((await list(FINANCE_AUTH, `date=${TODAY}&scope=own`)).status).toBe(403);
     expect((await list(FINANCE_AUTH, `date=${TODAY}`)).status).toBe(403);
@@ -290,6 +322,7 @@ describe('GET /api/appointments — the practice scope carries none of it', () =
       APPOINTMENT_FIRST,
       APPOINTMENT_SECOND,
       APPOINTMENT_SOMEONE_ELSE,
+      APPOINTMENT_CALLED_OFF,
     ]);
     for (const appointment of appointments) {
       expect(appointment.client.mrn).toBeUndefined();

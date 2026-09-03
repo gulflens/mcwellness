@@ -56,9 +56,13 @@
   font-weight: var(--w-medium);
 }
 
+/* align-items: start keeps the Arabic name beside the Latin one it belongs to.
+   The span carries dir="rtl", so left to stretch the full column it would
+   align its text to the far edge and read as a separate thing entirely. */
 .stop__who {
   display: flex;
   flex-direction: column;
+  align-items: start;
   gap: var(--s-1);
 }
 
