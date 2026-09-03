@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { resolveVat, validateNewPrice, type Price } from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
+import { isUuid } from './ids';
 import { mayReadCatalogue, mayWriteCatalogue } from './access';
 import {
   AddPackagePriceInput,
@@ -382,7 +383,7 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const packageId = c.req.param('id');
-    if (!/^[0-9a-f-]{36}$/i.test(packageId)) {
+    if (!isUuid(packageId)) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const body = AddPackagePriceInput.safeParse(await c.req.json().catch(() => null));

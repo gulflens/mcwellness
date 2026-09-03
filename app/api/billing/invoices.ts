@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
 import { logReads } from '../_middleware/audit';
+import { isUuid } from './ids';
 import { mayReadInvoices } from './access';
 import { InvoicesResponse } from './ledger-schema';
 
@@ -54,7 +55,7 @@ export function mountInvoices(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
     // An opaque id, never a name, in the query string (.claude/rules/ui.md).
     const clientId = c.req.query('clientId') ?? null;
-    if (clientId !== null && !/^[0-9a-f-]{36}$/i.test(clientId)) {
+    if (clientId !== null && !isUuid(clientId)) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
 

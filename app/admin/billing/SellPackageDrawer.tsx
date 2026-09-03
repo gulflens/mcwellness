@@ -11,6 +11,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { ClientPicker } from './ClientPicker';
+import { useAttemptKey } from './attempt';
 import { formatFils } from './money';
 
 /**
@@ -60,13 +61,12 @@ export function SellPackageDrawer({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /**
-   * One key per attempt at this, made when the drawer opens and kept until it
-   * succeeds. A retry of the same press — the button tapped twice, a lost
-   * response, a phone that changed network — carries the same key and replays
-   * the first answer instead of writing the whole thing again into tables that
-   * grant no delete (402_billing_document.sql).
+   * The key for the request about to be sent. It stays the same while the
+   * request does, so a straight retry replays the first answer; it changes
+   * the moment the amount, the family or anything else does, so a corrected
+   * attempt is a new one (app/admin/billing/attempt.ts).
    */
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const keyFor = useAttemptKey();
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -99,24 +99,28 @@ export function SellPackageDrawer({
 
     setBusy(true);
     try {
+      const payload = {
+        packageId: bundle.id,
+        clientId: client.id,
+        purchasedOn,
+        ...(takingPayment
+          ? {
+              payment: {
+                method,
+                // The gross figure: what the family actually hands over.
+                amountFils: price.grossFils,
+                reference: reference.trim() || null,
+              },
+            }
+          : {}),
+      };
       const res = await apiFetch('/api/billing/package-purchases', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
-        body: JSON.stringify({
-          packageId: bundle.id,
-          clientId: client.id,
-          purchasedOn,
-          ...(takingPayment
-            ? {
-                payment: {
-                  method,
-                  // The gross figure: what the family actually hands over.
-                  amountFils: price.grossFils,
-                  reference: reference.trim() || null,
-                },
-              }
-            : {}),
-        }),
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': keyFor(JSON.stringify(payload)),
+        },
+        body: JSON.stringify(payload),
       });
       if (res.status === 201) {
         const body = SellPackageResponse.parse(await res.json());

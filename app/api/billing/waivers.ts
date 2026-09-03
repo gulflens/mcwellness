@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { scrubReason } from '../_middleware/request-context';
 import type { ApiEnv } from '../_middleware/request-context';
+import { isUuid } from './ids';
 import { mayWaive } from './access';
 import { WaiveEntitlementInput, WaiveEntitlementResponse } from './ledger-schema';
 
@@ -69,7 +70,7 @@ export function mountWaivers(api: Hono<ApiEnv>, now: () => Date = () => new Date
     const entitlementId = c.req.param('id');
     // An id from the path, checked as a uuid before it reaches a query, the
     // way the invoice book checks its own filter.
-    if (!/^[0-9a-f-]{36}$/i.test(entitlementId)) {
+    if (!isUuid(entitlementId)) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const body = WaiveEntitlementInput.safeParse(await c.req.json().catch(() => null));

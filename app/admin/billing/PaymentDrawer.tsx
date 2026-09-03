@@ -8,6 +8,7 @@ import type { ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
+import { useAttemptKey } from './attempt';
 import { AED_MAX_FILS, formatFils, isAedAmountTooLarge, parseAedToFils } from './money';
 
 /**
@@ -59,13 +60,12 @@ export function PaymentDrawer({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /**
-   * One key per attempt at this, made when the drawer opens and kept until it
-   * succeeds. A retry of the same press — the button tapped twice, a lost
-   * response, a phone that changed network — carries the same key and replays
-   * the first answer instead of writing the whole thing again into tables that
-   * grant no delete (402_billing_document.sql).
+   * The key for the request about to be sent. It stays the same while the
+   * request does, so a straight retry replays the first answer; it changes
+   * the moment the amount, the family or anything else does, so a corrected
+   * attempt is a new one (app/admin/billing/attempt.ts).
    */
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const keyFor = useAttemptKey();
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -106,15 +106,19 @@ export function PaymentDrawer({
 
     setBusy(true);
     try {
+      const payload = {
+        clientId: client.id,
+        method,
+        amountFils,
+        reference: trimmedReference || null,
+      };
       const res = await apiFetch('/api/billing/payments', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
-        body: JSON.stringify({
-          clientId: client.id,
-          method,
-          amountFils,
-          reference: trimmedReference || null,
-        }),
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': keyFor(JSON.stringify(payload)),
+        },
+        body: JSON.stringify(payload),
       });
       if (res.status === 201) {
         const body = RecordPaymentResponse.parse(await res.json());

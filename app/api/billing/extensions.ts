@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { isoDateIn } from '../../../domain/shared';
 import { scrubReason } from '../_middleware/request-context';
 import type { ApiEnv } from '../_middleware/request-context';
+import { isUuid } from './ids';
 import { mayExtend } from './access';
 import { ExtendPurchaseInput, ExtendPurchaseResponse } from './ledger-schema';
 
@@ -69,7 +70,7 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const purchaseId = c.req.param('id');
-    if (!/^[0-9a-f-]{36}$/i.test(purchaseId)) {
+    if (!isUuid(purchaseId)) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const body = ExtendPurchaseInput.safeParse(await c.req.json().catch(() => null));
