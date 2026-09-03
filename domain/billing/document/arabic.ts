@@ -129,23 +129,34 @@ function joinsToNext(code: number): boolean {
   return (FORMS.get(code)?.length ?? 0) === 4;
 }
 
-/** Neighbours, looking past any marks between. */
-function neighbourBefore(codes: readonly number[], at: number): number | null {
-  for (let index = at - 1; index >= 0; index -= 1) {
+/**
+ * Neighbours, looking past any marks between — worked out for the whole run in
+ * two passes rather than scanned for at every letter.
+ *
+ * The scan-per-letter version was quadratic in marks: twenty thousand of them in
+ * a row made twenty thousand walks over twenty thousand characters, which is a
+ * denial of service on the one path that renders a client's financial record.
+ * Two passes answer the same question in linear time.
+ */
+function neighboursOf(codes: readonly number[]): {
+  before: (number | null)[];
+  after: (number | null)[];
+} {
+  const before: (number | null)[] = new Array<number | null>(codes.length).fill(null);
+  const after: (number | null)[] = new Array<number | null>(codes.length).fill(null);
+  let seen: number | null = null;
+  for (let index = 0; index < codes.length; index += 1) {
+    before[index] = seen;
     const code = codes[index];
-    if (code === undefined) return null;
-    if (!isTransparent(code)) return code;
+    if (code !== undefined && !isTransparent(code)) seen = code;
   }
-  return null;
-}
-
-function neighbourAfter(codes: readonly number[], at: number): number | null {
-  for (let index = at + 1; index < codes.length; index += 1) {
+  seen = null;
+  for (let index = codes.length - 1; index >= 0; index -= 1) {
+    after[index] = seen;
     const code = codes[index];
-    if (code === undefined) return null;
-    if (!isTransparent(code)) return code;
+    if (code !== undefined && !isTransparent(code)) seen = code;
   }
-  return null;
+  return { before, after };
 }
 
 /**
@@ -155,12 +166,13 @@ function neighbourAfter(codes: readonly number[], at: number): number | null {
  */
 export function shape(codes: readonly number[]): number[] {
   const shaped: number[] = [];
+  const { before, after } = neighboursOf(codes);
   for (let index = 0; index < codes.length; index += 1) {
     const code = codes[index];
     if (code === undefined) continue;
 
-    const previous = neighbourBefore(codes, index);
-    const next = neighbourAfter(codes, index);
+    const previous = before[index] ?? null;
+    const next = after[index] ?? null;
     const joinedBefore = previous !== null && joinsToNext(previous);
 
     // Lam-alef, taken as one glyph and the alef stepped over.
@@ -199,6 +211,29 @@ export function shape(codes: readonly number[]): number[] {
   }
   return shaped;
 }
+
+/**
+ * Punctuation that has a mirror image, and the character it becomes in a
+ * right-to-left run.
+ *
+ * A bracket is not a shape, it is a role: the one that *opens* is drawn on the
+ * side the reading starts from. Left as it stands, "(15 sessions)" reversed for
+ * Arabic comes out as ")15 sessions(" — inside out, and wrong in a way a reader
+ * notices immediately. Unicode calls this the mirrored property; these are the
+ * pairs that appear on a money document.
+ */
+const MIRRORED = new Map<number, number>([
+  [0x0028, 0x0029], // ( )
+  [0x0029, 0x0028],
+  [0x005b, 0x005d], // [ ]
+  [0x005d, 0x005b],
+  [0x007b, 0x007d], // { }
+  [0x007d, 0x007b],
+  [0x003c, 0x003e], // < >
+  [0x003e, 0x003c],
+  [0x00ab, 0x00bb], // « »
+  [0x00bb, 0x00ab],
+]);
 
 /** Digits and Latin: read left to right even inside an Arabic phrase. */
 function isLeftToRight(code: number): boolean {
@@ -240,6 +275,12 @@ function isNeutral(code: number): boolean {
  * gap.
  */
 export function toVisualOrder(codes: readonly number[]): number[] {
+  // Built by pushing and reversed once at the end, rather than unshifted.
+  // `out.unshift(...codes.slice(…))` spreads a run into the argument list, so a
+  // long enough line blew the call stack — on the path that renders a client's
+  // financial record, from a string somebody typed. A left-to-right stretch is
+  // pushed backwards so that the single reverse below leaves it reading
+  // forwards.
   const out: number[] = [];
   let index = 0;
   while (index < codes.length) {
@@ -263,13 +304,19 @@ export function toVisualOrder(codes: readonly number[]): number[] {
           break;
         }
       }
-      out.unshift(...codes.slice(start, end + 1));
+      for (let at = end; at >= start; at -= 1) {
+        const value = codes[at];
+        if (value !== undefined) out.push(value);
+      }
       index = end + 1;
       continue;
     }
-    out.unshift(code);
+    // Right-to-left, so a mirrored character is drawn as its pair: the bracket
+    // that opens the phrase is the one on the right.
+    out.push(MIRRORED.get(code) ?? code);
     index += 1;
   }
+  out.reverse();
   return out;
 }
 

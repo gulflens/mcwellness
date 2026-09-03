@@ -159,12 +159,12 @@ describe('the three figures above the book', () => {
 });
 
 describe('opening a document from a row', () => {
-  it('makes the document, asks for a link, and opens it', async () => {
-    const opened: string[] = [];
-    const tab = { location: { href: '' }, close: () => opened.push('closed') };
-    // A browser only lets a page open a tab during the click itself, so the
-    // tab is opened first and pointed at the document afterwards.
-    vi.stubGlobal('open', () => tab);
+  it('makes the document, asks for a link, and opens that link', async () => {
+    // Not a blank tab pointed at it afterwards: `noopener` is what makes
+    // window.open hand back nothing to point, so the first version opened a
+    // tab and left it blank on every row. Here the real URL is what is opened,
+    // and the spy records what the browser was actually asked for.
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
 
     const { requests } = mountWith(OWNER, <InvoicesSection />, (url, init) => {
       if (url === '/api/billing/invoices') {
@@ -195,16 +195,15 @@ describe('opening a document from a row', () => {
     if (!first) throw new Error('There is no Open PDF button.');
     fireEvent.click(first);
 
-    await waitFor(() => expect(tab.location.href).toBe('https://example.com/signed'));
-    // And the tab was not closed: it was pointed at the document.
-    expect(opened).toEqual([]);
+    await waitFor(() =>
+      expect(opened).toHaveBeenCalledWith('https://example.com/signed', '_blank', 'noopener'),
+    );
     expect(requests.some((r) => r.url === '/api/billing/documents')).toBe(true);
-    vi.unstubAllGlobals();
+    opened.mockRestore();
   });
 
-  it('says what went wrong and leaves no empty tab behind', async () => {
-    const closed: string[] = [];
-    vi.stubGlobal('open', () => ({ close: () => closed.push('closed') }));
+  it('says what went wrong and opens nothing', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
 
     mountWith(OWNER, <InvoicesSection />, (url, init) => {
       if (url === '/api/billing/invoices') {
@@ -225,8 +224,47 @@ describe('opening a document from a row', () => {
     expect(
       await screen.findByText('The document store cannot be reached. Try again shortly.'),
     ).toBeTruthy();
-    expect(closed).toEqual(['closed']);
-    vi.unstubAllGlobals();
+    expect(opened).not.toHaveBeenCalled();
+    opened.mockRestore();
+  });
+
+  it('says so when the filed document and a re-render no longer agree', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    mountWith(OWNER, <InvoicesSection />, (url, init) => {
+      if (url === '/api/billing/invoices') {
+        return json({ practiceVatRegistered: false, invoices: INVOICES });
+      }
+      if (url === '/api/billing/summary') return json(FIGURES);
+      if (url === '/api/billing/documents' && init?.method === 'POST') {
+        return json(
+          {
+            document: {
+              id: '00000006-0000-4000-8000-000000000001',
+              kind: 'invoice',
+              reference: 'INV-000002',
+              clientId: '00000005-0000-4000-8000-000000000002',
+            },
+          },
+          201,
+        );
+      }
+      if (url.endsWith('/link')) {
+        return json({ error: 'conflict', code: 'document_bytes_differ' }, 409);
+      }
+      return null;
+    });
+
+    const buttons = await screen.findAllByRole('button', { name: 'Open PDF' });
+    const first = buttons[0];
+    if (!first) throw new Error('There is no Open PDF button.');
+    fireEvent.click(first);
+
+    expect(
+      await screen.findByText(
+        'This document no longer matches what was filed. Ask for it to be looked at.',
+      ),
+    ).toBeTruthy();
+    opened.mockRestore();
   });
 });
 

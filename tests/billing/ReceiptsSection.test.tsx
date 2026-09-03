@@ -89,9 +89,8 @@ describe('ReceiptsSection', () => {
     );
   });
 
-  it('makes the receipt and opens it', async () => {
-    const tab = { location: { href: '' }, close: () => undefined };
-    vi.stubGlobal('open', () => tab);
+  it('makes the receipt and opens the link it is given', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
 
     const { requests } = mountWith(OWNER, <ReceiptsSection />, (url, init) => {
       if (url === '/api/billing/payments') return json({ receipts: RECEIPTS });
@@ -115,10 +114,12 @@ describe('ReceiptsSection', () => {
     });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open PDF' }));
-    await waitFor(() => expect(tab.location.href).toBe('https://example.com/receipt'));
+    await waitFor(() =>
+      expect(opened).toHaveBeenCalledWith('https://example.com/receipt', '_blank', 'noopener'),
+    );
     // It asked for a receipt, naming the payment and not an invoice.
     const made = requests.find((r) => r.url === '/api/billing/documents');
     expect(made?.body).toEqual({ paymentId: '00000007-0000-4000-8000-000000000002' });
-    vi.unstubAllGlobals();
+    opened.mockRestore();
   });
 });

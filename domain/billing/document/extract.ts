@@ -10,9 +10,22 @@
  * an unregistered practice's invoice.
  *
  * It works because the writer embeds a `/ToUnicode` map for every face, which a
- * real PDF wants anyway: it is what lets a reader select, search and copy the
- * text, and what a screen reader uses. So this is not a test-only back door —
- * it reads the same map any viewer does.
+ * real PDF wants anyway.
+ *
+ * **One thing that map does not yet give a reader.** Arabic is shaped and put
+ * into drawing order before it is written (`arabic.ts`), so the map's entries
+ * are presentation forms in visual order: text copied out of an Arabic run
+ * comes back reversed and spelt in the FE70 block rather than in the letters
+ * somebody would search for. It is legible to this extractor, which is reading
+ * the same glyphs the page draws, and to a person reading the page — but it is
+ * not usable text on the clipboard. Mapping each glyph back to the logical
+ * character it came from would fix it, and is a small change to the writer
+ * rather than to this file; it is recorded in
+ * `docs/CHANGE-REQUESTS/billing-04.md` rather than done here, because it is not
+ * what this round is for and the English half copies correctly today.
+ *
+ * So: what this reads is what the page draws, which is what the tests are
+ * about. It is not a promise about the clipboard.
  *
  * Deliberately narrow: it understands the small subset `pdf.ts` writes
  * (uncompressed streams, hexadecimal strings, one `Tj` per run) and nothing

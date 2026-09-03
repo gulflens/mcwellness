@@ -23,8 +23,9 @@ export type {
   ReceiptDocument,
   SupplierSnapshot,
 } from './model';
-export { layout, titleOf } from './render';
+export { clampForDocument, GEOMETRY, layout, titleOf } from './render';
 export {
+  arabicDocumentDate,
   formatDocumentDate,
   formatRate,
   NOT_REGISTERED_BASIS,

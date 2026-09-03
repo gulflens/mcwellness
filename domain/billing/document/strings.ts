@@ -123,17 +123,19 @@ export const NOT_REGISTERED_BASIS: Phrase = {
 export function receiptBasis(input: {
   method: 'cash' | 'transfer' | 'link';
   receivedOn: string;
+  /** The same day, with an Arabic month name (`arabicDocumentDate`). */
+  receivedOnAr: string;
   settlesReference: string | null;
 }): Phrase {
-  const on = formatDocumentDate(input.receivedOn);
   const against = input.settlesReference;
   return {
     en:
-      `Received by ${WORDS[input.method].en.toLowerCase()} on ${on}, ` +
+      `Received by ${WORDS[input.method].en.toLowerCase()} on ` +
+      `${formatDocumentDate(input.receivedOn)}, ` +
       `${against ? `against invoice ${against}` : 'on account'}. ` +
       'This is a receipt for money received, not a tax invoice.',
     ar:
-      `استُلم بواسطة ${WORDS[input.method].ar} بتاريخ ${on}، ` +
+      `استُلم بواسطة ${WORDS[input.method].ar} بتاريخ ${input.receivedOnAr}، ` +
       `${against ? `سداداً للفاتورة ${against}` : 'على الحساب'}. ` +
       'هذا إيصال باستلام مبلغ وليس فاتورة ضريبية.',
   };
@@ -174,6 +176,44 @@ export function formatDocumentDate(isoDate: string): string {
   if (!year || !day || name === undefined) {
     // Never guess at a date on a financial document: show exactly what the row
     // holds and let a person see that it is wrong.
+    return isoDate;
+  }
+  return `${Number(day)} ${name} ${year}`;
+}
+
+const MONTHS_AR = [
+  'يناير',
+  'فبراير',
+  'مارس',
+  'أبريل',
+  'مايو',
+  'يونيو',
+  'يوليو',
+  'أغسطس',
+  'سبتمبر',
+  'أكتوبر',
+  'نوفمبر',
+  'ديسمبر',
+];
+
+/**
+ * The same day, for the Arabic side of the page: "2 سبتمبر 2026".
+ *
+ * An English month name inside an Arabic sentence is not a bilingual document,
+ * it is an English one with Arabic around it — the design review's finding on
+ * the receipt's footer.
+ *
+ * **The digits stay Western**, and that is a choice rather than an oversight.
+ * Every figure on these documents — the amounts, the invoice number, the
+ * record number — is set in Western digits, on both sides of the page, because
+ * they are the same figures read by both readers. Arabic-Indic digits in one
+ * sentence and Western ones in the table above it would be the inconsistency,
+ * not the fix. This is also how bilingual invoices are set across the Gulf.
+ */
+export function arabicDocumentDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-');
+  const name = MONTHS_AR[Number(month) - 1];
+  if (!year || !day || name === undefined) {
     return isoDate;
   }
   return `${Number(day)} ${name} ${year}`;
