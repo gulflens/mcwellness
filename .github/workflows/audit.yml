@@ -8,9 +8,12 @@ on:
   schedule:
     - cron: '0 4 * * 1'
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   dependencies:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

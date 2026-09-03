@@ -6,22 +6,29 @@
 // finding about this code. On 2026-09-04 the feed timed out for over half an
 // hour and blocked two green branches from merging; that is what this ends.
 //
-// The verdict is read from the audit's own JSON report, never from the shape
-// of its table, which is coloured on CI and changes between pnpm versions.
-// Without a report there is no audit, and the output decides between an
-// outage and a fault of our own; only the first is excused. A 4xx from the
-// registry is not an outage.
+// Under `--json` pnpm prints exactly one document on stdout and nothing on
+// stderr: the audit report, which carries `metadata.vulnerabilities` with a
+// count per severity, or `{ "error": { code, message } }` when the audit could
+// not be made. The verdict is read from that document and never from the
+// shape of a table. Without a document, the exit code and any text decide.
+// Only an outage is excused; a 4xx from the registry, a missing lockfile, or
+// anything else of our own making is not.
 //
 // AUDIT_DEPS_STRICT=true makes an outage fail too, for the scheduled run
 // (.github/workflows/audit.yml) whose whole purpose is to notice one.
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-/** What pnpm prints while it cannot reach the advisory service at all. */
-const UNREACHABLE = [
+/**
+ * What pnpm's error says when the advisory service could not be reached at
+ * all. undici folds a refused connection or a failed lookup into "fetch
+ * failed"; a bad answer from the endpoint carries its status.
+ */
+const OUTAGE = [
+  /fetch failed/i,
+  /responded with 5\d\d/,
   /TimeoutError/,
-  /The operation was aborted due to timeout/,
-  /registry\.npmjs\.org\S* error \(5\d\d\)/,
+  /aborted due to timeout/,
   /ECONN(?:REFUSED|RESET)/,
   /ENOTFOUND/,
   /ETIMEDOUT/,
@@ -30,41 +37,56 @@ const UNREACHABLE = [
 ];
 
 /**
- * The audit's JSON report, if the output holds one: pnpm prints the report
- * as one JSON document on stdout and its warnings on stderr, and a report
- * carries `metadata.vulnerabilities` with a count per severity.
+ * The document pnpm printed on stdout, parsed. The report has
+ * `metadata.vulnerabilities`; a failure has `error`. Anything else, or no JSON
+ * at all, answers null. stdout only: a brace in stderr noise must not delete
+ * the report.
  *
- * @param {string} output
- * @returns {{ high: number, critical: number } | null}
+ * @param {string} stdout
+ * @returns {{ kind: 'report', high: number, critical: number } | { kind: 'error', code: string, message: string } | null}
  */
-export function readReport(output) {
-  const start = output.indexOf('{');
-  const end = output.lastIndexOf('}');
+export function readDocument(stdout) {
+  const start = stdout.indexOf('{');
+  const end = stdout.lastIndexOf('}');
   if (start < 0 || end <= start) return null;
+  let parsed;
   try {
-    const parsed = JSON.parse(output.slice(start, end + 1));
-    const counts = parsed?.metadata?.vulnerabilities;
-    if (!counts || typeof counts !== 'object') return null;
-    return { high: Number(counts.high) || 0, critical: Number(counts.critical) || 0 };
+    parsed = JSON.parse(stdout.slice(start, end + 1));
   } catch {
     return null;
   }
+  const counts = parsed?.metadata?.vulnerabilities;
+  if (counts && typeof counts === 'object') {
+    return {
+      kind: 'report',
+      high: Number(counts.high) || 0,
+      critical: Number(counts.critical) || 0,
+    };
+  }
+  const error = parsed?.error;
+  if (error && typeof error === 'object') {
+    return { kind: 'error', code: String(error.code ?? ''), message: String(error.message ?? '') };
+  }
+  return null;
 }
 
 /**
- * What an audit run means, from its exit code and output. Exported for the
- * test; the command below is the only other caller.
+ * What an audit run means. Exported for the test; the command below is the
+ * only other caller.
  *
  * @param {number | null} exitCode
- * @param {string} output stdout and stderr together
+ * @param {string} stdout
+ * @param {string} stderr
  * @returns {'clean' | 'advisory' | 'unreachable' | 'failed'}
  */
-export function classify(exitCode, output) {
-  const report = readReport(output);
-  if (report) return report.high + report.critical > 0 ? 'advisory' : 'clean';
+export function classify(exitCode, stdout, stderr = '') {
+  const document = readDocument(stdout);
+  if (document?.kind === 'report') {
+    return document.high + document.critical > 0 ? 'advisory' : 'clean';
+  }
   if (exitCode === 0) return 'clean';
-  if (UNREACHABLE.some((re) => re.test(output))) return 'unreachable';
-  return 'failed';
+  const text = document?.kind === 'error' ? `${document.code} ${document.message}` : stderr;
+  return OUTAGE.some((re) => re.test(text)) ? 'unreachable' : 'failed';
 }
 
 function main() {
@@ -77,20 +99,20 @@ function main() {
     console.error(`audit:deps: could not start pnpm audit: ${run.error.message}`);
     process.exit(1);
   }
-  const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
-  const verdict = classify(run.status, output);
+  const stdout = run.stdout ?? '';
+  const stderr = run.stderr ?? '';
+  const verdict = classify(run.status, stdout, stderr);
   const strict = process.env.AUDIT_DEPS_STRICT === 'true';
   switch (verdict) {
-    case 'clean': {
+    case 'clean':
       console.log(
-        readReport(output)
+        readDocument(stdout)?.kind === 'report'
           ? 'audit:deps: no high or critical advisory applies to a production dependency.'
           : 'audit:deps: pnpm audit exited cleanly without a report.',
       );
       return;
-    }
     case 'advisory':
-      process.stdout.write(output);
+      process.stdout.write(stdout);
       console.error(
         '\naudit:deps: a high or critical advisory applies to a production dependency.',
       );
@@ -108,7 +130,8 @@ function main() {
       return;
     }
     default:
-      process.stdout.write(output);
+      process.stdout.write(stdout);
+      process.stderr.write(stderr);
       console.error('\naudit:deps: pnpm audit failed for a reason this script does not excuse.');
       process.exit(run.status || 1);
   }
