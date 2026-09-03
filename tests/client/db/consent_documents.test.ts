@@ -614,6 +614,40 @@ describe('the Documents tab', () => {
     expect(body.documents.some((document) => document.kind === 'consent_signature')).toBe(true);
   });
 
+  it('records one read for every document it names', async () => {
+    // Listing what the practice holds about somebody is itself a read
+    // (docs/SPEC/audit.md section 5, and the rule app/api/clients/list.ts
+    // follows for every client it shows). The route wrote nothing at all
+    // before this: a refusal reached the trail and an answer did not.
+    const first = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/documents`);
+    expect(first.status).toBe(200);
+    const { documents } = (await first.json()) as { documents: { id: string }[] };
+    expect(documents.length).toBeGreaterThan(1);
+    const before = await Promise.all(documents.map((document) => auditRows(document.id, 'list')));
+
+    const again = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/documents`);
+    expect(again.status).toBe(200);
+    const after = await Promise.all(documents.map((document) => auditRows(document.id, 'list')));
+    expect(after).toEqual(before.map((count) => count + 1));
+
+    // The row names the document and the client it belongs to, and carries
+    // nothing of what the document says.
+    const { rows } = await owner.query<{
+      entity_type: string;
+      client_id: string;
+      old_values: unknown;
+      new_values: unknown;
+    }>(
+      'select entity_type, client_id, old_values, new_values from audit_log ' +
+        "where entity_id = $1 and action = 'list' order by occurred_at desc limit 1",
+      [documents[0]?.id],
+    );
+    expect(rows[0]?.entity_type).toBe('document');
+    expect(rows[0]?.client_id).toBe(ADULT_ID);
+    expect(rows[0]?.old_values).toBeNull();
+    expect(rows[0]?.new_values).toBeNull();
+  });
+
   it('refuses an identity document by name, and says which reason it is', async () => {
     const res = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/documents`, {
       method: 'POST',

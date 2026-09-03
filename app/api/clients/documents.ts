@@ -11,6 +11,7 @@ import {
   IdResponse,
   UploadDocumentBody,
 } from './record-schema';
+import { logReads } from '../_middleware/audit';
 import { logRefused } from './refused';
 
 /**
@@ -139,8 +140,16 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
       [clientId],
     );
 
-    // One read row per document named, the same rule the list route follows:
-    // naming what the practice holds about someone is itself a read.
+    // One `list` row per document named, the same rule app/api/clients/list.ts
+    // follows for a client it shows: naming what the practice holds about
+    // somebody is itself a read, and a trail that recorded only the refusals
+    // would say who was turned away and never who looked.
+    await logReads(
+      db,
+      'document',
+      rows.map((r) => ({ id: r.id, clientId })),
+      'list',
+    );
     return c.json(
       ClientDocumentListResponse.parse({
         documents: rows.map((row) => ({
