@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { canActor, isCredentialValidOn, isoDateIn, type Actor, type Capability } from './actor';
+import {
+  canActor,
+  isCredentialValidOn,
+  isoDateIn,
+  ROLES,
+  type Action,
+  type Actor,
+  type Capability,
+  type Role,
+} from './actor';
 
 const SERVICE = '00000000-0000-4000-8000-0000000000f1';
 const OTHER_SERVICE = '00000000-0000-4000-8000-0000000000f2';
 const CLIENT = '00000000-0000-4000-8000-0000000000c1';
 const OTHER_CLIENT = '00000000-0000-4000-8000-0000000000c2';
 const NOW = new Date('2026-09-02T08:00:00Z');
+
+/** The office: who reads the money (docs/SPEC/billing.md, "Who uses it"). */
+const OFFICE_READERS = ['owner', 'admin', 'lead_practitioner', 'finance'] as const;
+/** Who records it. The lead practitioner reads the ledger and writes nothing to it. */
+const MONEY_WRITERS = ['owner', 'admin', 'finance'] as const;
 
 const sessionCredential: Capability = {
   serviceTypeId: SERVICE,
@@ -243,5 +257,75 @@ describe('the appointment and price actions', () => {
     expect(canActor(actor(['practitioner']), read, {}, NOW)).toBe(false);
     expect(canActor(actor(['client_contact']), read, {}, NOW)).toBe(false);
     expect(canActor(actor([]), write, {}, NOW)).toBe(false);
+  });
+});
+
+describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 1)', () => {
+  // The floors as the change request states them, and as
+  // db/policies/billing/ledger.sql enforces them beneath: the four office
+  // roles read the catalogue, the invoice book and a refund quote; three of
+  // them record money; and only a balance reaches past the office.
+  const floors: { action: Action; allowed: readonly Role[] }[] = [
+    { action: { type: 'billing.package.read' }, allowed: OFFICE_READERS },
+    { action: { type: 'billing.invoice.read' }, allowed: OFFICE_READERS },
+    { action: { type: 'billing.refund.read' }, allowed: OFFICE_READERS },
+    { action: { type: 'billing.package.write' }, allowed: MONEY_WRITERS },
+    { action: { type: 'billing.sale.write' }, allowed: MONEY_WRITERS },
+    { action: { type: 'billing.payment.write' }, allowed: MONEY_WRITERS },
+    { action: { type: 'billing.waiver.write' }, allowed: MONEY_WRITERS },
+    {
+      action: { type: 'billing.balance.read', clientId: CLIENT },
+      // A client contact is allowed here only for their own client, which the
+      // clientIds context decides; this loop passes none, so they are refused.
+      allowed: [...OFFICE_READERS, 'practitioner'],
+    },
+  ];
+
+  it('answers every role for every action, allow and deny', () => {
+    for (const { action, allowed } of floors) {
+      for (const role of ROLES) {
+        expect(canActor(actor([role]), action, {}, NOW), `${action.type} for ${role}`).toBe(
+          allowed.includes(role),
+        );
+      }
+      expect(canActor(actor([]), action, {}, NOW), `${action.type} for no role`).toBe(false);
+    }
+  });
+
+  it('keeps the lead practitioner reading the money and never recording it', () => {
+    const lead = actor(['lead_practitioner']);
+    expect(canActor(lead, { type: 'billing.invoice.read' }, {}, NOW)).toBe(true);
+    expect(canActor(lead, { type: 'billing.refund.read' }, {}, NOW)).toBe(true);
+    expect(canActor(lead, { type: 'billing.package.read' }, {}, NOW)).toBe(true);
+    expect(canActor(lead, { type: 'billing.package.write' }, {}, NOW)).toBe(false);
+    expect(canActor(lead, { type: 'billing.sale.write' }, {}, NOW)).toBe(false);
+    expect(canActor(lead, { type: 'billing.payment.write' }, {}, NOW)).toBe(false);
+    expect(canActor(lead, { type: 'billing.waiver.write' }, {}, NOW)).toBe(false);
+  });
+
+  it('lets a practitioner ask for a balance and nothing else in billing', () => {
+    const a = actor(['practitioner']);
+    // The action says only that the role may ask; how far they reach is
+    // app.client_visible_to_practitioner's to decide, not this file's.
+    expect(canActor(a, { type: 'billing.balance.read', clientId: CLIENT }, {}, NOW)).toBe(true);
+    expect(canActor(a, { type: 'billing.balance.read', clientId: OTHER_CLIENT }, {}, NOW)).toBe(
+      true,
+    );
+    expect(canActor(a, { type: 'billing.package.read' }, {}, NOW)).toBe(false);
+    expect(canActor(a, { type: 'billing.invoice.read' }, {}, NOW)).toBe(false);
+    expect(canActor(a, { type: 'billing.refund.read' }, {}, NOW)).toBe(false);
+    expect(canActor(a, { type: 'billing.sale.write' }, {}, NOW)).toBe(false);
+  });
+
+  it('lets a client contact read only the balance of their own client', () => {
+    const a = actor(['client_contact']);
+    const ctx = { clientIds: [CLIENT] };
+    expect(canActor(a, { type: 'billing.balance.read', clientId: CLIENT }, ctx, NOW)).toBe(true);
+    expect(canActor(a, { type: 'billing.balance.read', clientId: OTHER_CLIENT }, ctx, NOW)).toBe(
+      false,
+    );
+    expect(canActor(a, { type: 'billing.balance.read', clientId: CLIENT }, {}, NOW)).toBe(false);
+    expect(canActor(a, { type: 'billing.invoice.read' }, ctx, NOW)).toBe(false);
+    expect(canActor(a, { type: 'billing.payment.write' }, ctx, NOW)).toBe(false);
   });
 });

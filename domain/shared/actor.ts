@@ -49,7 +49,15 @@ export type Action =
   | { type: 'appointment.list'; scope: 'practice' | 'own' }
   | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
   | { type: 'billing.price.read' }
-  | { type: 'billing.price.write' };
+  | { type: 'billing.price.write' }
+  | { type: 'billing.package.read' }
+  | { type: 'billing.package.write' }
+  | { type: 'billing.sale.write' }
+  | { type: 'billing.payment.write' }
+  | { type: 'billing.waiver.write' }
+  | { type: 'billing.invoice.read' }
+  | { type: 'billing.refund.read' }
+  | { type: 'billing.balance.read'; clientId: string };
 
 export type ActionContext = {
   /** The clients this actor's contact rows point at; resolved by the API for a client contact. */
@@ -152,6 +160,31 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'billing.price.write':
       // The price list; the service catalogue itself stays with the owner and an admin.
       return hasRole(actor, 'owner', 'admin', 'finance');
+    case 'billing.package.read':
+    case 'billing.invoice.read':
+    case 'billing.refund.read':
+      // The bundle catalogue, the invoice book and a refund quote: the same
+      // audience the price list has. A refund quote is arithmetic over rows
+      // a lead practitioner may already read (db/policies/billing/ledger.sql),
+      // so narrowing it here would be a courtesy pretending to be a boundary.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance');
+    case 'billing.package.write':
+    case 'billing.sale.write':
+    case 'billing.payment.write':
+    case 'billing.waiver.write':
+      // Recording money: the owner, an admin and finance. One audience today,
+      // four names, so a coordinator who may take a payment but not amend the
+      // price list is a change to one line rather than to a route.
+      return hasRole(actor, 'owner', 'admin', 'finance');
+    case 'billing.balance.read':
+      // The one billing action that reaches past the office. A practitioner
+      // asks because the stop card says "Session 3 of 15" and what is owed;
+      // how far they reach is app.client_visible_to_practitioner's to decide,
+      // not this file's. A client contact reads their own client's.
+      if (hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance', 'practitioner')) {
+        return true;
+      }
+      return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(action.clientId);
     default: {
       const unreachable: never = action;
       return unreachable;
