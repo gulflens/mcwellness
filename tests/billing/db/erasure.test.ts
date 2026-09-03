@@ -88,8 +88,22 @@ describe('erasing a household that has a rendered invoice', () => {
     expect(created.status).toBe(201);
     const document_ = ((await created.json()) as CreateDocumentResponse).document;
 
+    // The act needs a recorded request to perform, and an actor entitled to
+    // perform it (migration 104): the erasure is the answer to a request, never
+    // a bare call.
+    const owner = h.data.users[SEEDED.owner];
+    const { rows: requested } = await h.owner.query<{ id: string }>(
+      'insert into erasure_request (tenant_id, client_id, reason, created_by) ' +
+        "values ($1, $2, 'The household asked.', $3) returning id",
+      [h.data.tenant.id, clientId, owner?.id],
+    );
+    await h.owner.query(
+      "select set_config('app.actor_id', $1, false), set_config('app.actor_roles', 'owner', false), " +
+        "set_config('app.reason', 'The household asked.', false)",
+      [owner?.id],
+    );
     await expect(
-      h.owner.query('select app.erase_client($1, $2)', [clientId, 'The household asked.']),
+      h.owner.query('select app.erase_client($1, $2)', [clientId, requested[0]?.id]),
     ).resolves.toBeTruthy();
 
     // The document is still there, and so is the row that names it.

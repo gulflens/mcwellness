@@ -229,7 +229,9 @@ async function seedHousehold(h: Household): Promise<void> {
   await owner.query(
     'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, ' +
       "gross_fils, document_id) values ($1, $2, app.next_invoice_number(), 'statement', " +
-      'current_date, 70000, 3500, 73500, $3)',
+      // Net, with no VAT: the fixture's practice is not registered for it, and
+      // migration 406 refuses an invoice that carries VAT for one that is not.
+      'current_date, 70000, 0, 70000, $3)',
     [IDS.tenantA, h.client, h.invoicePdf],
   );
   await owner.query('commit');
@@ -876,11 +878,17 @@ describe('a rendered tax document', () => {
       [documentId, IDS.tenantA, TAXED.client, key, Buffer.from(PDF_BYTES), IDS.ownerA],
     );
     // Filed as an ordinary kind on purpose: what keeps it is the link, not the
-    // word on the row.
-    await owner.query('insert into billing_document (tenant_id, document_id) values ($1, $2)', [
-      IDS.tenantA,
-      documentId,
-    ]);
+    // word on the row. The link names the invoice it renders, as migration 407
+    // requires of every billing document.
+    const { rows: invoices } = await owner.query<{ id: string }>(
+      'select id from invoice where client_id = $1',
+      [TAXED.client],
+    );
+    await owner.query(
+      'insert into billing_document (tenant_id, client_id, kind, document_id, invoice_id) ' +
+        "values ($1, $2, 'invoice', $3, $4)",
+      [IDS.tenantA, TAXED.client, documentId, invoices[0]?.id],
+    );
 
     const requestId = await recordRequest(TAXED);
     const res = await request(
