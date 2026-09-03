@@ -80,6 +80,9 @@ const APPT_ALREADY_CANCELLED = '00000000-0000-4000-8000-000000006112';
 const APPT_MOVE_TWICE = '00000000-0000-4000-8000-000000006113';
 const APPT_NOTICE_SETTING = '00000000-0000-4000-8000-000000006114';
 const APPT_NO_CREDIT = '00000000-0000-4000-8000-000000006115';
+// Called off late and then forgiven, to prove the id the answer hands back is
+// one billing's own waiver route will act on.
+const APPT_WAIVED = '00000000-0000-4000-8000-000000006123';
 // Two visits whose arrival window has already opened: the practitioner is at
 // the door, which is the only moment 'unfit_to_attend' can honestly be given.
 const APPT_UNFIT_AT_DOOR = '00000000-0000-4000-8000-000000006116';
@@ -332,6 +335,7 @@ beforeAll(async () => {
     clientId: CLIENT_NO_CREDIT,
     windowStart: hoursFromNow(3),
   });
+  await seedAppointment(APPT_WAIVED, { clientId: IDS.clientA, windowStart: hoursFromNow(7) });
   // Windows already open. Practitioner A holds both, two hours apart, which is
   // clear of the one hour each occupies (a 45-minute window plus a 15-minute
   // travel buffer) with room to spare — the two `hoursFromNow` calls read the
@@ -712,6 +716,51 @@ describe('POST /api/appointments/:id/cancel', () => {
     );
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('invalid_request');
+  });
+
+  it('hands back an id billing will actually act on: the waiver gives the session back', async () => {
+    const available = async () =>
+      Number(
+        (
+          await owner.query<{ n: string }>(
+            "select count(*)::text as n from entitlement where client_id = $1 and status = 'available'",
+            [IDS.clientA],
+          )
+        ).rows[0]?.n ?? 0,
+      );
+    const before = await available();
+
+    const cancelled = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_WAIVED}/cancel`, {
+      reason: 'client_request',
+    });
+    expect(cancelled.status).toBe(200);
+    const body = (await cancelled.json()) as CancelAppointmentResponse;
+    expect(body.status).toBe('cancelled_late');
+    expect(body.creditConsumed).toBe(true);
+    expect(await available()).toBe(before - 1);
+
+    // The whole point of answering with the id: one call, and the family is
+    // whole again (docs/SPEC/billing.md section 4.3).
+    const waived = await call(
+      AUTH.ownerA,
+      'POST',
+      `/api/billing/entitlements/${body.waiverEntitlementId}/waiver`,
+      { reason: 'The practice moved it at the last minute.' },
+      'The practice moved it at the last minute.',
+    );
+    // 201: a waiver writes a replacement credit beside the waived one rather
+    // than editing the row (app/api/billing/waivers.ts), so it creates.
+    expect(waived.status).toBe(201);
+    expect(await available()).toBe(before);
+
+    // And what happened is still on the record: the visit stays late-cancelled
+    // and the credit stays waived rather than being rewritten as available.
+    expect((await statusOf(APPT_WAIVED)).status).toBe('cancelled_late');
+    const { rows } = await owner.query<{ status: string }>(
+      'select status::text as status from entitlement where id = $1',
+      [body.waiverEntitlementId],
+    );
+    expect(rows[0]?.status).toBe('waived');
   });
 
   it("shows another practice's owner nothing to cancel", async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { cancellationStatusFor, reasonCanBeGivenAt } from '@domain/scheduling';
+import { WaiveEntitlementResponse } from '../../api/billing/ledger-schema';
 import {
   CancelAppointmentResponse,
   CANCELLATION_REASONS,
@@ -57,6 +58,16 @@ const ACTION_MESSAGES: Record<AppointmentActionCode, string> = {
     'itself, not here.',
 };
 
+/** The eight characters `WaiveEntitlementInput` insists on, so the drawer can
+ * say so rather than let the route say it in a 400. */
+const MINIMUM_WAIVER_REASON = 8;
+
+type Waiver =
+  | { kind: 'offered' }
+  | { kind: 'saving' }
+  | { kind: 'given' }
+  | { kind: 'refused'; message: string };
+
 type State =
   | { kind: 'asking' }
   | { kind: 'error'; message: string }
@@ -80,6 +91,7 @@ export function CancelAppointmentDrawer({
   const [settings, setSettings] = useState<SchedulingSettingsResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [state, setState] = useState<State>({ kind: 'asking' });
+  const [waiver, setWaiver] = useState<Waiver>({ kind: 'offered' });
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -167,6 +179,49 @@ export function CancelAppointmentDrawer({
     }
   }
 
+  /**
+   * Give the session back, from here.
+   *
+   * `docs/SPEC/billing.md` section 4.3 asks for "a one-click waiver with a
+   * reason field", and this is the one moment a coordinator both knows it is
+   * wanted and has already written the reason down — the sentence they typed
+   * about what happened is exactly the reason a waiver needs. Sending them to
+   * another screen to find the credit again would be the click that never
+   * happens, and the family would keep paying for it.
+   *
+   * The route is billing's and so is the permission: a lead practitioner may
+   * call a visit off and may not forgive the charge, which is a real
+   * distinction and not one this screen argues with. A refusal is said plainly
+   * and the way through to Billing stays.
+   */
+  async function waive(entitlementId: string) {
+    setWaiver({ kind: 'saving' });
+    try {
+      const res = await apiFetch(`/api/billing/entitlements/${entitlementId}/waiver`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-reason': note.trim() },
+        body: JSON.stringify({ reason: note.trim() }),
+      });
+      if (res.ok) {
+        WaiveEntitlementResponse.parse(await res.json());
+        setWaiver({ kind: 'given' });
+        return;
+      }
+      setWaiver({
+        kind: 'refused',
+        message:
+          res.status === 403
+            ? 'Waiving a charge is the owner’s, an admin’s or finance’s. Ask one of them, or open Billing.'
+            : 'The session could not be given back from here. Open Billing and waive it there.',
+      });
+    } catch {
+      setWaiver({
+        kind: 'refused',
+        message: 'The session could not be given back from here. Open Billing and waive it there.',
+      });
+    }
+  }
+
   return (
     <aside className="drawer" role="dialog" aria-labelledby="cancel-appointment-title">
       <header className="drawer__header">
@@ -206,18 +261,34 @@ export function CancelAppointmentDrawer({
                   ? `, inside the practice's ${state.outcome.noticeHours} hours' notice.`
                   : '.'}
               </Note>
-              {state.outcome.creditConsumed ? (
+              {state.outcome.creditConsumed && waiver.kind !== 'given' ? (
                 <Note tone="attention">
-                  It used one of the client&rsquo;s sessions. If it should not have, waive it on the
-                  client&rsquo;s account in Billing.
+                  It used one of the client&rsquo;s sessions. If it should not have, give it back
+                  now.
                 </Note>
-              ) : state.outcome.status === 'cancelled_late' ? (
+              ) : null}
+              {waiver.kind === 'given' ? (
+                <Note>The session has been given back to the client.</Note>
+              ) : null}
+              {waiver.kind === 'refused' ? <Note tone="critical">{waiver.message}</Note> : null}
+              {!state.outcome.creditConsumed && state.outcome.status === 'cancelled_late' ? (
                 <Note tone="attention">
                   The client had no session left to use for it, so nothing was taken. The practice
                   decides whether to charge for this one.
                 </Note>
               ) : null}
               <div className="stepper__submit">
+                {state.outcome.waiverEntitlementId !== null && waiver.kind !== 'given' ? (
+                  <Button
+                    variant="primary"
+                    disabled={
+                      waiver.kind === 'saving' || note.trim().length < MINIMUM_WAIVER_REASON
+                    }
+                    onClick={() => void waive(state.outcome.waiverEntitlementId as string)}
+                  >
+                    {waiver.kind === 'saving' ? 'Giving it back…' : 'Give the session back'}
+                  </Button>
+                ) : null}
                 <Link className="button button--secondary" to="/admin/billing">
                   Open Billing
                 </Link>

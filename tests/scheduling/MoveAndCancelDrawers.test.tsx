@@ -354,6 +354,99 @@ describe('CancelAppointmentDrawer', () => {
     expect(screen.getByRole('link', { name: 'Open Billing' })).toBeTruthy();
   });
 
+  it('gives the session back in one click, with the sentence already written', async () => {
+    const seen: { url: string; init?: RequestInit }[] = [];
+    const fetchImpl = settingsAnd((url, init) => {
+      seen.push({ url, init });
+      if (url.includes('/waiver')) {
+        return new Response(
+          JSON.stringify({
+            waivedEntitlementId: '0000000a-0000-4000-8000-000000000301',
+            replacementEntitlementId: '0000000a-0000-4000-8000-000000000302',
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          id: IMMINENT.id,
+          status: 'cancelled_late',
+          reason: 'client_request',
+          noticeHours: 24,
+          creditConsumed: true,
+          waiverEntitlementId: '0000000a-0000-4000-8000-000000000301',
+        }),
+        { status: 200 },
+      );
+    });
+    mount(
+      <CancelAppointmentDrawer
+        appointment={IMMINENT}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      fetchImpl,
+    );
+    fireEvent.change(screen.getByLabelText('What happened?'), {
+      target: { value: 'The practice moved it at the last minute.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Give the session back' }));
+    expect(await screen.findByText('The session has been given back to the client.')).toBeTruthy();
+
+    // Addressed to the credit that was actually taken, and carrying the reason
+    // the coordinator had already written — the one moment they both know a
+    // waiver is wanted and have said why.
+    const waiver = seen.find((entry) => entry.url.includes('/waiver'));
+    expect(waiver?.url).toBe(
+      '/api/billing/entitlements/0000000a-0000-4000-8000-000000000301/waiver',
+    );
+    expect(JSON.parse(String(waiver?.init?.body))).toEqual({
+      reason: 'The practice moved it at the last minute.',
+    });
+    expect(headerOf(waiver?.init, 'x-reason')).toBe('The practice moved it at the last minute.');
+    // And the offer is gone once it is done.
+    expect(screen.queryByRole('button', { name: 'Give the session back' })).toBeNull();
+  });
+
+  it('says plainly when waiving is not this person’s to do', async () => {
+    const fetchImpl = settingsAnd((url) => {
+      if (url.includes('/waiver')) {
+        return new Response(JSON.stringify({ error: 'forbidden' }), { status: 403 });
+      }
+      return new Response(
+        JSON.stringify({
+          id: IMMINENT.id,
+          status: 'cancelled_late',
+          reason: 'client_request',
+          noticeHours: 24,
+          creditConsumed: true,
+          waiverEntitlementId: '0000000a-0000-4000-8000-000000000301',
+        }),
+        { status: 200 },
+      );
+    });
+    mount(
+      <CancelAppointmentDrawer
+        appointment={IMMINENT}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      fetchImpl,
+    );
+    fireEvent.change(screen.getByLabelText('What happened?'), {
+      target: { value: 'A genuine emergency at home.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Give the session back' }));
+    // A lead practitioner may call a visit off and may not forgive the charge.
+    expect(
+      await screen.findByText(/Waiving a charge is the owner’s, an admin’s or finance’s\./),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open Billing' })).toBeTruthy();
+  });
+
   it('does not claim a charge when the client had no session to use', async () => {
     const fetchImpl = settingsAnd(
       () =>
