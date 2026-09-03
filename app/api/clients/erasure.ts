@@ -215,7 +215,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
     const erasureId = randomUUID();
     await db.query(
       'insert into erasure_request (id, tenant_id, client_id, requested_by_contact_id, reason, ' +
-        'requested_by_phone) values ($1, $2, $3, $4, $5, $6)',
+        'requested_by_phone, created_by) values ($1, $2, $3, $4, $5, $6, $7)',
       [
         erasureId,
         actor.tenantId,
@@ -225,6 +225,11 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
         // general free-text ceiling elsewhere in this file (db/migrations/100_client_record.sql).
         cleanText(body.data.reason, 200),
         notifyPhone,
+        // Who typed it, beside who asked and who later performed it. The
+        // column has been on the table since migration 100 and nothing had
+        // filled it: a row saying a household asked to be forgotten should
+        // name the member of staff who wrote it down.
+        actor.userId,
       ],
     );
     return c.json(IdResponse.parse({ id: erasureId }), 201);

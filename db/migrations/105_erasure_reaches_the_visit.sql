@@ -335,10 +335,12 @@ begin
     v_sessions_cleared := 0;
     -- Guarded on a column rather than the table: `observations`,
     -- `checked_out_point`, `setup_photo_document_id` and `amendment_reason`
-    -- all arrive together with session-capture's close migration, and a
-    -- database that has the visit table without them has nothing here to
-    -- clear but the check-in point, which the payload step below reaches
-    -- anyway.
+    -- all arrive together with session-capture's close migration, so this
+    -- statement is skipped where only 300 is applied. `checked_in_point` is
+    -- the one thing that would then be left standing — the payload step below
+    -- reaches `session_event`, not the session row — and that is a database
+    -- mid-way through applying one stream's own range, never one an erasure
+    -- runs against.
     if exists (select 1 from pg_catalog.pg_attribute
                 where attrelid = to_regclass('public.session')
                   and attname = 'observations' and not attisdropped) then

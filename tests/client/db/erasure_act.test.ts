@@ -12,7 +12,7 @@ import { createApi } from '../../../app/api/create-api';
 import { mountBilling } from '../../../app/api/billing/routes';
 import { mountClientRecord } from '../../../app/api/clients/mount';
 import { mountClients } from '../../../app/api/clients/list';
-import { sweepErasureFiles } from '../../../app/api/clients/erasure-file-sweep';
+import { describeSweep, sweepErasureFiles } from '../../../app/api/clients/erasure-file-sweep';
 import {
   AUTH,
   IDS,
@@ -73,6 +73,19 @@ const ROLLED_BACK = {
   invoicePdf: '00000000-0000-4000-8000-000000000227',
   mrn: 'MW-000902',
 };
+const PHOTOGRAPHED = {
+  client: '00000000-0000-4000-8000-000000000261',
+  contact: '00000000-0000-4000-8000-000000000262',
+  portalUser: '00000000-0000-4000-8000-000000000263',
+  portalAuth: '00000000-0000-4000-8000-00000000026a',
+  location: '00000000-0000-4000-8000-000000000264',
+  goal: '00000000-0000-4000-8000-000000000265',
+  referral: '00000000-0000-4000-8000-000000000266',
+  invoicePdf: '00000000-0000-4000-8000-000000000267',
+  mrn: 'MW-000905',
+};
+const PHOTO_SESSION = '00000000-0000-4000-8000-000000000268';
+const SETUP_PHOTO = '00000000-0000-4000-8000-000000000269';
 const TAXED = {
   client: '00000000-0000-4000-8000-000000000251',
   contact: '00000000-0000-4000-8000-000000000252',
@@ -327,7 +340,7 @@ beforeAll(async () => {
   mountClientRecord(api);
   mountBilling(api);
 
-  for (const household of [MAIN, ROLLED_BACK, SWEPT, TAXED]) {
+  for (const household of [MAIN, ROLLED_BACK, SWEPT, TAXED, PHOTOGRAPHED]) {
     await seedHousehold(household);
   }
 
@@ -345,6 +358,31 @@ beforeAll(async () => {
   await seedServiceType(owner, IDS.tenantA, SERVICE_TYPE, 'neurofeedback');
   await seedPractitioner(owner, IDS.tenantA, PRACTITIONER_ROW, PRACTITIONER_ID);
   await seedCompletedVisit(MAIN);
+
+  // A household whose visit carries a setup photograph. `session` references
+  // `document` with no `on delete`, so this is the fixture that would have
+  // aborted the whole erasure before migration 105 unlinked it.
+  const photoKey = `tenant/${IDS.tenantA}/client/${PHOTOGRAPHED.client}/${SETUP_PHOTO}`;
+  await storage.put(photoKey, PDF_BYTES, 'application/pdf');
+  await owner.query(
+    'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256, ' +
+      "uploaded_by) values ($1, $2, $3, 'setup_photo', $4, 'application/pdf', sha256($5::bytea), $6)",
+    [SETUP_PHOTO, IDS.tenantA, PHOTOGRAPHED.client, photoKey, Buffer.from(PDF_BYTES), IDS.ownerA],
+  );
+  await owner.query(
+    'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+      'delivery_mode, location_id, status, checked_in_at, setup_photo_document_id, closed_at) ' +
+      "values ($1, $2, $3, $4, $5, 'home', $6, 'completed', now(), $7, now())",
+    [
+      PHOTO_SESSION,
+      IDS.tenantA,
+      PHOTOGRAPHED.client,
+      PRACTITIONER_ROW,
+      SERVICE_TYPE,
+      PHOTOGRAPHED.location,
+      SETUP_PHOTO,
+    ],
+  );
 });
 
 afterAll(async () => {
@@ -359,12 +397,17 @@ describe('recording the request', () => {
     const { rows } = await owner.query<{
       requested_by_phone: string | null;
       performed_at: Date | null;
+      created_by: string | null;
       status: string;
     }>(
-      'select e.requested_by_phone, e.performed_at, c.status from erasure_request e ' +
+      'select e.requested_by_phone, e.performed_at, e.created_by, c.status from erasure_request e ' +
         'join client c on c.id = e.client_id where e.id = $1',
       [id],
     );
+    // Who typed it: the row that says a household asked to be forgotten names
+    // the member of staff who wrote it down, beside who asked and (later) who
+    // carried it out.
+    expect(rows[0]?.created_by).toBe(ADMIN_ID);
     expect(rows[0]?.requested_by_phone).toBe('+971500000042');
     expect(rows[0]?.performed_at).toBeNull();
     // Asking is not doing: this was one statement away from the other until
@@ -857,6 +900,36 @@ describe('a rendered tax document', () => {
   });
 });
 
+describe('a visit with a setup photograph', () => {
+  it('is erased without the document reference aborting it', async () => {
+    const requestId = await recordRequest(PHOTOGRAPHED);
+    const res = await request(
+      api,
+      ADMIN_AUTH,
+      `/api/clients/${PHOTOGRAPHED.client}/erasure-requests/${requestId}/execute`,
+      { method: 'POST', headers: { 'x-reason': 'The household asked.' } },
+    );
+    // Before migration 105 unlinked it in step 4c, this raised on the document
+    // delete — session.setup_photo_document_id has no `on delete` — and rolled
+    // the entire erasure back.
+    expect(res.status).toBe(200);
+
+    const session = await owner.query<{ photo: string | null }>(
+      'select setup_photo_document_id as photo from session where id = $1',
+      [PHOTO_SESSION],
+    );
+    expect(session.rows[0]?.photo).toBeNull();
+    const document = await owner.query<{ n: string }>(
+      'select count(*)::text as n from document where id = $1',
+      [SETUP_PHOTO],
+    );
+    expect(document.rows[0]?.n).toBe('0');
+    expect(
+      await storage.exists(`tenant/${IDS.tenantA}/client/${PHOTOGRAPHED.client}/${SETUP_PHOTO}`),
+    ).toBe(false);
+  });
+});
+
 describe('the files, and only after the commit', () => {
   it('removes nothing when the request rolls back', async () => {
     const requestId = await recordRequest(ROLLED_BACK);
@@ -893,6 +966,46 @@ describe('the files, and only after the commit', () => {
         `tenant/${IDS.tenantA}/client/${ROLLED_BACK.client}/${ROLLED_BACK.referral}`,
       ),
     ).toBe(true);
+  });
+
+  it('leaves alone a key that does not name the request’s own household', async () => {
+    const request = await owner.query<{ id: string }>(
+      'select id from erasure_request where client_id = $1',
+      [MAIN.client],
+    );
+    const id = request.rows[0]?.id as string;
+    // Another household's file, planted on this request's worklist. The
+    // worklist is a jsonb column and the sweep runs as the owner with no row
+    // security under it, so the key's own shape is the only thing standing
+    // between a bad write and a delete of anything in the store.
+    const foreign = `tenant/${IDS.tenantA}/client/${ROLLED_BACK.client}/${SETUP_PHOTO}`;
+    await storage.put(foreign, PDF_BYTES, 'application/pdf');
+    await owner.query('update erasure_request set storage_keys_pending = $1::jsonb where id = $2', [
+      JSON.stringify([{ id: SETUP_PHOTO, storageKey: foreign }]),
+      id,
+    ]);
+
+    const swept = await sweepErasureFiles(owner, storage);
+    const mine = swept.find((one) => one.erasureRequestId === id);
+    expect(mine).toMatchObject({ cleared: 0, stillPending: 1, notOurs: 1 });
+    // Still there, and still on the list, where somebody can see it.
+    expect(await storage.exists(foreign)).toBe(true);
+    const after = await owner.query<{ n: number; cleared: Date | null }>(
+      'select jsonb_array_length(storage_keys_pending) as n, files_cleared_at as cleared ' +
+        'from erasure_request where id = $1',
+      [id],
+    );
+    expect(after.rows[0]?.n).toBe(1);
+    expect(after.rows[0]?.cleared).toBeNull();
+    expect(describeSweep(swept)).toContain('left alone');
+
+    // Put the row back as it was, so the tests after this one see what they
+    // expect: the erasure itself is unaffected either way.
+    await owner.query(
+      "update erasure_request set storage_keys_pending = '[]'::jsonb, files_cleared_at = now() " +
+        'where id = $1',
+      [id],
+    );
   });
 
   it('records what the store would not take, and sweeps it up afterwards', async () => {
