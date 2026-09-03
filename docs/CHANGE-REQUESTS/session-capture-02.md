@@ -667,3 +667,68 @@ that migration 901 exists, and the `alter table` statements in
 on `POST /api/sessions/:id/close` is now refused before anything is written,
 but that refusal cannot be audited at all: `audit_log.entity_id` is a `uuid`,
 so the very value worth recording is the one value the column will not take.
+
+---
+---
+
+# Change requests — session-capture, the billing rebase
+
+*Added by the round that rebased this branch onto pull request 42 and made
+billing's own tests pass against this stream's close. Sixteen of the
+seventeen failures were this stream's fault and are fixed in migration 302;
+this is the one that is not.*
+
+---
+
+## 10. One billing test reopens a closed visit, and must not
+
+**Where.** `tests/billing/db/consumption.test.ts`, "takes nothing more when a
+visit is reopened and closed again". It is the only billing test still red on
+`session-capture-2`, and it is billing's to change: this stream cannot make
+it pass without deleting the guarantee the whole record rests on.
+
+**What it does.**
+
+```ts
+it('takes nothing more when a visit is reopened and closed again', async () => {
+  await h.owner.query("update session set status = 'in_progress' where id = $1", [sessionId]);
+  await completeSession(sessionId);
+  ...
+});
+```
+
+The first statement moves a *closed* session back to `in_progress`. Migration
+302 refuses it with SQLSTATE 23001, `session ... is closed and cannot be
+changed; correct it with a new version` — the immutability guard that
+docs/SPEC/session-capture.md section 4 asks for and that
+`.claude/rules/data-model.md` requires of a clinical record. There is no
+session-capture change that would let this through: reopening is precisely
+the thing the guard exists to prevent, and a record that can be un-finished
+is not a record. A correction after close is a new `session` version with
+`supersedes_id` and `amendment_reason`, never an edit.
+
+**The exact change.** Delete the test. What it is really asking — that a
+second completion of the same visit does not take a second credit — is
+already proved twice over, and neither proof needs a reopen:
+
+- the test immediately above it, "takes nothing more when the same
+  completion is written again", writes `update session set status =
+  'completed'` twice more against the closed row. That now passes: this
+  round taught the guard that a write which would change nothing is not a
+  change, so a replayed completion is skipped rather than refused, and
+  `billing_on_completing`'s `old.status is distinct from 'completed'` never
+  fires a second time;
+- `entitlement_one_per_session` (403) is the guarantee underneath, exactly as
+  404's own header says: "The read is the courtesy; the index is the
+  guarantee." Replay safety does not depend on the row's status being
+  rewound, and no writer in either stream ever rewinds it.
+
+If billing would rather keep a test at that spot, the honest shape of it is
+two *different* visits for the same client completing in the same run — which
+`consumption_race.test.ts` already covers — or an amendment: insert a second
+`session` row with `supersedes_id` pointing at the first and assert that no
+second credit is taken. This stream will write that second one if billing
+would like it; it is a new row, so the guard never sees it.
+
+**Until then.** `pnpm test:db` is one test red on this branch, and that one
+test is the disagreement, not a defect in either stream's code.
