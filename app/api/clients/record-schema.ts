@@ -499,6 +499,90 @@ export const ErasureRequestBody = z.object({
 });
 export type ErasureRequestBody = z.infer<typeof ErasureRequestBody>;
 
+/**
+ * One recorded erasure request, whether or not it has been performed
+ * (docs/SPEC/client-record.md section 8). `performedAt` null is a request
+ * waiting on the confirmation step; anything else on the row is what happened.
+ *
+ * `notifyPhone` is the number captured when the request was recorded, and the
+ * only contact detail that outlives the erasure: the confirmation letter has
+ * to reach somebody (migration 104). It never travels in a URL — the screen
+ * puts it into the WhatsApp hand-off at the moment the person presses send,
+ * and no McWellness route ever carries it.
+ */
+export const ErasureRequestRecord = z.object({
+  id: z.uuid(),
+  reason: z.string(),
+  requestedAt: z.string(),
+  requestedByContactId: z.uuid().nullable(),
+  notifyPhone: z.string().nullable(),
+  performedAt: z.string().nullable(),
+  performedByName: z.string().nullable(),
+  /** The reason typed when the erasure was carried out, read from the trail. */
+  performedReason: z.string().nullable(),
+  letterDocumentId: z.uuid().nullable(),
+  letterVersion: z.string().nullable(),
+  /** When the practice handed the letter over. Null until somebody says they did. */
+  letterSentAt: z.string().nullable(),
+  /** What the erasure touched: counts, never names (db/migrations/104). */
+  summary: z
+    .object({
+      contactsAnonymised: z.number().int().nonnegative(),
+      portalAccountsArchived: z.number().int().nonnegative(),
+      locationsReduced: z.number().int().nonnegative(),
+      goalsCleared: z.number().int().nonnegative(),
+      consentsUnlinked: z.number().int().nonnegative(),
+      documentsDeleted: z.number().int().nonnegative(),
+      documentsKept: z.number().int().nonnegative(),
+      paymentsCleared: z.number().int().nonnegative(),
+      sessionsCleared: z.number().int().nonnegative(),
+      sessionEventsCleared: z.number().int().nonnegative(),
+      visitActualsCleared: z.number().int().nonnegative(),
+    })
+    .nullable(),
+  /**
+   * How many of the erased documents' files nothing has yet confirmed gone.
+   * The request's own after-commit hook removes them, but it runs with no
+   * database and cannot strike them off (docs/SEAMS.md), so this stays at
+   * what the erasure found until the sweep asks the store and clears it
+   * (app/api/clients/erasure-file-sweep.ts). It is "not yet confirmed", never
+   * "still there".
+   */
+  filesPending: z.number().int().nonnegative(),
+});
+export type ErasureRequestRecord = z.infer<typeof ErasureRequestRecord>;
+
+export const ErasureRequestListResponse = z.object({
+  requests: z.array(ErasureRequestRecord),
+});
+export type ErasureRequestListResponse = z.infer<typeof ErasureRequestListResponse>;
+
+/**
+ * What performing an erasure answers with: the request as it now stands, and
+ * a five-minute link to the letter.
+ *
+ * The link is here rather than only on the record for a reason that reads
+ * oddly until you follow it. An admin may perform an erasure and may not open
+ * an erased record afterwards — section 2 leaves that door to the owner and
+ * the lead practitioner — so the moment the act completes is the only moment
+ * that person can be handed the letter they are meant to send. The audit row
+ * for signing it is written before the link is (docs/SEAMS.md).
+ */
+export const ErasurePerformedResponse = z.object({
+  request: ErasureRequestRecord,
+  letter: DocumentLinkResponse.nullable(),
+});
+export type ErasurePerformedResponse = z.infer<typeof ErasurePerformedResponse>;
+
+/** The ways performing an erasure is refused, each with its own sentence on screen. */
+export const ERASURE_ERROR_CODES = [
+  'reason_required',
+  'already_erased',
+  'already_performed',
+  'storage_unavailable',
+] as const;
+export type ErasureErrorCode = (typeof ERASURE_ERROR_CODES)[number];
+
 export const IdResponse = z.object({ id: z.uuid() });
 
 /**

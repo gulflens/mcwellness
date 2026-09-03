@@ -42,5 +42,5 @@ export function mountClientRecord(api: Hono<ApiEnv>, now: () => Date = () => new
   mountGoals(api);
   mountConsents(api, now);
   mountDocuments(api, now);
-  mountErasureRequests(api);
+  mountErasureRequests(api, now);
 }

@@ -1,5 +1,10 @@
 import type { Actor } from '@domain/shared';
-import { canWriteClientRecord, canWriteGoal } from '../../api/clients/access';
+import {
+  canPerformErasure,
+  canRecordErasureRequest,
+  canWriteClientRecord,
+  canWriteGoal,
+} from '../../api/clients/access';
 
 /**
  * Screen-level admission for the client record: which write actions this
@@ -39,4 +44,14 @@ export function canWriteGoals(actor: Actor | null): boolean {
 export function canSeeFullRecord(actor: Actor | null): boolean {
   if (actor === null) return false;
   return actor.roles.some((role) => role !== 'finance');
+}
+
+/** Writing down that a household asked to be forgotten. */
+export function canAskForErasure(actor: Actor | null): boolean {
+  return actor !== null && canRecordErasureRequest(actor);
+}
+
+/** Pressing the button that erases them: the owner and an admin, and nobody else. */
+export function canErase(actor: Actor | null): boolean {
+  return actor !== null && canPerformErasure(actor);
 }

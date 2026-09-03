@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveVat } from '../../domain/billing';
+import { resolveSaleVat, resolveVat } from '../../domain/billing';
 import { fils } from '../../domain/shared';
 
 describe('resolveVat', () => {
@@ -56,5 +56,61 @@ describe('resolveVat', () => {
     const result = resolveVat(fils(33), { rateBasisPoints: 500, version: 1 });
     expect(Number.isInteger(result.vatFils)).toBe(true);
     expect(Number.isInteger(result.grossFils)).toBe(true);
+  });
+});
+
+describe('resolveSaleVat', () => {
+  const setting = { rateBasisPoints: 500, version: 3 };
+
+  it('charges nothing on a sale by a practice that is not registered for VAT', () => {
+    const result = resolveSaleVat(fils(70_000), setting, { vatRegistered: false });
+    expect(result).toEqual({
+      treatment: 'not_registered',
+      rateBasisPoints: 0,
+      settingVersion: 3,
+      vatFils: 0,
+      grossFils: 70_000,
+    });
+  });
+
+  it('charges the standard rate once the practice is registered', () => {
+    const result = resolveSaleVat(fils(70_000), setting, { vatRegistered: true });
+    expect(result).toEqual({
+      treatment: 'standard',
+      rateBasisPoints: 500,
+      settingVersion: 3,
+      vatFils: 3_500,
+      grossFils: 73_500,
+    });
+  });
+
+  it('leaves the net price alone either way: the gross is the net, unregistered', () => {
+    // Prices are published net (docs/SPEC/billing.md section 2.2), so
+    // registering adds five per cent on top rather than carving it out of a
+    // figure a family was already shown.
+    const net = fils(1_032_500);
+    expect(resolveSaleVat(net, setting, { vatRegistered: false }).grossFils).toBe(1_032_500);
+    expect(resolveSaleVat(net, setting, { vatRegistered: true }).grossFils).toBe(1_084_125);
+  });
+
+  it('names the setting it consulted even when it charged nothing', () => {
+    // The version is a foreign key on the invoice line, and the record of
+    // which rate was in force on the day — not a claim about what was charged.
+    const result = resolveSaleVat(
+      fils(82_500),
+      { rateBasisPoints: 500, version: 9 },
+      {
+        vatRegistered: false,
+      },
+    );
+    expect(result.settingVersion).toBe(9);
+    expect(result.rateBasisPoints).toBe(0);
+  });
+
+  it("does not call an unregistered practice's supply zero-rated or exempt", () => {
+    // Both are treatments a *registered* supplier applies. Saying either on a
+    // document would claim a registration the practice does not hold.
+    const result = resolveSaleVat(fils(70_000), setting, { vatRegistered: false });
+    expect(result.treatment).toBe('not_registered');
   });
 });

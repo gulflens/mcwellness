@@ -25,12 +25,19 @@ export function ContactsTab({
   record,
   onChanged,
   mayWrite,
+  erased = false,
 }: {
   clientId: string;
   record: ClientRecordResponse;
   onChanged: () => void;
   /** False for a role the write routes would refuse: no Add, no Edit. */
   mayWrite: boolean;
+  /**
+   * Whether this record has been erased. Passed rather than read from
+   * `record.status`, because the drawer knows it one act before the record
+   * does (app/admin/clients/ClientDrawer.tsx).
+   */
+  erased?: boolean;
 }) {
   const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
 
@@ -41,6 +48,12 @@ export function ContactsTab({
 
   return (
     <div className="tab-section">
+      {erased ? (
+        <Note tone="attention">
+          This record has been erased. What was here is gone: the contacts keep their relationship
+          to the client and nothing else.
+        </Note>
+      ) : null}
       {record.contacts.length === 0 ? (
         <Note>No contacts yet.</Note>
       ) : (
