@@ -111,6 +111,11 @@ function completeRecord() {
         expiresAt: null,
         method: 'app_signature',
         signatureDocumentId: null,
+        textDocumentId: '00000008-0000-4000-8000-000000000095',
+        wordingVersion: '0.1-draft',
+        wordingStatus: 'draft',
+        witnessedByUserId: null,
+        witnessedByName: null,
       },
       {
         id: '00000008-0000-4000-8000-000000000094',
@@ -122,6 +127,11 @@ function completeRecord() {
         expiresAt: null,
         method: 'app_signature',
         signatureDocumentId: null,
+        textDocumentId: '00000008-0000-4000-8000-000000000095',
+        wordingVersion: '0.1-draft',
+        wordingStatus: 'draft',
+        witnessedByUserId: null,
+        witnessedByName: null,
       },
     ],
   });

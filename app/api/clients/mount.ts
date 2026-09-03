@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mountConsentWording } from './consent-wording';
-import { mountConsents } from './consents';
+import { mountConsentWitnesses, mountConsents } from './consents';
 import { mountContacts } from './contacts';
 import { mountDocuments } from './documents';
 import { mountErasureRequests } from './erasure';
@@ -32,6 +32,10 @@ export function mountClientRecord(api: Hono<ApiEnv>, now: () => Date = () => new
   // registered before it for the same reason goal-categories is: Hono's router
   // never actually confuses the two, and the safe order costs nothing.
   mountConsentWording(api);
+  // Static beside /api/clients/:id for the same reason, and mounted here
+  // rather than with the consent routes below because that is where the safe
+  // order is: it lists who may witness a verbal re-confirmation, not a client.
+  mountConsentWitnesses(api);
   mountClientRecordCore(api, now);
   mountContacts(api, now);
   mountLocations(api, now);

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ConsentPurpose } from '@domain/client';
 import {
+  ConsentWitnessListResponse,
   ConsentWordingResponse,
   MAX_DOCUMENT_BYTES,
   type ClientRecordResponse,
+  type ConsentWitness,
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
@@ -55,6 +57,12 @@ const REFUSALS: Record<string, string> = {
     'A child’s consent has to come from a legal guardian. Mark the contact as a legal guardian, or choose one.',
   evidence_required: 'A consent needs the signature or the scanned form with it.',
   evidence_not_accepted: 'That evidence does not go with the method chosen.',
+  no_consent_to_reconfirm:
+    'A verbal confirmation re-confirms a home visit already agreed, and this client has agreed to none. Record the first one on screen or on paper.',
+  witness_required: 'A verbal confirmation needs the second member of staff who heard it.',
+  witness_not_accepted: 'Only a verbal confirmation carries a witness.',
+  witness_is_actor: 'The witness is the second person in the room, not the one recording it.',
+  witness_not_staff: 'That witness is not on this practice’s books.',
   bytes_do_not_match_type: 'That file is not the kind of file it says it is.',
   document_too_large: 'That file is too large to file here.',
   erased: 'This record has been erased and cannot be changed.',
@@ -71,6 +79,10 @@ type WordingState =
   | { kind: 'missing' }
   | { kind: 'error' }
   | { kind: 'ready'; wording: ConsentWordingResponse; markdown: string };
+
+/** Loaded only when a verbal re-confirmation is chosen; nothing else needs it. */
+type WitnessState =
+  { kind: 'idle' } | { kind: 'error' } | { kind: 'ready'; witnesses: ConsentWitness[] };
 
 export function RecordConsentForm({
   clientId,
@@ -97,6 +109,8 @@ export function RecordConsentForm({
   const [signature, setSignature] = useState<SignatureResult | null>(null);
   const [scan, setScan] = useState<UploadFile | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [witnessState, setWitnessState] = useState<WitnessState>({ kind: 'idle' });
+  const [witnessId, setWitnessId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -110,10 +124,15 @@ export function RecordConsentForm({
   const [typedName, setTypedName] = useState<string | null>(null);
   const signedName = typedName ?? contactName(giver) ?? '';
 
-  // `verbal_witnessed` is a home-visit re-confirmation and nothing else
-  // (section 7). Offering it anywhere else would be a choice the route refuses.
+  // `verbal_witnessed` is a home-visit **re-confirmation** and nothing else
+  // (section 7: never initial participation). So it is offered for that
+  // purpose and only once the client has a home_visit consent already on the
+  // record — of any status, since a withdrawn or expired one is exactly what
+  // gets re-confirmed at the door. Offering it anywhere else would be a choice
+  // the route refuses, which is a worse way to learn the rule.
+  const hasHomeVisitOnRecord = record.consents.some((consent) => consent.purpose === 'home_visit');
   const methods: Method[] =
-    purpose === 'home_visit'
+    purpose === 'home_visit' && hasHomeVisitOnRecord
       ? ['app_signature', 'paper_scan', 'verbal_witnessed']
       : ['app_signature', 'paper_scan'];
 
@@ -151,6 +170,32 @@ export function RecordConsentForm({
       live = false;
     };
   }, [loadWording]);
+
+  // Who may witness: this practice's own staff, other than the person
+  // recording. Asked for only when a verbal re-confirmation is chosen, because
+  // no other method has a witness and a dropdown nobody will open is still a
+  // request.
+  const loadWitnesses = useCallback(async (): Promise<WitnessState> => {
+    try {
+      const res = await apiFetch('/api/clients/consent-witnesses');
+      if (!res.ok) return { kind: 'error' };
+      const body = ConsentWitnessListResponse.parse(await res.json());
+      return { kind: 'ready', witnesses: body.witnesses };
+    } catch {
+      return { kind: 'error' };
+    }
+  }, [apiFetch]);
+
+  useEffect(() => {
+    if (method !== 'verbal_witnessed') return;
+    let live = true;
+    void loadWitnesses().then((next) => {
+      if (live) setWitnessState(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [method, loadWitnesses]);
 
   const onScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const box = event.currentTarget;
@@ -195,6 +240,10 @@ export function RecordConsentForm({
           : method === 'paper_scan'
             ? scan && { mimeType: scan.mimeType, bytesBase64: scan.bytesBase64 }
             : undefined;
+      // The witness travels only with the method that has one: migration
+      // 103's check constraint refuses the row otherwise, and the route
+      // refuses the request before that.
+      const witness = method === 'verbal_witnessed' ? { witnessedByUserId: witnessId } : {};
       const res = await apiFetch(`/api/clients/${clientId}/consents`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -204,6 +253,7 @@ export function RecordConsentForm({
           textDocumentId: wordingState.wording.id,
           method,
           ...(evidence ? { evidence } : {}),
+          ...witness,
         }),
       });
       if (res.status === 201) {
@@ -230,7 +280,7 @@ export function RecordConsentForm({
 
   const evidenceReady =
     method === 'verbal_witnessed'
-      ? true
+      ? witnessId !== ''
       : method === 'app_signature'
         ? signature !== null && signedName.trim() !== ''
         : scan !== null;
@@ -345,10 +395,38 @@ export function RecordConsentForm({
           ) : null}
 
           {method === 'verbal_witnessed' ? (
-            <Note>
-              A verbal re-confirmation of a home visit. It files no document, so record it only when
-              a second member of staff heard it given.
-            </Note>
+            <>
+              <Note>
+                A verbal re-confirmation of a home visit already agreed. It files no document, so
+                the second member of staff who heard it given is the whole of the record.
+              </Note>
+              {witnessState.kind === 'error' ? (
+                <Note tone="critical">
+                  The practice&rsquo;s staff could not be loaded. Try again.
+                </Note>
+              ) : null}
+              {witnessState.kind === 'ready' && witnessState.witnesses.length === 0 ? (
+                <Note tone="critical">
+                  Nobody else is on this practice&rsquo;s books to witness it. Record this consent
+                  on screen or on paper instead.
+                </Note>
+              ) : null}
+              {witnessState.kind === 'ready' && witnessState.witnesses.length > 0 ? (
+                <Select
+                  id="consent-witness"
+                  label="Witnessed by"
+                  value={witnessId}
+                  onChange={(event) => setWitnessId(event.target.value)}
+                >
+                  <option value="">Choose the member of staff who heard it</option>
+                  {witnessState.witnesses.map((witness) => (
+                    <option key={witness.id} value={witness.id}>
+                      {witness.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : null}
+            </>
           ) : null}
         </>
       ) : null}

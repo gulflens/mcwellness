@@ -91,6 +91,9 @@ export const Location = z.object({
 });
 export type Location = z.infer<typeof Location>;
 
+/** What a piece of consent wording can be: the practice's draft, or the approved text. */
+export const CONSENT_TEXT_STATUSES = ['draft', 'approved'] as const;
+
 export const Consent = z.object({
   id: z.uuid(),
   purpose: z.enum(CONSENT_PURPOSES),
@@ -107,6 +110,26 @@ export const Consent = z.object({
    * anywhere to keep a file.
    */
   signatureDocumentId: z.uuid().nullable(),
+  /**
+   * The exact wording shown, and how to say which version it was. A consent
+   * that could only link the signature was half a record: the screen showed
+   * what a person drew and never what they had read. The version and status
+   * are the wording document's own (migration 902), read through the join
+   * rather than guessed; both are nullable because `document.version` and
+   * `document.status` are nullable columns and a wording filed before 902 has
+   * neither.
+   */
+  textDocumentId: z.uuid(),
+  wordingVersion: z.string().nullable(),
+  wordingStatus: z.enum(CONSENT_TEXT_STATUSES).nullable(),
+  /**
+   * The second member of staff who confirmed a verbal re-confirmation
+   * (docs/SPEC/client-record.md section 7, db/migrations/103_consent_witness.sql).
+   * Null for every other method. The name travels with the id because the
+   * Consent tab has no other way to say who it was.
+   */
+  witnessedByUserId: z.uuid().nullable(),
+  witnessedByName: z.string().nullable(),
 });
 export type Consent = z.infer<typeof Consent>;
 
@@ -305,8 +328,6 @@ export const DocumentBytes = z.object({
 });
 export type DocumentBytes = z.infer<typeof DocumentBytes>;
 
-export const CONSENT_TEXT_STATUSES = ['draft', 'approved'] as const;
-
 /**
  * A link the storage seam signed. Two shapes, both legitimate: the bucket
  * hands back its own absolute `https:` URL, and the folder implementation
@@ -401,6 +422,14 @@ export const CONSENT_ERROR_CODES = [
   'evidence_not_accepted',
   'bytes_do_not_match_type',
   'storage_unavailable',
+  // A verbal re-confirmation, and the four ways it is refused: nothing to
+  // re-confirm, no witness, the person recording it standing in as their own
+  // witness, and a witness who is not this practice's staff.
+  'no_consent_to_reconfirm',
+  'witness_required',
+  'witness_not_accepted',
+  'witness_is_actor',
+  'witness_not_staff',
 ] as const;
 export type ConsentErrorCode = (typeof CONSENT_ERROR_CODES)[number];
 
@@ -420,8 +449,27 @@ export const RecordConsentBody = z.object({
    * refused if it tries.
    */
   evidence: DocumentBytes.optional(),
+  /**
+   * The second member of staff who heard a verbal re-confirmation given
+   * (docs/SPEC/client-record.md section 7). Optional in the shape and required
+   * by the route for `verbal_witnessed`, refused for every other method: a
+   * signature and a scanned form are their own evidence, and a witness beside
+   * one would be a fact about a conversation that did not happen.
+   */
+  witnessedByUserId: z.uuid().optional(),
 });
 export type RecordConsentBody = z.infer<typeof RecordConsentBody>;
+
+/**
+ * Who may stand as a witness to a verbal re-confirmation: this practice's own
+ * staff, other than the person recording it. A name and an id and nothing
+ * else — the screen needs to say who, not to show a staff directory.
+ */
+export const ConsentWitness = z.object({ id: z.uuid(), name: z.string() });
+export type ConsentWitness = z.infer<typeof ConsentWitness>;
+
+export const ConsentWitnessListResponse = z.object({ witnesses: z.array(ConsentWitness) });
+export type ConsentWitnessListResponse = z.infer<typeof ConsentWitnessListResponse>;
 
 export const ErasureRequestBody = z.object({
   // 200 characters, matching erasure_request.reason's own retention boundary

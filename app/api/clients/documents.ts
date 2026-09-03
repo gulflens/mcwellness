@@ -242,8 +242,21 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
     // path as well as the document's own id: a document id alone would let one
     // client's path name another client's file, and the answer would be
     // whatever row security happened to allow rather than what was asked for.
-    const { rows } = await db.query<{ storage_key: string }>(
-      'select storage_key from document where id = $1 and client_id = $2',
+    //
+    // Two shapes are admitted, and the second is why this is not a one-line
+    // predicate. A client's own document belongs to the client in the path.
+    // The **consent wording** a consent points at does not: it is a practice
+    // document with `client_id` null, the practice's published words, and
+    // `client_id = $2` could never match one — so the Consent tab could link
+    // the signature and never the text that was signed, which is the half of
+    // the record a person is most entitled to. It is admitted here only where
+    // a `consent` of this very client names it, so the door opens onto the
+    // wording somebody signed and never the practice's filing cabinet, and
+    // db/policies/client/readers.sql is the floor underneath saying the same.
+    const { rows } = await db.query<{ storage_key: string; client_id: string | null }>(
+      'select storage_key, client_id from document where id = $1 and (client_id = $2 or ' +
+        "(client_id is null and kind = 'consent_text' and exists (select 1 from consent cs " +
+        'where cs.text_document_id = document.id and cs.client_id = $2)))',
       [documentId, clientId],
     );
     const row = rows[0];
@@ -251,7 +264,10 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
 
     const link = await signedDocumentLink(db, storage, {
       id: documentId,
-      clientId,
+      // Null for a practice wording: the audit trail denormalises the client
+      // and a document that names none must not have one invented for it
+      // (app/api/_middleware/storage/audit.ts).
+      clientId: row.client_id,
       storageKey: row.storage_key,
     });
     return c.json(DocumentLinkResponse.parse(link));

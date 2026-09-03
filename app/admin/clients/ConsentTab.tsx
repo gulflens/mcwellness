@@ -191,6 +191,9 @@ export function ConsentTab({
                         Withdrawn {new Date(consent.withdrawnAt).toLocaleDateString('en-GB')}
                       </span>
                     ) : null}
+                    {consent.witnessedByName ? (
+                      <span>Witnessed by {consent.witnessedByName}</span>
+                    ) : null}
                     {consent.signatureDocumentId ? (
                       <DocumentLink
                         clientId={clientId}
@@ -200,6 +203,19 @@ export function ConsentTab({
                     ) : (
                       <span>No document filed</span>
                     )}
+                    {/* The words, not only the signature. A person is entitled to
+                        a copy of what they agreed to, and the exact version is on
+                        the consent row, so the tab can name it rather than send
+                        somebody to the current wording and hope. */}
+                    <DocumentLink
+                      clientId={clientId}
+                      documentId={consent.textDocumentId}
+                      label={
+                        consent.wordingVersion === null
+                          ? 'Open the wording'
+                          : `Wording version ${consent.wordingVersion}`
+                      }
+                    />
                   </div>
                 ))}
               </div>

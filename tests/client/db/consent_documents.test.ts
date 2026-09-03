@@ -32,6 +32,18 @@ const CONTACT_USER_ID = '00000000-0000-4000-8000-0000000000f3';
 const CONTACT_AUTH = '00000000-0000-4000-8000-0000000000f4';
 const OTHER_CONTACT_USER_ID = '00000000-0000-4000-8000-0000000000f5';
 const OTHER_CONTACT_AUTH = '00000000-0000-4000-8000-0000000000f6';
+// The three roles the deny cases are about: finance, which section 2 gives
+// demographics and contacts and nothing else; a practitioner with nobody on
+// their schedule; and a second member of staff, who is nobody's clinician and
+// exists to witness a verbal re-confirmation.
+const FINANCE_ID = '00000000-0000-4000-8000-0000000000f7';
+const FINANCE_AUTH = '00000000-0000-4000-8000-0000000000f8';
+const PRACTITIONER_ID = '00000000-0000-4000-8000-0000000000f9';
+const PRACTITIONER_AUTH = '00000000-0000-4000-8000-0000000000fa';
+const WITNESS_ID = '00000000-0000-4000-8000-0000000000fb';
+const WITNESS_AUTH = '00000000-0000-4000-8000-0000000000fc';
+/** Another practice entirely: its owner may not reach a single row of this one. */
+const OTHER_TENANT_AUTH = '00000000-0000-4000-8000-0000000000fd';
 
 const ADULT_ID = '00000000-0000-4000-8000-000000000101';
 const CHILD_ID = '00000000-0000-4000-8000-000000000102';
@@ -40,6 +52,9 @@ const ADULT_CONTACT = '00000000-0000-4000-8000-000000000111';
 const GUARDIAN_CONTACT = '00000000-0000-4000-8000-000000000112';
 const NON_GUARDIAN_CONTACT = '00000000-0000-4000-8000-000000000113';
 const OTHER_CLIENT_CONTACT = '00000000-0000-4000-8000-000000000114';
+/** A client who has agreed to nothing: there is no home visit to re-confirm. */
+const NO_HISTORY_ID = '00000000-0000-4000-8000-000000000104';
+const NO_HISTORY_CONTACT = '00000000-0000-4000-8000-000000000115';
 
 const WORDING_PARTICIPATION = '00000000-0000-4000-8000-000000000121';
 const WORDING_HOME_VISIT = '00000000-0000-4000-8000-000000000122';
@@ -123,23 +138,51 @@ beforeAll(async () => {
     id: ADMIN_ID,
     tenantId: IDS.tenantA,
     authId: ADMIN_AUTH,
-    displayName: 'Synthetic Admin',
+    displayName: 'Hazel Ridge',
     roles: ['admin'],
   });
   await seedUser(owner, {
     id: CONTACT_USER_ID,
     tenantId: IDS.tenantA,
     authId: CONTACT_AUTH,
-    displayName: 'Synthetic Household',
+    displayName: 'Olive Bay',
     roles: ['client_contact'],
   });
   await seedUser(owner, {
     id: OTHER_CONTACT_USER_ID,
     tenantId: IDS.tenantA,
     authId: OTHER_CONTACT_AUTH,
-    displayName: 'Another Household',
+    displayName: 'Pearl Cliff',
     roles: ['client_contact'],
   });
+  await seedUser(owner, {
+    id: FINANCE_ID,
+    tenantId: IDS.tenantA,
+    authId: FINANCE_AUTH,
+    displayName: 'Basil Dune',
+    roles: ['finance'],
+  });
+  await seedUser(owner, {
+    id: PRACTITIONER_ID,
+    tenantId: IDS.tenantA,
+    authId: PRACTITIONER_AUTH,
+    displayName: 'Jasper Creek',
+    roles: ['practitioner'],
+  });
+  await seedUser(owner, {
+    id: WITNESS_ID,
+    tenantId: IDS.tenantA,
+    authId: WITNESS_AUTH,
+    displayName: 'Fern Summit',
+    roles: ['practitioner'],
+  });
+  // A second practice, so "another tenant" is a real actor rather than an
+  // unknown id: its owner holds every role there and none here.
+  await seedTenant(owner, IDS.tenantB, IDS.ownerB, 'Other Studio');
+  await owner.query('update app_user set auth_id = $1 where id = $2', [
+    OTHER_TENANT_AUTH,
+    IDS.ownerB,
+  ]);
 
   // An adult and a child, each with their own contacts. The child's household
   // holds two people who may consent: one is a legal guardian and one is not,
@@ -148,6 +191,7 @@ beforeAll(async () => {
     [ADULT_ID, 'Meadow', '1990-01-01', 'en'],
     [CHILD_ID, 'Harbour', '2015-04-01', 'en'],
     [OTHER_CLIENT_ID, 'Quarry', '1988-06-01', 'ar'],
+    [NO_HISTORY_ID, 'Lagoon', '1992-03-03', 'en'],
   ] as const) {
     await owner.query(
       'insert into client (id, tenant_id, mrn, given_name, family_name, date_of_birth, ' +
@@ -162,7 +206,8 @@ beforeAll(async () => {
       "($1, $9, $5, 'Laurel', 'Meadow', 'self', false, true, '+971500000011', $10), " +
       "($2, $9, $6, 'Iris', 'Harbour', 'mother', true, true, '+971500000012', null), " +
       "($3, $9, $6, 'Cedar', 'Harbour', 'other', false, true, '+971500000013', null), " +
-      "($4, $9, $7, 'Sage', 'Quarry', 'self', false, true, '+971500000014', $8)",
+      "($4, $9, $7, 'Sage', 'Quarry', 'self', false, true, '+971500000014', $8), " +
+      "($11, $9, $12, 'Maple', 'Lagoon', 'self', false, true, '+971500000015', null)",
     [
       ADULT_CONTACT,
       GUARDIAN_CONTACT,
@@ -174,6 +219,8 @@ beforeAll(async () => {
       OTHER_CONTACT_USER_ID,
       IDS.tenantA,
       CONTACT_USER_ID,
+      NO_HISTORY_CONTACT,
+      NO_HISTORY_ID,
     ],
   );
 
@@ -530,6 +577,7 @@ describe('POST /api/clients/:id/consents', () => {
         givenByContactId: ADULT_CONTACT,
         textDocumentId: WORDING_PARTICIPATION,
         method: 'verbal_witnessed',
+        witnessedByUserId: WITNESS_ID,
       }),
     });
     expect(wrongPurpose.status).toBe(400);
@@ -541,15 +589,124 @@ describe('POST /api/clients/:id/consents', () => {
         givenByContactId: ADULT_CONTACT,
         textDocumentId: WORDING_HOME_VISIT,
         method: 'verbal_witnessed',
+        witnessedByUserId: WITNESS_ID,
       }),
     });
     expect(res.status).toBe(201);
     const { id } = (await res.json()) as { id: string };
-    const { rows } = await owner.query<{ signature_document_id: string | null }>(
-      'select signature_document_id from consent where id = $1',
-      [id],
-    );
+    const { rows } = await owner.query<{
+      signature_document_id: string | null;
+      witnessed_by_user_id: string | null;
+    }>('select signature_document_id, witnessed_by_user_id from consent where id = $1', [id]);
+    // Nothing filed, and the second member of staff named on the row instead:
+    // this is the one method where the row is the whole of the evidence
+    // (db/migrations/103_consent_witness.sql).
     expect(rows[0]?.signature_document_id).toBeNull();
+    expect(rows[0]?.witnessed_by_user_id).toBe(WITNESS_ID);
+  });
+
+  it('will not take a verbal confirmation as a first consent', async () => {
+    // docs/SPEC/client-record.md section 7: "allowed only for home_visit
+    // re-confirmation, never for initial participation". This client has
+    // agreed to nothing, so there is nothing to re-confirm.
+    const res = await request(ADMIN_AUTH, `/api/clients/${NO_HISTORY_ID}/consents`, {
+      method: 'POST',
+      body: JSON.stringify({
+        purpose: 'home_visit',
+        givenByContactId: NO_HISTORY_CONTACT,
+        textDocumentId: WORDING_HOME_VISIT,
+        method: 'verbal_witnessed',
+        witnessedByUserId: WITNESS_ID,
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { code: string }).toMatchObject({
+      code: 'no_consent_to_reconfirm',
+    });
+    const { rows } = await owner.query<{ n: string }>(
+      'select count(*)::text as n from consent where client_id = $1',
+      [NO_HISTORY_ID],
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
+  });
+
+  it('will not take a verbal confirmation nobody witnessed, or one witnessed by the person recording it', async () => {
+    const body = (extra: Record<string, unknown>) =>
+      JSON.stringify({
+        purpose: 'home_visit',
+        givenByContactId: ADULT_CONTACT,
+        textDocumentId: WORDING_HOME_VISIT,
+        method: 'verbal_witnessed',
+        ...extra,
+      });
+
+    const missing = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+      method: 'POST',
+      body: body({}),
+    });
+    expect(missing.status).toBe(400);
+    expect((await missing.json()) as { code: string }).toMatchObject({ code: 'witness_required' });
+
+    // A second staff member is a second person, not the same one twice.
+    const self = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+      method: 'POST',
+      body: body({ witnessedByUserId: ADMIN_ID }),
+    });
+    expect(self.status).toBe(400);
+    expect((await self.json()) as { code: string }).toMatchObject({ code: 'witness_is_actor' });
+
+    // Another practice's owner is nobody here, and the refusal never says
+    // whether such a person exists.
+    const otherTenant = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+      method: 'POST',
+      body: body({ witnessedByUserId: IDS.ownerB }),
+    });
+    expect(otherTenant.status).toBe(400);
+    expect((await otherTenant.json()) as { code: string }).toMatchObject({
+      code: 'witness_not_staff',
+    });
+
+    // The household's own portal account is not staff either.
+    const contact = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+      method: 'POST',
+      body: body({ witnessedByUserId: CONTACT_USER_ID }),
+    });
+    expect(contact.status).toBe(400);
+    expect((await contact.json()) as { code: string }).toMatchObject({ code: 'witness_not_staff' });
+  });
+
+  it('refuses a witness on a consent that was signed', async () => {
+    // Migration 103's check constraint says the same underneath, but the route
+    // answers first and by name: a signature is its own evidence.
+    const res = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+      method: 'POST',
+      body: JSON.stringify({
+        purpose: 'home_visit',
+        givenByContactId: ADULT_CONTACT,
+        textDocumentId: WORDING_HOME_VISIT,
+        method: 'app_signature',
+        evidence: { mimeType: 'image/png', bytesBase64: PNG_BASE64 },
+        witnessedByUserId: WITNESS_ID,
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { code: string }).toMatchObject({ code: 'witness_not_accepted' });
+  });
+
+  it('lists the staff who may witness, and never the person asking', async () => {
+    const res = await request(ADMIN_AUTH, '/api/clients/consent-witnesses');
+    expect(res.status).toBe(200);
+    const { witnesses } = (await res.json()) as { witnesses: { id: string; name: string }[] };
+    const ids = witnesses.map((witness) => witness.id);
+    expect(ids).toContain(WITNESS_ID);
+    expect(ids).not.toContain(ADMIN_ID);
+    // Not the household's portal account, and not another practice's staff.
+    expect(ids).not.toContain(CONTACT_USER_ID);
+    expect(ids).not.toContain(IDS.ownerB);
+    expect(witnesses.find((witness) => witness.id === WITNESS_ID)?.name).toBe('Fern Summit');
+
+    // Finance does not record consent, so it is not asked who might witness one.
+    expect((await request(FINANCE_AUTH, '/api/clients/consent-witnesses')).status).toBe(403);
   });
 
   it('supersedes the consent it replaces, so a purpose has one live answer', async () => {
@@ -607,7 +764,7 @@ describe('the Documents tab', () => {
       documents: { kind: string; uploadedByName: string | null; retentionUntil: string | null }[];
     };
     const referral = body.documents.find((document) => document.kind === 'referral');
-    expect(referral?.uploadedByName).toBe('Synthetic Admin');
+    expect(referral?.uploadedByName).toBe('Hazel Ridge');
     expect(referral?.retentionUntil).not.toBeNull();
     // The consent evidence is listed here too: it is part of what the practice
     // holds about this client.

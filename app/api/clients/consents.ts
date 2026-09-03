@@ -7,12 +7,13 @@ import {
   canGiveConsent,
   type ConsentPurpose,
 } from '../../../domain/client';
-import { isoDateIn } from '../../../domain/shared';
+import { isoDateIn, hasRole, type Actor } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { canWriteClientRecord } from './access';
 import { currentWording } from './consent-wording';
 import { fileClientDocument } from './document-store';
 import {
+  ConsentWitnessListResponse,
   IdResponse,
   RecordConsentBody,
   WithdrawConsentResponse,
@@ -54,6 +55,18 @@ import { retirePhotoEvidence } from './withdrawal';
  *     the pad rendered; `paper_scan` is a photograph or a PDF;
  *     `verbal_witnessed` carries none and is only ever a `home_visit`
  *     re-confirmation (section 7).
+ *   * **A verbal re-confirmation that re-confirms nothing, or that nobody
+ *     witnessed.** Section 7 is exact: "practitioner records, second staff
+ *     member confirms; allowed only for `home_visit` re-confirmation, never
+ *     for initial `participation`". So this route refuses `verbal_witnessed`
+ *     unless a `home_visit` consent is already on the client's record — of any
+ *     status, because a withdrawn or superseded one still means the household
+ *     agreed once and this is the confirmation of it — and unless the body
+ *     names a witness: a member of this practice's staff, other than the
+ *     person recording it, kept on `consent.witnessed_by_user_id`
+ *     (db/migrations/103_consent_witness.sql). This method files no document,
+ *     so the row is the whole of the evidence and a witness nobody can name is
+ *     not a witness.
  *
  * Withdrawal needs a reason and takes effect immediately (section 7). This
  * route does not cancel future appointments — that is scheduling's, and
@@ -119,6 +132,69 @@ async function checkWording(
     return { ok: false, code: 'wording_superseded' };
   }
   return { ok: true };
+}
+
+type WitnessCheck =
+  | { ok: true; witnessedByUserId: string | null }
+  | {
+      ok: false;
+      code:
+        | 'no_consent_to_reconfirm'
+        | 'witness_required'
+        | 'witness_not_accepted'
+        | 'witness_is_actor'
+        | 'witness_not_staff';
+    };
+
+/**
+ * The two facts a verbal re-confirmation needs beyond its purpose: something
+ * to re-confirm, and somebody who heard it (docs/SPEC/client-record.md
+ * section 7).
+ *
+ * "Something to re-confirm" is any `home_visit` consent already on this
+ * client's record, whatever its status. A withdrawn or superseded one still
+ * means the household agreed at some point and this is the confirmation of
+ * that agreement; requiring an *active* one would refuse the one case the
+ * method exists for — a consent that has expired and is being re-confirmed at
+ * the door.
+ *
+ * The witness is checked against `app_user` under row security, so an id from
+ * another practice finds nothing and is refused as "not staff" without this
+ * route ever learning that such a person exists. The tenant is named in the
+ * predicate as well, because a rule this route depends on should be legible
+ * here and not only in a policy file. A client contact is not staff: they hold
+ * a role like anyone else, and it is the one role that never counts.
+ */
+async function checkWitness(
+  db: Db,
+  actor: Actor,
+  clientId: string,
+  method: 'app_signature' | 'paper_scan' | 'verbal_witnessed',
+  witnessedByUserId: string | undefined,
+): Promise<WitnessCheck> {
+  if (method !== 'verbal_witnessed') {
+    // A signature and a scanned form are their own evidence. A witness beside
+    // one would be a fact about a conversation that did not happen, and
+    // migration 103's check constraint refuses the row in any case.
+    return witnessedByUserId
+      ? { ok: false, code: 'witness_not_accepted' }
+      : { ok: true, witnessedByUserId: null };
+  }
+  const prior = await db.query(
+    "select 1 from consent where client_id = $1 and purpose = 'home_visit' limit 1",
+    [clientId],
+  );
+  if (prior.rows.length === 0) return { ok: false, code: 'no_consent_to_reconfirm' };
+  if (!witnessedByUserId) return { ok: false, code: 'witness_required' };
+  if (witnessedByUserId === actor.userId) return { ok: false, code: 'witness_is_actor' };
+  const witness = await db.query(
+    'select 1 from app_user u where u.id = $1 and u.tenant_id = app.current_tenant_id() ' +
+      "and u.status = 'active' and exists (select 1 from user_role r where r.user_id = u.id " +
+      "and r.role <> 'client_contact')",
+    [witnessedByUserId],
+  );
+  if (witness.rows.length === 0) return { ok: false, code: 'witness_not_staff' };
+  return { ok: true, witnessedByUserId };
 }
 
 type EvidenceCheck =
@@ -242,6 +318,20 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: evidence.code, requestId }, 400);
     }
 
+    // Before anything is filed: a verbal re-confirmation with nothing to
+    // re-confirm, or with no second member of staff behind it, is not a
+    // consent this practice may record at all.
+    const witness = await checkWitness(
+      db,
+      actor,
+      clientId,
+      body.data.method,
+      body.data.witnessedByUserId,
+    );
+    if (!witness.ok) {
+      return c.json({ error: 'bad_request', code: witness.code, requestId }, 400);
+    }
+
     // Bytes into the store and the document row that names them, before the
     // consent that points at it: a consent whose evidence failed to file must
     // not exist at all, and the whole request is one transaction, so a refusal
@@ -281,8 +371,8 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const consentId = randomUUID();
     await db.query(
       'insert into consent (id, tenant_id, client_id, given_by_contact_id, purpose, version, ' +
-        'text_document_id, method, expires_at, signature_document_id) ' +
-        'values ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9)',
+        'text_document_id, method, expires_at, signature_document_id, witnessed_by_user_id) ' +
+        'values ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10)',
       [
         consentId,
         actor.tenantId,
@@ -293,6 +383,7 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         body.data.method,
         body.data.expiresAt ?? null,
         signatureDocumentId,
+        witness.witnessedByUserId,
       ],
     );
     return c.json(IdResponse.parse({ id: consentId }), 201);
@@ -356,6 +447,47 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         id: consentId,
         photographsRemoved: photographs.removed,
         photographsStillOnFile: photographs.stillOnFile,
+      }),
+    );
+  });
+}
+
+/**
+ * Who may stand as a witness to a verbal re-confirmation.
+ *
+ * The rule `checkWitness` above enforces has to be answerable on screen as
+ * well, or the form would be a free-text box for a uuid. This route is that
+ * answer and nothing more: the practice's own active staff, other than the
+ * person asking, as a name and an id.
+ *
+ * It is deliberately not audited. Every other read in this worktree writes a
+ * row because it names what the practice holds about a client; this one names
+ * no client at all — it is a list of colleagues, the same fact the console's
+ * own sign-in page shows the moment anybody signs in. A trail that recorded it
+ * would record the console drawing a dropdown.
+ *
+ * Finance and a practitioner are refused because neither records a consent
+ * (docs/SPEC/client-record.md section 2); they may still *be* a witness, which
+ * is a different question and one the list above answers.
+ */
+export function mountConsentWitnesses(api: Hono<ApiEnv>): void {
+  api.get('/api/clients/consent-witnesses', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const { rows } = await db.query<{ id: string; display_name: string }>(
+      'select u.id, u.display_name from app_user u ' +
+        'where u.tenant_id = app.current_tenant_id() and u.status = $2 and u.id <> $1 ' +
+        "and exists (select 1 from user_role r where r.user_id = u.id and r.role <> 'client_contact') " +
+        'order by u.display_name',
+      [actor.userId, 'active'],
+    );
+    return c.json(
+      ConsentWitnessListResponse.parse({
+        witnesses: rows.map((row) => ({ id: row.id, name: row.display_name })),
       }),
     );
   });

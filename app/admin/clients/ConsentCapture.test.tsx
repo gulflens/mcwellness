@@ -201,6 +201,11 @@ describe('ConsentTab', () => {
           expiresAt: null,
           method: 'app_signature',
           signatureDocumentId: EVIDENCE_ID,
+          textDocumentId: WORDING_ID,
+          wordingVersion: '0.1-draft',
+          wordingStatus: 'draft',
+          witnessedByUserId: null,
+          witnessedByName: null,
         },
       ],
     };
@@ -224,6 +229,11 @@ describe('ConsentTab', () => {
           expiresAt: null,
           method: 'app_signature',
           signatureDocumentId: null,
+          textDocumentId: WORDING_ID,
+          wordingVersion: '0.1-draft',
+          wordingStatus: 'draft',
+          witnessedByUserId: null,
+          witnessedByName: null,
         },
       ],
     };
