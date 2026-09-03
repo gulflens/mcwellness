@@ -314,17 +314,88 @@ describe('the erasure guard (098_erasure_guard.sql)', () => {
         await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select app.begin_erasure()');
         await rejectsWith(client, INSUFFICIENT_PRIVILEGE, 'select app.end_erasure()');
         await rejectsWith(client, INSUFFICIENT_PRIVILEGE, "select app.audit_redact('{}'::jsonb)");
+        await rejectsWith(
+          client,
+          INSUFFICIENT_PRIVILEGE,
+          "select app.audit_redact_value('{}'::jsonb)",
+        );
       });
     });
   });
 });
 
 describe('app.audit_redact drops a fixed set of keys outright (audit.md section 8)', () => {
-  it('drops checked_in_point alongside the Emirates ID columns, keeping the rest', async () => {
+  /**
+   * Called directly rather than through a write, because the two columns this
+   * covers arrive with the session-capture stream's own migration and are not
+   * on the trunk's branch: the list is the trunk's (audit.md section 8), so
+   * the trunk proves the function rather than the table.
+   */
+  async function redact(row: Record<string, unknown>): Promise<Record<string, unknown>> {
     const { rows } = await client.query<{ redacted: Record<string, unknown> }>(
-      'select app.audit_redact(\'{"checked_in_point": "POINT(1 1)", "note": "kept"}\'::jsonb) as redacted',
+      'select app.audit_redact($1::jsonb) as redacted',
+      [JSON.stringify(row)],
     );
-    expect(rows[0]?.redacted).toEqual({ note: 'kept' });
+    return rows[0]?.redacted ?? {};
+  }
+
+  it('drops checked_in_point alongside the Emirates ID columns, keeping the rest', async () => {
+    expect(await redact({ checked_in_point: 'POINT(1 1)', note: 'kept' })).toEqual({
+      note: 'kept',
+    });
+  });
+
+  it('drops the coordinate a visit ends on as readily as the one it starts on', async () => {
+    expect(
+      await redact({
+        checked_in_point: 'POINT(1 1)',
+        checked_out_point: 'POINT(2 2)',
+        emirates_id_hash: 'nope',
+        note: 'kept',
+      }),
+    ).toEqual({ note: 'kept' });
+  });
+
+  it('takes a coordinate out of a payload, and leaves the rest of it standing', async () => {
+    // session_event.payload carries the same coordinate under another name;
+    // before migration 904 the redaction looked only at top-level values.
+    expect(
+      await redact({ seq: 3, payload: { point: 'POINT(3 3)', kind: 'checked_out', battery: 61 } }),
+    ).toEqual({ seq: 3, payload: { kind: 'checked_out', battery: 61 } });
+  });
+
+  it('truncates free text inside a payload exactly as it would at the top level', async () => {
+    const long = 'n'.repeat(1000);
+    const redacted = await redact({ referral_source: long, payload: { note: long, seq: 4 } });
+
+    expect(redacted.referral_source).toBe('[redacted: 1000 chars]');
+    expect(redacted.payload).toEqual({ note: '[redacted: 1000 chars]', seq: 4 });
+  });
+
+  it('reaches an object nested inside an object, and leaves arrays and scalars alone', async () => {
+    const long = 'n'.repeat(300);
+    expect(
+      await redact({
+        payload: { device: { point: 'POINT(4 4)', note: long, id: 'dev-1' } },
+        preflight_checklist: [{ key: 'identity', label_en: 'short' }],
+        seq: 5,
+      }),
+    ).toEqual({
+      payload: { device: { note: '[redacted: 300 chars]', id: 'dev-1' } },
+      preflight_checklist: [{ key: 'identity', label_en: 'short' }],
+      seq: 5,
+    });
+  });
+
+  it('still withholds every value inside an erasure, nested rules and all', async () => {
+    await rolledBack(client, async () => {
+      await client.query('select app.begin_erasure()');
+      expect(await redact({ payload: { note: 'anything' }, seq: 6 })).toEqual({
+        payload: '[withheld: erasure]',
+        seq: '[withheld: erasure]',
+      });
+      await client.query('select app.end_erasure()');
+    });
   });
 });
 
