@@ -31,10 +31,18 @@ export function DocumentLink({
   clientId,
   documentId,
   label,
+  reason,
 }: {
   clientId: string;
   documentId: string;
   label: string;
+  /**
+   * The reason the drawer was opened with, for a record that has been erased:
+   * the link route asks for one exactly as the record itself does
+   * (docs/SPEC/client-record.md section 8). Absent everywhere else, which is
+   * every other document on every other record.
+   */
+  reason?: string;
 }) {
   const { apiFetch } = useAuth();
   const [busy, setBusy] = useState(false);
@@ -46,7 +54,9 @@ export function DocumentLink({
     setError(null);
     setBlockedUrl(null);
     try {
-      const res = await apiFetch(`/api/clients/${clientId}/documents/${documentId}/link`);
+      const res = await apiFetch(`/api/clients/${clientId}/documents/${documentId}/link`, {
+        headers: reason ? { 'x-reason': reason } : undefined,
+      });
       if (!res.ok) {
         setError(
           res.status === 503 ? 'The document store cannot be reached.' : 'That file did not open.',

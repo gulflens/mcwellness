@@ -135,15 +135,16 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
             <TabPanel id="overview" idPrefix="client" selected={tab}>
               <OverviewTab
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
+                reason={reason.trim() || undefined}
               />
             </TabPanel>
             <TabPanel id="contacts" idPrefix="client" selected={tab}>
               <ContactsTab
                 clientId={client.id}
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
               />
             </TabPanel>
@@ -151,7 +152,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
               <LocationsTab
                 clientId={client.id}
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
               />
             </TabPanel>
@@ -159,7 +160,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
               <ConsentTab
                 clientId={client.id}
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
               />
             </TabPanel>
@@ -167,12 +168,17 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
               <GoalsTab
                 clientId={client.id}
                 record={state.record}
-                onChanged={() => void refetch()}
+                onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWriteGoals}
               />
             </TabPanel>
             <TabPanel id="documents" idPrefix="client" selected={tab}>
-              <DocumentsTab clientId={client.id} mayWrite={mayWrite} />
+              <DocumentsTab
+                clientId={client.id}
+                mayWrite={mayWrite}
+                erased={state.record.status === 'erased'}
+                reason={reason.trim() || undefined}
+              />
             </TabPanel>
           </>
         ) : null}

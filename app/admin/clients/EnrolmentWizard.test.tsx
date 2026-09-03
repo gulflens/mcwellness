@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
 import { EnrolmentWizard } from './EnrolmentWizard';
+import { practiceToday } from './activation';
 
 afterEach(cleanup);
 
@@ -275,7 +276,12 @@ describe('EnrolmentWizard', () => {
 
   it('refuses a date of birth in the future, naming the field', async () => {
     mountWithRecord(baseRecord());
-    const future = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    // Tomorrow in the practice's own day, not in UTC. A day added to the UTC
+    // clock is the same day in Dubai for the four hours after midnight there,
+    // so this test refused nothing and failed between 00:00 and 04:00 local.
+    const tomorrow = new Date(`${practiceToday()}T00:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const future = tomorrow.toISOString().slice(0, 10);
     fireEvent.change(screen.getByLabelText('Given name'), { target: { value: 'Laurel' } });
     fireEvent.change(screen.getByLabelText('Family name'), { target: { value: 'Meadow' } });
     fireEvent.change(screen.getByLabelText('Relationship to the client'), {

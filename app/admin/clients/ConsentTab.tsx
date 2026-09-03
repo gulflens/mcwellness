@@ -182,6 +182,12 @@ export function ConsentTab({
 
   return (
     <div className="tab-section">
+      {record.status === 'erased' ? (
+        <Note tone="attention">
+          This record has been erased. The consents below are what was agreed; nothing more can be
+          recorded or withdrawn.
+        </Note>
+      ) : null}
       {/* tone="attention" carries role="status", so a confirmation reaches
           somebody who cannot see it land (app/shell/components/Controls.tsx). */}
       {outcome ? <Note tone="attention">{outcome}</Note> : null}

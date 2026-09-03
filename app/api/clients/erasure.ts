@@ -10,6 +10,7 @@ import { hasRole, isoDateIn } from '../../../domain/shared';
 import { logReads } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
+import { canPerformErasure, canRecordErasureRequest } from './access';
 import { filePracticeDocument, signedDocumentLink } from './document-store';
 import { erasureLetter } from './erasure-letter';
 import {
@@ -157,7 +158,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
     if (status === null) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
-    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+    if (!canRecordErasureRequest(actor)) {
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
@@ -217,7 +218,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
     );
     const status = statusRow.rows[0]?.status ?? null;
     if (status === null) return c.json({ error: 'not_found', requestId }, 404);
-    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+    if (!canRecordErasureRequest(actor)) {
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
@@ -263,7 +264,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
     );
     const status = statusRow.rows[0]?.status ?? null;
     if (status === null) return c.json({ error: 'not_found', requestId }, 404);
-    if (!hasRole(actor, 'owner', 'admin')) {
+    if (!canPerformErasure(actor)) {
       await logRefused(db, 'client', clientId, clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
     }

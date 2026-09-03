@@ -55,6 +55,12 @@ export function LocationsTab({
 
   return (
     <div className="tab-section">
+      {record.status === 'erased' ? (
+        <Note tone="attention">
+          This record has been erased. Each address keeps only its emirate, and the pin sits in the
+          middle of it.
+        </Note>
+      ) : null}
       {record.locations.length === 0 ? (
         <Note>No locations yet.</Note>
       ) : (

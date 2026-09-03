@@ -92,6 +92,12 @@ export function GoalsTab({
 
   return (
     <div className="tab-section">
+      {record.status === 'erased' ? (
+        <Note tone="attention">
+          This record has been erased. The goals below have kept their category and lost what was
+          written beside them.
+        </Note>
+      ) : null}
       {record.goals.length === 0 ? (
         <Note>No goals yet.</Note>
       ) : (
