@@ -286,6 +286,12 @@ export const APPOINTMENT_ACTION_CODES = [
   'appointment_not_found',
   'appointment_settled',
   'reason_required',
+  // "Could not go ahead at the door", given before the door could have been
+  // reached. The one reason with a moment of its own.
+  'reason_too_early',
+  // A visit somebody has already started delivering. How it ends is the
+  // session's to say, not the calendar's.
+  'session_open',
 ] as const;
 export type AppointmentActionCode = (typeof APPOINTMENT_ACTION_CODES)[number];
 

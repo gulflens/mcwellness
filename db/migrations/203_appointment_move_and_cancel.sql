@@ -43,6 +43,21 @@
 -- docs/CHANGE-REQUESTS/client-record-03.md CR-10). It cancels forward only,
 -- never late, and stamps the caller's reason on every audit row it causes.
 --
+-- **What neither door checks, and where that is checked instead.** A visit
+-- somebody has already started delivering must be neither moved nor called
+-- off. Moving it retires the appointment its open session still points at, so
+-- closing that session later completes a superseded row and the replacement
+-- stands for ever; calling it off late takes a credit, which the session's own
+-- close takes again. The status test would catch both — except that check-in
+-- does not currently move an appointment to `checked_in` (the session-capture
+-- stream is adding that), so a visit in progress still reads `confirmed`.
+-- `app/api/appointments/move.ts` and `cancel.ts` therefore ask the question
+-- directly, of `session.closed_at`, before either write. It is not repeated in
+-- these functions because `session` is another stream's table and a definer
+-- body in this one is the wrong place to hold a rule about it; the routes are
+-- the only callers, and both are tested against a seeded open session
+-- (schema review of this pull request).
+--
 -- Needs: 000 (schema app, app.current_tenant_id), 020 (app_user), 050
 -- (practitioner), 080 (app.audit_row, already on appointment), 100
 -- (app.current_actor_id), 200 (appointment, its statuses and its
@@ -111,9 +126,12 @@ alter table appointment add constraint appointment_rescheduled_from_fk
 create unique index appointment_one_move_per_source
   on appointment (rescheduled_from_id) where rescheduled_from_id is not null;
 
--- Postgres does not index a foreign key's own side; this serves the constraint
--- above and the "what did this become" read from the client's record.
-create index appointment_rescheduled_from_idx on appointment (rescheduled_from_id);
+-- The unique index above already serves the foreign key's own side and the
+-- "what did this become" read from the client's record — a partial unique index
+-- on exactly that column, and every row with a value in it is in that index. A
+-- second plain index on the same column was written here and taken out again:
+-- it would have been two indexes maintained for one question (schema review of
+-- this pull request, low 2).
 
 ------------------------------------------------------------------------------
 -- 2. The practitioner's own door onto calling off their own stop.
@@ -131,7 +149,7 @@ create function app.cancel_own_appointment(
   p_appointment_id uuid,
   p_status         text,
   p_reason         appointment_cancellation_reason
-) returns boolean
+) returns table (cancelled boolean, entitlement_id uuid)
 language plpgsql security definer
 set search_path = pg_catalog, pg_temp
 as $$
@@ -148,6 +166,26 @@ begin
   if p_reason = 'consent_withdrawn' then
     raise exception 'a withdrawn consent cancels through app.cancel_future_appointments'
       using errcode = 'invalid_parameter_value';
+  end if;
+
+  -- "Could not go ahead at the door" is a thing that happened at a door, and
+  -- nobody has been to one before the arrival window opens. It is the one
+  -- reason that skips the notice rule and takes a credit however far ahead the
+  -- visit is (domain/scheduling/cancellation.ts, ALWAYS_LATE_REASONS), so
+  -- without this it is a way to charge a household a whole session for a visit
+  -- weeks away. app/api/appointments/cancel.ts refuses it first, through
+  -- `reasonCanBeGivenAt`, which is where the rule is written and tested; this
+  -- is the same rule again beneath, because a security definer body runs with
+  -- row security switched off and is the last thing standing.
+  if p_reason = 'unfit_to_attend' then
+    perform 1 from public.appointment a
+      where a.id = p_appointment_id
+        and a.tenant_id = app.current_tenant_id()
+        and a.window_start <= now();
+    if not found then
+      raise exception 'a visit cannot be unfit to attend before its arrival window opens'
+        using errcode = 'invalid_parameter_value';
+    end if;
   end if;
 
   update public.appointment a
@@ -173,9 +211,42 @@ begin
      -- practitioner is inside the house and how that visit ends is the
      -- session's to say — completed, or a no-show — not a cancellation
      -- written underneath an open session.
+     --
+     -- Deliberately NOT bounded to visits still in the future. The reason this
+     -- door exists at all is `unfit_to_attend`, which by definition happens
+     -- once the practitioner has arrived and therefore once the arrival window
+     -- has opened; a forward-only bound would refuse exactly the case it was
+     -- built for. What stops a practitioner reaching back into last month is
+     -- the status list above — a visit that far back has been delivered,
+     -- missed or called off, so there is nothing left in `proposed` or
+     -- `confirmed` to touch (schema review of this pull request, low 1).
      and a.status in ('proposed', 'confirmed');
   get diagnostics v_updated = row_count;
-  return v_updated = 1;
+  if v_updated <> 1 then
+    cancelled := false;
+    entitlement_id := null;
+    return next;
+    return;
+  end if;
+
+  -- Which credit billing's trigger took, if it took one. Read here rather than
+  -- by the caller, and this is the only place it can honestly be read from: the
+  -- caller reads `entitlement` under their own row security, and a practitioner
+  -- reaches a client's ledger only through app.client_visible_to_practitioner,
+  -- which the visit they have just called off has this moment dropped out of.
+  -- So the caller's own read came back empty and the answer said no credit was
+  -- taken when one had been — and the waiver link with it (security review of
+  -- this pull request). The update above is a completed statement, so the
+  -- after-row trigger billing hangs off it (404_billing_consumption.sql) has
+  -- already run by the time this select does.
+  select e.id into entitlement_id
+    from public.entitlement e
+   where e.tenant_id = app.current_tenant_id()
+     and e.consumed_by_appointment_id = p_appointment_id
+     and e.status = 'consumed'
+   limit 1;
+  cancelled := true;
+  return next;
 end
 $$;
 revoke execute on function app.cancel_own_appointment(uuid, text, appointment_cancellation_reason)
@@ -256,7 +327,6 @@ grant execute on function app.cancel_future_appointments(uuid, text) to app_role
 --   revoke execute on function app.cancel_own_appointment(uuid, text, appointment_cancellation_reason)
 --     from app_role;
 --   drop function if exists app.cancel_own_appointment(uuid, text, appointment_cancellation_reason);
---   drop index if exists appointment_rescheduled_from_idx;
 --   drop index if exists appointment_one_move_per_source;
 --   alter table appointment drop constraint if exists appointment_rescheduled_from_fk;
 --   alter table appointment drop constraint if exists appointment_not_moved_from_itself;

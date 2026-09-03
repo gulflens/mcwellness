@@ -1,7 +1,11 @@
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import { hasRole } from '@domain/shared';
-import { DEFAULT_NOTICE_HOURS, cancellationStatusFor } from '@domain/scheduling';
+import {
+  DEFAULT_NOTICE_HOURS,
+  cancellationStatusFor,
+  reasonCanBeGivenAt,
+} from '@domain/scheduling';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import {
   CancelAppointmentRequest,
@@ -52,6 +56,29 @@ const APPOINTMENT_SQL =
   'select id, client_id, status, window_start from appointment ' +
   'where id = $1 and tenant_id = app.current_tenant_id()';
 
+/**
+ * Whether somebody has already started delivering this visit.
+ *
+ * `session.appointment_id` points at the appointment a visit was created from
+ * (db/migrations/300_session.sql), and a session with no `closed_at` is one in
+ * progress. Neither moving nor calling off is a thing to do underneath one,
+ * and both go wrong in their own way if it is allowed: a move retires the
+ * appointment the open session still points at, so closing it later would try
+ * to complete a row that has been superseded and the replacement would stand
+ * for ever; and a late cancellation takes a credit, which the session's own
+ * close then takes again when it completes.
+ *
+ * The proper fix is upstream — check-in should move the appointment to
+ * `checked_in`, and the session-capture stream is adding exactly that — at
+ * which point the status test both routes already make would catch this on its
+ * own. This is the belt beneath that brace, and it stays afterwards: it asks
+ * the question directly rather than through a status that something has to
+ * remember to write (schema review of this pull request).
+ */
+const OPEN_SESSION_SQL =
+  'select 1 from session s where s.appointment_id = $1 ' +
+  'and s.tenant_id = app.current_tenant_id() and s.closed_at is null limit 1';
+
 const NOTICE_SQL =
   'select notice_hours from scheduling_setting where tenant_id = app.current_tenant_id()';
 
@@ -59,7 +86,11 @@ const CANCEL_SQL =
   'update appointment set status = $2, cancellation_reason = $3, cancelled_at = now() ' +
   "where id = $1 and tenant_id = app.current_tenant_id() and status in ('proposed', 'confirmed')";
 
-const CANCEL_OWN_SQL = 'select app.cancel_own_appointment($1, $2, $3) as cancelled';
+// Answers both halves at once: whether the visit was called off, and which
+// credit billing's trigger took for it. The second cannot be read by the
+// caller on this path — see the note in the function itself.
+const CANCEL_OWN_SQL =
+  'select cancelled, entitlement_id from app.cancel_own_appointment($1, $2, $3)';
 
 // What billing's trigger did about it, read back rather than assumed. A
 // practitioner may read this row for a client on their own schedule
@@ -146,6 +177,22 @@ export function mountAppointmentCancel(
       return badRequest(c, requestId, 'appointment_settled');
     }
 
+    const openSession = await db.query(OPEN_SESSION_SQL, [appointmentId]);
+    if (openSession.rows.length > 0) {
+      return badRequest(c, requestId, 'session_open');
+    }
+
+    // "The visit could not go ahead at the door" is a thing that happened at a
+    // door, and nobody has been to one before the arrival window opens. Without
+    // this it is a way to take a household's whole session for a visit weeks
+    // away, by choosing the reason that skips the notice rule
+    // (domain/scheduling/cancellation.ts, and the compliance review of this
+    // pull request). app.cancel_own_appointment refuses the same thing again
+    // beneath, because it runs with row security switched off.
+    if (!reasonCanBeGivenAt(reason, { windowStart: appointment.window_start }, now())) {
+      return badRequest(c, requestId, 'reason_too_early');
+    }
+
     const noticeHours = await noticeHoursFor(db);
     const status = cancellationStatusFor(
       { windowStart: appointment.window_start },
@@ -155,16 +202,20 @@ export function mountAppointmentCancel(
     );
 
     let cancelled: boolean;
+    // Set on the practitioner path by the door itself, because that is the only
+    // place it can be read from there; left null on the office path, which
+    // reads it back below under its own row security.
+    let creditFromDoor: string | null = null;
     if (isCalendarRole) {
       const result = await db.query(CANCEL_SQL, [appointmentId, status, reason]);
       cancelled = result.rowCount === 1;
     } else {
-      const result = await db.query<{ cancelled: boolean }>(CANCEL_OWN_SQL, [
-        appointmentId,
-        status,
-        reason,
-      ]);
+      const result = await db.query<{ cancelled: boolean; entitlement_id: string | null }>(
+        CANCEL_OWN_SQL,
+        [appointmentId, status, reason],
+      );
       cancelled = result.rows[0]?.cancelled === true;
+      creditFromDoor = result.rows[0]?.entitlement_id ?? null;
     }
     // Nothing was written: either somebody settled this visit between the read
     // above and the write, or — for a practitioner — it is not their stop
@@ -175,8 +226,18 @@ export function mountAppointmentCancel(
     }
 
     // Billing's trigger has already run, in this same transaction.
-    const credit = await db.query<{ id: string }>(CONSUMED_CREDIT_SQL, [appointmentId]);
-    const waiverEntitlementId = credit.rows[0]?.id ?? null;
+    //
+    // The office reads the credit back for itself; a practitioner cannot, and
+    // must not be told a story about it either. Their reach into a client's
+    // ledger goes through app.client_visible_to_practitioner — confirmed visits
+    // only — and the visit they have this moment called off is no longer one.
+    // So this read would come back empty on that path and the answer would deny
+    // a charge that had just been made, taking the waiver link with it
+    // (security review of this pull request). The definer door hands it over
+    // instead.
+    const waiverEntitlementId = isCalendarRole
+      ? ((await db.query<{ id: string }>(CONSUMED_CREDIT_SQL, [appointmentId])).rows[0]?.id ?? null)
+      : creditFromDoor;
 
     // No separate read row: the update above carries the whole story into the
     // audit trail through appointment's own row trigger — before and after,

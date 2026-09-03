@@ -80,6 +80,18 @@ const APPT_ALREADY_CANCELLED = '00000000-0000-4000-8000-000000006112';
 const APPT_MOVE_TWICE = '00000000-0000-4000-8000-000000006113';
 const APPT_NOTICE_SETTING = '00000000-0000-4000-8000-000000006114';
 const APPT_NO_CREDIT = '00000000-0000-4000-8000-000000006115';
+// Two visits whose arrival window has already opened: the practitioner is at
+// the door, which is the only moment 'unfit_to_attend' can honestly be given.
+const APPT_UNFIT_AT_DOOR = '00000000-0000-4000-8000-000000006116';
+const APPT_PRACTITIONER_AT_DOOR = '00000000-0000-4000-8000-000000006117';
+// A visit with a session already open beneath it: neither moved nor called off.
+const APPT_SESSION_OPEN = '00000000-0000-4000-8000-000000006118';
+const OPEN_SESSION = '00000000-0000-4000-8000-000000006119';
+// A third household, holding no credits at all, so the "no credit to take"
+// case does not depend on which other test ran first.
+const CLIENT_NO_CREDIT = '00000000-0000-4000-8000-000000006120';
+const CONTACT_NO_CREDIT = '00000000-0000-4000-8000-000000006121';
+const LOCATION_NO_CREDIT = '00000000-0000-4000-8000-000000006122';
 
 const REASON = 'The family asked for a different day.';
 
@@ -140,7 +152,11 @@ async function seedAppointment(
       args.clientId,
       args.practitionerId ?? MORE_IDS.practitionerA,
       MORE_IDS.serviceTypeA,
-      args.clientId === IDS.clientA ? IDS.locationA : LOCATION_B,
+      args.clientId === IDS.clientA
+        ? IDS.locationA
+        : args.clientId === IDS.clientB
+          ? LOCATION_B
+          : LOCATION_NO_CREDIT,
       start,
       new Date(start.getTime() + 45 * 60_000),
       args.status ?? 'confirmed',
@@ -241,6 +257,7 @@ beforeAll(async () => {
   for (const [clientId, contactId, locationId, familyName] of [
     [IDS.clientA, CONTACT_A, IDS.locationA, 'Alpha'],
     [IDS.clientB, CONTACT_B, LOCATION_B, 'Beta'],
+    [CLIENT_NO_CREDIT, CONTACT_NO_CREDIT, LOCATION_NO_CREDIT, 'Gamma'],
   ] as const) {
     await seedClient(owner, IDS.tenantA, clientId, IDS.ownerA, familyName);
     await owner.query(
@@ -311,12 +328,51 @@ beforeAll(async () => {
     clientId: IDS.clientA,
     windowStart: hoursFromNow(18),
   });
-  await seedAppointment(APPT_NO_CREDIT, { clientId: IDS.clientB, windowStart: hoursFromNow(3) });
+  await seedAppointment(APPT_NO_CREDIT, {
+    clientId: CLIENT_NO_CREDIT,
+    windowStart: hoursFromNow(3),
+  });
+  // Windows already open. Practitioner A holds both, two hours apart, which is
+  // clear of the one hour each occupies (a 45-minute window plus a 15-minute
+  // travel buffer) with room to spare — the two `hoursFromNow` calls read the
+  // clock a moment apart, and a gap of exactly one hour would land on that.
+  await seedAppointment(APPT_UNFIT_AT_DOOR, {
+    clientId: IDS.clientA,
+    windowStart: hoursFromNow(-1),
+  });
+  await seedAppointment(APPT_PRACTITIONER_AT_DOOR, {
+    clientId: IDS.clientB,
+    windowStart: hoursFromNow(-3),
+  });
+  await seedAppointment(APPT_SESSION_OPEN, {
+    clientId: CLIENT_NO_CREDIT,
+    windowStart: hoursFromNow(700),
+  });
 
-  // Credits for the two clients whose late cancellations should take one.
+  // Credits for the households whose late cancellations should take one.
+  // The third household deliberately holds none.
   await giveCredit(IDS.clientA);
   await giveCredit(IDS.clientA);
   await giveCredit(IDS.clientA);
+  await giveCredit(IDS.clientB);
+
+  // A session already open on one visit, so both routes can be held to
+  // refusing underneath one. Written straight in, as the session-capture
+  // stream's own check-in would.
+  await owner.query(
+    'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+      'appointment_id, delivery_mode, checked_in_at, created_by) ' +
+      "values ($1, $2, $3, $4, $5, $6, 'home', now(), $7)",
+    [
+      OPEN_SESSION,
+      IDS.tenantA,
+      CLIENT_NO_CREDIT,
+      MORE_IDS.practitionerA,
+      MORE_IDS.serviceTypeA,
+      APPT_SESSION_OPEN,
+      IDS.ownerA,
+    ],
+  );
 
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
@@ -396,6 +452,18 @@ describe('POST /api/appointments/:id/move', () => {
     expect((await statusOf(secondBody.appointment.id)).rescheduled_from_id).toBe(
       firstBody.appointment.id,
     );
+  });
+
+  it('refuses to move a visit somebody has already started delivering', async () => {
+    // Moving it would retire the appointment the open session still points at,
+    // and closing that session later would complete a superseded row while its
+    // replacement stood for ever.
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_SESSION_OPEN}/move`, {
+      windowStart: hoursFromNow(710).toISOString(),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('session_open');
+    expect((await statusOf(APPT_SESSION_OPEN)).status).toBe('confirmed');
   });
 
   it('refuses to move a visit that is already settled', async () => {
@@ -487,16 +555,50 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(rows[0]?.consumption_kind).toBe('late_cancellation');
   });
 
-  it('counts a visit that could not go ahead at the door as late, whatever the calendar said', async () => {
-    // Two hundred hours' notice on the calendar, and none at all at the door.
+  it('refuses "could not go ahead at the door" for a visit nobody has driven to yet', async () => {
+    // Two hundred hours away. Without this rule it is a way to take a whole
+    // session from a household for a visit weeks off, by choosing the one
+    // reason that skips the notice period.
     const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_CANCEL_UNFIT}/cancel`, {
+      reason: 'unfit_to_attend',
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('reason_too_early');
+    expect((await statusOf(APPT_CANCEL_UNFIT)).status).toBe('confirmed');
+    expect(await creditsTaken(APPT_CANCEL_UNFIT)).toBe(0);
+  });
+
+  it('refuses it in the database too, so the door is not the only thing holding it', async () => {
+    await asApiRole(
+      owner,
+      IDS.tenantA,
+      async () => {
+        await owner.query("select set_config('app.actor_id', $1, true)", [
+          MORE_IDS.practitionerUserA,
+        ]);
+        await expect(
+          owner.query('select * from app.cancel_own_appointment($1, $2, $3)', [
+            APPT_CANCEL_UNFIT,
+            'cancelled_late',
+            'unfit_to_attend',
+          ]),
+        ).rejects.toMatchObject({ code: '22023' });
+      },
+      'practitioner',
+    );
+  });
+
+  it('counts it as late once the window has opened, whatever the calendar said', async () => {
+    // The window opened an hour ago; on the calendar this visit was booked long
+    // in advance, and none of that notice reached the practitioner at the door.
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_UNFIT_AT_DOOR}/cancel`, {
       reason: 'unfit_to_attend',
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled_late');
-    expect((await statusOf(APPT_CANCEL_UNFIT)).cancellation_reason).toBe('unfit_to_attend');
-    expect(await creditsTaken(APPT_CANCEL_UNFIT)).toBe(1);
+    expect((await statusOf(APPT_UNFIT_AT_DOOR)).cancellation_reason).toBe('unfit_to_attend');
+    expect(await creditsTaken(APPT_UNFIT_AT_DOOR)).toBe(1);
   });
 
   it('says plainly when a late cancellation found no credit to take', async () => {
@@ -539,17 +641,43 @@ describe('POST /api/appointments/:id/cancel', () => {
     }
   });
 
-  it('lets a practitioner call off their own stop', async () => {
+  it('lets a practitioner call off their own stop, and tells them what it cost', async () => {
     const res = await call(
       AUTH.practitionerA,
       'POST',
-      `/api/appointments/${APPT_PRACTITIONER_OWN}/cancel`,
+      `/api/appointments/${APPT_PRACTITIONER_AT_DOOR}/cancel`,
       { reason: 'unfit_to_attend' },
       'Nobody was home and the session could not go ahead.',
     );
     expect(res.status).toBe(200);
-    expect(((await res.json()) as CancelAppointmentResponse).status).toBe('cancelled_late');
-    expect((await statusOf(APPT_PRACTITIONER_OWN)).status).toBe('cancelled_late');
+    const body = (await res.json()) as CancelAppointmentResponse;
+    expect(body.status).toBe('cancelled_late');
+    expect((await statusOf(APPT_PRACTITIONER_AT_DOOR)).status).toBe('cancelled_late');
+
+    // The credit really was taken, and the answer says so. This is the case
+    // that used to come back false: a practitioner reads a client's ledger only
+    // through app.client_visible_to_practitioner, and the visit they have just
+    // called off has this moment dropped out of it, so their own read found
+    // nothing and the waiver link went with it.
+    expect(await creditsTaken(APPT_PRACTITIONER_AT_DOOR)).toBe(1);
+    expect(body.creditConsumed).toBe(true);
+    const { rows } = await owner.query<{ id: string }>(
+      'select id from entitlement where consumed_by_appointment_id = $1',
+      [APPT_PRACTITIONER_AT_DOOR],
+    );
+    expect(body.waiverEntitlementId).toBe(rows[0]?.id);
+  });
+
+  it('refuses to call off a visit somebody has already started delivering', async () => {
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_SESSION_OPEN}/cancel`, {
+      reason: 'client_request',
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('session_open');
+    // Untouched, and no credit taken: a late cancellation here would take one
+    // and the session's own close would take a second.
+    expect((await statusOf(APPT_SESSION_OPEN)).status).toBe('confirmed');
+    expect(await creditsTaken(APPT_SESSION_OPEN)).toBe(0);
   });
 
   it("refuses a practitioner somebody else's stop, without telling them it exists", async () => {
@@ -606,11 +734,12 @@ describe('app.cancel_future_appointments', () => {
         'select app.cancel_future_appointments($1, $2) as cancelled',
         [IDS.clientB, 'The household withdrew its participation consent.'],
       );
-      // Every future visit this client still had — the two named below and
-      // the two other tests in this file left standing for them
-      // (APPT_SOMEONE_ELSES and APPT_BLOCKING_THE_CLASH) — and not the
-      // completed one behind them.
-      expect(rows[0]?.cancelled).toBe(4);
+      // Every future visit this client still had — the two named below, plus
+      // the three other tests in this file left standing for them
+      // (APPT_SOMEONE_ELSES, APPT_BLOCKING_THE_CLASH and
+      // APPT_PRACTITIONER_OWN) — and not the completed one behind them, nor
+      // the one at the door whose window opened three hours ago.
+      expect(rows[0]?.cancelled).toBe(5);
 
       const future = await owner.query(
         'select id, status::text as status, cancellation_reason::text as reason ' +

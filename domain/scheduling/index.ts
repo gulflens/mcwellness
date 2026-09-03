@@ -18,6 +18,7 @@ export {
   NEVER_LATE_REASONS,
   cancellationStatusFor,
   isLateCancellation,
+  reasonCanBeGivenAt,
 } from './cancellation';
 export type { CancellableAppointment, CancellationReason } from './cancellation';
 export { PRACTICE_TIME_ZONE, currentStopIndex, practiceDate, stopPhases } from './day';

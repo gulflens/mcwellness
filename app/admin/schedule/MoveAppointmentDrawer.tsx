@@ -43,6 +43,12 @@ const ACTION_MESSAGES: Record<AppointmentActionCode, string> = {
     'This visit has already been checked in, delivered, called off or moved, so it cannot be ' +
     'moved now. Reload the day to see where it stands.',
   reason_required: 'Say why this visit is moving before moving it.',
+  reason_too_early:
+    'A visit can only be recorded as unable to go ahead once its arrival window has opened. ' +
+    'Choose another reason.',
+  session_open:
+    'A session has already been started for this visit. How it ends is recorded on the session ' +
+    'itself, not here.',
 };
 
 type Issue = { code: string; message: string };
@@ -222,7 +228,10 @@ export function MoveAppointmentDrawer({
             />
           </div>
 
-          <Note>The household still has to be told the new window.</Note>
+          <Note>
+            The household still has to be told the new window, and the practitioner sees it on their
+            next Today.
+          </Note>
 
           {submitError ? (
             submitError.kind === 'forbidden' ? (

@@ -82,6 +82,31 @@ export const NEVER_LATE_REASONS: readonly CancellationReason[] = ['consent_withd
 export type CancellableAppointment = { windowStart: Date };
 
 /**
+ * Whether a reason can honestly be given about this visit at this moment.
+ *
+ * Only one reason has a moment: `unfit_to_attend` means the practitioner
+ * arrived and the visit could not go ahead, and nobody has arrived anywhere
+ * before the arrival window has opened. Without this it is a way to charge a
+ * household a full session for a visit weeks away, by choosing the reason that
+ * skips the notice rule — which is exactly what it was doing (compliance
+ * review of this pull request: a visit two hundred hours out, called off as
+ * unfit, consumed a credit).
+ *
+ * Judged against `window_start` rather than against the end of the window,
+ * because a practitioner may reasonably be at the door the minute it opens.
+ */
+export function reasonCanBeGivenAt(
+  reason: CancellationReason,
+  appointment: CancellableAppointment,
+  at: Date,
+): boolean {
+  if (reason !== 'unfit_to_attend') {
+    return true;
+  }
+  return appointment.windowStart.getTime() <= at.getTime();
+}
+
+/**
  * Whether a visit was called off inside the notice period.
  *
  * The boundary is exclusive at the notice period itself: "under 24 hours

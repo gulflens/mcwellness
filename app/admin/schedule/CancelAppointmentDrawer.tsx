@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { cancellationStatusFor } from '@domain/scheduling';
+import { cancellationStatusFor, reasonCanBeGivenAt } from '@domain/scheduling';
 import {
   CancelAppointmentResponse,
   CANCELLATION_REASONS,
@@ -49,6 +49,12 @@ const ACTION_MESSAGES: Record<AppointmentActionCode, string> = {
     'This visit has already been checked in, delivered, called off or moved, so it cannot be ' +
     'called off now. Reload the day to see where it stands.',
   reason_required: 'Say why this visit is being called off before calling it off.',
+  reason_too_early:
+    'A visit can only be recorded as unable to go ahead once its arrival window has opened. ' +
+    'Choose another reason.',
+  session_open:
+    'A session has already been started for this visit. How it ends is recorded on the session ' +
+    'itself, not here.',
 };
 
 type State =
@@ -101,6 +107,16 @@ export function CancelAppointmentDrawer({
       live = false;
     };
   }, [apiFetch]);
+
+  // "Could not go ahead at the door" cannot honestly be given about a visit
+  // nobody has driven to yet. The route refuses it and so does the database;
+  // this says so before the coordinator has typed a sentence about it, which
+  // is the only one of the three that is any use to them.
+  const tooEarly = !reasonCanBeGivenAt(
+    reason,
+    { windowStart: new Date(appointment.windowStart) },
+    new Date(),
+  );
 
   // The same rule the route runs, given the same figure. Null only while the
   // practice's own notice period is still being fetched: guessing at it and
@@ -227,7 +243,8 @@ export function CancelAppointmentDrawer({
                 </Select>
               </div>
 
-              {willBeLate === true ? (
+              {tooEarly ? <Note tone="critical">{ACTION_MESSAGES.reason_too_early}</Note> : null}
+              {!tooEarly && willBeLate === true ? (
                 <Note tone="attention">
                   {reason === 'unfit_to_attend'
                     ? 'A visit that cannot go ahead once the practitioner has arrived counts as ' +
@@ -236,13 +253,16 @@ export function CancelAppointmentDrawer({
                       "uses one of the client's sessions. It can be waived afterwards."}
                 </Note>
               ) : null}
-              {willBeLate === false ? (
+              {!tooEarly && willBeLate === false ? (
                 <Note>
                   This is outside the practice&rsquo;s {settings?.noticeHours} hours&rsquo; notice,
                   so the client keeps the session.
                 </Note>
               ) : null}
-              {reason === 'unfit_to_attend' && settings !== null && settings.unfitFeeFils > 0 ? (
+              {!tooEarly &&
+              reason === 'unfit_to_attend' &&
+              settings !== null &&
+              settings.unfitFeeFils > 0 ? (
                 <Note>
                   The practice&rsquo;s fee for this is AED {formatFils(settings.unfitFeeFils)}. It
                   is not charged automatically; add it on the client&rsquo;s account in Billing.
@@ -265,7 +285,7 @@ export function CancelAppointmentDrawer({
               <div className="stepper__submit">
                 <Button
                   variant="primary"
-                  disabled={!note.trim() || submitting}
+                  disabled={!note.trim() || tooEarly || submitting}
                   onClick={() => void handleSubmit()}
                 >
                   {submitting ? 'Calling off…' : 'Call off this visit'}

@@ -76,6 +76,29 @@ const APPOINTMENT_SQL =
   'and p.tenant_id = app.current_tenant_id() and u.tenant_id = app.current_tenant_id() ' +
   'and st.tenant_id = app.current_tenant_id() and l.tenant_id = app.current_tenant_id()';
 
+/**
+ * Whether somebody has already started delivering this visit.
+ *
+ * `session.appointment_id` points at the appointment a visit was created from
+ * (db/migrations/300_session.sql), and a session with no `closed_at` is one in
+ * progress. Neither moving nor calling off is a thing to do underneath one,
+ * and both go wrong in their own way if it is allowed: a move retires the
+ * appointment the open session still points at, so closing it later would try
+ * to complete a row that has been superseded and the replacement would stand
+ * for ever; and a late cancellation takes a credit, which the session's own
+ * close then takes again when it completes.
+ *
+ * The proper fix is upstream — check-in should move the appointment to
+ * `checked_in`, and the session-capture stream is adding exactly that — at
+ * which point the status test both routes already make would catch this on its
+ * own. This is the belt beneath that brace, and it stays afterwards: it asks
+ * the question directly rather than through a status that something has to
+ * remember to write (schema review of this pull request).
+ */
+const OPEN_SESSION_SQL =
+  'select 1 from session s where s.appointment_id = $1 ' +
+  'and s.tenant_id = app.current_tenant_id() and s.closed_at is null limit 1';
+
 const CLIENT_SQL =
   'select given_name, family_name, given_name_ar, family_name_ar, status, date_of_birth ' +
   'from client where id = $1 and tenant_id = app.current_tenant_id()';
@@ -202,6 +225,11 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
       // A visit checked in, delivered, missed, called off or already moved is
       // not one to move: what happened to it has happened.
       return badRequest(c, requestId, 'appointment_settled');
+    }
+
+    const openSession = await db.query(OPEN_SESSION_SQL, [appointmentId]);
+    if (openSession.rows.length > 0) {
+      return badRequest(c, requestId, 'session_open');
     }
 
     const clientId = appointment.client_id;

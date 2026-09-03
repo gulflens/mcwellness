@@ -6,6 +6,7 @@ import {
   NEVER_LATE_REASONS,
   cancellationStatusFor,
   isLateCancellation,
+  reasonCanBeGivenAt,
 } from './cancellation';
 
 /**
@@ -110,6 +111,33 @@ describe('cancellationStatusFor', () => {
   it('keeps the two override lists apart, so no reason is both', () => {
     for (const reason of ALWAYS_LATE_REASONS) {
       expect(NEVER_LATE_REASONS, reason).not.toContain(reason);
+    }
+  });
+});
+
+describe('reasonCanBeGivenAt', () => {
+  it('refuses "could not go ahead at the door" before the door was ever reached', () => {
+    // The fault this exists to stop: two hundred hours' notice, called off as
+    // unfit, and a full session taken for it.
+    expect(reasonCanBeGivenAt('unfit_to_attend', visit, noticeOf(200))).toBe(false);
+    expect(reasonCanBeGivenAt('unfit_to_attend', visit, noticeOf(1))).toBe(false);
+  });
+
+  it('allows it from the moment the arrival window opens', () => {
+    // A practitioner may reasonably be at the door the minute it opens.
+    expect(reasonCanBeGivenAt('unfit_to_attend', visit, WINDOW_START)).toBe(true);
+    expect(
+      reasonCanBeGivenAt('unfit_to_attend', visit, new Date(WINDOW_START.getTime() + 60_000)),
+    ).toBe(true);
+    expect(reasonCanBeGivenAt('unfit_to_attend', visit, new Date(WINDOW_START.getTime() - 1))).toBe(
+      false,
+    );
+  });
+
+  it('puts no moment on the other reasons: a visit may be called off at any time', () => {
+    for (const reason of CANCELLATION_REASONS.filter((r) => r !== 'unfit_to_attend')) {
+      expect(reasonCanBeGivenAt(reason, visit, noticeOf(200)), reason).toBe(true);
+      expect(reasonCanBeGivenAt(reason, visit, WINDOW_START), reason).toBe(true);
     }
   });
 });
