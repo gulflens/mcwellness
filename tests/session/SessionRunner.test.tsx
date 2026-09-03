@@ -342,3 +342,76 @@ describe('the sync band', () => {
     );
   });
 });
+
+describe('what the outbox is given', () => {
+  it('numbers a resumed visit on from where the device left off', async () => {
+    const { posted } = mount({ visit: { lastSeq: 6 } });
+    await screen.findByRole('heading', { name: 'Before you start' });
+    fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
+
+    await waitFor(() => expect(posted.length).toBeGreaterThan(0));
+    const seqs = posted.flatMap((call) =>
+      (call.body.events as { seq: number }[]).map((event) => event.seq),
+    );
+    // Never 1: seq 1 is the check-in the server already holds.
+    expect(Math.min(...seqs)).toBe(7);
+  });
+
+  it('loses nothing tapped before the device store has finished opening', async () => {
+    // A store that takes a moment, as IndexedDB does on a cold start. The
+    // practitioner is faster than it, which must not cost them an event.
+    const store = createMemoryStore();
+    let open: () => void = () => undefined;
+    const ready = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const posted: Posted[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/me') return json(ME);
+      if (init?.method === 'POST') {
+        posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        const events = (JSON.parse(String(init.body)) as { events: { id: string }[] }).events;
+        return json({
+          status: 'stored',
+          acknowledged: events.map((e) => e.id),
+          refused: [],
+          session: {
+            id: SESSION_ID,
+            phase: 'in_progress',
+            checkedInAt: VISIT.checkedInAt,
+            startedAt: null,
+            endedAt: null,
+            checkedOutAt: null,
+            signalQualityScore: null,
+            closed: false,
+            lastSeq: 1,
+          },
+        });
+      }
+      return json({ error: 'not_found', requestId: null }, 404);
+    }) as unknown as typeof fetch;
+
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <SessionRunner
+          visit={VISIT}
+          service={SERVICE}
+          onFinished={() => undefined}
+          createStore={async () => {
+            await ready;
+            return store;
+          }}
+        />
+      </AuthProviderBoundary>,
+    );
+
+    await screen.findByRole('heading', { name: 'Before you start' });
+    fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
+    expect(posted).toHaveLength(0);
+
+    open();
+    await waitFor(() => expect(kinds(posted)).toContain('observation_recorded'));
+    expect(kinds(posted)).toContain('rating_recorded');
+  });
+});

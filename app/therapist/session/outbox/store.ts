@@ -42,6 +42,14 @@ export type OpenVisitNote = {
   checkedInAt: string;
   number: number;
   of: number | null;
+  /**
+   * The highest seq this device has ever written for this visit. Kept here,
+   * and updated as events are written, because a resume with no signal
+   * cannot ask the server where it got to — and picking up at zero would
+   * mean every event of the second half claiming a position the first half
+   * already has.
+   */
+  lastSeq: number;
 };
 
 export type OutboxStore = {

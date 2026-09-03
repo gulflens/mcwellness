@@ -33,7 +33,6 @@ export function SummaryStep({
   actuals,
   onActuals,
   onConfirm,
-  confirming,
 }: {
   durationSeconds: number | null;
   signalQuality: number | null;
@@ -42,7 +41,6 @@ export function SummaryStep({
   actuals: VisitActuals;
   onActuals: (actuals: VisitActuals) => void;
   onConfirm: () => void;
-  confirming: boolean;
 }) {
   return (
     <div className="step">
@@ -136,13 +134,8 @@ export function SummaryStep({
       </section>
 
       <div className="step__dock">
-        <Button
-          variant="primary"
-          className="step__primary"
-          disabled={confirming}
-          onClick={onConfirm}
-        >
-          {confirming ? 'Checking out…' : 'Check out'}
+        <Button variant="primary" className="step__primary" onClick={onConfirm}>
+          Check out
         </Button>
       </div>
     </div>

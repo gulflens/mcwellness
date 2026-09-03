@@ -177,6 +177,8 @@ export function SessionRunner({
   const [telemetry, setTelemetry] = useState<TelemetrySample[]>([]);
 
   const seqRef = useRef(visit.lastSeq);
+  const bufferRef = useRef<OutboxRecord[]>([]);
+  const [highWater, setHighWater] = useState(visit.lastSeq);
   // The minute timer below reads the reading as it stands when it fires, not
   // as it stood when the timer was set, so it goes through a ref rather than
   // resetting the interval on every slider move.
@@ -185,7 +187,10 @@ export function SessionRunner({
     readingRef.current = reading;
   }, [reading]);
 
-  // One store, one outbox, for the life of this visit on this device.
+  // One store and one outbox for the life of this visit on this device. It
+  // opens asynchronously, so anything written before it is ready waits in
+  // `bufferRef` and is drained the moment it is — a practitioner who taps
+  // through pre-flight faster than IndexedDB opens must not lose the tick.
   useEffect(() => {
     let live = true;
     let stop: (() => void) | null = null;
@@ -199,15 +204,10 @@ export function SessionRunner({
         setDurable(state.durable);
       });
       const stopLoop = next.start();
-      void next.rememberOpenVisit({
-        sessionId: visit.sessionId,
-        clientLabel: visit.clientLabel,
-        serviceTypeId: visit.serviceTypeId,
-        checkedInAt: visit.checkedInAt,
-        number: visit.number,
-        of: visit.of,
-      });
       setOutbox(next);
+      const waiting = bufferRef.current;
+      bufferRef.current = [];
+      for (const record of waiting) await next.append(record);
       stop = () => {
         unsubscribe();
         stopLoop();
@@ -217,11 +217,25 @@ export function SessionRunner({
       live = false;
       stop?.();
     };
-  }, [apiFetch, createStore, visit]);
+  }, [apiFetch, createStore]);
+
+  // The note the next reload reads. Rewritten as the visit moves, so its own
+  // record of how far the seq has got stays true.
+  useEffect(() => {
+    if (!outbox) return;
+    void outbox.rememberOpenVisit({
+      sessionId: visit.sessionId,
+      clientLabel: visit.clientLabel,
+      serviceTypeId: visit.serviceTypeId,
+      checkedInAt: visit.checkedInAt,
+      number: visit.number,
+      of: visit.of,
+      lastSeq: highWater,
+    });
+  }, [highWater, outbox, visit]);
 
   const write = useCallback(
     async (kind: string, payload: unknown): Promise<void> => {
-      if (!outbox) return;
       seqRef.current += 1;
       const record: OutboxRecord = {
         id: crypto.randomUUID(),
@@ -231,6 +245,11 @@ export function SessionRunner({
         deviceAt: new Date().toISOString(),
         payload,
       };
+      setHighWater(record.seq);
+      if (!outbox) {
+        bufferRef.current.push(record);
+        return;
+      }
       await outbox.append(record);
     },
     [outbox, visit.sessionId],
@@ -494,7 +513,6 @@ export function SessionRunner({
             actuals={actuals}
             onActuals={setActuals}
             onConfirm={() => void confirm()}
-            confirming={false}
           />
         ) : null}
 

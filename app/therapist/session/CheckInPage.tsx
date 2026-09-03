@@ -305,7 +305,10 @@ export function CheckInPage() {
                 // Unknown offline, and the safer answer is no: the server
                 // refuses a photo without consent either way.
                 photoConsent: false,
-                lastSeq: 0,
+                // The device's own high-water mark: an offline resume cannot
+                // ask the server where it got to, so it picks up from what it
+                // last wrote rather than from one.
+                lastSeq: note.lastSeq,
                 shareLocation: false,
               },
             },

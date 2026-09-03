@@ -167,10 +167,17 @@ describe('the outbox', () => {
       checkedInAt: '2026-09-03T10:32:00.000Z',
       number: 4,
       of: null,
+      lastSeq: 6,
     });
 
     const second = new Outbox(store, async () => 'retry');
-    expect(await second.openVisit()).toMatchObject({ sessionId: SESSION, clientLabel: 'Rowan M.' });
+    expect(await second.openVisit()).toMatchObject({
+      sessionId: SESSION,
+      clientLabel: 'Rowan M.',
+      // The high-water mark comes back too, so a resume with no signal does
+      // not restart the numbering (app/therapist/session/SessionRunner.tsx).
+      lastSeq: 6,
+    });
     expect(await store.pending()).toHaveLength(1);
   });
 
