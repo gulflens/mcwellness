@@ -72,6 +72,7 @@ type RequestRow = {
   requested_by_phone: string | null;
   performed_at: Date | null;
   performed_by_name: string | null;
+  performed_reason: string | null;
   letter_document_id: string | null;
   letter_version: string | null;
   letter_sent_at: Date | null;
@@ -81,11 +82,20 @@ type RequestRow = {
 
 const REQUEST_COLUMNS =
   'e.id, e.reason, e.requested_at, e.requested_by_contact_id, e.requested_by_phone, ' +
-  'e.performed_at, u.display_name as performed_by_name, e.letter_document_id, ' +
+  'e.performed_at, u.display_name as performed_by_name, r.reason as performed_reason, ' +
+  'e.letter_document_id, ' +
   'e.letter_version, e.letter_sent_at, e.summary, ' +
   'jsonb_array_length(e.storage_keys_pending) as files_pending';
 /** The request with the person who performed it named, which is a join and not a column. */
-const REQUEST_FROM = 'from erasure_request e left join app_user u on u.id = e.performed_by';
+const REQUEST_FROM =
+  'from erasure_request e left join app_user u on u.id = e.performed_by ' +
+  // The reason the erasure was carried out with belongs to the act, not to the
+  // row, so it comes from the trail — the same lateral join record.ts uses for
+  // the reason a consent was withdrawn, and audit_log's own read policy decides
+  // who sees it.
+  'left join lateral (select a.reason from audit_log a ' +
+  "where a.action = 'erase' and a.entity_id = e.client_id and a.reason is not null " +
+  'order by a.occurred_at desc limit 1) r on true';
 
 /**
  * The summary app.erase_client writes, as the screen reads it. Counts only:
@@ -120,6 +130,7 @@ function toRecord(row: RequestRow): ErasureRequestRecord {
     notifyPhone: row.requested_by_phone,
     performedAt: row.performed_at ? row.performed_at.toISOString() : null,
     performedByName: row.performed_by_name,
+    performedReason: row.performed_reason,
     letterDocumentId: row.letter_document_id,
     letterVersion: row.letter_version,
     letterSentAt: row.letter_sent_at ? row.letter_sent_at.toISOString() : null,

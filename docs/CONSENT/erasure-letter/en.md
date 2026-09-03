@@ -25,8 +25,9 @@ records requires it. **The measurements stay, with nobody attached to them** —
 the before-and-after ratings, the readings from the sessions and their quality
 scores — because they are numbers that no longer say whose they were, and we
 use them to understand our own work. **Invoices and receipts stay for five
-years**, as UAE tax law requires of every business; they carry what a tax
-document must carry and nothing further about you. **Our own log of what was
+years**, as UAE tax law requires of every business — the records themselves
+and the copies we issued you — and they carry what a tax document must carry
+and nothing further about you. **Our own log of what was
 done and when stays for its five years**, and the entries this erasure wrote
 record the names of the fields that were cleared without any of the values
 that were in them. Nothing else about you is held, and nobody at

@@ -102,12 +102,19 @@ export function ConsentTab({
   record,
   onChanged,
   mayWrite,
+  erased = false,
 }: {
   clientId: string;
   record: ClientRecordResponse;
   onChanged: () => void;
   /** False for a role the consent routes would refuse: no recording, no withdrawal. */
   mayWrite: boolean;
+  /**
+   * Whether this record has been erased. Passed rather than read from
+   * `record.status`, because the drawer knows it one act before the record
+   * does (app/admin/clients/ClientDrawer.tsx).
+   */
+  erased?: boolean;
 }) {
   const today = practiceToday();
   // As a set of plain strings: `requiredConsents` answers with the three
@@ -182,7 +189,7 @@ export function ConsentTab({
 
   return (
     <div className="tab-section">
-      {record.status === 'erased' ? (
+      {erased || record.status === 'erased' ? (
         <Note tone="attention">
           This record has been erased. The consents below are what was agreed; nothing more can be
           recorded or withdrawn.

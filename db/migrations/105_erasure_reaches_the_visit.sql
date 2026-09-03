@@ -30,6 +30,10 @@
 --     `document` has no `on delete`, so the first erasure of a household that
 --     had ever had a setup photograph taken would have raised on step 6 and
 --     rolled the whole thing back.
+--   * The rendered invoice and receipt PDFs the billing stream links through
+--     `billing_document` are held back with the invoice kinds, for both
+--     reasons at once: the link has no `on delete` either, and a rendered tax
+--     document is exactly what the five-year rule is about.
 --   * `payment.reference` is cleared, which docs/CHANGE-REQUESTS/billing-03.md
 --     section 3 asked this stream for: the amount, the method and the date are
 --     the financial record and stay for their five years, and a bank
@@ -451,6 +455,25 @@ begin
     if to_regclass('public.invoice') is not null then
       execute 'select coalesce(array_agg(i.document_id), ''{}''::uuid[]) from public.invoice i '
               'where i.client_id = $1 and i.document_id is not null'
+        into v_invoice_ids using p_client_id;
+      v_kept_ids := v_kept_ids || coalesce(v_invoice_ids, '{}'::uuid[]);
+    end if;
+
+    --    c) by the billing stream's own link table. `billing_document` (the
+    --       billing worktree's pull request 54) names the rendered PDF of
+    --       every invoice and receipt, with a foreign key to `document` and
+    --       no `on delete`, so a household that ever had an invoice rendered
+    --       would abort this erasure on the delete below — and deleting those
+    --       files would breach the five-year financial-record rule in the
+    --       same breath (CLAUDE.md rule 8). Asked here rather than joined,
+    --       and guarded like the two above, so this function is valid before
+    --       that table exists and correct after it does. Nothing of the
+    --       client's is assumed about its shape beyond the column that names
+    --       a document: the client is reached through `document` itself.
+    if to_regclass('public.billing_document') is not null then
+      execute 'select coalesce(array_agg(d.id), ''{}''::uuid[]) from public.document d '
+              'where d.client_id = $1 and exists ('
+              '  select 1 from public.billing_document b where b.document_id = d.id)'
         into v_invoice_ids using p_client_id;
       v_kept_ids := v_kept_ids || coalesce(v_invoice_ids, '{}'::uuid[]);
     end if;

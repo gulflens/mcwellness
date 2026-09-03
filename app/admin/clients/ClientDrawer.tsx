@@ -51,12 +51,23 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
   // next. Every client opens on Overview.
   const [tab, setTab] = useState<string>(DEFAULT_TAB);
   const [reason, setReason] = useState('');
+  // Set the moment this record is erased from the Overview tab, and not by
+  // asking the server: the person who pressed the button may be an admin, and
+  // an admin may not open an erased record (docs/SPEC/client-record.md section
+  // 2). A refetch would answer 403 and this drawer would say the record could
+  // not be loaded, immediately after an irreversible act succeeded. So the
+  // drawer takes the fact from the panel that did it — the status it shows,
+  // and the reason its own routes now ask for.
+  const [erasedHere, setErasedHere] = useState(false);
   const { state, refetch } = useClientRecord(client.id);
   const { session } = useAuth();
   const actor = session.status === 'signed-in' ? session.actor : null;
   const now = new Date();
-  const mayWrite = canWriteRecord(actor, now);
-  const mayWriteGoals = canWriteGoals(actor);
+  const erased = erasedHere || (state.kind === 'ready' && state.record.status === 'erased');
+  // Nothing is written to an erased record, by anyone: the routes refuse it
+  // and the policies refuse it under them, so no tab offers it either.
+  const mayWrite = canWriteRecord(actor, now) && !erased;
+  const mayWriteGoals = canWriteGoals(actor) && !erased;
   const tabs = canSeeFullRecord(actor) ? ALL_TABS : FINANCE_TABS;
 
   useEffect(() => {
@@ -90,7 +101,9 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 not leave the header still saying "lead" against a row the list fetched
                 before the change. */}
             <ClientStatusChip
-              status={state.kind === 'ready' ? state.record.status : client.status}
+              status={
+                erased ? 'erased' : state.kind === 'ready' ? state.record.status : client.status
+              }
             />
           </p>
         </div>
@@ -138,6 +151,14 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
                 reason={reason.trim() || undefined}
+                onErased={(erasureReason) => {
+                  setErasedHere(true);
+                  // The reason it was erased with becomes the reason this
+                  // drawer holds, so an owner or a lead practitioner reading
+                  // the record afterwards is not bounced to the reason prompt
+                  // for a record they are standing in front of.
+                  if (!reason.trim()) setReason(erasureReason);
+                }}
               />
             </TabPanel>
             <TabPanel id="contacts" idPrefix="client" selected={tab}>
@@ -146,6 +167,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 record={state.record}
                 onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
+                erased={erased}
               />
             </TabPanel>
             <TabPanel id="locations" idPrefix="client" selected={tab}>
@@ -154,6 +176,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 record={state.record}
                 onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
+                erased={erased}
               />
             </TabPanel>
             <TabPanel id="consent" idPrefix="client" selected={tab}>
@@ -162,6 +185,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 record={state.record}
                 onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWrite}
+                erased={erased}
               />
             </TabPanel>
             <TabPanel id="goals" idPrefix="client" selected={tab}>
@@ -170,13 +194,14 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 record={state.record}
                 onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWriteGoals}
+                erased={erased}
               />
             </TabPanel>
             <TabPanel id="documents" idPrefix="client" selected={tab}>
               <DocumentsTab
                 clientId={client.id}
                 mayWrite={mayWrite}
-                erased={state.record.status === 'erased'}
+                erased={erased}
                 reason={reason.trim() || undefined}
               />
             </TabPanel>

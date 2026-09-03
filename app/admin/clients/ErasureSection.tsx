@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   ErasurePerformedResponse,
   ErasureRequestListResponse,
@@ -7,6 +7,7 @@ import {
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
+import { Textarea } from './FormAtoms';
 import { contactName } from './contactName';
 import { DocumentLink } from './DocumentLink';
 
@@ -16,17 +17,28 @@ import { DocumentLink } from './DocumentLink';
  * Three states, and the screen is only ever in one of them.
  *
  *   * Nothing recorded. A quiet way to write down that a household has asked,
- *     with the reason and which contact asked, because the number to send the
- *     confirmation to is read from that contact at this moment and at no
- *     other: the erasure itself takes every phone on the record away.
+ *     with the reason and which contact asked. Which contact is not optional
+ *     bookkeeping: their number is read at that moment and at no other, and it
+ *     is the only way the confirmation can be sent afterwards, so the form
+ *     makes somebody say either who asked or that nobody on the record did.
  *   * Recorded, not yet done. What was asked and by whom, and — for the owner
- *     or an admin — the button, behind a step that says plainly what is about
- *     to happen and will not proceed without a reason. This is the sensitive
- *     action of section 9, so the reason is typed before it commits rather
- *     than explained afterwards.
- *   * Done. When, what went, what was kept, and the letter: to download, and
- *     to hand to WhatsApp as a drafted message somebody still has to press
- *     send on.
+ *     or an admin — the button, behind a step that names the record it is
+ *     about, says plainly what is about to happen, and will not proceed
+ *     without a typed reason. This is the sensitive action of section 9, so
+ *     the reason is typed before it commits rather than explained afterwards.
+ *   * Done. When, who by, what went, what was kept, and the letter: to
+ *     download and to hand to WhatsApp as a drafted message somebody still has
+ *     to press send on.
+ *
+ * **After the act this panel stays put and nothing is refetched.** An admin
+ * may perform an erasure and may not open an erased record (section 2), so a
+ * refetch as the person who just pressed the button answers 403 and the drawer
+ * would say "the record could not be loaded" the moment an irreversible act
+ * succeeded. The response carries everything this panel needs, so it renders
+ * from that and tells the drawer what happened instead of asking the server
+ * again — and hands the drawer the reason it was erased with, so an owner or a
+ * lead practitioner is not bounced to the reason prompt for a record they are
+ * standing in front of.
  *
  * **The number never enters a McWellness address.** The WhatsApp link is built
  * at the moment the button is pressed and handed straight to WhatsApp; it is
@@ -45,16 +57,33 @@ const PERFORM_REFUSALS: Record<string, string> = {
   reason_required: 'Say why this record is being erased.',
 };
 
-/** What the confirmation step repeats, in the order the erasure does it. */
+/**
+ * What the confirmation step repeats, in the order the erasure does it, and
+ * saying the same as the letter the household receives
+ * (docs/CONSENT/erasure-letter/).
+ */
 const WHAT_HAPPENS = [
   'The name, date of birth and referral are removed from the record.',
   'Every contact loses their name, phone, email and WhatsApp preference, and any portal account is closed.',
   'Each address keeps only its emirate; the pin moves to the middle of that emirate and the Makani, directions, parking, gate and notes go.',
   'The description beside each goal is cleared.',
+  'The visit record loses where the practitioner checked in and out, the observations written afterwards, the access notes from the drive, and anything written in words.',
+  'The measurements stay, with nobody attached to them: the ratings, the readings and their quality scores.',
   'Every document filed against this client is deleted, and so are the files behind them.',
-  'Invoices and credit notes are kept, as tax law requires, and nothing on them is changed.',
-  'The record stays, in status erased, so the ledger and the audit trail still reconcile. Only the owner and the lead practitioner may open it afterwards, with a reason.',
+  'Invoices and receipts are kept for five years, as tax law requires — the records and the copies issued to the household — and nothing on them is changed.',
+  "The practice's own log keeps its five years, holding the names of the fields that were cleared and none of the values.",
+  'The record stays, in status erased, so the ledger and the audit trail still reconcile.',
 ];
+
+/** One line, pluralised, or nothing at all when there was nothing of that kind. */
+function counted(n: number, one: string, many: string): ReactNode {
+  if (n === 0) return null;
+  return (
+    <li className="numeric" key={one}>
+      {n} {n === 1 ? one : many}
+    </li>
+  );
+}
 
 function formatDay(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -72,6 +101,32 @@ function draftMessage(record: ClientRecordResponse, performedAt: string): string
     : `Hello. This is McWellness. Your record was erased, as you asked, on ${day}. The written confirmation is with this message.`;
 }
 
+/** The letter's own file name, so a person can find it again in their downloads. */
+function letterFileName(record: ClientRecordResponse): string {
+  return `erasure-letter-${record.mrn}.md`;
+}
+
+/**
+ * The heading of a step that has just opened, which takes focus as it appears
+ * and announces itself. The same atom ConsentTab uses, and for the same
+ * reason: a panel that opens below the fold while focus stays on the button
+ * that opened it is a button that appears to do nothing.
+ */
+function StepHeading({ children }: { children: ReactNode }) {
+  return (
+    <h4
+      className="drawer__section"
+      tabIndex={-1}
+      role="status"
+      ref={(node) => {
+        node?.focus();
+      }}
+    >
+      {children}
+    </h4>
+  );
+}
+
 type State =
   { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; requests: ErasureRequestRecord[] };
 
@@ -80,14 +135,19 @@ export function ErasureSection({
   reason: openingReason,
   mayAsk,
   mayErase,
-  onChanged,
+  onErased,
 }: {
   record: ClientRecordResponse;
   /** The reason this drawer was opened with, when the record is already erased. */
   reason?: string;
   mayAsk: boolean;
   mayErase: boolean;
-  onChanged: () => void;
+  /**
+   * Called once the record has been erased, with the reason it was erased
+   * with. The drawer takes both: the status it shows, and the reason its own
+   * routes now ask for. Nothing is refetched — see the note above.
+   */
+  onErased?: (reason: string) => void;
 }) {
   const { apiFetch } = useAuth();
   const [state, setState] = useState<State>({ kind: 'loading' });
@@ -100,6 +160,7 @@ export function ErasureSection({
   const [error, setError] = useState<string | null>(null);
   const [letterUrl, setLetterUrl] = useState<string | null>(null);
   const [whatsAppUrl, setWhatsAppUrl] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
 
   const headers = useCallback(
     (extra?: Record<string, string>): Record<string, string> => ({
@@ -149,7 +210,9 @@ export function ErasureSection({
         headers: headers({ 'content-type': 'application/json' }),
         body: JSON.stringify({
           reason: askReason.trim(),
-          ...(askContactId ? { requestedByContactId: askContactId } : {}),
+          ...(askContactId && askContactId !== 'none'
+            ? { requestedByContactId: askContactId }
+            : {}),
         }),
       });
       if (res.status !== 201) {
@@ -170,6 +233,7 @@ export function ErasureSection({
   async function erase(requestId: string): Promise<void> {
     setBusy(true);
     setError(null);
+    const reason = eraseReason.trim();
     try {
       const res = await apiFetch(
         `/api/clients/${record.id}/erasure-requests/${requestId}/execute`,
@@ -178,7 +242,7 @@ export function ErasureSection({
           // The act carries no body of its own — the reason is a header, never
           // a query string — but every POST says what it is sending
           // (app/api/_middleware/security.ts answers 415 otherwise).
-          headers: headers({ 'content-type': 'application/json', 'x-reason': eraseReason.trim() }),
+          headers: headers({ 'content-type': 'application/json', 'x-reason': reason }),
           body: '{}',
         },
       );
@@ -191,10 +255,10 @@ export function ErasureSection({
       setLetterUrl(body.letter?.url ?? null);
       setConfirming(null);
       setEraseReason('');
+      // Straight from the answer, and nothing is asked of the server again:
+      // this person may no longer be allowed to read what they have just done.
       setState({ kind: 'ready', requests: [body.request] });
-      // The header, the tabs and the status chip are all about to read
-      // differently: this record is erased now.
-      onChanged();
+      onErased?.(reason);
     } catch {
       setError(PERFORM_ERROR);
     } finally {
@@ -210,6 +274,15 @@ export function ErasureSection({
     // A blocked popup is null and silent; hand the link over rather than leave
     // a button that appears to do nothing (DocumentLink does the same).
     if (!opened) setWhatsAppUrl(url);
+    // Saying the letter has gone starts the clock on the number it went to:
+    // the sweep clears it once the files are confirmed gone as well. Nothing
+    // depends on the answer — the message is already open in front of them.
+    setSent(true);
+    void apiFetch(`/api/clients/${record.id}/erasure-requests/${request.id}/letter-sent`, {
+      method: 'POST',
+      headers: headers({ 'content-type': 'application/json' }),
+      body: '{}',
+    }).catch(() => undefined);
   }
 
   if (state.kind === 'loading') return <Note>Loading the erasure record.</Note>;
@@ -220,6 +293,11 @@ export function ErasureSection({
   const requests = state.requests;
   const performed = requests.find((request) => request.performedAt !== null) ?? null;
   const open = requests.find((request) => request.performedAt === null) ?? null;
+  const askedBy = (request: ErasureRequestRecord): string => {
+    const contact = record.contacts.find((one) => one.id === request.requestedByContactId);
+    if (!contact) return 'Not recorded';
+    return contactName(contact) || 'A contact on this record';
+  };
 
   return (
     <section className="tab-section erasure">
@@ -228,54 +306,119 @@ export function ErasureSection({
       {performed ? (
         <>
           <Note tone="attention">
-            Erased on {formatDay(performed.performedAt as string)}. Nothing more can be filed
-            against this record.
+            Erased on {formatDay(performed.performedAt as string)}
+            {performed.performedByName ? ` by ${performed.performedByName}` : ''}. Nothing more can
+            be filed against this record.
           </Note>
-          {performed.summary ? (
-            <dl className="record-facts">
+          <dl className="record-facts">
+            <div className="record-facts__row">
+              <dt>Asked on</dt>
+              <dd className="numeric">{formatDay(performed.requestedAt)}</dd>
+            </div>
+            <div className="record-facts__row">
+              <dt>Asked by</dt>
+              <dd>{askedBy(performed)}</dd>
+            </div>
+            <div className="record-facts__row">
+              <dt>Reason for the request</dt>
+              <dd>{performed.reason}</dd>
+            </div>
+            {performed.performedReason ? (
               <div className="record-facts__row">
-                <dt>Reason given</dt>
-                <dd>{performed.reason}</dd>
+                <dt>Reason given when erasing</dt>
+                <dd>{performed.performedReason}</dd>
               </div>
-              <div className="record-facts__row">
-                <dt>What went</dt>
-                <dd>
-                  <ul className="record-facts__list">
-                    <li className="numeric">
-                      {performed.summary.contactsAnonymised} contacts emptied
-                    </li>
-                    <li className="numeric">
-                      {performed.summary.locationsReduced} addresses reduced to their emirate
-                    </li>
-                    <li className="numeric">
-                      {performed.summary.documentsDeleted} documents deleted
-                    </li>
-                  </ul>
-                </dd>
-              </div>
-              <div className="record-facts__row">
-                <dt>What was kept</dt>
-                <dd className="numeric">
-                  {performed.summary.documentsKept} invoices and credit notes, as tax law requires
-                </dd>
-              </div>
-              {performed.filesPending > 0 ? (
+            ) : null}
+            {performed.summary ? (
+              <>
                 <div className="record-facts__row">
-                  <dt>Files not yet confirmed gone</dt>
-                  <dd className="numeric">
-                    {performed.filesPending}. They were removed as this record was erased; the store
-                    is asked again afterwards, and this clears when it answers.
+                  <dt>What went</dt>
+                  <dd>
+                    <ul className="record-facts__list">
+                      {counted(
+                        performed.summary.contactsAnonymised,
+                        'contact emptied',
+                        'contacts emptied',
+                      )}
+                      {counted(
+                        performed.summary.portalAccountsArchived,
+                        'portal account closed',
+                        'portal accounts closed',
+                      )}
+                      {counted(
+                        performed.summary.locationsReduced,
+                        'address reduced to its emirate',
+                        'addresses reduced to their emirate',
+                      )}
+                      {counted(performed.summary.goalsCleared, 'goal cleared', 'goals cleared')}
+                      {counted(
+                        performed.summary.consentsUnlinked,
+                        'consent unlinked',
+                        'consents unlinked',
+                      )}
+                      {counted(
+                        performed.summary.sessionsCleared,
+                        'visit cleared',
+                        'visits cleared',
+                      )}
+                      {counted(
+                        performed.summary.sessionEventsCleared,
+                        'visit event cleared',
+                        'visit events cleared',
+                      )}
+                      {counted(
+                        performed.summary.visitActualsCleared,
+                        'set of access notes cleared',
+                        'sets of access notes cleared',
+                      )}
+                      {counted(
+                        performed.summary.paymentsCleared,
+                        'payment reference cleared',
+                        'payment references cleared',
+                      )}
+                      {counted(
+                        performed.summary.documentsDeleted,
+                        'document deleted',
+                        'documents deleted',
+                      )}
+                    </ul>
                   </dd>
                 </div>
-              ) : null}
-            </dl>
-          ) : null}
+                <div className="record-facts__row">
+                  <dt>What was kept</dt>
+                  <dd>
+                    <ul className="record-facts__list">
+                      <li className="numeric">
+                        {performed.summary.documentsKept}{' '}
+                        {performed.summary.documentsKept === 1
+                          ? 'invoice or credit note, as tax law requires'
+                          : 'invoices and credit notes, as tax law requires'}
+                      </li>
+                      <li>The measurements, with nobody attached to them</li>
+                    </ul>
+                  </dd>
+                </div>
+              </>
+            ) : null}
+            {performed.filesPending > 0 ? (
+              <div className="record-facts__row">
+                <dt>Files</dt>
+                <dd>
+                  The files were removed as this record was erased. The store is asked again
+                  afterwards, and{' '}
+                  {performed.filesPending === 1 ? 'one is' : `${performed.filesPending} are`}{' '}
+                  waiting on that answer.
+                </dd>
+              </div>
+            ) : null}
+          </dl>
 
           <div className="drawer__actions">
             {letterUrl ? (
               <a
                 className="button button--secondary"
                 href={letterUrl}
+                download={letterFileName(record)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -286,20 +429,33 @@ export function ErasureSection({
                 clientId={record.id}
                 documentId={performed.letterDocumentId}
                 reason={openingReason}
+                downloadName={letterFileName(record)}
+                variant="secondary"
                 label="Download the letter"
               />
             ) : null}
             {performed.notifyPhone ? (
               <Button variant="secondary" onClick={() => handToWhatsApp(performed)}>
-                Send it by WhatsApp
+                Draft a WhatsApp message
               </Button>
             ) : null}
           </div>
+          <Note>
+            The letter is filed as {letterFileName(record)}
+            {performed.letterVersion ? `, from draft wording ${performed.letterVersion}` : ''},
+            pending the practice&apos;s lawyer. Attach it to the message before sending.
+          </Note>
           {performed.notifyPhone ? null : (
             <Note>
               No number was recorded with the request, so the letter has to be sent by hand.
             </Note>
           )}
+          {sent || performed.letterSentAt ? (
+            <Note tone="attention">
+              Marked as sent. The number the confirmation went to is cleared once the files are
+              confirmed gone.
+            </Note>
+          ) : null}
           {whatsAppUrl ? (
             <p className="small" role="status">
               Your browser stopped WhatsApp opening.{' '}
@@ -308,11 +464,6 @@ export function ErasureSection({
               </a>
             </p>
           ) : null}
-          <Note>
-            The letter is a draft wording, pending the practice&apos;s lawyer
-            {performed.letterVersion ? ` (version ${performed.letterVersion})` : ''}. Attach it to
-            the message before sending.
-          </Note>
         </>
       ) : null}
 
@@ -329,15 +480,7 @@ export function ErasureSection({
             </div>
             <div className="record-facts__row">
               <dt>Asked by</dt>
-              <dd>
-                {(() => {
-                  const contact = record.contacts.find(
-                    (one) => one.id === open.requestedByContactId,
-                  );
-                  if (!contact) return 'Not recorded';
-                  return contactName(contact) || 'A contact on this record';
-                })()}
-              </dd>
+              <dd>{askedBy(open)}</dd>
             </div>
           </dl>
 
@@ -351,15 +494,22 @@ export function ErasureSection({
 
           {mayErase && confirming === open.id ? (
             <div className="tab-section erasure__confirm">
-              <h4>This cannot be undone. Here is what happens.</h4>
+              <StepHeading>
+                This erases record {record.mrn}. It cannot be undone. Here is what happens.
+              </StepHeading>
               <ul className="record-facts__list">
                 {WHAT_HAPPENS.map((line) => (
                   <li key={line}>{line}</li>
                 ))}
+                <li>
+                  You will no longer be able to open this record afterwards unless you are the owner
+                  or the lead practitioner, and they must say why each time.
+                </li>
               </ul>
-              <Field
+              <Textarea
                 id="erasure-reason"
                 label="Reason"
+                rows={3}
                 hint="Recorded against every entry this erasure writes."
                 value={eraseReason}
                 onChange={(event) => setEraseReason(event.target.value)}
@@ -386,9 +536,11 @@ export function ErasureSection({
         <>
           {asking ? (
             <div className="drawer__form">
-              <Field
+              <StepHeading>Record that this household has asked to be forgotten</StepHeading>
+              <Textarea
                 id="erasure-ask-reason"
                 label="Why the household has asked"
+                rows={3}
                 value={askReason}
                 onChange={(event) => setAskReason(event.target.value)}
               />
@@ -402,12 +554,13 @@ export function ErasureSection({
                   value={askContactId}
                   onChange={(event) => setAskContactId(event.target.value)}
                 >
-                  <option value="">Not recorded</option>
+                  <option value="">Choose</option>
                   {record.contacts.map((contact) => (
                     <option key={contact.id} value={contact.id}>
                       {contactName(contact) || contact.relationship}
                     </option>
                   ))}
+                  <option value="none">Nobody on this record — no letter can be sent</option>
                 </select>
                 <p className="field__hint small muted">
                   Their number is kept with the request, and is the only way the confirmation can be
@@ -417,7 +570,7 @@ export function ErasureSection({
               <div className="drawer__actions">
                 <Button
                   variant="primary"
-                  disabled={busy || !askReason.trim()}
+                  disabled={busy || !askReason.trim() || askContactId === ''}
                   onClick={() => void ask()}
                 >
                   {busy ? 'Recording…' : 'Record the request'}

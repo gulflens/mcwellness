@@ -518,6 +518,8 @@ export const ErasureRequestRecord = z.object({
   notifyPhone: z.string().nullable(),
   performedAt: z.string().nullable(),
   performedByName: z.string().nullable(),
+  /** The reason typed when the erasure was carried out, read from the trail. */
+  performedReason: z.string().nullable(),
   letterDocumentId: z.uuid().nullable(),
   letterVersion: z.string().nullable(),
   /** When the practice handed the letter over. Null until somebody says they did. */

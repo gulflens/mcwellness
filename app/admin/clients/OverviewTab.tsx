@@ -47,6 +47,7 @@ export function OverviewTab({
   onChanged,
   mayWrite,
   reason,
+  onErased,
 }: {
   record: ClientRecordResponse;
   onChanged: () => void;
@@ -54,6 +55,8 @@ export function OverviewTab({
   mayWrite: boolean;
   /** The reason an erased record was opened with, passed on to the routes that ask for one. */
   reason?: string;
+  /** Told when this record has just been erased, with the reason it was erased with. */
+  onErased?: (reason: string) => void;
 }) {
   const { apiFetch, session } = useAuth();
   const actor = session.status === 'signed-in' ? session.actor : null;
@@ -163,7 +166,7 @@ export function OverviewTab({
         reason={reason}
         mayAsk={canAskForErasure(actor)}
         mayErase={canErase(actor)}
-        onChanged={onChanged}
+        onErased={onErased}
       />
     </div>
   );

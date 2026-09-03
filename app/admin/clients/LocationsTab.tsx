@@ -39,12 +39,19 @@ export function LocationsTab({
   record,
   onChanged,
   mayWrite,
+  erased = false,
 }: {
   clientId: string;
   record: ClientRecordResponse;
   onChanged: () => void;
   /** False for a role the write routes would refuse: no Add, no Edit, no Verify pin. */
   mayWrite: boolean;
+  /**
+   * Whether this record has been erased. Passed rather than read from
+   * `record.status`, because the drawer knows it one act before the record
+   * does (app/admin/clients/ClientDrawer.tsx).
+   */
+  erased?: boolean;
 }) {
   const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
 
@@ -55,7 +62,7 @@ export function LocationsTab({
 
   return (
     <div className="tab-section">
-      {record.status === 'erased' ? (
+      {erased || record.status === 'erased' ? (
         <Note tone="attention">
           This record has been erased. Each address keeps only its emirate, and the pin sits in the
           middle of it.
