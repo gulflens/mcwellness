@@ -496,3 +496,148 @@ No change is asked for. This is a note to whoever rebases after round 14:
 those two expressions can become ordinary column references, and the two
 `alter table` statements in `tests/session/db/service_types.test.ts` can be
 deleted. The shape they parse into does not change, so nothing else does.
+
+---
+---
+
+# Change requests — session-capture, the fix round
+
+*Added by the round that answers four reviews of the runner (security,
+compliance, schema and design). Everything above section 5 stands as it was
+written; these are the five things the fix round could not do inside its own
+paths, and the two decisions it took while waiting.*
+
+---
+
+## 5. Sign-out must empty the shell's own cache too
+
+**What.** Exactly the diff in section 1f above, and it is now the only half
+of the sign-out rule this stream does not hold itself.
+
+**Why, restated.** The device's own half is done and tested: the outbox
+observes the auth session and empties both IndexedDB stores the moment it
+becomes signed out (`app/therapist/session/SessionRunner.tsx`,
+`outbox/store.ts`), a store claimed by a different practitioner is wiped
+before it is used, and nothing survives seven days. What that cannot reach is
+the service worker's `mcwellness-reads-v1` cache, which holds the day sheet —
+a given name and a family initial per household — and belongs to
+`app/shell/**`.
+
+So the rule reads: **a signed-out device keeps nothing of anybody.** Two
+caches, two owners, one sentence. Until 1f lands, a practitioner who signs
+out on a shared phone leaves the day sheet behind in the HTTP cache, and
+nothing in this stream's paths can take it out.
+
+---
+
+## 6. Withdrawing photo consent must delete the photographs
+
+**What.** A path — a screen, a job, or a hand-written runbook, the trunk's
+call — that deletes the stored setup photos of a household that withdraws
+`photo_video` consent, and the `document` rows that name them.
+
+**Why.** `consent.status = 'withdrawn'` stops the next photograph. It does
+nothing about the ones already taken, and a photograph kept after the
+household has said stop is the plainest kind of breach there is. This stream
+holds the door that refuses a new one (`app.session_consent_active`,
+304_session_reads.sql) and it holds nothing at all after that: `document` is
+the trunk's table (060), its rows are `is_immutable`, and deletion crosses
+storage, the audit trail and the retention rule in
+`domain/client/computeRetentionUntil.ts` — none of which is session-capture's.
+
+**What this stream will do when the path exists.** Nothing, and that is the
+point: the photo's own key is derived from the session id
+(`sessions/<id>/setup-photo.jpg`, `app/api/sessions/close.ts`), so every
+photograph of a household is reachable from that household's sessions without
+a new index or a new column.
+
+**Not urgent today, and it will be.** No photograph exists yet — the camera
+is off until the storage seam lands (section 2 above, and section 8 below) —
+so there is nothing to delete and nothing at risk. The request is filed now
+rather than later precisely because the day the camera is switched on is the
+day this becomes a live obligation, and a compliance path built after the
+first photograph is a path built too late.
+
+---
+
+## 7. A note about `child_assents`, not a request
+
+Shared-zone round 14 seeds a fourth item into the neurofeedback service's
+`preflight_checklist`: `child_assents`, "For a child: they agreed to take
+part today", beside the guardian's presence. Nothing here needs changing —
+the checklist is data, the pre-flight step renders whatever the service
+carries, and the answer is filed in the `preflight` observation event like
+every other item. Two things are worth writing down anyway.
+
+First, it renders in both languages, because the runner now shows every
+checklist item's Arabic beneath its English (`PreflightStep.tsx`, marked
+`lang="ar" dir="rtl"`). The wording the trunk seeds is the wording the
+practitioner reads.
+
+Second, it records the promise; it does not enforce it. The
+minor-participation wording says a child's "no" ends the session, and this
+item is what makes that promise showable afterwards. It is a toggle the
+practitioner may leave unticked and still continue, exactly as they may with
+"environment suitable" — the pre-flight step counts what is outstanding and
+never blocks. If the practice wants a child's refusal to *stop* a visit, that
+is a rule and belongs in `domain/session/canCheckIn.ts` with a reason of its
+own, not a checklist item that quietly behaves differently from its four
+neighbours. Whoever wants it should ask for it as a rule.
+
+---
+
+## 8. `proposed` versus `confirmed`: still open, and decided narrowly meanwhile
+
+Section 3b above stands unanswered: `app.checkin_context` (301) admits a
+check-in against a `proposed` appointment, and
+`app.client_visible_to_practitioner` (201) opens its window on `confirmed`.
+One of the two is wrong and it is not this stream's call which.
+
+**What changed while waiting.** The close's own door,
+`app.complete_appointment_for_session` (302_session_close.sql), used to
+complete an appointment whose status was `proposed`, `confirmed` or
+`checked_in`. It now admits `confirmed` and `checked_in` only, with a test
+(`tests/session/db/doors.test.ts`).
+
+**Why narrow.** A visit nobody confirmed is not one this door should quietly
+mark completed on the strength of a practitioner having stood in the room; a
+coordinator can still settle it from the calendar, which is where an
+unconfirmed appointment's questions belong. Narrow is the reversible side of
+a disagreement: widening later is one word in one migration, and un-completing
+appointments that were never confirmed is a data repair.
+
+**If scheduling answers "proposed counts".** Add it back to that one `in`
+list and delete this section. If scheduling answers the other way, 301 is
+where the fix goes, and this door is already there.
+
+---
+
+## 9. The storage seam, and what is switched off until it lands
+
+Section 2 above asked for `c.get('storage')` and a body-cap exemption. Round
+14 has built the first half on `origin/shared-zone-round-14` —
+`put(key, bytes, mimeType, { overwrite })` returning `{ sha256, size }`, and
+migration 904, which drops `checked_out_point` from the audit trail and
+strips a `point` key from inside any jsonb payload. It has not merged.
+
+**So the camera is off, in one place.**
+`app/api/sessions/photo-availability.ts` is a single constant, and everything
+turns on it: the post step does not offer to take a photograph, the events
+route refuses a `photo_captured` event by name
+(`photo_storage_unavailable`), and the close files no `document` row. The
+review that asked for this was right that the previous behaviour was worse
+than nothing — a document row against a key nothing ever uploaded to is a
+record of a photograph that does not exist, and a practitioner who takes one
+and is told it was saved has been lied to.
+
+When the seam merges, that constant becomes a check for `c.get('storage')`,
+the upload happens inside the close's own transaction before the row is
+filed, the hash comes from the seam rather than from the device, and a store
+that is unavailable at that moment lets the close succeed with the photograph
+dropped and the practitioner told so plainly. The body-cap exemption in
+section 2 is still needed for the route that carries the bytes.
+
+Two smaller notes for the same rebase: section 4's two defensive
+`to_jsonb(st) -> '...'` expressions can become ordinary column references now
+that migration 901 exists, and the `alter table` statements in
+`tests/session/db/service_types.test.ts` can go with them.
