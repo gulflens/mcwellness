@@ -114,6 +114,15 @@ Applying it makes this stream's own fold redundant but harmless, and that
 file's fold can be dropped in a later pull request rather than in the same
 commit. Nothing here waits on it.
 
+**And a placement question with it.** `app/api/clients/emirates-id-shape.ts`
+is a pure rule with its own tests, which CLAUDE.md rule 4 would put in
+`domain/`. It sits in this stream's own path only because `domain/shared` and
+`domain/client` are both the shared zone. If the trunk takes the fold, the
+rest of the file — "is this term an Emirates ID being typed" — is a natural
+neighbour for it in `domain/shared/emirates-id.ts`, and this stream would
+import it from there instead. Say which you would prefer and the move is a
+one-line change here.
+
 ---
 
 ## A decision taken here, not asked for: the Emirates ID never enters a URL

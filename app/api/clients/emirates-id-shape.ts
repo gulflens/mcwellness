@@ -14,9 +14,17 @@
  * separator a person or a paste can put between them — hyphens, spaces,
  * non-breaking spaces, zero-width joiners, brackets, a stray plus — and folds
  * Arabic-Indic digits to Latin first, because an Arabic keyboard is a first
- * class way to type a number here. Being generous costs nothing: the only
- * terms it turns away are those whose digits open 784, and a record number
- * reads MW-000001.
+ * class way to type a number here. Being generous costs almost nothing: it
+ * turns away a term whose digits open 784, and — through the two-digit floor
+ * below — one whose whole digit run is 7 or 78. `q` searches names and record
+ * numbers, and a record number reads MW-000001, so the terms lost are
+ * theoretical.
+ *
+ * It lives here rather than in `domain/client` or `domain/shared` because
+ * both are the shared zone; `docs/CHANGE-REQUESTS/client-record-02.md` CR-06
+ * asks for the fold to move to `domain/shared/emirates-id.ts`, beside the
+ * normaliser it exists to feed, and says what becomes of this file when it
+ * does.
  */
 
 const ARABIC_INDIC = 0x0660; // ٠ to ٩
