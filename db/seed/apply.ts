@@ -231,7 +231,13 @@ export async function applySeed(
     await insert('tenant', {
       id: t.id,
       legal_name: t.legalName,
+      legal_name_ar: t.legalNameAr,
       trn: t.trn,
+      licence_number: t.licenceNumber,
+      licensing_authority: t.licensingAuthority,
+      licence_expires_on: t.licenceExpiresOn,
+      vat_registered: t.vatRegistered,
+      vat_trn: t.vatTrn,
       default_emirate: t.defaultEmirate,
       timezone: t.timezone,
     });

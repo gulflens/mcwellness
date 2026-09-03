@@ -82,6 +82,33 @@ describe('the synthetic seed', () => {
     expect(await isSeeded(owner)).toBe(true);
   });
 
+  it('leaves the synthetic practice unregistered for VAT, with a synthetic licence', async () => {
+    // Migration 905. The real practice is not VAT registered — registration
+    // follows the AED 375,000 threshold (docs/SPEC/billing.md section 5.1) —
+    // so the fixture is not either, and a screen built against it meets the
+    // state it will actually meet. The licence is synthetic like every other
+    // fact here: the practice's real identity is entered on staging by the
+    // operator and never seeded.
+    const { rows } = await owner.query<{
+      legal_name_ar: string | null;
+      licence_number: string | null;
+      licensing_authority: string | null;
+      vat_registered: boolean;
+      vat_trn: string | null;
+    }>(
+      'select legal_name_ar, licence_number, licensing_authority, vat_registered, vat_trn ' +
+        'from tenant where id = $1',
+      [SEED_TENANT_ID],
+    );
+    expect(rows[0]).toEqual({
+      legal_name_ar: data.tenant.legalNameAr,
+      licence_number: data.tenant.licenceNumber,
+      licensing_authority: data.tenant.licensingAuthority,
+      vat_registered: false,
+      vat_trn: null,
+    });
+  });
+
   it('stamps every price with the VAT the tenant trigger set, never a typed figure', async () => {
     // CLAUDE.md rule 6. The generator is pure and reads no database, so the
     // rate it carries is proved here against the row app.default_vat_setting()
