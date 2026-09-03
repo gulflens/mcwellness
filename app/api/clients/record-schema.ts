@@ -517,8 +517,11 @@ export const ErasureRequestRecord = z.object({
   requestedByContactId: z.uuid().nullable(),
   notifyPhone: z.string().nullable(),
   performedAt: z.string().nullable(),
+  performedByName: z.string().nullable(),
   letterDocumentId: z.uuid().nullable(),
   letterVersion: z.string().nullable(),
+  /** When the practice handed the letter over. Null until somebody says they did. */
+  letterSentAt: z.string().nullable(),
   /** What the erasure touched: counts, never names (db/migrations/104). */
   summary: z
     .object({
@@ -529,6 +532,10 @@ export const ErasureRequestRecord = z.object({
       consentsUnlinked: z.number().int().nonnegative(),
       documentsDeleted: z.number().int().nonnegative(),
       documentsKept: z.number().int().nonnegative(),
+      paymentsCleared: z.number().int().nonnegative(),
+      sessionsCleared: z.number().int().nonnegative(),
+      sessionEventsCleared: z.number().int().nonnegative(),
+      visitActualsCleared: z.number().int().nonnegative(),
     })
     .nullable(),
   /**

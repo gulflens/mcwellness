@@ -11,7 +11,11 @@ import { logReads } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { canPerformErasure, canRecordErasureRequest } from './access';
-import { filePracticeDocument, signedDocumentLink } from './document-store';
+import {
+  putPracticeDocumentBytes,
+  recordPracticeDocument,
+  signedDocumentLink,
+} from './document-store';
 import { erasureLetter } from './erasure-letter';
 import {
   ErasurePerformedResponse,
@@ -67,16 +71,21 @@ type RequestRow = {
   requested_by_contact_id: string | null;
   requested_by_phone: string | null;
   performed_at: Date | null;
+  performed_by_name: string | null;
   letter_document_id: string | null;
   letter_version: string | null;
+  letter_sent_at: Date | null;
   summary: Record<string, unknown> | null;
   files_pending: number;
 };
 
 const REQUEST_COLUMNS =
-  'id, reason, requested_at, requested_by_contact_id, requested_by_phone, performed_at, ' +
-  'letter_document_id, letter_version, summary, ' +
-  'jsonb_array_length(storage_keys_pending) as files_pending';
+  'e.id, e.reason, e.requested_at, e.requested_by_contact_id, e.requested_by_phone, ' +
+  'e.performed_at, u.display_name as performed_by_name, e.letter_document_id, ' +
+  'e.letter_version, e.letter_sent_at, e.summary, ' +
+  'jsonb_array_length(e.storage_keys_pending) as files_pending';
+/** The request with the person who performed it named, which is a join and not a column. */
+const REQUEST_FROM = 'from erasure_request e left join app_user u on u.id = e.performed_by';
 
 /**
  * The summary app.erase_client writes, as the screen reads it. Counts only:
@@ -95,6 +104,10 @@ function summaryOf(row: RequestRow): ErasureRequestRecord['summary'] {
     consentsUnlinked: count('consentsUnlinked'),
     documentsDeleted: count('documentsDeleted'),
     documentsKept: count('documentsKept'),
+    paymentsCleared: count('paymentsCleared'),
+    sessionsCleared: count('sessionsCleared'),
+    sessionEventsCleared: count('sessionEventsCleared'),
+    visitActualsCleared: count('visitActualsCleared'),
   };
 }
 
@@ -106,8 +119,10 @@ function toRecord(row: RequestRow): ErasureRequestRecord {
     requestedByContactId: row.requested_by_contact_id,
     notifyPhone: row.requested_by_phone,
     performedAt: row.performed_at ? row.performed_at.toISOString() : null,
+    performedByName: row.performed_by_name,
     letterDocumentId: row.letter_document_id,
     letterVersion: row.letter_version,
+    letterSentAt: row.letter_sent_at ? row.letter_sent_at.toISOString() : null,
     summary: summaryOf(row),
     filesPending: Number(row.files_pending ?? 0),
   });
@@ -238,7 +253,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
     }
 
     const { rows } = await db.query<RequestRow>(
-      `select ${REQUEST_COLUMNS} from erasure_request where client_id = $1 order by requested_at desc`,
+      `select ${REQUEST_COLUMNS} ${REQUEST_FROM} where e.client_id = $1 order by e.requested_at desc`,
       [clientId],
     );
     await logReads(
@@ -248,6 +263,43 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
       'list',
     );
     return c.json(ErasureRequestListResponse.parse({ requests: rows.map(toRecord) }));
+  });
+
+  api.post('/api/clients/:id/erasure-requests/:requestId/letter-sent', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    const params = ExecuteParams.safeParse(c.req.param());
+    if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
+    const { id: clientId, requestId: erasureId } = params.data;
+
+    // Handing the letter over is a thing only a person can report: it goes by
+    // WhatsApp, from the practice's own phone, and no system sees it happen.
+    // Saying so is what starts the clock on the one contact detail that
+    // outlived the erasure — the sweep clears requested_by_phone once this and
+    // files_cleared_at both stand (migration 105).
+    const statusRow = await db.query<{ status: ClientStatus | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
+    );
+    if ((statusRow.rows[0]?.status ?? null) === null) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (!canRecordErasureRequest(actor)) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const marked = await db.query(
+      'update erasure_request set letter_sent_at = now() where id = $1 and client_id = $2 ' +
+        'and performed_at is not null and letter_sent_at is null',
+      [erasureId, clientId],
+    );
+    // Already marked, never performed, or not this client's: nothing to say
+    // yes to, and nothing worth an error either. The screen asks once.
+    if (marked.rowCount === 0) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    return c.json(IdResponse.parse({ id: erasureId }));
   });
 
   api.post('/api/clients/:id/erasure-requests/:requestId/execute', async (c) => {
@@ -279,7 +331,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
     }
 
     const existing = await db.query<RequestRow>(
-      `select ${REQUEST_COLUMNS} from erasure_request where id = $1 and client_id = $2`,
+      `select ${REQUEST_COLUMNS} ${REQUEST_FROM} where e.id = $1 and e.client_id = $2`,
       [erasureId, clientId],
     );
     const request = existing.rows[0];
@@ -309,8 +361,13 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
       [clientId],
     );
     const locale = before.rows[0]?.preferred_locale ?? 'en';
-    const practice = await db.query<{ legal_name: string }>(
-      'select legal_name from tenant where id = $1',
+    // The registered address comes with the legal name: the letter tells a
+    // person where to write, and says so in words when the practice has not
+    // recorded one (domain/client/erasureLetter.ts) rather than printing a
+    // bracket into a legal confirmation.
+    const practice = await db.query<{ legal_name: string; display_address: string | null }>(
+      'select t.legal_name, l.display_address from tenant t ' +
+        'left join location l on l.id = t.location_id where t.id = $1',
       [actor.tenantId],
     );
     const practiceLegalName = practice.rows[0]?.legal_name;
@@ -321,20 +378,35 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
       throw new Error('The practice has no legal name to sign an erasure letter with.');
     }
 
+    // The letter's bytes go into the store **before the first audited write
+    // of this transaction**, and that ordering is the whole reason this is
+    // three steps rather than one. Every audited write takes the audit
+    // chain's lock, and a bucket call held between two of them would
+    // serialise every other audited write in the practice behind a vendor's
+    // network call (app/api/clients/document-store.ts says the same at the
+    // seam). If the erasure below then fails, what is left is an object
+    // nothing points at — the orphan docs/SEAMS.md already accepts, and the
+    // better half of the trade.
+    const letter = erasureLetter({
+      locale,
+      erasedOn: isoDateIn(now(), PRACTICE_TIME_ZONE),
+      practiceLegalName,
+      practiceAddress: practice.rows[0]?.display_address ?? null,
+    });
+    const filed = await putPracticeDocumentBytes(storage, actor, {
+      bytes: new TextEncoder().encode(letter.text),
+      mimeType: ERASURE_LETTER_MIME_TYPE,
+    });
+
     const erased = await db.query<{ summary: { storage_keys_to_delete?: unknown } }>(
       'select app.erase_client($1, $2) as summary',
       [clientId, erasureId],
     );
     await logErasurePerformed(db, clientId);
 
-    const letter = erasureLetter({
-      locale,
-      erasedOn: isoDateIn(now(), PRACTICE_TIME_ZONE),
-      practiceLegalName,
-    });
-    const filed = await filePracticeDocument(db, storage, actor, {
+    await recordPracticeDocument(db, actor, {
+      ...filed,
       kind: ERASURE_LETTER_KIND,
-      bytes: new TextEncoder().encode(letter.text),
       mimeType: ERASURE_LETTER_MIME_TYPE,
       // What was sent is what was sent. Migration 903 freezes it, and a
       // correction would be a second letter rather than an edit of the first.
@@ -382,7 +454,7 @@ export function mountErasureRequests(api: Hono<ApiEnv>, now: () => Date = () => 
     }
 
     const after = await db.query<RequestRow>(
-      `select ${REQUEST_COLUMNS} from erasure_request where id = $1`,
+      `select ${REQUEST_COLUMNS} ${REQUEST_FROM} where e.id = $1`,
       [erasureId],
     );
     const performed = after.rows[0];

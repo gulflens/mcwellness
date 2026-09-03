@@ -51,12 +51,15 @@ export function erasureLetter(input: {
   locale: ErasureLetterLocale;
   erasedOn: string;
   practiceLegalName: string;
+  /** The practice's registered address, where it has recorded one. */
+  practiceAddress?: string | null;
 }): { text: string; version: string } {
   const template = erasureLetterTemplate(input.locale);
   return {
     text: renderErasureLetter(template, {
       erasedOn: input.erasedOn,
       practiceLegalName: input.practiceLegalName,
+      practiceAddress: input.practiceAddress ?? null,
     }),
     version: template.version,
   };
