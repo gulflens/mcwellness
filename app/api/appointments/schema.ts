@@ -1,19 +1,15 @@
 import { z } from 'zod';
+import { APPOINTMENT_STATUSES } from '@domain/scheduling';
 
-/** The shapes the appointment routes return. Imported by the routes and, once
- * the second pull request adds the screen, by the browser. */
+/** The shapes the appointment routes return. Imported by the routes and by
+ * the two screens that read them: the admin console's day schedule and the
+ * practitioner's Today. */
 
-export const APPOINTMENT_STATUSES = [
-  'proposed',
-  'confirmed',
-  'checked_in',
-  'completed',
-  'cancelled',
-  'cancelled_late',
-  'no_show',
-  'rescheduled',
-] as const;
-export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
+// The lifecycle itself lives in domain/scheduling/status.ts, where the rules
+// that judge it live; this file validates the wire against that list rather
+// than keeping a second copy of it.
+export { APPOINTMENT_STATUSES };
+export type { AppointmentStatus } from '@domain/scheduling';
 
 export const DELIVERY_MODES = ['home', 'studio', 'remote'] as const;
 export type DeliveryMode = (typeof DELIVERY_MODES)[number];
@@ -48,6 +44,27 @@ export const ConflictIssue = z.object({
 });
 export type ConflictIssue = z.infer<typeof ConflictIssue>;
 
+/** A verified coordinate, as the browser reads it. */
+export const GeoPoint = z.object({ lat: z.number(), lng: z.number() });
+export type GeoPoint = z.infer<typeof GeoPoint>;
+
+/**
+ * One appointment on the wire.
+ *
+ * The four optional fields — `client.mrn`, `client.age`, `location.entrancePoint`
+ * and `location.parkingPoint` — are served for `scope: 'own'` only, never for
+ * the practice-wide scope, and `app/api/appointments/list.ts` is where that is
+ * enforced. The practitioner's Today screen needs them to drive to a door, say
+ * who is behind it, and hand the record number to check-in; the coordinator's
+ * day schedule needs none of them, and scheduling-manual.md section 11 holds
+ * that screen to "window, names, practitioner, service, place, status" and
+ * nothing further. Absent means the caller did not ask for that scope; null
+ * (`age`, `parkingPoint`) means the practice has nothing on file.
+ *
+ * `mrn` is the practice's own record number (MW-000123), not an identity
+ * number: it is what the check-in screen already asks a practitioner to type,
+ * and what this screen saves them typing.
+ */
 export const AppointmentRow = z.object({
   id: z.uuid(),
   windowStart: z.iso.datetime(),
@@ -60,12 +77,26 @@ export const AppointmentRow = z.object({
     familyName: z.string(),
     givenNameAr: z.string().nullable(),
     familyNameAr: z.string().nullable(),
+    mrn: z.string().optional(),
+    age: z.number().int().min(0).nullable().optional(),
   }),
   practitioner: z.object({ id: z.uuid(), displayName: z.string() }),
   serviceType: z.object({ id: z.uuid(), name: z.string() }),
-  location: z.object({ id: z.uuid(), label: z.string(), emirate: z.string() }),
+  location: z.object({
+    id: z.uuid(),
+    label: z.string(),
+    emirate: z.string(),
+    // Never null when present: db/migrations/030_location.sql requires a
+    // verified entrance coordinate on every location.
+    entrancePoint: GeoPoint.optional(),
+    parkingPoint: GeoPoint.nullable().optional(),
+  }),
 });
 export type AppointmentRow = z.infer<typeof AppointmentRow>;
+
+/** Whose day is being asked for: the whole practice's, or the caller's own. */
+export const APPOINTMENT_SCOPES = ['practice', 'own'] as const;
+export type AppointmentScope = (typeof APPOINTMENT_SCOPES)[number];
 
 export const AppointmentListResponse = z.object({ appointments: z.array(AppointmentRow) });
 export type AppointmentListResponse = z.infer<typeof AppointmentListResponse>;
