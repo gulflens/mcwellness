@@ -85,6 +85,7 @@ export function CoordinateFields({
             href={googleMapsUrl(lat, lng)}
             target="_blank"
             rel="noreferrer noopener"
+            aria-label="Open in Google Maps, opens in a new tab"
           >
             Open in Google Maps
           </a>

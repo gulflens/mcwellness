@@ -9,12 +9,14 @@
 /* A real tab strip (task brief item 1): the ledger's own rhythm, an
    underline on the selected tab rather than a filled pill (DESIGN-BRIEF's
    Do's and Don'ts: no colour-only meaning). */
+/* Wraps rather than scrolls: a strip that ran off the drawer's edge hid
+   Documents and Timeline with nothing to say they were there. */
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--s-4);
   border-block-end: var(--hairline) solid var(--rule);
   margin-block-end: var(--s-4);
-  overflow-x: auto;
 }
 
 .tabs__tab {
@@ -94,6 +96,15 @@
   padding: 0;
   margin: 0;
   list-style: none;
+}
+
+/* A label and its value on one line, with room between them: two spans in a
+   list item otherwise render as "Mother+971500001113". */
+.record-facts__list > li,
+.record-facts__pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
 }
 
 /* Contacts, locations, goals and consent: each entity's own row, a
@@ -225,8 +236,11 @@
   font-weight: var(--w-medium);
 }
 
+/* Not yet reached. --slate, never --rule: a hairline's colour on paper is
+   1.49:1 and unreadable as text (design review of pull request 35). The step
+   being read is told apart by weight and aria-current, not by colour. */
 .wizard__step-name--locked {
-  color: var(--rule);
+  color: var(--slate);
 }
 
 .wizard__step-body {

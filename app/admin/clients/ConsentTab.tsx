@@ -55,7 +55,7 @@ function isActiveOn(
  * Recording one is deliberately not built here. The route needs the exact
  * wording that was shown (`consent.text_document_id`, a practice document),
  * and every method it accepts for initial participation attests to evidence
- * this pull request can neither capture nor file: `app_signature` needs a
+ * this stream cannot yet capture or file: `app_signature` needs a
  * signature drawn on screen, `paper_scan` needs the scan uploaded, and
  * `verbal_witnessed` is never allowed for initial participation (section 7).
  * Weakening the route to record an unevidenced consent would be worse than
@@ -75,9 +75,9 @@ export function ConsentTab({ record }: { record: ClientRecordResponse }) {
         {required.map((purpose) => {
           const onFile = record.consents.some((consent) => isActiveOn(consent, today, purpose));
           return (
-            <li key={purpose}>
-              {PURPOSE_LABELS[purpose] ?? purpose}
-              <span className="muted"> — {onFile ? 'on file' : 'not yet recorded'}</span>
+            <li key={purpose} className="record-facts__pair">
+              <span>{PURPOSE_LABELS[purpose] ?? purpose}</span>
+              <span className="muted">{onFile ? 'On file' : 'Not yet recorded'}</span>
             </li>
           );
         })}
@@ -121,11 +121,7 @@ export function ConsentTab({ record }: { record: ClientRecordResponse }) {
           ))}
         </ul>
       )}
-      <Note>
-        Recording consent and withdrawing it — with the wording that was shown, and a signature
-        drawn in the app or a scanned paper form — arrives with the documents module in the next
-        pull request.
-      </Note>
+      <Note>Recording consent arrives with documents.</Note>
     </div>
   );
 }

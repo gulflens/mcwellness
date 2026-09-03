@@ -4,16 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
 import { ClientDrawer } from './ClientDrawer';
+import { ADMIN, FINANCE, PRACTITIONER, signedInProvider } from './testActors';
 
 afterEach(cleanup);
 
-const provider: AuthProvider = {
-  kind: 'development',
-  signIn: async () => undefined,
-  signOut: async () => undefined,
-  getAccessToken: async () => null,
-  onChange: () => () => undefined,
-};
+const provider: AuthProvider = signedInProvider;
 
 const client = {
   id: '00000008-0000-4000-8000-000000000005',
@@ -67,9 +62,10 @@ const record = {
 };
 
 /** Mounts the drawer with `fetchImpl` answering GET /api/clients/:id with `record` (or 500 if omitted). */
-function mount(recordBody: unknown = record) {
+function mount(recordBody: unknown = record, me: unknown = ADMIN) {
   const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
+    if (url === '/api/me') return json(me);
     if (url === `/api/clients/${client.id}`) {
       return recordBody === null ? json({ error: 'internal' }, 500) : json(recordBody);
     }
@@ -92,7 +88,10 @@ describe('ClientDrawer', () => {
   it('names the client, takes focus, and closes on the button and on Escape', () => {
     const onClose = vi.fn();
     render(
-      <AuthProviderBoundary provider={provider} fetchImpl={vi.fn() as unknown as typeof fetch}>
+      <AuthProviderBoundary
+        provider={provider}
+        fetchImpl={vi.fn(async () => json({ error: 'not_found' }, 404)) as unknown as typeof fetch}
+      >
         <ClientDrawer client={client} onClose={onClose} />
       </AuthProviderBoundary>,
     );
@@ -148,14 +147,39 @@ describe('ClientDrawer', () => {
     mount();
     await screen.findByRole('tablist');
     fireEvent.click(screen.getByRole('tab', { name: 'Documents' }));
-    expect(
-      await screen.findByText(
-        'Arriving. Uploading, previewing and filing documents is the next pull request.',
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText('Uploading and filing documents arrives soon.')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Consent' }));
     expect(await screen.findByText('No consent recorded yet.')).toBeTruthy();
+  });
+
+  it('shows finance the three tabs it may read, and no more', async () => {
+    mount(record, FINANCE);
+    await screen.findByRole('tablist');
+    for (const name of ['Overview', 'Contacts', 'Timeline']) {
+      expect(screen.getByRole('tab', { name })).toBeTruthy();
+    }
+    // Locations, consents, goals and documents are not finance's to read
+    // (docs/SPEC/client-record.md section 2 and rule 6); the read policies refuse
+    // them, so a tab would open onto nothing it could fill.
+    for (const name of ['Locations', 'Consent', 'Goals', 'Documents']) {
+      expect(screen.queryByRole('tab', { name })).toBeNull();
+    }
+  });
+
+  it('offers no write action to a practitioner, and every one to an admin', async () => {
+    mount(record, PRACTITIONER);
+    await screen.findByRole('tablist');
+    fireEvent.click(screen.getByRole('tab', { name: 'Contacts' }));
+    expect(screen.queryByRole('button', { name: 'Add contact' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    cleanup();
+
+    mount(record, ADMIN);
+    await screen.findByRole('tablist');
+    fireEvent.click(screen.getByRole('tab', { name: 'Contacts' }));
+    expect(await screen.findByRole('button', { name: 'Add contact' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeTruthy();
   });
 
   it('names the problem when the record fails to load', async () => {
@@ -167,6 +191,7 @@ describe('ClientDrawer', () => {
     let calls = 0;
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url === '/api/me') return json(ADMIN);
       if (url === `/api/clients/${client.id}`) {
         calls += 1;
         const headers = new Headers(init?.headers);

@@ -15,7 +15,7 @@ describe('CoordinateFields', () => {
     const onChange = vi.fn();
     const { rerender } = render(<CoordinateFields lat={null} lng={null} onChange={onChange} />);
 
-    expect(screen.queryByText('Open in Google Maps')).toBeNull();
+    expect(screen.queryByRole('link')).toBeNull();
 
     const getCurrentPosition = vi.fn((success: PositionCallback) => {
       success({
@@ -31,7 +31,7 @@ describe('CoordinateFields', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ lat: 25.2048, lng: 55.2708 }));
 
     rerender(<CoordinateFields lat={25.2048} lng={55.2708} onChange={onChange} />);
-    const link = screen.getByRole('link', { name: 'Open in Google Maps' });
+    const link = screen.getByRole('link', { name: 'Open in Google Maps, opens in a new tab' });
     expect(link.getAttribute('href')).toBe(
       'https://www.google.com/maps/search/?api=1&query=25.2048,55.2708',
     );

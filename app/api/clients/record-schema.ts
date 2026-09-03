@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isoDateIn } from '../../../domain/shared';
 
 /**
  * Request and response shapes for the client-record routes (GET/POST/PATCH
@@ -35,6 +36,22 @@ const Phone = z.string().regex(E164, 'A phone number is E.164, e.g. +97150000123
 // domain/client's validateEmiratesId (15 digits, starts 784, Luhn check
 // digit), never required (docs/SPEC/00-data-model.md section 3).
 const EmiratesIdInput = z.string().min(1).max(40);
+
+/**
+ * A date of birth is in the past. Format alone was not enough: a date in the
+ * future passed, and `isMinor` then read it as an age below zero — a minor,
+ * silently, with the guardian consent that implies. Judged against the
+ * practice's own day, so a client born today in Dubai is not refused because
+ * the server is still on yesterday. The upper bound is deliberately soft (no
+ * "oldest plausible person" rule): a wrong century is a typo for the practice
+ * to see and fix, not a body of policy for a schema to hold.
+ */
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+const DateOfBirth = z.iso
+  .date()
+  .refine((value) => value <= isoDateIn(new Date(), PRACTICE_TIME_ZONE), {
+    message: 'A date of birth is in the past.',
+  });
 
 export const Contact = z.object({
   id: z.uuid(),
@@ -113,7 +130,7 @@ export const CreateClientBody = z.object({
   familyName: Name,
   givenNameAr: Name.optional(),
   familyNameAr: Name.optional(),
-  dateOfBirth: z.iso.date().optional(),
+  dateOfBirth: DateOfBirth.optional(),
   referralSource: z.string().max(200).optional(),
   contact: z.object({
     relationship: z.enum(RELATIONSHIPS),
@@ -137,7 +154,7 @@ export const UpdateClientBody = z
     familyName: Name,
     givenNameAr: Name.nullable(),
     familyNameAr: Name.nullable(),
-    dateOfBirth: z.iso.date().nullable(),
+    dateOfBirth: DateOfBirth.nullable(),
     sexAtBirth: z.enum(['female', 'male', 'unknown']).nullable(),
     referralSource: z.string().max(200).nullable(),
   })

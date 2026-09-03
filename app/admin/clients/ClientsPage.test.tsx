@@ -4,16 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
 import { ClientsPage, searchRequest } from './ClientsPage';
+import { ADMIN, FINANCE, PRACTITIONER, signedInProvider } from './testActors';
 
 afterEach(cleanup);
 
-const provider: AuthProvider = {
-  kind: 'development',
-  signIn: async () => undefined,
-  signOut: async () => undefined,
-  getAccessToken: async () => null,
-  onChange: () => () => undefined,
-};
+const provider: AuthProvider = signedInProvider;
 
 /** The reserved synthetic range (.claude/rules/testing.md), with its own check digit. */
 const EMIRATES_ID = '784-1900-0000013-4';
@@ -38,10 +33,11 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function mount(matches: (typeof row)[] = [], lookupStatus = 200) {
+function mount(matches: (typeof row)[] = [], lookupStatus = 200, me: unknown = ADMIN) {
   const calls: { url: string; init?: RequestInit }[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    if (url === '/api/me') return json(me);
     calls.push({ url, init });
     if (url === '/api/clients/lookup') {
       return lookupStatus === 200
@@ -151,6 +147,17 @@ describe('ClientsPage search', () => {
         'Searching by Emirates ID is not set up on this installation yet. Search by name or record number.',
       ),
     ).toBeTruthy();
+  });
+
+  it('offers enrolment to an admin, and to nobody the write routes would refuse', async () => {
+    mount([], 200, PRACTITIONER);
+    await screen.findByRole('table');
+    expect(screen.queryByRole('button', { name: 'Enrol a client' })).toBeNull();
+    cleanup();
+
+    mount([], 200, FINANCE);
+    await screen.findByRole('table');
+    expect(screen.queryByRole('button', { name: 'Enrol a client' })).toBeNull();
   });
 
   it('offers the enrolment wizard from the page header, and closes it again', async () => {

@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { validateEmiratesId } from '@domain/client';
 import { toLatinDigits } from '../../api/clients/emirates-id-shape';
+import {
+  EMAIL_ERROR,
+  FUTURE_DATE_ERROR,
+  PHONE_ERROR,
+  PHONE_HINT,
+  fieldOf,
+  focusFirstError,
+  isPastDate,
+  isValidEmail,
+  isValidPhone,
+  normalisePhone,
+  type BadRequest,
+} from './formRules';
 import { RELATIONSHIPS, type CreateClientResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
@@ -37,9 +50,31 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
 type IdentityFieldErrors = {
   givenName?: string;
   familyName?: string;
+  dateOfBirth?: string;
   relationship?: string;
   phone?: string;
+  email?: string;
   emiratesId?: string;
+};
+
+/** The fields in the order they are read, so a refusal lands the caret on the first one. */
+const IDENTITY_FIELD_ORDER = [
+  'wizard-given-name',
+  'wizard-family-name',
+  'wizard-dob',
+  'wizard-relationship',
+  'wizard-phone',
+  'wizard-email',
+  'wizard-emirates-id',
+] as const;
+const FIELD_INPUT_ID: Record<keyof IdentityFieldErrors, string> = {
+  givenName: 'wizard-given-name',
+  familyName: 'wizard-family-name',
+  dateOfBirth: 'wizard-dob',
+  relationship: 'wizard-relationship',
+  phone: 'wizard-phone',
+  email: 'wizard-email',
+  emiratesId: 'wizard-emirates-id',
 };
 
 const GENERIC_ERROR = 'This could not be saved. Try again.';
@@ -57,7 +92,14 @@ const FORBIDDEN_ERROR = "You don't have permission to enrol a client.";
  * which the shell's existing default route to /admin/clients already
  * resolves).
  */
-export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
+export function EnrolmentWizard({
+  onDone,
+  mayWriteGoals,
+}: {
+  onDone: () => void;
+  /** Whether this person may set a goal: an admin writes the record but not goals. */
+  mayWriteGoals: boolean;
+}) {
   const { apiFetch } = useAuth();
   const closeRef = useRef<HTMLButtonElement>(null);
   const [step, setStep] = useState<Step>('identity');
@@ -109,8 +151,16 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
     if (!givenName.trim()) errors.givenName = "Enter the client's given name.";
     if (!familyName.trim()) errors.familyName = "Enter the client's family name.";
     if (!relationship) errors.relationship = "Choose the contact's relationship to the client.";
-    const trimmedPhone = phone.trim();
-    if (!trimmedPhone) errors.phone = 'Enter a phone number, e.g. +971500001234.';
+    const trimmedPhone = normalisePhone(phone.trim());
+    // The rule the route holds, checked here so the field can say which one is wrong:
+    // "it must not be empty" was all this asked, and a number typed without its country
+    // code then came back as an unnameable 400 (design review of pull request 35).
+    if (!trimmedPhone || !isValidPhone(trimmedPhone)) errors.phone = PHONE_ERROR;
+    const trimmedEmail = email.trim();
+    if (trimmedEmail && !isValidEmail(trimmedEmail)) errors.email = EMAIL_ERROR;
+    if (dateOfBirth && !isPastDate(dateOfBirth, practiceToday())) {
+      errors.dateOfBirth = FUTURE_DATE_ERROR;
+    }
     // Folded to Latin digits before it is judged or sent, so an Arabic keyboard
     // captures an identity number as readily as it searches for one
     // (app/api/clients/emirates-id-shape.ts). The server normalises again.
@@ -119,7 +169,18 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
       errors.emiratesId = 'Enter fifteen digits starting 784, or leave this blank.';
     }
     setIdentityErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirstError(
+        IDENTITY_FIELD_ORDER,
+        Object.fromEntries(
+          Object.entries(errors).map(([key, value]) => [
+            FIELD_INPUT_ID[key as keyof IdentityFieldErrors],
+            value,
+          ]),
+        ),
+      );
+      return;
+    }
 
     setBusy(true);
     try {
@@ -136,7 +197,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
           contact: {
             relationship,
             phone: trimmedPhone,
-            ...(email.trim() ? { email: email.trim() } : {}),
+            ...(trimmedEmail ? { email: trimmedEmail } : {}),
             isLegalGuardian,
             canConsent,
             ...(trimmedEmiratesId ? { emiratesId: trimmedEmiratesId } : {}),
@@ -169,12 +230,37 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
         return;
       }
       if (res.status === 400) {
-        const body = (await res.json().catch(() => null)) as { code?: string } | null;
+        const body = (await res.json().catch(() => null)) as BadRequest | null;
         if (body?.code === 'invalid_emirates_id') {
           setIdentityErrors((prev) => ({
             ...prev,
             emiratesId: 'Enter fifteen digits starting 784, or leave this blank.',
           }));
+          return;
+        }
+        // Whatever else the route rejected, named by field rather than left as a
+        // sentence with nowhere to look (app/api/clients/bad-request.ts).
+        const named = (body?.fields ?? []).map(fieldOf).filter((field) => field !== null);
+        if (named.length > 0) {
+          const messages: IdentityFieldErrors = {};
+          for (const field of named) {
+            if (field === 'phone') messages.phone = PHONE_ERROR;
+            if (field === 'email') messages.email = EMAIL_ERROR;
+            if (field === 'dateOfBirth') messages.dateOfBirth = FUTURE_DATE_ERROR;
+            if (field === 'emiratesId') {
+              messages.emiratesId = 'Enter fifteen digits starting 784, or leave this blank.';
+            }
+          }
+          setIdentityErrors((prev) => ({ ...prev, ...messages }));
+          focusFirstError(
+            IDENTITY_FIELD_ORDER,
+            Object.fromEntries(
+              Object.entries(messages).map(([key, value]) => [
+                FIELD_INPUT_ID[key as keyof IdentityFieldErrors],
+                value,
+              ]),
+            ),
+          );
           return;
         }
       }
@@ -310,11 +396,15 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
             />
             <Field
               id="wizard-dob"
-              label="Date of birth"
+              label="Date of birth (optional)"
               type="date"
               value={dateOfBirth}
-              onChange={(e) => setDateOfBirth(e.target.value)}
-              hint="Needed before this client can be activated."
+              onChange={(e) => {
+                setDateOfBirth(e.target.value);
+                clearIdentityError('dateOfBirth');
+              }}
+              hint="Not needed to save a lead, but needed before this client can be activated."
+              error={identityErrors.dateOfBirth}
             />
             <Field
               id="wizard-referral"
@@ -351,6 +441,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
                 setPhone(e.target.value);
                 clearIdentityError('phone');
               }}
+              hint={PHONE_HINT}
               error={identityErrors.phone}
             />
             <Field
@@ -358,7 +449,11 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
               label="Email (optional)"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearIdentityError('email');
+              }}
+              error={identityErrors.email}
             />
             <Field
               id="wizard-emirates-id"
@@ -410,6 +505,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
                     clientId={created.id}
                     record={record}
                     onChanged={() => void refetch()}
+                    mayWrite
                   />
                 ) : null}
                 {step === 'location' ? (
@@ -417,6 +513,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
                     clientId={created.id}
                     record={record}
                     onChanged={() => void refetch()}
+                    mayWrite
                   />
                 ) : null}
                 {step === 'goals' ? (
@@ -424,6 +521,7 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
                     clientId={created.id}
                     record={record}
                     onChanged={() => void refetch()}
+                    mayWrite={mayWriteGoals}
                   />
                 ) : null}
                 {step === 'consent' ? <ConsentTab record={record} /> : null}
@@ -450,7 +548,14 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
               </>
             ) : null}
 
+            <p className="small muted">
+              Saved as a lead. Everything entered so far is on the record, and you can close this
+              and come back to it.
+            </p>
             <div className="wizard__nav">
+              <Button variant="quiet" onClick={onDone}>
+                {step === 'summary' ? 'Close' : 'Finish later'}
+              </Button>
               <Button
                 variant="secondary"
                 disabled={!canGoBack}
@@ -459,19 +564,10 @@ export function EnrolmentWizard({ onDone }: { onDone: () => void }) {
                 Back
               </Button>
               {canGoNext ? (
-                <Button variant="secondary" onClick={() => goTo(STEPS[stepIndex + 1] ?? 'summary')}>
+                <Button variant="primary" onClick={() => goTo(STEPS[stepIndex + 1] ?? 'summary')}>
                   Next
                 </Button>
               ) : null}
-              {step !== 'summary' ? (
-                <Button variant="quiet" onClick={onDone}>
-                  Finish later
-                </Button>
-              ) : (
-                <Button variant="quiet" onClick={onDone}>
-                  Close
-                </Button>
-              )}
             </div>
           </div>
         ) : null}

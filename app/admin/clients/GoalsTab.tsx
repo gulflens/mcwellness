@@ -5,7 +5,7 @@ import {
   type ClientRecordResponse,
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Note, Select } from '../../shell/components/Controls';
+import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { GoalForm } from './GoalForm';
 import { useGoalCategories } from './useGoalCategories';
 
@@ -26,10 +26,13 @@ export function GoalsTab({
   clientId,
   record,
   onChanged,
+  mayWrite,
 }: {
   clientId: string;
   record: ClientRecordResponse;
   onChanged: () => void;
+  /** False for a role the goal routes would refuse: read the goals, change nothing. */
+  mayWrite: boolean;
 }) {
   const { apiFetch } = useAuth();
   const categories = useGoalCategories();
@@ -106,7 +109,7 @@ export function GoalsTab({
                 id={`goal-status-${goal.id}`}
                 label="Status"
                 value={reasonFor === goal.id ? 'dropped' : goal.status}
-                disabled={busyId === goal.id}
+                disabled={!mayWrite || busyId === goal.id}
                 onChange={(e) => {
                   const next = e.target.value;
                   if (next === 'dropped') {
@@ -124,12 +127,9 @@ export function GoalsTab({
               </Select>
               {reasonFor === goal.id ? (
                 <div className="record-row__reason">
-                  <label htmlFor={`goal-reason-${goal.id}`} className="field__label">
-                    Why is this goal dropped?
-                  </label>
-                  <input
+                  <Field
                     id={`goal-reason-${goal.id}`}
-                    className="field__input"
+                    label="Why is this goal dropped?"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                   />
@@ -159,7 +159,7 @@ export function GoalsTab({
       )}
       {error ? <Note tone="critical">{error}</Note> : null}
 
-      {!adding ? (
+      {!mayWrite ? null : !adding ? (
         <Button variant="secondary" onClick={() => setAdding(true)}>
           Add goal
         </Button>

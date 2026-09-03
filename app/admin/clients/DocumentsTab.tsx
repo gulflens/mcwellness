@@ -1,10 +1,10 @@
 import { Note } from '../../shell/components/Controls';
 
-/** Documents: arriving with the fourth pull request (task brief item 1). */
+/** Documents: the upload, preview and retention work is not built yet. */
 export function DocumentsTab() {
   return (
     <div className="tab-section">
-      <Note>Arriving. Uploading, previewing and filing documents is the next pull request.</Note>
+      <Note>Uploading and filing documents arrives soon.</Note>
     </div>
   );
 }

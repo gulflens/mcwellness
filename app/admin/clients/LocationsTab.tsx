@@ -38,10 +38,13 @@ export function LocationsTab({
   clientId,
   record,
   onChanged,
+  mayWrite,
 }: {
   clientId: string;
   record: ClientRecordResponse;
   onChanged: () => void;
+  /** False for a role the write routes would refuse: no Add, no Edit, no Verify pin. */
+  mayWrite: boolean;
 }) {
   const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
 
@@ -83,14 +86,16 @@ export function LocationsTab({
                   <p className="small muted">{location.accessNotes}</p>
                 ) : null}
               </div>
-              <div className="record-row__actions">
-                <Button variant="quiet" onClick={() => setPanel({ kind: 'verify', location })}>
-                  Verify pin
-                </Button>
-                <Button variant="quiet" onClick={() => setPanel({ kind: 'edit', location })}>
-                  Edit
-                </Button>
-              </div>
+              {mayWrite ? (
+                <div className="record-row__actions">
+                  <Button variant="quiet" onClick={() => setPanel({ kind: 'verify', location })}>
+                    Verify pin
+                  </Button>
+                  <Button variant="quiet" onClick={() => setPanel({ kind: 'edit', location })}>
+                    Edit
+                  </Button>
+                </div>
+              ) : null}
               {panel.kind === 'verify' && panel.location.id === location.id ? (
                 <VerifyPinForm
                   clientId={clientId}
@@ -112,7 +117,7 @@ export function LocationsTab({
         </ul>
       )}
 
-      {panel.kind === 'closed' ? (
+      {mayWrite && panel.kind === 'closed' ? (
         <Button variant="secondary" onClick={() => setPanel({ kind: 'add' })}>
           Add location
         </Button>

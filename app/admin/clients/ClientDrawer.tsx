@@ -11,9 +11,11 @@ import { GoalsTab } from './GoalsTab';
 import { LocationsTab } from './LocationsTab';
 import { OverviewTab } from './OverviewTab';
 import { Tabs, TabPanel, type Tab } from './Tabs';
+import { canSeeFullRecord, canWriteGoals, canWriteRecord } from './clientAccess';
+import { useAuth } from '../../shell/auth/AuthContext';
 import { useClientRecord } from './useClientRecord';
 
-const TABS: readonly Tab[] = [
+const ALL_TABS: readonly Tab[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'contacts', label: 'Contacts' },
   { id: 'locations', label: 'Locations' },
@@ -22,6 +24,15 @@ const TABS: readonly Tab[] = [
   { id: 'documents', label: 'Documents' },
   { id: 'timeline', label: 'Timeline' },
 ];
+/**
+ * Finance reads demographics and contacts, and nothing else
+ * (docs/SPEC/client-record.md section 2 and rule 6). The read policies already
+ * refuse the rest, so the four tabs left out would open onto nothing they could
+ * fill; the screen matches the rule rather than discovering it.
+ */
+const FINANCE_TABS: readonly Tab[] = ALL_TABS.filter((tab) =>
+  ['overview', 'contacts', 'timeline'].includes(tab.id),
+);
 const DEFAULT_TAB = 'overview';
 
 /**
@@ -41,6 +52,12 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
   const [tab, setTab] = useState<string>(DEFAULT_TAB);
   const [reason, setReason] = useState('');
   const { state, refetch } = useClientRecord(client.id);
+  const { session } = useAuth();
+  const actor = session.status === 'signed-in' ? session.actor : null;
+  const now = new Date();
+  const mayWrite = canWriteRecord(actor, now);
+  const mayWriteGoals = canWriteGoals(actor);
+  const tabs = canSeeFullRecord(actor) ? ALL_TABS : FINANCE_TABS;
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -88,7 +105,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
         </button>
       </header>
       <div className="drawer__body">
-        <Tabs tabs={TABS} selected={tab} onSelect={setTab} idPrefix="client" />
+        <Tabs tabs={tabs} selected={tab} onSelect={setTab} idPrefix="client" />
 
         {state.kind === 'loading' ? <Note>Loading the record.</Note> : null}
         {state.kind === 'error' ? (
@@ -116,13 +133,18 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
         {state.kind === 'ready' ? (
           <>
             <TabPanel id="overview" idPrefix="client" selected={tab}>
-              <OverviewTab record={state.record} onChanged={() => void refetch()} />
+              <OverviewTab
+                record={state.record}
+                onChanged={() => void refetch()}
+                mayWrite={mayWrite}
+              />
             </TabPanel>
             <TabPanel id="contacts" idPrefix="client" selected={tab}>
               <ContactsTab
                 clientId={client.id}
                 record={state.record}
                 onChanged={() => void refetch()}
+                mayWrite={mayWrite}
               />
             </TabPanel>
             <TabPanel id="locations" idPrefix="client" selected={tab}>
@@ -130,6 +152,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 clientId={client.id}
                 record={state.record}
                 onChanged={() => void refetch()}
+                mayWrite={mayWrite}
               />
             </TabPanel>
             <TabPanel id="consent" idPrefix="client" selected={tab}>
@@ -140,6 +163,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 clientId={client.id}
                 record={state.record}
                 onChanged={() => void refetch()}
+                mayWrite={mayWriteGoals}
               />
             </TabPanel>
             <TabPanel id="documents" idPrefix="client" selected={tab}>

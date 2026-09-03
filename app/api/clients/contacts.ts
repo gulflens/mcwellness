@@ -3,6 +3,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 import type { ApiEnv } from '../_middleware/request-context';
 import { canWriteClientRecord } from './access';
+import { rejectedFields } from './bad-request';
 import { captureEmiratesId, emiratesIdInUse } from './emirates-id-capture';
 import { CreateContactBody, IdResponse, UpdateContactBody } from './record-schema';
 import { logRefused } from './refused';
@@ -28,7 +29,9 @@ export function mountContacts(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const clientId = params.data.id;
     const bodyJson = await c.req.json().catch(() => null);
     const body = CreateContactBody.safeParse(bodyJson);
-    if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
+    if (!body.success) {
+      return c.json({ error: 'bad_request', fields: rejectedFields(body.error), requestId }, 400);
+    }
 
     // app.client_status_for bypasses row level security, so it tells "no such client"
     // (404, never logged) apart from "a row this role cannot write, or cannot even read"
@@ -101,7 +104,9 @@ export function mountContacts(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const { id: clientId, contactId } = params.data;
     const bodyJson = await c.req.json().catch(() => null);
     const body = UpdateContactBody.safeParse(bodyJson);
-    if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
+    if (!body.success) {
+      return c.json({ error: 'bad_request', fields: rejectedFields(body.error), requestId }, 400);
+    }
 
     // Client existence first (bypassing row level security, for the reason the POST route
     // above does), then role, then the contact itself: only once the actor is confirmed to

@@ -80,7 +80,7 @@ describe('ContactForm', () => {
 
   it('clears a phone with null when editing, which the edit body accepts', async () => {
     const { calls, onSaved } = mount(contact);
-    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Phone (optional)'), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save contact' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());

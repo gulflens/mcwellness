@@ -12,6 +12,7 @@ import { logRead } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { canWriteClientRecord } from './access';
+import { rejectedFields } from './bad-request';
 import { captureEmiratesId, emiratesIdInUse } from './emirates-id-capture';
 import {
   ClientRecordResponse,
@@ -275,15 +276,20 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     const db = c.get('db');
     const requestId = c.get('requestId');
     if (!canWriteClientRecord(actor, '', now())) {
-      // A collection action, not a specific row: nothing here can name what was refused
-      // (client-record.md section 9), so the request id itself stands in as the entity —
-      // still a real, non-null value a later audit read can point at.
-      await logRefused(db, 'client', requestId, null);
+      // A collection action, not a specific row: nothing here can name what was
+      // refused (client-record.md section 9), so a fresh id stands in as the entity.
+      // Deliberately not the request id: that comes from the caller's own
+      // `x-request-id` header, and using it would let a signed-in actor mint an audit
+      // row pointing at any uuid they chose. The request id still reaches the
+      // `request_id` column from the transaction's setting, so correlation is unharmed.
+      await logRefused(db, 'client', randomUUID(), null);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const bodyJson = await c.req.json().catch(() => null);
     const body = CreateClientBody.safeParse(bodyJson);
-    if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
+    if (!body.success) {
+      return c.json({ error: 'bad_request', fields: rejectedFields(body.error), requestId }, 400);
+    }
 
     const tenantId = actor.tenantId;
     // contactId is generated before either insert, both so the Emirates ID seal below can
@@ -374,7 +380,9 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     const clientId = params.data.id;
     const bodyJson = await c.req.json().catch(() => null);
     const body = UpdateClientBody.safeParse(bodyJson);
-    if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
+    if (!body.success) {
+      return c.json({ error: 'bad_request', fields: rejectedFields(body.error), requestId }, 400);
+    }
 
     // Existence first, role second, and existence goes through
     // app.client_status_for (security definer) rather than a plain select: a plain

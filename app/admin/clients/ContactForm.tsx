@@ -5,6 +5,17 @@ import { RELATIONSHIPS, type Contact, IdResponse } from '../../api/clients/recor
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { Checkbox } from './FormAtoms';
+import {
+  EMAIL_ERROR,
+  PHONE_ERROR,
+  PHONE_HINT,
+  fieldOf,
+  focusFirstError,
+  isValidEmail,
+  isValidPhone,
+  normalisePhone,
+  type BadRequest,
+} from './formRules';
 
 /** `relationship`'s plain-language labels, matching ClientsPage.tsx's own list. */
 const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -16,7 +27,33 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
-type FieldErrors = { relationship?: string; phone?: string; emiratesId?: string };
+type FieldErrors = { relationship?: string; phone?: string; email?: string; emiratesId?: string };
+
+/** The fields in the order they are read, so a refusal lands the caret on the first one. */
+const FIELD_INPUT_ID: Record<keyof FieldErrors, string> = {
+  relationship: 'contact-relationship',
+  phone: 'contact-phone',
+  email: 'contact-email',
+  emiratesId: 'contact-emirates-id',
+};
+const FIELD_ORDER = [
+  'contact-relationship',
+  'contact-phone',
+  'contact-email',
+  'contact-emirates-id',
+] as const;
+
+function focusFirst(errors: FieldErrors): void {
+  focusFirstError(
+    FIELD_ORDER,
+    Object.fromEntries(
+      Object.entries(errors).map(([key, value]) => [
+        FIELD_INPUT_ID[key as keyof FieldErrors],
+        value,
+      ]),
+    ),
+  );
+}
 
 const GENERIC_ERROR = 'This contact could not be saved. Try again.';
 const FORBIDDEN_ERROR = "You don't have permission to change this client's contacts.";
@@ -79,12 +116,28 @@ export function ContactForm({
       return;
     }
     if (res.status === 400) {
-      const body = (await res.json().catch(() => null)) as { code?: string } | null;
+      const body = (await res.json().catch(() => null)) as BadRequest | null;
       if (body?.code === 'invalid_emirates_id') {
-        setFieldErrors((prev) => ({
-          ...prev,
+        const named: FieldErrors = {
           emiratesId: 'Enter fifteen digits starting 784, or leave this blank.',
-        }));
+        };
+        setFieldErrors((prev) => ({ ...prev, ...named }));
+        focusFirst(named);
+        return;
+      }
+      // Whatever else the route rejected, named by field rather than left as a sentence
+      // with nowhere to look (app/api/clients/bad-request.ts).
+      const messages: FieldErrors = {};
+      for (const field of (body?.fields ?? []).map(fieldOf)) {
+        if (field === 'phone') messages.phone = PHONE_ERROR;
+        if (field === 'email') messages.email = EMAIL_ERROR;
+        if (field === 'emiratesId') {
+          messages.emiratesId = 'Enter fifteen digits starting 784, or leave this blank.';
+        }
+      }
+      if (Object.keys(messages).length > 0) {
+        setFieldErrors((prev) => ({ ...prev, ...messages }));
+        focusFirst(messages);
         return;
       }
       setFormError(GENERIC_ERROR);
@@ -98,6 +151,10 @@ export function ContactForm({
     setFormError(null);
     const errors: FieldErrors = {};
     if (!relationship) errors.relationship = 'Choose how this person relates to the client.';
+    // The rules the route holds, checked here so the field can name which one is wrong
+    // rather than leaving the person to guess at a 400 (design review of pull request 35).
+    if (phone.trim() && !isValidPhone(phone)) errors.phone = PHONE_ERROR;
+    if (email.trim() && !isValidEmail(email.trim())) errors.email = EMAIL_ERROR;
     // Folded to Latin digits before it is judged or sent, so an Arabic keyboard
     // captures an identity number as readily as it searches for one
     // (app/api/clients/emirates-id-shape.ts). The server normalises again.
@@ -106,13 +163,16 @@ export function ContactForm({
       errors.emiratesId = 'Enter fifteen digits starting 784, or leave this blank.';
     }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      focusFirst(errors);
+      return;
+    }
 
     // Create and edit do not speak the same dialect about an empty field: the create
     // body takes phone and email as optional (absent means "not given"), the edit body
     // as nullable (null means "clear what is there"). Sending null to create is a 400,
     // so a blank field is omitted there and cleared here.
-    const trimmedPhone = phone.trim();
+    const trimmedPhone = normalisePhone(phone.trim());
     const trimmedEmail = email.trim();
     const contactDetails = editing
       ? { phone: trimmedPhone || null, email: trimmedEmail || null }
@@ -198,18 +258,27 @@ export function ContactForm({
       </Select>
       <Field
         id="contact-phone"
-        label="Phone"
+        label="Phone (optional)"
         type="tel"
         placeholder="+971500001234"
         value={phone}
-        onChange={(e) => setPhone(e.target.value)}
+        onChange={(e) => {
+          setPhone(e.target.value);
+          clear('phone');
+        }}
+        hint={PHONE_HINT}
+        error={fieldErrors.phone}
       />
       <Field
         id="contact-email"
-        label="Email"
+        label="Email (optional)"
         type="email"
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        onChange={(e) => {
+          setEmail(e.target.value);
+          clear('email');
+        }}
+        error={fieldErrors.email}
       />
       <Field
         id="contact-emirates-id"

@@ -42,9 +42,12 @@ const FORBIDDEN_ERROR = "You don't have permission to activate this client.";
 export function OverviewTab({
   record,
   onChanged,
+  mayWrite,
 }: {
   record: ClientRecordResponse;
   onChanged: () => void;
+  /** False for a role the status route would refuse: the gate is shown, Activate is not. */
+  mayWrite: boolean;
 }) {
   const { apiFetch } = useAuth();
   const primaryLocation = record.locations.find((l) => l.isPrimary) ?? record.locations[0] ?? null;
@@ -79,7 +82,7 @@ export function OverviewTab({
       {record.status === 'lead' ? (
         <div className="tab-section">
           <ActivationSummary missing={gate.missing} />
-          {gate.ok ? (
+          {gate.ok && mayWrite ? (
             <div className="drawer__actions">
               <Button variant="primary" disabled={busy} onClick={() => void activate()}>
                 {busy ? 'Activating…' : 'Activate'}
@@ -93,7 +96,9 @@ export function OverviewTab({
         <div className="record-facts__row">
           <dt>Date of birth</dt>
           <dd className="numeric">
-            {record.dateOfBirth ? `${record.dateOfBirth} (age ${age})` : 'Not recorded'}
+            {record.dateOfBirth
+              ? `${new Date(record.dateOfBirth).toLocaleDateString('en-GB')} (age ${age})`
+              : 'Not recorded'}
           </dd>
         </div>
         <div className="record-facts__row">

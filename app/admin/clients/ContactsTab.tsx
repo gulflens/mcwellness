@@ -23,10 +23,13 @@ export function ContactsTab({
   clientId,
   record,
   onChanged,
+  mayWrite,
 }: {
   clientId: string;
   record: ClientRecordResponse;
   onChanged: () => void;
+  /** False for a role the write routes would refuse: no Add, no Edit. */
+  mayWrite: boolean;
 }) {
   const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
 
@@ -53,15 +56,19 @@ export function ContactsTab({
                   {contact.hasEmiratesId ? <li>Emirates ID on file</li> : null}
                 </ul>
               </div>
-              <Button variant="quiet" onClick={() => setPanel({ kind: 'edit', contact })}>
-                Edit
-              </Button>
+              {mayWrite ? (
+                <div className="record-row__actions">
+                  <Button variant="quiet" onClick={() => setPanel({ kind: 'edit', contact })}>
+                    Edit
+                  </Button>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
       )}
 
-      {panel.kind === 'closed' ? (
+      {mayWrite && panel.kind === 'closed' ? (
         <Button variant="secondary" onClick={() => setPanel({ kind: 'add' })}>
           Add contact
         </Button>

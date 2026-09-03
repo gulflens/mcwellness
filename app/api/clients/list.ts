@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { ageOn, canActor, hasRole, isoDateIn } from '../../../domain/shared';
@@ -125,6 +126,23 @@ function toClientRows(rows: readonly Row[], today: string): ClientRow[] {
   }));
 }
 
+/**
+ * A search by identity number that named nobody: refused by role, unanswerable
+ * for want of a key, or simply matching no one. Every one of those is still
+ * somebody asking after a person's identity number, and the trail owes an answer
+ * to "who looked, and when" even when the answer to the search was nothing
+ * (audit.md section 5). It never records what was searched for.
+ *
+ * The entity is a fresh id, not the request id: `x-request-id` is supplied by the
+ * caller, so using it here would let any signed-in actor mint an audit row
+ * pointing at a uuid of their choosing — a real client's, for instance. The
+ * request id still reaches `request_id` from the transaction's own setting, so
+ * correlation is unharmed.
+ */
+async function logSearched(db: Db): Promise<void> {
+  await logReads(db, 'client', [{ id: randomUUID(), clientId: null }], 'list');
+}
+
 /** Every client a person sees, listed or looked up, is one audit row (audit.md section 5). */
 async function logListed(db: Db, clients: readonly ClientRow[]): Promise<void> {
   await logReads(
@@ -143,7 +161,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
       // A collection action: nothing here names a specific row (client-record.md
       // section 9), so the request id stands in as the entity, the same convention
       // POST /api/clients uses (issue 13, third review round).
-      await logRefused(c.get('db'), 'client', requestId, null);
+      await logRefused(c.get('db'), 'client', randomUUID(), null);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const query = Query.safeParse(c.req.query());
@@ -192,7 +210,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
     const actor = c.get('actor');
     const requestId = c.get('requestId');
     if (!canActor(actor, { type: 'client.list' }, {}, now())) {
-      await logRefused(c.get('db'), 'client', requestId, null);
+      await logRefused(c.get('db'), 'client', randomUUID(), null);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const bodyJson = await c.req.json().catch(() => null);
@@ -204,13 +222,20 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
       // which is the truth, and not a lecture about a number the practice may not hold.
       return c.json({ error: 'bad_request', code: 'invalid_emirates_id', requestId }, 400);
     }
-    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance')) {
+    // Finance lists the practice by name and record number (the table above) but never
+    // searches by identity number: the stated need for holding one at all is verifying
+    // the adult who consents for a minor or who is refunded, and finance does neither
+    // (docs/SPEC/client-record.md section 2, 00-data-model.md section 11). A role that
+    // may not ask is told nothing about whether the number is on file.
+    if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+      await logSearched(c.get('db'));
       return c.json(ClientListResponse.parse({ clients: [], note: 'schedule' }));
     }
     const identityKeys = c.get('identityKeys');
     if (identityKeys === undefined) {
       // No key, no fingerprint. An empty list would read as "no such client", which
       // would be a lie about the practice rather than about the deployment.
+      await logSearched(c.get('db'));
       return c.json({ error: 'emirates_id_unavailable', requestId }, 503);
     }
     const { rows } = await c
@@ -221,12 +246,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
       ]);
     const clients = toClientRows(rows, isoDateIn(now(), PRACTICE_TIME_ZONE));
     if (clients.length === 0) {
-      // A search that found nobody is still a search by somebody's identity number,
-      // and the trail owes an answer to "who looked, and for what" even when the
-      // answer was nothing (audit.md section 5). No client to name, so the request
-      // id stands in as the entity, the same convention a refused collection action
-      // uses (logRefused above).
-      await logReads(c.get('db'), 'client', [{ id: requestId, clientId: null }], 'list');
+      await logSearched(c.get('db'));
     } else {
       await logListed(c.get('db'), clients);
     }

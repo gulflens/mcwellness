@@ -20,7 +20,7 @@ export function ActivationSummary({
   }
   return (
     <div className="activation-summary">
-      <p className="small muted">{heading}</p>
+      {heading ? <p className="small muted">{heading}</p> : null}
       <ul className="record-facts__list small">
         {missing.map((item) => (
           <li key={item}>{missingLabel(item)}</li>

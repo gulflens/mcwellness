@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
+import { canWriteGoals, canWriteRecord } from './clientAccess';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
@@ -98,7 +99,14 @@ export function searchRequest(
 }
 
 export function ClientsPage() {
-  const { apiFetch } = useAuth();
+  const { apiFetch, session } = useAuth();
+  const actor = session.status === 'signed-in' ? session.actor : null;
+  // The same rule POST /api/clients enforces (app/api/clients/access.ts): a
+  // practitioner or a finance account is never offered a form the routes would
+  // refuse at the end of.
+  const mayEnrol = canWriteRecord(actor, new Date());
+  // An admin writes the record but never sets a goal (client-record.md section 2).
+  const mayWriteGoals = canWriteGoals(actor);
   const [status, setStatus] = useState<string>('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<State>({ kind: 'loading' });
@@ -220,9 +228,11 @@ export function ClientsPage() {
           )
         }
         action={
-          <Button variant="primary" onClick={openWizard}>
-            Enrol a client
-          </Button>
+          mayEnrol ? (
+            <Button variant="primary" onClick={openWizard}>
+              Enrol a client
+            </Button>
+          ) : undefined
         }
       />
       <div className="toolbar">
@@ -270,7 +280,7 @@ export function ClientsPage() {
         />
       ) : null}
       {selected ? <ClientDrawer key={selected.id} client={selected} onClose={closeDrawer} /> : null}
-      {enrolling ? <EnrolmentWizard onDone={closeWizard} /> : null}
+      {enrolling ? <EnrolmentWizard onDone={closeWizard} mayWriteGoals={mayWriteGoals} /> : null}
     </section>
   );
 }

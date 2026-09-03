@@ -139,7 +139,7 @@ function mountWithRecord(record: ReturnType<typeof baseRecord>, onDone = vi.fn()
   }) as unknown as typeof fetch;
   render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <EnrolmentWizard onDone={onDone} />
+      <EnrolmentWizard onDone={onDone} mayWriteGoals />
     </AuthProviderBoundary>,
   );
   return { calls, onDone };
@@ -162,7 +162,7 @@ async function goToSummary() {
   fireEvent.click(screen.getByRole('button', { name: 'Next' })); // location -> goals
   await screen.findByRole('button', { name: 'Add goal' });
   fireEvent.click(screen.getByRole('button', { name: 'Next' })); // goals -> consent
-  await screen.findByText(/documents module/);
+  await screen.findByText('Recording consent arrives with documents.');
   fireEvent.click(screen.getByRole('button', { name: 'Next' })); // consent -> summary
 }
 
