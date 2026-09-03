@@ -227,13 +227,17 @@ function expectEveryContactNamed(rows: ContactNameRow[]): void {
   }
 }
 
-async function contactUpdatesAudited(client: pg.Client): Promise<number> {
-  const { rows } = await client.query<{ n: number }>(
-    "select count(*)::int as n from audit_log where reason = $1 and action = 'update' " +
-      "and entity_type = 'contact'",
+/** How the audit trail read a contact: recorded once, and never amended after. */
+async function contactAudit(client: pg.Client): Promise<{ inserts: number; updates: number }> {
+  const { rows } = await client.query<{ action: string; n: number }>(
+    'select action, count(*)::int as n from audit_log where reason = $1 ' +
+      "and entity_type = 'contact' group by action",
     [SEED_REASON],
   );
-  return rows[0]?.n ?? -1;
+  return {
+    inserts: rows.find((r) => r.action === 'insert')?.n ?? 0,
+    updates: rows.find((r) => r.action === 'update')?.n ?? 0,
+  };
 }
 
 describe('a seeded contact carries a name', () => {
@@ -244,8 +248,12 @@ describe('a seeded contact carries a name', () => {
       await applySeed(fresh, data, KEYS);
       const { rows } = await fresh.query<ContactNameRow>(CONTACT_NAMES_QUERY);
       expectEveryContactNamed(rows);
-      // One audit row per contact: the names are a write like any other.
-      expect(await contactUpdatesAudited(fresh)).toBe(data.contacts.length);
+      // The name is part of recording the contact, not a change made to one:
+      // one insert each, and not a single update anywhere in the trail.
+      expect(await contactAudit(fresh)).toEqual({
+        inserts: data.contacts.length,
+        updates: 0,
+      });
     } finally {
       await fresh.end();
     }
@@ -263,9 +271,15 @@ describe('a seeded contact carries a name', () => {
         ['public', 'contact', CONTACT_NAME_COLUMNS],
       );
       expect(rows).toHaveLength(0);
-      // Nothing was attempted, rather than attempted and swallowed.
-      expect(await contactUpdatesAudited(fresh)).toBe(0);
+      // The same trail as the database that has them: nothing extra either way.
+      expect(await contactAudit(fresh)).toEqual({
+        inserts: data.contacts.length,
+        updates: 0,
+      });
     } finally {
+      // The columns go back before the next file sees this database: six of
+      // them do not reset it themselves, and app.erase_client reads all four.
+      await withContactNameColumns(fresh);
       await fresh.end();
     }
   });

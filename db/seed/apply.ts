@@ -32,49 +32,91 @@ function point(p: { lng: number; lat: number } | null): string | null {
 }
 
 /**
- * The four name columns on `contact` arrive with migration 101, which belongs
- * to the client record's range and is not on main yet. So the names are filled
- * in by their own statement, and that statement asks the database whether it
- * has the columns before it writes: the seed fills a database migrated to
- * either point, and nothing here has to be timed to a merge.
+ * The contact rows, written by one statement that picks its own column list.
  *
- * The question is asked in SQL rather than in TypeScript on purpose. The same
- * statement travels into the rendered script (render.ts), which is applied to a
- * hosted project this process never connects to, so a decision taken here
- * against a laptop would be the wrong decision there. `execute` keeps the
- * update unplanned until the branch is taken, so a database without the columns
- * never resolves them.
+ * `contact`'s four name columns arrive with migration 101, which belongs to the
+ * client record's range. The seed has to fill a database migrated to either
+ * side of it, so the choice is made in SQL rather than in TypeScript: the same
+ * statement is rendered into the script that seeds a hosted project this
+ * process never connects to, and a decision taken here against a laptop would
+ * be the wrong decision there. `execute` keeps each shape unplanned until its
+ * branch is taken, so a database without the columns never resolves them.
  *
- * The values come through a transaction-local setting because a `do` block
- * takes no parameters, and the rendered script inlines that one statement the
- * way it inlines every other. When 101 is on main this collapses into the
- * insert above it and the setting goes away.
+ * The names go into the insert rather than into an update after it. An update
+ * would be a second write on every contact, and the audit trail would carry
+ * twenty-three changes to rows that were never changed — a trail that says a
+ * name was amended when it was only ever recorded.
+ *
+ * Values travel through a transaction-local setting because a `do` block takes
+ * no parameters; the rendered script inlines that one statement the way it
+ * inlines every other. Sealed bytes go as hex, jsonb having no bytea of its
+ * own, and `seq` keeps the rows in the order the generator built them.
  */
-const CONTACT_NAMES_SETTING = 'app.seed_contact_names';
-const FILL_CONTACT_NAMES = `do $fill$
+const CONTACTS_SETTING = 'app.seed_contacts';
+
+type ContactColumn = {
+  name: string;
+  /** Its type in the record definition, which is what jsonb is read through. */
+  type: string;
+  /** How the value reaches the column, when it is not simply the field itself. */
+  value?: string;
+};
+
+const CONTACT_COLUMNS: ContactColumn[] = [
+  { name: 'id', type: 'uuid' },
+  { name: 'tenant_id', type: 'uuid' },
+  { name: 'client_id', type: 'uuid' },
+  { name: 'relationship', type: 'public.relationship' },
+  { name: 'is_legal_guardian', type: 'boolean' },
+  { name: 'can_consent', type: 'boolean' },
+  { name: 'can_receive_reports', type: 'boolean' },
+  { name: 'can_pay', type: 'boolean' },
+  { name: 'phone', type: 'text' },
+  { name: 'email', type: 'text' },
+  { name: 'whatsapp_opt_in', type: 'boolean' },
+  { name: 'emirates_id_encrypted', type: 'text', value: "decode(v.emirates_id_encrypted, 'hex')" },
+  { name: 'emirates_id_hash', type: 'text', value: "decode(v.emirates_id_hash, 'hex')" },
+  { name: 'created_by', type: 'uuid' },
+];
+
+/** Migration 101's four. Present in the payload always; in the statement only when the table has them. */
+const CONTACT_NAME_COLUMNS: ContactColumn[] = [
+  { name: 'given_name', type: 'text' },
+  { name: 'family_name', type: 'text' },
+  { name: 'given_name_ar', type: 'text' },
+  { name: 'family_name_ar', type: 'text' },
+];
+
+/** Not a column of `contact`: the generator's own order, so the rows go in as they were built. */
+const CONTACT_SEQUENCE: ContactColumn = { name: 'seq', type: 'int' };
+
+function contactInsert(columns: ContactColumn[]): string {
+  const definition = [...columns, CONTACT_SEQUENCE].map((c) => `${c.name} ${c.type}`).join(', ');
+  return (
+    `insert into public.contact (${columns.map((c) => c.name).join(', ')})\n` +
+    `      select ${columns.map((c) => c.value ?? `v.${c.name}`).join(', ')}\n` +
+    `        from pg_catalog.jsonb_to_recordset(` +
+    `pg_catalog.current_setting('${CONTACTS_SETTING}')::jsonb)\n` +
+    `          as v(${definition})\n` +
+    `       order by v.seq`
+  );
+}
+
+const INSERT_CONTACTS = `do $contacts$
 begin
   -- All four, not one of them: a database part-way through the migration, or
   -- one where a column was renamed, is not a database these names fit.
   if (
     select count(*) from information_schema.columns
     where table_schema = 'public' and table_name = 'contact'
-      and column_name in ('given_name', 'family_name', 'given_name_ar', 'family_name_ar')
-  ) = 4 then
-    execute $names$
-      update public.contact as c
-         set given_name = v.given_name,
-             family_name = v.family_name,
-             given_name_ar = v.given_name_ar,
-             family_name_ar = v.family_name_ar
-        from pg_catalog.jsonb_to_recordset(
-               pg_catalog.current_setting('${CONTACT_NAMES_SETTING}')::jsonb)
-          as v(id uuid, given_name text, family_name text,
-               given_name_ar text, family_name_ar text)
-       where c.id = v.id
-    $names$;
+      and column_name in (${CONTACT_NAME_COLUMNS.map((c) => `'${c.name}'`).join(', ')})
+  ) = ${CONTACT_NAME_COLUMNS.length} then
+    execute $named$${contactInsert([...CONTACT_COLUMNS, ...CONTACT_NAME_COLUMNS])}$named$;
+  else
+    execute $plain$${contactInsert(CONTACT_COLUMNS)}$plain$;
   end if;
 end
-$fill$`;
+$contacts$`;
 
 /** A nonce that never repeats across contacts and never changes for one, so the seed is stable. */
 function nonceFor(contactId: string): Buffer {
@@ -396,39 +438,43 @@ export async function applySeed(
         created_by: owner,
       });
     }
-    for (const c of data.contacts) {
-      const sealed =
-        c.emiratesId === null ? null : sealEmiratesId(c.emiratesId, keys, nonceFor(c.id), c.id);
-      const hash = c.emiratesId === null ? null : emiratesIdHash(c.emiratesId, keys);
-      await insert('contact', {
-        id: c.id,
-        tenant_id: t.id,
-        client_id: c.clientId,
-        relationship: c.relationship,
-        is_legal_guardian: c.isLegalGuardian,
-        can_consent: c.canConsent,
-        can_receive_reports: c.canReceiveReports,
-        can_pay: c.canPay,
-        phone: c.phone,
-        email: c.email,
-        whatsapp_opt_in: c.whatsappOptIn,
-        emirates_id_encrypted: sealed,
-        emirates_id_hash: hash,
-        created_by: owner,
-      });
-    }
-    await client.query(`select set_config('${CONTACT_NAMES_SETTING}', $1, true)`, [
+    // One statement for all of them, because the column list is the database's
+    // to choose (see INSERT_CONTACTS). The audit trigger is per row, so the
+    // trail reads exactly as it did when these were twenty-three inserts.
+    await client.query(`select set_config('${CONTACTS_SETTING}', $1, true)`, [
       JSON.stringify(
-        data.contacts.map((c) => ({
-          id: c.id,
-          given_name: c.givenName,
-          family_name: c.familyName,
-          given_name_ar: c.givenNameAr,
-          family_name_ar: c.familyNameAr,
-        })),
+        data.contacts.map((c, i) => {
+          const sealed =
+            c.emiratesId === null ? null : sealEmiratesId(c.emiratesId, keys, nonceFor(c.id), c.id);
+          const hash = c.emiratesId === null ? null : emiratesIdHash(c.emiratesId, keys);
+          return {
+            seq: i + 1,
+            id: c.id,
+            tenant_id: t.id,
+            client_id: c.clientId,
+            relationship: c.relationship,
+            is_legal_guardian: c.isLegalGuardian,
+            can_consent: c.canConsent,
+            can_receive_reports: c.canReceiveReports,
+            can_pay: c.canPay,
+            phone: c.phone,
+            email: c.email,
+            whatsapp_opt_in: c.whatsappOptIn,
+            emirates_id_encrypted: sealed === null ? null : sealed.toString('hex'),
+            emirates_id_hash: hash === null ? null : hash.toString('hex'),
+            created_by: owner,
+            given_name: c.givenName,
+            family_name: c.familyName,
+            given_name_ar: c.givenNameAr,
+            family_name_ar: c.familyNameAr,
+          };
+        }),
       ),
     ]);
-    await client.query(FILL_CONTACT_NAMES);
+    await client.query(INSERT_CONTACTS);
+    // What the statement above wrote: it is one statement, so nothing counts it
+    // for us, and the rows are the ones assertSynthetic already vouched for.
+    counts.contact = data.contacts.length;
     for (const c of data.clients) {
       await client.query('update client set primary_contact_id = $1 where id = $2', [
         c.primaryContactId,
