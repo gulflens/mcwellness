@@ -230,6 +230,10 @@ down never stops the API from starting — a call against it answers 503
 One bucket, in the same project, **once**, from the dashboard under Storage,
 "New bucket":
 
+The bucket sits in the project, so it sits where the project sits: **Mumbai,
+`ap-south-1`, outside the UAE** (docs/COMPLIANCE/approved-vendors.md). It holds
+synthetic files only, for the same reason the database does.
+
 - Name: `documents`
 - Public: **off**. Nothing in it is ever served from a public URL; the API
   signs a link good for five minutes when someone needs to see a file.
@@ -247,9 +251,13 @@ a client, `tenant/<tenantId>/practice/<documentId>` for a document with no
 client. They are made of ids alone, so a key says nothing about whose file it
 is.
 
-**The consent wording has to be uploaded once, by hand.** `pnpm seed` writes
-those eight files into the local folder, but a rendered seed script carries
-only the rows: each consent wording document row holds a `storage_key` and
+**The consent wording has to be uploaded once, by hand, whichever route
+seeded the rows.** `pnpm seed` writes those eight files into the local folder
+and nowhere else, deliberately — it holds no storage credential and never
+reaches a bucket — so pointing it at a hosted database fills the rows and
+leaves the bytes on the laptop. It says so on the way past: seeding a
+non-local database prints the same warning this section carries. The rendered
+seed script carries only the rows either way: each consent wording document row holds a `storage_key` and
 the sha256 of its file, and the bytes travel separately. After applying a
 rendered seed to a hosted project, upload each file in `docs/CONSENT` (all
 but `README.md`) into the `documents` bucket at exactly the `storage_key` its
@@ -257,7 +265,9 @@ row names — the script's own header repeats this. Until that is done the rows
 exist and point at nothing, which is visible the moment anyone opens a
 consent. The mapping is stable: the seed's document ids are fixed, so
 `select purpose, locale, storage_key from document where kind = 'consent_text'
-order by purpose, locale` gives the list to work from.
+order by purpose, locale` gives the list to work from. Until each file is in
+the bucket at exactly its row's `storage_key`, `exists()` answers false for it
+and anyone opening a consent sees nothing behind the wording.
 
 ## 6. The app's build settings
 

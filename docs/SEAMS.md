@@ -23,11 +23,47 @@ capability that sends personal data anywhere is approved before it exists.
 **The interface** — `domain/shared/storage.ts`, browser-safe, four calls:
 
 ```
-put(key, bytes, mimeType) -> { sha256, size }
+put(key, bytes, mimeType, { overwrite? }) -> { sha256, size }
 getSignedUrl(key, ttlSeconds) -> url
 delete(key)
 exists(key)
 ```
+
+**A document is written once.** `overwrite` is **false by default on both
+implementations**, and a second write to a key that already holds an object is
+refused with `StorageConflictError`, which the API answers as **409
+`document_exists`** — the store answered, and its answer was no, which is not
+an outage. The bytes behind a filed consent, a signed report or a piece of
+consent wording are the evidence of what a person was shown and agreed to, and
+a store that quietly accepts a second write over the first is a store where
+that evidence can be changed after the fact. Neither implementation checks and
+then writes: the bucket is asked with `x-upsert: false` and answers 409, the
+folder opens with `O_EXCL`, so there is no window between the two. A caller
+that genuinely means to replace an object — a retry that knows the first
+attempt half-finished — passes `overwrite: true` and means it.
+
+**How long the bytes are kept.** `documentRetentionUntil(kind, uploadedAt)`,
+next to the seam in `domain/shared/storage.ts`, is the one piece of
+arithmetic: five years from upload for a practice document, written to
+`document.retention_until` at upload. It answers **null for a `consent_text`
+document**, which is exempt from that clock — it is kept until no `consent`
+references it and the last referencing client's own retention has expired
+(`docs/SPEC/00-data-model.md` section 3, migration 903). So **a deletion job
+must check what still references a document before it calls `storage.delete`**:
+deleting on `retention_until` alone would take a wording out from under a
+consent that is still live, and null there means "not on an upload clock",
+never "keep forever".
+
+**Every route that signs a link calls `auditDocumentRead(db, document)` first**
+(`app/api/_middleware/storage/audit.ts`). A signed link is a read whether or
+not the bytes are ever fetched: handing someone the means to open a client's
+file is the act worth recording. Signing is the only place the trail can be
+written — the folder implementation serves its own bytes from ahead of the
+authentication fence, where there is no actor to name, and the bucket's bytes
+never reach this API at all — so the rule belongs to the seam rather than to
+any one route. The helper takes the document and nothing else: the actor, the
+roles, the reason and the request id all come off the transaction's own
+settings inside the SQL, so no caller can attribute a read to someone else.
 
 Every file the practice holds is a `document` row (`docs/SPEC/00-data-model.md`
 section 3) whose `storage_key` names the bytes. Nothing else knows how those
@@ -54,10 +90,25 @@ Private always: nothing is ever served from a public URL, every fetch goes
 through a signed URL good for five minutes by default and an hour at the very
 most. The credential is `SUPABASE_STORAGE_KEY`, a service credential — never
 the anon key, which the browser holds and which storage does not fence the
-way row security fences the database.
+way row security fences the database. **One variable, with no fallback**: the
+API does not stand `SUPABASE_SERVICE_ROLE_KEY` in when it is absent, because a
+variable whose whole purpose is to say "this credential may write documents"
+means nothing if another one is used instead, and the old fallback silently
+handed storage the widest credential in the project to a deployment that had
+only ever configured the database. A blank or whitespace-only value is read as
+absent. When the value is a JWT it names its own role, and one claiming `anon`
+is refused by name at startup rather than on the first upload someone attempts
+weeks later; the newer key formats are not JWTs and claim nothing, so nothing
+is guessed from them.
 
 **The fallback** — `app/api/_middleware/storage/local-disk.ts`. A folder,
-`STORAGE_DIR`, `.storage/` by default and git-ignored. Same semantics: bytes
+`STORAGE_DIR`, `.storage/` by default and git-ignored. **It must sit outside
+the repository, or be git-ignored inside it**: the default is both, and a
+`STORAGE_DIR` pointed somewhere tracked is how a practice's documents end up
+in a commit. Every read and every write also asks the filesystem where the
+path really leads (`realpath`), not only where its name says it does, so a
+symlink planted in the folder by anything sharing the machine cannot make the
+store read `/etc` or write over something it does not own. Same semantics: bytes
 in, sha256 out, a signed URL that expires, delete, exists. Its signed URLs
 point back at the API's own `GET /api/storage/:key`, mounted only when this
 implementation is the one chosen. That route sits ahead of the authentication
