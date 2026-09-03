@@ -123,7 +123,14 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // No opening event in the batch: this belongs to a visit already open,
     // and the rest of the flush is ./events.ts's.
     if (!batch.data.events.some((event) => event.kind === 'session_started')) {
-      return appendEvents(c, sessionId, practitionerId, batch.data.events, now);
+      return appendEvents(
+        c,
+        sessionId,
+        practitionerId,
+        batch.data.events,
+        batch.data.point ?? null,
+        now,
+      );
     }
 
     // Opening a visit is the narrower shape: exactly one of clientId and

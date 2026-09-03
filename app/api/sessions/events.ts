@@ -11,6 +11,7 @@ import {
   lastSeqOf,
   loadSession,
   readEvents,
+  writeCheckedOutPoint,
   writeProjection,
   type SessionRow,
 } from './session-row';
@@ -20,6 +21,7 @@ import {
   type EventRefusalReason,
   type SessionEventWire,
 } from './schema';
+import { PHOTO_STORAGE_AVAILABLE } from './photo-availability';
 
 /**
  * The rest of the outbox's flush: every event after the one that opened the
@@ -81,6 +83,13 @@ export async function appendEvents(
   sessionId: string,
   practitionerId: string,
   events: readonly SessionEventWire[],
+  /**
+   * The coordinate the practitioner is standing on, carried beside the batch
+   * rather than inside an event — session-level, exactly as check-in carries
+   * its own (domain/session/events.ts explains why). Read only when the batch
+   * carries the check-out.
+   */
+  point: { lat: number; lng: number } | null,
   now: () => Date,
 ): Promise<Response> {
   const db = c.get('db');
@@ -107,6 +116,7 @@ export async function appendEvents(
 
   const acknowledged: string[] = [];
   const refused: Refusal[] = [];
+  const stored: string[] = [];
   const nowMs = now().getTime();
   const checkedInMs = session.checked_in_at.getTime();
   // Asked once per request, not once per event: a client's consent does not
@@ -131,6 +141,9 @@ export async function appendEvents(
     }
 
     if (event.kind === 'photo_captured') {
+      // Consent first, and it is the more important of the two refusals: a
+      // household that has not agreed to photographs must be told that,
+      // whatever the state of the storage seam.
       photoConsent ??= await hasPhotoConsent(db, sessionId);
       if (!photoConsent) {
         await logRefusal(db, 'session_event', event.id, session.client_id, [
@@ -139,13 +152,44 @@ export async function appendEvents(
         refused.push({ id: event.id, reason: 'consent_missing_photo_video' });
         continue;
       }
+      if (!PHOTO_STORAGE_AVAILABLE) {
+        // Nowhere to put the bytes yet (./photo-availability.ts). Accepting
+        // the event would mean filing a document row against a key nothing
+        // ever uploads to, which is a record of a photograph that does not
+        // exist; refusing it is the honest answer and the device stops
+        // asking.
+        await logRefusal(db, 'session_event', event.id, session.client_id, [
+          'photo_storage_unavailable',
+        ]);
+        refused.push({ id: event.id, reason: 'photo_storage_unavailable' });
+        continue;
+      }
     }
 
-    const stored = await insertEvent(db, session, event, actor.userId);
-    if (stored === 'duplicate_seq') {
+    if (event.kind === 'checked_out' && point !== null) {
+      if (!session.has_checked_in_point) {
+        // "The position only if sharing was switched on at check-in"
+        // (section 3.6). Enforced here rather than trusted from the device:
+        // a practitioner who declined at the door declined for the visit.
+        await logRefusal(db, 'session_event', event.id, session.client_id, [
+          'location_not_shared_at_check_in',
+        ]);
+        refused.push({ id: event.id, reason: 'location_not_shared_at_check_in' });
+        continue;
+      }
+    }
+
+    const outcome = await insertEvent(db, session, event, actor.userId);
+    if (outcome === 'duplicate_seq') {
       await logRefusal(db, 'session_event', event.id, session.client_id, ['duplicate_seq']);
       refused.push({ id: event.id, reason: 'duplicate_seq' });
       continue;
+    }
+    if (outcome === 'stored') {
+      stored.push(event.id);
+      if (event.kind === 'checked_out' && point !== null) {
+        await writeCheckedOutPoint(db, sessionId, point);
+      }
     }
     // 'stored' and 'already_held' are the same answer to the device: the
     // server has this event and the outbox may let it go.
@@ -154,10 +198,14 @@ export async function appendEvents(
 
   const stream = await readEvents(db, sessionId);
   const projection = replayEvents(stream);
-  if (projection) {
+  // Only when something was actually stored, and then only when the
+  // projection it folds to differs from the one already on the row: every
+  // update writes an audit row, and a visit copied out unchanged on every
+  // thirty-second retry buries the changes that matter.
+  if (projection && stored.length > 0) {
     await writeProjection(
       db,
-      sessionId,
+      session,
       projection,
       scoreSignalQuality(projection.telemetry),
       deriveObservationFlag(projection.observations),

@@ -1,10 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
+import { z } from 'zod';
 import {
   deriveObservationFlag,
   replayEvents,
   scoreSignalQuality,
-  type PhotoCapturedPayload,
   type SessionProjection,
 } from '@domain/session';
 import { hasRole } from '@domain/shared';
@@ -28,14 +27,22 @@ import { loadSession, readEvents, resolvePractitioner, type SessionRow } from '.
  * 1. the session's own row — status `completed`, `closed_at`, `closed_by`,
  *    and the projection of every event the server holds, including the
  *    signal quality score computed by domain/session/scoreSignalQuality.ts;
- * 2. the setup photo's `document` row, when one was taken and `photo_video`
- *    consent is active;
- * 3. `visit_actuals` — the drive, the crossings, the parking and the access
+ * 2. `visit_actuals` — the drive, the crossings, the parking and the access
  *    sentence the practitioner recorded at the door;
- * 4. the appointment's own status, through the one narrow door
+ * 3. the appointment's own status, through the one narrow door
  *    app.complete_appointment_for_session (302_session_close.sql);
- * 5. the audit rows: the triggers write what changed, and `session_closed`
+ * 4. the audit rows: the triggers write what changed, and `session_closed`
  *    is written here as the sensitive action it is, carrying the request id.
+ *
+ * The setup photo files no `document` row, because there is nowhere to put
+ * its bytes yet: see ./photo-availability.ts, and
+ * docs/CHANGE-REQUESTS/session-capture-02.md section 2. The route refuses
+ * the event itself, so a visit never reaches here holding a photograph.
+ *
+ * The check-out coordinate is not written here either. It is recorded when
+ * the check-out event arrives (./events.ts), session-level and once, and it
+ * never travels inside an event payload where the audit trail's redaction
+ * could not see it.
  *
  * What deliberately does not land: the entitlement. Section 4.2 has
  * completing a session consume exactly one credit, and that is the billing
@@ -51,22 +58,21 @@ import { loadSession, readEvents, resolvePractitioner, type SessionRow } from '.
 
 const PRACTITIONER_ROLES = ['practitioner', 'lead_practitioner'] as const;
 
-const PHOTO_EXTENSIONS: Record<PhotoCapturedPayload['mimeType'], string> = {
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-  'image/png': 'png',
-};
-
-/** Five years from the close, the retention floor for a client's record (CLAUDE.md rule 8). */
-const RETENTION_YEARS = 5;
+const Params = z.object({ id: z.uuid() });
 
 /**
- * Where the setup photo lives. Derived from the session's own id, never from
- * anything the device said: a caller-supplied key is a key that can name
- * another visit's object.
+ * Where the setup photo will live once there is somewhere to put it: derived
+ * from the session's own id, never from anything the device said, because a
+ * caller-supplied key is a key that can name another visit's object. Kept
+ * here, unused, as the convention the storage seam's `put` will be given —
+ * see ./photo-availability.ts.
  */
-export function setupPhotoKey(sessionId: string, mimeType: PhotoCapturedPayload['mimeType']) {
-  return `sessions/${sessionId}/setup-photo.${PHOTO_EXTENSIONS[mimeType]}`;
+export function setupPhotoKey(
+  sessionId: string,
+  mimeType: 'image/jpeg' | 'image/webp' | 'image/png',
+): string {
+  const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/webp' ? 'webp' : 'png';
+  return `sessions/${sessionId}/setup-photo.${extension}`;
 }
 
 function durationSeconds(projection: SessionProjection): number | null {
@@ -82,7 +88,14 @@ export function mountClose(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     const actor = c.get('actor');
     const requestId = c.get('requestId');
     const db = c.get('db');
-    const sessionId = c.req.param('id');
+    // Validated before anything is written or logged: an id that is not a
+    // uuid reaches audit_log.entity_id, fails on its type, aborts the
+    // transaction and takes the refusal it was meant to record down with it.
+    const params = Params.safeParse(c.req.param());
+    if (!params.success) {
+      return c.json({ error: 'bad_request', requestId }, 400);
+    }
+    const sessionId = params.data.id;
 
     if (!hasRole(actor, ...PRACTITIONER_ROLES)) {
       await logRefusal(db, 'session', sessionId, null, ['wrong_role']);
@@ -114,19 +127,7 @@ export function mountClose(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     if (session.closed_at !== null) {
       // Already closed. The device asking again is a retry of a response it
       // never saw, not a second close, so it gets the first one's answer.
-      return c.json(
-        CloseResponse.parse({
-          status: 'closed',
-          sessionId,
-          closedAt: session.closed_at.toISOString(),
-          signalQualityScore:
-            session.signal_quality_score === null ? null : Number(session.signal_quality_score),
-          durationSeconds: projection ? durationSeconds(projection) : null,
-          observationFlag: deriveObservationFlag(projection?.observations ?? null),
-          setupPhotoDocumentId: session.setup_photo_document_id,
-        }),
-        200,
-      );
+      return c.json(closedAnswer(session, projection), 200);
     }
     if (session.status !== 'in_progress') {
       await logRefusal(db, 'session', sessionId, session.client_id, ['session_not_open']);
@@ -146,19 +147,21 @@ export function mountClose(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     const closedAt = now();
     const score = scoreSignalQuality(projection.telemetry);
     const observationFlag = deriveObservationFlag(projection.observations);
-    const photoDocumentId = await filePhoto(db, session, projection, actor.userId, closedAt);
 
     // One update, not two: the immutability trigger (302) refuses any update
     // to a row that is already closed, so the projection and the close land
     // in the same statement or the second would be refused by the first.
-    await db.query(
+    //
+    // `closed_at is null` in the predicate is what makes closing
+    // exactly-once. Two requests racing each other both read an open visit;
+    // only one of them updates a row, and the other must not go on to write
+    // a second audit row and answer with a close time it invented.
+    const updated = await db.query(
       "update session set status = 'completed', closed_at = $2, closed_by = $3, " +
         'started_at = $4, ended_at = $5, checked_out_at = $6, ' +
-        'checked_out_point = case when $7::float8 is null then null else ' +
-        "extensions.st_geogfromtext('SRID=4326;POINT(' || $7::float8 || ' ' || $8::float8 || ')') end, " +
-        'preflight = $9::jsonb, signal_check = $10::jsonb, pre_rating = $11::jsonb, ' +
-        'post_rating = $12::jsonb, telemetry = $13::jsonb, observations = $14::jsonb, ' +
-        'observation_flag = $15, signal_quality_score = $16, setup_photo_document_id = $17 ' +
+        'preflight = $7::jsonb, signal_check = $8::jsonb, pre_rating = $9::jsonb, ' +
+        'post_rating = $10::jsonb, telemetry = $11::jsonb, observations = $12::jsonb, ' +
+        'observation_flag = $13, signal_quality_score = $14 ' +
         'where id = $1 and tenant_id = app.current_tenant_id() and closed_at is null',
       [
         sessionId,
@@ -167,8 +170,6 @@ export function mountClose(api: Hono<ApiEnv>, now: () => Date = () => new Date()
         projection.startedAt,
         projection.endedAt,
         projection.checkedOutAt,
-        projection.checkedOutPoint?.lng ?? null,
-        projection.checkedOutPoint?.lat ?? null,
         JSON.stringify(projection.preflight),
         projection.signal === null ? null : JSON.stringify(projection.signal),
         JSON.stringify(projection.preRating),
@@ -177,9 +178,18 @@ export function mountClose(api: Hono<ApiEnv>, now: () => Date = () => new Date()
         projection.observations === null ? null : JSON.stringify(projection.observations),
         observationFlag,
         score,
-        photoDocumentId,
       ],
     );
+    if (updated.rowCount !== 1) {
+      // Somebody else closed it between the read above and this write. Read
+      // back what they wrote and answer with that, exactly as the idempotent
+      // branch does — never a second close, never a second audit row.
+      const already = await loadSession(db, sessionId);
+      if (!already?.closed_at) {
+        return c.json({ error: 'conflict', requestId, detail: 'session_not_open' }, 409);
+      }
+      return c.json(closedAnswer(already, projection), 200);
+    }
 
     await writeVisitActuals(db, session, parsed.data.visitActuals, actor.userId);
 
@@ -198,65 +208,25 @@ export function mountClose(api: Hono<ApiEnv>, now: () => Date = () => new Date()
         signalQualityScore: score,
         durationSeconds: durationSeconds(projection),
         observationFlag,
-        setupPhotoDocumentId: photoDocumentId,
+        setupPhotoDocumentId: null,
       }),
       200,
     );
   });
 }
 
-/**
- * Files the setup photo as a `document` (00-data-model.md section 3) and
- * returns its id, or null when no photo was taken or consent does not allow
- * one.
- *
- * Consent is checked here as well as at append time (./events.ts), because
- * it may have been withdrawn between the two and section 4's rule is that
- * every use is checked at the moment of use, not once at the start.
- *
- * The bytes are not here. The API's body cap is 64 KB and a compressed photo
- * is up to 1 MB, so the device holds them in its own outbox until the upload
- * door exists; this writes the row, against the key convention the trunk's
- * StorageProvider will put them under (`put(key, bytes, mimeType)`, landing
- * in shared-zone round 14). The change request for that door, and for the
- * body-cap exemption it needs, is docs/CHANGE-REQUESTS/session-capture-02.md;
- * the database test for this path is marked accordingly.
- */
-async function filePhoto(
-  db: Db,
-  session: SessionRow,
-  projection: SessionProjection,
-  userId: string,
-  at: Date,
-): Promise<string | null> {
-  const photo = projection.photo;
-  if (!photo) return null;
-
-  const { rows } = await db.query<{ active: boolean }>(
-    "select app.session_consent_active($1, 'photo_video') as active",
-    [session.id],
-  );
-  if (rows[0]?.active !== true) return null;
-
-  const documentId = randomUUID();
-  const retentionUntil = new Date(at);
-  retentionUntil.setUTCFullYear(retentionUntil.getUTCFullYear() + RETENTION_YEARS);
-
-  await db.query(
-    'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256, ' +
-      'uploaded_by, retention_until, is_immutable, created_by) values ' +
-      "($1, app.current_tenant_id(), $2, 'setup_photo', $3, $4, decode($5, 'hex'), $6, $7, true, $6)",
-    [
-      documentId,
-      session.client_id,
-      setupPhotoKey(session.id, photo.mimeType),
-      photo.mimeType,
-      photo.sha256,
-      userId,
-      retentionUntil.toISOString(),
-    ],
-  );
-  return documentId;
+/** The answer for a visit that is already closed: what the row says, never a fresh reading. */
+function closedAnswer(session: SessionRow, projection: SessionProjection | null): CloseResponse {
+  return CloseResponse.parse({
+    status: 'closed',
+    sessionId: session.id,
+    closedAt: session.closed_at?.toISOString() ?? null,
+    signalQualityScore:
+      session.signal_quality_score === null ? null : Number(session.signal_quality_score),
+    durationSeconds: projection ? durationSeconds(projection) : null,
+    observationFlag: deriveObservationFlag(projection?.observations ?? null),
+    setupPhotoDocumentId: session.setup_photo_document_id,
+  });
 }
 
 async function writeVisitActuals(

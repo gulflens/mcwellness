@@ -236,6 +236,12 @@ export const EVENT_REFUSAL_REASONS = [
   'duplicate_seq',
   'device_clock_out_of_range',
   'consent_missing_photo_video',
+  // Nowhere to put a photograph's bytes yet — see ./photo-availability.ts.
+  // Temporary by design; it goes when the storage seam lands.
+  'photo_storage_unavailable',
+  // A check-out coordinate on a visit the practitioner declined to share at
+  // the door. Section 3.6's rule, held by the server rather than the device.
+  'location_not_shared_at_check_in',
 ] as const;
 export type EventRefusalReason = (typeof EVENT_REFUSAL_REASONS)[number];
 
