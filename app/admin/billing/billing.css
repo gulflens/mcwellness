@@ -279,3 +279,29 @@
   align-items: center;
   min-block-size: var(--row);
 }
+
+/* Two quiet actions on a row: they read as one thing, not as a pair of buttons. */
+.row-actions {
+  display: flex;
+  gap: var(--s-3);
+  align-items: baseline;
+}
+
+/* The sentence about VAT, above the invoice book. */
+.vat-status {
+  margin: 0 0 var(--s-5);
+}
+
+/* The drafted message, shown as written before anybody sends it. */
+.message {
+  margin: 0;
+  padding: var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--paper);
+  font: inherit;
+  font-size: var(--t-small);
+  line-height: var(--lh-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

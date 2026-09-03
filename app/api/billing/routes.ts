@@ -7,6 +7,8 @@ import { mountInvoices } from './invoices';
 import { mountPackages } from './packages';
 import { mountPayments } from './payments';
 import { mountPrices } from './prices';
+import { mountReceipts } from './receipts';
+import { mountSendOptions } from './send-options';
 import { mountRefundQuotes } from './refunds';
 import { mountSales } from './sales';
 import { mountSummary } from './summary';
@@ -32,6 +34,8 @@ export function mountBilling(api: Hono<ApiEnv>, now: () => Date = () => new Date
   mountDocuments(api, now);
   mountDocumentSending(api, now);
   mountSummary(api, now);
+  mountReceipts(api, now);
+  mountSendOptions(api, now);
   mountRefundQuotes(api, now);
   mountWaivers(api, now);
   mountExtensions(api, now);

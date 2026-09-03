@@ -10,16 +10,18 @@ import { InvoicesSection } from './InvoicesSection';
 import { formatFils } from './money';
 import { PackagesSection } from './PackagesSection';
 import { PriceDrawer } from './PriceDrawer';
+import { ReceiptsSection } from './ReceiptsSection';
 
 /**
  * The admin console's money screen, in the shape ClientsPage.tsx set: a page
  * header, loading and error notes, tables, and a right-side drawer to write
  * something.
  *
- * Four sections, one at a time. Prices is what the practice charges for a
+ * Five sections, one at a time. Prices is what the practice charges for a
  * single visit; Packages is what it charges for a programme; Balances is what
- * one family has left and owes; Invoices is the book. Each fetches only when
- * it is opened — the screen asks for nothing it is not showing, so opening
+ * one family has left and owes; Invoices is the book, with the month's three
+ * figures above it; Receipts is the money received. Each fetches only when it
+ * is opened — the screen asks for nothing it is not showing, so opening
  * Billing costs one request, as it always did.
  *
  * Every figure on this screen is formatted by `money.ts` and by nothing else,
@@ -34,6 +36,7 @@ const SECTIONS = [
   { key: 'packages', label: 'Packages' },
   { key: 'balances', label: 'Balances' },
   { key: 'invoices', label: 'Invoices' },
+  { key: 'receipts', label: 'Receipts' },
 ] as const;
 type SectionKey = (typeof SECTIONS)[number]['key'];
 
@@ -243,6 +246,7 @@ export function BillingPage() {
       {section === 'packages' ? <PackagesSection canWrite={canWrite} /> : null}
       {section === 'balances' ? <BalancesSection canWrite={canWrite} /> : null}
       {section === 'invoices' ? <InvoicesSection /> : null}
+      {section === 'receipts' ? <ReceiptsSection /> : null}
     </section>
   );
 }

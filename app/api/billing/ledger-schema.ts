@@ -299,6 +299,13 @@ export type InvoiceRow = z.infer<typeof InvoiceRow>;
 
 export const InvoicesResponse = z.object({
   invoices: z.array(InvoiceRow),
+  /**
+   * Whether the practice is registered for VAT *now*. Not a fact about any
+   * invoice in the list — each of those carries its own snapshot of what was
+   * true on the day — but what the screen needs to say plainly why the VAT
+   * column reads as it does.
+   */
+  practiceVatRegistered: z.boolean(),
   /** True when more matched than the page holds. */
   truncated: z.boolean().optional(),
 });
