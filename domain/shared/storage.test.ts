@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  alreadyStored,
   assertValidStorageKey,
   clientDocumentKey,
+  documentRetentionUntil,
+  DOCUMENT_RETENTION_YEARS,
   isValidStorageKey,
   practiceDocumentKey,
+  StorageConflictError,
   StorageUnavailableError,
 } from './storage';
 
@@ -70,5 +74,48 @@ describe('StorageUnavailableError', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.name).toBe('StorageUnavailableError');
     expect(error.cause).toBe(cause);
+  });
+});
+
+describe('StorageConflictError', () => {
+  it('is its own type, so an outage and a refusal are never the same answer', () => {
+    const error = alreadyStored();
+
+    expect(error).toBeInstanceOf(StorageConflictError);
+    expect(error).not.toBeInstanceOf(StorageUnavailableError);
+    expect(error.name).toBe('StorageConflictError');
+  });
+
+  it('names no key: a key names a document', () => {
+    expect(alreadyStored().message).toBe('Something is already stored under that key.');
+  });
+});
+
+describe('how long a document is kept', () => {
+  const UPLOADED = new Date('2026-09-03T08:30:00.000Z');
+
+  it('gives a practice document five years from its upload, not from now', () => {
+    const until = documentRetentionUntil('certificate', UPLOADED);
+
+    expect(DOCUMENT_RETENTION_YEARS).toBe(5);
+    expect(until?.toISOString()).toBe('2031-09-03T08:30:00.000Z');
+    // Pure: the clock is an argument, so the same upload always answers the same.
+    expect(documentRetentionUntil('report', UPLOADED)?.toISOString()).toBe(until?.toISOString());
+    // And the date handed in is left as it was found.
+    expect(UPLOADED.toISOString()).toBe('2026-09-03T08:30:00.000Z');
+  });
+
+  it('leaves a leap day on a real date rather than inventing the 29th', () => {
+    // 2028 is a leap year, 2033 is not: 29 February + five years is 1 March.
+    const until = documentRetentionUntil('report', new Date('2028-02-29T00:00:00.000Z'));
+
+    expect(until?.toISOString()).toBe('2033-03-01T00:00:00.000Z');
+  });
+
+  it('puts consent wording on no clock at all, and says so with null', () => {
+    // Not "forever by oversight": kept while a consent still points at it
+    // (migration 903, docs/SEAMS.md), which is a question about references
+    // rather than about a date, so no date is the honest answer.
+    expect(documentRetentionUntil('consent_text', UPLOADED)).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ import {
   type RequestContextDeps,
 } from './_middleware/request-context';
 import {
+  isStorageConflict,
   isStorageUnavailable,
   mountLocalStorage,
   withStorage,
@@ -82,10 +83,20 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     }
     // A database message can carry row values; only the shape of the failure is logged.
     const requestId = c.get('requestId') ?? c.res.headers.get('X-Request-Id') ?? null;
-    // A store that is down is not a bug in the record it belongs to: it says so.
+    // A store that is down is not a bug in the record it belongs to: it says
+    // so. The message is logged here, unlike a database's: every one of them
+    // is written in domain/shared/storage.ts and its implementations, none
+    // names a key or echoes a vendor's body, and without it an outage and a
+    // refusal are the same line in the log.
     if (isStorageUnavailable(error)) {
-      console.error(JSON.stringify({ requestId, name: error.name }));
+      console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
       return c.json({ error: 'storage_unavailable', requestId }, 503);
+    }
+    // Something is already filed under that key and the caller did not ask to
+    // replace it. Not an outage, and not an internal error: a plain refusal.
+    if (isStorageConflict(error)) {
+      console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
+      return c.json({ error: 'document_exists', requestId }, 409);
     }
     console.error(
       JSON.stringify({ requestId, name: error.name, code: (error as { code?: string }).code }),

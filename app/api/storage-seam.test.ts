@@ -32,6 +32,11 @@ const rejectingVerifier: TokenVerifier = {
 
 const KEY =
   'tenant/00000000-0000-4000-8000-00000000000a/practice/00000000-0000-4000-8000-0000000000f1';
+// A second document, because the two tests below share one folder and a
+// document is written once: a second put to the same key is refused, which is
+// the seam's rule (docs/SEAMS.md) and not something to work around here.
+const OTHER_KEY =
+  'tenant/00000000-0000-4000-8000-00000000000a/practice/00000000-0000-4000-8000-0000000000f2';
 const BYTES = new TextEncoder().encode('Draft consent wording, synthetic.');
 
 let dir: string;
@@ -63,8 +68,8 @@ describe('the API with the real store disabled', () => {
   it('answers an unsigned, tampered, expired or unknown link with a flat not-found', async () => {
     const storage = localDiskStorage({ dir, signingSecret: Buffer.alloc(32, 3) });
     const api = createApi({ pool: untouchedPool, verifier: rejectingVerifier, storage });
-    await storage.put(KEY, BYTES, 'text/markdown');
-    const url = await storage.getSignedUrl(KEY, 60);
+    await storage.put(OTHER_KEY, BYTES, 'text/markdown');
+    const url = await storage.getSignedUrl(OTHER_KEY, 60);
 
     // A hex digit flipped to a different one, deterministically. Writing
     // `token=0` over the first digit was a coin flip: an HMAC begins with '0'
@@ -75,7 +80,7 @@ describe('the API with the real store disabled', () => {
     const tamperedUrl = url.replace(token, `${token.startsWith('0') ? '1' : '0'}${token.slice(1)}`);
     expect(tamperedUrl).not.toBe(url);
 
-    const unsigned = await api.request(`/api/storage/${KEY}`);
+    const unsigned = await api.request(`/api/storage/${OTHER_KEY}`);
     const tampered = await api.request(tamperedUrl);
     const expired = await api.request(url.replace(/expires=\d+/, 'expires=1'));
     const unknown = await api.request(

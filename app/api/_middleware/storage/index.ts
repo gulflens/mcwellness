@@ -2,6 +2,7 @@ import { createMiddleware } from 'hono/factory';
 import type { Hono } from 'hono';
 import {
   DEFAULT_SIGNED_URL_TTL_SECONDS,
+  StorageConflictError,
   StorageUnavailableError,
 } from '../../../../domain/shared/storage';
 import type { ApiEnv } from '../request-context';
@@ -9,10 +10,42 @@ import { LOCAL_STORAGE_ROUTE, localDiskStorage } from './local-disk';
 import { supabaseStorage } from './supabase';
 import { isLocalStorage, type ServerStorageProvider } from './types';
 
+export { auditDocumentRead } from './audit';
 export { DEFAULT_STORAGE_DIR, LOCAL_STORAGE_ROUTE, localDiskStorage } from './local-disk';
 export { DOCUMENTS_BUCKET, supabaseStorage } from './supabase';
 export { isLocalStorage } from './types';
 export type { LocalOnly, ServerStorageProvider } from './types';
+
+/**
+ * Storage is not fenced by row security the way the database is: whatever key
+ * the API holds is what the bucket obeys. A publishable key pasted here would
+ * not merely be weak — against a private bucket it can do nothing at all, and
+ * the deployment would look configured while every document call failed.
+ *
+ * A Supabase key of the JWT kind names its role in its own payload, so when
+ * the value is one it is read and `anon` refused by name at startup, rather
+ * than on the first upload someone attempts weeks later. Newer key formats
+ * (`sb_secret_...`, `sb_publishable_...`) are not JWTs and carry no readable
+ * claim; nothing is guessed from them and they pass, so this check tightens
+ * the case it can prove and never invents one it cannot.
+ */
+function refuseAnonKey(key: string): void {
+  const payload = key.split('.')[1];
+  if (key.split('.').length !== 3 || payload === undefined) return;
+  let role: unknown;
+  try {
+    role = (JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { role?: unknown })
+      .role;
+  } catch {
+    return; // Not a JWT after all. Nothing claimed, nothing refused.
+  }
+  if (role === 'anon') {
+    // The key itself never reaches the message, even a public one.
+    throw new Error(
+      'SUPABASE_STORAGE_KEY carries the anon role, which the browser holds: it is never the storage credential.',
+    );
+  }
+}
 
 /**
  * Which implementation of the storage seam this deployment runs
@@ -40,13 +73,23 @@ export function storageFromEnv(env: NodeJS.ProcessEnv): ServerStorageProvider {
   if (chosen === 'supabase') {
     const url = env.SUPABASE_URL;
     // The anon key is the browser's and is never the storage credential.
-    const serviceKey = env.SUPABASE_STORAGE_KEY ?? env.SUPABASE_SERVICE_ROLE_KEY;
+    //
+    // One variable, and no falling back to SUPABASE_SERVICE_ROLE_KEY: that
+    // fallback silently gave storage the widest credential in the project to
+    // a deployment that had only ever configured the database, and a variable
+    // whose whole purpose is to say "this credential may write documents"
+    // means nothing if another one is used when it is absent. A deployment
+    // that wants the service role key here pastes it here, deliberately.
+    // Blank is absent: an empty or whitespace-only value in a secret store is
+    // a variable someone meant to fill in.
+    const serviceKey = env.SUPABASE_STORAGE_KEY?.trim() || undefined;
     if (!url) {
       throw new Error('STORAGE_PROVIDER=supabase needs SUPABASE_URL.');
     }
     if (!serviceKey) {
       throw new Error('STORAGE_PROVIDER=supabase needs SUPABASE_STORAGE_KEY (never the anon key).');
     }
+    refuseAnonKey(serviceKey);
     return supabaseStorage({ url, serviceKey });
   }
   throw new Error(`STORAGE_PROVIDER is "${chosen}"; it is "supabase" or "local".`);
@@ -99,6 +142,11 @@ export function mountLocalStorage(api: Hono<ApiEnv>, storage: ServerStorageProvi
 /** The 503 an unreachable store gets, in the shape every other refusal uses. */
 export function isStorageUnavailable(error: unknown): error is StorageUnavailableError {
   return error instanceof StorageUnavailableError;
+}
+
+/** The 409 a second write to the same key gets: the store answered, and said no. */
+export function isStorageConflict(error: unknown): error is StorageConflictError {
+  return error instanceof StorageConflictError;
 }
 
 export { DEFAULT_SIGNED_URL_TTL_SECONDS };

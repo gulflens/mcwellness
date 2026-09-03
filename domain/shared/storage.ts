@@ -25,9 +25,32 @@ export type StoredObject = {
   size: number;
 };
 
+/** What a caller may say about a write. */
+export type PutOptions = {
+  /**
+   * Whether bytes already at that key may be replaced. **False by default**,
+   * on both implementations: a document is written once. The bytes behind a
+   * filed consent, a signed report or a piece of consent wording are the
+   * evidence of what a person was shown and agreed to, and a store that
+   * quietly accepts a second write over the first is a store where that
+   * evidence can be changed after the fact. A caller that genuinely means to
+   * replace an object — a retry that knows the first attempt half-finished —
+   * says `overwrite: true` and says it deliberately.
+   */
+  overwrite?: boolean;
+};
+
 export type StorageProvider = {
-  /** Writes bytes at a key, replacing whatever was there, and fingerprints them. */
-  put(key: string, bytes: Uint8Array, mimeType: string): Promise<StoredObject>;
+  /**
+   * Writes bytes at a key and fingerprints them. Refuses a key that already
+   * holds an object unless `overwrite` says otherwise: see PutOptions.
+   */
+  put(
+    key: string,
+    bytes: Uint8Array,
+    mimeType: string,
+    options?: PutOptions,
+  ): Promise<StoredObject>;
   /** A URL that fetches those bytes without a session, good for `ttlSeconds` and no longer. */
   getSignedUrl(key: string, ttlSeconds: number): Promise<string>;
   /** Removes the object. Removing what is not there is not an error. */
@@ -54,6 +77,31 @@ export class StorageUnavailableError extends Error {
     super(message, options);
     this.name = 'StorageUnavailableError';
   }
+}
+
+/**
+ * Something is already stored at that key and the caller did not ask to
+ * replace it (`PutOptions.overwrite`). Not an outage — the store answered,
+ * and its answer was no — so it is its own type and its own status: the API
+ * (app/api/create-api.ts) answers **409 `document_exists`**, which a caller
+ * can tell apart from a store that is down.
+ */
+export class StorageConflictError extends Error {
+  /** Structural, for the same reason StorageUnavailableError carries one. */
+  readonly storageConflict = true;
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'StorageConflictError';
+  }
+}
+
+/**
+ * The refusal both implementations give, worded once. The key is not echoed:
+ * it names a document.
+ */
+export function alreadyStored(): StorageConflictError {
+  return new StorageConflictError('Something is already stored under that key.');
 }
 
 /** How long a signed URL should live by default: long enough to fetch, short enough to leak harmlessly. */
@@ -97,4 +145,41 @@ export function practiceDocumentKey(tenantId: string, documentId: string): strin
   const key = `tenant/${tenantId}/practice/${documentId}`;
   assertValidStorageKey(key);
   return key;
+}
+
+/**
+ * How long a practice document is kept: five years from upload
+ * (`docs/SPEC/00-data-model.md` section 3 and section 7's retention rule,
+ * `db/migrations/060_client.sql`). `document.retention_until` is computed by
+ * the application at upload, so this is the arithmetic every stream calls
+ * rather than one each.
+ */
+export const DOCUMENT_RETENTION_YEARS = 5;
+
+/**
+ * The one kind of document upload-dated retention does not fit
+ * (`db/migrations/903_document_write_guard.sql`). Consent wording is a
+ * practice document, but it is not the practice's own paperwork: it is the
+ * text a person was shown, and a consent recorded in year four of a wording's
+ * life would outlive the words it points at. A `consent_text` document is
+ * therefore exempt — kept until no `consent` row references it and the last
+ * referencing client's own retention has expired — and its `retention_until`
+ * is deliberately null, meaning "not on an upload clock", never "forever by
+ * oversight".
+ */
+export const RETENTION_EXEMPT_KINDS: readonly string[] = ['consent_text'];
+
+/**
+ * When a document uploaded now stops being kept, or null when its kind is
+ * exempt. Pure: the clock is an argument, never read in here.
+ *
+ * Note the shape of the answer. Null is not "no retention": it is "not this
+ * rule's to decide", and a deletion job must check what still references the
+ * row before it calls `storage.delete` (`docs/SEAMS.md`).
+ */
+export function documentRetentionUntil(kind: string, uploadedAt: Date): Date | null {
+  if (RETENTION_EXEMPT_KINDS.includes(kind)) return null;
+  const until = new Date(uploadedAt.getTime());
+  until.setUTCFullYear(until.getUTCFullYear() + DOCUMENT_RETENTION_YEARS);
+  return until;
 }

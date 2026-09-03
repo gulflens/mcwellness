@@ -1,14 +1,16 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import {
+  alreadyStored,
   assertValidStorageKey,
   MAX_SIGNED_URL_TTL_SECONDS,
   StorageUnavailableError,
+  type PutOptions,
   type StoredObject,
 } from '../../../../domain/shared/storage';
-import type { ServerStorageProvider } from './types';
+import type { LocalOnly, ServerStorageProvider } from './types';
 
 /**
  * The deterministic fallback behind the storage seam (docs/SEAMS.md): a folder
@@ -26,7 +28,12 @@ import type { ServerStorageProvider } from './types';
  *
  * A key is validated first (domain/shared/storage.ts) and then resolved
  * against the folder and checked again, so nothing is read or written outside
- * it even if that validation is ever loosened.
+ * it even if that validation is ever loosened. That second check is string
+ * arithmetic and cannot see a symlink, so a read and a write ask the
+ * filesystem itself as well (`realpath`): a link planted inside the folder,
+ * by anything sharing the machine, points at a target the name does not
+ * admit to, and following it is how a folder store reads /etc or writes over
+ * something it does not own.
  */
 
 export const DEFAULT_STORAGE_DIR = '.storage';
@@ -56,7 +63,27 @@ function pathFor(root: string, key: string): string {
   return full;
 }
 
-export function localDiskStorage(options: LocalDiskOptions = {}): ServerStorageProvider {
+/**
+ * The same question asked of the filesystem rather than of the string: where
+ * does this path really lead, once every link on the way is followed? The
+ * root is resolved too, so a store whose own folder is a symlink — a common
+ * enough thing on a laptop — is not refused for it.
+ *
+ * A path that does not exist yet cannot be resolved, so a write asks about
+ * the directory it is about to write into, after that directory is made.
+ */
+async function assertRealPathInside(root: string, path: string): Promise<void> {
+  const realRoot = await realpath(root);
+  const real = await realpath(path);
+  if (real !== realRoot && !real.startsWith(realRoot + sep)) {
+    // Same wording as every other refusal: the key names a document.
+    throw new Error('That storage key is not a valid one.');
+  }
+}
+
+export function localDiskStorage(
+  options: LocalDiskOptions = {},
+): ServerStorageProvider & LocalOnly {
   const root = resolve(options.dir ?? process.env.STORAGE_DIR ?? DEFAULT_STORAGE_DIR);
   const secret = options.signingSecret ?? randomBytes(32);
   const baseUrl = options.baseUrl ?? '';
@@ -68,13 +95,39 @@ export function localDiskStorage(options: LocalDiskOptions = {}): ServerStorageP
     kind: 'local',
     root,
 
-    async put(key: string, bytes: Uint8Array, mimeType: string): Promise<StoredObject> {
+    async put(
+      key: string,
+      bytes: Uint8Array,
+      mimeType: string,
+      options: PutOptions = {},
+    ): Promise<StoredObject> {
       const path = pathFor(root, key);
       void mimeType; // The type is the document row's to hold; the disk keeps bytes only.
+      const overwrite = options.overwrite === true;
       try {
         await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, bytes);
+        await assertRealPathInside(root, dirname(path));
+        // 'wx' is O_CREAT | O_EXCL: the kernel refuses an existing name, so
+        // the check and the write are one operation with no window between
+        // them, and a symlink sitting at the key counts as existing rather
+        // than being followed. A caller that means to replace says so, and
+        // then the target is asked where it really leads first.
+        if (overwrite) {
+          await stat(path).then(
+            () => assertRealPathInside(root, path),
+            () => undefined,
+          );
+          await writeFile(path, bytes);
+        } else {
+          await writeFile(path, bytes, { flag: 'wx' });
+        }
       } catch (error) {
+        if (!overwrite && (error as NodeJS.ErrnoException).code === 'EEXIST') {
+          throw alreadyStored();
+        }
+        if (error instanceof Error && error.message === 'That storage key is not a valid one.') {
+          throw error;
+        }
         throw unavailable('write that document', error);
       }
       return { sha256: createHash('sha256').update(bytes).digest('hex'), size: bytes.byteLength };
@@ -119,9 +172,14 @@ export function localDiskStorage(options: LocalDiskOptions = {}): ServerStorageP
     async read(key: string): Promise<Buffer | null> {
       const path = pathFor(root, key);
       try {
+        // Where the path really leads, before a byte is read from it.
+        await assertRealPathInside(root, path);
         return await readFile(path);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        if (error instanceof Error && error.message === 'That storage key is not a valid one.') {
+          throw error;
+        }
         throw unavailable('read that document', error);
       }
     },

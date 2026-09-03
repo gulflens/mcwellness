@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import {
+  alreadyStored,
   assertValidStorageKey,
   MAX_SIGNED_URL_TTL_SECONDS,
   StorageUnavailableError,
+  type PutOptions,
   type StoredObject,
 } from '../../../../domain/shared/storage';
 import type { ServerStorageProvider } from './types';
@@ -50,11 +52,28 @@ export function supabaseStorage(options: SupabaseStorageOptions): ServerStorageP
     authorization: `Bearer ${options.serviceKey}`,
   };
 
-  /** One call. Anything but a clean answer is an outage as far as the caller is concerned. */
-  async function call(path: string, init: RequestInit): Promise<Response> {
+  /**
+   * One call. Anything but a clean answer is an outage as far as the caller is
+   * concerned.
+   *
+   * The credential goes on first and the call's own headers on top, in that
+   * order and not the other way about: spreading `headers` after `init` threw
+   * every per-call header away, so a `put` sent no content type and no upsert
+   * decision and a `getSignedUrl` posted JSON labelled as text. No call here
+   * sets `apikey` or `authorization`, so nothing can shed the credential this
+   * way either.
+   */
+  async function call(
+    path: string,
+    init: RequestInit & { headers?: Record<string, string> },
+  ): Promise<Response> {
     const signal = AbortSignal.timeout(timeoutMs);
     try {
-      return await doFetch(`${base}/storage/v1/${path}`, { ...init, headers, signal });
+      return await doFetch(`${base}/storage/v1/${path}`, {
+        ...init,
+        headers: { ...headers, ...init.headers },
+        signal,
+      });
     } catch (error) {
       throw new StorageUnavailableError('The document store could not be reached.', {
         cause: error,
@@ -72,10 +91,18 @@ export function supabaseStorage(options: SupabaseStorageOptions): ServerStorageP
   return {
     kind: 'supabase',
 
-    async put(key: string, bytes: Uint8Array, mimeType: string): Promise<StoredObject> {
+    async put(
+      key: string,
+      bytes: Uint8Array,
+      mimeType: string,
+      options: PutOptions = {},
+    ): Promise<StoredObject> {
       assertValidStorageKey(key);
-      // upsert: a bucket with versioning keeps the old object; without it, the
-      // key is the document's own id, so a rewrite is the same document's bytes.
+      // The default is no replacement: `x-upsert: false` and the vendor's own
+      // 409 is the refusal, so the check and the write are one operation and
+      // no window exists between them. A caller that means to replace an
+      // object says so, and only then does the upsert header go true.
+      const overwrite = options.overwrite === true;
       // Copied into a buffer of its own: the seam accepts any Uint8Array, and
       // fetch will only take one backed by a plain, unshared ArrayBuffer.
       const body = new Uint8Array(bytes.byteLength);
@@ -83,8 +110,9 @@ export function supabaseStorage(options: SupabaseStorageOptions): ServerStorageP
       const response = await call(`object/${bucket}/${key}`, {
         method: 'POST',
         body,
-        headers: { ...headers, 'content-type': mimeType, 'x-upsert': 'true' },
+        headers: { 'content-type': mimeType, 'x-upsert': overwrite ? 'true' : 'false' },
       });
+      if (!overwrite && response.status === 409) throw alreadyStored();
       if (!response.ok) throw refused(response, 'accept that document');
       return { sha256: createHash('sha256').update(bytes).digest('hex'), size: bytes.byteLength };
     },
@@ -95,7 +123,7 @@ export function supabaseStorage(options: SupabaseStorageOptions): ServerStorageP
       const response = await call(`object/sign/${bucket}/${key}`, {
         method: 'POST',
         body: JSON.stringify({ expiresIn }),
-        headers: { ...headers, 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json' },
       });
       if (!response.ok) throw refused(response, 'sign a link to that document');
       const body = (await response.json().catch(() => ({}))) as { signedURL?: string };

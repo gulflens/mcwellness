@@ -12,6 +12,10 @@ const ALLOWED_VALUES = [
   'test-secret-that-unlocks-nothing-0123456789',
   'another-test-secret-that-unlocks-nothing-9876543210',
   'test-secret-not-real-0123456789abcdef',
+  // The storage seam's test for a key that is not a JWT and claims no role
+  // (app/api/_middleware/storage/seam.test.ts): shaped like the newer format,
+  // opens nothing.
+  'sb_secret_nothing_real_0123456789',
   'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJlLXNpZ25hdHVyZQ',
   'postgresql://postgres:postgres@localhost:5432/postgres',
   'postgresql://mcwellness_api:mcwellness_api@localhost:5432/postgres',
