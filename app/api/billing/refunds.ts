@@ -3,7 +3,7 @@ import { refundOnTermination } from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
-import { mayReadCatalogue } from './access';
+import { mayQuoteRefund } from './access';
 import { RefundQuoteResponse } from './ledger-schema';
 
 /**
@@ -50,7 +50,7 @@ export function mountRefundQuotes(api: Hono<ApiEnv>, now: () => Date = () => new
   api.get('/api/billing/package-purchases/:id/refund-quote', async (c) => {
     const actor = c.get('actor');
     const requestId = c.get('requestId');
-    if (!mayReadCatalogue(actor, now())) {
+    if (!mayQuoteRefund(actor, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const purchaseId = c.req.param('id');

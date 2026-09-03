@@ -5,7 +5,7 @@ import { canActor, hasRole } from '../../../domain/shared';
  * Who may do each of this pull request's billing actions.
  *
  * `domain/shared/actor.ts` is the shared zone and this worktree does not own
- * it, so the seven actions these routes need are asked for in
+ * it, so the eight actions these routes need are asked for in
  * `docs/CHANGE-REQUESTS/billing-03.md` and, until the trunk applies them,
  * composed here from the two that already exist. Each function below is a
  * thin wrapper over `canActor`, in the shape `app/api/clients/access.ts` and
@@ -47,6 +47,18 @@ export function mayWaive(actor: Actor, now: Date): boolean {
 
 /** Invoices: read by everyone who reads the price list. */
 export function mayReadInvoices(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'billing.price.read' }, {}, now);
+}
+
+/**
+ * Quoting what a family would be owed if they left the programme today. The
+ * same audience as the invoice book, and deliberately not narrower: a refund
+ * quote is arithmetic over a purchase and its credits, rows the lead
+ * practitioner may already read under `ledger_readers`
+ * (db/policies/billing/ledger.sql). A route stricter than the row security
+ * beneath it would be a courtesy pretending to be a boundary.
+ */
+export function mayQuoteRefund(actor: Actor, now: Date): boolean {
   return canActor(actor, { type: 'billing.price.read' }, {}, now);
 }
 
