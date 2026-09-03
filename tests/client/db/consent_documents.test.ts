@@ -867,6 +867,162 @@ describe('the Documents tab', () => {
   });
 });
 
+describe('who these routes turn away', () => {
+  /** Any document of the adult's, for the link route to be refused on. */
+  async function aDocumentOf(clientId: string): Promise<string> {
+    const { rows } = await owner.query<{ id: string }>(
+      'select id from document where client_id = $1 order by created_at limit 1',
+      [clientId],
+    );
+    const id = rows[0]?.id;
+    if (!id) throw new Error('the fixture filed no document for this client');
+    return id;
+  }
+
+  const consentBody = JSON.stringify({
+    purpose: 'participation',
+    givenByContactId: ADULT_CONTACT,
+    textDocumentId: WORDING_PARTICIPATION,
+    method: 'app_signature',
+    evidence: { mimeType: 'image/png', bytesBase64: PNG_BASE64 },
+  });
+
+  it('refuses finance every one of them, and records that it did', async () => {
+    // docs/SPEC/client-record.md section 2 gives finance demographics and
+    // contacts and nothing else. The read policy is the floor
+    // (db/policies/client/readers.sql); these are the doors above it.
+    const documentId = await aDocumentOf(ADULT_ID);
+    const before = await auditRows(ADULT_ID, 'refused');
+
+    expect(
+      (await request(FINANCE_AUTH, '/api/clients/consent-wording?purpose=participation&locale=en'))
+        .status,
+    ).toBe(403);
+    expect((await request(FINANCE_AUTH, `/api/clients/${ADULT_ID}/documents`)).status).toBe(403);
+    expect(
+      (await request(FINANCE_AUTH, `/api/clients/${ADULT_ID}/documents/${documentId}/link`)).status,
+    ).toBe(403);
+    expect(
+      (
+        await request(FINANCE_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+          method: 'POST',
+          body: consentBody,
+        })
+      ).status,
+    ).toBe(403);
+
+    // Three of the four name a row, so three refusals reach the trail; the
+    // wording route names no client and writes none.
+    expect(await auditRows(ADULT_ID, 'refused')).toBe(before + 3);
+  });
+
+  it('refuses a practitioner with nobody on their schedule, and records that it did', async () => {
+    // app.client_visible_to_practitioner is the window (migration 201): this
+    // practitioner is booked with no one, so this client is not theirs to read.
+    const documentId = await aDocumentOf(ADULT_ID);
+    const before = await auditRows(ADULT_ID, 'refused');
+
+    expect((await request(PRACTITIONER_AUTH, `/api/clients/${ADULT_ID}/documents`)).status).toBe(
+      403,
+    );
+    expect(
+      (await request(PRACTITIONER_AUTH, `/api/clients/${ADULT_ID}/documents/${documentId}/link`))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await request(PRACTITIONER_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+          method: 'POST',
+          body: consentBody,
+        })
+      ).status,
+    ).toBe(403);
+    expect(await auditRows(ADULT_ID, 'refused')).toBe(before + 3);
+
+    // The wording is deliberately not refused them: it is the practice's own
+    // published text, it names no client, and a practitioner reading what the
+    // households they visit are asked to agree to is the point of publishing
+    // it (db/policies/client/readers.sql, the practice-document branch).
+    expect(
+      (
+        await request(
+          PRACTITIONER_AUTH,
+          '/api/clients/consent-wording?purpose=participation&locale=en',
+        )
+      ).status,
+    ).toBe(200);
+  });
+
+  it('answers another practice as if this one did not exist', async () => {
+    // app.client_status_for is tenant-scoped, so the client is not found
+    // rather than forbidden: a 403 would confirm that this id names somebody.
+    const documentId = await aDocumentOf(ADULT_ID);
+    const before = await auditRows(ADULT_ID, 'refused');
+
+    expect((await request(OTHER_TENANT_AUTH, `/api/clients/${ADULT_ID}/documents`)).status).toBe(
+      404,
+    );
+    expect(
+      (await request(OTHER_TENANT_AUTH, `/api/clients/${ADULT_ID}/documents/${documentId}/link`))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await request(OTHER_TENANT_AUTH, `/api/clients/${ADULT_ID}/consents`, {
+          method: 'POST',
+          body: consentBody,
+        })
+      ).status,
+    ).toBe(404);
+    // Their own practice has published no wording, and this practice's is not
+    // theirs to read.
+    expect(
+      (
+        await request(
+          OTHER_TENANT_AUTH,
+          '/api/clients/consent-wording?purpose=participation&locale=en',
+        )
+      ).status,
+    ).toBe(404);
+    // Nothing was named, so nothing is written against this client's name.
+    expect(await auditRows(ADULT_ID, 'refused')).toBe(before);
+  });
+
+  it("will not open one household's consent wording to another household", async () => {
+    // The wording is a practice document, admitted to a client contact only
+    // where a consent of their own client names it. Through the link route
+    // that means: the household that signed it may open it, and the household
+    // that did not may not (db/policies/client/readers.sql).
+    const { rows } = await owner.query<{ text_document_id: string }>(
+      'select text_document_id from consent where client_id = $1 limit 1',
+      [ADULT_ID],
+    );
+    const wordingId = rows[0]?.text_document_id ?? '';
+    const before = await auditRows(wordingId, 'read');
+    const own = await request(
+      CONTACT_AUTH,
+      `/api/clients/${ADULT_ID}/documents/${wordingId}/link`,
+    );
+    expect(own.status).toBe(200);
+    // Signed through the same seam and audited before it is signed, like any
+    // other document. The row names no client, because a practice wording has
+    // none and one must not be invented for it.
+    expect(await auditRows(wordingId, 'read')).toBe(before + 1);
+    const audited = await owner.query<{ client_id: string | null }>(
+      "select client_id from audit_log where entity_id = $1 and action = 'read' " +
+        'order by occurred_at desc limit 1',
+      [wordingId],
+    );
+    expect(audited.rows[0]?.client_id).toBeNull();
+
+    const other = await request(
+      OTHER_CONTACT_AUTH,
+      `/api/clients/${ADULT_ID}/documents/${wordingId}/link`,
+    );
+    expect(other.status).toBe(403);
+  });
+});
+
 describe('withdrawing a consent', () => {
   it('will not go without a reason, and takes effect at once when it has one', async () => {
     const recorded = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents`, {
