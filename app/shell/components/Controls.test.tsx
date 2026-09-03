@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { Field, PageHeader, Select } from './Controls';
+import { Field, Note, PageHeader, Select } from './Controls';
 
 afterEach(cleanup);
 
@@ -118,5 +118,22 @@ describe('disabled', () => {
     const select = screen.getByLabelText('Zone');
     expect(select.hasAttribute('disabled')).toBe(true);
     expect(screen.getByText('Set once the address is confirmed')).toBeTruthy();
+  });
+});
+
+describe('Note', () => {
+  it('says a quiet thing with no role, and a critical thing as an alert', () => {
+    render(<Note>Nothing here yet.</Note>);
+    expect(screen.getByText('Nothing here yet.').getAttribute('role')).toBeNull();
+    cleanup();
+    render(<Note tone="critical">This could not be saved.</Note>);
+    expect(screen.getByRole('alert').textContent).toBe('This could not be saved.');
+  });
+
+  it('announces a thing that wants noticing as a status, in the attention tone', () => {
+    render(<Note tone="attention">This package runs out in 30 days.</Note>);
+    const note = screen.getByRole('status');
+    expect(note.textContent).toBe('This package runs out in 30 days.');
+    expect(note.className).toContain('note--attention');
   });
 });

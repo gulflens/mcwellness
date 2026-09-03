@@ -106,16 +106,23 @@ export function Select({
   );
 }
 
-/** A quiet line of text that answers a state: loading, empty, an error. Never a banner. */
+/**
+ * A quiet line of text that answers a state: loading, empty, an error. Never
+ * a banner. Three tones: `muted` for a state that asks nothing of the reader,
+ * `attention` for one that wants noticing but is not wrong yet (a package
+ * expiring in thirty days), `critical` for one that is wrong now. Attention is
+ * announced politely, critical assertively.
+ */
 export function Note({
   tone = 'muted',
   children,
 }: {
-  tone?: 'muted' | 'critical';
+  tone?: 'muted' | 'attention' | 'critical';
   children: ReactNode;
 }) {
+  const role = tone === 'critical' ? 'alert' : tone === 'attention' ? 'status' : undefined;
   return (
-    <p className={`note note--${tone}`} role={tone === 'critical' ? 'alert' : undefined}>
+    <p className={`note note--${tone}`} role={role}>
       {children}
     </p>
   );
