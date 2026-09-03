@@ -67,5 +67,20 @@ export function practiceToday(now: Date = new Date()): string {
   }).format(now);
 }
 
+/**
+ * The same day, written the way this country writes it. `practiceToday` is
+ * ISO because it is compared; this one is read by a person — it is drawn into
+ * the signature image that is filed, where 2026-09-03 is a database talking
+ * and 03/09/2026 is a date on a form.
+ */
+export function practiceTodayInWords(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: PRACTICE_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
 export { canActivate };
 export type { Missing };

@@ -51,3 +51,17 @@ export function ContactNameAr({
     </p>
   );
 }
+
+/** A relationship in words, never the raw enum value a screen should not show. */
+const RELATIONSHIP_LABELS: Record<string, string> = {
+  self: 'Self',
+  mother: 'Mother',
+  father: 'Father',
+  guardian: 'Guardian',
+  spouse: 'Spouse',
+  other: 'Other',
+};
+
+export function relationshipLabel(relationship: string): string {
+  return RELATIONSHIP_LABELS[relationship] ?? relationship;
+}

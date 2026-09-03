@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { CONSENT_PURPOSES, requiredConsents, type ConsentPurpose } from '@domain/client';
 import {
   WithdrawConsentResponse,
@@ -13,7 +13,7 @@ import { DocumentLink } from './DocumentLink';
 import { RecordConsentForm } from './RecordConsentForm';
 
 const PURPOSE_LABELS: Record<string, string> = {
-  participation: 'Taking part',
+  participation: 'Participation',
   minor_participation: "Guardian's consent for a child",
   home_visit: 'Visits at home',
   photo_video: 'Photographs and video',
@@ -42,6 +42,32 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
 };
 
 const WITHDRAW_ERROR = 'This consent could not be withdrawn. Try again.';
+
+/**
+ * The heading of a panel that has just opened, which takes focus as it
+ * appears.
+ *
+ * Both panels used to open at the foot of the tab, below six rows of
+ * purposes and well under the fold, while focus stayed on the button that was
+ * pressed. On a 900px screen that is a button that does nothing: the panel is
+ * a thousand pixels away and nothing says it arrived. The panels now sit
+ * inside the row whose consent they are about, and this puts the reader
+ * inside them — which also gives a screen reader the panel's own name rather
+ * than leaving it on a button whose meaning has changed.
+ */
+function PanelHeading({ children }: { children: ReactNode }) {
+  return (
+    <h4
+      className="drawer__section"
+      tabIndex={-1}
+      ref={(node) => {
+        node?.focus();
+      }}
+    >
+      {children}
+    </h4>
+  );
+}
 
 function isActiveOn(consent: Consent, today: string, purpose: ConsentPurpose): boolean {
   return (
@@ -131,7 +157,7 @@ export function ConsentTab({
             } removed.`,
           );
         } else {
-          setOutcome(null);
+          setOutcome('Consent withdrawn.');
         }
         setWithdrawing(null);
         setReason('');
@@ -156,7 +182,9 @@ export function ConsentTab({
 
   return (
     <div className="tab-section">
-      {outcome ? <Note>{outcome}</Note> : null}
+      {/* tone="attention" carries role="status", so a confirmation reaches
+          somebody who cannot see it land (app/shell/components/Controls.tsx). */}
+      {outcome ? <Note tone="attention">{outcome}</Note> : null}
       {consenting.length === 0 ? (
         <Note>
           No contact on this record may give consent yet. Set &ldquo;May give consent&rdquo; on the
@@ -190,6 +218,12 @@ export function ConsentTab({
                       <span>
                         Withdrawn {new Date(consent.withdrawnAt).toLocaleDateString('en-GB')}
                       </span>
+                    ) : null}
+                    {/* Why it went, from the trail rather than a column: a
+                        withdrawal always carries a reason and the tab that
+                        asked for it is the tab that should show it back. */}
+                    {consent.withdrawalReason ? (
+                      <span>Reason: {consent.withdrawalReason}</span>
                     ) : null}
                     {consent.witnessedByName ? (
                       <span>Witnessed by {consent.witnessedByName}</span>
@@ -227,6 +261,7 @@ export function ConsentTab({
                     onClick={() => {
                       setRecording(purpose);
                       setWithdrawing(null);
+                      setOutcome(null);
                     }}
                   >
                     {active ? 'Record again' : 'Record'}
@@ -238,6 +273,7 @@ export function ConsentTab({
                         setWithdrawing(active.id);
                         setRecording(null);
                         setReason('');
+                        setOutcome(null);
                       }}
                     >
                       Withdraw
@@ -245,56 +281,70 @@ export function ConsentTab({
                   ) : null}
                 </div>
               ) : null}
+
+              {/* Both panels open inside the row they are about, so pressing
+                  Record or Withdraw changes the thing that was pressed rather
+                  than something a thousand pixels below the fold. */}
+              {active && withdrawing === active.id ? (
+                <div className="record-row__reason">
+                  <PanelHeading>
+                    Withdraw consent: {(PURPOSE_LABELS[purpose] ?? purpose).toLowerCase()}
+                  </PanelHeading>
+                  <p className="small">
+                    Withdrawing takes effect at once. Appointments already in the diary are not
+                    cancelled by this — tell whoever keeps the schedule.
+                  </p>
+                  <Field
+                    id="withdraw-reason"
+                    label="Reason"
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    hint="Recorded against this withdrawal in the client's history."
+                  />
+                  <div className="drawer__actions">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setWithdrawing(null)}
+                      disabled={busy}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      disabled={busy || reason.trim() === ''}
+                      onClick={() => void withdraw(active.id)}
+                    >
+                      {busy ? 'Withdrawing…' : 'Withdraw consent'}
+                    </Button>
+                  </div>
+                  {reason.trim() === '' ? (
+                    <p className="small muted">A withdrawal is not recorded without a reason.</p>
+                  ) : null}
+                  {error ? <Note tone="critical">{error}</Note> : null}
+                </div>
+              ) : null}
+
+              {recording === purpose ? (
+                <RecordConsentForm
+                  // Keyed on the purpose: choosing a different consent is a fresh
+                  // form, so the wording, the pad and the read-to-the-end gate all
+                  // start again rather than one purpose's state leaking into another's.
+                  key={purpose}
+                  clientId={clientId}
+                  record={record}
+                  purpose={purpose}
+                  onSaved={() => {
+                    setRecording(null);
+                    setOutcome(`Consent recorded: ${PURPOSE_LABELS[purpose] ?? purpose}.`);
+                    onChanged();
+                  }}
+                  onCancel={() => setRecording(null)}
+                />
+              ) : null}
             </li>
           );
         })}
       </ul>
-
-      {withdrawing ? (
-        <div className="record-row__reason">
-          <p className="small">
-            Withdrawing takes effect at once. Appointments already in the diary are not cancelled by
-            this — tell whoever keeps the schedule.
-          </p>
-          <Field
-            id="withdraw-reason"
-            label="Reason"
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            hint="Recorded against this withdrawal in the client's history."
-          />
-          <div className="drawer__actions">
-            <Button variant="secondary" onClick={() => setWithdrawing(null)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              disabled={busy || reason.trim() === ''}
-              onClick={() => void withdraw(withdrawing)}
-            >
-              {busy ? 'Withdrawing…' : 'Withdraw consent'}
-            </Button>
-          </div>
-          {error ? <Note tone="critical">{error}</Note> : null}
-        </div>
-      ) : null}
-
-      {recording ? (
-        <RecordConsentForm
-          // Keyed on the purpose: choosing a different consent is a fresh
-          // form, so the wording, the pad and the read-to-the-end gate all
-          // start again rather than one purpose's state leaking into another's.
-          key={recording}
-          clientId={clientId}
-          record={record}
-          purpose={recording}
-          onSaved={() => {
-            setRecording(null);
-            onChanged();
-          }}
-          onCancel={() => setRecording(null)}
-        />
-      ) : null}
     </div>
   );
 }

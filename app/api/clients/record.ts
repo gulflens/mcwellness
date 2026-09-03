@@ -102,6 +102,7 @@ type ConsentRow = {
   wording_status: Consent['wordingStatus'];
   witnessed_by_user_id: string | null;
   witnessed_by_name: string | null;
+  withdrawal_reason: string | null;
 };
 
 type GoalRow = {
@@ -152,9 +153,17 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
     'select c.id, c.purpose, c.status, c.given_by_contact_id, c.given_at, c.withdrawn_at, ' +
       'c.expires_at, c.method, c.signature_document_id, c.text_document_id, ' +
       'w.version as wording_version, w.status as wording_status, ' +
-      'c.witnessed_by_user_id, u.display_name as witnessed_by_name ' +
+      'c.witnessed_by_user_id, u.display_name as witnessed_by_name, wr.reason as withdrawal_reason ' +
       'from consent c left join document w on w.id = c.text_document_id ' +
       'left join app_user u on u.id = c.witnessed_by_user_id ' +
+      // The reason a consent went, from the trail. A lateral join rather than
+      // a column, because the reason belongs to the act and not to the row,
+      // and audit_log's own read policy decides who sees it: for a
+      // practitioner or a contact this simply comes back null.
+      'left join lateral (select a.reason from audit_log a ' +
+      "where a.entity_type = 'consent' and a.entity_id = c.id and a.action = 'update' " +
+      "and c.status = 'withdrawn' and a.reason is not null " +
+      'order by a.occurred_at desc limit 1) wr on true ' +
       'where c.client_id = $1 order by c.created_at desc',
     [clientId],
   );
@@ -221,6 +230,7 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
       wordingStatus: c.wording_status,
       witnessedByUserId: c.witnessed_by_user_id,
       witnessedByName: c.witnessed_by_name,
+      withdrawalReason: c.withdrawal_reason,
     })),
     goals: goals.rows.map((g) => ({
       id: g.id,

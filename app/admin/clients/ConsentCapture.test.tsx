@@ -27,6 +27,28 @@ const GUARDIAN_ID = '00000008-0000-4000-8000-000000000202';
 const SIBLING_ID = '00000008-0000-4000-8000-000000000203';
 const WORDING_ID = '00000008-0000-4000-8000-000000000204';
 const EVIDENCE_ID = '00000008-0000-4000-8000-000000000205';
+const WITNESS_ID = '00000008-0000-4000-8000-000000000208';
+
+/** A consent already on the record, so a test can say what has been agreed before. */
+function consentOn(purpose: 'participation' | 'home_visit', id: string) {
+  return {
+    id,
+    purpose,
+    status: 'active' as const,
+    givenByContactId: GUARDIAN_ID,
+    givenAt: '2026-09-01T08:00:00+04:00',
+    withdrawnAt: null,
+    expiresAt: null,
+    method: 'app_signature' as const,
+    signatureDocumentId: null,
+    textDocumentId: WORDING_ID,
+    wordingVersion: '0.1-draft',
+    wordingStatus: 'draft' as const,
+    witnessedByUserId: null,
+    witnessedByName: null,
+    withdrawalReason: null,
+  };
+}
 
 const WORDING_MARKDOWN = [
   '---',
@@ -113,6 +135,7 @@ function mount(
     wordingStatus?: number;
     consentResponse?: Response;
     documents?: unknown;
+    witnesses?: unknown;
     me?: unknown;
   } = {},
 ) {
@@ -141,6 +164,9 @@ function mount(
     if (url.startsWith('/api/storage/')) {
       return new Response(WORDING_MARKDOWN, { status: 200 });
     }
+    if (url === '/api/clients/consent-witnesses') {
+      return json(options.witnesses ?? { witnesses: [{ id: WITNESS_ID, name: 'Fern Summit' }] });
+    }
     if (url.endsWith('/consents') && init?.method === 'POST') {
       return options.consentResponse ?? json({ id: 'x' }, 201);
     }
@@ -168,11 +194,11 @@ describe('ConsentTab', () => {
   it('lists every purpose, with what activation needs first', async () => {
     mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite />);
     const purposes = await screen.findAllByText(
-      /Taking part|Guardian's consent for a child|Visits at home|Photographs and video/,
+      /^(Participation|Guardian's consent for a child|Visits at home|Photographs and video)$/,
     );
     // A child, delivered at home: three required, and the first three listed.
     expect(purposes.slice(0, 3).map((node) => node.textContent)).toEqual([
-      'Taking part',
+      'Participation',
       "Guardian's consent for a child",
       'Visits at home',
     ]);
@@ -183,7 +209,7 @@ describe('ConsentTab', () => {
       <ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite={false} />,
       { me: PRACTITIONER },
     );
-    await screen.findByText('Taking part');
+    await screen.findByText('Participation');
     expect(screen.queryByRole('button', { name: 'Record' })).toBeNull();
   });
 
@@ -206,6 +232,7 @@ describe('ConsentTab', () => {
           wordingStatus: 'draft',
           witnessedByUserId: null,
           witnessedByName: null,
+          withdrawalReason: null,
         },
       ],
     };
@@ -240,6 +267,7 @@ describe('ConsentTab', () => {
           wordingStatus: 'draft',
           witnessedByUserId: null,
           witnessedByName: null,
+          withdrawalReason: null,
         },
       ],
     };
@@ -267,36 +295,38 @@ describe('ConsentTab', () => {
   });
 });
 
+/** The pad needs a canvas; without one it says so, which is its own test. */
+function stubCanvas(): void {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+    () =>
+      ({
+        clearRect: vi.fn(),
+        beginPath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        stroke: vi.fn(),
+        fillRect: vi.fn(),
+        fillText: vi.fn(),
+      }) as never,
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
+    'data:image/png;base64,iVBORw0KGgo=',
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
+    x: 0,
+    y: 0,
+    left: 0,
+    top: 0,
+    right: 600,
+    bottom: 260,
+    width: 600,
+    height: 260,
+    toJSON: () => ({}),
+  } as DOMRect);
+}
+
 describe('recording a consent', () => {
-  beforeEach(() => {
-    // The pad needs a canvas; without one it says so, which is its own test.
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
-      () =>
-        ({
-          clearRect: vi.fn(),
-          beginPath: vi.fn(),
-          moveTo: vi.fn(),
-          lineTo: vi.fn(),
-          stroke: vi.fn(),
-          fillRect: vi.fn(),
-          fillText: vi.fn(),
-        }) as never,
-    );
-    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
-      'data:image/png;base64,iVBORw0KGgo=',
-    );
-    vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      left: 0,
-      top: 0,
-      right: 600,
-      bottom: 260,
-      width: 600,
-      height: 260,
-      toJSON: () => ({}),
-    } as DOMRect);
-  });
+  beforeEach(stubCanvas);
 
   it('shows the wording, its version and its draft line, and fills the name in', async () => {
     mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite />);
@@ -391,6 +421,133 @@ describe('recording a consent', () => {
   });
 });
 
+describe('the read-to-the-end gate', () => {
+  beforeEach(stubCanvas);
+
+  /**
+   * jsdom reports every height as zero, so the wording box always looks
+   * already scrolled to the end and the gate opened on mount in every test in
+   * this file — which is to say it was asserted nowhere. Stubbing the two
+   * heights is what makes the rule testable at all.
+   */
+  function stubHeights(scrollHeight: number, clientHeight: number): void {
+    vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockReturnValue(scrollHeight);
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(clientHeight);
+  }
+
+  it('keeps the pad shut until the wording has been read to the end', async () => {
+    stubHeights(2000, 300);
+    mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[0] as Element);
+    await screen.findByText('Agreement to take part');
+
+    // A consent records that a person was shown a text, and a text nobody
+    // reached the bottom of was not shown.
+    const pad = document.querySelector('canvas');
+    expect(pad?.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByText('Read to the end of the wording to sign.')).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: 'Record consent' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    const box = document.querySelector('.consent-text');
+    fireEvent.scroll(box as Element, { target: { scrollTop: 1700 } });
+
+    await waitFor(() => {
+      expect(document.querySelector('canvas')?.getAttribute('aria-disabled')).toBeNull();
+    });
+    expect(screen.queryByText('Read to the end of the wording to sign.')).toBeNull();
+  });
+});
+
+describe('where a panel opens, and what it says', () => {
+  it('puts the reader inside the form the button opened', async () => {
+    mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[0] as Element);
+    // The button that was pressed does not change, and the form used to open
+    // below six rows of purposes: focus is the only thing that says it arrived.
+    const heading = await screen.findByRole('heading', { name: 'Record participation' });
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it('names the consent it is about to withdraw, and takes focus to it', async () => {
+    const signed: ClientRecordResponse = {
+      ...record,
+      consents: [consentOn('participation', '00000008-0000-4000-8000-000000000209')],
+    };
+    mount(<ConsentTab clientId={CLIENT_ID} record={signed} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+    const heading = await screen.findByRole('heading', {
+      name: 'Withdraw consent: participation',
+    });
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it('shows back the reason a consent was withdrawn', async () => {
+    const withdrawn: ClientRecordResponse = {
+      ...record,
+      consents: [
+        {
+          ...consentOn('participation', '00000008-0000-4000-8000-00000000020a'),
+          status: 'withdrawn',
+          withdrawnAt: '2026-09-02T08:00:00+04:00',
+          withdrawalReason: 'The household asked us to stop.',
+        },
+      ],
+    };
+    mount(<ConsentTab clientId={CLIENT_ID} record={withdrawn} onChanged={vi.fn()} mayWrite />);
+    expect(await screen.findByText('Reason: The household asked us to stop.')).toBeTruthy();
+  });
+});
+
+describe('a verbal re-confirmation', () => {
+  it('is not offered until there is a home visit to re-confirm', async () => {
+    mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite />);
+    // The third row is home visits, and this client has agreed to nothing.
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[2] as Element);
+    await screen.findByText('Agreement to take part');
+    expect(screen.queryByRole('option', { name: 'Confirmed verbally, witnessed' })).toBeNull();
+  });
+
+  it('asks who heard it, and sends them with the consent', async () => {
+    const agreed: ClientRecordResponse = {
+      ...record,
+      consents: [consentOn('home_visit', '00000008-0000-4000-8000-00000000020b')],
+    };
+    const calls = mount(
+      <ConsentTab clientId={CLIENT_ID} record={agreed} onChanged={vi.fn()} mayWrite />,
+    );
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record again' }))[0] as Element);
+    await screen.findByText('Agreement to take part');
+
+    fireEvent.change(screen.getByLabelText('How it is being given'), {
+      target: { value: 'verbal_witnessed' },
+    });
+    // Nobody chosen yet: this method files no document, so the witness is the
+    // whole of the evidence and the form will not go without one.
+    const record_ = await screen.findByLabelText('Witnessed by');
+    expect(
+      (screen.getByRole('button', { name: 'Record consent' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.change(record_, { target: { value: WITNESS_ID } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record consent' }));
+
+    await waitFor(() => {
+      const post = calls.find(
+        (call) => call.url.endsWith('/consents') && call.init?.method === 'POST',
+      );
+      const body = JSON.parse(String(post?.init?.body)) as {
+        method: string;
+        witnessedByUserId: string;
+        evidence?: unknown;
+      };
+      expect(body.method).toBe('verbal_witnessed');
+      expect(body.witnessedByUserId).toBe(WITNESS_ID);
+      expect(body.evidence).toBeUndefined();
+    });
+  });
+});
+
 describe('DocumentsTab', () => {
   it('lists what is held, with who filed it and how long it is kept', async () => {
     mount(<DocumentsTab clientId={CLIENT_ID} mayWrite />, {
@@ -410,9 +567,15 @@ describe('DocumentsTab', () => {
       },
     });
     expect(await screen.findByText('Signed consent')).toBeTruthy();
-    expect(screen.getByText('Hazel Harbour')).toBeTruthy();
-    expect(screen.getByText('01/09/2031')).toBeTruthy();
+    expect(screen.getByText('Filed by Hazel Harbour')).toBeTruthy();
     expect(screen.getByText('Unchangeable')).toBeTruthy();
+    expect(screen.getByText('01/09/2031')).toBeTruthy();
+    // Four columns, not five: the fifth pushed Open off the edge of a 480px
+    // drawer, and reaching it took the client's name out of frame. Who filed
+    // it folds under what it is, and the table scrolls inside its own box.
+    expect(screen.getAllByRole('columnheader')).toHaveLength(4);
+    expect(screen.queryByRole('columnheader', { name: 'Filed by' })).toBeNull();
+    expect(screen.getByRole('table').parentElement?.className).toContain('ledger__scroll');
     // Erasure is its own thing, with a reason and a record of what went.
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   });

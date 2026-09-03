@@ -116,6 +116,7 @@ function completeRecord() {
         wordingStatus: 'draft',
         witnessedByUserId: null,
         witnessedByName: null,
+        withdrawalReason: null,
       },
       {
         id: '00000008-0000-4000-8000-000000000094',
@@ -132,6 +133,7 @@ function completeRecord() {
         wordingStatus: 'draft',
         witnessedByUserId: null,
         witnessedByName: null,
+        withdrawalReason: null,
       },
     ],
   });
@@ -184,7 +186,7 @@ async function goToSummary() {
   fireEvent.click(screen.getByRole('button', { name: 'Next' })); // goals -> consent
   // The consent step is the record's own Consent tab: every purpose listed,
   // with what activation still needs at the top.
-  await screen.findByText('Taking part');
+  await screen.findByText('Participation');
   fireEvent.click(screen.getByRole('button', { name: 'Next' })); // consent -> summary
 }
 

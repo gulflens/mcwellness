@@ -162,7 +162,7 @@ describe('ClientDrawer', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Consent' }));
     // Every purpose, with the ones activation needs first and each saying
     // where it stands.
-    expect(await screen.findByText('Taking part')).toBeTruthy();
+    expect(await screen.findByText('Participation')).toBeTruthy();
     expect(screen.getByText('Photographs and video')).toBeTruthy();
     expect(
       screen.getAllByText('Needed before this client can be activated').length,

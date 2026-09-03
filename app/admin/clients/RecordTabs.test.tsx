@@ -113,7 +113,7 @@ describe('ConsentTab', () => {
     // Born 2015: a minor, so the guardian's consent is required as well as
     // taking part, and both are named in plain words.
     expect(await screen.findByText("Guardian's consent for a child")).toBeTruthy();
-    expect(screen.getByText('Taking part')).toBeTruthy();
+    expect(screen.getByText('Participation')).toBeTruthy();
     expect(screen.getAllByText('Needed before this client can be activated').length).toBe(3);
     // The optional purposes are listed too, below the required ones, so a
     // person never has to wonder where photographs are recorded.

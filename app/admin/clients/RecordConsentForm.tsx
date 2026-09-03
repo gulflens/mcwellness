@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ConsentPurpose } from '@domain/client';
+import { canGiveConsent, type ConsentPurpose } from '@domain/client';
 import {
   ConsentWitnessListResponse,
   ConsentWordingResponse,
@@ -12,8 +12,8 @@ import { Button, Note, Select } from '../../shell/components/Controls';
 import { ConsentText } from './ConsentText';
 import { SignaturePad, type SignatureResult } from './SignaturePad';
 import { compressToFit, type UploadFile } from './fileUpload';
-import { contactName } from './contactName';
-import { practiceToday } from './activation';
+import { contactName, relationshipLabel } from './contactName';
+import { practiceToday, practiceTodayInWords } from './activation';
 
 /**
  * Recording one consent (docs/SPEC/client-record.md section 7).
@@ -35,7 +35,7 @@ import { practiceToday } from './activation';
  */
 
 const PURPOSE_LABELS: Record<ConsentPurpose, string> = {
-  participation: 'Taking part',
+  participation: 'Participation',
   minor_participation: "Guardian's consent for a child",
   home_visit: 'Visits at home',
   photo_video: 'Photographs and video',
@@ -98,10 +98,32 @@ export function RecordConsentForm({
   onCancel: () => void;
 }) {
   const { apiFetch } = useAuth();
+  const today = practiceToday();
+  // Only the contacts who may actually give *this* consent, judged by the
+  // same rule the route judges by (`canGiveConsent` in domain/client): the
+  // practice's own can_consent flag always, and a legal guardian besides when
+  // the client is a minor or the purpose is a guardian's own. Listing the
+  // others and letting the server refuse made the guardian rule something a
+  // person discovered by being told no.
   const consenting = useMemo(
-    () => record.contacts.filter((contact) => contact.canConsent),
-    [record.contacts],
+    () =>
+      record.contacts.filter(
+        (contact) =>
+          canGiveConsent(
+            { dateOfBirth: record.dateOfBirth },
+            {
+              id: contact.id,
+              canConsent: contact.canConsent,
+              isLegalGuardian: contact.isLegalGuardian,
+            },
+            purpose,
+            today,
+          ).ok,
+      ),
+    [record.contacts, record.dateOfBirth, purpose, today],
   );
+  /** Someone may consent, but not to this: the sentence has to say which. */
+  const guardianIsTheGap = record.contacts.some((contact) => contact.canConsent);
   const [givenByContactId, setGivenByContactId] = useState(consenting[0]?.id ?? '');
   const [method, setMethod] = useState<Method>('app_signature');
   const [wordingState, setWordingState] = useState<WordingState>({ kind: 'loading' });
@@ -294,12 +316,24 @@ export function RecordConsentForm({
 
   return (
     <section className="tab-section consent-form">
-      <h3 className="drawer__section">Record {PURPOSE_LABELS[purpose].toLowerCase()}</h3>
+      {/* Focused as it appears: the button that opened this form is above it
+          and unchanged, so without this the press reads as having done
+          nothing at all. */}
+      <h3
+        className="drawer__section"
+        tabIndex={-1}
+        ref={(node) => {
+          node?.focus();
+        }}
+      >
+        Record {PURPOSE_LABELS[purpose].toLowerCase()}
+      </h3>
 
       {consenting.length === 0 ? (
         <Note tone="critical">
-          No contact on this record may give consent. Set &ldquo;May give consent&rdquo; on the
-          Contacts tab first.
+          {guardianIsTheGap
+            ? 'This consent has to come from a legal guardian, and no contact on this record is marked as one. Mark the guardian on the Contacts tab first.'
+            : 'No contact on this record may give consent. Set “May give consent” on the Contacts tab first.'}
         </Note>
       ) : (
         <Select
@@ -310,7 +344,8 @@ export function RecordConsentForm({
         >
           {consenting.map((contact) => (
             <option key={contact.id} value={contact.id}>
-              {contactName(contact) ?? 'Unnamed contact'} — {contact.relationship}
+              {contactName(contact) ?? 'Unnamed contact'} —{' '}
+              {relationshipLabel(contact.relationship).toLowerCase()}
               {contact.isLegalGuardian ? ' (legal guardian)' : ''}
             </option>
           ))}
@@ -373,7 +408,7 @@ export function RecordConsentForm({
               onSignedNameChange={setTypedName}
               onChange={setSignature}
               disabled={!readToEnd}
-              today={practiceToday()}
+              today={practiceTodayInWords()}
             />
           ) : null}
 
@@ -438,6 +473,24 @@ export function RecordConsentForm({
       ) : null}
 
       {formError ? <Note tone="critical">{formError}</Note> : null}
+      {/* A disabled primary with nothing beside it is a dead end: the person
+          is looking at a pad they have drawn on and a button that will not
+          go. Say which of the three things is still missing. */}
+      {!canSubmit && !busy && wordingState.kind === 'ready' ? (
+        <p className="small muted">
+          {!readToEnd
+            ? 'Scroll to the end of the wording before recording this.'
+            : givenByContactId === ''
+              ? 'Choose who is giving this consent.'
+              : method === 'verbal_witnessed'
+                ? 'Choose the member of staff who witnessed it.'
+                : method === 'paper_scan'
+                  ? 'Add a photograph or a PDF of the signed form.'
+                  : signature === null
+                    ? 'A signature has to be drawn on the pad.'
+                    : 'Type the name as the person writes it: it is printed into the image that is filed.'}
+        </p>
+      ) : null}
       <div className="drawer__actions">
         <Button variant="secondary" onClick={onCancel} disabled={busy}>
           Cancel

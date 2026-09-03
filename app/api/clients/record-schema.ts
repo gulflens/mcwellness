@@ -130,6 +130,17 @@ export const Consent = z.object({
    */
   witnessedByUserId: z.uuid().nullable(),
   witnessedByName: z.string().nullable(),
+  /**
+   * Why a withdrawn consent was withdrawn. It lives on the trail rather than
+   * on the row — a withdrawal always carries a reason and the audit trigger
+   * records it (docs/SPEC/audit.md section 5) — and the tab that asked for it
+   * is the tab that should be able to show it back. Null when the consent
+   * stands, and null for anyone the trail is not open to: reading it is the
+   * owner's, an admin's and the lead practitioner's
+   * (db/policies/core/audit_log.sql), and the database decides that rather
+   * than this screen.
+   */
+  withdrawalReason: z.string().nullable(),
 });
 export type Consent = z.infer<typeof Consent>;
 

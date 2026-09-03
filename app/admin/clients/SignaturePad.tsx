@@ -238,14 +238,29 @@ export function SignaturePad({
       ) : (
         <canvas
           ref={canvasRef}
-          className="signature__pad"
+          className={disabled ? 'signature__pad signature__pad--gated' : 'signature__pad'}
           aria-labelledby="signature-label"
+          // Gated, not broken: the pad is live-looking and strokes vanish
+          // without this, so somebody signs, sees nothing, and signs again.
+          aria-disabled={disabled ? true : undefined}
           onPointerDown={start}
           onPointerMove={move}
           onPointerUp={end}
           onPointerCancel={end}
         />
       )}
+      {disabled && !unavailable ? (
+        // Beside the pad, where the person is looking, rather than two
+        // controls away where the scroll box is.
+        <p className="small muted">Read to the end of the wording to sign.</p>
+      ) : null}
+      {!disabled && !unavailable ? (
+        <div className="signature__actions">
+          <Button variant="quiet" onClick={clear} disabled={!hasInk}>
+            Clear
+          </Button>
+        </div>
+      ) : null}
       <p className="small muted">
         Sign with a finger or the mouse. A typed name on its own is not a signature — if the person
         cannot sign on screen, take the paper form instead.
@@ -258,11 +273,6 @@ export function SignaturePad({
         disabled={disabled}
         hint="Printed beneath the signature in the image that is filed."
       />
-      <div className="drawer__actions">
-        <Button variant="quiet" onClick={clear} disabled={disabled || !hasInk}>
-          Clear
-        </Button>
-      </div>
     </div>
   );
 }

@@ -174,48 +174,58 @@ export function DocumentsTab({
         state.documents.length === 0 ? (
           <Note>Nothing filed against this client yet.</Note>
         ) : (
-          <table className="ledger">
-            <caption className="visually-hidden">Documents filed against this client</caption>
-            <thead>
-              <tr>
-                <th scope="col">Document</th>
-                <th scope="col">Filed</th>
-                <th scope="col">Filed by</th>
-                <th scope="col">Kept until</th>
-                <th scope="col">
-                  <span className="visually-hidden">Open</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.documents.map((document) => (
-                <tr key={document.id}>
-                  <td>
-                    {KIND_LABELS[document.kind] ?? document.kind}
-                    {document.isImmutable ? <p className="small muted">Unchangeable</p> : null}
-                  </td>
-                  <td className="numeric">
-                    {new Date(document.uploadedAt).toLocaleDateString('en-GB')}
-                  </td>
-                  <td>{document.uploadedByName ?? 'Not recorded'}</td>
-                  <td className="numeric">
-                    {document.retentionUntil
-                      ? new Date(document.retentionUntil).toLocaleDateString('en-GB')
-                      : 'Not on a fixed clock'}
-                  </td>
-                  <td>
-                    {document.bytesRemoved ? (
-                      <span className="small muted">
-                        Removed when photographs and video consent was withdrawn
-                      </span>
-                    ) : (
-                      <DocumentLink clientId={clientId} documentId={document.id} label="Open" />
-                    )}
-                  </td>
+          // Four columns, not five, and a scroller of its own. Five needed
+          // 592px and the drawer is 480: Open sat off the right-hand edge, and
+          // reaching it scrolled the whole drawer body sideways, taking the
+          // client's name and the tab strip out of frame. Who filed a document
+          // is a second line under what it is — the same fold the record rows
+          // already use — and if a narrower screen still runs out of room, the
+          // table scrolls inside itself and the drawer stays still.
+          <div className="ledger__scroll">
+            <table className="ledger">
+              <caption className="visually-hidden">Documents filed against this client</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Document</th>
+                  <th scope="col">Filed</th>
+                  <th scope="col">Kept until</th>
+                  <th scope="col">
+                    <span className="visually-hidden">Open</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {state.documents.map((document) => (
+                  <tr key={document.id}>
+                    <td>
+                      {KIND_LABELS[document.kind] ?? document.kind}
+                      <p className="small muted">
+                        Filed by {document.uploadedByName ?? 'somebody no longer recorded'}
+                      </p>
+                      {document.isImmutable ? <p className="small muted">Unchangeable</p> : null}
+                    </td>
+                    <td className="numeric">
+                      {new Date(document.uploadedAt).toLocaleDateString('en-GB')}
+                    </td>
+                    <td className="numeric">
+                      {document.retentionUntil
+                        ? new Date(document.retentionUntil).toLocaleDateString('en-GB')
+                        : 'Not on a fixed clock'}
+                    </td>
+                    <td>
+                      {document.bytesRemoved ? (
+                        <span className="small muted">
+                          Removed when photographs and video consent was withdrawn
+                        </span>
+                      ) : (
+                        <DocumentLink clientId={clientId} documentId={document.id} label="Open" />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )
       ) : null}
 

@@ -282,6 +282,15 @@
   margin-block-start: var(--s-3);
 }
 
+/* A consent runs to several screens, and 20rem of it on a tall display is a
+   great deal of scrolling for a person the practice is asking to read every
+   word. Where there is room, give them more of it at once. */
+@media (min-height: 50rem) {
+  .consent-text {
+    max-block-size: 32rem;
+  }
+}
+
 .consent-text__heading {
   font-size: var(--t-body);
   line-height: var(--lh-body);
@@ -320,6 +329,21 @@
   border-radius: var(--r-2);
   background: var(--surface);
   cursor: crosshair;
+}
+
+/* Before the wording has been read to the end. It looked identical to a live
+   pad — full strength, a crosshair under the pointer — and swallowed every
+   stroke, so a person signed, saw nothing and signed again. */
+.signature__pad--gated {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Clear belongs against the pad it clears, not under the name field two
+   controls below it. */
+.signature__actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .consent-row__history {
