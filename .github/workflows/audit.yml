@@ -1,0 +1,27 @@
+# The dependency audit on its own clock. On a pull request an outage of npm's
+# advisory service is excused (scripts/audit-deps.mjs), so that npm's uptime
+# does not gate a merge; this run is where an outage is not excused, so that a
+# silent pass on a pull request is followed, within the week, by a run that
+# either audits the dependencies or fails loudly.
+name: audit
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit:deps
+        env:
+          AUDIT_DEPS_STRICT: 'true'
