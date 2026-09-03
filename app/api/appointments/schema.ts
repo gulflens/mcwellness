@@ -277,3 +277,14 @@ export const APPOINTMENT_ACTION_CODES = [
   'reason_required',
 ] as const;
 export type AppointmentActionCode = (typeof APPOINTMENT_ACTION_CODES)[number];
+
+/**
+ * The practice's cancellation policy, for the screens that have to name its
+ * consequences before somebody acts (`GET /api/appointments/settings`).
+ * `unfitFeeFils` is integer fils, like every amount in this codebase.
+ */
+export const SchedulingSettingsResponse = z.object({
+  noticeHours: z.number().int().nonnegative(),
+  unfitFeeFils: z.number().int().nonnegative(),
+});
+export type SchedulingSettingsResponse = z.infer<typeof SchedulingSettingsResponse>;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import {
   AppointmentListResponse,
   type AppointmentRow,
@@ -9,8 +10,11 @@ import { Button, Field, Note, PageHeader } from '../../shell/components/Controls
 import { StatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from './appointmentStatus';
+import { CancelAppointmentDrawer } from './CancelAppointmentDrawer';
+import { MoveAppointmentDrawer } from './MoveAppointmentDrawer';
 import { NewAppointmentDrawer } from './NewAppointmentDrawer';
 import { ScheduleClientDrawer } from './ScheduleClientDrawer';
+import { formatWindow, practiceDay } from './windows';
 import './schedule.css';
 
 /**
@@ -20,28 +24,22 @@ import './schedule.css';
  * practitioner, with an "Add appointment" door onto `POST /api/appointments`.
  */
 
-const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+/**
+ * The two statuses a visit can still be moved or called off from: it is
+ * either on the calendar unannounced, or agreed with the household. Anything
+ * further on — checked in, delivered, missed, already called off, already
+ * moved — has happened, and what happened is not undone from this screen
+ * (docs/SPEC/scheduling-manual.md section 3). The routes hold the same line,
+ * and they are the ones that matter; this only keeps the screen from
+ * offering an action that would be refused.
+ */
+const OPEN_STATUSES: readonly AppointmentRow['status'][] = ['proposed', 'confirmed'];
 
 const DELIVERY_LABELS: Record<DeliveryMode, string> = {
   home: 'Home',
   studio: 'Studio',
   remote: 'Remote',
 };
-
-const TIME_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  timeZone: PRACTICE_TIME_ZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-function todayInDubai(now: Date): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: PRACTICE_TIME_ZONE }).format(now);
-}
-
-function formatWindow(windowStart: string, windowEnd: string): string {
-  return `${TIME_FORMAT.format(new Date(windowStart))}–${TIME_FORMAT.format(new Date(windowEnd))}`;
-}
 
 type State =
   | { kind: 'loading' }
@@ -50,11 +48,22 @@ type State =
 
 export function SchedulePage() {
   const { apiFetch } = useAuth();
-  const [date, setDate] = useState(() => todayInDubai(new Date()));
+  // The day lives in the address, so the week view can hand a day back and a
+  // reload or a shared link opens on the same one. A date is not personal
+  // data (.claude/rules/ui.md forbids putting a person in a query string, not
+  // a calendar day).
+  const [params, setParams] = useSearchParams();
+  const date = params.get('date') ?? practiceDay(new Date());
+  const setDate = (next: string) => setParams(next ? { date: next } : {});
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [selectedClient, setSelectedClient] = useState<AppointmentRow['client'] | null>(null);
+  // One drawer at a time: the schedule has one inline-end slot, and two
+  // drawers stacked in it would be two dialogs fighting over the same focus.
+  const [acting, setActing] = useState<{ kind: 'move' | 'cancel'; row: AppointmentRow } | null>(
+    null,
+  );
 
   useEffect(() => {
     let live = true;
@@ -87,6 +96,14 @@ export function SchedulePage() {
   const handleCreated = useCallback(() => {
     setDrawerOpen(false);
     setReloadToken((token) => token + 1);
+  }, []);
+
+  const reload = useCallback(() => setReloadToken((token) => token + 1), []);
+
+  const openAction = useCallback((kind: 'move' | 'cancel', row: AppointmentRow) => {
+    setDrawerOpen(false);
+    setSelectedClient(null);
+    setActing({ kind, row });
   }, []);
 
   const columns = useMemo<Column<AppointmentRow>[]>(
@@ -143,8 +160,35 @@ export function SchedulePage() {
           />
         ),
       },
+      {
+        key: 'actions',
+        header: 'Change',
+        align: 'end',
+        render: (row) =>
+          OPEN_STATUSES.includes(row.status) ? (
+            <span className="schedule__row-actions">
+              {/* The accessible name carries whose visit it is: eight
+                  identical "Move" buttons down a column are eight identical
+                  buttons to anything that reads them aloud. */}
+              <Button
+                variant="quiet"
+                aria-label={`Move ${row.client.givenName} ${row.client.familyName}'s appointment`}
+                onClick={() => openAction('move', row)}
+              >
+                Move
+              </Button>
+              <Button
+                variant="quiet"
+                aria-label={`Call off ${row.client.givenName} ${row.client.familyName}'s appointment`}
+                onClick={() => openAction('cancel', row)}
+              >
+                Call off
+              </Button>
+            </span>
+          ) : null,
+      },
     ],
-    [],
+    [openAction],
   );
 
   const count = state.kind === 'ready' ? state.appointments.length : null;
@@ -184,6 +228,9 @@ export function SchedulePage() {
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
+        <Link className="link schedule__week-link" to={`/admin/schedule/week?date=${date}`}>
+          See the week
+        </Link>
       </div>
       {state.kind === 'loading' ? <Note>Loading the day's appointments.</Note> : null}
       {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
@@ -205,6 +252,23 @@ export function SchedulePage() {
       ) : null}
       {selectedClient ? (
         <ScheduleClientDrawer client={selectedClient} onClose={() => setSelectedClient(null)} />
+      ) : null}
+      {acting?.kind === 'move' ? (
+        <MoveAppointmentDrawer
+          appointment={acting.row}
+          onClose={() => setActing(null)}
+          onMoved={() => {
+            setActing(null);
+            reload();
+          }}
+        />
+      ) : null}
+      {acting?.kind === 'cancel' ? (
+        <CancelAppointmentDrawer
+          appointment={acting.row}
+          onClose={() => setActing(null)}
+          onCancelled={reload}
+        />
       ) : null}
     </section>
   );

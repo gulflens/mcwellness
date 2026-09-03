@@ -88,3 +88,100 @@
     'tnum' 1,
     'lnum' 1;
 }
+
+/* The day view's own row actions: two quiet buttons, kept on one line and
+   pushed to the row's end so the column reads as one edge rather than as
+   ragged text. Logical properties throughout, so an Arabic layout mirrors it
+   without a second rule. */
+.schedule__row-actions {
+  display: flex;
+  gap: var(--s-2);
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+/* The way through to the week. A link, not a button: it goes somewhere, and
+   the toolbar's one control is the date. */
+.schedule__week-link {
+  align-self: end;
+  min-block-size: var(--row);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* The week: seven days across on a wide screen, folding to fewer columns and
+   then to one as the screen narrows. Not a grid of time slots — the practice
+   runs at most a handful of visits a day, so a column of the day's stops in
+   time order says more than an hour scale mostly made of blank space. */
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+@media (max-width: 1100px) {
+  .week {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .week {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.week__day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-inline-size: 0;
+}
+
+.week__heading {
+  margin: 0;
+  padding-block-end: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+}
+
+.week__empty {
+  margin: 0;
+  padding-block: var(--s-2);
+}
+
+.week__stops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One visit. A bordered block rather than a card: hairline, no shadow, no
+   lift — the ledger's vocabulary, in a column instead of a row. */
+.week__stop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  min-inline-size: 0;
+}
+
+.week__window {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings:
+    'tnum' 1,
+    'lnum' 1;
+}
+
+.week__name {
+  font-weight: var(--w-medium);
+  overflow-wrap: anywhere;
+}

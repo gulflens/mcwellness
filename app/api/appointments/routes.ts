@@ -5,6 +5,7 @@ import { mountAppointmentCreate } from './create';
 import { mountAppointmentList } from './list';
 import { mountAppointmentMove } from './move';
 import { mountAppointmentOptions } from './options';
+import { mountAppointmentSettings } from './settings';
 
 /**
  * Mounts every appointment route. `app/api/create-api.ts` calls this — it is
@@ -17,4 +18,5 @@ export function mountAppointments(api: Hono<ApiEnv>, now: () => Date = () => new
   mountAppointmentCreate(api, now);
   mountAppointmentMove(api, now);
   mountAppointmentCancel(api, now);
+  mountAppointmentSettings(api);
 }
