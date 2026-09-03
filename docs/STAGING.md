@@ -204,6 +204,21 @@ staging is a patched-up version of an older seed.
    run, the eight consent wording rows on staging point at nothing, which shows
    the moment anyone opens a consent.
 
+## What was done on 2026-09-03, third pass: the patch
+
+After the rebuild, main gained the client-record stream's consent capture
+(migrations 101 to 103) and the seeded contact names (pull request 47). On
+staging: the three migrations were applied through Supabase's migration
+tool in filename order with their bookkeeping rows (37 rows now, none with
+an empty checksum); all twelve policy files re-applied; the 23 contacts
+were given their English and Arabic names from a render of the seed at the
+merge of 47, applied as an update under the seed's own session settings,
+which cost 23 audit rows a fresh seed would not write. Fingerprints of
+columns, constraints, indexes, policies, functions and triggers identical
+to a fresh local database; the audit chain verifies over 638 rows; the
+owner's demo rows intact. The file store still runs as the local stopgap
+until the operator's three steps above are done.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
