@@ -55,6 +55,14 @@ export type Harness = {
     /** Extra request headers: an idempotency key, a reason for the trail. */
     extra?: Record<string, string>,
   ) => Promise<Response>;
+  /** The same call, as any auth id at all: a fixture's own user, not a seeded one. */
+  callAs: (
+    method: 'GET' | 'POST',
+    path: string,
+    authId: string,
+    body?: unknown,
+    extra?: Record<string, string>,
+  ) => Promise<Response>;
   authIdOf: (index: number) => string;
   serviceTypeId: (code: string) => string;
   clientId: (index: number) => string;
@@ -98,6 +106,25 @@ export async function startHarness(now: () => Date): Promise<Harness> {
     return user.authId;
   }
 
+  async function callAs(
+    method: 'GET' | 'POST',
+    path: string,
+    authId: string,
+    body?: unknown,
+    extra?: Record<string, string>,
+  ): Promise<Response> {
+    const headers: Record<string, string> = {
+      authorization: `Bearer ${await mint(authId)}`,
+      ...extra,
+    };
+    const init: RequestInit = { method, headers };
+    if (body !== undefined) {
+      headers['content-type'] = 'application/json';
+      init.body = JSON.stringify(body);
+    }
+    return api.request(path, init);
+  }
+
   return {
     owner,
     pool,
@@ -105,6 +132,7 @@ export async function startHarness(now: () => Date): Promise<Harness> {
     storage,
     data,
     authIdOf,
+    callAs,
     serviceTypeId(code: string): string {
       const service = data.serviceTypes.find((s) => s.code === code);
       if (!service) throw new Error(`No seeded service type "${code}".`);
@@ -116,16 +144,7 @@ export async function startHarness(now: () => Date): Promise<Harness> {
       return client.id;
     },
     async call(method, path, seededUser, body, extra) {
-      const headers: Record<string, string> = {
-        authorization: `Bearer ${await mint(authIdOf(seededUser))}`,
-        ...extra,
-      };
-      const init: RequestInit = { method, headers };
-      if (body !== undefined) {
-        headers['content-type'] = 'application/json';
-        init.body = JSON.stringify(body);
-      }
-      return api.request(path, init);
+      return callAs(method, path, authIdOf(seededUser), body, extra);
     },
     async close() {
       await pool.end();

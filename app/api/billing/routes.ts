@@ -11,6 +11,7 @@ import { mountReceipts } from './receipts';
 import { mountSendOptions } from './send-options';
 import { mountRefundQuotes } from './refunds';
 import { mountSales } from './sales';
+import { mountStopBalance } from './stop-balance';
 import { mountSummary } from './summary';
 import { mountServiceTypeOptions } from './service-types';
 import { mountVatRate } from './vat-rate';
@@ -30,6 +31,7 @@ export function mountBilling(api: Hono<ApiEnv>, now: () => Date = () => new Date
   mountSales(api, now);
   mountPayments(api, now);
   mountBalance(api, now);
+  mountStopBalance(api, now);
   mountInvoices(api, now);
   mountDocuments(api, now);
   mountDocumentSending(api, now);
