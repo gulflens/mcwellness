@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SEND_CHANNELS } from '../../../domain/billing/sending';
 
 /**
  * The shapes the document routes accept and answer. Imported by the routes and
@@ -37,3 +38,29 @@ export const DocumentLinkResponse = z.object({
   expiresInSeconds: z.number().int().positive(),
 });
 export type DocumentLinkResponse = z.infer<typeof DocumentLinkResponse>;
+
+/**
+ * Sending a document to a family. The recipient is named by contact id and
+ * never by an address: a telephone number in a request body is a telephone
+ * number in a log (.claude/rules/ui.md, docs/SPEC/audit.md section 8).
+ */
+export const SendDocumentInput = z.object({
+  channel: z.enum(SEND_CHANNELS),
+  contactId: z.uuid(),
+});
+export type SendDocumentInput = z.infer<typeof SendDocumentInput>;
+
+export const SendDocumentResponse = z.object({
+  channel: z.enum(SEND_CHANNELS),
+  /** True when a vendor took it. False when the person sends it themselves. */
+  delivered: z.boolean(),
+  /**
+   * Where to hand off: a `wa.me` link with the message already written, or the
+   * document's own signed link for the share sheet. Absent when a vendor
+   * delivered it and there is nothing for a person to do.
+   */
+  handoffUrl: z.string().optional(),
+  /** The drafted message, so a screen can show what is about to be sent. */
+  message: z.string(),
+});
+export type SendDocumentResponse = z.infer<typeof SendDocumentResponse>;
