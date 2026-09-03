@@ -156,7 +156,12 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
               />
             </TabPanel>
             <TabPanel id="consent" idPrefix="client" selected={tab}>
-              <ConsentTab record={state.record} />
+              <ConsentTab
+                clientId={client.id}
+                record={state.record}
+                onChanged={() => void refetch()}
+                mayWrite={mayWrite}
+              />
             </TabPanel>
             <TabPanel id="goals" idPrefix="client" selected={tab}>
               <GoalsTab
@@ -167,7 +172,7 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
               />
             </TabPanel>
             <TabPanel id="documents" idPrefix="client" selected={tab}>
-              <DocumentsTab />
+              <DocumentsTab clientId={client.id} mayWrite={mayWrite} />
             </TabPanel>
           </>
         ) : null}

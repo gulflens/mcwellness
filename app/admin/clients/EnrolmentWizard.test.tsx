@@ -44,6 +44,10 @@ function baseRecord(overrides: Partial<Record<string, unknown>> = {}) {
         relationship: 'self',
         isLegalGuardian: false,
         canConsent: false,
+        givenName: 'Laurel',
+        familyName: 'Meadow',
+        givenNameAr: 'لوريل',
+        familyNameAr: 'مرج',
         canReceiveReports: true,
         canPay: false,
         phone: '+971500000058',
@@ -69,6 +73,10 @@ function completeRecord() {
         relationship: 'self',
         isLegalGuardian: true,
         canConsent: true,
+        givenName: 'Basil',
+        familyName: 'Ridge',
+        givenNameAr: 'ريحان',
+        familyNameAr: 'حافة',
         canReceiveReports: true,
         canPay: true,
         phone: '+971500000058',
@@ -102,6 +110,7 @@ function completeRecord() {
         withdrawnAt: null,
         expiresAt: null,
         method: 'app_signature',
+        signatureDocumentId: null,
       },
       {
         id: '00000008-0000-4000-8000-000000000094',
@@ -112,6 +121,7 @@ function completeRecord() {
         withdrawnAt: null,
         expiresAt: null,
         method: 'app_signature',
+        signatureDocumentId: null,
       },
     ],
   });
@@ -162,7 +172,9 @@ async function goToSummary() {
   fireEvent.click(screen.getByRole('button', { name: 'Next' })); // location -> goals
   await screen.findByRole('button', { name: 'Add goal' });
   fireEvent.click(screen.getByRole('button', { name: 'Next' })); // goals -> consent
-  await screen.findByText('Recording consent arrives with documents.');
+  // The consent step is the record's own Consent tab: every purpose listed,
+  // with what activation still needs at the top.
+  await screen.findByText('Taking part');
   fireEvent.click(screen.getByRole('button', { name: 'Next' })); // consent -> summary
 }
 

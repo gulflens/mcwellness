@@ -23,6 +23,10 @@ const provider: AuthProvider = {
 const CLIENT_ID = '00000008-0000-4000-8000-0000000000c1';
 const contact: Contact = {
   id: '00000008-0000-4000-8000-0000000000c2',
+  givenName: 'Dahlia',
+  familyName: 'Creek',
+  givenNameAr: 'داليا',
+  familyNameAr: 'خور',
   relationship: 'mother',
   isLegalGuardian: true,
   canConsent: true,

@@ -533,7 +533,14 @@ export function EnrolmentWizard({
                     mayWrite={mayWriteGoals}
                   />
                 ) : null}
-                {step === 'consent' ? <ConsentTab record={record} /> : null}
+                {step === 'consent' ? (
+                  <ConsentTab
+                    clientId={created.id}
+                    record={record}
+                    onChanged={() => void refetch()}
+                    mayWrite
+                  />
+                ) : null}
                 {step === 'summary' && gate ? (
                   <div className="tab-section">
                     <h3 className="drawer__section">

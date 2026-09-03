@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ClientRecordResponse, Contact } from '../../api/clients/record-schema';
 import { Button, Note } from '../../shell/components/Controls';
 import { ContactForm } from './ContactForm';
+import { ContactNameAr, contactName } from './contactName';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   self: 'Self',
@@ -47,7 +48,20 @@ export function ContactsTab({
           {record.contacts.map((contact) => (
             <li key={contact.id} className="record-row">
               <div className="record-row__main">
-                <p>{RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship}</p>
+                {/* The name leads and the relationship follows it, because who
+                    to ask for at the door is the name; a contact with no name
+                    on file still reads as the relationship alone (CR-07). */}
+                <p>
+                  {contactName(contact) ??
+                    RELATIONSHIP_LABELS[contact.relationship] ??
+                    contact.relationship}
+                </p>
+                {contactName(contact) ? (
+                  <p className="small muted">
+                    {RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship}
+                  </p>
+                ) : null}
+                <ContactNameAr contact={contact} />
                 <p className="small muted">{contact.phone ?? 'No phone'}</p>
                 {contact.email ? <p className="small muted">{contact.email}</p> : null}
                 <ul className="record-row__flags small muted">
