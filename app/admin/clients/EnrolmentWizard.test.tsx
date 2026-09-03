@@ -275,7 +275,13 @@ describe('EnrolmentWizard', () => {
 
   it('refuses a date of birth in the future, naming the field', async () => {
     mountWithRecord(baseRecord());
-    const future = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const future = new Date(
+      Date.now() +
+        2 *
+          86_400_000 /* two days: a future date in every timezone, since the screen counts the day in Asia/Dubai */,
+    )
+      .toISOString()
+      .slice(0, 10);
     fireEvent.change(screen.getByLabelText('Given name'), { target: { value: 'Laurel' } });
     fireEvent.change(screen.getByLabelText('Family name'), { target: { value: 'Meadow' } });
     fireEvent.change(screen.getByLabelText('Relationship to the client'), {

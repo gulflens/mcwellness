@@ -405,7 +405,13 @@ describe('who may search by identity number', () => {
 
 describe('a date of birth is in the past', () => {
   it('refuses one in the future on create and on edit, naming the field', async () => {
-    const future = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    const future = new Date(
+      Date.now() +
+        2 *
+          86_400_000 /* two days: a future date in every timezone, since the screen counts the day in Asia/Dubai */,
+    )
+      .toISOString()
+      .slice(0, 10);
     const created = await request(api, AUTH.ownerA, '/api/clients', {
       method: 'POST',
       body: JSON.stringify({
