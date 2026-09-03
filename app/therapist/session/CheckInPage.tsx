@@ -208,10 +208,22 @@ function visitFromOpen(open: {
   };
 }
 
-/** Asks the server for the visit this practitioner left open, if any. */
+/**
+ * Asks the server for the visit this practitioner left open, if any.
+ *
+ * Bounded, because the whole face waits on this answer: the screen shows
+ * either the offer or the form, never one and then suddenly the other, and a
+ * question nobody answers must not hold a practitioner at a door. Four
+ * seconds, then the device's own note is asked instead — which is what
+ * happens with no signal at all anyway, and answers in milliseconds.
+ */
+const OPEN_VISIT_TIMEOUT_MS = 4000;
+
 async function fetchOpenVisit(apiFetch: ApiFetch): Promise<RunnerVisit | null> {
   try {
-    const res = await apiFetch('/api/sessions/open');
+    const res = await apiFetch('/api/sessions/open', {
+      signal: AbortSignal.timeout(OPEN_VISIT_TIMEOUT_MS),
+    });
     if (!res.ok) return null;
     const parsed = OpenSessionResponse.safeParse(await res.json());
     if (!parsed.success || parsed.data.session === null) return null;
@@ -473,6 +485,26 @@ export function CheckInPage() {
     );
   }
 
+  if (resume.kind === 'looking') {
+    // The offer, when there is one, is the loudest thing on this face and
+    // belongs above the form. So the form does not exist until the question
+    // is answered: an offer that arrives afterwards would push the record
+    // number, the service and the primary action down the screen while the
+    // practitioner was already reaching for them (design review, item 11).
+    // A moment, not a screen — bounded above, and answered from the device
+    // in milliseconds when there is no signal to ask over.
+    return (
+      <div className="ground" data-ground="dark">
+        <main className="plain plain--instrument">
+          <div className="checkin__confirmation">
+            <h1>Check in</h1>
+            <Note>Checking whether you have a visit already open.</Note>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (outcome.kind === 'checked-in') {
     // Checked in, and the visit is being read back so the runner can name
     // who is in the room. A moment, not a screen.
@@ -508,39 +540,37 @@ export function CheckInPage() {
           </Button>
           <h1>Check in</h1>
 
-          {/* The offer keeps its own space from the first paint, so it does
-              not shove the form down the screen when the answer arrives
-              (design review, item 11). It is the only primary on this face
-              while it stands: the form's own Check in drops to secondary
-              below, so the practitioner is never asked to choose between two
-              equally loud actions. */}
-          <section className="checkin__resume" aria-live="polite">
-            {resume.kind === 'offered' ? (
-              <>
-                <p className="checkin__resume-line">
-                  Resume session for {resume.visit.clientLabel}, started{' '}
-                  <span className="numeric">{formatCheckedInTime(resume.visit.checkedInAt)}</span>.
-                </p>
-                <p className="small muted">
-                  Sharing your location is off after a resume. The visit is recorded either way.
-                </p>
-                <Button
-                  variant="primary"
-                  className="checkin__primary"
-                  onClick={() => setRunning(resume.visit)}
-                >
-                  Resume
-                </Button>
-                <Button
-                  variant="quiet"
-                  className="checkin__dismiss"
-                  onClick={() => setResume({ kind: 'dismissed' })}
-                >
-                  Check in someone else instead
-                </Button>
-              </>
-            ) : null}
-          </section>
+          {/* The offer is the only primary on this face while it stands: the
+              form's own Check in drops to secondary below, so the
+              practitioner is never asked to choose between two equally loud
+              actions. It cannot arrive late and shove the form down the
+              screen, because the form is not painted until the question it
+              answers is settled (above). */}
+          {resume.kind === 'offered' ? (
+            <section className="checkin__resume">
+              <p className="checkin__resume-line">
+                Resume session for {resume.visit.clientLabel}, started{' '}
+                <span className="numeric">{formatCheckedInTime(resume.visit.checkedInAt)}</span>.
+              </p>
+              <p className="small muted">
+                Sharing your location is off after a resume. The visit is recorded either way.
+              </p>
+              <Button
+                variant="primary"
+                className="checkin__primary"
+                onClick={() => setRunning(resume.visit)}
+              >
+                Resume
+              </Button>
+              <Button
+                variant="quiet"
+                className="checkin__dismiss"
+                onClick={() => setResume({ kind: 'dismissed' })}
+              >
+                Check in someone else instead
+              </Button>
+            </section>
+          ) : null}
           <div className="checkin__form">
             <div className="field">
               <label htmlFor="checkin-record-number" className="field__label">

@@ -528,4 +528,51 @@ describe('CheckInPage, resuming a visit', () => {
     await ready();
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
   });
+
+  it('does not paint the form until it knows whether there is a visit to resume', async () => {
+    // The offer belongs above the form, so an offer that arrived after the
+    // form would push the record number, the service and the primary action
+    // down the screen under a thumb already reaching for them. The face
+    // waits instead, and says what it is waiting for.
+    mount({ openSession: OPEN });
+    expect(screen.getByText('Checking whether you have a visit already open.')).toBeTruthy();
+    expect(screen.queryByLabelText('Record number')).toBeNull();
+
+    expect(await screen.findByRole('button', { name: 'Resume' })).toBeTruthy();
+  });
+
+  it('is the only loud action while it stands, and says sharing is off', async () => {
+    mount({ openSession: OPEN });
+    const resume = await screen.findByRole('button', { name: 'Resume' });
+    expect(resume.className).toContain('button--primary');
+    // One primary on the face: the form's own action steps back rather than
+    // asking the practitioner to choose between two equally loud buttons.
+    expect(screen.getByRole('button', { name: 'Check in' }).className).toContain(
+      'button--secondary',
+    );
+
+    // A resumed visit cannot know what was switched on at the door, so it
+    // shares nothing and says so rather than leaving the practitioner to
+    // wonder (docs/SPEC/session-capture.md section 3.6).
+    expect(
+      screen.getByText(
+        'Sharing your location is off after a resume. The visit is recorded either way.',
+      ),
+    ).toBeTruthy();
+
+    // And the quiet way out meets the practitioner tap floor.
+    expect(
+      screen.getByRole('button', { name: 'Check in someone else instead' }).className,
+    ).toContain('checkin__dismiss');
+  });
+
+  it('gives the form its own single primary once the offer is set aside', async () => {
+    mount({ openSession: OPEN });
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in someone else instead' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Check in' }).className).toContain(
+        'button--primary',
+      ),
+    );
+  });
 });
