@@ -42,6 +42,26 @@ export type SupabaseStorageOptions = {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+/**
+ * Supabase Storage answers a missing object on `object/info` with HTTP 400
+ * whose body says `{"statusCode":"404","code":"NoSuchKey"}` (seen on staging,
+ * 2026-09-04), not with a 404 status. Absent is absent either way; anything
+ * else stays a refusal. The body is read only when the status is 400.
+ */
+async function isNoSuchKey(response: Response): Promise<boolean> {
+  if (response.status !== 400) return false;
+  try {
+    const body = (await response.clone().json()) as {
+      code?: unknown;
+      error?: unknown;
+      statusCode?: unknown;
+    };
+    return body.code === 'NoSuchKey' || body.error === 'not_found' || body.statusCode === '404';
+  } catch {
+    return false;
+  }
+}
+
 export function supabaseStorage(options: SupabaseStorageOptions): ServerStorageProvider {
   const base = options.url.replace(/\/+$/, '');
   const bucket = options.bucket ?? DOCUMENTS_BUCKET;
@@ -145,7 +165,7 @@ export function supabaseStorage(options: SupabaseStorageOptions): ServerStorageP
     async exists(key: string): Promise<boolean> {
       assertValidStorageKey(key);
       const response = await call(`object/info/${bucket}/${key}`, { method: 'GET' });
-      if (response.status === 404) return false;
+      if (response.status === 404 || (await isNoSuchKey(response))) return false;
       if (!response.ok) throw refused(response, 'look for that document');
       return true;
     },
