@@ -421,7 +421,11 @@ describe('app.audit_redact drops a fixed set of keys outright (audit.md section 
       // is named and every value is gone, a dropped key included. The two
       // rules do not compete, and 906 left this branch untouched.
       expect(
-        await redact({ payload: { note: 'anything' }, requested_by_phone: '+971500000000', seq: 6 }),
+        await redact({
+          payload: { note: 'anything' },
+          requested_by_phone: '+971500000000',
+          seq: 6,
+        }),
       ).toEqual({
         payload: '[withheld: erasure]',
         requested_by_phone: '[withheld: erasure]',
