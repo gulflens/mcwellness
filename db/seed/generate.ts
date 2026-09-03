@@ -183,57 +183,59 @@ const EMIRATES: readonly { code: Emirate; name: string; centre: Point }[] = [
   { code: 'FUJ', name: 'Fujairah', centre: { lng: 56.33, lat: 25.12 } },
 ];
 
-const SERVICES: readonly Omit<SeedServiceType, 'id' | 'preflightChecklist' | 'ratingQuestions'>[] =
-  [
-    {
-      code: 'discovery-call',
-      name: 'Discovery call',
-      nameAr: 'مكالمة تعارف',
-      durationMinutes: 60,
-      requiresCertification: null,
-      deliveryModes: ['remote'],
-    },
-    {
-      code: 'consultation',
-      name: 'Consultation',
-      nameAr: 'استشارة',
-      durationMinutes: 45,
-      requiresCertification: null,
-      deliveryModes: ['home', 'remote'],
-    },
-    {
-      code: 'brain-map',
-      name: 'Brain map (QEEG)',
-      nameAr: 'خريطة الدماغ',
-      durationMinutes: 90,
-      requiresCertification: 'vendor_qeeg',
-      deliveryModes: ['home'],
-    },
-    {
-      code: 'results-call',
-      name: 'Results call',
-      nameAr: 'مكالمة النتائج',
-      durationMinutes: 30,
-      requiresCertification: null,
-      deliveryModes: ['remote'],
-    },
-    {
-      code: 'nf-session',
-      name: 'Neurofeedback session',
-      nameAr: 'جلسة التغذية الراجعة العصبية',
-      durationMinutes: 60,
-      requiresCertification: 'bcia_bcn',
-      deliveryModes: ['home'],
-    },
-    {
-      code: 'compassionate-inquiry',
-      name: 'Compassionate Inquiry',
-      nameAr: 'الاستقصاء الرحيم',
-      durationMinutes: 60,
-      requiresCertification: null,
-      deliveryModes: ['home', 'remote'],
-    },
-  ];
+/** A service as the catalogue lists it; its session settings are attached below. */
+type SeedServiceDefinition = Omit<SeedServiceType, 'id' | 'preflightChecklist' | 'ratingQuestions'>;
+
+const SERVICES: readonly SeedServiceDefinition[] = [
+  {
+    code: 'discovery-call',
+    name: 'Discovery call',
+    nameAr: 'مكالمة تعارف',
+    durationMinutes: 60,
+    requiresCertification: null,
+    deliveryModes: ['remote'],
+  },
+  {
+    code: 'consultation',
+    name: 'Consultation',
+    nameAr: 'استشارة',
+    durationMinutes: 45,
+    requiresCertification: null,
+    deliveryModes: ['home', 'remote'],
+  },
+  {
+    code: 'brain-map',
+    name: 'Brain map (QEEG)',
+    nameAr: 'خريطة الدماغ',
+    durationMinutes: 90,
+    requiresCertification: 'vendor_qeeg',
+    deliveryModes: ['home'],
+  },
+  {
+    code: 'results-call',
+    name: 'Results call',
+    nameAr: 'مكالمة النتائج',
+    durationMinutes: 30,
+    requiresCertification: null,
+    deliveryModes: ['remote'],
+  },
+  {
+    code: 'nf-session',
+    name: 'Neurofeedback session',
+    nameAr: 'جلسة التغذية الراجعة العصبية',
+    durationMinutes: 60,
+    requiresCertification: 'bcia_bcn',
+    deliveryModes: ['home'],
+  },
+  {
+    code: 'compassionate-inquiry',
+    name: 'Compassionate Inquiry',
+    nameAr: 'الاستقصاء الرحيم',
+    durationMinutes: 60,
+    requiresCertification: null,
+    deliveryModes: ['home', 'remote'],
+  },
+];
 
 /**
  * Drafts, and marked as drafts: the practice edits both lists in the app once
