@@ -6,7 +6,7 @@
 | Supabase Cloud, staging project `mcwellness` (`ajjkvjtqxktkgrvcrzkh`, Mumbai `ap-south-1`, Pro plan) | Auth, Postgres, Storage for staging | Synthetic data only; created 2026-09-02 | Approved 2026-09-02 (owner) |
 | Supabase Cloud, staging project | Staging | Synthetic only, never client data | Same | ✅ staging only |
 | GitHub | Source code, CI | Code; the CI database holds only the synthetic rows the tests create | US | ✅ code and synthetic tests only |
-| Google Maps Platform | Distance matrix, geocoding | Coordinates only, never names | Global | ⚠️ send location ids only |
+| Google Maps Platform | Distance matrix, geocoding, and the practitioner's navigation hand-off | Coordinates only, never names or identities; the hand-off sends a client's entrance coordinates only on the practitioner's deliberate tap (operator decision 2026-09-03) | Global | Approved for coordinates; no name, record number or identity may accompany them |
 | Payment gateway | TBD | Amount, reference, payer contact | TBD | ❌ not yet |
 | BNPL provider (Tabby or Tamara, candidates) | Packages | Amount, reference, payer contact | UAE | ❌ not yet |
 | WhatsApp Business API | Phase 2 | Phone, message text (no session content) | Meta | ❌ not yet |
