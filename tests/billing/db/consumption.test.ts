@@ -223,13 +223,16 @@ describe('a delivered visit with no credit left', () => {
       'select kind, reference, net_fils, vat_fils, gross_fils from invoice where session_id = $1',
       [sessionId],
     );
+    // No VAT: the practice is not registered for it, so the charge is the net
+    // price and the gross is the same figure (migration 406, and
+    // tests/billing/db/vat_registration.test.ts for the rule itself).
     expect(invoices).toEqual([
       {
         kind: 'session',
         reference: 'INV-000002',
         net_fils: 70_000,
-        vat_fils: 3_500,
-        gross_fils: 73_500,
+        vat_fils: 0,
+        gross_fils: 70_000,
       },
     ]);
 
@@ -278,9 +281,9 @@ describe('a delivered visit with no credit left', () => {
   it('leaves the family owing what the visit cost', async () => {
     const res = await h.call('GET', `/api/billing/clients/${h.clientId(1)}/balance`, SEEDED.owner);
     const body = (await res.json()) as BalanceResponse;
-    expect(body.chargedFils).toBe(73_500);
+    expect(body.chargedFils).toBe(70_000);
     expect(body.paidFils).toBe(0);
-    expect(body.outstandingFils).toBe(73_500);
+    expect(body.outstandingFils).toBe(70_000);
   });
 });
 
