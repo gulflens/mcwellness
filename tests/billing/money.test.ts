@@ -72,8 +72,33 @@ describe('parseAedToFils', () => {
     expect(parseAedToFils('12.345')).toBeNull();
   });
 
-  it('refuses a thousands separator', () => {
-    expect(parseAedToFils('1,234.56')).toBeNull();
+  it('reads back a grouped figure, which is what formatFils writes', () => {
+    // The bug this test pins: the package drawer offers the contents' total
+    // as the list price and the payment drawer offers the outstanding
+    // amount, both through formatFils, and both were then refused on submit
+    // because the parser would not read its own output. A founder building
+    // the practice's Silver programme was told to "enter both prices in AED"
+    // about the figure the screen had just handed her.
+    expect(parseAedToFils('1,234.56')).toBe(123_456);
+    expect(parseAedToFils('12,150.00')).toBe(1_215_000);
+    expect(parseAedToFils('1,215,000')).toBe(121_500_000);
+  });
+
+  it('reads back every figure formatFils writes, exactly', () => {
+    for (const amountFils of [0, 5, 999, 90_000, 123_456, 1_032_500, 1_997_500, 3_130_000]) {
+      expect(parseAedToFils(formatFils(amountFils))).toBe(amountFils);
+    }
+  });
+
+  it('refuses grouping that is not grouping', () => {
+    // A European decimal comma must never be read as a separator and paid a
+    // hundredfold: "12,34" is not AED 1,234.
+    expect(parseAedToFils('12,34')).toBeNull();
+    expect(parseAedToFils('1,23,456')).toBeNull();
+    expect(parseAedToFils('1,2345')).toBeNull();
+    expect(parseAedToFils(',123')).toBeNull();
+    expect(parseAedToFils('1,')).toBeNull();
+    expect(parseAedToFils('0,123')).toBeNull();
   });
 
   it('accepts the int4 column maximum exactly', () => {
@@ -104,6 +129,12 @@ describe('isAedAmountTooLarge', () => {
     expect(isAedAmountTooLarge('')).toBe(false);
     expect(isAedAmountTooLarge('abc')).toBe(false);
     expect(isAedAmountTooLarge('-5')).toBe(false);
+    expect(isAedAmountTooLarge('12,34')).toBe(false);
+  });
+
+  it('reads a grouped figure the same way the parser does', () => {
+    expect(isAedAmountTooLarge('21,474,836.47')).toBe(false);
+    expect(isAedAmountTooLarge('21,474,836.48')).toBe(true);
   });
 });
 

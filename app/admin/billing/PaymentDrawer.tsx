@@ -46,8 +46,11 @@ export function PaymentDrawer({
   const { apiFetch } = useAuth();
   const closeRef = useRef<HTMLButtonElement>(null);
 
+  // Offered as this file's own formatter writes it, grouping and all: the
+  // parser reads back what `formatFils` produces (money.ts), so the figure a
+  // coordinator is shown is the figure they can submit unchanged.
   const [amount, setAmount] = useState(() =>
-    outstandingFils > 0 ? formatFils(outstandingFils).replace(/,/g, '') : '',
+    outstandingFils > 0 ? formatFils(outstandingFils) : '',
   );
   const [method, setMethod] = useState<PaymentMethod>('transfer');
   const [reference, setReference] = useState('');
