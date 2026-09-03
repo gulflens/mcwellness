@@ -5,14 +5,15 @@ import {
   isSettled,
   navigationTarget,
   practiceDate,
-  PRACTICE_TIME_ZONE,
   stopPhases,
+  PRACTICE_TIME_ZONE,
   type AppointmentStatus,
   type StopPhase,
 } from '@domain/scheduling';
-import { AppointmentListResponse, type AppointmentRow } from '../../api/appointments/schema';
+import { DayStopListResponse, type DayStop } from '../../api/appointments/schema';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
+import { ChevronIcon } from '../../shell/components/Icons';
 import { describeRoles, homeFor } from '../../shell/routing';
 import './today.css';
 
@@ -20,7 +21,8 @@ import './today.css';
  * The practitioner's day (docs/SPEC/scheduling-manual.md section 5.1). One
  * column on the dark ground, one stop after another: the arrival window, who
  * is behind the door, where it is, the drive, and the way into check-in. The
- * current stop is emphasised and the ones behind it collapse to a line.
+ * stop being delivered is emphasised; the ones behind it fold away, and open
+ * again in full if the practitioner wants them.
  *
  * Deliberately not here:
  *
@@ -29,12 +31,11 @@ import './today.css';
  *   notes, contacts). Nothing on this screen invents a shortcut to it.
  * - **Offline.** Section 5.1 also asks this screen to render from the last
  *   sync, and section 11 makes that a condition of the stage. There is no
- *   local store yet, so the screen says what it can do rather than pretending
- *   the day is cached.
+ *   local store yet, so the screen states the plain fact and no more.
  *
- * Nothing here shows an identity number or a clinical note (section 11). The
- * record number is the practice's own MW-000123, which the check-in screen
- * already asks the practitioner to type; this screen saves them typing it.
+ * Nothing here shows an identity number or a clinical note (section 11), and
+ * the family name never reaches the browser at all: the wire carries a single
+ * initial (app/api/appointments/schema.ts's `DayStop`).
  */
 
 // Mirrors app/admin/clients/ClientsPage.tsx's own map. Kept local rather than
@@ -68,10 +69,13 @@ const LOCATION_LABELS: Record<string, string> = {
  * needs telling when the status changes what they do. `confirmed` is the
  * ordinary case and says nothing at all.
  *
- * The two cancelled statuses are covered even though the own scope does not
- * send them today (app/api/appointments/list.ts drops a cancelled visit from
- * a day sheet): a map with a hole in it is a worse thing to hand a component
- * than a map with a branch that rarely fires.
+ * Four of these are covered even though the own scope does not send them:
+ * app/api/appointments/list.ts holds a day sheet to the visits that are
+ * actually stops, so a proposed, cancelled, late-cancelled or rescheduled
+ * appointment never reaches this component. They stay named anyway — a map
+ * with a hole in it is a worse thing to hand a component than a map with a
+ * branch that rarely fires, and the day the day sheet widens, the words are
+ * already written.
  */
 const STOP_NOTES: Partial<Record<AppointmentStatus, string>> = {
   proposed: 'Not yet confirmed with the client',
@@ -103,53 +107,56 @@ const DAY_FORMAT = new Intl.DateTimeFormat('en-GB', {
   month: 'long',
 });
 
-// A day sheet left open goes stale: the emphasised stop is the one whose
-// window has opened, and windows open while nobody touches the screen. A
-// minute is fine for a 45-minute window, and it is a re-render, not motion.
-const CLOCK_TICK_MS = 60_000;
-
-// Asia/Dubai carries no daylight-saving change, so the day being shown
-// always starts at this exact offset from UTC.
+// Asia/Dubai carries no daylight-saving change, so the day being shown always
+// starts at this exact offset from UTC.
 const PRACTICE_UTC_OFFSET = '+04:00';
+
+// A day sheet left open goes stale: the emphasised stop is the one whose
+// window has opened, windows open while nobody touches the screen, and a day
+// eventually turns into the next one. A minute is fine for a 45-minute
+// window, and it is a re-render, not motion.
+const CLOCK_TICK_MS = 60_000;
 
 const LOAD_ERROR = 'Your day could not be loaded. Check your connection, then try again.';
 
-type State =
-  { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; stops: readonly AppointmentRow[] };
+type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; stops: readonly DayStop[] };
 
 function formatWindow(windowStart: string, windowEnd: string): string {
   return `${TIME_FORMAT.format(new Date(windowStart))}–${TIME_FORMAT.format(new Date(windowEnd))}`;
 }
 
-/** First name and family initial (section 5.1), never the full family name. */
-function shortName(client: AppointmentRow['client']): string {
-  const initial = client.familyName.trim().slice(0, 1);
-  return initial ? `${client.givenName} ${initial}.` : client.givenName;
+/**
+ * First name and family initial (section 5.1). The initial is computed in SQL
+ * and is all the browser is given, so this only decides the punctuation — and
+ * drops it entirely for a client with no family name on file.
+ */
+function shortName(givenName: string, familyInitial: string | null): string {
+  const initial = (familyInitial ?? '').trim();
+  return initial ? `${givenName} ${initial}.` : givenName;
 }
 
-function describeAge(age: number | null | undefined): string | null {
-  if (age === null || age === undefined) {
+function describeAge(age: number | null): string | null {
+  if (age === null) {
     return null;
   }
   return age === 1 ? '1 year old' : `${age} years old`;
 }
 
-function describePlace(location: AppointmentRow['location']): string {
+function describePlace(location: DayStop['location']): string {
   const label = LOCATION_LABELS[location.label] ?? location.label;
   const emirate = EMIRATES[location.emirate] ?? location.emirate;
   return `${label}, ${emirate}`;
 }
 
-/** The Google Maps hand-off, or null when the row carries no coordinate. */
-function navigateHref(location: AppointmentRow['location']): string | null {
-  const entrancePoint = location.entrancePoint;
-  if (!entrancePoint) {
-    return null;
-  }
+/** The Google Maps hand-off for a stop. */
+function navigateHref(location: DayStop['location']): string {
   // Coordinates only, never a name or an address: docs/COMPLIANCE/approved-vendors.md
   // holds Google Maps to exactly that, and the app sends no referrer either.
   return directionsUrl(
-    navigationTarget({ entrancePoint, parkingPoint: location.parkingPoint ?? null }),
+    navigationTarget({
+      entrancePoint: location.entrancePoint,
+      parkingPoint: location.parkingPoint,
+    }),
   );
 }
 
@@ -157,7 +164,7 @@ function fetchDay(apiFetch: ApiFetch, date: string): Promise<State> {
   return apiFetch(`/api/appointments?date=${date}&scope=own`)
     .then(async (res) => {
       if (!res.ok) return { kind: 'error' } as const;
-      const parsed = AppointmentListResponse.safeParse(await res.json());
+      const parsed = DayStopListResponse.safeParse(await res.json());
       if (!parsed.success) return { kind: 'error' } as const;
       return { kind: 'ready', stops: parsed.data.appointments } as const;
     })
@@ -169,30 +176,33 @@ function Stop({
   phase,
   onCheckIn,
 }: {
-  stop: AppointmentRow;
+  stop: DayStop;
   phase: StopPhase;
-  onCheckIn: (stop: AppointmentRow) => void;
+  onCheckIn: (stop: DayStop) => void;
 }) {
-  const name = shortName(stop.client);
+  const name = shortName(stop.client.givenName, stop.client.familyInitial);
+  const arabicName = stop.client.givenNameAr
+    ? shortName(stop.client.givenNameAr, stop.client.familyInitialAr)
+    : null;
   const age = describeAge(stop.client.age);
   const note = STOP_NOTES[stop.status];
-  const href = navigateHref(stop.location);
-  const collapsed = phase === 'past';
+
+  // The actions turn on whether the visit is finished, never on where the
+  // practitioner has got to in the day. A confirmed visit nobody closed is
+  // still a visit somebody owes: it folds away, but it keeps its buttons.
   const settled = isSettled(stop.status);
 
-  return (
-    <li className={`stop stop--${phase}`}>
-      <div className="stop__window numeric">{formatWindow(stop.windowStart, stop.windowEnd)}</div>
-      <div className="stop__who">
-        <span className="stop__name">{name}</span>
-        {stop.client.givenNameAr ? (
-          <span className="stop__name-ar small muted" lang="ar" dir="rtl">
-            {stop.client.givenNameAr}
-          </span>
-        ) : null}
-      </div>
+  const head = (
+    <>
+      <span className="stop__window numeric">{formatWindow(stop.windowStart, stop.windowEnd)}</span>
+      <span className="stop__name">{name}</span>
+      {arabicName ? (
+        <span className="stop__name-ar small muted" lang="ar" dir="rtl">
+          {arabicName}
+        </span>
+      ) : null}
       {note ? (
-        <div
+        <span
           className={
             CRITICAL_STATUSES.includes(stop.status)
               ? 'stop__note small note--critical'
@@ -200,36 +210,65 @@ function Stop({
           }
         >
           {note}
-        </div>
+        </span>
       ) : null}
-      {collapsed ? null : (
+    </>
+  );
+
+  const detail = (
+    <div className="stop__detail">
+      {age ? <div className="small muted numeric">{age}</div> : null}
+      <div className="small muted">{stop.serviceType.name}</div>
+      <div className="small muted">{describePlace(stop.location)}</div>
+      {settled ? null : (
+        <div className="stop__actions">
+          {/* The visible word is one of several identical ones down the
+              column, and it leaves the app, so the announced name says whose
+              door and where the tap goes. An aria-label rather than a
+              visually-hidden span: the accessible-name algorithm concatenates
+              child text without inserting separators, so the span form is
+              announced as one run-together word by anything that follows it
+              literally. The visible text stays a prefix of the label, so
+              voice control still hears "Navigate". */}
+          <a
+            className="button stop__action"
+            href={navigateHref(stop.location)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Navigate to ${name}, opens Google Maps in a new tab`}
+          >
+            Navigate
+          </a>
+          <Button
+            variant={phase === 'current' ? 'primary' : 'secondary'}
+            className="stop__action"
+            aria-label={`Check in ${name}`}
+            onClick={() => onCheckIn(stop)}
+          >
+            Check in
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <li className={`stop stop--${phase}`} aria-current={phase === 'current' ? 'step' : undefined}>
+      {phase === 'past' ? (
+        // A real disclosure, not a stub: a stop behind the practitioner folds
+        // down to when it was and who it was, and opens again in full — the
+        // drive and the check-in included, when the visit is still open.
+        <details className="stop__fold">
+          <summary className="stop__summary">
+            {head}
+            <ChevronIcon className="stop__chevron" />
+          </summary>
+          {detail}
+        </details>
+      ) : (
         <>
-          {age ? <div className="stop__detail small muted numeric">{age}</div> : null}
-          <div className="stop__detail small muted">{stop.serviceType.name}</div>
-          <div className="stop__detail small muted">{describePlace(stop.location)}</div>
-          {settled ? null : (
-            <div className="stop__actions">
-              {href ? (
-                <a
-                  className="button stop__action"
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`Navigate to ${name}`}
-                >
-                  Navigate
-                </a>
-              ) : null}
-              <Button
-                variant={phase === 'current' ? 'primary' : 'secondary'}
-                className="stop__action"
-                aria-label={`Check in ${name}`}
-                onClick={() => onCheckIn(stop)}
-              >
-                Check in
-              </Button>
-            </div>
-          )}
+          {head}
+          {detail}
         </>
       )}
     </li>
@@ -241,13 +280,29 @@ export function TodayPage() {
   const navigate = useNavigate();
 
   const [now, setNow] = useState(() => new Date());
-  const [date] = useState(() => practiceDate(new Date()));
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
 
+  // The day is derived from the clock, never frozen at mount: a screen left
+  // open overnight asks for the new day, not yesterday's.
+  const date = practiceDate(now);
+
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
-    return () => clearInterval(id);
+    const tick = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
+    // Coming back to the screen is the moment a coordinator's change is most
+    // likely to have happened since it was last read, so it is also the moment
+    // to ask again.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        setNow(new Date());
+        setReloadToken((token) => token + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(tick);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -261,9 +316,12 @@ export function TodayPage() {
   }, [apiFetch, date, reloadToken]);
 
   const checkIn = useCallback(
-    (stop: AppointmentRow) => {
-      const mrn = stop.client.mrn;
-      navigate(mrn ? `/today/check-in?mrn=${encodeURIComponent(mrn)}` : '/today/check-in');
+    (stop: DayStop) => {
+      // Router state, never the address: a record number is personal data and
+      // .claude/rules/ui.md keeps it out of paths and query strings. It is
+      // carried in memory, so it never lands in history, a bookmark, a shared
+      // link or a server log.
+      navigate('/today/check-in', { state: { record: stop.client.mrn } });
     },
     [navigate],
   );
@@ -281,18 +339,22 @@ export function TodayPage() {
   return (
     <div className="ground" data-ground="dark">
       <main className="plain plain--instrument">
-        <h1>Today</h1>
-        <div className="small muted">{roles}</div>
-        <div className="small muted numeric">
-          {DAY_FORMAT.format(new Date(`${date}T00:00:00${PRACTICE_UTC_OFFSET}`))}
-        </div>
+        {/* Title, who is signed in and which day, as one block: three items on
+            the column's own 24px rhythm pushed the first window off a small
+            phone before anything had been read. */}
+        <header className="today__header">
+          <h1>Today</h1>
+          <div className="small muted">{roles}</div>
+          <div className="small muted numeric">
+            {DAY_FORMAT.format(new Date(`${date}T00:00:00${PRACTICE_UTC_OFFSET}`))}
+          </div>
+        </header>
 
         {state.kind === 'loading' ? <Note>Loading your day.</Note> : null}
         {state.kind === 'error' ? (
           <div className="today__error">
             <Note tone="critical">{LOAD_ERROR}</Note>
             <Button
-              className="today__wide"
               onClick={() => {
                 setState({ kind: 'loading' });
                 setReloadToken((token) => token + 1);
@@ -306,7 +368,7 @@ export function TodayPage() {
           <Note>Nothing is booked for you today.</Note>
         ) : null}
         {stops.length > 0 ? (
-          <ol className="stops">
+          <ol className="stops" aria-label="Your stops today">
             {stops.map((stop, index) => (
               <Stop
                 key={stop.id}
@@ -318,18 +380,19 @@ export function TodayPage() {
           </ol>
         ) : null}
 
-        <Note>
-          Today needs a connection for now. Holding the day on the device, so it opens in a basement
-          or a lift, is the next piece of work.
-        </Note>
-        {hasConsole ? (
-          <Button className="today__wide" onClick={() => navigate('/admin/clients')}>
-            Admin console
+        <Note>Today needs a connection.</Note>
+
+        {/* The account controls, set apart from the day by a rule and sized to
+            themselves: full-width slabs here would read as two more actions of
+            the same weight as checking a client in, which they are not. */}
+        <div className="today__account">
+          {hasConsole ? (
+            <Button onClick={() => navigate('/admin/clients')}>Admin console</Button>
+          ) : null}
+          <Button variant="quiet" onClick={() => void signOut()}>
+            Sign out
           </Button>
-        ) : null}
-        <Button className="today__wide" onClick={() => void signOut()}>
-          Sign out
-        </Button>
+        </div>
       </main>
     </div>
   );

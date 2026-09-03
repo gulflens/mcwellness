@@ -1,7 +1,7 @@
 import { SignJWT } from 'jose';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { AppointmentListResponse } from '@app/api/appointments/schema';
+import type { AppointmentListResponse, DayStopListResponse } from '@app/api/appointments/schema';
 import { createPool } from '@app/api/_middleware/db';
 import { createTokenVerifier } from '@app/api/_middleware/token-verifier';
 import { createApi } from '@app/api/create-api';
@@ -61,6 +61,10 @@ const CLIENT_CALLED_OFF = '00000000-0000-4000-8000-000000007019';
 const LOCATION_CALLED_OFF = '00000000-0000-4000-8000-000000007020';
 const APPOINTMENT_CALLED_OFF = '00000000-0000-4000-8000-000000007021';
 
+const CLIENT_PROPOSED = '00000000-0000-4000-8000-000000007022';
+const LOCATION_PROPOSED = '00000000-0000-4000-8000-000000007023';
+const APPOINTMENT_PROPOSED = '00000000-0000-4000-8000-000000007024';
+
 // The clock the API is given, fixed so nothing here can turn over midnight
 // mid-run. The Dubai calendar date is read straight from Intl rather than from
 // domain/scheduling, so the fixture does not lean on the code it checks.
@@ -111,8 +115,23 @@ async function list(sub: string, query: string): Promise<Response> {
   });
 }
 
+/** The practice scope's rows. */
 async function appointmentsFrom(res: Response): Promise<AppointmentListResponse['appointments']> {
   const body = (await res.json()) as AppointmentListResponse;
+  return body.appointments;
+}
+
+/** The own scope's rows, which are a different shape (schema.ts's DayStop). */
+async function stopsFrom(res: Response): Promise<DayStopListResponse['appointments']> {
+  const body = (await res.json()) as DayStopListResponse;
+  return body.appointments;
+}
+
+/** The same rows as plain objects, for asserting what is *not* on them: the
+ *  types forbid naming a field the shape does not have, which is the point,
+ *  so the absence is checked against the wire itself. */
+async function rawFrom(res: Response): Promise<Record<string, unknown>[]> {
+  const body = (await res.json()) as { appointments: Record<string, unknown>[] };
   return body.appointments;
 }
 
@@ -195,6 +214,23 @@ beforeAll(async () => {
     LOCATION_SECOND,
     secondStart,
     plus45(secondStart),
+    'confirmed',
+  ]);
+
+  // A visit the client has not been told about yet. It holds the slot, and it
+  // is not a stop: nobody drives to a house that is not expecting them.
+  await seedClient(owner, IDS.tenantA, CLIENT_PROPOSED, IDS.ownerA, 'Proposed');
+  await seedLocation(owner, IDS.tenantA, LOCATION_PROPOSED, CLIENT_PROPOSED, IDS.ownerA);
+  const proposedStart = dubaiTime('12:00:00');
+  await owner.query(APPOINTMENT_INSERT_SQL, [
+    APPOINTMENT_PROPOSED,
+    IDS.tenantA,
+    CLIENT_PROPOSED,
+    PRACTITIONER_ONE,
+    SERVICE_TYPE,
+    LOCATION_PROPOSED,
+    proposedStart,
+    plus45(proposedStart),
     'proposed',
   ]);
 
@@ -251,23 +287,52 @@ describe("GET /api/appointments?scope=own — the practitioner's own day", () =>
   it('shows the caller their own stops, in window order, and nobody else’s', async () => {
     const res = await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`);
     expect(res.status).toBe(200);
-    const appointments = await appointmentsFrom(res);
-    expect(appointments.map((a) => a.id)).toEqual([APPOINTMENT_FIRST, APPOINTMENT_SECOND]);
+    const stops = await stopsFrom(res);
+    expect(stops.map((a) => a.id)).toEqual([APPOINTMENT_FIRST, APPOINTMENT_SECOND]);
   });
 
   it('carries the record number, the age and the coordinates the screen needs', async () => {
     const res = await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`);
-    const [first] = await appointmentsFrom(res);
+    const [first] = await stopsFrom(res);
     expect(first?.client.mrn).toMatch(/^MW-/);
     expect(first?.client.age).toBe(THIRTY_YEARS);
+    expect(first?.client.givenName).toBe('Synthetic');
     expect(first?.location.entrancePoint).toEqual(ENTRANCE);
     expect(first?.location.parkingPoint).toEqual(PARKING);
   });
 
+  it('sends a family initial and never the family name, nor the client id', async () => {
+    // Minimisation is a property of the shape, not of what the component
+    // happens to render: the full family name and the client's id do not
+    // cross the wire for this scope at all.
+    const res = await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`);
+    const [first] = await stopsFrom(res);
+    expect(first?.client.familyInitial).toBe('F'); // seeded family name 'First'
+    const [raw] = await rawFrom(await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`));
+    const client = raw?.client as Record<string, unknown>;
+    expect(client).not.toHaveProperty('familyName');
+    expect(client).not.toHaveProperty('familyNameAr');
+    expect(client).not.toHaveProperty('id');
+    // Nor the practitioner: every row is the caller's own.
+    expect(raw).not.toHaveProperty('practitioner');
+  });
+
+  it('still attributes each stop to its client in the audit trail', async () => {
+    // The id is dropped from the answer, not from the trail
+    // (docs/SPEC/audit.md section 5).
+    await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`);
+    const { rows } = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'list' " +
+        "and entity_type = 'appointment' and entity_id = $1 and client_id = $2 and actor_id = $3",
+      [APPOINTMENT_FIRST, CLIENT_FIRST, PRACTITIONER_ONE_USER],
+    );
+    expect(Number(rows[0]?.n)).toBeGreaterThanOrEqual(1);
+  });
+
   it('says null, not nothing, when the practice holds no age and no parking point', async () => {
     const res = await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`);
-    const appointments = await appointmentsFrom(res);
-    const second = appointments.find((a) => a.id === APPOINTMENT_SECOND);
+    const stops = await stopsFrom(res);
+    const second = stops.find((a) => a.id === APPOINTMENT_SECOND);
     expect(second?.client.age).toBeNull();
     expect(second?.location.parkingPoint).toBeNull();
     expect(second?.location.entrancePoint).toEqual(ENTRANCE);
@@ -280,18 +345,22 @@ describe("GET /api/appointments?scope=own — the practitioner's own day", () =>
     expect(res.status).toBe(200);
     // The owner is nobody's practitioner here, so their own day is empty —
     // not a refusal, and not somebody else's day either.
-    expect(await appointmentsFrom(res)).toEqual([]);
+    expect(await stopsFrom(res)).toEqual([]);
   });
 
-  it('leaves a cancelled visit off the day sheet, deliberately and not by accident', async () => {
-    const own = await appointmentsFrom(
-      await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`),
-    );
+  it('leaves a cancelled visit and a merely proposed one off the day sheet', async () => {
+    // Deliberately, and not as a side effect of the client join: the own
+    // scope names the statuses that are stops, and they are a subset of the
+    // statuses app.client_visible_to_practitioner grants on, so nothing this
+    // query returns can be dropped behind it.
+    const own = await stopsFrom(await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`));
     expect(own.map((a) => a.id)).not.toContain(APPOINTMENT_CALLED_OFF);
-    // The coordinator's own screen keeps it: a cancellation is a fact the
-    // ledger shows, and only the own scope drops it.
+    expect(own.map((a) => a.id)).not.toContain(APPOINTMENT_PROPOSED);
+    // The coordinator's own screen keeps both: a plan and a cancellation are
+    // facts the ledger shows, and only the own scope drops them.
     const practice = await appointmentsFrom(await list(AUTH.ownerA, `date=${TODAY}`));
     expect(practice.map((a) => a.id)).toContain(APPOINTMENT_CALLED_OFF);
+    expect(practice.map((a) => a.id)).toContain(APPOINTMENT_PROPOSED);
   });
 
   it('is refused for finance, the same as the practice scope', async () => {
@@ -321,14 +390,21 @@ describe('GET /api/appointments — the practice scope carries none of it', () =
     expect(appointments.map((a) => a.id)).toEqual([
       APPOINTMENT_FIRST,
       APPOINTMENT_SECOND,
+      APPOINTMENT_PROPOSED,
       APPOINTMENT_SOMEONE_ELSE,
       APPOINTMENT_CALLED_OFF,
     ]);
-    for (const appointment of appointments) {
-      expect(appointment.client.mrn).toBeUndefined();
-      expect(appointment.client.age).toBeUndefined();
-      expect(appointment.location.entrancePoint).toBeUndefined();
-      expect(appointment.location.parkingPoint).toBeUndefined();
+    for (const raw of await rawFrom(await list(AUTH.ownerA, `date=${TODAY}`))) {
+      const client = raw.client as Record<string, unknown>;
+      const location = raw.location as Record<string, unknown>;
+      expect(client).not.toHaveProperty('mrn');
+      expect(client).not.toHaveProperty('age');
+      expect(client).not.toHaveProperty('familyInitial');
+      expect(location).not.toHaveProperty('entrancePoint');
+      expect(location).not.toHaveProperty('parkingPoint');
+      // And it keeps what it needs: the coordinator's table names both.
+      expect(client).toHaveProperty('familyName');
+      expect(raw).toHaveProperty('practitioner');
     }
   });
 

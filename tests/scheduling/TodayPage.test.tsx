@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppointmentRow } from '../../app/api/appointments/schema';
+import type { DayStop } from '../../app/api/appointments/schema';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
 import { TodayPage } from '../../app/therapist/today/TodayPage';
@@ -12,8 +12,8 @@ afterEach(cleanup);
 /**
  * The practitioner's Today screen (docs/SPEC/scheduling-manual.md section
  * 5.1): the stops of one day in one column, the current one emphasised, the
- * ones behind it collapsed, a drive out to Google Maps and a way into
- * check-in carrying the record number.
+ * ones behind it folded but whole, a drive out to Google Maps and a way into
+ * check-in that carries the record number without putting it in the address.
  */
 
 // A signed-in session: the screen shows who is signed in and offers the
@@ -27,6 +27,9 @@ const provider: AuthProvider = {
 };
 
 // Synthetic throughout, in the reserved ranges (.claude/rules/testing.md).
+// Names and their Arabic come from db/seed/names.ts, the one list every
+// invented person in this repository is named from: Iris is سوسن and Cliff is
+// جرف there, so those are the spellings here too.
 const PRACTITIONER = {
   userId: '00000009-0000-4000-8000-000000000001',
   displayName: 'Rowan Meadow',
@@ -41,8 +44,9 @@ const OWNER_WHO_TREATS = { ...PRACTITIONER, roles: ['owner', 'lead_practitioner'
 const TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(new Date());
 const dubai = (hour: string) => new Date(`${TODAY}T${hour}+04:00`).toISOString();
 const plus45 = (iso: string) => new Date(new Date(iso).getTime() + 45 * 60_000).toISOString();
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
 
-function stop(overrides: Partial<AppointmentRow> & { id: string }): AppointmentRow {
+function stop(overrides: Partial<DayStop> & { id: string }): DayStop {
   const windowStart = overrides.windowStart ?? dubai('09:00:00');
   return {
     windowStart,
@@ -50,15 +54,13 @@ function stop(overrides: Partial<AppointmentRow> & { id: string }): AppointmentR
     status: 'confirmed',
     deliveryMode: 'home',
     client: {
-      id: '00000009-0000-4000-8000-000000000101',
-      givenName: 'Iris',
-      familyName: 'Cliff',
-      givenNameAr: null,
-      familyNameAr: null,
       mrn: 'MW-000123',
+      givenName: 'Iris',
+      givenNameAr: null,
+      familyInitial: 'C',
+      familyInitialAr: null,
       age: 9,
     },
-    practitioner: { id: '00000009-0000-4000-8000-000000000102', displayName: 'Rowan Meadow' },
     serviceType: { id: '00000009-0000-4000-8000-000000000103', name: 'Standard session' },
     location: {
       id: '00000009-0000-4000-8000-000000000104',
@@ -71,7 +73,7 @@ function stop(overrides: Partial<AppointmentRow> & { id: string }): AppointmentR
   };
 }
 
-function dayOf(...appointments: AppointmentRow[]): typeof fetch {
+function dayOf(...appointments: DayStop[]): typeof fetch {
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.startsWith('/api/appointments?')) {
@@ -81,10 +83,15 @@ function dayOf(...appointments: AppointmentRow[]): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-/** Renders the destination path, so a navigation can be asserted on. */
+/** Renders where a navigation landed, and what it carried out of sight. */
 function Wherever() {
   const location = useLocation();
-  return <div data-testid="destination">{`${location.pathname}${location.search}`}</div>;
+  return (
+    <div>
+      <div data-testid="destination">{`${location.pathname}${location.search}`}</div>
+      <div data-testid="carried">{JSON.stringify(location.state)}</div>
+    </div>
+  );
 }
 
 function renderPage(fetchImpl: typeof fetch, actor: typeof PRACTITIONER = PRACTITIONER) {
@@ -122,34 +129,34 @@ describe('TodayPage', () => {
     expect(screen.getByText('9 years old')).toBeTruthy();
     expect(screen.getByText('Standard session')).toBeTruthy();
     expect(screen.getByText('Home, Dubai')).toBeTruthy();
-    // Never the full family name, and never a record number on the face of it.
+    // The family name never reaches the browser at all (the wire carries one
+    // initial), and the record number is never put on the face of the screen.
     expect(screen.queryByText(/Cliff/)).toBeNull();
     expect(screen.queryByText(/MW-000123/)).toBeNull();
   });
 
-  it('renders an Arabic given name in its own script and direction', async () => {
+  it('renders an Arabic name as given name and initial, in its own script and direction', async () => {
     renderPage(
       dayOf(
         stop({
           id: '00000009-0000-4000-8000-000000000203',
           client: {
-            id: '00000009-0000-4000-8000-000000000101',
-            givenName: 'Iris',
-            familyName: 'Cliff',
-            givenNameAr: 'إيريس',
-            familyNameAr: 'كليف',
             mrn: 'MW-000123',
+            givenName: 'Iris',
+            givenNameAr: 'سوسن',
+            familyInitial: 'C',
+            familyInitialAr: 'ج',
             age: 9,
           },
         }),
       ),
     );
-    const arabic = await screen.findByText('إيريس');
+    const arabic = await screen.findByText('سوسن ج.');
     expect(arabic.getAttribute('lang')).toBe('ar');
     expect(arabic.getAttribute('dir')).toBe('rtl');
   });
 
-  it('drives to the parking point when there is one, and the entrance when there is not', async () => {
+  it('drives to the parking point when there is one, and says where the link goes', async () => {
     renderPage(
       dayOf(
         stop({
@@ -164,50 +171,110 @@ describe('TodayPage', () => {
         }),
       ),
     );
-    const link = await screen.findByRole('link', { name: 'Navigate to Iris C.' });
+    const link = await screen.findByRole('link', {
+      name: 'Navigate to Iris C., opens Google Maps in a new tab',
+    });
     expect(link.getAttribute('href')).toBe(
       'https://www.google.com/maps/dir/?api=1&destination=25.21,55.28',
     );
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    // Only the word is on screen; the rest is for a screen reader.
+    expect(link.textContent).toContain('Navigate');
   });
 
-  it('carries the record number into check-in through the query string', async () => {
+  it('falls back to the entrance when nobody has recorded where to park', async () => {
     renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000205' })));
-    fireEvent.click(await screen.findByRole('button', { name: 'Check in Iris C.' }));
-    await waitFor(() =>
-      expect(screen.getByTestId('destination').textContent).toBe('/today/check-in?mrn=MW-000123'),
+    const link = await screen.findByRole('link', { name: /^Navigate/ });
+    expect(link.getAttribute('href')).toBe(
+      'https://www.google.com/maps/dir/?api=1&destination=25.2,55.27',
     );
   });
 
-  it('emphasises the stop being delivered and collapses the ones behind it', async () => {
-    // Two stops, both still open, both already begun: the later of the two is
-    // the one the practitioner is on. Timed from the real clock rather than a
-    // fixed hour, so the assertion holds whenever the suite runs.
-    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
-    const first = stop({ id: '00000009-0000-4000-8000-000000000206', windowStart: hoursAgo(3) });
-    const second = stop({ id: '00000009-0000-4000-8000-000000000207', windowStart: hoursAgo(2) });
-    const { container } = renderPage(dayOf(first, second));
+  it('hands check-in the record number out of sight, never in the address', async () => {
+    renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000206' })));
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in Iris C.' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('destination').textContent).toBe('/today/check-in'),
+    );
+    // .claude/rules/ui.md: no personal data in paths or query strings. It
+    // travels in router state, so it never reaches history or a server log.
+    expect(screen.getByTestId('destination').textContent).not.toContain('MW-000123');
+    expect(JSON.parse(screen.getByTestId('carried').textContent ?? '{}')).toEqual({
+      record: 'MW-000123',
+    });
+  });
+
+  it('emphasises the stop being delivered', async () => {
+    const first = stop({ id: '00000009-0000-4000-8000-000000000207', windowStart: hoursAgo(3) });
+    const second = stop({
+      id: '00000009-0000-4000-8000-000000000208',
+      windowStart: hoursAgo(2),
+      client: {
+        mrn: 'MW-000456',
+        givenName: 'Hazel',
+        givenNameAr: null,
+        familyInitial: 'B',
+        familyInitialAr: null,
+        age: 41,
+      },
+    });
+    renderPage(dayOf(first, second));
+    // What a screen reader is told, and what a person reads in it.
+    const current = await screen.findByRole('listitem', { current: 'step' });
+    expect(current.textContent).toContain('Hazel B.');
+    expect(current.textContent).not.toContain('Iris C.');
+  });
+
+  it('keeps the actions on a stop nobody closed, however far the day has moved on', async () => {
+    // The gap this test exists for: the earlier visit is behind the
+    // practitioner but still open, and it must not lose its buttons just
+    // because a later window has since opened.
+    const forgotten = stop({
+      id: '00000009-0000-4000-8000-000000000209',
+      windowStart: hoursAgo(3),
+    });
+    const current = stop({
+      id: '00000009-0000-4000-8000-000000000210',
+      windowStart: hoursAgo(2),
+      client: {
+        mrn: 'MW-000456',
+        givenName: 'Hazel',
+        givenNameAr: null,
+        familyInitial: 'B',
+        familyInitialAr: null,
+        age: 41,
+      },
+    });
+    const { container } = renderPage(dayOf(forgotten, current));
     await waitFor(() => expect(container.querySelectorAll('.stop')).toHaveLength(2));
-    const stops = container.querySelectorAll('.stop');
-    expect(stops[0]?.className).toContain('stop--past');
-    expect(stops[1]?.className).toContain('stop--current');
-    // The collapsed stop keeps its window and its name and loses the rest.
-    expect(stops[0]?.textContent).toContain('Iris C.');
-    expect(stops[0]?.textContent).not.toContain('Standard session');
-    expect(stops[1]?.textContent).toContain('Standard session');
+    const [behind] = Array.from(container.querySelectorAll<HTMLElement>('.stop'));
+    if (!behind) throw new Error('no stop rendered');
+
+    // Folded to when it was and who it was.
+    const summary = within(behind).getByText('Iris C.');
+    expect(summary).toBeTruthy();
+
+    // And it opens to the whole stop, drive and check-in included.
+    const fold = behind.querySelector('details');
+    fireEvent.click(behind.querySelector('summary') as HTMLElement);
+    expect(fold?.hasAttribute('open')).toBe(true);
+    expect(within(behind).getByRole('button', { name: 'Check in Iris C.' })).toBeTruthy();
+    expect(within(behind).getByRole('link', { name: /^Navigate to Iris C\./ })).toBeTruthy();
+    expect(within(behind).getByText('Standard session')).toBeTruthy();
   });
 
   it('offers no drive and no check-in for a visit already settled', async () => {
-    renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000208', status: 'completed' })));
+    renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000211', status: 'completed' })));
     expect(await screen.findByText('Done')).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Navigate/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Check in/ })).toBeNull();
   });
 
-  it('warns when the client has not been told about the visit yet', async () => {
-    renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000209', status: 'proposed' })));
-    expect(await screen.findByText('Not yet confirmed with the client')).toBeTruthy();
+  it('says what happened at a visit nobody answered', async () => {
+    renderPage(dayOf(stop({ id: '00000009-0000-4000-8000-000000000212', status: 'no_show' })));
+    expect(await screen.findByText('Nobody answered')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Check in/ })).toBeNull();
   });
 
   it('says so plainly when nothing is booked', async () => {
@@ -231,10 +298,26 @@ describe('TodayPage', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
-  it('keeps the landing screen it replaces: the roles line and sign-out', async () => {
+  it('asks again when the practitioner comes back to the screen', async () => {
+    const fetchImpl = dayOf(stop({ id: '00000009-0000-4000-8000-000000000213' }));
+    renderPage(fetchImpl);
+    await screen.findByText('09:00–09:45');
+    const dayCalls = () =>
+      (fetchImpl as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((call) =>
+        String(call[0]).startsWith('/api/appointments?'),
+      ).length;
+    const before = dayCalls();
+    fireEvent(document, new Event('visibilitychange'));
+    await waitFor(() => expect(dayCalls()).toBeGreaterThan(before));
+  });
+
+  it('keeps the landing screen it replaces: the roles line and a quiet sign-out', async () => {
     renderPage(dayOf());
     expect(await screen.findByText('Practitioner')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    const signOut = screen.getByRole('button', { name: 'Sign out' });
+    // Not a slab of the same weight as checking a client in.
+    expect(signOut.className).toContain('button--quiet');
+    expect(signOut.className).not.toContain('stop__action');
     expect(screen.queryByRole('button', { name: 'Admin console' })).toBeNull();
   });
 
@@ -243,8 +326,9 @@ describe('TodayPage', () => {
     expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
   });
 
-  it('states that offline is still to come, rather than pretending the day is cached', async () => {
+  it('states plainly that it needs a connection, without describing a roadmap', async () => {
     renderPage(dayOf());
-    expect(await screen.findByText(/Today needs a connection for now/)).toBeTruthy();
+    expect(await screen.findByText('Today needs a connection.')).toBeTruthy();
+    expect(screen.queryByText(/next piece of work/)).toBeNull();
   });
 });

@@ -7,8 +7,10 @@ import type { ApiEnv, Db } from '../_middleware/request-context';
 import {
   APPOINTMENT_SCOPES,
   AppointmentListResponse,
+  DayStopListResponse,
   type AppointmentRow,
   type AppointmentScope,
+  type DayStop,
   type DeliveryMode,
 } from './schema';
 
@@ -17,12 +19,21 @@ import {
  * one of two scopes.
  *
  * `scope=practice` (the default) is the admin console's day schedule
- * (scheduling-manual.md section 4.1), across every practitioner. `scope=own`
- * is the practitioner's Today (section 5.1): their own stops, and only
- * theirs. The two differ in more than a filter — the own scope also carries
- * the record number, the client's age and the location's coordinates, which
- * the practice scope must never carry (see the note on `AppointmentRow` in
- * schema.ts, and section 11's limit on what the coordinator's screen shows).
+ * (scheduling-manual.md section 4.1), across every practitioner.
+ * `scope=own` is the practitioner's Today (section 5.1): their own stops, and
+ * only theirs. The two answer in different shapes, not one shape with holes
+ * in it — see `AppointmentRow` and `DayStop` in schema.ts, and the note there
+ * on what the own scope deliberately does not carry.
+ *
+ * **The own scope's effective date range.** A stop appears only while its
+ * client is on the caller's schedule, which
+ * db/migrations/201_client_visible_to_practitioner.sql defines as 90 Dubai
+ * days back to 30 Dubai days ahead of today. The list joins `client`, and a
+ * client outside that window is not readable by this caller, so the row never
+ * forms: asking for a date beyond the range returns an empty list rather than
+ * an error, even though appointments exist on it. That is the same rule the
+ * day sheet lives by rather than a fault in the query, but it is silent, so
+ * it is stated here and on `DayStopListResponse`.
  *
  * The queries below carry an explicit tenant_id = app.current_tenant_id()
  * predicate (the same defence-in-depth billing/prices.ts uses): row
@@ -43,19 +54,14 @@ const Query = z.object({
   scope: z.enum(APPOINTMENT_SCOPES).default('practice'),
 });
 
-type Row = {
+/** What both scopes read, and what neither hands out unchanged. */
+type BaseRow = {
   id: string;
   window_start: Date;
   window_end: Date;
   status: AppointmentRow['status'];
   delivery_mode: DeliveryMode;
   client_id: string;
-  client_given_name: string;
-  client_family_name: string;
-  client_given_name_ar: string | null;
-  client_family_name_ar: string | null;
-  practitioner_id: string;
-  practitioner_display_name: string;
   service_type_id: string;
   service_type_name: string;
   location_id: string;
@@ -63,9 +69,23 @@ type Row = {
   location_emirate: string;
 };
 
-/** The own scope's extra columns; absent from a practice-scope row entirely. */
-type OwnRow = Row & {
+type PracticeRow = BaseRow & {
+  client_given_name: string;
+  client_family_name: string;
+  client_given_name_ar: string | null;
+  client_family_name_ar: string | null;
+  practitioner_id: string;
+  practitioner_display_name: string;
+};
+
+type OwnRow = BaseRow & {
   client_mrn: string;
+  client_given_name: string;
+  client_given_name_ar: string | null;
+  // Computed in SQL: the full family name never leaves the database for this
+  // scope (schema.ts's note on DayStop).
+  client_family_initial: string;
+  client_family_initial_ar: string | null;
   client_date_of_birth: string | null;
   entrance_lng: number;
   entrance_lat: number;
@@ -73,18 +93,26 @@ type OwnRow = Row & {
   parking_lat: number | null;
 };
 
-const COLUMNS =
+const BASE_COLUMNS =
   'select a.id, a.window_start, a.window_end, a.status, a.delivery_mode, ' +
-  'c.id as client_id, c.given_name as client_given_name, c.family_name as client_family_name, ' +
-  'c.given_name_ar as client_given_name_ar, c.family_name_ar as client_family_name_ar, ' +
-  'p.id as practitioner_id, u.display_name as practitioner_display_name, ' +
+  'c.id as client_id, ' +
   'st.id as service_type_id, st.name as service_type_name, ' +
   'l.id as location_id, l.label::text as location_label, l.emirate::text as location_emirate';
 
-// Only the own scope selects these. st_x/st_y against the geography cast to
-// geometry is the same read app/api/clients/record.ts makes of a location.
+const PRACTICE_COLUMNS =
+  ', c.given_name as client_given_name, c.family_name as client_family_name, ' +
+  'c.given_name_ar as client_given_name_ar, c.family_name_ar as client_family_name_ar, ' +
+  'p.id as practitioner_id, u.display_name as practitioner_display_name';
+
+// st_x/st_y against the geography cast to geometry is the same read
+// app/api/clients/record.ts makes of a location. left(...) is the family
+// initial: one character, in whichever script the name is written.
 const OWN_COLUMNS =
-  ', c.mrn as client_mrn, c.date_of_birth as client_date_of_birth, ' +
+  ', c.mrn as client_mrn, c.given_name as client_given_name, ' +
+  'c.given_name_ar as client_given_name_ar, ' +
+  'left(c.family_name, 1) as client_family_initial, ' +
+  'left(c.family_name_ar, 1) as client_family_initial_ar, ' +
+  'c.date_of_birth as client_date_of_birth, ' +
   'extensions.st_x(l.entrance_point::extensions.geometry) as entrance_lng, ' +
   'extensions.st_y(l.entrance_point::extensions.geometry) as entrance_lat, ' +
   'extensions.st_x(l.parking_point::extensions.geometry) as parking_lng, ' +
@@ -109,24 +137,33 @@ const FROM_AND_WHERE =
 
 const ORDER = 'order by a.window_start';
 
-// A cancelled visit is not a stop: nobody drives to it, and the day sheet is
-// the list of doors still to knock on plus the ones already knocked on. The
-// coordinator's own screen keeps them — a cancellation is a fact the ledger
-// shows — which is why only the own scope carries this predicate.
+// What counts as a stop on a day sheet: a visit the practitioner is going to,
+// is at, or has been to. Named positively, so a status added to
+// appointment_status later appears on nobody's day until somebody puts it
+// here on purpose.
 //
-// It also keeps the join above honest. app.client_visible_to_practitioner
-// (201) opens a client's record to a practitioner for every appointment
-// except a cancellation, so without this the `join client` would drop exactly
-// these rows anyway, silently and only sometimes — a client with a second,
-// live visit inside the window would still be visible, and the same cancelled
-// stop would then appear. Filtering here makes it one deliberate rule rather
-// than an emergent property of two. (An erased client's stop still disappears
-// through that join, and should: erasure outranks a day sheet.)
-const OWN_STATUS_FILTER = "and a.status not in ('cancelled', 'cancelled_late') ";
+// What that leaves out, and why. A 'proposed' visit holds the slot but the
+// client has not been told about it (scheduling-manual.md section 3) — nobody
+// should be driving to a house that is not expecting them. A visit cancelled,
+// inside the notice period or outside it, is not happening. A 'rescheduled'
+// row has been superseded by the appointment that replaced it. The
+// coordinator's practice scope keeps all four: a plan, a cancellation and a
+// move are facts the ledger shows.
+//
+// This list is deliberately a subset of the five statuses
+// app.client_visible_to_practitioner (201) grants a practitioner's own client
+// on. That is what keeps the `join client` above honest: every row this query
+// selects has a readable client behind it, so the join can never quietly
+// drop one. Were the two lists to diverge, a stop would vanish from a day
+// sheet with nothing said — and only sometimes, since a client with a second
+// qualifying visit in the window stays readable regardless. (An erased
+// client's stop still disappears through that join, and should: erasure
+// outranks a day sheet.)
+const OWN_STATUS_FILTER = "and a.status in ('confirmed', 'checked_in', 'completed', 'no_show') ";
 
-const PRACTICE_SQL = COLUMNS + FROM_AND_WHERE + ORDER;
+const PRACTICE_SQL = BASE_COLUMNS + PRACTICE_COLUMNS + FROM_AND_WHERE + ORDER;
 const OWN_SQL =
-  COLUMNS +
+  BASE_COLUMNS +
   OWN_COLUMNS +
   FROM_AND_WHERE +
   'and a.practitioner_id = $3 ' +
@@ -147,7 +184,7 @@ function point(lng: number | null, lat: number | null): { lat: number; lng: numb
   return lng === null || lat === null ? null : { lat, lng };
 }
 
-function toRow(r: Row): AppointmentRow {
+function toPracticeRow(r: PracticeRow): AppointmentRow {
   return {
     id: r.id,
     windowStart: r.window_start.toISOString(),
@@ -167,18 +204,26 @@ function toRow(r: Row): AppointmentRow {
   };
 }
 
-/** The same row plus what a practitioner standing at the door needs. */
-function toOwnRow(r: OwnRow, today: string): AppointmentRow {
-  const base = toRow(r);
+function toDayStop(r: OwnRow, today: string): DayStop {
   return {
-    ...base,
+    id: r.id,
+    windowStart: r.window_start.toISOString(),
+    windowEnd: r.window_end.toISOString(),
+    status: r.status,
+    deliveryMode: r.delivery_mode,
     client: {
-      ...base.client,
       mrn: r.client_mrn,
+      givenName: r.client_given_name,
+      givenNameAr: r.client_given_name_ar,
+      familyInitial: r.client_family_initial,
+      familyInitialAr: r.client_family_initial_ar,
       age: r.client_date_of_birth === null ? null : ageOn(r.client_date_of_birth, today),
     },
+    serviceType: { id: r.service_type_id, name: r.service_type_name },
     location: {
-      ...base.location,
+      id: r.location_id,
+      label: r.location_label,
+      emirate: r.location_emirate,
       // entrance_point is `not null` in the schema (030_location.sql), so this
       // pair is always a real coordinate. parking_point is not, and st_x of a
       // null geography is null, which is what `point` folds back into one null.
@@ -188,13 +233,16 @@ function toOwnRow(r: OwnRow, today: string): AppointmentRow {
   };
 }
 
-async function ownAppointments(
+/** The rows, and the client ids the audit trail needs but the wire does not. */
+type OwnDay = { stops: DayStop[]; clientIds: (string | null)[] };
+
+async function ownDay(
   db: Db,
   userId: string,
   dayStart: Date,
   dayEnd: Date,
   today: string,
-): Promise<AppointmentRow[]> {
+): Promise<OwnDay> {
   const practitioner = await db.query<{ id: string }>(PRACTITIONER_SQL, [userId]);
   const practitionerId = practitioner.rows[0]?.id;
   // An owner or a lead practitioner may ask for their own day without being a
@@ -202,10 +250,13 @@ async function ownAppointments(
   // calendar). They have no stops of their own, and an empty day is the honest
   // answer rather than a refusal.
   if (practitionerId === undefined) {
-    return [];
+    return { stops: [], clientIds: [] };
   }
   const { rows } = await db.query<OwnRow>(OWN_SQL, [dayStart, dayEnd, practitionerId]);
-  return rows.map((r) => toOwnRow(r, today));
+  return {
+    stops: rows.map((r) => toDayStop(r, today)),
+    clientIds: rows.map((r) => r.client_id),
+  };
 }
 
 export function mountAppointmentList(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -224,10 +275,23 @@ export function mountAppointmentList(api: Hono<ApiEnv>, now: () => Date = () => 
     }
     const [dayStart, dayEnd] = dayRange(query.data.date);
     const db = c.get('db');
-    const appointments =
-      scope === 'own'
-        ? await ownAppointments(db, actor.userId, dayStart, dayEnd, practiceDate(now()))
-        : (await db.query<Row>(PRACTICE_SQL, [dayStart, dayEnd])).rows.map(toRow);
+
+    if (scope === 'own') {
+      const day = await ownDay(db, actor.userId, dayStart, dayEnd, practiceDate(now()));
+      // The client id is resolved for the trail and dropped from the answer:
+      // every read of a client's row is attributed to that client
+      // (docs/SPEC/audit.md section 5), whether or not the id crosses the wire.
+      await logReads(
+        db,
+        'appointment',
+        day.stops.map((stop, index) => ({ id: stop.id, clientId: day.clientIds[index] ?? null })),
+        'list',
+      );
+      return c.json(DayStopListResponse.parse({ appointments: day.stops }));
+    }
+
+    const { rows } = await db.query<PracticeRow>(PRACTICE_SQL, [dayStart, dayEnd]);
+    const appointments = rows.map(toPracticeRow);
     await logReads(
       db,
       'appointment',

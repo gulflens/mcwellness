@@ -8,6 +8,7 @@ import {
   IDS,
   asApiRole,
   freshDatabase,
+  rejectsWith,
   seedClient,
   seedContact,
   seedLocation,
@@ -73,6 +74,41 @@ const CLIENT_WITHIN_WINDOW = '00000000-0000-4000-8000-000000006027';
 const LOCATION_WITHIN_WINDOW = '00000000-0000-4000-8000-000000006028';
 const APPOINTMENT_WITHIN_WINDOW = '00000000-0000-4000-8000-000000006029';
 
+// The four future cases the window rule turns on: what a visit's status has
+// to be before it opens anything, and how far ahead it may sit.
+const CLIENT_PROPOSED = '00000000-0000-4000-8000-000000006040';
+const LOCATION_PROPOSED = '00000000-0000-4000-8000-000000006041';
+const APPOINTMENT_PROPOSED = '00000000-0000-4000-8000-000000006042';
+
+const CLIENT_TOMORROW = '00000000-0000-4000-8000-000000006043';
+const LOCATION_TOMORROW = '00000000-0000-4000-8000-000000006044';
+const APPOINTMENT_TOMORROW = '00000000-0000-4000-8000-000000006045';
+
+const CLIENT_FAR_AHEAD = '00000000-0000-4000-8000-000000006046';
+const LOCATION_FAR_AHEAD = '00000000-0000-4000-8000-000000006047';
+const APPOINTMENT_FAR_AHEAD = '00000000-0000-4000-8000-000000006048';
+
+const CLIENT_NEAR_AHEAD = '00000000-0000-4000-8000-000000006049';
+const LOCATION_NEAR_AHEAD = '00000000-0000-4000-8000-000000006050';
+const APPOINTMENT_NEAR_AHEAD = '00000000-0000-4000-8000-000000006051';
+
+// A practitioner who has been deactivated, and their otherwise perfect visit.
+const RETIRED_PRACTITIONER_USER = '00000000-0000-4000-8000-000000006052';
+const RETIRED_PRACTITIONER_ID = '00000000-0000-4000-8000-000000006053';
+const CLIENT_OF_RETIRED = '00000000-0000-4000-8000-000000006054';
+const LOCATION_OF_RETIRED = '00000000-0000-4000-8000-000000006055';
+const APPOINTMENT_OF_RETIRED = '00000000-0000-4000-8000-000000006056';
+
+// A second practice entirely, for the tenant boundary. The function reads
+// through row security, so its two tenant_id predicates are the only thing
+// keeping one practice's clients out of another's answers.
+const TENANT_B_PRACTITIONER_USER = '00000000-0000-4000-8000-000000006060';
+const TENANT_B_PRACTITIONER_ID = '00000000-0000-4000-8000-000000006061';
+const TENANT_B_SERVICE_TYPE = '00000000-0000-4000-8000-000000006062';
+const TENANT_B_CLIENT = '00000000-0000-4000-8000-000000006063';
+const TENANT_B_LOCATION = '00000000-0000-4000-8000-000000006064';
+const TENANT_B_APPOINTMENT = '00000000-0000-4000-8000-000000006065';
+
 let owner: pg.Client;
 let pool: pg.Pool;
 let api: ReturnType<typeof createApi>;
@@ -112,6 +148,25 @@ async function visibleToPractitioner(clientId: string): Promise<boolean> {
   );
 }
 
+/** The same check, but as a named actor in a named practice: the two tenant
+ * predicates inside the function are the only isolation on this path, so the
+ * tenant has to be a parameter rather than always tenant A. */
+async function visibleTo(tenantId: string, actorId: string, clientId: string): Promise<boolean> {
+  return asApiRole(
+    owner,
+    tenantId,
+    async () => {
+      await owner.query("select set_config('app.actor_id', $1, true)", [actorId]);
+      const { rows } = await owner.query<{ visible: boolean }>(
+        'select app.client_visible_to_practitioner($1) as visible',
+        [clientId],
+      );
+      return rows[0]?.visible ?? false;
+    },
+    'practitioner',
+  );
+}
+
 /** Minutes-precise offsets from the real clock: app.client_visible_to_practitioner
  * reads now() itself (it is an RLS-called function, not a domain one; CLAUDE.md
  * rule 4's "time is always an argument" binds domain/scheduling's pure
@@ -124,6 +179,12 @@ function hoursAgo(hours: number): Date {
 }
 function ago(days: number): Date {
   return new Date(Date.now() - days * DAY_MS);
+}
+/** `days` ahead, plus an hour offset: two fixtures on the same day would
+ * otherwise collide on appointment_no_overlap_practitioner, which holds a
+ * proposed slot exactly as firmly as a confirmed one (200_appointment.sql). */
+function ahead(days: number, hours = 0): Date {
+  return new Date(Date.now() + days * DAY_MS + hours * HOUR_MS);
 }
 function plus45(start: Date): Date {
   return new Date(start.getTime() + 45 * 60_000);
@@ -296,6 +357,90 @@ beforeAll(async () => {
     'completed',
   ]);
 
+  // The window's four future cases. Whole days from the real clock, so each
+  // lands on exactly that many Dubai calendar days from today: Dubai has no
+  // daylight-saving change, so adding 24 hours always advances the date by one.
+  const futures: readonly [string, string, string, Date, string][] = [
+    // Proposed, and tomorrow: the client has not been told about this visit
+    // yet, so it is a plan and not a schedule. It opens nothing.
+    [CLIENT_PROPOSED, LOCATION_PROPOSED, APPOINTMENT_PROPOSED, ahead(1), 'proposed'],
+    // The same visit, confirmed: now it is a schedule.
+    [CLIENT_TOMORROW, LOCATION_TOMORROW, APPOINTMENT_TOMORROW, ahead(1, 3), 'confirmed'],
+    // Thirty-one days out: beyond the far edge.
+    [CLIENT_FAR_AHEAD, LOCATION_FAR_AHEAD, APPOINTMENT_FAR_AHEAD, ahead(31), 'confirmed'],
+    // Twenty-nine days out: inside it.
+    [CLIENT_NEAR_AHEAD, LOCATION_NEAR_AHEAD, APPOINTMENT_NEAR_AHEAD, ahead(29), 'confirmed'],
+  ];
+  for (const [clientId, locationId, appointmentId, start, status] of futures) {
+    await seedClient(owner, IDS.tenantA, clientId, IDS.ownerA, 'Ahead');
+    await seedLocation(owner, IDS.tenantA, locationId, clientId, IDS.ownerA);
+    await owner.query(APPOINTMENT_INSERT_SQL, [
+      appointmentId,
+      IDS.tenantA,
+      clientId,
+      PRACTITIONER_ID,
+      SERVICE_TYPE,
+      locationId,
+      start,
+      plus45(start),
+      status,
+    ]);
+  }
+
+  // A deactivated practitioner whose user row still carries the role, with a
+  // confirmed visit an hour ago: everything the rule wants except being here.
+  await seedUser(owner, {
+    id: RETIRED_PRACTITIONER_USER,
+    tenantId: IDS.tenantA,
+    authId: null,
+    displayName: 'Synthetic Practitioner (deactivated)',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, RETIRED_PRACTITIONER_ID, RETIRED_PRACTITIONER_USER);
+  await owner.query("update practitioner set status = 'inactive' where id = $1", [
+    RETIRED_PRACTITIONER_ID,
+  ]);
+  await seedClient(owner, IDS.tenantA, CLIENT_OF_RETIRED, IDS.ownerA, 'Retired');
+  await seedLocation(owner, IDS.tenantA, LOCATION_OF_RETIRED, CLIENT_OF_RETIRED, IDS.ownerA);
+  const retiredStart = hoursAgo(1);
+  await owner.query(APPOINTMENT_INSERT_SQL, [
+    APPOINTMENT_OF_RETIRED,
+    IDS.tenantA,
+    CLIENT_OF_RETIRED,
+    RETIRED_PRACTITIONER_ID,
+    SERVICE_TYPE,
+    LOCATION_OF_RETIRED,
+    retiredStart,
+    plus45(retiredStart),
+    'confirmed',
+  ]);
+
+  // A second practice, complete with its own practitioner, client and visit.
+  await seedTenant(owner, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
+  await seedServiceType(owner, IDS.tenantB, TENANT_B_SERVICE_TYPE, 'nf-session');
+  await seedUser(owner, {
+    id: TENANT_B_PRACTITIONER_USER,
+    tenantId: IDS.tenantB,
+    authId: null,
+    displayName: 'Synthetic Practitioner (other practice)',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantB, TENANT_B_PRACTITIONER_ID, TENANT_B_PRACTITIONER_USER);
+  await seedClient(owner, IDS.tenantB, TENANT_B_CLIENT, IDS.ownerB, 'Otherpractice');
+  await seedLocation(owner, IDS.tenantB, TENANT_B_LOCATION, TENANT_B_CLIENT, IDS.ownerB);
+  const tenantBStart = hoursAgo(1);
+  await owner.query(APPOINTMENT_INSERT_SQL, [
+    TENANT_B_APPOINTMENT,
+    IDS.tenantB,
+    TENANT_B_CLIENT,
+    TENANT_B_PRACTITIONER_ID,
+    TENANT_B_SERVICE_TYPE,
+    TENANT_B_LOCATION,
+    tenantBStart,
+    plus45(tenantBStart),
+    'confirmed',
+  ]);
+
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
@@ -341,6 +486,28 @@ describe('app.client_visible_to_practitioner', () => {
     expect(await visibleToPractitioner(CLIENT_WITHIN_WINDOW)).toBe(true);
   });
 
+  it('opens nothing for a visit that is only proposed, however close it is', async () => {
+    // The client has not been told about it yet (scheduling-manual.md section
+    // 3), so it is a plan, not a schedule.
+    expect(await visibleToPractitioner(CLIENT_PROPOSED)).toBe(false);
+  });
+
+  it('grants for the same visit once it is confirmed', async () => {
+    expect(await visibleToPractitioner(CLIENT_TOMORROW)).toBe(true);
+  });
+
+  it('grants for a confirmed visit 29 days ahead and refuses one 31 days ahead', async () => {
+    expect(await visibleToPractitioner(CLIENT_NEAR_AHEAD)).toBe(true);
+    expect(await visibleToPractitioner(CLIENT_FAR_AHEAD)).toBe(false);
+  });
+
+  it('closes the door on a practitioner who has been deactivated', async () => {
+    // The visit is confirmed, an hour old and theirs; only their own row has
+    // been switched off. Without the status clause this would answer true for
+    // another 90 days.
+    expect(await visibleTo(IDS.tenantA, RETIRED_PRACTITIONER_USER, CLIENT_OF_RETIRED)).toBe(false);
+  });
+
   it('grants nothing to a practitioner who is not the appointment’s own assignee', async () => {
     const visible = await asApiRole(
       owner,
@@ -356,6 +523,83 @@ describe('app.client_visible_to_practitioner', () => {
       'practitioner',
     );
     expect(visible).toBe(false);
+  });
+});
+
+describe('the tenant boundary, which this function carries alone', () => {
+  // security definer means row security is not evaluated inside the function
+  // at all, so the two `tenant_id = app.current_tenant_id()` predicates in
+  // 201 are the whole of the isolation on this path. Both directions, because
+  // one predicate could be dropped without the other failing.
+  it("shows a practitioner nothing of another practice's client", async () => {
+    expect(await visibleTo(IDS.tenantB, TENANT_B_PRACTITIONER_USER, CLIENT_TODAY)).toBe(false);
+  });
+
+  it("shows that practice's own practitioner nothing of this one's client", async () => {
+    expect(await visibleTo(IDS.tenantA, PRACTITIONER_USER, TENANT_B_CLIENT)).toBe(false);
+  });
+
+  it('is not simply refusing everyone: each practitioner still sees their own', async () => {
+    expect(await visibleTo(IDS.tenantB, TENANT_B_PRACTITIONER_USER, TENANT_B_CLIENT)).toBe(true);
+    expect(await visibleTo(IDS.tenantA, PRACTITIONER_USER, CLIENT_TODAY)).toBe(true);
+  });
+});
+
+describe('the one write this door opens (db/policies/client/writers.sql)', () => {
+  // Flipping the stub opens client_record_update_writers on location as well
+  // as the six read policies, so the column boundary that write relies on —
+  // app.guard_location_notes, 100_client_record.sql — is proved here too.
+  it('lets a practitioner on the schedule add access notes to that location', async () => {
+    await asApiRole(
+      owner,
+      IDS.tenantA,
+      async () => {
+        await owner.query("select set_config('app.actor_id', $1, true)", [PRACTITIONER_USER]);
+        const updated = await owner.query(
+          'update location set access_notes = $2 where id = $1 returning access_notes',
+          [LOCATION_TODAY, 'Gate code is with the guard; park on the left.'],
+        );
+        expect(updated.rowCount).toBe(1);
+      },
+      'practitioner',
+    );
+  });
+
+  it('refuses that same practitioner any other column on the row', async () => {
+    await asApiRole(
+      owner,
+      IDS.tenantA,
+      async () => {
+        await owner.query("select set_config('app.actor_id', $1, true)", [PRACTITIONER_USER]);
+        // insufficient_privilege: app.guard_location_notes raises it by name.
+        await rejectsWith(owner, '42501', "update location set label = 'work' where id = $1", [
+          LOCATION_TODAY,
+        ]);
+        await rejectsWith(
+          owner,
+          '42501',
+          'update location set display_address = $2 where id = $1',
+          [LOCATION_TODAY, 'Somewhere else entirely'],
+        );
+      },
+      'practitioner',
+    );
+  });
+
+  it('reaches no location of a client it has no visit with', async () => {
+    await asApiRole(
+      owner,
+      IDS.tenantA,
+      async () => {
+        await owner.query("select set_config('app.actor_id', $1, true)", [PRACTITIONER_USER]);
+        const updated = await owner.query('update location set access_notes = $2 where id = $1', [
+          LOCATION_CANCELLED,
+          'Nothing should be written here.',
+        ]);
+        expect(updated.rowCount).toBe(0);
+      },
+      'practitioner',
+    );
   });
 });
 
