@@ -1,0 +1,347 @@
+/*
+  The session runner (docs/DESIGN-BRIEF.md section 6.1, "the instrument").
+  Dark ground, one column, one decision per screen, every tap target at or
+  above the practitioner app's 48px floor. Every value here is a token from
+  app/shell/tokens.css; nothing carries a literal colour or size.
+
+  Hue appears exactly twice: the critical token on a signal below threshold
+  and on a warning. Everything else is ink, paper and rule — the achromatic
+  chrome rule.
+*/
+
+.runner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+/* The run screen is full-bleed: no page padding competing with the numbers
+   a practitioner reads at arm's length. */
+.runner--full {
+  min-block-size: 100dvh;
+  padding: var(--s-6) var(--s-5) calc(var(--s-5) + env(safe-area-inset-bottom, 0px));
+  max-inline-size: none;
+  margin: 0;
+}
+
+/* Offline is normal. A line of ordinary text, never a banner and never a
+   colour (DESIGN-BRIEF.md section 6.1). */
+.sync {
+  margin: 0;
+  color: var(--slate);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.step h2 {
+  margin: 0;
+}
+
+/* The primary action stays in the thumb zone however much stacks above it. */
+.step__dock {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-block: var(--s-4) calc(var(--s-4) + env(safe-area-inset-bottom, 0px));
+  background: var(--paper);
+  border-block-start: var(--hairline) solid var(--rule);
+}
+
+.step__primary {
+  inline-size: 100%;
+  min-block-size: calc(var(--s-12) + var(--s-2));
+}
+
+.step__secondary {
+  align-self: flex-start;
+  min-block-size: var(--tap);
+}
+
+/* Pre-flight: large toggles, one per line, the whole row a target. */
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-block-size: calc(var(--tap) + var(--s-2));
+  padding-inline: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.check__input {
+  position: absolute;
+  opacity: 0;
+  inline-size: 0;
+  block-size: 0;
+}
+
+.check__box {
+  flex: none;
+  inline-size: var(--s-6);
+  block-size: var(--s-6);
+  border: var(--hairline) solid var(--ink-2);
+  border-radius: var(--r-2);
+}
+
+.check__input:checked ~ .check__box {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.check__input:focus-visible ~ .check__box {
+  box-shadow: var(--focus);
+}
+
+.check__label {
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+}
+
+/* Sliders: a wide track and a wide value, both readable in bad light. */
+.ratings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.rating {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.rating__label {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+}
+
+.rating__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+
+.rating__slider {
+  flex: 1 1 auto;
+  min-block-size: var(--tap);
+  accent-color: var(--ink);
+}
+
+.rating__value {
+  flex: none;
+  min-inline-size: var(--s-8);
+  text-align: end;
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+}
+
+/* The five-dot indicator. */
+.signal {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+
+.signal__hero {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--s-6);
+}
+
+.signal__dots {
+  display: inline-flex;
+  gap: var(--s-2);
+}
+
+.signal__dot {
+  inline-size: var(--s-4);
+  block-size: var(--s-4);
+  border-radius: 50%;
+  border: var(--hairline) solid var(--ink-2);
+}
+
+.signal__dot--on {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.signal__word {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+}
+
+.signal--low .signal__dot--on {
+  background: var(--critical);
+  border-color: var(--critical);
+}
+
+.signal--low .signal__word {
+  color: var(--critical);
+}
+
+.sites {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.site {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.site .field__input {
+  min-block-size: var(--tap);
+}
+
+/* The run: the largest type in the product, and nothing else on the screen. */
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  flex: 1 1 auto;
+}
+
+.run__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.run__client {
+  font-size: var(--t-h2);
+  line-height: var(--lh-h2);
+  font-weight: var(--w-medium);
+}
+
+.run__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-3);
+}
+
+.run__clock {
+  margin: 0;
+  font-size: var(--t-display);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.run__reading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+}
+
+.run__reading-toggle {
+  align-self: center;
+}
+
+/* Chips: the structured answer, never a colour and never an icon. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.chip {
+  min-block-size: var(--tap);
+  padding-inline: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-body);
+  cursor: pointer;
+}
+
+.chip--on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.chip:focus-visible {
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.field__input--area {
+  min-block-size: calc(var(--tap) * 2);
+  padding-block: var(--s-3);
+  resize: vertical;
+}
+
+/* The summary reads as a record, so it is a description list, not a table of
+   one column and not a stack of cards. */
+.summary {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.summary__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding-block-end: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.summary__row dt {
+  color: var(--ink-2);
+}
+
+.summary__row dd {
+  margin: 0;
+  text-align: end;
+}
+
+.summary__score {
+  color: var(--ink-2);
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

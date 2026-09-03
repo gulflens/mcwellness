@@ -12,11 +12,32 @@ import { z } from 'zod';
  * implementation has one convention to match rather than a second one.
  */
 
+export const ChecklistItem = z.object({
+  key: z.string(),
+  labelEn: z.string(),
+  labelAr: z.string(),
+});
+export type ChecklistItem = z.infer<typeof ChecklistItem>;
+
+export const RatingQuestion = ChecklistItem.extend({
+  min: z.number().int(),
+  max: z.number().int(),
+});
+export type RatingQuestion = z.infer<typeof RatingQuestion>;
+
 export const ServiceTypeOption = z.object({
   id: z.uuid(),
   code: z.string(),
   name: z.string(),
   nameAr: z.string().nullable(),
+  /**
+   * What this service asks the practitioner (docs/SPEC/session-capture.md
+   * sections 3.2 and 3.5). Both default to empty, so a practice that has set
+   * neither — and a server from before the settings existed — leaves the
+   * runner with a checklist of nothing rather than a failure.
+   */
+  preflightChecklist: z.array(ChecklistItem).default([]),
+  ratingQuestions: z.array(RatingQuestion).default([]),
 });
 export type ServiceTypeOption = z.infer<typeof ServiceTypeOption>;
 

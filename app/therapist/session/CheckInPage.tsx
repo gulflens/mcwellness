@@ -1,17 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { CheckInRequest, CheckInResponseReason } from '../../api/sessions/schema';
-import { CheckInResponse } from '../../api/sessions/schema';
+import { CheckInResponse, OpenSessionResponse } from '../../api/sessions/schema';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import './CheckInPage.css';
+import { SessionRunner, type RunnerVisit } from './SessionRunner';
+import { createOutboxStore, type OutboxStore } from './outbox/store';
 import { ServiceTypeOptionsResponse, SessionErrorBody, type ServiceTypeOption } from './schema';
 
 /**
- * The practitioner's check-in screen (docs/SPEC/session-capture.md section
- * 3.1): a record number, the caller's own certified service, a delivery
- * mode and an optional location, then one button. Dark ground, single
- * column, the primary action in the thumb zone (.claude/rules/ui.md).
+ * The practitioner's way into a visit (docs/SPEC/session-capture.md sections
+ * 2 and 3.1). Two doors, one screen:
+ *
+ * - **Check in.** A record number, the caller's own certified service, a
+ *   delivery mode and an optional location, then one button. Dark ground,
+ *   single column, the primary action in the thumb zone (.claude/rules/ui.md).
+ * - **Resume.** A visit already open — because the phone died, the app was
+ *   force-quit, or the practitioner simply reloaded — is offered by name and
+ *   by the time it started, before anything else on the screen. Asked of the
+ *   server when there is a connection, and of the device's own outbox when
+ *   there is not, so a reload in a basement still finds the visit.
+ *
+ * Once a visit is running, this screen hands over to SessionRunner and shows
+ * nothing else: no navigation chrome during a session (section 3.4).
  */
 
 type DeliveryMode = 'home' | 'studio' | 'remote';
@@ -20,6 +32,13 @@ type Point = { lat: number; lng: number };
 
 type ServicesState =
   { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; services: ServiceTypeOption[] };
+
+/** A visit already open, offered before anything else on the screen. */
+type ResumeOffer =
+  | { kind: 'looking' }
+  | { kind: 'none' }
+  | { kind: 'offered'; visit: RunnerVisit }
+  | { kind: 'dismissed' };
 
 type Outcome =
   | { kind: 'idle' }
@@ -155,6 +174,50 @@ function fetchServicesState(apiFetch: ApiFetch): Promise<ServicesState> {
     .catch(() => ({ kind: 'error' }) as const);
 }
 
+/**
+ * Turns the server's answer about an open visit into what the runner needs.
+ * The label is a given name and a family initial, which is all the wire ever
+ * carried (app/api/sessions/schema.ts's OpenSession).
+ */
+function visitFromOpen(open: {
+  id: string;
+  clientGivenName: string;
+  clientFamilyInitial: string | null;
+  serviceTypeId: string;
+  checkedInAt: string;
+  number: number;
+  of: number | null;
+  lastSeq: number;
+  photoConsent: boolean;
+}): RunnerVisit {
+  const initial = (open.clientFamilyInitial ?? '').trim();
+  const name = open.clientGivenName.trim();
+  return {
+    sessionId: open.id,
+    clientLabel: name.length === 0 ? 'This visit' : initial ? `${name} ${initial}.` : name,
+    checkedInAt: open.checkedInAt,
+    number: open.number,
+    of: open.of,
+    serviceTypeId: open.serviceTypeId,
+    photoConsent: open.photoConsent,
+    lastSeq: open.lastSeq,
+    shareLocation: false,
+  };
+}
+
+/** Asks the server for the visit this practitioner left open, if any. */
+async function fetchOpenVisit(apiFetch: ApiFetch): Promise<RunnerVisit | null> {
+  try {
+    const res = await apiFetch('/api/sessions/open');
+    if (!res.ok) return null;
+    const parsed = OpenSessionResponse.safeParse(await res.json());
+    if (!parsed.success || parsed.data.session === null) return null;
+    return visitFromOpen(parsed.data.session);
+  } catch {
+    return null;
+  }
+}
+
 export function CheckInPage() {
   const { apiFetch } = useAuth();
   const navigate = useNavigate();
@@ -179,6 +242,9 @@ export function CheckInPage() {
   }, []);
 
   const [attempt, setAttempt] = useState<Attempt | null>(null);
+  const [running, setRunning] = useState<RunnerVisit | null>(null);
+  const [resume, setResume] = useState<ResumeOffer>({ kind: 'looking' });
+  const storeRef = useRef<OutboxStore | null>(null);
 
   const [servicesState, setServicesState] = useState<ServicesState>({ kind: 'loading' });
   const [selectedServiceId, setSelectedServiceId] = useState('');
@@ -206,6 +272,49 @@ export function CheckInPage() {
       live = false;
     };
   }, [loadServices]);
+
+  // Is there a visit already open? The server knows, and when it cannot be
+  // reached the device's own outbox note does — a reload with no signal must
+  // still offer to resume rather than looking like a fresh day.
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      const fromServer = await fetchOpenVisit(apiFetch);
+      if (!live) return;
+      if (fromServer) {
+        setResume({ kind: 'offered', visit: fromServer });
+        return;
+      }
+      const store = await createOutboxStore();
+      if (!live) return;
+      storeRef.current = store;
+      const note = await store.readOpenVisit();
+      if (!live) return;
+      setResume(
+        note === null
+          ? { kind: 'none' }
+          : {
+              kind: 'offered',
+              visit: {
+                sessionId: note.sessionId,
+                clientLabel: note.clientLabel,
+                checkedInAt: note.checkedInAt,
+                number: note.number,
+                of: note.of,
+                serviceTypeId: note.serviceTypeId,
+                // Unknown offline, and the safer answer is no: the server
+                // refuses a photo without consent either way.
+                photoConsent: false,
+                lastSeq: 0,
+                shareLocation: false,
+              },
+            },
+      );
+    })();
+    return () => {
+      live = false;
+    };
+  }, [apiFetch]);
 
   // Derived, not stored: the practitioner's own pick once made, otherwise
   // the first (usually only) certified service — computed at render rather
@@ -320,6 +429,25 @@ export function CheckInPage() {
       const parsed = CheckInResponse.safeParse(await res.json());
       if (parsed.success && parsed.data.status === 'checked_in') {
         setOutcome({ kind: 'checked-in', checkedInAt: parsed.data.checkedInAt });
+        // The check-in answer has no name in it — the request carried a
+        // record number, not a person — so the visit is read back once,
+        // which is also where "session N of M" comes from. A failure here is
+        // not a failure of the check-in: the visit runs with a plain label.
+        const opened = await fetchOpenVisit(apiFetch);
+        if (!mountedRef.current) return;
+        setRunning(opened === null ? null : { ...opened, shareLocation });
+        if (opened !== null) return;
+        setRunning({
+          sessionId: ids.sessionId,
+          clientLabel: 'This visit',
+          checkedInAt: parsed.data.checkedInAt,
+          number: 1,
+          of: null,
+          serviceTypeId,
+          photoConsent: parsed.data.photoConsent,
+          lastSeq: 1,
+          shareLocation,
+        });
         return;
       }
       setOutcome({ kind: 'failed' });
@@ -328,7 +456,19 @@ export function CheckInPage() {
     }
   }, [apiFetch, attempt, deliveryMode, effectiveServiceId, recordNumber, shareLocation]);
 
+  if (running) {
+    return (
+      <SessionRunner
+        visit={running}
+        service={services.find((s) => s.id === running.serviceTypeId) ?? null}
+        onFinished={() => navigate('/today')}
+      />
+    );
+  }
+
   if (outcome.kind === 'checked-in') {
+    // Checked in, and the visit is being read back so the runner can name
+    // who is in the room. A moment, not a screen.
     return (
       <div className="ground" data-ground="dark">
         <main className="plain plain--instrument">
@@ -338,13 +478,6 @@ export function CheckInPage() {
               Checked in at{' '}
               <span className="numeric">{formatCheckedInTime(outcome.checkedInAt)}</span>.
             </Note>
-            <Button
-              variant="primary"
-              className="checkin__primary"
-              onClick={() => navigate('/today')}
-            >
-              Back to Today
-            </Button>
           </div>
         </main>
       </div>
@@ -367,6 +500,25 @@ export function CheckInPage() {
             Back to Today
           </Button>
           <h1>Check in</h1>
+
+          {resume.kind === 'offered' ? (
+            <section className="checkin__resume">
+              <p className="checkin__resume-line">
+                Resume session for {resume.visit.clientLabel}, started{' '}
+                <span className="numeric">{formatCheckedInTime(resume.visit.checkedInAt)}</span>.
+              </p>
+              <Button
+                variant="primary"
+                className="checkin__primary"
+                onClick={() => setRunning(resume.visit)}
+              >
+                Resume
+              </Button>
+              <Button variant="quiet" onClick={() => setResume({ kind: 'dismissed' })}>
+                Check in someone else instead
+              </Button>
+            </section>
+          ) : null}
           <div className="checkin__form">
             <div className="field">
               <label htmlFor="checkin-record-number" className="field__label">

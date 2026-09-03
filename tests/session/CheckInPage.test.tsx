@@ -52,6 +52,8 @@ function mount(
     onServiceTypes?: (callIndex: number) => Response;
     /** Router state the day sheet hands over when a stop's Check in is tapped. */
     state?: { record?: unknown };
+    /** What GET /api/sessions/open answers: a visit already open, or none. */
+    openSession?: unknown;
   } = {},
 ) {
   const services = options.services ?? [SERVICE_A];
@@ -60,6 +62,9 @@ function mount(
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
+    if (url === '/api/sessions/open') {
+      return json({ session: options.openSession ?? null });
+    }
     if (url === '/api/sessions/service-types') {
       const index = serviceTypesCalls;
       serviceTypesCalls += 1;
@@ -192,7 +197,7 @@ describe('CheckInPage', () => {
     expect(serviceTypeCalls).toBe(2);
   });
 
-  it('shows a confirmation with the time on a successful check-in', async () => {
+  it('hands straight over to the session once the visit is open', async () => {
     mount({
       onPost: () =>
         json(
@@ -207,8 +212,10 @@ describe('CheckInPage', () => {
     await ready();
     enterRecordNumber('MW-000123');
     clickCheckIn();
-    expect(await screen.findByRole('heading', { name: 'Checked in' })).toBeTruthy();
-    expect(screen.getByText('10:32')).toBeTruthy();
+    // A check-in is not a destination: the practitioner is standing at the
+    // door and the next thing they need is the pre-flight checklist, not a
+    // receipt they have to tap past.
+    expect(await screen.findByRole('heading', { name: 'Before you start' })).toBeTruthy();
   });
 
   const REASONS: Array<[string, string]> = [
@@ -325,7 +332,7 @@ describe('CheckInPage', () => {
     clickCheckIn();
     await screen.findByText('That check-in could not be completed. Try again.');
     clickCheckIn('Try again');
-    await screen.findByRole('heading', { name: 'Checked in' });
+    await screen.findByRole('heading', { name: 'Before you start' });
 
     expect(calls.length).toBe(2);
     expect(calls[1]?.url).toBe(calls[0]?.url);
@@ -470,5 +477,55 @@ describe('the record number the day sheet hands over', () => {
     mount();
     await ready();
     expect((screen.getByLabelText('Record number') as HTMLInputElement).value).toBe('');
+  });
+});
+
+/**
+ * The resume offer (docs/SPEC/session-capture.md section 2): "on restart the
+ * app offers 'resume session for Client L., started 14:32'". It is the first
+ * thing on the screen, because a practitioner whose phone died mid-visit has
+ * one thing to do and typing a record number again is not it.
+ */
+describe('CheckInPage, resuming a visit', () => {
+  const OPEN = {
+    id: '00000000-0000-4000-8000-000000009001',
+    clientGivenName: 'Rowan',
+    clientFamilyInitial: 'M',
+    serviceTypeId: SERVICE_A.id,
+    serviceName: 'Neurofeedback session',
+    deliveryMode: 'home',
+    checkedInAt: '2026-09-02T10:32:00.000Z',
+    phase: 'in_progress',
+    number: 12,
+    of: 30,
+    lastSeq: 6,
+    photoConsent: false,
+  };
+
+  it('offers the visit the practitioner left open, by name and by the time it started', async () => {
+    mount({ openSession: OPEN });
+    expect(await screen.findByText(/Resume session for Rowan M\., started/)).toBeTruthy();
+    expect(screen.getByText('14:32')).toBeTruthy();
+  });
+
+  it('goes back into that visit rather than starting a new one', async () => {
+    const { calls } = mount({ openSession: OPEN });
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
+    expect(await screen.findByRole('heading', { name: 'Before you start' })).toBeTruthy();
+    // Resuming posts no check-in: the visit is already open on the server.
+    expect(calls.filter((call) => call.url.endsWith('/events')).length).toBe(0);
+  });
+
+  it('lets the practitioner set the offer aside and check somebody else in', async () => {
+    mount({ openSession: OPEN });
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in someone else instead' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull());
+    expect(screen.getByLabelText('Record number')).toBeTruthy();
+  });
+
+  it('offers nothing when no visit is open', async () => {
+    mount();
+    await ready();
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
   });
 });

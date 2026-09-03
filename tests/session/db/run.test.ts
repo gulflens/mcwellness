@@ -10,7 +10,6 @@ import type {
   OpenSessionResponse,
 } from '../../../app/api/sessions/schema';
 import {
-  AUTH,
   IDS,
   freshDatabase,
   seedClient,

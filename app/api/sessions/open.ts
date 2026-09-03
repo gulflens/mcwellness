@@ -100,6 +100,11 @@ export function mountOpenSession(api: Hono<ApiEnv>): void {
       [],
     );
 
+    const photo = await db.query<{ active: boolean }>(
+      "select app.session_consent_active($1, 'photo_video') as active",
+      [session.id],
+    );
+
     await logRead(db, 'session', session.id, session.client_id);
 
     return c.json(
@@ -116,6 +121,7 @@ export function mountOpenSession(api: Hono<ApiEnv>): void {
           number: count.number,
           of: count.of,
           lastSeq: lastSeqOf(events),
+          photoConsent: photo.rows[0]?.active === true,
         },
       }),
     );

@@ -8,7 +8,7 @@ import {
 } from '@domain/session';
 import { hasRole } from '@domain/shared';
 import { logRefusal } from './audit';
-import type { ApiEnv } from '../_middleware/request-context';
+import type { ApiEnv, Db } from '../_middleware/request-context';
 import { appendEvents } from './events';
 import { mountClose } from './close';
 import { mountOpenSession } from './open';
@@ -52,6 +52,20 @@ function isConsentPurpose(value: string): value is CheckInConsentPurpose {
 }
 
 const Params = z.object({ id: z.uuid() });
+
+/**
+ * Whether the setup photo may be offered on this visit at all
+ * (app/therapist/session): one boolean, from the definer door in
+ * 304_session_reads.sql, so the runner never has to ask a second time and
+ * never sees a consent row.
+ */
+async function photoConsent(db: Db, sessionId: string): Promise<boolean> {
+  const { rows } = await db.query<{ active: boolean }>(
+    "select app.session_consent_active($1, 'photo_video') as active",
+    [sessionId],
+  );
+  return rows[0]?.active === true;
+}
 
 // How far a device's own clock may drift from the server's before its event
 // is refused rather than trusted as the visit's checked-in time.
@@ -165,6 +179,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
             status: 'checked_in',
             sessionId: existingRow.id,
             checkedInAt: existingRow.checked_in_at.toISOString(),
+            photoConsent: await photoConsent(db, sessionId),
           }),
           200,
         );
@@ -370,6 +385,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
               status: 'checked_in',
               sessionId: row.id,
               checkedInAt: row.checked_in_at.toISOString(),
+              photoConsent: await photoConsent(db, sessionId),
             }),
             200,
           );
@@ -393,6 +409,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         status: 'checked_in',
         sessionId,
         checkedInAt: projection.checkedInAt,
+        photoConsent: await photoConsent(db, sessionId),
       }),
       201,
     );
