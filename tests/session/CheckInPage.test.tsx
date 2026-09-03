@@ -24,7 +24,7 @@ const SERVICE_A = {
   id: '00000004-0000-4000-8000-000000000001',
   code: 'nf-session',
   name: 'Neurofeedback session',
-  nameAr: null,
+  nameAr: 'جلسة نيوروفيدباك',
 };
 
 const provider: AuthProvider = {
@@ -160,6 +160,17 @@ describe('CheckInPage', () => {
     clickCheckIn();
     await waitFor(() => expect(calls.length).toBe(1));
     expect(calls[0]?.body.clientMrn).toBe('MW-000123');
+  });
+
+  it('shows the chosen service in both languages, the Arabic marked as Arabic', async () => {
+    // A native <option> holds no markup, so the Arabic name cannot be marked
+    // or laid out inside one; it sits beneath the picker instead, the way
+    // every checklist item and question on the runner carries its own.
+    mount();
+    await ready();
+    const arabic = await screen.findByText('جلسة نيوروفيدباك');
+    expect(arabic.getAttribute('lang')).toBe('ar');
+    expect(arabic.getAttribute('dir')).toBe('rtl');
   });
 
   it('lists the caller’s certified services, and explains an empty list', async () => {
