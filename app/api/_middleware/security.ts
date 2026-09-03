@@ -41,7 +41,11 @@ export function securityHeaders(
       appEnv === 'production' ? 'max-age=31536000; includeSubDomains' : false,
     xFrameOptions: 'DENY',
     crossOriginResourcePolicy: 'same-origin',
-    permissionsPolicy: { camera: [], microphone: [], geolocation: [] },
+    // Location is the app's own to ask for: the check-in's optional "Share my
+    // location" and enrolment's "Use my current position" both read the
+    // browser's geolocation on a tap, and geolocation=() would silently kill
+    // both in the served app. Camera and microphone stay off.
+    permissionsPolicy: { camera: [], microphone: [], geolocation: ['self'] },
   });
 }
 

@@ -30,6 +30,10 @@ describe('protective headers', () => {
       expect(res.headers.get('referrer-policy')).toBe('no-referrer');
       expect(res.headers.get('cross-origin-resource-policy')).toBe('same-origin');
       expect(res.headers.get('permissions-policy')).toContain('camera=()');
+      expect(res.headers.get('permissions-policy')).toContain('microphone=()');
+      // The app's own origin may ask for location (check-in, enrolment); no
+      // embedded third party may.
+      expect(res.headers.get('permissions-policy')).toContain('geolocation=(self)');
       expect(res.headers.get('x-powered-by')).toBeNull();
       expect(res.headers.get('server')).toBeNull();
       expect(res.headers.get('access-control-allow-origin')).toBeNull();
