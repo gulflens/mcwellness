@@ -93,7 +93,7 @@ export function OverviewTab({
         <div className="record-facts__row">
           <dt>Date of birth</dt>
           <dd className="numeric">
-            {record.dateOfBirth ? `${record.dateOfBirth} (${age})` : 'Not recorded'}
+            {record.dateOfBirth ? `${record.dateOfBirth} (age ${age})` : 'Not recorded'}
           </dd>
         </div>
         <div className="record-facts__row">

@@ -41,6 +41,9 @@ export function GoalsTab({
     [categories],
   );
   const [adding, setAdding] = useState(false);
+  // The goal whose "dropped" is waiting on a reason, so the select keeps showing the
+  // choice that was made rather than snapping back to the old status while the
+  // prompt is open.
   const [reasonFor, setReasonFor] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -102,7 +105,7 @@ export function GoalsTab({
               <Select
                 id={`goal-status-${goal.id}`}
                 label="Status"
-                value={goal.status}
+                value={reasonFor === goal.id ? 'dropped' : goal.status}
                 disabled={busyId === goal.id}
                 onChange={(e) => {
                   const next = e.target.value;
@@ -131,7 +134,13 @@ export function GoalsTab({
                     onChange={(e) => setReason(e.target.value)}
                   />
                   <div className="drawer__actions">
-                    <Button variant="secondary" onClick={() => setReasonFor(null)}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setReasonFor(null);
+                        setReason('');
+                      }}
+                    >
                       Cancel
                     </Button>
                     <Button
