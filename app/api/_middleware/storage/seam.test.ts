@@ -376,3 +376,40 @@ describe('the folder store and a link planted inside it', () => {
     }
   });
 });
+
+describe('the vendor says a missing object is a 400, not a 404', () => {
+  // Seen on staging on 2026-09-04: object/info on a key that is not there
+  // answers HTTP 400 with {"statusCode":"404","error":"not_found","code":"NoSuchKey"}.
+  const noSuchKey = () =>
+    new Response(JSON.stringify({ statusCode: '404', error: 'not_found', code: 'NoSuchKey' }), {
+      status: 400,
+      headers: { 'content-type': 'application/json' },
+    });
+  const KEY =
+    'tenant/00000001-0000-4000-8000-000000000001/practice/0000000a-0000-4000-8000-000000000011';
+
+  it('reads that answer as absent', async () => {
+    const store = supabaseStorage({
+      url: 'https://project.supabase.co',
+      serviceKey: 'not-a-real-key',
+      fetchImpl: async () => noSuchKey(),
+    });
+    expect(await store.exists(KEY)).toBe(false);
+  });
+
+  it('still treats any other 400 as a refusal', async () => {
+    const store = supabaseStorage({
+      url: 'https://project.supabase.co',
+      serviceKey: 'not-a-real-key',
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({ statusCode: '400', error: 'InvalidRequest', message: 'bad' }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+    });
+    await expect(store.exists(KEY)).rejects.toThrow();
+  });
+});
