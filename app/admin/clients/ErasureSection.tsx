@@ -6,7 +6,7 @@ import {
   type ErasureRequestRecord,
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note } from '../../shell/components/Controls';
+import { Button, Note } from '../../shell/components/Controls';
 import { Textarea } from './FormAtoms';
 import { contactName } from './contactName';
 import { DocumentLink } from './DocumentLink';

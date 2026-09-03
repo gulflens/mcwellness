@@ -143,7 +143,7 @@ function mount(
 
 describe('a recorded request, not yet carried out', () => {
   it('says what was asked and by whom, and does not erase until it has been confirmed', async () => {
-    const calls = mount(<ErasureSection record={record} mayAsk mayErase onChanged={vi.fn()} />, {
+    const calls = mount(<ErasureSection record={record} mayAsk mayErase />, {
       requests: [openRequest],
     });
     expect(
@@ -392,10 +392,9 @@ describe('the drawer, after the act', () => {
             familyName: 'Creek',
             givenNameAr: null,
             familyNameAr: null,
-            dateOfBirth: record.dateOfBirth,
+            age: 36,
             status: 'active',
-            contactRelationship: 'self',
-            contactPhone: '+971500000071',
+            contact: { relationship: 'self', phone: '+971500000071' },
             emirate: 'DXB',
           }}
           onClose={vi.fn()}
