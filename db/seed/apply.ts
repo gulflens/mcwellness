@@ -52,7 +52,7 @@ export function seedTargetError(
   return null;
 }
 
-const SYNTHETIC_ID = /^0000000[0-9a-f]-0000-4000-8000-[0-9a-f]{12}$/;
+const SYNTHETIC_ID = /^0{6}[0-9a-f]{2}-0000-4000-8000-[0-9a-f]{12}$/;
 const SYNTHETIC_PHONE = /^\+97150000\d{4}$/;
 const SYNTHETIC_EMAIL = /@example\.com$/;
 const SYNTHETIC_EMIRATES_ID = /^7841900\d{8}$/;
@@ -71,6 +71,10 @@ export function assertSynthetic(data: SeedData): void {
     data.users,
     data.roles,
     data.serviceTypes,
+    data.prices,
+    data.packages,
+    data.packages.flatMap((p) => p.components),
+    data.packages.map((p) => p.price),
     data.practitioners,
     data.credentials,
     data.locations,
@@ -189,6 +193,60 @@ export async function applySeed(
         // jsonb columns (migration 901): the text of the array, which Postgres casts.
         preflight_checklist: JSON.stringify(s.preflightChecklist),
         rating_questions: JSON.stringify(s.ratingQuestions),
+        created_by: owner,
+      });
+    }
+
+    // The price list, then the programmes. Both after service_type, which they
+    // reference, and both carrying the VAT rate and setting version stamped at
+    // write time from vat_setting version 1 - the row 400_billing_catalogue.sql's
+    // tenant trigger created when the tenant above was inserted (CLAUDE.md rule 6:
+    // nobody types a rate).
+    for (const p of data.prices) {
+      await insert('price', {
+        id: p.id,
+        tenant_id: t.id,
+        service_type_id: p.serviceTypeId,
+        unit_price_fils: p.unitPriceFils,
+        vat_rate_basis_points: p.vatRateBasisPoints,
+        vat_setting_version: p.vatSettingVersion,
+        valid_from: p.validFrom,
+        amendment_reason: p.amendmentReason,
+        created_by: owner,
+      });
+    }
+
+    for (const p of data.packages) {
+      await insert('package', {
+        id: p.id,
+        tenant_id: t.id,
+        code: p.code,
+        name: p.name,
+        name_ar: p.nameAr,
+        list_price_fils: p.listPriceFils,
+        expiry_months: p.expiryMonths,
+        created_by: owner,
+      });
+      for (const c of p.components) {
+        await insert('package_component', {
+          id: c.id,
+          tenant_id: t.id,
+          package_id: c.packageId,
+          service_type_id: c.serviceTypeId,
+          quantity: c.quantity,
+          line_no: c.lineNo,
+          created_by: owner,
+        });
+      }
+      await insert('package_price', {
+        id: p.price.id,
+        tenant_id: t.id,
+        package_id: p.id,
+        amount_fils: p.price.amountFils,
+        vat_rate_basis_points: p.price.vatRateBasisPoints,
+        vat_setting_version: p.price.vatSettingVersion,
+        valid_from: p.price.validFrom,
+        amendment_reason: p.price.amendmentReason,
         created_by: owner,
       });
     }
@@ -352,6 +410,10 @@ export function describeSeed(counts: SeedCounts): string {
     'app_user',
     'user_role',
     'service_type',
+    'price',
+    'package',
+    'package_component',
+    'package_price',
     'practitioner',
     'credential',
     'location',

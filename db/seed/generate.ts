@@ -5,8 +5,9 @@ import { at, seededRandom } from './random';
 
 /**
  * The synthetic practice: one tenant, four people with logins, three
- * practitioners with certifications, six services, twenty clients with
- * contacts, home locations and consents. Pure: the same options give the same
+ * practitioners with certifications, six services with the practice's own
+ * prices and its three programmes, twenty clients with contacts, home
+ * locations and consents. Pure: the same options give the same
  * output, byte for byte. Every value is inside the reserved fake ranges
  * (.claude/rules/testing.md): ids of the form 0000000K-0000-4000-8000-*, phones
  * +971 50 000 1xxx, emails at example.com, Emirates IDs 784-1900-*, names from
@@ -52,6 +53,42 @@ export type SeedServiceType = {
   preflightChecklist: ChecklistItem[];
   /** The 0-to-10 questions asked before the session and again after it. */
   ratingQuestions: RatingQuestion[];
+};
+/** One service's price, net of VAT. Append-only in the database; one row each here. */
+export type SeedPrice = {
+  id: string;
+  serviceTypeId: string;
+  unitPriceFils: number;
+  vatRateBasisPoints: number;
+  vatSettingVersion: number;
+  validFrom: string;
+  amendmentReason: string;
+};
+export type SeedPackageComponent = {
+  id: string;
+  packageId: string;
+  serviceTypeId: string;
+  quantity: number;
+  lineNo: number;
+};
+export type SeedPackage = {
+  id: string;
+  code: string;
+  name: string;
+  nameAr: string;
+  /** What the contents come to bought one at a time. Set by the practice, never derived. */
+  listPriceFils: number;
+  expiryMonths: number;
+  components: SeedPackageComponent[];
+  /** What it is selling for today, with the reason behind the figure. */
+  price: {
+    id: string;
+    amountFils: number;
+    vatRateBasisPoints: number;
+    vatSettingVersion: number;
+    validFrom: string;
+    amendmentReason: string;
+  };
 };
 export type SeedPractitioner = {
   id: string;
@@ -154,6 +191,8 @@ export type SeedData = {
   users: SeedUser[];
   roles: SeedRole[];
   serviceTypes: SeedServiceType[];
+  prices: SeedPrice[];
+  packages: SeedPackage[];
   practitioners: SeedPractitioner[];
   credentials: SeedCredential[];
   locations: SeedLocation[];
@@ -173,9 +212,10 @@ export const SEED_DEFAULT = 20_260_902;
 export const SEED_TODAY = '2026-09-02';
 export const SEED_REASON = 'synthetic seed';
 
-/** 0000000K-0000-4000-8000-000000000NNN: readable, fixed, and shaped like a v4 uuid. */
+/** 0000000K-0000-4000-8000-000000000NNN: readable, fixed, and shaped like a v4 uuid.
+ *  `kind` is one or two hex characters; the single characters are nearly spent. */
 export function seedId(kind: string, n: number): string {
-  return `0000000${kind}-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  return `${'0000000'.slice(kind.length - 1)}${kind}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 }
 export const SEED_TENANT_ID = seedId('1', 1);
 export const SEED_OWNER_USER_ID = seedId('2', 1);
@@ -283,6 +323,89 @@ const NF_RATINGS: readonly RatingQuestion[] = [
   { key: 'focus', label_en: 'Focus today', label_ar: 'التركيز اليوم', min: 0, max: 10 },
   { key: 'mood', label_en: 'Mood now', label_ar: 'المزاج الآن', min: 0, max: 10 },
 ];
+
+/**
+ * What the practice charges, net of VAT (the founder's decisions of
+ * 2026-09-03). A discovery call, a consultation and a results call are
+ * included in something else and never billed, so they carry a zero price
+ * rather than no price: an unpriced service that is delivered goes to
+ * billing_exception, and a free call is not an exception. Compassionate
+ * Inquiry is deliberately absent - no figure has been set.
+ */
+const PRICES: readonly { code: string; fils: number; why: string }[] = [
+  { code: 'discovery-call', fils: 0, why: 'Free of charge; never billed.' },
+  { code: 'consultation', fils: 0, why: 'Included in a programme; never sold alone.' },
+  { code: 'brain-map', fils: 82_500, why: 'Opening price list.' },
+  { code: 'results-call', fils: 0, why: "Included in the brain map's price; never billed." },
+  { code: 'nf-session', fils: 70_000, why: 'Opening price list.' },
+];
+
+/**
+ * The three programmes. The list price is what the contents come to one at a
+ * time; the price now is the founder's own launch figure, and no discount
+ * percentage is stored anywhere (docs/SPEC/billing.md section 2.3, and the
+ * founder's decision of 2026-09-03).
+ */
+const LAUNCH_REASON = "Launch pricing, ends on the founder's word.";
+const PACKAGES: readonly {
+  code: string;
+  name: string;
+  nameAr: string;
+  listFils: number;
+  nowFils: number;
+  contents: { code: string; quantity: number }[];
+}[] = [
+  {
+    code: 'silver',
+    name: 'Silver',
+    nameAr: 'الفضية',
+    listFils: 1_215_000,
+    nowFils: 1_032_500,
+    contents: [
+      { code: 'consultation', quantity: 1 },
+      { code: 'brain-map', quantity: 2 },
+      { code: 'nf-session', quantity: 15 },
+    ],
+  },
+  {
+    code: 'gold',
+    name: 'Gold',
+    nameAr: 'الذهبية',
+    listFils: 1_997_500,
+    nowFils: 1_697_500,
+    contents: [
+      { code: 'consultation', quantity: 2 },
+      { code: 'brain-map', quantity: 3 },
+      { code: 'nf-session', quantity: 25 },
+    ],
+  },
+  {
+    code: 'platinum',
+    name: 'Platinum',
+    nameAr: 'البلاتينية',
+    listFils: 3_130_000,
+    nowFils: 2_660_500,
+    contents: [
+      { code: 'consultation', quantity: 3 },
+      { code: 'brain-map', quantity: 4 },
+      { code: 'nf-session', quantity: 40 },
+    ],
+  },
+];
+
+/**
+ * The VAT the seeded prices carry. Not a figure anyone types per price
+ * (CLAUDE.md rule 6): it is the rate and version app.default_vat_setting()
+ * writes for every new tenant (400_billing_catalogue.sql), restated here
+ * because the generator is pure and reads no database, and proved equal to
+ * the tenant's own vat_setting row in tests/db/seed.test.ts.
+ */
+const VAT_RATE_BASIS_POINTS = 500;
+const VAT_SETTING_VERSION = 1;
+/** The price list opens before the seed's own "today", so every price is in force. */
+const PRICED_FROM = '2026-01-01';
+/** Twelve months, the founder's decision of 2026-09-03; package.expiry_months's own default. */
+const PACKAGE_EXPIRY_MONTHS = 12;
 
 const CONSENT_PURPOSES: readonly ConsentPurpose[] = [
   'participation',
@@ -430,6 +553,43 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     if (!found) throw new Error(`No service ${code}.`);
     return found;
   };
+
+  const prices: SeedPrice[] = PRICES.map((row, i) => ({
+    id: seedId('d0', i + 1),
+    serviceTypeId: service(row.code).id,
+    unitPriceFils: row.fils,
+    vatRateBasisPoints: VAT_RATE_BASIS_POINTS,
+    vatSettingVersion: VAT_SETTING_VERSION,
+    validFrom: PRICED_FROM,
+    amendmentReason: row.why,
+  }));
+  let componentCount = 0;
+  const packages: SeedPackage[] = PACKAGES.map((bundle, i) => {
+    const id = seedId('d1', i + 1);
+    return {
+      id,
+      code: bundle.code,
+      name: bundle.name,
+      nameAr: bundle.nameAr,
+      listPriceFils: bundle.listFils,
+      expiryMonths: PACKAGE_EXPIRY_MONTHS,
+      components: bundle.contents.map((line, lineNo) => ({
+        id: seedId('d2', ++componentCount),
+        packageId: id,
+        serviceTypeId: service(line.code).id,
+        quantity: line.quantity,
+        lineNo: lineNo + 1,
+      })),
+      price: {
+        id: seedId('d3', i + 1),
+        amountFils: bundle.nowFils,
+        vatRateBasisPoints: VAT_RATE_BASIS_POINTS,
+        vatSettingVersion: VAT_SETTING_VERSION,
+        validFrom: PRICED_FROM,
+        amendmentReason: LAUNCH_REASON,
+      },
+    };
+  });
 
   const practitioners: SeedPractitioner[] = team
     .map((member, i) => ({ member, user: at(users, i) }))
@@ -720,6 +880,8 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     users,
     roles,
     serviceTypes,
+    prices,
+    packages,
     practitioners,
     credentials,
     locations,

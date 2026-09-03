@@ -41,6 +41,9 @@ describe('generateSeed', () => {
     expect(data.practitioners).toHaveLength(3);
     expect(data.serviceTypes).toHaveLength(6);
     expect(data.clients).toHaveLength(20);
+    // Five of the six services are priced; Compassionate Inquiry deliberately is not.
+    expect(data.prices).toHaveLength(5);
+    expect(data.packages).toHaveLength(3);
     expect(data.today).toBe(SEED_TODAY);
     expect(data.roles.filter((r) => r.role === 'owner')).toHaveLength(1);
     expect(data.roles.filter((r) => r.role === 'admin')).toHaveLength(2);
@@ -141,6 +144,8 @@ describe('generateSeed', () => {
       ...data.users.flatMap((u) => [u.id, u.authId]),
       ...data.roles.map((r) => r.id),
       ...data.serviceTypes.map((s) => s.id),
+      ...data.prices.map((p) => p.id),
+      ...data.packages.flatMap((p) => [p.id, p.price.id, ...p.components.map((c) => c.id)]),
       ...data.practitioners.map((p) => p.id),
       ...data.credentials.map((c) => c.id),
       ...data.locations.map((l) => l.id),
@@ -151,6 +156,60 @@ describe('generateSeed', () => {
     ];
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(UUID_V4);
+  });
+
+  it("carries the practice's own prices, net, and no service priced twice", () => {
+    const priced = new Map(data.prices.map((p) => [p.serviceTypeId, p.unitPriceFils]));
+    expect(priced.size).toBe(data.prices.length);
+    const fils = (code: string): number => {
+      const service = data.serviceTypes.find((s) => s.code === code);
+      const found = service === undefined ? undefined : priced.get(service.id);
+      if (found === undefined) throw new Error(`No price for ${code}.`);
+      return found;
+    };
+    // The founder's decisions of 2026-09-03, net of VAT.
+    expect(fils('nf-session')).toBe(70_000);
+    expect(fils('brain-map')).toBe(82_500);
+    // Included in something else and never billed: zero, not absent.
+    expect(fils('consultation')).toBe(0);
+    expect(fils('results-call')).toBe(0);
+    expect(fils('discovery-call')).toBe(0);
+    // Compassionate Inquiry has no figure yet, and so has no row.
+    const inquiry = data.serviceTypes.find((s) => s.code === 'compassionate-inquiry');
+    expect(priced.has(inquiry?.id ?? '')).toBe(false);
+    for (const price of data.prices) {
+      expect(price.vatRateBasisPoints).toBe(500);
+      expect(price.vatSettingVersion).toBe(1);
+      expect(price.validFrom < data.today).toBe(true);
+    }
+  });
+
+  it("prices each programme at its contents' total, and sells it for the founder's own figure", () => {
+    expect(data.packages.map((p) => p.code)).toEqual(['silver', 'gold', 'platinum']);
+    const unit = (serviceTypeId: string): number => {
+      const found = data.prices.find((p) => p.serviceTypeId === serviceTypeId);
+      if (found === undefined) throw new Error('A component has no price.');
+      return found.unitPriceFils;
+    };
+    const listed = [1_215_000, 1_997_500, 3_130_000];
+    const selling = [1_032_500, 1_697_500, 2_660_500];
+    data.packages.forEach((bundle, i) => {
+      // The list price is what the contents come to one at a time: the screen
+      // shows both figures, and a bundle whose parts do not add up is a drift
+      // warning there, so the seed must not be the thing that raises one.
+      const total = bundle.components.reduce(
+        (sum, c) => sum + c.quantity * unit(c.serviceTypeId),
+        0,
+      );
+      expect(bundle.listPriceFils, bundle.code).toBe(total);
+      expect(bundle.listPriceFils, bundle.code).toBe(listed[i]);
+      expect(bundle.price.amountFils, bundle.code).toBe(selling[i]);
+      expect(bundle.price.amountFils).toBeLessThan(bundle.listPriceFils);
+      expect(bundle.price.amendmentReason).toContain('Launch pricing');
+      expect(bundle.expiryMonths).toBe(12);
+      expect(bundle.components.map((c) => c.lineNo)).toEqual([1, 2, 3]);
+      for (const component of bundle.components) expect(component.packageId).toBe(bundle.id);
+    });
   });
 
   it('places a home in every emirate, with a Makani number only in Dubai', () => {
