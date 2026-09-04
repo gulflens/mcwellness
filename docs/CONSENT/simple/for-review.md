@@ -7,7 +7,9 @@ recommendation is what happens if you say nothing.
 1. **Bookings.** A visit can be moved or cancelled with 24 hours' notice. With
    less notice, one session from the package is used. A visit that cannot go
    ahead once the practitioner has arrived also uses one session, and there is
-   no separate fee for now. *Recommendation: yes.*
+   no separate fee for now. *Recommendation: yes.* **Answered 4 September 2026:
+   changed. A visit that cannot go ahead on the day costs a call-out fee of
+   AED 150 instead of a session.**
 
 2. **Packages and refunds.** Sessions in a package are valid for twelve
    months. If a client stops early, the unused sessions are refunded at the

@@ -25,3 +25,14 @@ box and the child section as the difference), the seed is re-rendered, the
 bytes are re-uploaded to the staging bucket with
 `scripts/upload-consent-wording.mjs`, and the long drafts are marked
 superseded rather than deleted, because consents already recorded name them.
+
+## The founder's review, 4 September 2026
+
+Approved in full with two changes, both applied here: the health question asks
+about a head injury at any time, not only the last year; and a visit that
+cannot go ahead once the practitioner has arrived costs a call-out fee of
+AED 150 instead of a session from the package. The second is a rule change
+for the software as well as the wording: today the scheduling stream treats
+that case as a late cancellation that uses a session, and the fee is only
+recorded. The next round makes the fee the charge and leaves the session in
+place (docs/CHANGE-REQUESTS, scheduling and billing).

@@ -3,8 +3,11 @@
 McWellness, September 2026. How the practical side works.
 
 **Moving or cancelling a visit.** Tell us at least 24 hours before. With
-less notice, one session from your package is used. If a visit cannot go
-ahead once the practitioner has arrived, the same applies.
+less notice, one session from your package is used.
+
+**If a visit cannot go ahead on the day.** If the practitioner has travelled
+to you and the session cannot proceed because of how the client is on the
+day, a call-out fee of AED 150 applies instead of a session from the package.
 
 **Arrival.** We give you an arrival window rather than a fixed minute,
 because visits are in people's homes across the city. If we are running

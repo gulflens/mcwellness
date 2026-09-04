@@ -27,7 +27,7 @@ afterwards. It passes. Tell the practitioner if you notice anything.
 ## Please tell us before the first session, and if it changes
 
 Epilepsy or any seizure; a pacemaker or any implanted electrical device; a
-head injury in the last year; pregnancy; medication that affects mood, sleep
+head injury at any time; pregnancy; medication that affects mood, sleep
 or attention; a skin condition or sensitivity on the scalp.
 
 ## Bookings and your information
