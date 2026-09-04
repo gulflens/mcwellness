@@ -32,6 +32,7 @@ import { mountClients } from './clients/list';
 import { mountClientRecord } from './clients/mount';
 import { mountDevSession, type DevSessionOptions } from './dev-session';
 import { mountPractice } from './practice/routes';
+import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
 import { mountSessions } from './sessions/checkin';
 
 /**
@@ -52,6 +53,9 @@ import { mountSessions } from './sessions/checkin';
  */
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
+/** The one path with a larger envelope, and what it is allowed (see below). */
+const LOGO_PATH = '/api/practice/logo';
+export const LOGO_BODY_LIMIT_BYTES = MAX_LOGO_BASE64_LENGTH + LOGO_ENVELOPE_ALLOWANCE_BYTES;
 export const REQUEST_TIMEOUT_MS = 10_000;
 const MINUTE = 60_000;
 
@@ -127,7 +131,19 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
       mode: 'failure',
     }),
   );
-  api.use('/api/*', bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge }));
+  // One route carries a file rather than a form and needs more room than the
+  // rest: the practice's logo, capped at 512 KiB by
+  // app/api/practice/schema.ts and by migration 909's own rules beneath it.
+  // Written as a choice between two caps rather than as a second `use` on the
+  // narrower path, because both would run and the smaller of the two would
+  // decide — which is the opposite of what a per-route exception means. Every
+  // other route keeps the 64 KiB envelope, deliberately: the exception is one
+  // path, one method's worth of bytes, and not a raised floor for everything.
+  const defaultBodyLimit = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge });
+  const logoBodyLimit = bodyLimit({ maxSize: LOGO_BODY_LIMIT_BYTES, onError: payloadTooLarge });
+  api.use('/api/*', async (c, next) =>
+    c.req.path === LOGO_PATH ? logoBodyLimit(c, next) : defaultBodyLimit(c, next),
+  );
   api.use('/api/*', timeout(REQUEST_TIMEOUT_MS, timedOut));
   api.use('/api/*', jsonOnly);
 

@@ -4,6 +4,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, PageHeader } from '../../shell/components/Controls';
 import { EMIRATE_LABELS } from './emirates';
 import { PracticeDrawer } from './PracticeDrawer';
+import { PracticeLogo } from './PracticeLogo';
 import './settings.css';
 
 /**
@@ -189,6 +190,8 @@ export function PracticePage() {
               practice&rsquo;s standard rate today, whichever way the switch is set.
             </p>
           </section>
+
+          <PracticeLogo />
         </div>
       ) : null}
 

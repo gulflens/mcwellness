@@ -50,6 +50,9 @@ function json(body: unknown, status = 200): Response {
 
 type Call = { url: string; init?: RequestInit };
 
+/** A fresh practice has no logo; PracticeLogo.test.tsx covers the section itself. */
+const NO_LOGO = () => json({ error: 'not_found', requestId: null }, 404);
+
 /** Answers the read, and whatever the test says to the save. */
 function mount(answer: (call: Call) => Response = () => json({ practice: PRACTICE })) {
   const calls: Call[] = [];
@@ -67,6 +70,12 @@ function mount(answer: (call: Call) => Response = () => json({ practice: PRACTIC
     }
     if (call.url === '/api/practice' && (init?.method ?? 'GET') === 'GET') {
       return json({ practice: PRACTICE });
+    }
+    // The logo section asks on mount, and a practice starts without one.
+    // What the section itself does is PracticeLogo.test.tsx's; this file is
+    // about the identity form, so the answer here is always "no logo yet".
+    if (call.url === '/api/practice/logo') {
+      return NO_LOGO();
     }
     return answer(call);
   }) as unknown as typeof fetch;

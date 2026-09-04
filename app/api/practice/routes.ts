@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { canActor } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
+import { mountPracticeLogo } from './logo';
 import { Practice, PracticeResponse, UpdatePracticeInput } from './schema';
 
 /**
@@ -92,6 +93,11 @@ function view(row: PracticeRow): Practice {
 }
 
 export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  // The practice's mark, in its own file: it is bytes rather than facts, and
+  // the ordering it has to keep (bytes into the store, then the row, then the
+  // old bytes after the commit) has nothing to say to the form above it.
+  mountPracticeLogo(api, now);
+
   api.get('/api/practice', async (c) => {
     const requestId = c.get('requestId');
     if (!canActor(c.get('actor'), { type: 'practice.settings.write' }, {}, now())) {
