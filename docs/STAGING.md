@@ -284,6 +284,13 @@ seals the identifiers in the script:
 node --env-file=.env.staging --import tsx db/seed/render-cli.ts > ../mcwellness-staging.seed.sql
 ```
 
+`pnpm seed:sql` runs the same renderer, and elsewhere in this file that is
+what a past render is described as. It is written out in full here because the
+script reads `.env` — the laptop's own database and the laptop's own identity
+key — and a staging render has to read `.env.staging` or the identifiers it
+seals will not open on staging. Same command, different environment file, and
+the environment file is the whole of the difference.
+
 Check the first line, which names the environment it was rendered for. Open
 the project's SQL editor, confirm the project reference in the address bar,
 paste the whole file and run it once: the script opens and commits its own
