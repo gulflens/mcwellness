@@ -130,6 +130,18 @@ describe('what logAction refuses to write down', () => {
     ).rejects.toThrow('may not carry a telephone number');
   });
 
+  it('refuses a bare number with no plus, local or with the country code', async () => {
+    // A number reaches a detail written both ways: as a person writes it on a
+    // form, and as a system strips it.
+    for (const number of ['0501234567', '971501234567', '050 123 4567', '050-123-4567']) {
+      const { calls, db } = recordingDb();
+      await expect(logAction(db, 'send', ENTITY, { sentTo: number })).rejects.toThrow(
+        'may not carry a telephone number',
+      );
+      expect(calls).toHaveLength(0);
+    }
+  });
+
   it('refuses an email address, naming the key and never the address', async () => {
     const { calls, db } = recordingDb();
 
@@ -161,6 +173,43 @@ describe('what logAction refuses to write down', () => {
         delivered: 'false',
       }),
     ).not.toThrow();
+  });
+
+  it('leaves an all-digit uuid alone: it is one long run, not a nine-digit number', () => {
+    // The boundary between runs is what keeps ids out of this. Every id the
+    // platform writes is thirty-two digits with hyphens between, and judged
+    // whole it is far too long to be a telephone number; judged through a
+    // window it would look like one every time.
+    expect(() =>
+      refuseContactDetails({
+        documentId: '00000000-0000-4000-8000-000000000909',
+        invoiceId: '00000001-0000-4000-8000-000000000001',
+      }),
+    ).not.toThrow();
+  });
+
+  it('leaves a year, a date and a reference number alone', () => {
+    expect(() =>
+      refuseContactDetails({
+        year: '2026',
+        issuedOn: '2026-09-04',
+        number: '12',
+        reference: 'INV-000012',
+        version: '1.0',
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses a nine-digit run of its own that starts with a zero, and says why that is right', () => {
+    // 04 123 4567 is a Dubai landline and 000000012 is a padded reference, and
+    // stripped of their punctuation the two are the same nine digits. The
+    // helper cannot tell them apart and refuses, which is the safe direction:
+    // a reference is written as it is printed (INV-000012, above) and loses
+    // nothing, where a landline written bare would sit in the trail for five
+    // years.
+    expect(() => refuseContactDetails({ landline: '04 123 4567' })).toThrow(
+      'may not carry a telephone number',
+    );
   });
 });
 

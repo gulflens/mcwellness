@@ -46,13 +46,50 @@ export async function logReads(
 }
 
 /**
- * A telephone number in the international shape the practice writes: a plus,
- * a leading digit that is not zero, and seven to fourteen more, with spaces,
- * hyphens or brackets allowed between them the way a person types one. Read
- * anywhere inside a value, not only as the whole of it, so "sent to
- * +971 50 000 0001" is caught as readily as the number alone.
+ * Every run in a value that could be a telephone number written out: an
+ * optional plus, then digits with the spaces, hyphens and brackets people put
+ * between them. Anything else — a letter, a comma, a full stop, a colon —
+ * ends the run.
+ *
+ * That boundary is the whole trick, and it is what keeps an id out of this.
+ * `00000000-0000-4000-8000-0000000000e6` is one run of thirty-four digits, not
+ * a phone number of nine; `INV-000012` is a run of six; `2026-09-04` is a run
+ * of eight starting with a 2. A number is judged on the run as a whole, never
+ * on a window inside it.
  */
-const E164_ANYWHERE = /\+[1-9][\d\s\-().]{6,17}\d/;
+const NUMERIC_RUNS = /\+?\d[\d\s\-()]*/g;
+
+/**
+ * Whether a run of that kind reads as a way to ring somebody.
+ *
+ * Two shapes, because a number reaches an audit detail written both ways:
+ *
+ * - **International**, with the plus: eight to fifteen digits, the first not a
+ *   zero. That is E.164's own range, and it catches `+971500000001` and
+ *   `+971 50 000 0001` alike.
+ * - **Local or bare**, without it: nine to twelve digits beginning `971` or
+ *   `0` — `0501234567` as a person writes it on a form, `971501234567` as a
+ *   system strips it. The prefixes are what make this narrow: nine to twelve
+ *   digits beginning with anything else is a reference, an amount or a date,
+ *   and is left alone.
+ *
+ * `04 123 4567` is a Dubai landline and `000000012` is a padded reference,
+ * and stripped of their punctuation the two are the same nine digits. Both are
+ * refused. That is the safe direction and it costs nothing: a reference is
+ * written the way it is printed — `INV-000012` — where a landline written bare
+ * would sit in the trail for its five years.
+ */
+function readsAsTelephone(run: string): boolean {
+  const digits = run.replace(/\D/g, '');
+  if (run.startsWith('+')) {
+    return digits.length >= 8 && digits.length <= 15 && !digits.startsWith('0');
+  }
+  return (
+    digits.length >= 9 &&
+    digits.length <= 12 &&
+    (digits.startsWith('971') || digits.startsWith('0'))
+  );
+}
 
 /** An email address: something, an at sign, a dotted host, no spaces in either. */
 const EMAIL_ANYWHERE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
@@ -70,11 +107,13 @@ const EMAIL_ANYWHERE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
  */
 export function refuseContactDetails(details: Record<string, string>): void {
   for (const [key, value] of Object.entries(details)) {
-    if (E164_ANYWHERE.test(value)) {
-      throw new Error(
-        `The audit details may not carry a telephone number; "${key}" does. ` +
-          "Record the contact's id instead (docs/SPEC/audit.md section 8).",
-      );
+    for (const run of value.match(NUMERIC_RUNS) ?? []) {
+      if (readsAsTelephone(run)) {
+        throw new Error(
+          `The audit details may not carry a telephone number; "${key}" does. ` +
+            "Record the contact's id instead (docs/SPEC/audit.md section 8).",
+        );
+      }
     }
     if (EMAIL_ANYWHERE.test(value)) {
       throw new Error(
