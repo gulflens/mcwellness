@@ -4,10 +4,10 @@ McWellness, September 2026. Please read the three short pages that come with
 this one, then answer these five questions. A yes or no is enough; the
 recommendation is what happens if you say nothing.
 
-1. **Bookings.** A visit can be moved or cancelled with 24 hours' notice. With
-   less notice, one session from the package is used. A visit that cannot go
-   ahead once the practitioner has arrived also uses one session, and there is
-   no separate fee for now. *Recommendation: yes.*
+1. **Bookings.** Moving or cancelling a visit more than 24 hours ahead is
+   free. Within 24 hours, a fee of AED 150 applies; a visit that cannot go
+   ahead once the practitioner has arrived carries the same fee. Sessions in a
+   package are never taken for a cancellation. **Settled 4 September 2026.**
 
 2. **Packages and refunds.** Sessions in a package are valid for twelve
    months. If a client stops early, the unused sessions are refunded at the
