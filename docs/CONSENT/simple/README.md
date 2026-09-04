@@ -29,10 +29,13 @@ superseded rather than deleted, because consents already recorded name them.
 ## The founder's review, 4 September 2026
 
 Approved in full with two changes, both applied here: the health question asks
-about a head injury at any time, not only the last year; and a visit that
-cannot go ahead once the practitioner has arrived costs a call-out fee of
-AED 150 instead of a session from the package. The second is a rule change
-for the software as well as the wording: today the scheduling stream treats
-that case as a late cancellation that uses a session, and the fee is only
-recorded. The next round makes the fee the charge and leaves the session in
-place (docs/CHANGE-REQUESTS, scheduling and billing).
+about a head injury at any time, not only the last year; and the booking rule
+is now one fee, not a session. Moving or cancelling more than 24 hours ahead is
+free; within 24 hours a fee of AED 150 applies; a visit that cannot go ahead
+once the practitioner has arrived carries the same fee; a package's sessions
+are never taken for a cancellation. This is a rule change for the software as
+well as the wording: today the scheduling stream treats a late cancellation
+and an unfit visit as using a session, and only records the fee. The next
+scheduling and billing round keeps the session and posts the AED 150 fee as a
+charge on the household's account (the figure already sits in
+`scheduling_setting.unfit_fee_fils`).
