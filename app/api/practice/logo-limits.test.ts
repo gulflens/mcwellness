@@ -29,7 +29,10 @@ describe('the practice logo against the API body caps', () => {
     expect(LOGO_BODY_LIMIT_BYTES).toBeGreaterThan(BODY_LIMIT_BYTES);
   });
 
-  it('holds the logo to half a megabyte, which is a mark and not a photograph', () => {
-    expect(MAX_LOGO_BYTES).toBe(512 * 1024);
+  it('holds the logo to the 500 KB the screen says, in the unit the screen means', () => {
+    // 500,000 bytes, not 512 x 1024. A person told "up to 500 KB" and then
+    // refused a 505,000-byte file has been told something untrue.
+    expect(MAX_LOGO_BYTES).toBe(500_000);
+    expect(Math.floor(MAX_LOGO_BYTES / 1000)).toBe(500);
   });
 });

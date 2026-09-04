@@ -92,7 +92,7 @@ const VatTrn = registration(40).refine(
  */
 const TaxRegistration = registration(40).refine(
   (value) => value === null || /^[A-Za-z0-9-]{5,30}$/.test(value),
-  'A tax registration number is letters, digits and hyphens.',
+  'A corporate tax registration number is letters, digits and hyphens.',
 );
 
 export const PracticeAddress = z.object({
@@ -179,17 +179,20 @@ export const LOGO_MIME_TYPES = ['image/png', 'image/jpeg'] as const;
 export type LogoMimeType = (typeof LOGO_MIME_TYPES)[number];
 
 /**
- * 512 KiB, which is a great deal of room for a mark at the top of an invoice
- * and still small enough that the file travels in one JSON body.
+ * 500 KB, and **500,000 bytes rather than 512 × 1024**, because the number the
+ * screen says is the number the server keeps. A person told "up to 500 KB" who
+ * is refused a 505,000-byte file has been told something untrue; the kibibyte
+ * is the right unit for a buffer and the wrong one for a label.
  *
- * The API's own body cap is `BODY_LIMIT_BYTES`, 64 KiB, and this is the one
- * route that needs more (`app/api/create-api.ts` gives it its own, larger cap
- * for that reason and no other). Base64 costs four characters for every three
- * bytes, so the envelope has to leave room for a third again on top;
- * `logo-limits.test.ts` pins the arithmetic so neither constant can move
- * without the other.
+ * It is a great deal of room for a mark at the top of an invoice and still
+ * small enough that the file travels in one JSON body. The API's own body cap
+ * is `BODY_LIMIT_BYTES`, 64 KiB, and this is the one route that needs more
+ * (`app/api/create-api.ts` gives it its own, larger cap for that reason and no
+ * other). Base64 costs four characters for every three bytes, so the envelope
+ * has to leave room for a third again on top; `logo-limits.test.ts` pins the
+ * arithmetic so neither constant can move without the other.
  */
-export const MAX_LOGO_BYTES = 512 * 1024;
+export const MAX_LOGO_BYTES = 500_000;
 /** The longest `bytesBase64` may be, padding included. */
 export const MAX_LOGO_BASE64_LENGTH = Math.ceil(MAX_LOGO_BYTES / 3) * 4;
 /** Room for the rest of the JSON: the media type, the braces, the field names. */

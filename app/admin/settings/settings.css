@@ -188,3 +188,14 @@
   max-block-size: var(--s-16);
   object-fit: contain;
 }
+
+/*
+  The logo's own actions. Its own name rather than `.drawer__actions`, which is
+  a drawer's footer and is justified to the end: these two sit in the reading
+  order of the section they belong to, so they start where the text does.
+*/
+.logo-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: var(--s-3);
+}

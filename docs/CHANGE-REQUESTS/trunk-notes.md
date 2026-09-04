@@ -365,7 +365,7 @@ deliberately left, and the lines the streams asked for.
 | `appointment.move` and `appointment.cancel` in `domain/shared/actor.ts` | scheduling-04 item 3 | Applied, with the change request's own audience table as a unit test beside the existing actor tests. No route's behaviour changes |
 | `formatFils` moved to `domain/shared/fils.ts` | scheduling-04 item 4 | Moved, and re-exported from `domain/billing/money.ts` and `app/admin/billing/money.ts`, so not one caller moved. It is on `domain/shared`'s barrel too |
 | The `invoice_no_vat_unless_supplier_registered` constraint | billing-04 request 1 | Migration **950**, the first in the trunk's new 950s. Proved with the trigger from 406 switched off, which is the case a constraint exists for |
-| The practice's logo as a replaceable document | billing-04 request 5 | Migration **909** and Settings › Practice. Upload, replace and remove, PNG or JPEG, 512 KB, through the storage seam. See section 4 below, addressed to billing |
+| The practice's logo as a replaceable document | billing-04 request 5 | Migration **909** and Settings › Practice. Upload, replace and remove, PNG or JPEG, 500 KB, through the storage seam. See section 4 below, addressed to billing |
 | `jobs/client/retry-erasure-deletions.ts` and its script | client-record-04 CR-14 | Written as the change request proposed, with `pnpm job:erasure-files` in `package.json` |
 | A `client.erase` sentence in `domain/shared/audit-narrative.ts` | client-record-04 CR-16 | Added, both languages, with its case in the narrative test |
 
@@ -428,9 +428,12 @@ from '@domain/shared'` is the same function and none of the rest.
 **The practice's logo is ready to read** (`billing`). A row on `document` with
 `kind = 'practice_logo'`, `client_id` null, one per practice (migration 909's
 partial unique index), PNG or JPEG (its check constraint), keyed by
-`practiceDocumentKey`. `app/api/billing/document-source.ts` can select it
-straight, or call `GET /api/practice/logo`, which answers the document id and
-a signed URL or a plain 404 — that route is `practice.settings.write` today
+`practiceDocumentKey`, and on no upload clock — `retention_until` is null,
+because there is one logo at a time and it is replaced rather than expired
+(`RETENTION_EXEMPT_KINDS`, `domain/shared/storage.ts`).
+`app/api/billing/document-source.ts` can select it straight, or call
+`GET /api/practice/logo`, which answers the document id and a signed URL or a
+plain 404 — that route is `practice.settings.write` today
 (the owner and an admin), and widening it to whoever renders a document is a
 decision for whoever writes that half, not one to take in advance. Remember
 `auditDocumentRead` before signing any link (docs/SEAMS.md). Nothing in the

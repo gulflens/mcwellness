@@ -75,21 +75,46 @@ function file(name: string, type: string, bytes: number[]): File {
 
 const PNG_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3];
 
+/** The input itself is off the screen; its label is what names it. */
+function chooserInput(): HTMLInputElement {
+  return screen.getByLabelText(/logo/i) as HTMLInputElement;
+}
+
 async function chooseFile(chosen: File): Promise<void> {
-  const input = await screen.findByLabelText(/logo/i);
-  fireEvent.change(input, { target: { files: [chosen] } });
+  await screen.findByLabelText(/logo/i);
+  fireEvent.change(chooserInput(), { target: { files: [chosen] } });
 }
 
 describe('with no logo yet', () => {
-  it('says the wordmark stands in its place', async () => {
+  it('says the wordmark stands until the renderer draws one', async () => {
+    // The renderer is billing's and is unwritten, so nothing here claims the
+    // logo is printed on anything yet.
     mount();
-    expect(await screen.findByText(/No logo yet/)).toBeTruthy();
+    expect(await screen.findByText(/No logo filed/)).toBeTruthy();
+    expect(screen.getByText(/until the renderer draws one/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Remove logo' })).toBeNull();
   });
 
-  it('names the two formats and the cap it will accept', async () => {
+  it('names the two formats and the cap it will accept, in the unit it means', async () => {
     mount();
-    expect(await screen.findByText(/A PNG or a JPEG, up to 512 KB/)).toBeTruthy();
+    expect(await screen.findByText(/A PNG or a JPEG, up to 500 KB/)).toBeTruthy();
+  });
+
+  it('offers the practice’s own words rather than the browser’s file chrome', async () => {
+    mount();
+    // The native control is off the screen and reachable by keyboard; the
+    // button beside it opens the same dialogue and says what we would say.
+    const button = await screen.findByRole('button', { name: 'Choose a logo file' });
+    expect(button).toBeTruthy();
+    expect(chooserInput().className).toContain('visually-hidden');
+  });
+
+  it('describes the control with the hint rather than leaving it a loose paragraph', async () => {
+    mount();
+    await screen.findByText(/A PNG or a JPEG/);
+    const described = chooserInput().getAttribute('aria-describedby');
+    expect(described).toBe('practice-logo-hint');
+    expect(document.getElementById(String(described))?.textContent).toContain('A PNG or a JPEG');
   });
 });
 
@@ -98,11 +123,11 @@ describe('choosing a file', () => {
     const { calls } = mount((call) =>
       call.init?.method === 'POST' ? json({ logo: LOGO }) : notFound(),
     );
-    await screen.findByText(/No logo yet/);
+    await screen.findByText(/No logo filed/);
 
     await chooseFile(file('mark.png', 'image/png', PNG_BYTES));
 
-    await waitFor(() => expect(screen.getByText(/The logo is saved/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('The logo is saved.')).toBeTruthy());
     const post = calls.find((call) => call.init?.method === 'POST');
     expect(post?.url).toBe('/api/practice/logo');
     expect(JSON.parse(String(post?.init?.body))).toEqual({
@@ -117,7 +142,7 @@ describe('choosing a file', () => {
 
   it('refuses a kind the browser already knows is wrong, without asking the server', async () => {
     const { calls } = mount();
-    await screen.findByText(/No logo yet/);
+    await screen.findByText(/No logo filed/);
 
     await chooseFile(file('brochure.pdf', 'application/pdf', [0x25, 0x50, 0x44, 0x46]));
 
@@ -127,13 +152,26 @@ describe('choosing a file', () => {
     expect(calls.some((call) => call.init?.method === 'POST')).toBe(false);
   });
 
+  it('empties the control after a refusal, so the same file can be chosen again', async () => {
+    // The control keeps what it was given and choosing the same file twice
+    // fires no change event, so a person who fixes the file on disk and picks
+    // it again would otherwise get nothing at all.
+    mount();
+    await screen.findByText(/No logo filed/);
+
+    await chooseFile(file('brochure.pdf', 'application/pdf', [0x25, 0x50, 0x44, 0x46]));
+
+    await waitFor(() => expect(screen.getByText(/PNG or a JPEG/)).toBeTruthy());
+    expect(chooserInput().value).toBe('');
+  });
+
   it('says what the server refused, in words rather than a code', async () => {
     mount((call) =>
       call.init?.method === 'POST'
         ? json({ error: 'bad_request', code: 'bytes_do_not_match_type' }, 400)
         : notFound(),
     );
-    await screen.findByText(/No logo yet/);
+    await screen.findByText(/No logo filed/);
 
     await chooseFile(file('mark.png', 'image/png', PNG_BYTES));
 
@@ -144,7 +182,7 @@ describe('choosing a file', () => {
 });
 
 describe('with a logo', () => {
-  it('offers to remove it, and says the wordmark comes back', async () => {
+  it('offers to remove it, and says what the documents carry afterwards', async () => {
     const { calls } = mount((call) =>
       call.init?.method === 'DELETE' ? new Response(null, { status: 204 }) : json({ logo: LOGO }),
     );
@@ -154,12 +192,46 @@ describe('with a logo', () => {
 
     await waitFor(() => expect(screen.getByText(/The logo is removed/)).toBeTruthy());
     expect(calls.some((call) => call.init?.method === 'DELETE')).toBe(true);
-    expect(screen.getByText(/No logo yet/)).toBeTruthy();
+    expect(screen.getByText(/No logo filed/)).toBeTruthy();
+  });
+
+  it('puts focus on the control that replaces the button it just removed', async () => {
+    // The Remove button leaves the page with the logo, and focus would
+    // otherwise fall to the body.
+    mount((call) =>
+      call.init?.method === 'DELETE' ? new Response(null, { status: 204 }) : json({ logo: LOGO }),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove logo' }));
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: 'Choose a logo file' }),
+      ),
+    );
   });
 
   it('shows it through the short-lived link the route signed', async () => {
     mount(() => json({ logo: LOGO }));
     const image = await screen.findByRole('img', { name: /logo/i });
     expect(image).toHaveProperty('src', expect.stringContaining('token='));
+  });
+
+  it('fetches a fresh link when the signed one has expired, once and no more', async () => {
+    // A signed link lives five minutes. Left open longer than that the box
+    // shows a broken image, which reads as a lost file rather than a stale
+    // link. Once per link, so a genuinely missing object does not loop.
+    const { calls } = mount(() => json({ logo: LOGO }));
+    const image = await screen.findByRole('img', { name: /logo/i });
+    const before = calls.filter((call) => call.url === '/api/practice/logo').length;
+
+    fireEvent.error(image);
+    await waitFor(() =>
+      expect(calls.filter((call) => call.url === '/api/practice/logo').length).toBe(before + 1),
+    );
+
+    fireEvent.error(await screen.findByRole('img', { name: /logo/i }));
+    await waitFor(() => expect(screen.getByRole('img', { name: /logo/i })).toBeTruthy());
+    expect(calls.filter((call) => call.url === '/api/practice/logo').length).toBe(before + 1);
   });
 });
