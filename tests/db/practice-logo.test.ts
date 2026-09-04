@@ -13,7 +13,7 @@ import type { PracticeLogoResponse } from '../../app/api/practice/schema';
 import { applySeed } from '../../db/seed/apply';
 import { generateSeed } from '../../db/seed/generate';
 import { deriveIdentityKeys } from '../../domain/shared/identity';
-import { freshDatabase } from './helpers';
+import { asApiRole, freshDatabase, IDS, rejectsWith, rolledBack, seedTenant } from './helpers';
 
 /**
  * The practice's logo, end to end against a real database and a real store
@@ -175,6 +175,17 @@ describe('uploading one', () => {
     // A mark the practice replaces, not evidence of what anybody was shown.
     expect(rows[0]?.is_immutable).toBe(false);
   });
+
+  it('puts it on no upload clock, so nothing sweeps the mark off the practice', async () => {
+    // RETENTION_EXEMPT_KINDS (domain/shared/storage.ts, migration 909). There
+    // is one logo at a time and it is replaced rather than expired, so five
+    // years from upload would mark the current mark for deletion while every
+    // document still carries it.
+    const { rows } = await owner.query<{ retention_until: Date | null }>(
+      "select retention_until from document where kind = 'practice_logo'",
+    );
+    expect(rows[0]?.retention_until).toBeNull();
+  });
 });
 
 describe('replacing one', () => {
@@ -245,6 +256,48 @@ describe('what it refuses', () => {
         [id, data.tenant.id, client?.id, `tenant/${data.tenant.id}/practice/${id}`, 'household'],
       ),
     ).rejects.toThrow('document_practice_logo_has_no_client');
+  });
+});
+
+describe('the door itself: app.remove_practice_logo()', () => {
+  /**
+   * The route is one caller; the function is the rule. `app_role` holds
+   * execute on it (it is the one delete app_role may cause on `document`), so
+   * a practitioner who has signed in can reach it directly whatever a screen
+   * shows, and it has to refuse them itself. Both cases run inside a rolled
+   * back transaction, so the practice's own logo is where the next test
+   * expects it.
+   */
+  const INSUFFICIENT_PRIVILEGE = '42501';
+
+  it('refuses a practitioner calling it directly, and leaves the logo standing', async () => {
+    await rolledBack(owner, async () => {
+      await asApiRole(
+        owner,
+        data.tenant.id,
+        async () => {
+          await rejectsWith(owner, INSUFFICIENT_PRIVILEGE, 'select app.remove_practice_logo()');
+        },
+        'practitioner',
+      );
+    });
+    expect(await logoRows()).toHaveLength(1);
+  });
+
+  it("reaches only the caller's own practice, never another's", async () => {
+    // app.current_tenant_id() scopes the delete, so tenant B calling it finds
+    // nothing of its own and takes nothing of A's.
+    await rolledBack(owner, async () => {
+      await seedTenant(owner, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
+      await asApiRole(owner, IDS.tenantB, async () => {
+        const { rows } = await owner.query<{ key: string | null }>(
+          'select app.remove_practice_logo() as key',
+        );
+        expect(rows[0]?.key).toBeNull();
+      });
+      expect(await logoRows()).toHaveLength(1);
+    });
+    expect(await logoRows()).toHaveLength(1);
   });
 });
 

@@ -1,7 +1,8 @@
 -- 908_audit_redact_every_row.sql
 -- Needs: 070 (app.audit_chain_link, app.audit_row_hash, app.audit_chain),
---        080 (app.audit_redact), 904 and 906 (the version of it that runs
---        today; this migration calls the function and never restates it)
+--        080 (app.audit_redact), 904, 906 (the version of app.audit_redact
+--        that runs today; this migration calls the function and never
+--        restates it)
 --
 -- Redaction reaches every audit row, not only the ones a trigger wrote.
 --

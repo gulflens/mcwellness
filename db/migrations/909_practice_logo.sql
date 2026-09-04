@@ -1,6 +1,6 @@
 -- 909_practice_logo.sql
--- Needs: 060 (document), 090 (the API role's grants on document), 095
---        (app.actor_has_role, app.current_tenant_id), 902 and 903 (the
+-- Needs: 000 (app.current_tenant_id), 060 (document), 090 (the API role's
+--        grants on document), 095 (app.actor_has_role), 902, 903 (the
 --        consent-wording rules this one is written beside)
 --
 -- The practice's own logo, as a document the owner can replace
@@ -53,6 +53,22 @@
 -- fires. If a logo were ever filed immutable by mistake, this function would
 -- be refused by that guard rather than quietly succeeding, which is the right
 -- way round.
+--
+-- **Retention: none, and that is the answer rather than an omission.** A logo
+-- is on `RETENTION_EXEMPT_KINDS` beside `consent_text`
+-- (`domain/shared/storage.ts`), so `documentRetentionUntil` answers null for
+-- it and the row is filed with `retention_until` null. The reason is the
+-- opposite of the wording's and lands in the same place: there is one logo at
+-- a time and it is replaced rather than expired — the route that replaces it
+-- removes the old bytes in the same breath — so a five-year clock started at
+-- upload would mark the practice's *current* mark for deletion while it is
+-- still the mark, and every document the practice issues would lose it on the
+-- same day. Null there means "not on an upload clock", never "keep forever",
+-- and a deletion job must ask what still references a document before it
+-- removes anything (docs/SEAMS.md, and migration 903's own retention note).
+-- Nothing in the schema stands in the way of that: `document.retention_until`
+-- is nullable with no default, no check constraint reads it, and migration
+-- 903's write guard never looks at it on an insert.
 --
 -- **Not here, deliberately.** No write floor for filing a logo:
 -- `db/policies/client/writers.sql` already admits only an owner or an admin
