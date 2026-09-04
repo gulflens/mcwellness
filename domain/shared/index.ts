@@ -4,7 +4,7 @@
 // 'domain/shared/identity', never through this barrel. tests/lint guards this,
 // and the same walk starts from every other stream barrel too, so the rule is
 // "every domain barrel is browser-safe", not just this one.
-export { addFils, fils } from './fils';
+export { addFils, fils, formatFils } from './fils';
 export type { Fils } from './fils';
 export { ROLES, canActor, hasRole, isCredentialValidOn, isoDateIn } from './actor';
 export type { Action, ActionContext, Actor, Capability, IsoDate, Role } from './actor';

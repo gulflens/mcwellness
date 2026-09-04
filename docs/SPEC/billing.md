@@ -221,7 +221,27 @@ A package's components carry the same treatment, so the allocation from §4.2 ne
 
 **Tax point on prepaid packages.** For a package paid in January and delivered through May, when is VAT due — at payment, or as each session is delivered? UAE VAT generally sets the tax point at the earlier of payment or invoice, which would mean VAT falls due on the full package at sale even though revenue is recognised over months. Take this to a UAE tax advisor with the specific fact pattern, get the answer in writing, and encode it. Do not guess.
 
-### 5.4 E-invoicing
+### 5.4 What kind of invoice the practice issues
+
+The practice bills households. A household is a private individual and not a
+registered person, so what a registered supplier issues to one is a
+**simplified tax invoice**, which need not carry the recipient's name and
+address. That is the decision, and two things follow from it:
+
+- **The recipient is deliberately not snapshotted.** `invoice` carries the
+  supplier's identity and names the client by foreign key. A renamed or erased
+  household therefore changes what an already-issued invoice renders as, and
+  that is accepted rather than overlooked: a simplified tax invoice does not
+  have to state the recipient at all, and the client's own record and the
+  ledger both keep the link.
+- **The document says so on its face.** The rendered invoice carries the basis
+  in its footer, in both languages, so a reader checking it does not have to
+  infer why the recipient block is as short as it is.
+
+Take this to the tax advisor section 5.3 already names, at the same time as the
+tax point on prepaid packages, and record the answer here.
+
+### 5.5 E-invoicing
 
 Structure invoices as PINT AE (UBL/XML) objects from day one. Your wave: appoint an Accredited Service Provider by **31 March 2027**, live by **1 July 2027**. Building the invoice as a structured object now costs nothing; retrofitting it in 2027 costs a sprint.
 

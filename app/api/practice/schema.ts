@@ -92,7 +92,7 @@ const VatTrn = registration(40).refine(
  */
 const TaxRegistration = registration(40).refine(
   (value) => value === null || /^[A-Za-z0-9-]{5,30}$/.test(value),
-  'A tax registration number is letters, digits and hyphens.',
+  'A corporate tax registration number is letters, digits and hyphens.',
 );
 
 export const PracticeAddress = z.object({
@@ -164,3 +164,68 @@ export const UpdatePracticeInput = z
     { path: ['address'], message: 'A coordinate needs both a latitude and a longitude.' },
   );
 export type UpdatePracticeInput = z.infer<typeof UpdatePracticeInput>;
+
+/**
+ * The practice's logo: the two formats a PDF can carry, and a cap.
+ *
+ * PNG or JPEG and nothing else, because the renderer will draw one as an
+ * `/XObject` — a PNG's pixels, or a JPEG passed straight through as
+ * `/DCTDecode` (docs/CHANGE-REQUESTS/billing-04.md request 5) — and migration
+ * 909 holds the same rule as a check constraint. An SVG is deliberately not
+ * on the list: it is a document that can carry script, and it is not
+ * something a PDF draws.
+ */
+export const LOGO_MIME_TYPES = ['image/png', 'image/jpeg'] as const;
+export type LogoMimeType = (typeof LOGO_MIME_TYPES)[number];
+
+/**
+ * 500 KB, and **500,000 bytes rather than 512 × 1024**, because the number the
+ * screen says is the number the server keeps. A person told "up to 500 KB" who
+ * is refused a 505,000-byte file has been told something untrue; the kibibyte
+ * is the right unit for a buffer and the wrong one for a label.
+ *
+ * It is a great deal of room for a mark at the top of an invoice and still
+ * small enough that the file travels in one JSON body. The API's own body cap
+ * is `BODY_LIMIT_BYTES`, 64 KiB, and this is the one route that needs more
+ * (`app/api/create-api.ts` gives it its own, larger cap for that reason and no
+ * other). Base64 costs four characters for every three bytes, so the envelope
+ * has to leave room for a third again on top; `logo-limits.test.ts` pins the
+ * arithmetic so neither constant can move without the other.
+ */
+export const MAX_LOGO_BYTES = 500_000;
+/** The longest `bytesBase64` may be, padding included. */
+export const MAX_LOGO_BASE64_LENGTH = Math.ceil(MAX_LOGO_BYTES / 3) * 4;
+/** Room for the rest of the JSON: the media type, the braces, the field names. */
+export const LOGO_ENVELOPE_ALLOWANCE_BYTES = 2 * 1024;
+
+// Standard base64, padded, no line breaks: what btoa and Buffer.toString('base64')
+// produce. The URL-safe alphabet is deliberately not accepted — one encoding in,
+// so a caller cannot smuggle bytes past a length check by choosing the other.
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/** The logo on its way in: what it is, and the file itself. */
+export const UploadLogoInput = z.object({
+  mimeType: z.enum(LOGO_MIME_TYPES),
+  bytesBase64: z
+    .string()
+    .min(1, 'A logo needs a file.')
+    .max(MAX_LOGO_BASE64_LENGTH, 'That file is larger than the practice logo may be.')
+    .regex(BASE64, 'The file must be standard base64.'),
+});
+export type UploadLogoInput = z.infer<typeof UploadLogoInput>;
+
+/**
+ * What `GET /api/practice/logo` and `POST /api/practice/logo` answer: the
+ * document's id, a short-lived link to its bytes, and how long that link
+ * lives. Never a permanent URL and never the bytes themselves (docs/SEAMS.md).
+ */
+export const PracticeLogo = z.object({
+  documentId: z.string(),
+  mimeType: z.enum(LOGO_MIME_TYPES),
+  url: z.string(),
+  expiresInSeconds: z.number().int().positive(),
+});
+export type PracticeLogo = z.infer<typeof PracticeLogo>;
+
+export const PracticeLogoResponse = z.object({ logo: PracticeLogo });
+export type PracticeLogoResponse = z.infer<typeof PracticeLogoResponse>;

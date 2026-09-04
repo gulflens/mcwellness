@@ -1,9 +1,4 @@
-import type {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  ReactNode,
-  SelectHTMLAttributes,
-} from 'react';
+import type { ComponentPropsWithRef, ReactNode, SelectHTMLAttributes } from 'react';
 import { ChevronIcon } from './Icons';
 
 /** Buttons and fields in the ledger's vocabulary: ink on paper, no hue, 44px tall. */
@@ -12,7 +7,7 @@ export function Button({
   variant = 'secondary',
   className,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'quiet' }) {
+}: ComponentPropsWithRef<'button'> & { variant?: 'primary' | 'secondary' | 'quiet' }) {
   return (
     <button
       type="button"
@@ -29,7 +24,7 @@ export function Field({
   error,
   className,
   ...rest
-}: InputHTMLAttributes<HTMLInputElement> & {
+}: ComponentPropsWithRef<'input'> & {
   label: string;
   id: string;
   hint?: string;

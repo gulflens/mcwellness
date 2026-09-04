@@ -118,4 +118,12 @@ describe('how long a document is kept', () => {
     // rather than about a date, so no date is the honest answer.
     expect(documentRetentionUntil('consent_text', UPLOADED)).toBeNull();
   });
+
+  it('puts the practice logo on no clock either', () => {
+    // There is one at a time and it is replaced rather than expired
+    // (migration 909): a five-year clock started at upload would mark the
+    // practice's current logo for deletion while it is still the logo, and
+    // every document the practice issues would lose its mark on the same day.
+    expect(documentRetentionUntil('practice_logo', UPLOADED)).toBeNull();
+  });
 });

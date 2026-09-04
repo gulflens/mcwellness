@@ -46,14 +46,17 @@ attempt half-finished — passes `overwrite: true` and means it.
 **How long the bytes are kept.** `documentRetentionUntil(kind, uploadedAt)`,
 next to the seam in `domain/shared/storage.ts`, is the one piece of
 arithmetic: five years from upload for a practice document, written to
-`document.retention_until` at upload. It answers **null for a `consent_text`
-document**, which is exempt from that clock — it is kept until no `consent`
+`document.retention_until` at upload. It answers **null for two kinds**, both
+exempt from that clock: a `consent_text` document, kept until no `consent`
 references it and the last referencing client's own retention has expired
-(`docs/SPEC/00-data-model.md` section 3, migration 903). So **a deletion job
-must check what still references a document before it calls `storage.delete`**:
-deleting on `retention_until` alone would take a wording out from under a
-consent that is still live, and null there means "not on an upload clock",
-never "keep forever".
+(`docs/SPEC/00-data-model.md` section 3, migration 903); and a `practice_logo`,
+which there is one of at a time and which is replaced rather than expired, so a
+five-year clock would mark the practice's current logo for deletion while it is
+still the logo (migration 909). So **a deletion job must check what still
+references a document before it calls `storage.delete`**: deleting on
+`retention_until` alone would take a wording out from under a consent that is
+still live, or the mark off the practice's own paperwork, and null there means
+"not on an upload clock", never "keep forever".
 
 **Every route that signs a link calls `auditDocumentRead(db, document)` first**
 (`app/api/_middleware/storage/audit.ts`). A signed link is a read whether or

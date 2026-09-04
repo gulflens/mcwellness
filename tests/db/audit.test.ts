@@ -2,6 +2,7 @@ import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   IDS,
+  PHONES,
   asApiRole,
   freshDatabase,
   rejectsWith,
@@ -432,6 +433,132 @@ describe('app.audit_redact drops a fixed set of keys outright (audit.md section 
         seq: '[withheld: erasure]',
       });
       await client.query('select app.end_erasure()');
+    });
+  });
+});
+
+describe('the redaction reaches a row written straight into the trail (migration 908)', () => {
+  /**
+   * `app.audit_redact` used to run from `app.audit_row` alone, the trigger on
+   * the eleven audited tables, so a row written directly — `logAction`,
+   * `logRead`, a refusal, the erasure's own act row — carried exactly what
+   * the caller passed. Migration 908 folds it into `app.audit_chain_link()`,
+   * the before-insert trigger on `audit_log` itself, which every insert
+   * passes through whoever performs it.
+   */
+  const DIRECT =
+    'insert into audit_log (tenant_id, actor_id, actor_type, action, entity_type, entity_id, ' +
+    "client_id, new_values) values ($1, $2, 'user', 'document.sent', 'invoice', $3, null, $4::jsonb)";
+  const SENT_ONE = '00000000-0000-4000-8000-000000000901';
+  const SENT_TWO = '00000000-0000-4000-8000-000000000902';
+  const SENT_THREE = '00000000-0000-4000-8000-000000000903';
+
+  it('drops a telephone number from the details of an action nothing else redacts', async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      await client.query(DIRECT, [
+        IDS.tenantA,
+        IDS.ownerA,
+        SENT_ONE,
+        JSON.stringify({ requested_by_phone: PHONES.first, channel: 'whatsapp' }),
+      ]);
+
+      const [row] = await rowsFor(SENT_ONE);
+      expect(row?.new_values).toEqual({ channel: 'whatsapp' });
+      expect(JSON.stringify(row?.new_values)).not.toContain(PHONES.first);
+      expect(row?.hash_ok).toBe(true);
+    });
+  });
+
+  it('truncates free text on that path exactly as it does on a column', async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      await client.query(DIRECT, [
+        IDS.tenantA,
+        IDS.ownerA,
+        SENT_TWO,
+        JSON.stringify({ note: 'n'.repeat(300), channel: 'email' }),
+      ]);
+
+      const [row] = await rowsFor(SENT_TWO);
+      expect(row?.new_values).toEqual({ note: '[redacted: 300 chars]', channel: 'email' });
+      expect(row?.hash_ok).toBe(true);
+    });
+  });
+
+  it('hashes what it stores, so a row written this way verifies beside one a trigger wrote', async () => {
+    // The two paths in one chain: a trigger row, then a direct row, then
+    // another trigger row. The verifier recomputes every hash from the stored
+    // columns, so the redaction has to happen before the hash and not after.
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+      await client.query(DIRECT, [
+        IDS.tenantA,
+        IDS.ownerA,
+        SENT_THREE,
+        JSON.stringify({ contact_id: IDS.contactA, channel: 'whatsapp' }),
+      ]);
+      await client.query('update client set family_name = $2 where id = $1', [
+        IDS.clientA,
+        'Changed',
+      ]);
+
+      const trigger = await rowsFor(IDS.clientA);
+      const direct = await rowsFor(SENT_THREE);
+      expect(trigger.every((row) => row.hash_ok)).toBe(true);
+      expect(direct.every((row) => row.hash_ok)).toBe(true);
+      expect(await verify()).toBeNull();
+    });
+  });
+
+  it('leaves a trigger-written row exactly as it was: redaction is idempotent', async () => {
+    // app.audit_row redacts before it inserts and 908 redacts again on the way
+    // in. The second pass finds nothing left to do — "[redacted: 250 chars]"
+    // is nineteen characters and stays — so what a trigger wrote before this
+    // migration is what it writes after it.
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+      await client.query('update client set referral_source = repeat($2, 250) where id = $1', [
+        IDS.clientA,
+        'x',
+      ]);
+
+      const rows = await rowsFor(IDS.clientA);
+      expect(rows[1]?.new_values?.referral_source).toBe('[redacted: 250 chars]');
+      expect(rows[1]?.hash_ok).toBe(true);
+    });
+  });
+
+  it('withholds the values of a direct row written inside an erasure', async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA, 'erasure');
+      await client.query('select app.begin_erasure()');
+      await client.query(DIRECT, [
+        IDS.tenantA,
+        IDS.ownerA,
+        SENT_ONE,
+        JSON.stringify({ contact_id: IDS.contactA, channel: 'whatsapp' }),
+      ]);
+      await client.query('select app.end_erasure()');
+
+      const [row] = await rowsFor(SENT_ONE);
+      expect(row?.new_values).toEqual({
+        contact_id: '[withheld: erasure]',
+        channel: '[withheld: erasure]',
+      });
+    });
+  });
+
+  it('refuses values that are not a JSON object, which nothing can redact', async () => {
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA);
+      const refusal = await client
+        .query(DIRECT, [IDS.tenantA, IDS.ownerA, SENT_TWO, '["+971500000001"]'])
+        .then(() => 'the statement was accepted')
+        .catch((error: Error) => error.message);
+      expect(refusal).toContain('a JSON object or nothing at all');
     });
   });
 });

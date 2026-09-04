@@ -1,6 +1,6 @@
 import type pg from 'pg';
 import { describe, expect, it } from 'vitest';
-import { logAction, logRead, logReads } from './audit';
+import { logAction, logRead, logReads, refuseContactDetails } from './audit';
 import type { Db } from './request-context';
 
 /**
@@ -80,12 +80,12 @@ describe('logAction', () => {
     expect(calls[0]?.params).toHaveLength(5);
   });
 
-  it('writes the details as given: nothing on this path redacts them', async () => {
-    // app.audit_redact is reached only from app.audit_row, the trigger on the
-    // audited tables. A row written straight into audit_log carries exactly
-    // what the caller passed, which is why the rule is that details hold ids
-    // and channels and never a way to reach a family (audit.ts, audit.md
-    // section 8). This test states the fact the rule rests on.
+  it('hands the details to the insert as given, and lets the database redact them', async () => {
+    // This route composes no redaction of its own: app.audit_chain_link()
+    // does it on the way in, whichever path wrote the row (migration 908).
+    // What the caller passes is what the insert carries; what the trail keeps
+    // is what the redaction leaves, which tests/db/audit.test.ts proves
+    // against a real database.
     const { calls, db } = recordingDb();
 
     await logAction(
@@ -100,6 +100,116 @@ describe('logAction', () => {
       contactId: '00000000-0000-4000-8000-0000000000e4',
       channel: 'whatsapp',
     });
+  });
+});
+
+describe('what logAction refuses to write down', () => {
+  /**
+   * The rule the helper's own comment states, enforced rather than trusted
+   * (docs/SPEC/audit.md section 8): the details hold ids and the shape of the
+   * act, never a way to reach a family. A number under a key nothing drops is
+   * short and unremarkable, so the database's redaction would not catch it;
+   * this is what does.
+   */
+  const ENTITY = { type: 'document', id: '00000000-0000-4000-8000-0000000000a5', clientId: null };
+
+  it('refuses a telephone number, naming the key and never the number', async () => {
+    const { calls, db } = recordingDb();
+
+    await expect(
+      logAction(db, 'send', ENTITY, { channel: 'whatsapp', sentTo: '+971500000001' }),
+    ).rejects.toThrow('may not carry a telephone number; "sentTo" does');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses one written the way a person types it, inside a longer sentence', async () => {
+    const { db } = recordingDb();
+
+    await expect(
+      logAction(db, 'send', ENTITY, { note: 'handed to +971 50 000 0001 at the door' }),
+    ).rejects.toThrow('may not carry a telephone number');
+  });
+
+  it('refuses a bare number with no plus, local or with the country code', async () => {
+    // A number reaches a detail written both ways: as a person writes it on a
+    // form, and as a system strips it.
+    for (const number of ['0501234567', '971501234567', '050 123 4567', '050-123-4567']) {
+      const { calls, db } = recordingDb();
+      await expect(logAction(db, 'send', ENTITY, { sentTo: number })).rejects.toThrow(
+        'may not carry a telephone number',
+      );
+      expect(calls).toHaveLength(0);
+    }
+  });
+
+  it('refuses an email address, naming the key and never the address', async () => {
+    const { calls, db } = recordingDb();
+
+    await expect(
+      logAction(db, 'send', ENTITY, { channel: 'email', sentTo: 'nobody@example.invalid' }),
+    ).rejects.toThrow('may not carry an email address; "sentTo" does');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('throws before the insert, so no half-written row reaches the trail', async () => {
+    const { calls, db } = recordingDb();
+
+    await expect(
+      logAction(db, 'send', ENTITY, { contactId: '00000000-0000-4000-8000-0000000000e5' }),
+    ).resolves.toBeUndefined();
+    await expect(logAction(db, 'send', ENTITY, { to: '+971500000002' })).rejects.toThrow();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('leaves an id, a channel and a money figure alone', async () => {
+    // Nothing here reads as a way to reach anybody, and a helper that refused
+    // an invoice reference or a figure would be a helper nobody could use.
+    expect(() =>
+      refuseContactDetails({
+        contactId: '00000000-0000-4000-8000-0000000000e6',
+        channel: 'whatsapp',
+        reference: 'INV-000012',
+        grossFils: '103250',
+        delivered: 'false',
+      }),
+    ).not.toThrow();
+  });
+
+  it('leaves an all-digit uuid alone: it is one long run, not a nine-digit number', () => {
+    // The boundary between runs is what keeps ids out of this. Every id the
+    // platform writes is thirty-two digits with hyphens between, and judged
+    // whole it is far too long to be a telephone number; judged through a
+    // window it would look like one every time.
+    expect(() =>
+      refuseContactDetails({
+        documentId: '00000000-0000-4000-8000-000000000909',
+        invoiceId: '00000001-0000-4000-8000-000000000001',
+      }),
+    ).not.toThrow();
+  });
+
+  it('leaves a year, a date and a reference number alone', () => {
+    expect(() =>
+      refuseContactDetails({
+        year: '2026',
+        issuedOn: '2026-09-04',
+        number: '12',
+        reference: 'INV-000012',
+        version: '1.0',
+      }),
+    ).not.toThrow();
+  });
+
+  it('refuses a nine-digit run of its own that starts with a zero, and says why that is right', () => {
+    // 04 123 4567 is a Dubai landline and 000000012 is a padded reference, and
+    // stripped of their punctuation the two are the same nine digits. The
+    // helper cannot tell them apart and refuses, which is the safe direction:
+    // a reference is written as it is printed (INV-000012, above) and loses
+    // nothing, where a landline written bare would sit in the trail for five
+    // years.
+    expect(() => refuseContactDetails({ landline: '04 123 4567' })).toThrow(
+      'may not carry a telephone number',
+    );
   });
 });
 

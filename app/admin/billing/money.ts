@@ -2,12 +2,17 @@ import { formatFils, resolveVat, type VatSetting } from '@domain/billing';
 import { fils } from '@domain/shared';
 
 /**
- * The formatter itself moved to `domain/billing/money.ts` when the rendered
- * invoice needed it: a PDF is drawn by pure code that cannot reach into `app/`,
- * and two formatters that happen to agree is exactly what CLAUDE.md's one-place
- * rule exists to prevent. It is re-exported here so every screen keeps its
- * import, and what stays in this file is the half that is genuinely the
- * browser's: reading an amount a person typed.
+ * The formatter itself lives in `domain/shared/fils.ts`, beside the `Fils`
+ * type. It went to `domain/billing/money.ts` first, when the rendered invoice
+ * needed it — a PDF is drawn by pure code that cannot reach into `app/`, and
+ * two formatters that happen to agree is exactly what CLAUDE.md's one-place
+ * rule exists to prevent — and on to `domain/shared` when two more streams
+ * wanted it and `docs/SPEC/OWNERSHIP.md` rule 3 stood between them and
+ * billing's domain (`docs/CHANGE-REQUESTS/scheduling-04.md` section 4).
+ *
+ * It is re-exported here so every screen keeps its import, and what stays in
+ * this file is the half that is genuinely the browser's: reading an amount a
+ * person typed.
  */
 export { formatFils };
 

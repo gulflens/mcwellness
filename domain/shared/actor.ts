@@ -49,6 +49,8 @@ export type Action =
   | { type: 'audit.read'; clientId: string }
   | { type: 'appointment.list'; scope: 'practice' | 'own' }
   | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
+  | { type: 'appointment.move' }
+  | { type: 'appointment.cancel'; ownStop: boolean }
   | { type: 'billing.price.read' }
   | { type: 'billing.price.write' }
   | { type: 'billing.package.read' }
@@ -164,6 +166,23 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
             isCredentialValidOn(capability, action.on),
         )
       );
+    case 'appointment.move':
+      // Rearranging the diary: the three calendar roles. A practitioner
+      // "request[s] a change (Stage 2)" (docs/SPEC/scheduling-manual.md
+      // section 2) rather than making one, and the row policy on appointment
+      // says the same underneath.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    case 'appointment.cancel':
+      // The same three, for any visit — and a practitioner, for their own
+      // stop alone. They are the person who arrives at a door to find the
+      // visit cannot go ahead. Whether the stop is theirs is the route's to
+      // resolve and pass in, the way ctx.assigneeCapabilities already is;
+      // app.cancel_own_appointment (203) asks it again in the database,
+      // which is the answer that binds.
+      if (hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+        return true;
+      }
+      return hasRole(actor, 'practitioner') && action.ownStop;
     case 'billing.price.read':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'finance');
     case 'billing.price.write':

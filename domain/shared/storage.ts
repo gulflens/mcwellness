@@ -157,17 +157,27 @@ export function practiceDocumentKey(tenantId: string, documentId: string): strin
 export const DOCUMENT_RETENTION_YEARS = 5;
 
 /**
- * The one kind of document upload-dated retention does not fit
- * (`db/migrations/903_document_write_guard.sql`). Consent wording is a
- * practice document, but it is not the practice's own paperwork: it is the
- * text a person was shown, and a consent recorded in year four of a wording's
- * life would outlive the words it points at. A `consent_text` document is
- * therefore exempt — kept until no `consent` row references it and the last
- * referencing client's own retention has expired — and its `retention_until`
- * is deliberately null, meaning "not on an upload clock", never "forever by
- * oversight".
+ * The kinds of document upload-dated retention does not fit. Both are practice
+ * documents, neither is the practice's own paperwork, and both are kept for as
+ * long as something still uses them rather than for five years from the day
+ * the file arrived. Their `retention_until` is deliberately null, meaning "not
+ * on an upload clock", never "forever by oversight".
+ *
+ * - **`consent_text`** (`db/migrations/903_document_write_guard.sql`): the
+ *   text a person was shown. A consent recorded in year four of a wording's
+ *   life would outlive the words it points at, so a wording is kept until no
+ *   `consent` row references it and the last referencing client's own
+ *   retention has expired.
+ * - **`practice_logo`** (`db/migrations/909_practice_logo.sql`): the mark on
+ *   the practice's own documents. There is one at a time and it is replaced
+ *   rather than expired — the day it is replaced, the route that replaces it
+ *   removes the old bytes — so a five-year clock started at upload would mark
+ *   the practice's *current* logo for deletion while it is still the logo.
+ *
+ * A deletion job must therefore ask what still references a document before it
+ * removes anything, which is the rule for both (`docs/SEAMS.md`).
  */
-export const RETENTION_EXEMPT_KINDS: readonly string[] = ['consent_text'];
+export const RETENTION_EXEMPT_KINDS: readonly string[] = ['consent_text', 'practice_logo'];
 
 /**
  * When a document uploaded now stops being kept, or null when its kind is

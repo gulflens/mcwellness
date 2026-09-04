@@ -309,6 +309,8 @@ Everything in the table is now round 24's, the moment 52 is on `main`.
 | The practice's logo as a replaceable document, on `app/admin/settings/**` | billing-04 request 5 | 54 | The settings page is the trunk's, but the two halves that make it mean anything — `app/api/billing/document-source.ts` reading it onto the model, and an `/XObject` in `domain/billing/document/pdf.ts` drawing it — are billing's and unwritten. An upload box feeding a renderer that ignores it is worse than the wordmark, which is at least honest |
 | `jobs/client/retry-erasure-deletions.ts` and its `package.json` script | client-record-04 CR-14 | 51 | The job is twenty lines around `sweepErasureFiles`, which is in `app/api/clients/erasure-file-sweep.ts` on the branch. The sweep itself already works and is tested; what waits is the command an operator can be told to run |
 
+**Every row of that table was done in round 24**, below, once 52 was on `main`. The table stays as the record of what each was waiting for; what happened to each is round 24 section 1.
+
 ### 2. Not waiting on a merge, and still not done this round
 
 Recorded so the next trunk round picks them up rather than rediscovers them.
@@ -345,3 +347,175 @@ document would breach the five-year financial-record rule.
 So the first `pnpm test:db` after 51 and 54 are both on `main` runs a test that
 has never run in CI. If it fails, that is where to look first, and the failure
 is real rather than a merge artefact.
+
+---
+
+## Round 24, 2026-09-04 (the asks the streams left at the trunk's door)
+
+Pull requests 52, 56, 57 and 58 are on `main`, so every file round 23 was
+waiting for is here. This round did all seven rows of that round's table and
+eight other things beside; what follows is what happened to each, what it
+deliberately left, and the lines the streams asked for.
+
+### 1. Round 23 section 1's table, answered
+
+| What | Asked in | What round 24 did |
+|---|---|---|
+| A route for `/admin/schedule/week` | scheduling-04 item 2 | Applied, exactly as the diff was written, with two tests in `app/shell/App.test.tsx`: an admin reaches the week, a practitioner is sent home. `canOpenSchedule` is the rule, the same one the day sits behind |
+| `appointment.move` and `appointment.cancel` in `domain/shared/actor.ts` | scheduling-04 item 3 | Applied, with the change request's own audience table as a unit test beside the existing actor tests. No route's behaviour changes |
+| `formatFils` moved to `domain/shared/fils.ts` | scheduling-04 item 4 | Moved, and re-exported from `domain/billing/money.ts` and `app/admin/billing/money.ts`, so not one caller moved. It is on `domain/shared`'s barrel too |
+| The `invoice_no_vat_unless_supplier_registered` constraint | billing-04 request 1 | Migration **950**, the first in the trunk's new 950s. Proved with the trigger from 406 switched off, which is the case a constraint exists for |
+| The practice's logo as a replaceable document | billing-04 request 5 | Migration **909** and Settings › Practice. Upload, replace and remove, PNG or JPEG, 500 KB, through the storage seam. See section 4 below, addressed to billing |
+| `jobs/client/retry-erasure-deletions.ts` and its script | client-record-04 CR-14 | Written as the change request proposed, with `pnpm job:erasure-files` in `package.json` |
+| A `client.erase` sentence in `domain/shared/audit-narrative.ts` | client-record-04 CR-16 | Added, both languages, with its case in the narrative test |
+
+And from round 23 section 2: **`docs/SPEC/billing.md` section 5.4** is written
+(billing-04 section 2's text verbatim; e-invoicing became 5.5), and **CR-19**
+was confirmed already applied in round 23 and needed nothing.
+
+### 2. `invoice.document_id` is still there, and here is what has to happen first
+
+**Who.** `billing`.
+
+**What.** billing-04 request 5 asks for the dead column to be dropped
+"whenever `invoice` is next touched", which was migration 950. It was not
+dropped, because the grep the trunk ran before dropping it found a reader:
+
+```
+tests/billing/db/packages.test.ts:327
+  'select reference, kind, net_fils, vat_fils, gross_fils, document_id from invoice ' +
+```
+
+That test asserts `document_id: null` with a comment saying nothing writes it
+— which is exactly right, and is a test *of* the column. `tests/billing/**` is
+the billing stream's path, so the trunk left both alone.
+
+**The ask.** Take that column out of the select and the expectation in
+`packages.test.ts` (the assertion the test is really making — one invoice, one
+line, the right figures — does not need it), and say so; the trunk drops the
+column in its next round, in the 950s, where a migration that alters
+`invoice` now belongs.
+
+### 3. The two `hasRole` calls in the appointment routes
+
+**Who.** `scheduling`.
+
+**What.** `appointment.move` and `appointment.cancel` are now actions on
+`domain/shared/actor.ts` (scheduling-04 section 3, applied verbatim). The two
+`hasRole` calls at the top of `app/api/appointments/move.ts` and `cancel.ts`
+may become `canActor` calls with those actions whenever that stream next opens
+those files. Nothing is broken until they do: the audiences are identical, and
+`tests/scheduling/db/move_and_cancel.test.ts` asserts them against the running
+routes either way.
+
+### 4. Two files that can now shrink, and one that is ready to read
+
+**`app/therapist/session/dirhams.ts` can become a re-export** (`session-capture`).
+`formatFils` lives in `domain/shared/fils.ts` from this round, which is what
+that file's own comment says it was waiting for: "the right home for these two
+pure functions is `domain/shared` … and when it is granted this file becomes a
+re-export and then goes." `formatFilsAsAed` and `formatFils` differ in one
+respect — the first clamps a negative to zero, which a parking cost wants and
+a balance does not — so the re-export is not quite a rename, and that is the
+stream's call to make.
+
+**`app/therapist/today/TodayPage.tsx` can stop importing billing's money
+module** (`scheduling`). It reaches `formatFils` through
+`app/admin/billing/money.ts`, which imports `@domain/billing` for `previewVat`
+— the transitive reach scheduling-04 section 4 objected to. `import { formatFils }
+from '@domain/shared'` is the same function and none of the rest.
+
+**The practice's logo is ready to read** (`billing`). A row on `document` with
+`kind = 'practice_logo'`, `client_id` null, one per practice (migration 909's
+partial unique index), PNG or JPEG (its check constraint), keyed by
+`practiceDocumentKey`, and on no upload clock — `retention_until` is null,
+because there is one logo at a time and it is replaced rather than expired
+(`RETENTION_EXEMPT_KINDS`, `domain/shared/storage.ts`).
+`app/api/billing/document-source.ts` can select it straight, or call
+`GET /api/practice/logo`, which answers the document id and a signed URL or a
+plain 404 — that route is `practice.settings.write` today
+(the owner and an admin), and widening it to whoever renders a document is a
+decision for whoever writes that half, not one to take in advance. Remember
+`auditDocumentRead` before signing any link (docs/SEAMS.md). Nothing in the
+renderer or in `document-source.ts` was touched.
+
+### 5. Round 14 item 7, closed: 904 and 908 are the correction
+
+`080_audit_triggers.sql` carries a note saying the core tables have no nested
+jsonb, which stopped being true at migration 901. Round 14 recorded it as a
+false comment in a merged migration that may never be edited. **Migration 904
+is the correction to the behaviour** — the dropping and the truncation reach
+inside any jsonb object value, at any depth — and **migration 908 is the
+correction to its reach**: the redaction now runs from `app.audit_chain_link()`
+rather than from `app.audit_row()` alone, so it covers every insert into
+`audit_log` and not only the ones a table trigger wrote. Both are recorded in
+`docs/SPEC/audit.md` section 8. Nothing further is owed here; jsonb **arrays**
+are still not descended into, and that remains a change request rather than a
+gap.
+
+### 6. CR-15 is declined, as the stream itself suggested
+
+**Who.** `client-record`.
+
+**What.** CR-15 asks `db/seed/consent-text.ts` to skip files whose name starts
+`erasure-letter`, so the two letter templates can sit flat in `docs/CONSENT`.
+Declined, on the stream's own reasoning: "a subdirectory is arguably the
+better home for a family of templates that is about to grow a second member —
+the practice will want a 'your request has been received' letter eventually —
+and this request can be closed as declined." `docs/CONSENT/erasure-letter/`
+already works, `app/api/clients/erasure-letter.ts` already reads from it, and
+`loadConsentTexts()` keeps the simple rule that every `*.md` in that folder is
+a piece of consent wording. Nothing to change on either side.
+
+### 7. Two erasure-test guards are dead weight now
+
+Found in the review of pull request 57, and neither file is the trunk's.
+
+**`tests/billing/db/erasure.test.ts`, lines 53–58** (`billing`). The case
+"erasing a household that has a rendered invoice" opens with
+`if (!(await erasureSparesBillingDocuments())) { return; }` — a **silent
+return, not a `skip()`**, so a skipped run reads as a passing one. Both the
+guard and the helper can go: `billing_document` and the erasure are both on
+`main` since pull requests 51 and 54.
+
+**`tests/client/db/erasure_act.test.ts`, lines 866–870** (`client-record`).
+The same shape, done properly with `skip()`, guarding on
+`to_regclass('public.billing_document')`. That table is on `main` too, so the
+guard now only costs a query. The test itself has run in CI since 54 merged
+and passes.
+
+### 8. What this round deliberately left
+
+Each could be picked up next; none was this round's.
+
+- **Billing's takings aggregate** (billing-04 section 8). `GET /api/billing/summary`
+  reads the ledger under row security, and `db/policies/billing/ledger.sql`
+  puts every client-scoped read behind `app.client_erasure_gate` — so cash
+  collected, revenue recognised and the deferred balance are all *smaller for
+  finance than for the owner* on any month containing an erased household. A
+  total that depends on who is looking is not a total. The fix is a
+  security-definer aggregate reading the ledger whole and answering three
+  integers naming no client, which is a migration and a route change in
+  billing's own range and not something to smuggle into a shared-zone round.
+- **The Arabic clipboard** (billing-04 section 8). The renderer shapes Arabic
+  into presentation forms and reverses it before writing, and builds
+  `/ToUnicode` from the glyphs drawn, so text copied out of an Arabic run
+  arrives reversed and spelt in the FE70 block. The fix is to record the
+  logical character behind each drawn glyph and map that instead — a change to
+  `domain/billing/document`, which is billing's.
+- **`invoice.supplied_on`** (billing-04 section 8). The column exists and
+  nothing writes it, on purpose: a single visit is supplied on the day it is
+  invoiced, and the tax point on a **prepaid package** is the open question
+  `docs/SPEC/billing.md` section 5.3 sends to the tax adviser. Writing a date
+  before that answer exists would be inventing the answer. Left exactly as it
+  is, and named here so a later round does not read the empty column as an
+  oversight.
+
+### 9. `pnpm seed:sql` exists, and STAGING.md now says which environment file
+
+Round 14 item 5 asked for it; it landed in the trunk's round of 2026-09-03
+(`node --env-file-if-exists=.env --import tsx db/seed/render-cli.ts`) and this
+round only closed the half-inch left between the script and the document. A
+staging render must read `.env.staging` rather than the laptop's `.env`, which
+is why `docs/STAGING.md` writes that one command out in full, and it now says
+so rather than leaving a reader to notice.

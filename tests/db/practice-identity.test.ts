@@ -327,3 +327,130 @@ describe('what an invoice keeps of it', () => {
     });
   });
 });
+
+describe('no VAT unless the supplier was registered (migration 950)', () => {
+  /**
+   * A caller supplying its own supplier snapshot, so the stamp returns early
+   * and the row says exactly what the test means it to say. Ten fils of VAT
+   * on a hundred net, which invoice_totals_agree accepts.
+   */
+  const ISSUE_WITH_VAT =
+    'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, ' +
+    'gross_fils, supplier_legal_name, supplier_vat_registered) ' +
+    "values ($1, $2, $3, 'statement', current_date, 100, 10, 110, $4, $5)";
+  /** The ordinary path: no supplier named, so the stamp fills the snapshot. */
+  const ISSUE_STAMPED =
+    'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, ' +
+    "gross_fils) values ($1, $2, $3, 'statement', current_date, 0, 0, 0)";
+
+  it('refuses VAT from a practice that was not registered, by the trigger 406 already had', async () => {
+    await rolledBack(owner, async () => {
+      await rejectsWith(owner, '23514', ISSUE_WITH_VAT, [
+        TENANT,
+        CLIENT,
+        11,
+        'Synthetic Studio A',
+        false,
+      ]);
+    });
+  });
+
+  it('refuses it again with that trigger switched off, which is the whole point', async () => {
+    // A trigger can be disabled and a check constraint cannot. This is the
+    // case the constraint exists for: the failure it guards against is a
+    // false statement to the Federal Tax Authority, so the rule holds even
+    // for somebody who has the privilege to turn the guard off.
+    await rolledBack(owner, async () => {
+      await owner.query('alter table invoice disable trigger zz_guard_invoice_vat');
+      const refusal = await owner
+        .query(ISSUE_WITH_VAT, [TENANT, CLIENT, 12, 'Synthetic Studio A', false])
+        .then(() => 'the statement was accepted')
+        .catch((error: Error) => error.message);
+      expect(refusal).toContain('invoice_no_vat_unless_supplier_registered');
+    });
+  });
+
+  it('says nothing about an invoice issued before the registration column existed', async () => {
+    // supplier_vat_registered null means "unknown", never "false" (905's own
+    // column comment). Refusing those rows would refuse history rather than
+    // protect it, so the constraint's first arm lets them through.
+    await rolledBack(owner, async () => {
+      await owner.query('alter table invoice disable trigger zz_guard_invoice_vat');
+      await owner.query(ISSUE_WITH_VAT, [TENANT, CLIENT, 13, 'Synthetic Studio A', null]);
+      const { rows } = await owner.query<{ vat: number }>(
+        'select vat_fils as vat from invoice where tenant_id = $1 and number = 13',
+        [TENANT],
+      );
+      expect(rows[0]?.vat).toBe(10);
+    });
+  });
+
+  it('refuses a hand-supplied snapshot claiming a registration the practice does not hold', async () => {
+    // The hole the security review of pull request 60 found. 905's stamp
+    // returns early the moment a caller supplies supplier_legal_name — so a
+    // correction may pass its own snapshot in — and until migration 950
+    // nothing then asked whether the practice really held the registration
+    // the row claimed. Both 406's guard and the constraint read the column;
+    // neither read the tenant.
+    await rolledBack(owner, async () => {
+      const refusal = await owner
+        .query(ISSUE_WITH_VAT, [TENANT, CLIENT, 15, 'Synthetic Studio A', true])
+        .then(() => 'the statement was accepted')
+        .catch((error: Error) => error.message);
+      expect(refusal).toContain('cannot claim a VAT registration the practice does not hold');
+    });
+  });
+
+  it('refuses the claim even with no VAT on the row, because the number would still print', async () => {
+    await rolledBack(owner, async () => {
+      const refusal = await owner
+        .query(
+          'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, ' +
+            'vat_fils, gross_fils, supplier_legal_name, supplier_vat_registered) ' +
+            "values ($1, $2, 16, 'statement', current_date, 100, 0, 100, $3, true)",
+          [TENANT, CLIENT, 'Synthetic Studio A'],
+        )
+        .then(() => 'the statement was accepted')
+        .catch((error: Error) => error.message);
+      expect(refusal).toContain('cannot claim a VAT registration the practice does not hold');
+    });
+  });
+
+  it('leaves the ordinary sale path alone: the stamp writes what the tenant says', async () => {
+    // Nothing supplies a supplier here, so app.stamp_invoice_supplier fills
+    // the snapshot from the practice's own row and the new check agrees with
+    // it by construction — whichever way the registration is set.
+    await rolledBack(owner, async () => {
+      await owner.query(ISSUE_STAMPED, [TENANT, CLIENT, 17]);
+      await owner.query('update tenant set vat_registered = true, vat_trn = $1 where id = $2', [
+        VAT_TRN,
+        TENANT,
+      ]);
+      await owner.query(ISSUE_STAMPED, [TENANT, CLIENT, 18]);
+      const { rows } = await owner.query<{ number: number; registered: boolean }>(
+        'select number, supplier_vat_registered as registered from invoice ' +
+          'where tenant_id = $1 and number in (17, 18) order by number',
+        [TENANT],
+      );
+      expect(rows).toEqual([
+        { number: 17, registered: false },
+        { number: 18, registered: true },
+      ]);
+    });
+  });
+
+  it('lets a registered practice charge it', async () => {
+    await rolledBack(owner, async () => {
+      await owner.query('update tenant set vat_registered = true, vat_trn = $1 where id = $2', [
+        VAT_TRN,
+        TENANT,
+      ]);
+      await owner.query(ISSUE_WITH_VAT, [TENANT, CLIENT, 14, 'Synthetic Studio A', true]);
+      const { rows } = await owner.query<{ vat: number }>(
+        'select vat_fils as vat from invoice where tenant_id = $1 and number = 14',
+        [TENANT],
+      );
+      expect(rows[0]?.vat).toBe(10);
+    });
+  });
+});

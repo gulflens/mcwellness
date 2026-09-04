@@ -4,6 +4,7 @@ import { hasRole } from '@domain/shared';
 import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
+import { WeekPage } from '../admin/schedule/WeekPage';
 import { PracticePage } from '../admin/settings/PracticePage';
 import { PortalLanding } from '../client/PortalLanding';
 import { CheckInPage } from '../therapist/session/CheckInPage';
@@ -71,6 +72,20 @@ export function App() {
               {(actor) =>
                 canOpenSchedule(actor, new Date()) ? (
                   <SchedulePage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="schedule/week"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenSchedule(actor, new Date()) ? (
+                  <WeekPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )

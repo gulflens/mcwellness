@@ -260,6 +260,60 @@ describe('the appointment and price actions', () => {
   });
 });
 
+describe('moving and cancelling a visit (docs/CHANGE-REQUESTS/scheduling-04.md section 3)', () => {
+  /**
+   * The change request's own audience table, read straight across. The two
+   * actions were composed out of `hasRole` inside the routes until now, which
+   * is honest as a stop-gap and wrong as a destination: "may this person move
+   * a visit" and "may this person book one" are one audience today and two
+   * decisions the first time the practice hires a coordinator who may
+   * rearrange the diary but not fill it.
+   */
+  const AUDIENCE: { role: Role; move: boolean; cancelAny: boolean; cancelOwn: boolean }[] = [
+    { role: 'owner', move: true, cancelAny: true, cancelOwn: true },
+    { role: 'admin', move: true, cancelAny: true, cancelOwn: true },
+    { role: 'finance', move: false, cancelAny: false, cancelOwn: false },
+    { role: 'lead_practitioner', move: true, cancelAny: true, cancelOwn: true },
+    { role: 'practitioner', move: false, cancelAny: false, cancelOwn: true },
+    { role: 'client_contact', move: false, cancelAny: false, cancelOwn: false },
+  ];
+
+  it('answers the table for every role, both actions, both senses of "own stop"', () => {
+    for (const { role, move, cancelAny, cancelOwn } of AUDIENCE) {
+      const who = actor([role]);
+      expect(canActor(who, { type: 'appointment.move' }, {}, NOW), `move for ${role}`).toBe(move);
+      expect(
+        canActor(who, { type: 'appointment.cancel', ownStop: false }, {}, NOW),
+        `cancel any for ${role}`,
+      ).toBe(cancelAny);
+      expect(
+        canActor(who, { type: 'appointment.cancel', ownStop: true }, {}, NOW),
+        `cancel own for ${role}`,
+      ).toBe(cancelOwn);
+    }
+  });
+
+  it('gives a practitioner the visit at their own door and no other', () => {
+    // They are the person who arrives to find the visit cannot go ahead.
+    // Whether the stop is theirs is the route's to resolve and pass in, and
+    // app.cancel_own_appointment (migration 203) asks it again in the
+    // database, which is the answer that binds.
+    const practitioner = actor(['practitioner']);
+    expect(canActor(practitioner, { type: 'appointment.cancel', ownStop: true }, {}, NOW)).toBe(
+      true,
+    );
+    expect(canActor(practitioner, { type: 'appointment.cancel', ownStop: false }, {}, NOW)).toBe(
+      false,
+    );
+    expect(canActor(practitioner, { type: 'appointment.move' }, {}, NOW)).toBe(false);
+  });
+
+  it('refuses an actor with no role at all, own stop or not', () => {
+    expect(canActor(actor([]), { type: 'appointment.move' }, {}, NOW)).toBe(false);
+    expect(canActor(actor([]), { type: 'appointment.cancel', ownStop: true }, {}, NOW)).toBe(false);
+  });
+});
+
 describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 1)', () => {
   // The floors as the change request states them, and as
   // db/policies/billing/ledger.sql enforces them beneath: the four office

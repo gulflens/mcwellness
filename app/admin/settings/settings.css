@@ -165,3 +165,37 @@
 .coordinate-pair .field {
   flex: 1 1 0;
 }
+
+/*
+  The practice's logo, as documents carry it. Bounded rather than sized: a
+  mark supplied for paper may be any shape, and the box says how much room it
+  has without pretending to know which way round it is. The rule around it is
+  the same hairline every other bordered surface uses, so an image with a
+  white ground still reads as a thing on the page.
+*/
+.logo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 0;
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  background: var(--surface);
+}
+
+.logo-preview img {
+  max-inline-size: 100%;
+  max-block-size: var(--s-16);
+  object-fit: contain;
+}
+
+/*
+  The logo's own actions. Its own name rather than `.drawer__actions`, which is
+  a drawer's footer and is justified to the end: these two sit in the reading
+  order of the section they belong to, so they start where the text does.
+*/
+.logo-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: var(--s-3);
+}
