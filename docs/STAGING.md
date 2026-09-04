@@ -236,6 +236,116 @@ local database; the audit chain verifies over 641 rows. These facts are
 the practice's own public registration data; they live on staging's tenant
 row and in the operator's documents, never in the repository or the seed.
 
+## What was done on 2026-09-04, fifth pass: catching up with main
+
+Main had reached `5663f18` and staging had stopped at 905. Eight migrations
+were missing — the client-record stream's erasure act and its reach into the
+visit, scheduling's settings table and its move-and-cancel columns,
+session-capture's check-in status, billing's VAT registration and its rendered
+documents, and the trunk's own redaction of a requester's phone number.
+
+- **Eight migrations were applied** one at a time through Supabase's migration
+  tool, in filename order: 104, 105, 202, 203, 305, 406, 407 and 906. Each was
+  applied under the same audit context the runner sets — `app.reason` naming
+  the file, and a fresh request id — so anything a migration wrote is
+  attributable to the migration that wrote it. `schema_migration` now holds
+  **forty-six rows**, one per file in `db/migrations`, every one carrying a
+  checksum. The thirty-eight rows already there were checked against the files
+  on disk before anything was applied: all thirty-eight matched, so no merged
+  migration had been edited behind the runner's back. Afterwards the whole
+  bookkeeping table — filename and checksum, in filename order — hashes to
+  the same value on staging, on a freshly migrated local database, and from
+  the files themselves, so `pnpm db:migrate` pointed at staging would see
+  nothing pending and nothing unexplained.
+- **Thirteen policy files were re-applied**, in path order, in one
+  transaction, the way the runner applies them. Twelve is the number the
+  earlier passes record; the thirteenth is
+  `db/policies/scheduling/scheduling_setting_access.sql`, which arrives with
+  migration 202 and had nowhere to be applied before it. One hundred and four
+  policies stand on `public` afterwards, matching a fresh local database
+  exactly.
+- **The practice got its notice period.** Migration 202 carries a data step
+  for practices that already exist, and staging is the real one it was written
+  for: the tenant now has a `scheduling_setting` row of twenty-four hours'
+  notice and an unfit-to-attend fee of AED 150, the operator's two figures of
+  2026-09-03. That insert is the only row this pass wrote to an audited table,
+  and its audit row names `migration 202_scheduling_setting.sql` as the reason.
+- **Nothing else was owed to the seed.** `git log de84cd0..5663f18 -- db/seed`
+  shows the seed learned three things since the reseed: the contact names
+  (already on staging from the third pass), the synthetic practice's own
+  identity fields, and a script that files the consent wording in a bucket.
+  None of them is a row staging lacks. Every table the seed writes was
+  compared against a freshly seeded local database, column by column with the
+  keyed identifiers left out, and all of them match byte for byte — the
+  services, the price list, the three programmes and their contents, the
+  twenty clients, the twenty-three contacts with their English and Arabic
+  names, the forty-two consents and the eight wording documents. Two tables
+  differ by their generated identifiers alone and by nothing else:
+  `goal_category` and `vat_setting`, whose rows are written by migrations 100
+  and 400 with `gen_random_uuid()` defaults, so their ids are per-database by
+  construction and nothing reads them across one. With the ids set aside, both
+  hash identically.
+- **Fingerprinted against a fresh `pnpm db:reset && pnpm db:migrate`** on the
+  trunk's own local database. Seven of the eight parts are identical:
+  columns (1,077), constraints (409), indexes (398), policies (104),
+  functions (57), triggers (198) and row-level security (60). Two differences
+  stand, both expected and both benign:
+  - **Grants.** Staging carries 939 table grants to a local database's 512.
+    Every one of the extra rows belongs to Supabase's own `service_role`,
+    which mirrors `postgres` and does not exist on a laptop. The grants that
+    matter are identical: `app_role` holds the same eighty-five, hashing to
+    the same value on both, and `anon` and `authenticated` hold nothing at all
+    on `public`, which is what every migration's `revoke all` intends.
+  - **The position of `schema_migration.checksum`**, third on staging where a
+    fresh local database has it second, carried since migration 900 added it
+    to a database that already had the table. The earlier passes record it and
+    it still stands. Nothing reads the position, and the column is now `not
+    null` on both.
+- **The audit chain verifies** end to end, over 646 rows, with no broken link.
+  Five of those rows arrived after the fourth pass and before this one — the
+  VAT registration, the owner's psychology-degree credential replacing the
+  `STAGING-DEMO` placeholder, and a demo visit re-booked for the current day —
+  and the sixth is this pass's own, from migration 202.
+- **The demo is intact and needed no rebuilding.** The owner's practitioner
+  row `00000005-0000-4000-8000-0000000000aa` stands, her credential covers the
+  neurofeedback service and has no expiry, and a confirmed home visit for
+  MW-000005 sits on **2026-09-04 at 10:00 Dubai time**, window closing at
+  10:45 with the trigger's own `busy_end` at 11:15, at that client's seeded
+  home. `app.checkin_context` answers for it: the client resolves, and two
+  consents are active. A later day still needs a fresh visit row, as before.
+
+### What the tenant row says about VAT, and the caution that goes with it
+
+Reported here without being changed, because it is the operator's own
+statement and not the assistant's to revise: the tenant row currently records
+the practice as **registered for VAT**, with a fifteen-character VAT number
+against it, entered on 2026-09-04 at the operator's direction. Its
+corporate-tax registration, legal name in English and Arabic, licence number
+and expiry (2027-05-09) and registered address are all present from the fourth
+pass.
+
+Two things follow, and both are worth saying plainly.
+
+**Only a corporate-tax certificate has been seen.** The practice's documents
+hold a corporate-tax registration and no VAT certificate — that is what the
+fourth pass recorded when it set the row to "not registered", and it is why
+`db/migrations/406_billing_vat_registration.sql` and
+`docs/SPEC/billing.md` section 5.1 both say the AED 375,000 threshold has not
+been crossed. The switch now says otherwise on the operator's word alone. If
+the certificate exists it should be filed; if it does not, the switch is the
+thing to correct, and correcting it is a one-column update, not a migration.
+
+**The switch is now load-bearing.** Before migration 406 the flag was
+decoration: `app.charge_single_visit` wrote VAT on every sale whatever the
+practice was registered for. From this pass it is the question the charge
+paths ask. With the switch true, a visit charged on staging will carry VAT at
+the price row's stamped rate, and the two guard triggers 406 installs
+(`zz_guard_invoice_vat` and `zz_guard_invoice_line_vat`) will admit it. The
+synthetic practice a fresh local database seeds is not registered, so the
+laptop and staging will disagree about the money on an invoice until the two
+are brought into line. That is a difference to decide about, not a defect to
+patch quietly.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
