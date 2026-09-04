@@ -492,6 +492,16 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         t(`${actor} requested erasure of this record`, `${actor} طلب محو هذا السجل`),
         locale,
       );
+    case 'client.erase':
+      // The act itself, written by app/api/clients/erasure.ts after
+      // app.erase_client returns: everything the erasure touched is already
+      // logged by the triggers with every value withheld, which is right and
+      // also means the trail would otherwise show a great many field names
+      // and never the sentence (docs/CHANGE-REQUESTS/client-record-04.md
+      // CR-16). Without this case it fell to the generic branch and read
+      // "X recorded erase on the record", which is understandable and is not
+      // a sentence anybody wrote.
+      return pick(t(`${actor} erased this record`, `${actor} محا هذا السجل`), locale);
     default: {
       const entity = label(ENTITY, event.entityType, locale) ?? event.entityType.replace(/_/g, ' ');
       switch (event.action) {

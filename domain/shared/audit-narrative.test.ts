@@ -140,6 +140,14 @@ const CASES: { name: string; event: AuditEvent; en: string; ar: string }[] = [
     ar: 'Hazel Harbour طلب محو هذا السجل',
   },
   {
+    // The act, not the request: app/api/clients/erasure.ts writes one row
+    // saying what the withheld trigger rows cannot (client-record-04 CR-16).
+    name: 'erasing a record',
+    event: event({ entityType: 'client', action: 'erase' }),
+    en: 'Hazel Harbour erased this record',
+    ar: 'Hazel Harbour محا هذا السجل',
+  },
+  {
     name: 'being refused access to a record',
     event: event({ action: 'refused' }),
     en: 'Hazel Harbour was refused access to this record',
