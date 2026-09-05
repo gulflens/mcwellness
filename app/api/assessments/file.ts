@@ -8,7 +8,7 @@ import { canActor, clientDocumentKey } from '@domain/shared';
 // trunk's to export from.
 import { documentRetentionUntil } from '../../../domain/shared/storage';
 import { logAction } from '../_middleware/audit';
-import type { ApiEnv } from '../_middleware/request-context';
+import type { ApiEnv, Db } from '../_middleware/request-context';
 import { logRefusal } from './audit';
 import { readOne } from './rows';
 import {
@@ -36,24 +36,29 @@ import {
  * handed under whatever type it is told will one day hold an HTML page called
  * a report, and a signed link to it is a link a browser may render.
  *
- * **The order is row, then bytes**, and the store call sits inside the
- * transaction rather than after it. That is deliberate and it differs from the
- * billing document's own route: an invoice is rendered deterministically and a
- * put that never ran can be put right by rendering it again, while an uploaded
- * file cannot be re-made from anything. A row that survived a failed put would
- * name bytes that will never exist, so the put is where the transaction can
- * still be rolled back with it — the setup photograph's door for the same
- * reason.
+ * **The order is row, then bytes, and the bytes go after the commit**
+ * (spec section 7.1), through `c.get('afterCommit')` exactly as
+ * app/api/billing/documents.ts does. A store cannot be rolled back and a
+ * transaction can, so a put inside the transaction leaves a person's qEEG
+ * export in the store under a key no `document` row names whenever anything
+ * downstream fails — unreachable, and out of reach of the erasure's own key
+ * list, which reads the rows.
  *
- * **`overwrite` stays false.** A fresh uuid cannot already be in the store, so
- * a conflict there means something is very wrong and 409 is a better answer
- * than a silent replacement. A filed evidence document is never replaced
- * (docs/SEAMS.md).
+ * **What the invoice can do and this cannot** is re-make the bytes: rendering
+ * is deterministic, an upload is not. So the repair is the retry. A browser
+ * that asks again with the same digest is handed the same document, and if
+ * nothing is behind that document's key the bytes it brought are put there
+ * then — a 200 over missing bytes would tell a practitioner their export is
+ * filed when it is not, and no later request would ever put it right, because
+ * the digest matches and the same id comes back for ever.
  *
- * **Idempotent on the digest.** A browser whose connection dropped after the
- * server committed asks again and is handed the same document; a different
- * file against the same measurement is an ordinary second file, because one
- * brain map produces several.
+ * **`overwrite` stays false**, on the first filing and on the repair. A fresh
+ * uuid cannot already be in the store, and a repair only runs where
+ * `storage.exists` says there is nothing under the key. A filed evidence
+ * document is never replaced (docs/SEAMS.md).
+ *
+ * **Idempotent on the digest.** A different file against the same measurement
+ * is an ordinary second file, because one brain map produces several.
  */
 
 const Params = z.object({ id: z.uuid() });
@@ -150,29 +155,40 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
       // These bytes are already filed under a document of their own: the same
       // digest against the same measurement. Hand that one back rather than
       // writing a second row over the same file.
+      //
+      // But a row is not bytes. The store is written after the commit, so a
+      // first attempt whose row committed and whose put then failed leaves a
+      // document with nothing behind it, and every retry after that matches on
+      // the digest and is handed the same id. So the retry looks, and puts
+      // back what is missing — the bytes in hand are the filed document's own,
+      // because the function matched them by their digest.
+      const key = await keyOf(db, filedId);
+      if (key !== null && !(await storage.exists(key))) {
+        c.get('afterCommit')(async () => {
+          await storage.put(key, body, ASSESSMENT_FILE_MIME_TYPE);
+        });
+      }
       return c.json(
         FileFiledResponse.parse({ documentId: filedId, role: role.data as AssessmentFileRole }),
         200,
       );
     }
 
-    await storage.put(storageKey, body, ASSESSMENT_FILE_MIME_TYPE);
+    c.get('afterCommit')(async () => {
+      await storage.put(storageKey, body, ASSESSMENT_FILE_MIME_TYPE);
+    });
 
     // What was filed, and nothing else: bytes never appear in a payload, a log
     // line or the trail.
     //
-    // **The document's id is deliberately not among the details**, and that is
-    // not a preference. `refuseContactDetails` in
-    // app/api/_middleware/audit.ts reads any run of nine to twelve digits
-    // beginning with a nought as a telephone number, and a random uuid
-    // contains one about **1.2 per cent of the time** — so a filing whose id
-    // happened to look like that would throw, roll its own transaction back,
-    // and answer 500, at random, about one filing in eighty. The trail loses
-    // nothing: the `assessment_document` row this filing writes is itself
-    // audited and its `new_values` name the document. Written up as a request
-    // to the trunk in docs/CHANGE-REQUESTS/assessment-01.md, where the same
-    // fault is recorded against the setup photograph's own door, which passes
-    // its id and does fail this way.
+    // The document's id is not among the details. That began as a way round
+    // `refuseContactDetails` in app/api/_middleware/audit.ts, which read a
+    // hyphenated run inside a random uuid as a telephone number about one time
+    // in eighty; the trunk has since fixed the check (round 30 of
+    // docs/CHANGE-REQUESTS/trunk-notes.md, which says the choice is now this
+    // stream's) and the id could be passed today. It is not, because the trail
+    // already names the document where it belongs: the `assessment_document`
+    // row this filing writes is itself audited and its `new_values` carry it.
     await logAction(
       db,
       'assessment.file_filed',
@@ -184,4 +200,18 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
       201,
     );
   });
+}
+
+/**
+ * The storage key of a document already filed, read back so a retry can tell
+ * an empty key from a filed one. Row security decides whether the row is one
+ * this caller may see; where it is not, there is nothing to repair and the
+ * answer is the same document id either way.
+ */
+async function keyOf(db: Db, documentId: string): Promise<string | null> {
+  const { rows } = await db.query<{ storage_key: string }>(
+    'select storage_key from document where tenant_id = app.current_tenant_id() and id = $1',
+    [documentId],
+  );
+  return rows[0]?.storage_key ?? null;
 }

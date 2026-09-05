@@ -61,10 +61,14 @@ const CONTACT_AUTH = assessmentId('14', 2);
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x0a, 0x25]);
 const OTHER_PDF = new Uint8Array([...PDF, 0x0a]);
 const digestOf = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+/** The key the seam builds for a client's document (domain/shared/storage.ts). */
+const keyFor = (clientId: string, documentId: string): string =>
+  `tenant/${IDS.tenantA}/client/${clientId}/${documentId}`;
 
 let owner: pg.Client;
 let pool: ReturnType<typeof createPool>;
 let api: ReturnType<typeof createApi>;
+let store: ReturnType<typeof localDiskStorage>;
 let today: string;
 let dir: string;
 
@@ -261,10 +265,13 @@ beforeAll(async () => {
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
   pool = createPool(apiUrl);
+  // Held rather than passed inline, so a test can look in the store and take
+  // bytes out of it: the repair on a retry is only provable from outside.
+  store = localDiskStorage({ dir, signingSecret: Buffer.alloc(32, 5) });
   api = createApi({
     pool,
     verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }),
-    storage: localDiskStorage({ dir, signingSecret: Buffer.alloc(32, 5) }),
+    storage: store,
   });
 });
 
@@ -693,6 +700,52 @@ describe('the export’s own door', () => {
       [created.assessment.id],
     );
     expect(Number(links.rows[0]?.n)).toBe(2);
+  });
+
+  it('leaves the bytes in the store once the row has committed', async () => {
+    const household = await seedHousehold('60');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const filed = (await (await putFile(created.assessment.id, household.authSub, PDF)).json()) as {
+      documentId: string;
+    };
+    // The put runs after the commit (spec section 7.1), and the middleware
+    // awaits it before the response leaves, so a caller told the export is
+    // filed is told the truth.
+    expect(await store.exists(keyFor(household.clientId, filed.documentId))).toBe(true);
+  });
+
+  it('puts the bytes back when a retry finds nothing under the key', async () => {
+    const household = await seedHousehold('61');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const filed = (await (await putFile(created.assessment.id, household.authSub, PDF)).json()) as {
+      documentId: string;
+    };
+    const key = keyFor(household.clientId, filed.documentId);
+
+    // The store was down for the moment after the commit: the row is filed and
+    // nothing is behind it. Every retry from here matches on the digest, so
+    // without the repair the same id would come back for ever over no bytes.
+    await store.delete(key);
+    expect(await store.exists(key)).toBe(false);
+
+    const again = await putFile(created.assessment.id, household.authSub, PDF);
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { documentId: string }).documentId).toBe(filed.documentId);
+    expect(await store.exists(key)).toBe(true);
+
+    // And nothing was filed twice: one document, one link.
+    const links = await owner.query<{ n: string }>(
+      'select count(*)::text as n from assessment_document where assessment_id = $1',
+      [created.assessment.id],
+    );
+    expect(Number(links.rows[0]?.n)).toBe(1);
+
+    // The bytes that came back are the bytes that were filed.
+    const link = (await (
+      await get(`/api/assessments/file/${filed.documentId}/link`, household.authSub)
+    ).json()) as { url: string };
+    const bytes = await api.request(link.url);
+    expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(PDF);
   });
 
   it('refuses a media type that is not a PDF', async () => {
