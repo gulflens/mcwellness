@@ -155,16 +155,29 @@ const INSTALL_KEY = 'mcwellness-install-note-dismissed';
 const INSTALL_NOTE =
   'Add this to your home screen so it opens with no signal: press Share, then Add to Home Screen.';
 
-/** "about 25 min \u00b7 18 km, estimate from traffic" (section 5.4). */
+/**
+ * "about 25 min, 18 km, estimate from traffic", or "about 25 min,
+ * straight-line estimate" (docs/SPEC/practitioner-phone.md section 5.4, as
+ * amended in the fix round).
+ *
+ * **Commas, not a middle dot.** docs/DESIGN-BRIEF.md section 4.5 prohibits the
+ * dot-joined metadata string, and this is a sentence a practitioner reads at
+ * arm's length rather than a row of fields.
+ *
+ * **And no distance on the fallback's line.** A straight-line figure is a
+ * distance as the crow flies multiplied by a road factor; printing it as
+ * kilometres beside the word estimate offers a precision the arithmetic does
+ * not have. The minutes are what the practitioner is planning around.
+ */
 export function describeLeg(leg: DayLegRow | undefined): string {
   if (leg === undefined) return NO_ESTIMATE;
   const minutes = Math.max(1, Math.round(leg.seconds / 60));
-  const km = leg.metres / 1000;
-  const distance = km < 10 ? km.toFixed(1) : String(Math.round(km));
-  const source = leg.source === 'traffic' ? 'estimate from traffic' : 'straight-line estimate';
   // Always the word estimate, and never a point time: neither implementation
   // knows when anybody will arrive (docs/SEAMS.md).
-  return `about ${minutes} min \u00b7 ${distance} km, ${source}`;
+  if (leg.source !== 'traffic') return `about ${minutes} min, straight-line estimate`;
+  const km = leg.metres / 1000;
+  const distance = km < 10 ? km.toFixed(1) : String(Math.round(km));
+  return `about ${minutes} min, ${distance} km, estimate from traffic`;
 }
 
 /**

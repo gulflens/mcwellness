@@ -149,8 +149,10 @@ const FALLBACK = {
 
 describe('describeLeg', () => {
   it('always says the word estimate, and never a point time', () => {
-    expect(describeLeg(TRAFFIC_LEG)).toBe('about 25 min · 18 km, estimate from traffic');
-    expect(describeLeg(FALLBACK.legs[0])).toBe('about 30 min · 20 km, straight-line estimate');
+    expect(describeLeg(TRAFFIC_LEG)).toBe('about 25 min, 18 km, estimate from traffic');
+    // No distance at all on the fallback's line: a straight line times a road
+    // factor is not a figure to print as kilometres (section 5.4).
+    expect(describeLeg(FALLBACK.legs[0])).toBe('about 30 min, straight-line estimate');
   });
 
   it('renders a placeholder rather than nothing while the figure is missing', () => {
@@ -167,7 +169,7 @@ describe('the day sheet with the real implementation', () => {
     mount(TRAFFIC);
     expect(await screen.findByText('Rowan M.')).toBeTruthy();
     await waitFor(() =>
-      expect(screen.getByText('about 25 min · 18 km, estimate from traffic')).toBeTruthy(),
+      expect(screen.getByText('about 25 min, 18 km, estimate from traffic')).toBeTruthy(),
     );
     const map = await screen.findByRole('img', { name: /map of your 2 stops today/ });
     // Not the route's own address: the bytes were fetched and are shown from
@@ -208,7 +210,7 @@ describe('the forced fallback', () => {
     expect(await screen.findByText('Rowan M.')).toBeTruthy();
     expect(screen.getByText('Dahlia M.')).toBeTruthy();
     await waitFor(() =>
-      expect(screen.getByText('about 30 min · 20 km, straight-line estimate')).toBeTruthy(),
+      expect(screen.getByText('about 30 min, straight-line estimate')).toBeTruthy(),
     );
     expect(screen.getByText("The map needs the practice's key.")).toBeTruthy();
     expect(screen.queryByRole('img', { name: /map of your/ })).toBeNull();
