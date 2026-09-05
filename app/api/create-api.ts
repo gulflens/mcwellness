@@ -76,6 +76,15 @@ export const LOGO_BODY_LIMIT_BYTES = MAX_LOGO_BASE64_LENGTH + LOGO_ENVELOPE_ALLO
 export const PHOTO_LIMIT_BYTES = 1024 * 1024;
 /** `PUT /api/sessions/:id/photo`, matched by shape because the id is in the path. */
 const PHOTO_PATH = /^\/api\/sessions\/[^/]+\/photo$/;
+/**
+ * The method as well as the path. The photograph's door is a `PUT` and only a
+ * `PUT`; every other method on that address is a 404 the router has not
+ * reached yet, and matching on the path alone handed those a megabyte of room
+ * and a pass out of `jsonOnly` for nothing.
+ */
+function isPhotoUpload(c: Context): boolean {
+  return c.req.method === 'PUT' && PHOTO_PATH.test(c.req.path);
+}
 export const REQUEST_TIMEOUT_MS = 10_000;
 const MINUTE = 60_000;
 
@@ -191,14 +200,14 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   const photoBodyLimit = bodyLimit({ maxSize: PHOTO_LIMIT_BYTES, onError: payloadTooLarge });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
-    if (PHOTO_PATH.test(c.req.path)) return photoBodyLimit(c, next);
+    if (isPhotoUpload(c)) return photoBodyLimit(c, next);
     return defaultBodyLimit(c, next);
   });
   api.use('/api/*', timeout(REQUEST_TIMEOUT_MS, timedOut));
   // One path carries an image rather than JSON, and it is the only one: the
   // route itself refuses any type but the three it names and verifies the
   // digest the device declared (app/api/sessions/photo.ts).
-  api.use('/api/*', async (c, next) => (PHOTO_PATH.test(c.req.path) ? next() : jsonOnly(c, next)));
+  api.use('/api/*', async (c, next) => (isPhotoUpload(c) ? next() : jsonOnly(c, next)));
 
   // Public, registered before the fence. The payload carries nothing
   // environment-specific on purpose.
