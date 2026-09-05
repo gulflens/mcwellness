@@ -1,6 +1,6 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated late on 5 September with piece eight under review and pieces nine and ten's checkpoints in flight. This file exists so that the next Claude session,
+Written 4 September 2026, updated early on 6 September with piece eight merged and on staging, and pieces nine and ten approved and building. This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -27,36 +27,38 @@ start; a checkpoint you have not read yet stays open and costs nothing.
 
 ## 2. Where things stand
 
-- `main` is at `259e11f` plus this file's own pull request: fifty-five
-  migrations and fifteen policy files, with piece eight's two migrations
-  (204 and 306) waiting on pull request 73. Every merged pull request
-  through #72 carries its review record as a comment or, for documentation,
-  the integrator's own read in the body.
-- Pieces one to seven are built, reviewed, merged and on staging.
-- **Piece eight, the practitioner's phone, is built and under review.** Its
-  spec merged as pull request 72 (`docs/SPEC/practitioner-phone.md`, with
-  `docs/CHANGE-REQUESTS/session-capture-04.md` authorising the shared-zone
-  edits). The builder opened pull request 73 at 23:41 on 5 September:
-  ten commits, 82 files, all gates green on its own run (`pnpm verify`
-  1443 tests, `pnpm test:db` 833 tests, `pnpm build` with the worker's
-  precache written). The builder's report is in the session scratchpad
-  (section 9) and names five decisions beyond the spec's defaults and one
-  twelfth shared-zone edit, all called out in the pull-request body. The
-  combined review on Fable 5.1 started at 23:41; what follows is section
-  10, steps 1 to 6.
-- **Piece nine's design checkpoint is being written** (branch `hosting-spec`,
-  worktree `mcwellness-trunk-2`): `docs/SPEC/hosting.md`, answering the three
-  Hostinger confirmations from the account's own API with read-only calls.
-  It opens as a documentation pull request for the operator's approval.
-- **Piece ten's specifications are being rewritten** (branch
-  `piece-ten-specs`, worktree `mcwellness-assessment`): `docs/SPEC/assessment.md`
-  and `docs/SPEC/reports-v1.md` against today's `main`, with
-  `docs/PLAN/piece-ten.md` for the operator's approval. Documentation only.
+- `main` is at `0c99ff2` plus pull request 77 (the eighth staging pass) and
+  this file's own pull request: fifty-seven migrations and seventeen policy
+  files. Every merged pull request through #76 carries its review record as
+  a comment or, for documentation, the integrator's read.
+- Pieces one to **eight** are built, reviewed, merged and on staging. Piece
+  eight (the practitioner's phone) merged as pull request 73 early on 6
+  September: the app installs and opens with no signal, the sensor
+  photograph has its door and is filed under the household's consent, the
+  day's drive estimates and picture sit behind a routing seam, and the kit
+  register blocks a session on an overdue amplifier. Its record on the pull
+  request names the review, the fix round, the re-check, and the short
+  second round the re-check made necessary (the day picture and the previous
+  placement were object URLs the content-security policy refused; `blob:` is
+  now admitted for images and pinned by a test). The eighth staging pass
+  (pull request 77) applied migrations 204 and 306, the seed's kit rows and
+  `ROUTING_PROVIDER=straight-line`, with the schema fingerprint identical to
+  a fresh local build in all nine parts and the routing fallback proved live
+  under the owner's account.
+- **Pieces nine and ten are approved and building.** The operator approved
+  both checkpoints at about 01:05 on 6 September in the session named
+  "Handover section 10 continuation"; pull requests 75 (hosting) and 76
+  (piece ten's plan and specs) merged at 01:08. That session dispatched the
+  builds at 01:12 (piece nine in `mcwellness-trunk-2`; the PDF-writer move
+  piece ten needs first in `mcwellness-trunk`; assessments in
+  `mcwellness-assessment`; reports queued until the writer move merges) and
+  is the one that reviews and merges them; its briefs, review briefs and
+  reports live in its own scratch directory, and it updates sections 2, 3
+  and 10 of this file in its own pull request after this one merges.
 - Staging (Supabase project `ajjkvjtqxktkgrvcrzkh`, Mumbai) is level with
-  `main` as of the seventh pass (pull request 70) and owes the eighth pass
-  once pull request 73 merges: migrations 204 and 306, the seed's kit rows,
-  and `ROUTING_PROVIDER=straight-line` in `.env.staging`. The brief for it is
-  written (section 9).
+  `main` after the eighth pass; the record is in `docs/STAGING.md`. Staging
+  runs the straight-line routing fallback until the operator supplies the
+  Google server key (section 8).
 - The old Flutter app (`McWellness UAE`, a separate repository) is not this
   platform. Nothing in it needs revisiting for this work.
 
@@ -67,10 +69,13 @@ September 2026: pieces seven and eight are built, piece nine's domain and
 host were answered on 5 September, and the same approval authorised the
 writing of piece ten's two specifications. Piece eight's spec was approved
 for building by the integrator under that plan on 5 September, with its
-seven decisions marked as Claude's. **Not yet approved:** piece nine's
-hosting spec and piece ten's plan and specs, which are the two checkpoints
-section 1 asks the operator to answer. A build starts only on an approved
-checkpoint.
+seven decisions marked as Claude's. **Approved on 6 September 2026 at about 01:05** (operator, in the session
+"Handover section 10 continuation"): piece nine's hosting spec
+(`docs/SPEC/hosting.md`, pull request 75) and piece ten's plan and two specs
+(`docs/PLAN/piece-ten.md`, `docs/SPEC/assessment.md`,
+`docs/SPEC/reports-v1.md`, pull request 76), with every default marked as
+Claude's standing until overruled. Their builds are running from that
+session.
 
 ## 4. How the work is done
 
@@ -182,13 +187,17 @@ files while iterating, because a silent ten-minute command is what stalled
 the first run; and a stalled agent cannot be resumed from this desktop
 session, so the continuation note in the brief is what saved its work.
 
-**What piece eight has cost so far (5 September, 23:45).** The spec by the
-integrator in the main conversation; the builder on Opus about 0.73 million
-in one run of 95 minutes with no stall (the timeout and single-file rules
-from piece seven held); the combined review, the fix round, the re-check and
-the staging pass not yet run when this was written. Piece nine's checkpoint
-and piece ten's specs, running beside it on Opus, are expected at roughly
-0.3 to 0.6 million each; their reports state the figure.
+**What piece eight cost (6 September, 01:40).** The spec by the integrator
+in the main conversation; the builder on Opus about 0.73 million in one run
+of 95 minutes with no stall (the timeout and single-file rules from piece
+seven held); the combined review on Fable 5.1 about 0.26 million; the fix
+round on Opus about 0.33 million; the re-check on Fable 5.1 about 0.11
+million, which found one defect the suite could not see; a short second
+round on Opus about 0.055 million, read by the integrator instead of a
+third agent pass; the staging pass on Sonnet about 0.35 million. About 1.84
+million in agents, plus the integrator's own conversation. Beside it, piece
+nine's checkpoint cost about 0.19 million and piece ten's specs about 0.27
+million, both on Opus.
 
 ## 7. The failed-run emails
 
@@ -219,6 +228,13 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
+- **Rotate the staging project's service-role key** (Supabase dashboard,
+  API settings, the `documents` bucket's key in `.env.staging` as
+  `SUPABASE_STORAGE_KEY`) when convenient. During the eighth staging pass a
+  shell redirection mis-appended onto that line and the diagnostic that
+  found the fault printed the line, key included, into the agent's own
+  transcript. Fixed the same minute, never committed or logged elsewhere,
+  staging and synthetic data only; rotating it closes the matter.
 - **The Google server key for piece eight.** In the practice's Google Cloud
   project, enable the Routes API and the Maps Static API, mint a server key
   restricted to those two (never the key inside the old app's binaries), set
@@ -283,8 +299,10 @@ from it is copied into the pull-request record or into this file.
 Each step names who runs it and what it produces. A step is done when its
 pull request is merged or its report exists.
 
-**Finishing piece eight** (one chain, in order; parallel work may run beside
-it):
+**Finishing piece eight** — **done, 6 September 01:40.** Review at 8624c02,
+fix round to 458545e, re-check, second round to 014e3e4, record posted,
+merged as pull request 73 at 01:04, laptop migrated, staging pass as pull
+request 77, this file updated. Kept below for the record:
 
 1. The combined review of pull request 73 on Fable 5.1 (brief and report in
    section 9). Done when `phone-review-report.md` exists.
@@ -307,8 +325,8 @@ it):
    eight completed, and the piece eight entry in Claude's memory replaced by
    a completed note.
 
-**The two checkpoints** (already running when this was written; each ends in
-a documentation pull request for the operator):
+**The two checkpoints** — **done and approved**: pull requests 75 and 76,
+merged 01:08 on 6 September. Kept for the record:
 
 8. Piece nine's hosting spec (`hosting-spec`): read by the integrator, then
    held open until the operator approves it. If the Hostinger confirmation
@@ -318,8 +336,9 @@ a documentation pull request for the operator):
 9. Piece ten's plan and specs (`piece-ten-specs`): the same; the plan page
    lists the decisions the operator must answer.
 
-**After approval** (builds may run in parallel, one builder each, one
-combined review and one re-check each):
+**After approval** — **dispatched at 01:12 on 6 September** from the session
+"Handover section 10 continuation", which owns their review, merge and
+staging and records them here in its own pull request:
 
 10. Piece nine's build from `docs/SPEC/hosting.md`: the deploy pipeline on a
     `v*` tag, the production guard in `db:migrate`, backups with a rehearsed
