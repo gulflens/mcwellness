@@ -238,6 +238,15 @@ address. That is the decision, and two things follow from it:
   in its footer, in both languages, so a reader checking it does not have to
   infer why the recipient block is as short as it is.
 
+_Amended in the build, 2026-09-06 (trunk round 29):_ the writer that renders
+that document is in two halves. The invoice's own model, layout and wording are
+`domain/billing/document` and are billing's; the byte-level half underneath —
+the PDF file format, TrueType, Arabic shaping and the extractor the tests read a
+finished page back with — is `domain/shared/document`, and the seam that sends a
+finished document is `domain/shared/sending.ts`, because the reports stream
+renders and sends documents too and `docs/SPEC/OWNERSHIP.md` rule 3 forbids it
+importing billing's `domain/`.
+
 Take this to the tax advisor section 5.3 already names, at the same time as the
 tax point on prepaid packages, and record the answer here.
 
