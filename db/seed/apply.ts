@@ -66,6 +66,9 @@ const CONTACT_COLUMNS: ContactColumn[] = [
   { name: 'id', type: 'uuid' },
   { name: 'tenant_id', type: 'uuid' },
   { name: 'client_id', type: 'uuid' },
+  // The portal account, on the two contacts that have one (migration 700's
+  // door is what puts a real sign-in behind it; the seed only links the row).
+  { name: 'user_id', type: 'uuid' },
   { name: 'relationship', type: 'public.relationship' },
   { name: 'is_legal_guardian', type: 'boolean' },
   { name: 'can_consent', type: 'boolean' },
@@ -240,6 +243,7 @@ export async function applySeed(
       vat_trn: t.vatTrn,
       default_emirate: t.defaultEmirate,
       timezone: t.timezone,
+      whatsapp_number: t.whatsappNumber,
     });
 
     for (const u of data.users) {
@@ -467,6 +471,7 @@ export async function applySeed(
             id: c.id,
             tenant_id: t.id,
             client_id: c.clientId,
+            user_id: c.userId,
             relationship: c.relationship,
             is_legal_guardian: c.isLegalGuardian,
             can_consent: c.canConsent,

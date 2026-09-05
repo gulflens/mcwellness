@@ -215,6 +215,38 @@ describe('the synthetic seed', () => {
     }
   });
 
+  it('gives two households a portal login and the practice a WhatsApp number', async () => {
+    const { rows } = await owner.query<{
+      id: string;
+      client_id: string;
+      relationship: string;
+      display_name: string;
+      preferred_locale: string;
+      roles: string[];
+    }>(
+      'select ct.id, ct.client_id, ct.relationship, u.display_name, u.preferred_locale, ' +
+        '(select array_agg(r.role::text) from user_role r where r.user_id = u.id) as roles ' +
+        'from contact ct join app_user u on u.id = ct.user_id order by ct.id',
+    );
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.roles).toEqual(['client_contact']);
+      const contact = data.contacts.find((c) => c.id === row.id);
+      expect(contact?.userId).not.toBeNull();
+    }
+    // One of each shape the portal renders: a parent reading in English, and
+    // an Arabic-first adult who is her own contact.
+    expect(rows.map((r) => r.relationship).sort()).toEqual(['mother', 'self']);
+    expect(rows.map((r) => r.preferred_locale).sort()).toEqual(['ar', 'en']);
+
+    const { rows: practice } = await owner.query<{ whatsapp_number: string }>(
+      'select whatsapp_number from tenant where id = $1',
+      [data.tenant.id],
+    );
+    expect(practice[0]?.whatsapp_number).toBe(data.tenant.whatsappNumber);
+    expect(practice[0]?.whatsapp_number).toMatch(/^\+97150000[0-9]{4}$/);
+  });
+
   it('resolves a seeded login to its roles and certifications', async () => {
     const { rows } = await owner.query<{ roles: string[]; capabilities: unknown[] }>(
       'select roles, capabilities from app.resolve_actor($1)',
