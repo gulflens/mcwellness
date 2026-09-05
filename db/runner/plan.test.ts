@@ -183,7 +183,7 @@ describe('migrationRefusal', () => {
     expect(refusal).not.toContain('db.example.invalid');
   });
 
-  it('refuses a MIGRATE_TARGET that names neither environment', () => {
+  it('refuses a MIGRATE_TARGET that names none of the three', () => {
     expect(
       migrationRefusal({
         url: HOSTED,
@@ -191,7 +191,21 @@ describe('migrationRefusal', () => {
         releaseTag: undefined,
         checkoutTags: noTags,
       }),
-    ).toContain('must be either staging or production');
+    ).toContain('It must be staging, scratch or production');
+  });
+
+  it('allows a scratch database on the word alone', () => {
+    // A hosted database that is neither of the other two and that nothing
+    // depends on: the throwaway project a backup is restored into, where
+    // docs/RUNBOOK/restore.md re-applies the policies before anybody signs in.
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'scratch',
+        releaseTag: undefined,
+        checkoutTags: noTags,
+      }),
+    ).toBeNull();
   });
 
   it('allows staging on the word alone', () => {

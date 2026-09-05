@@ -48,9 +48,12 @@ Then, before anyone signs in:
   brings them back; the erasure requests raised since the dump's date are
   run again against the restored database. Ninety days bounds how long any
   one dump can carry them.
-- **Re-apply the policies**: `pnpm db:migrate` against the restored
-  database re-applies every file under `db/policies`, which is how a policy
-  change reaches a database in the ordinary course of things.
+- **Re-apply the policies**: `MIGRATE_TARGET=scratch pnpm db:migrate` against
+  the restored database re-applies every file under `db/policies`, which is
+  how a policy change reaches a database in the ordinary course of things.
+  The word is `scratch` because the restore target is a hosted database that
+  is neither staging nor production, and the guard in `db/runner/plan.ts`
+  refuses any database that is not on this machine until somebody names it.
 - **The sign-in accounts are not in this dump.** It carries the platform's
   own two schemas and not Supabase's `auth`, so the people and their roles
   come back but the accounts they sign in with do not. Those come from

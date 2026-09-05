@@ -277,10 +277,18 @@ export function isLocalDatabaseUrl(url: string): boolean {
 }
 
 /**
- * The two things `MIGRATE_TARGET` may say a database is. Anything else, the
+ * The three things `MIGRATE_TARGET` may say a database is. Anything else, the
  * empty string included, is treated as unsaid.
+ *
+ * `scratch` is a hosted database that is neither of the other two and that
+ * nothing depends on: the throwaway project a backup is restored into, where
+ * the policies are re-applied before anybody signs in (docs/RUNBOOK/restore.md
+ * section 1), or a short-lived project made to try something. Without a word of
+ * its own, a restore rehearsal has to call itself staging — a word typed to get
+ * past a refusal rather than because it is true, which is the very habit this
+ * guard exists to discourage.
  */
-export const MIGRATE_TARGETS = ['staging', 'production'] as const;
+export const MIGRATE_TARGETS = ['staging', 'scratch', 'production'] as const;
 export type MigrateTarget = (typeof MIGRATE_TARGETS)[number];
 
 /** What the guard below is given. Nothing here is read from the environment: see db/migrate.ts. */
@@ -330,14 +338,15 @@ export function migrationRefusal(facts: MigrationGuardFacts): string | null {
   if (target === '') {
     return (
       'it is not on this machine and MIGRATE_TARGET is not set. ' +
-      'Set MIGRATE_TARGET=staging, or MIGRATE_TARGET=production with RELEASE_TAG, ' +
-      'to say deliberately which database this is.'
+      'Set MIGRATE_TARGET=staging, MIGRATE_TARGET=scratch for a throwaway database, ' +
+      'or MIGRATE_TARGET=production with RELEASE_TAG, to say deliberately which ' +
+      'database this is.'
     );
   }
   if (!(MIGRATE_TARGETS as readonly string[]).includes(target)) {
     return (
       `it is not on this machine and MIGRATE_TARGET is "${target}", which names nothing. ` +
-      'It must be either staging or production.'
+      'It must be staging, scratch or production.'
     );
   }
   if (target !== 'production') {
