@@ -2,7 +2,8 @@ import type { Hono } from 'hono';
 import { visitOutcome, visitsFor, type AppointmentStatus } from '../../../domain/portal';
 import { logReads } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
-import { clientsFor, readHousehold, type Household } from './household';
+import { clientsFor, mayReadHousehold, readHousehold, type Household } from './household';
+import { logHouseholdRefusal } from './refused';
 import { VisitsResponse, type Visit } from './schema';
 
 /**
@@ -84,8 +85,18 @@ export function mountPortalVisits(api: Hono<ApiEnv>, now: () => Date = () => new
   api.get('/api/portal/visits', async (c) => {
     const requestId = c.get('requestId');
     const db = c.get('db');
-    const household = await readHousehold(db, c.get('actor'), now());
+    const actor = c.get('actor');
+    const household = await readHousehold(db, actor, now());
     if (household === null) return c.json({ error: 'forbidden', requestId }, 403);
+    // Section 5, rule 1: `client.read` for every client this answer is about,
+    // with the ids the database resolved and never one a request claimed. The
+    // policies refuse the rows beneath and `readHousehold` has already turned
+    // away anybody who is not a contact; this is the rule stated where the
+    // route exercises it, and a refusal on the trail if the three disagree.
+    if (!mayReadHousehold(actor, household, now())) {
+      await logHouseholdRefusal(db, household);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
 
     const { upcoming, past } = await householdVisits(db, household);
     // One row per visit the household was shown, as the contact: the practice's

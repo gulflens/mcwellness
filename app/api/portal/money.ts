@@ -5,7 +5,14 @@ import { DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../../domain/shared';
 import { logRead } from '../_middleware/audit';
 import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
-import { clientsFor, moneyClientIds, readHousehold, type Household } from './household';
+import {
+  clientsFor,
+  mayReadHousehold,
+  moneyClientIds,
+  readHousehold,
+  type Household,
+} from './household';
+import { logHouseholdRefusal } from './refused';
 import {
   DocumentLinkResponse,
   MoneyResponse,
@@ -183,8 +190,18 @@ export function mountPortalMoney(api: Hono<ApiEnv>, now: () => Date = () => new 
   api.get('/api/portal/money', async (c) => {
     const requestId = c.get('requestId');
     const db = c.get('db');
-    const household = await readHousehold(db, c.get('actor'), now());
+    const actor = c.get('actor');
+    const household = await readHousehold(db, actor, now());
     if (household === null) return c.json({ error: 'forbidden', requestId }, 403);
+    // Section 5, rule 1: `client.read` for every client this answer is about,
+    // with the ids the database resolved and never one a request claimed. The
+    // policies refuse the rows beneath and `readHousehold` has already turned
+    // away anybody who is not a contact; this is the rule stated where the
+    // route exercises it, and a refusal on the trail if the three disagree.
+    if (!mayReadHousehold(actor, household, now())) {
+      await logHouseholdRefusal(db, household);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
 
     const visible = moneyClientIds(household);
     if (visible.length === 0) {

@@ -1,4 +1,5 @@
 import type { Db } from '../_middleware/request-context';
+import type { Household } from './household';
 
 /**
  * Records that this request tried to reach a specific row and was turned away
@@ -33,4 +34,21 @@ export async function logPortalRefusal(
       "nullif(current_setting('app.request_id', true), '')::uuid)",
     [entityType, entityId, clientId],
   );
+}
+
+/**
+ * The same, for a whole household: one row per client the answer would have
+ * been about, written when `mayReadHousehold` says no (section 5, rule 1).
+ *
+ * Every one of those clients is a row this request did reach — the household is
+ * resolved in the database from the actor stamp — so naming them fills no trail
+ * with uuids of anybody's choosing. It is a refusal that should never be
+ * written: the ids the gate is asked about are the ids the database itself
+ * handed back. If one ever is, the domain's rule and the policies have come
+ * apart, and the trail is where that shows.
+ */
+export async function logHouseholdRefusal(db: Db, household: Household): Promise<void> {
+  for (const client of household.clients) {
+    await logPortalRefusal(db, 'client', client.id, client.id);
+  }
 }
