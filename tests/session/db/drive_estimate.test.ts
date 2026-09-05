@@ -279,6 +279,38 @@ describe('who may read and who may fill the cache', () => {
     });
   });
 
+  it('refuses finance and a household refreshing one, though finance may read it', async () => {
+    // The update grant is the one the routing route uses, and it is narrower
+    // than the read: finance may look at a drive because a drive is a cost of
+    // delivering a visit, and may not touch the figure; a household reaches
+    // neither. A restrictive policy that refuses an update filters the row out
+    // rather than raising, so the proof is that nothing was written — the
+    // statement matched no row, and the figure still says what it said.
+    for (const [userId, roles] of [
+      [FINANCE_USER, 'finance'],
+      [CONTACT_USER, 'client_contact'],
+    ] as const) {
+      await rolledBack(client, async () => {
+        await client.query(INSERT, [IDS.tenantA, HOME, AWAY, 8, 1500, 18000, 'straight-line']);
+        await asRole(userId, roles, async () => {
+          const updated = await client.query(
+            "update drive_estimate set seconds = 60, source = 'traffic' " +
+              'where from_location_id = $1 and to_location_id = $2 and hour_bucket = 8',
+            [HOME, AWAY],
+          );
+          expect(updated.rowCount, roles).toBe(0);
+        });
+        const { rows } = await client.query<{ seconds: number; source: string }>(
+          'select seconds, source::text as source from drive_estimate ' +
+            'where from_location_id = $1 and to_location_id = $2 and hour_bucket = 8',
+          [HOME, AWAY],
+        );
+        expect(rows[0]?.seconds, roles).toBe(1500);
+        expect(rows[0]?.source, roles).toBe('straight-line');
+      });
+    }
+  });
+
   it('grants nobody a delete: a stale row is overwritten, never removed', async () => {
     const { rows } = await client.query<{ privilege_type: string }>(
       'select privilege_type from information_schema.role_table_grants ' +
