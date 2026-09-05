@@ -710,6 +710,12 @@ log file.
 9. **A first step in each new workflow checks its own secrets.** Neither
    workflow can run today, and a workflow that half-runs on empty strings is
    worse than one that stops on its first line saying which name is missing.
+10. **Both rounds of this file were kept** when the branch met `main`, round 28
+    ahead of round 29, rather than one of them overwriting the other. The
+    conflict was a rebase artefact and neither round is a draft of the other.
+
+All ten are also listed on the pull request itself, one line each, so the
+operator can overrule any of them from the page they approve on.
 
 ### 3. What is still the operator's, and what was deliberately left undone
 
