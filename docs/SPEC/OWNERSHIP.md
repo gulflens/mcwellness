@@ -67,12 +67,14 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 
 | Worktree | Owns exclusively | Migrations | Spec |
 |---|---|---|---|
-| `assessment` | `domain/assessment/**`, `app/admin/assessments/**`, `app/api/assessments/**`, `tests/assessment/**` | `500–599` | `SPEC/assessment.md` |
+| `assessment` | `domain/assessment/**`, `app/admin/assessments/**`, `app/api/assessments/**`, `db/policies/assessment/**`, `tests/assessment/**` | `500–599` | `SPEC/assessment.md` |
 | `reports` | `domain/reports/**`, `app/admin/reports/**`, `jobs/reports/**`, `app/api/reports/**`, `tests/reports/**` | `600–699` | `SPEC/reports-v1.md` |
 | `client-portal` | `app/client/**`, `app/admin/portal/**`, `app/api/portal/**`, `domain/portal/**`, `db/policies/portal/**`, `tests/portal/**` | `700–799` | `SPEC/client-portal.md` |
 | `audit-ui` | `app/admin/audit/**`, `app/api/audit/**`, `tests/audit/**` | `800–899` | `SPEC/audit.md` section 9 |
 
 > Widened for piece seven (2026-09-05): the portal gained an admin page for household access, a small pure domain of its own and its own policy folder. The shared-zone edits the piece needs are listed in `docs/CHANGE-REQUESTS/client-portal-05.md` and, by the integrator's decision under the cost rules of `docs/HANDOVER.md`, ride in the piece's own pull request rather than a separate trunk round.
+
+> Widened for piece ten (2026-09-06, `docs/SPEC/assessment.md`): the `assessment` row gains `db/policies/assessment/**`, which every other row already names. The shared-zone edits the piece needs are listed in `docs/CHANGE-REQUESTS/assessment-01.md` — items 2 to 7: the raw-body door in `app/api/create-api.ts`, the Assessments tab's mount point in `app/admin/clients/ClientDrawer.tsx`, the seed generator and its assertions, the erasure step as migration `106` in the client record's range with the sentence in the confirmation letter, the audit-narrative sentences and the actor's own actions — and, by the integrator's decision under the cost rules of `docs/HANDOVER.md`, ride in the piece's own pull request rather than a separate trunk round.
 
 **Apply order across these ranges is not fixed.** Every worktree runs its own local Postgres (see the ports below), and each one only ever applies the migrations it has: the trunk's, and its own. Which of another stream's migrations, if any, a given database has seen depends on integration order, not on the numbers themselves — a database can carry billing's `400` without ever having carried the trunk's `099`, or the reverse. `db/runner/plan.ts` reflects this: a pending migration numbered below the highest one already applied is planned, not refused (the missing-file and duplicate-number checks still catch genuinely edited history). A migration may therefore depend only on what it names in its own `Needs` comment at the top of the file; it must never assume another stream's range is present just because its own number is higher.
 

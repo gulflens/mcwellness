@@ -7,6 +7,7 @@ import {
   SEED_REASON,
   SEED_TENANT_ID,
 } from '../../db/seed/generate';
+import { validateDerived } from '../../domain/assessment';
 import { isCalibrationOverdue } from '../../domain/session';
 import { deriveIdentityKeys, openEmiratesId } from '../../domain/shared/identity';
 import { normaliseEmiratesId } from '../../domain/shared/emirates-id';
@@ -38,6 +39,7 @@ const SEED_TABLES = [
   'contact',
   'document',
   'consent',
+  'assessment',
 ];
 
 let owner: pg.Client;
@@ -85,6 +87,7 @@ describe('the synthetic seed', () => {
       contact: data.contacts.length,
       document: data.documents.length,
       consent: data.consents.length,
+      assessment: data.assessments.length,
     };
     for (const [table, n] of Object.entries(expected)) {
       expect(await count(table), table).toBe(n);
@@ -131,6 +134,62 @@ describe('the synthetic seed', () => {
     // And it is the only overdue item there is: an amplifier somebody carries
     // that had lapsed would block that person's whole day.
     expect(data.kit.filter(overdue)).toHaveLength(1);
+  });
+
+  it('gives three households a baseline, a re-map ninety days later and one questionnaire', async () => {
+    // docs/CHANGE-REQUESTS/assessment-01.md item 4 and docs/SPEC/assessment.md
+    // section 6: enough for the comparison screen to have something to show on
+    // staging, and no file at all — an export is a vendor's own PDF and there
+    // is no synthetic one to invent.
+    const measured = new Set(data.assessments.map((row) => row.clientId));
+    expect(measured.size).toBe(3);
+    for (const clientId of measured) {
+      const maps = data.assessments.filter(
+        (row) => row.clientId === clientId && row.instrument === 'qeeg',
+      );
+      expect(maps).toHaveLength(2);
+      const [baseline, remap] = maps as [(typeof maps)[number], (typeof maps)[number]];
+      const days = (Date.parse(remap.performedAt) - Date.parse(baseline.performedAt)) / 86_400_000;
+      expect(days).toBe(90);
+      expect(
+        data.assessments.filter(
+          (row) => row.clientId === clientId && row.instrument === 'questionnaire.sample',
+        ),
+      ).toHaveLength(1);
+    }
+    // Nothing is filed against any of them.
+    const files = await count('assessment_document');
+    expect(files).toBe(0);
+  });
+
+  it('writes figures the declared shape of the instrument recognises', async () => {
+    for (const row of data.assessments) {
+      const validated = validateDerived(row.instrument, row.instrumentVersion, row.derived);
+      expect(validated.ok, `${row.id} ${JSON.stringify(validated)}`).toBe(true);
+    }
+  });
+
+  it('attaches no word to any figure it seeds', async () => {
+    // CLAUDE.md rule 1 and the spec's own rule: a measurement carries figures
+    // and no words. A fixture that shipped one would teach the screens to.
+    const written = JSON.stringify(data.assessments).toLowerCase();
+    for (const word of ['abnormal', 'severity', 'moderate', 'diagnos', 'elevated']) {
+      expect(written.includes(word), word).toBe(false);
+    }
+  });
+
+  it('sets a comparison against the age and sex it was actually made against', async () => {
+    const maps = data.assessments.filter((row) => row.instrument === 'qeeg');
+    expect(maps.length).toBeGreaterThan(0);
+    for (const row of maps) {
+      expect(row.referenceAgeYears).not.toBeNull();
+      expect(row.referenceSex).not.toBeNull();
+    }
+    // A questionnaire has no reference database behind it, so it snapshots none.
+    for (const row of data.assessments.filter((r) => r.instrument === 'questionnaire.sample')) {
+      expect(row.referenceAgeYears).toBeNull();
+      expect(row.referenceSex).toBeNull();
+    }
   });
 
   it('leaves the synthetic practice unregistered for VAT, with a synthetic licence', async () => {

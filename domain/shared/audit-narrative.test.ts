@@ -391,3 +391,88 @@ describe('the equipment register and the setup photograph', () => {
     }
   });
 });
+
+describe('measurements', () => {
+  // docs/SPEC/assessment.md section 8, docs/CHANGE-REQUESTS/assessment-01.md
+  // item 6. The trail says a measurement was taken and by whom; the figures
+  // themselves are read on the record, never here.
+  it('tells a first recording from a correction', () => {
+    expect(
+      narrate(event({ entityType: 'assessment', action: 'insert' }), 'en')?.sentence,
+    ).toContain('recorded a measurement');
+    expect(
+      narrate(
+        event({ entityType: 'assessment', action: 'insert', newValues: { version: 2 } }),
+        'en',
+      )?.sentence,
+    ).toContain('corrected version');
+  });
+
+  it('says an erasure cleared the words beside a measurement', () => {
+    expect(
+      narrate(
+        event({
+          entityType: 'assessment',
+          action: 'update',
+          changedFields: ['condition_note', 'supersede_reason'],
+        }),
+        'en',
+      )?.sentence,
+    ).toContain('cleared the words');
+  });
+
+  it('says a measurement was read, and a refusal was refused', () => {
+    expect(narrate(event({ entityType: 'assessment', action: 'read' }), 'en')?.sentence).toContain(
+      'read a measurement',
+    );
+    expect(narrate(event({ entityType: 'assessment', action: 'list' }), 'en')?.sentence).toContain(
+      'read a measurement',
+    );
+    expect(
+      narrate(event({ entityType: 'assessment', action: 'refused' }), 'en')?.sentence,
+    ).toContain('was refused');
+  });
+
+  it('says a file was filed, and never says the document id', () => {
+    const sentence = narrate(
+      event({
+        entityType: 'assessment',
+        action: 'assessment.file_filed',
+        newValues: { documentId: '00000000-0000-4000-8000-0000000000f9', role: 'raw' },
+      }),
+      'en',
+    )?.sentence;
+    expect(sentence).toContain("filed the software's own export");
+    expect(sentence).not.toContain('0000000000f9');
+  });
+
+  it('says a file was attached and, on an erasure, removed', () => {
+    expect(
+      narrate(event({ entityType: 'assessment_document', action: 'insert' }), 'en')?.sentence,
+    ).toContain('attached a file');
+    expect(
+      narrate(event({ entityType: 'assessment_document', action: 'delete' }), 'en')?.sentence,
+    ).toContain('removed a measurement');
+  });
+
+  it('writes every one of them in Arabic too', () => {
+    for (const overrides of [
+      { entityType: 'assessment', action: 'insert' },
+      { entityType: 'assessment', action: 'insert', newValues: { version: 2 } },
+      {
+        entityType: 'assessment',
+        action: 'update',
+        changedFields: ['condition_note'],
+      },
+      { entityType: 'assessment', action: 'read' },
+      { entityType: 'assessment', action: 'list' },
+      { entityType: 'assessment', action: 'refused' },
+      { entityType: 'assessment', action: 'assessment.file_filed' },
+      { entityType: 'assessment_document', action: 'insert' },
+      { entityType: 'assessment_document', action: 'delete' },
+    ] as Partial<AuditEvent>[]) {
+      const sentence = narrate(event(overrides), 'ar')?.sentence ?? '';
+      expect(/[\u0600-\u06FF]/.test(sentence), JSON.stringify(overrides)).toBe(true);
+    }
+  });
+});

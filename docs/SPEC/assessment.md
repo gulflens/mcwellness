@@ -2,7 +2,7 @@
 
 _Worktree: `assessment`, owning `domain/assessment/**`, `app/admin/assessments/**`, `app/api/assessments/**`, `db/policies/assessment/**`, `tests/assessment/**` and migrations `500–599` (`docs/SPEC/OWNERSHIP.md`; the policy path is one of the change requests in section 6). Entities are defined in `00-data-model.md` section 4. Builds on `session-capture.md`, `client-record.md` sections 4.2 and 8, and `docs/SEAMS.md`. This file defines behaviour._
 
-Status: **written 2026-09-05 for the operator's approval as piece ten** (`docs/PLAN/piece-ten.md`). **It replaces the draft of 2 September 2026**, which was written before pieces one to eight existed — before the brain map was a service in the catalogue, before a visit had a record, before the storage seam, and before an erasure reached anything. Where the two differ, this file stands. The decisions the draft raised are re-answered in section 10.
+Status: **approved by the operator on 2026-09-06 with `docs/PLAN/piece-ten.md`, and amended in the build, 2026-09-06** (the amendments are recorded in `docs/CHANGE-REQUESTS/assessment-01.md`). **It replaces the draft of 2 September 2026**, which was written before pieces one to eight existed — before the brain map was a service in the catalogue, before a visit had a record, before the storage seam, and before an erasure reached anything. Where the two differ, this file stands. The decisions the draft raised are re-answered in section 10.
 
 ---
 

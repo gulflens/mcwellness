@@ -173,6 +173,7 @@ export function assertSynthetic(data: SeedData): void {
     data.contacts,
     data.documents,
     data.consents,
+    data.assessments,
   ];
   for (const rows of collections) {
     for (const row of rows) {
@@ -537,6 +538,28 @@ export async function applySeed(
       });
     }
 
+    // The measurements, last: they reference a client and a practitioner, and
+    // nothing references them (docs/CHANGE-REQUESTS/assessment-01.md item 4).
+    // No file is seeded against any of them, deliberately: an export is a
+    // vendor's own PDF and there is no synthetic one to invent.
+    for (const a of data.assessments) {
+      await insert('assessment', {
+        id: a.id,
+        tenant_id: t.id,
+        client_id: a.clientId,
+        performed_by_practitioner_id: a.practitionerId,
+        performed_at: a.performedAt,
+        instrument: a.instrument,
+        instrument_version: a.instrumentVersion,
+        // jsonb: the text of the object, which Postgres casts.
+        derived: JSON.stringify(a.derived),
+        condition_note: a.conditionNote,
+        reference_age_years: a.referenceAgeYears,
+        reference_sex: a.referenceSex,
+        created_by: owner,
+      });
+    }
+
     await client.query('commit');
   } catch (error) {
     await client.query('rollback');
@@ -563,6 +586,7 @@ export function describeSeed(counts: SeedCounts): string {
     'contact',
     'document',
     'consent',
+    'assessment',
   ];
   const parts = order.filter((table) => counts[table]).map((table) => `${counts[table]} ${table}`);
   return `Seeded the synthetic practice: ${parts.join(', ')}.`;

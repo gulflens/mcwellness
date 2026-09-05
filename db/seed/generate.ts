@@ -1,3 +1,4 @@
+import { ageOn } from '../../domain/shared/dates';
 import { practiceDocumentKey } from '../../domain/shared/storage';
 import { CONSENT_TEXT_MIME_TYPE, loadConsentTexts, type ConsentText } from './consent-text';
 import { FAMILY_NAMES, GIVEN_NAMES, type Name } from './names';
@@ -205,6 +206,36 @@ export type SeedKit = {
   calibrationDueAt: string | null;
 };
 
+/**
+ * One measurement of the synthetic practice
+ * (docs/CHANGE-REQUESTS/assessment-01.md item 4, docs/SPEC/assessment.md
+ * section 6).
+ *
+ * Three clients each get a baseline brain map, a re-map ninety days later and
+ * one questionnaire total, so a comparison can be shown on staging without
+ * anybody typing ninety figures. **No file is seeded at all**: an export is a
+ * vendor's own PDF and there is no synthetic one to invent, so the Assessments
+ * tab shows "none attached" and the file door is exercised by the tests rather
+ * than by the fixture.
+ *
+ * Every figure comes from the seeded random source under the fixed seed, so
+ * the same practice comes out on every run — and none of them says anything
+ * about anybody: they are numbers with units and no words beside them.
+ */
+export type SeedAssessment = {
+  id: string;
+  clientId: string;
+  practitionerId: string;
+  performedAt: string;
+  instrument: 'qeeg' | 'questionnaire.sample';
+  instrumentVersion: string;
+  /** Validated against the instrument's declared shape by the seed's own test. */
+  derived: Record<string, unknown>;
+  conditionNote: string | null;
+  referenceAgeYears: number | null;
+  referenceSex: 'female' | 'male' | 'unknown' | null;
+};
+
 export type SeedDocument = {
   id: string;
   purpose: ConsentPurpose;
@@ -254,6 +285,7 @@ export type SeedData = {
   contacts: SeedContact[];
   documents: SeedDocument[];
   consents: SeedConsent[];
+  assessments: SeedAssessment[];
 };
 export type SeedOptions = {
   seed?: number;
@@ -526,6 +558,17 @@ function email(local: string): string {
 
 function isoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * A day so many days before or after another. Calendar arithmetic on a plain
+ * date, never on an instant: a seed that added `interval '90 days'` to a
+ * timestamp would answer differently in a zone with daylight saving.
+ */
+function addDays(day: string, days: number): string {
+  const at = new Date(`${day}T00:00:00Z`);
+  at.setUTCDate(at.getUTCDate() + days);
+  return at.toISOString().slice(0, 10);
 }
 
 /** A birthday earlier in the year than `today`, so the age is exactly `age` on that day. */
@@ -1041,6 +1084,90 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     contact.userId = user.id;
   }
 
+  /**
+   * The measurements (docs/CHANGE-REQUESTS/assessment-01.md item 4).
+   *
+   * Three active households, each with a baseline brain map, a re-map ninety
+   * days later and one questionnaire total on the baseline day. Five sites of
+   * the ten-twenty map and all five bands, in microvolts squared, which is
+   * enough for the comparison screen to have something to set side by side
+   * without inventing a whole ninety-five-figure export.
+   *
+   * The reference age and sex are snapshots of what the software's own
+   * comparison was made against, which for a fixture is the client's own age
+   * on the day and their recorded sex — the point of the columns being that
+   * the answer does not move afterwards when a birthday does.
+   *
+   * The recording practitioner is the one who holds a current brain-map
+   * certification in this fixture (the second: the third's has expired, which
+   * the credentials above deliberately arrange).
+   */
+  const assessments: SeedAssessment[] = [];
+  const MEASURED_CLIENTS = [5, 6, 7] as const;
+  const MAP_SITES = ['Fz', 'Cz', 'Pz', 'O1', 'O2'] as const;
+  const MAP_BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma'] as const;
+  const SOFTWARE = { software: 'Synthetic Mapping Suite', softwareVersion: '3.2.1' };
+  const mapFigures = () =>
+    MAP_SITES.flatMap((site) =>
+      MAP_BANDS.map((band) => ({
+        site,
+        band,
+        value: Number((rng.int(200, 2400) / 100).toFixed(2)),
+        unit: 'uV2',
+      })),
+    );
+  let assessmentCount = 0;
+  for (const n of MEASURED_CLIENTS) {
+    const client = clients.find((row) => row.id === seedId('8', n));
+    if (!client) continue;
+    const practitioner = at(practitioners, 1);
+    const baselineOn = addDays(today, -180);
+    const remapOn = addDays(baselineOn, 90);
+    for (const [index, day] of [baselineOn, remapOn].entries()) {
+      assessments.push({
+        id: seedId('f', ++assessmentCount),
+        clientId: client.id,
+        practitionerId: practitioner.id,
+        performedAt: `${day}T09:00:00+04:00`,
+        instrument: 'qeeg',
+        instrumentVersion: '1',
+        derived: {
+          kind: 'brain-map',
+          provenance: SOFTWARE,
+          condition: 'eyes-closed',
+          figures: mapFigures(),
+        },
+        conditionNote:
+          index === 0
+            ? 'Eyes closed, quiet room; the first minute carried an artefact.'
+            : 'Eyes closed, quiet room.',
+        referenceAgeYears: ageOn(client.dateOfBirth, day),
+        referenceSex: client.sexAtBirth,
+      });
+    }
+    const answers = ['q1', 'q2', 'q3'].map((key) => ({ key, value: rng.int(0, 4) }));
+    assessments.push({
+      id: seedId('f', ++assessmentCount),
+      clientId: client.id,
+      practitionerId: practitioner.id,
+      performedAt: `${baselineOn}T11:00:00+04:00`,
+      instrument: 'questionnaire.sample',
+      instrumentVersion: '1',
+      derived: {
+        kind: 'questionnaire',
+        provenance: SOFTWARE,
+        answers,
+        total: answers.reduce((sum, answer) => sum + answer.value, 0),
+        maximum: 12,
+      },
+      conditionNote: null,
+      // A questionnaire is a person's own answers on a day; there is no
+      // reference database behind it and nothing to snapshot.
+      referenceAgeYears: null,
+      referenceSex: null,
+    });
+  }
+
   return {
     today,
     tenant,
@@ -1057,6 +1184,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     contacts,
     documents,
     consents,
+    assessments,
   };
 }
 
