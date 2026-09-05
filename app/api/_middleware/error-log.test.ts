@@ -35,13 +35,22 @@ function apiThatThrows(): ReturnType<typeof createApi> {
     (error as { code?: string }).code = '23503';
     throw error;
   });
+  // The same failure through the one kind of request that carries a body. It
+  // reads the body before it throws, so the body has genuinely been parsed and
+  // is in play when the line is written, rather than merely never asked for.
+  api.post('/probe/:token/thing', async (c) => {
+    await c.req.json();
+    const error = new TypeError(LEAKY);
+    (error as { code?: string }).code = '23503';
+    throw error;
+  });
   return api;
 }
 
-async function lineFrom(path: string): Promise<Record<string, unknown>> {
+async function lineFrom(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
   const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
   try {
-    const response = await apiThatThrows().request(path);
+    const response = await apiThatThrows().request(path, init);
     expect(response.status).toBe(500);
     expect(stderr).toHaveBeenCalledTimes(1);
     return JSON.parse(String(stderr.mock.calls[0]?.[0])) as Record<string, unknown>;
@@ -79,6 +88,31 @@ describe('the line written when a request fails', () => {
     // The telephone number, and the driver's whole sentence with it.
     expect(raw).not.toContain('971500000001');
     expect(raw).not.toContain('violates something');
+    expect(raw).not.toContain(LEAKY);
+  });
+
+  it('carries no part of the request body', async () => {
+    // A form posted from a screen is the shape that carries a household's own
+    // words. Synthetic throughout: the name is from db/seed/names.ts and the
+    // number is in the reserved +971 50 000 xxxx range (.claude/rules/testing.md).
+    const raw = JSON.stringify(
+      await lineFrom('/probe/00000008-0000-4000-8000-000000000001/thing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: 'Juniper Creek',
+          phone: '+971500000042',
+          note: 'asks for the afternoon window',
+        }),
+      }),
+    );
+
+    expect(raw).not.toContain('Juniper');
+    expect(raw).not.toContain('Creek');
+    expect(raw).not.toContain('971500000042');
+    expect(raw).not.toContain('afternoon window');
+    // And still none of what the other requests must not carry.
+    expect(raw).not.toContain('00000008-0000-4000-8000-000000000001');
     expect(raw).not.toContain(LEAKY);
   });
 
