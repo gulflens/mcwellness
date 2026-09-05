@@ -513,6 +513,114 @@ thirty days; expenses count only towards the voluntary threshold of AED
 settings, with the number typed in, and the platform's job is to say when
 the threshold is near (`docs/PLAN/pieces-seven-to-nine.md`, small things).
 
+## What was done on 2026-09-05, seventh pass: the client portal
+
+Main had reached `c80a17a`, pull request 69's merge of the client-portal
+stream, and staging had stopped at 950 with the VAT switch just corrected
+above. Five migrations were missing, not four: 700, 701, 702 and 703 are the
+portal's own range, and 910 is the trunk's — the practice's WhatsApp number,
+which rewrites `tenant` and so must sort after every stream's range
+(docs/SPEC/OWNERSHIP.md). Two new policy files arrived with them,
+`db/policies/portal/access.sql` and `db/policies/portal/money.sql`, and two
+existing ones were amended, `db/policies/scheduling/appointment_access.sql`
+(a client contact's own visits join the read scope) and
+`db/policies/client/writers.sql` (a contact may correct its own telephone,
+email and WhatsApp preference).
+
+- **The fifty rows already there were checked before anything was applied.**
+  Every one's recorded checksum still matches the file on disk, so no merged
+  migration has been edited behind the runner's back.
+- **Five migrations were applied** one at a time through Supabase's migration
+  tool, in filename order: 700, 701, 702, 703, 910. Each was applied under
+  the audit context the runner sets — `app.reason` naming the file, and a
+  fresh request id. `schema_migration` now holds **fifty-five rows**, one per
+  file in `db/migrations`, every one carrying a checksum, and the whole
+  bookkeeping table — filename and checksum, in filename order — hashes to
+  the same value on staging, on a freshly migrated local database, and from
+  the files themselves, so `pnpm db:migrate` pointed at staging would see
+  nothing pending and nothing unexplained.
+- **Nothing was refused.** All five were asked, as every pass asks, whether
+  they could meet a row they would refuse. 700 and 701 create tables that did
+  not exist; there was nothing for either to meet. 702 adds a trigger and a
+  function and touches no existing row. 703 adds a function alone. 910 adds
+  `tenant.whatsapp_number` nullable with a check that admits null, and
+  staging's one tenant row had no number recorded, so the check had nothing
+  to refuse either. All five went in clean.
+- **Fifteen policy files were re-applied**, in path order, the way the runner
+  applies them — split across three calls for the tool's own size limit
+  rather than the runner's single transaction, which changes nothing about
+  what lands: every file is `drop policy if exists` then `create policy`, so
+  re-running the same file twice is a no-op and the split cannot leave a
+  policy half-applied. One hundred and eighteen policies stand on `public`
+  afterwards (104 before this pass, plus fourteen new: four each on
+  `portal_invite` and `portal_request`, and `portal_money_adults` on the six
+  tables `db/policies/portal/money.sql` names), matching a fresh local
+  database exactly.
+- **The seed owed two households and a number, and only that.** `git log
+  de36bab..c80a17a -- db/seed` shows one commit, adding `tenant.whatsappNumber`
+  and a `user_id` on two contacts. `pnpm seed:sql` was rendered against
+  `.env.staging` (never printed, and deleted once the diff below was taken
+  from it) and checked against staging column by column before anything was
+  written: both destination rows —the contact on client 5's own record and
+  the mother of client 17 — stood exactly as a fresh seed leaves an
+  unconnected contact, `user_id` null, and the tenant's `whatsapp_number` was
+  null. Nothing else in the render differed from staging's existing rows, so
+  only the render's own new statements were applied, verbatim: two
+  `app_user` rows (Clover Quarry, English; Dahlia Bay, Arabic), two
+  `user_role` rows granting each `client_contact`, the two contacts'
+  `user_id` linked to them, and the tenant's `whatsapp_number` set to the
+  seed's reserved synthetic number. Applied in one transaction under the
+  seed's own audit reason (`synthetic seed`) with the owner stamped as
+  actor, exactly as the render itself stamps its own inserts. No Supabase
+  Auth user was created for either contact — the owner does that from the
+  dashboard if she wants a demo login for one of them, exactly as the two
+  staff accounts were made, and nothing in this pass touched Authentication.
+- **Fingerprinted against a fresh `pnpm db:reset && pnpm db:migrate`** on
+  `mcwellness-trunk-2` (its own database, port 5442, never the main
+  checkout's), after fetching and checking out `main` there. All fifty-five
+  migrations and all fifteen policy files applied cleanly to an empty
+  database. Nine parts compared, hash for hash, this time with the noise
+  filtered at the query rather than eyeballed afterwards: columns (1,117, by
+  schema, table, name, type, nullability and default — never ordinal
+  position, which is why the standing `schema_migration.checksum`
+  difference from earlier passes has nothing to show up in), constraints
+  (443), indexes (416), triggers (204), policies (118), row-level security
+  flags (64 tables), functions (65, by schema, name, arguments, return type,
+  language, security and volatility), the grants `app_role` holds (92,
+  `public`+`app` together) and what `anon`, `authenticated` and `PUBLIC` hold
+  on either schema (0, on both sides — every migration's `revoke all` still
+  intends exactly that). All nine hashes matched exactly; nothing stood
+  aside as expected-and-benign this time.
+- **The audit chain verifies** end to end, over 657 rows: 646 after the
+  sixth pass, 654 after the VAT correction above, and this pass added seven
+  audited rows of its own from the seed catch-up (the tenant update, two
+  `app_user` inserts, two `user_role` inserts, two `contact` updates) and
+  three more from the demo visit below (an insert, its own deletion, and the
+  corrected insert), landing on 657.
+- **The demo needed a fresh visit row.** The one the sixth pass left was
+  dated 2026-09-04; today is 2026-09-05, and `app.checkin_context` is tied to
+  the practice's own "today" in Dubai, so a demo walked today would have
+  found nothing to check in against. A replacement was booked for
+  MW-000005 at the client's seeded home, 10:00–10:45 Dubai time, under the
+  real owner account's own actor stamp (the practice's staff account,
+  `Shauna McGuinness`, not the seed's synthetic placeholder) — the same
+  account that booked the ones before it. The first attempt computed the
+  window with `current_date at time zone 'Asia/Dubai'`, which is the wrong
+  half of that operator for a plain `date` and landed the visit at 18:00
+  Dubai instead of 10:00; it was deleted before anything read it and
+  replaced with the form `current_date::timestamp at time zone 'Asia/Dubai'`
+  that `app.checkin_context` itself uses, landing correctly at 06:00–06:45
+  UTC with `busy_end` computed by the trigger to 07:15 UTC. `checkin_context`
+  now answers `found: true` for MW-000005 with two active consents,
+  confirmed against the query itself rather than assumed. A later day still
+  needs a fresh visit row, as before.
+- **Advisors were checked after the DDL.** Every `rls_enabled_no_policy`
+  finding is a table this pass did not touch and every earlier pass already
+  carries by design (`schema_migration`, `payment_receipt_series`, the
+  audit-log partitions and their default), and the one `WARN` is leaked-
+  password protection, unrelated to this pass and already known
+  (docs/SECURITY.md). Nothing new.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
