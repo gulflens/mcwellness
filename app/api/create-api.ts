@@ -143,26 +143,29 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     // the failure. A database message can carry row values, so only the shape
     // of the failure is logged.
     const requestId = c.get('requestId') ?? c.res.headers.get('X-Request-Id') ?? null;
-    // A store that is down is not a bug in the record it belongs to: it says
-    // so. The message is logged here, unlike a database's: every one of them
-    // is written in domain/shared/storage.ts and its implementations, none
-    // names a key or echoes a vendor's body, and without it an outage and a
-    // refusal are the same line in the log.
+    // The three seams below get their own status and their own answer, and no
+    // more of the line than any other failure gets. Section 7.3 provides for
+    // the error's class and not its message, and the class already tells the
+    // seams apart — StorageUnavailableError, StorageConflictError and
+    // RoutingUnavailableError each name themselves — so the message would have
+    // bought a distinction the line already draws, at the cost of a rule with
+    // an exception in it.
+    //
+    // A store that is down is not a bug in the record it belongs to: it says so.
     if (isStorageUnavailable(error)) {
-      logError(c, error, 503, error.message);
+      logError(c, error, 503);
       return c.json({ error: 'storage_unavailable', requestId }, 503);
     }
     // Something is already filed under that key and the caller did not ask to
     // replace it. Not an outage, and not an internal error: a plain refusal.
     if (isStorageConflict(error)) {
-      logError(c, error, 409, error.message);
+      logError(c, error, 409);
       return c.json({ error: 'document_exists', requestId }, 409);
     }
     // The same shape for the routing seam: a vendor that is down is not a bug
-    // in the day sheet. Every message this can carry is written in
-    // app/api/_middleware/routing and names no coordinate and no key.
+    // in the day sheet.
     if (isRoutingUnavailable(error)) {
-      logError(c, error, 503, error.message);
+      logError(c, error, 503);
       return c.json({ error: 'routing_unavailable', requestId }, 503);
     }
     logError(c, error, 500);

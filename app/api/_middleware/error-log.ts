@@ -18,8 +18,9 @@ import type { ApiEnv } from './request-context';
  *
  * What it must never carry, and the test beside this file proves each absence:
  * the query string (a search term is typed by staff about a client), the body,
- * the path's own parameters, and the driver's or the database's message, which
- * can hold a row's values. Anything that touched personal data is already in the
+ * the path's own parameters, and any message at all — a driver's or a
+ * database's can hold a row's values, and no caller is asked to judge which
+ * sentences are safe. Anything that touched personal data is already in the
  * audit trail, which is the record that matters.
  */
 
@@ -39,16 +40,14 @@ export const withRequestTiming = createMiddleware<ApiEnv>(async (c, next) => {
  * Builds the line. Separate from writing it so a test can read the shape
  * without reading stderr.
  *
- * `message` is passed only by the callers whose comment says why: the three
- * seams whose every message is written in this repository and names no key, no
- * coordinate and no person. Nothing else may pass it, and nothing does.
+ * There is no way to pass a message, deliberately. Section 7.3 provides for the
+ * error's class and not its text, and with no parameter for it no caller has to
+ * be trusted to know whether the sentence it is about to log was written in this
+ * repository or by a driver holding a row's values. A failure that needs to say
+ * which of its kinds it was carries a constant `code` on the error instead,
+ * which `shape.code` below already prints.
  */
-export function errorLine(
-  c: Context<ApiEnv>,
-  error: unknown,
-  status: number,
-  message?: string,
-): string {
+export function errorLine(c: Context<ApiEnv>, error: unknown, status: number): string {
   const shape = (error ?? {}) as { name?: string; code?: string };
   const startedAt = c.get('startedAt') as number | undefined;
   return JSON.stringify({
@@ -63,16 +62,10 @@ export function errorLine(
     ms: startedAt === undefined ? null : Math.round(performance.now() - startedAt),
     name: shape.name ?? null,
     code: shape.code,
-    ...(message === undefined ? {} : { message }),
   });
 }
 
 /** Writes the line. One call, one line, on stderr. */
-export function logError(
-  c: Context<ApiEnv>,
-  error: unknown,
-  status: number,
-  message?: string,
-): void {
-  console.error(errorLine(c, error, status, message));
+export function logError(c: Context<ApiEnv>, error: unknown, status: number): void {
+  console.error(errorLine(c, error, status));
 }
