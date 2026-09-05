@@ -29,12 +29,6 @@
   flex-wrap: wrap;
 }
 
-/* A superseded version sits beneath the one that replaced it, quiet. */
-.assessments__superseded td {
-  color: var(--slate);
-  padding-block: var(--s-2);
-}
-
 /*
   The files behind one measurement, and the way to attach another. A column of
   small controls rather than a row: the cell is narrow, and a file's name is
@@ -58,9 +52,14 @@
   max-inline-size: 16rem;
 }
 
+/*
+  The reason a version was replaced, under the word for its state. The line
+  around it is quietened on the cells by AssessmentsTab.tsx — the shared table
+  renders its own rows and takes no row class, so there is nothing here for a
+  `tr` selector to match.
+*/
 .assessments__reason {
   display: block;
-  color: var(--slate);
 }
 
 /* The band's own square, and the only hue on this tab. */

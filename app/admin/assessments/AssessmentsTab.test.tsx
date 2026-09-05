@@ -213,10 +213,27 @@ describe('the measurements table', () => {
     mount();
     await screen.findAllByText('1 Mar 2026');
     expect(screen.getAllByText('Stands').length).toBe(2);
-    expect(screen.getByText('Replaced')).toBeTruthy();
+    expect(screen.getByText(/Replaced/)).toBeTruthy();
     expect(
       screen.getByText('The alpha figure at Fz was typed from the wrong column.'),
     ).toBeTruthy();
+  });
+
+  it('renders a replaced version’s line quiet, cell by cell', async () => {
+    // The shared table renders its own rows and takes no row class, so the
+    // quiet is written on the cells. Every cell of the replaced line but the
+    // export's, whose content is a note that is already muted or a control.
+    mount();
+    const rows = await screen.findAllByRole('row');
+    const replaced = rows.find((each) => each.textContent?.includes('Replaced'))!;
+    const cells = within(replaced).getAllByRole('cell');
+    for (const cell of cells.slice(0, 3)) {
+      expect(cell.querySelector('span.small.muted'), cell.textContent ?? '').toBeTruthy();
+    }
+    expect(within(replaced).getByText(/Replaced/).className).toBe('small muted');
+
+    const standing = rows.find((each) => each.textContent?.includes('Stands'))!;
+    expect(within(standing).getAllByRole('cell')[0]?.querySelector('span.small.muted')).toBeNull();
   });
 
   it('says so plainly when nothing has been measured yet', async () => {

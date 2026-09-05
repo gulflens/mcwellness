@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Comparison as ComparisonValue } from '@domain/assessment';
 import {
   AssessmentListResponse,
@@ -86,6 +86,21 @@ function linesOf(chains: readonly AssessmentChain[]): Line[] {
   });
 }
 
+/**
+ * A replaced version sits beneath the one that replaced it, **quiet** (section
+ * 3.1).
+ *
+ * Written on the cells rather than on the row, because the console's shared
+ * `Table` renders `<tr key>` and takes no row class of its own; a rule for
+ * `.assessments__superseded td` matched nothing at all, and giving the shared
+ * component a `rowClassName` would be a change request against the trunk for
+ * one screen's shading. This is the treatment the state cell already used,
+ * applied to the rest of the line.
+ */
+function quiet(line: Line, content: ReactNode): ReactNode {
+  return line.superseded ? <span className="small muted">{content}</span> : content;
+}
+
 export function AssessmentsTab({ clientId }: { clientId: string }) {
   const { apiFetch } = useAuth();
   const [state, setState] = useState<Loaded>({ kind: 'loading' });
@@ -159,22 +174,29 @@ export function AssessmentsTab({ clientId }: { clientId: string }) {
       key: 'date',
       header: 'Taken on',
       numeric: true,
-      render: (line) => on(line.row.performedAt),
+      render: (line) => quiet(line, on(line.row.performedAt)),
     },
     {
       key: 'instrument',
       header: 'Instrument',
-      render: (line) => INSTRUMENT_LABELS[line.row.instrument] ?? line.row.instrument,
+      render: (line) => quiet(line, INSTRUMENT_LABELS[line.row.instrument] ?? line.row.instrument),
     },
     {
       key: 'by',
       header: 'Recorded by',
       render: (line) =>
-        line.row.performedBy ?? <span className="small muted">No longer with the practice</span>,
+        line.row.performedBy === null ? (
+          <span className="small muted">No longer with the practice</span>
+        ) : (
+          quiet(line, line.row.performedBy)
+        ),
     },
     {
       key: 'files',
       header: 'Export',
+      // Not quietened: what is in this cell is either a note that is already
+      // muted or a control, and a control shaded down to say "this line is
+      // history" is a control somebody cannot read.
       render: (line) => (
         // The equipment's own files, each opening through the link route, and
         // the way to attach another — offered on the version that stands and
@@ -192,10 +214,13 @@ export function AssessmentsTab({ clientId }: { clientId: string }) {
       header: 'State',
       render: (line) =>
         line.superseded ? (
-          <span className="small">
-            Replaced
-            {line.reason ? <span className="assessments__reason small">{line.reason}</span> : null}
-          </span>
+          quiet(
+            line,
+            <>
+              Replaced
+              {line.reason ? <span className="assessments__reason">{line.reason}</span> : null}
+            </>,
+          )
         ) : (
           <span className="small">Stands</span>
         ),
