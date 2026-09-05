@@ -1,5 +1,15 @@
-import type pg from 'pg';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { SignJWT } from 'jose';
+import pg from 'pg';
+import { createPool } from '../../../app/api/_middleware/db';
+import { localDiskStorage } from '../../../app/api/_middleware/storage';
+import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
+import { createApi } from '../../../app/api/create-api';
+import { fakeAuthAdmin, type AuthAdminProvider } from '../../../app/api/portal/mount';
 import {
+  freshDatabase,
   IDS,
   asApiRole,
   seedClient,
@@ -83,8 +93,12 @@ export const PORTAL_PHONES = {
   practice: '+971500000024',
 } as const;
 
-/** The child's eighteenth birthday, so a test can stand on either side of it. */
-export const CHILD_A_BIRTHDAY = '2008-09-05';
+/**
+ * A child, and one who stays a child for years yet: the money-visibility test
+ * moves this date itself to stand on either side of an eighteenth birthday, and
+ * every other suite wants a minor that no passing of time turns into an adult.
+ */
+export const CHILD_A_BIRTHDAY = '2014-09-05';
 
 type HouseholdOptions = {
   /** The practice's own time zone, which decides when a birthday arrives. */
@@ -514,4 +528,101 @@ export async function seedMoney(owner: pg.Client, clientId: string): Promise<voi
     [PORTAL_MONEY.payment, IDS.tenantA, clientId, PORTAL_FIGURES.paymentFils],
   );
   await owner.query('commit');
+}
+
+/**
+ * A whole API, pointed at this fixture's database, with the portal mounted the
+ * way `createApi` mounts it — no route registered by hand, so a dropped mount
+ * call fails a test loudly rather than falling through to the catch-all 404.
+ *
+ * The two seams are the fallbacks: documents in a folder under the system
+ * temporary directory, sign-ins in this process's memory. That is what a
+ * laptop runs, and it is the forced-fallback proof the seam pattern asks for
+ * (docs/SEAMS.md) applied to the whole invitation path rather than to one call.
+ */
+export type PortalHarness = {
+  owner: pg.Client;
+  pool: pg.Pool;
+  api: ReturnType<typeof createApi>;
+  storage: ReturnType<typeof localDiskStorage>;
+  authAdmin: AuthAdminProvider;
+  /** A signed request as the person whose auth id is given. */
+  callAs: (
+    method: 'GET' | 'POST' | 'PATCH',
+    path: string,
+    authId: string,
+    body?: unknown,
+  ) => Promise<Response>;
+  /** The same, with no session at all: what the door answers. */
+  callOpen: (method: 'POST', path: string, body?: unknown) => Promise<Response>;
+  close: () => Promise<void>;
+};
+
+export const PORTAL_SECRET = 'test-secret-that-unlocks-nothing-0123456789';
+export const PORTAL_ISSUER = 'http://localhost:54321/auth/v1';
+
+export async function startPortalHarness(
+  now: () => Date = () => new Date(),
+): Promise<PortalHarness> {
+  const owner = await freshDatabase();
+  await seedPortalHousehold(owner);
+
+  const apiUrl = process.env.API_DATABASE_URL;
+  if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
+  const pool = createPool(apiUrl);
+  const storage = localDiskStorage({
+    dir: mkdtempSync(join(tmpdir(), 'mcwellness-portal-')),
+    signingSecret: Buffer.alloc(32, 9),
+  });
+  const authAdmin = fakeAuthAdmin();
+  const api = createApi({
+    pool,
+    verifier: createTokenVerifier({ issuer: PORTAL_ISSUER, secret: PORTAL_SECRET }),
+    now,
+    storage,
+    authAdmin,
+  });
+
+  const key = new TextEncoder().encode(PORTAL_SECRET);
+  async function mint(sub: string): Promise<string> {
+    return new SignJWT({ role: 'authenticated' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuer(PORTAL_ISSUER)
+      .setAudience('authenticated')
+      .setSubject(sub)
+      .setIssuedAt()
+      .setExpirationTime('10m')
+      .sign(key);
+  }
+
+  return {
+    owner,
+    pool,
+    api,
+    storage,
+    authAdmin,
+    async callAs(method, path, authId, body) {
+      const headers: Record<string, string> = { authorization: `Bearer ${await mint(authId)}` };
+      const init: RequestInit = { method, headers };
+      if (method !== 'GET') {
+        // The API takes JSON bodies only (app/api/_middleware/security.ts), and
+        // says 415 to a write that does not declare one — including a write
+        // with no body at all, such as revoking access.
+        headers['content-type'] = 'application/json';
+        init.body = JSON.stringify(body ?? {});
+      }
+      return api.request(path, init);
+    },
+    async callOpen(method, path, body) {
+      return api.request(path, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body ?? {}),
+      });
+    },
+    async close() {
+      await pool.end();
+      await owner.end();
+    },
+  };
 }

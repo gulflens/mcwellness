@@ -161,6 +161,13 @@ export type RateLimits = {
   actorPerMinute: number;
   authFailuresPerMinute: number;
   devDoorPerMinute: number;
+  /**
+   * The portal's invitation door, which answers somebody who is not signed in
+   * (docs/SPEC/client-portal.md sections 7 and 10). Ten a minute per address:
+   * a household redeems one link once, and the budget is what makes guessing a
+   * 32-byte token pointless rather than merely hard.
+   */
+  inviteDoorPerMinute: number;
 };
 
 export const DEFAULT_LIMITS: RateLimits = {
@@ -168,6 +175,7 @@ export const DEFAULT_LIMITS: RateLimits = {
   actorPerMinute: 600,
   authFailuresPerMinute: 20,
   devDoorPerMinute: 30,
+  inviteDoorPerMinute: 10,
 };
 
 function positiveInt(value: string | undefined, fallback: number): number {
@@ -187,6 +195,10 @@ export function limitsFromEnv(env: NodeJS.ProcessEnv): RateLimits {
     devDoorPerMinute: positiveInt(
       env.RATE_LIMIT_DEV_DOOR_PER_MINUTE,
       DEFAULT_LIMITS.devDoorPerMinute,
+    ),
+    inviteDoorPerMinute: positiveInt(
+      env.RATE_LIMIT_INVITE_DOOR_PER_MINUTE,
+      DEFAULT_LIMITS.inviteDoorPerMinute,
     ),
   };
 }

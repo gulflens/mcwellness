@@ -6,6 +6,7 @@ import { storageFromEnv } from './_middleware/storage';
 import { issuerFor, verifierFromEnv } from './_middleware/token-verifier';
 import { createApi } from './create-api';
 import { devSessionEnabled, isLoopback } from './dev-session';
+import { authAdminFromEnv } from './portal/mount';
 import { mountApp } from './serve-app';
 
 const apiDatabaseUrl = process.env.API_DATABASE_URL;
@@ -22,6 +23,11 @@ const verifier = verifierFromEnv(process.env);
 const identityKeys = identityKeysFromEnv(process.env);
 const storage = storageFromEnv(process.env);
 console.log(`Documents: ${storage.describe()}.`);
+// The portal's sign-ins (docs/SEAMS.md). Chosen here and never reached until
+// somebody redeems an invitation, so a project that is down cannot stop the
+// API from starting.
+const authAdmin = authAdminFromEnv(process.env);
+console.log(`Portal sign-ins: ${authAdmin.describe()}.`);
 
 // The development sign-in door exists only on a laptop: APP_ENV=development, a
 // local database, a local Supabase URL and the local secret to sign with.
@@ -45,6 +51,7 @@ const api = createApi({
   trustedProxyHops: trustedProxyHopsFromEnv(process.env),
   identityKeys,
   storage,
+  authAdmin,
 });
 
 // SERVE_APP=true: the built app (pnpm build) is served by this process too, so

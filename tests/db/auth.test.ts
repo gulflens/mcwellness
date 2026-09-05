@@ -260,6 +260,10 @@ describe('sign-in through the API', () => {
       tenantId: IDS.tenantA,
       roles: ['owner'],
       capabilities: [],
+      // The person's own language, so the portal opens in it
+      // (docs/CHANGE-REQUESTS/client-portal-05.md item 2). English is what the
+      // column carries until somebody sets otherwise.
+      preferredLocale: 'en',
     });
   });
 
