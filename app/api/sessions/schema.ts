@@ -77,6 +77,7 @@ export const CHECK_IN_BLOCK_REASONS = [
   'date_of_birth_unknown',
   'already_checked_in',
   'not_booked_today',
+  'kit_calibration_overdue',
 ] as const;
 export type CheckInResponseReason = (typeof CHECK_IN_BLOCK_REASONS)[number];
 

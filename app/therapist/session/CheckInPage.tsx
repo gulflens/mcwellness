@@ -95,6 +95,10 @@ const REASON_COPY: Record<CheckInResponseReason, string> = {
   already_checked_in: 'Already checked in on another device. Ask the practice if that was not you.',
   not_booked_today:
     'This visit is not booked for you today. Check the record number, or ask the practice.',
+  // Its own sentence, and it names the instrument rather than the register:
+  // the practitioner is standing at a door and needs to know what to say
+  // (docs/SPEC/practitioner-phone.md section 6.3).
+  kit_calibration_overdue: "The amplifier's calibration is overdue. Call the practice.",
 };
 
 const FORBIDDEN_MESSAGE =

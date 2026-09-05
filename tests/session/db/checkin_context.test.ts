@@ -531,13 +531,27 @@ describe('app.checkin_context', () => {
           has_date_of_birth: false,
           is_minor: false,
           active_consent_purposes: [],
+          // The two columns migration 306 added describe the caller's own
+          // instruments and not the client, so they are answered whatever
+          // found says (docs/SPEC/practitioner-phone.md section 6.3). This
+          // caller carries nothing.
+          kit_calibration_overdue: false,
+          kit_id: null,
         },
       ]);
       // Not just this row's values withheld: the column itself does not
       // exist to withhold. A name or contact detail could never ride along
       // even by accident.
       expect(result.fields.map((f) => f.name).sort()).toEqual(
-        ['active_consent_purposes', 'client_id', 'found', 'has_date_of_birth', 'is_minor'].sort(),
+        [
+          'active_consent_purposes',
+          'client_id',
+          'found',
+          'has_date_of_birth',
+          'is_minor',
+          'kit_calibration_overdue',
+          'kit_id',
+        ].sort(),
       );
     });
   });
