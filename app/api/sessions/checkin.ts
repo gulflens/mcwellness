@@ -13,7 +13,9 @@ import { appendEvents } from './events';
 import { mountClose } from './close';
 import { mountOpenSession } from './open';
 import { CheckInRequest, CheckInResponse, SessionEventsRequest } from './schema';
-import { resolvePractitioner } from './session-row';
+import { previousSetupPhoto, resolvePractitioner } from './session-row';
+import { mountSessionPhoto } from './photo';
+import { mountSessionPhotoLink } from './photo-link';
 import { mountServiceTypes } from './service-types';
 
 /**
@@ -84,12 +86,19 @@ type CheckinContextRow = {
   has_date_of_birth: boolean;
   is_minor: boolean;
   active_consent_purposes: string[];
+  // The caller's own instruments (db/migrations/306_kit_and_setup_photo.sql).
+  // Answered whatever `found` says, because they describe the practitioner
+  // rather than the client.
+  kit_calibration_overdue: boolean;
+  kit_id: string | null;
 };
 
 export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   mountServiceTypes(api, now);
   mountOpenSession(api);
   mountClose(api, now);
+  mountSessionPhoto(api, now);
+  mountSessionPhotoLink(api);
 
   api.post('/api/sessions/:id/events', async (c) => {
     const actor = c.get('actor');
@@ -187,6 +196,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
             sessionId: existingRow.id,
             checkedInAt: existingRow.checked_in_at.toISOString(),
             photoConsent: await photoConsent(db, sessionId),
+            previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
           }),
           200,
         );
@@ -220,7 +230,8 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // is true in every one of those cases and reveals nothing about which it
     // actually was.
     const context = await db.query<CheckinContextRow>(
-      'select found, client_id, has_date_of_birth, is_minor, active_consent_purposes ' +
+      'select found, client_id, has_date_of_birth, is_minor, active_consent_purposes, ' +
+        'kit_calibration_overdue, kit_id ' +
         'from app.checkin_context($1, $2)',
       [parsed.data.clientId ?? null, parsed.data.clientMrn ?? null],
     );
@@ -263,6 +274,11 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         hasDateOfBirth: contextRow.has_date_of_birth,
         isMinor: contextRow.is_minor,
         activeConsentPurposes,
+        // The sixth reason (docs/SPEC/practitioner-phone.md section 6.3).
+        // domain/session/kit.ts is the rule; app.checkin_context mirrors it in
+        // SQL and hands back the answer, so the screen and the door cannot
+        // disagree about whether an amplifier is in date.
+        kitCalibrationOverdue: contextRow.kit_calibration_overdue,
       },
       now(),
     );
@@ -343,10 +359,10 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       await db.query(
         'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
           'delivery_mode, location_id, checked_in_at, checked_in_point, created_by, ' +
-          'appointment_id) values ' +
+          'appointment_id, kit_id) values ' +
           '($1, app.current_tenant_id(), $2, $3, $4, $5, $6, $7, ' +
           'case when $8::float8 is null then null else extensions.st_geogfromtext(' +
-          "'SRID=4326;POINT(' || $8::float8 || ' ' || $9::float8 || ')') end, $10, $11)",
+          "'SRID=4326;POINT(' || $8::float8 || ' ' || $9::float8 || ')') end, $10, $11, $12)",
         [
           sessionId,
           clientId,
@@ -359,6 +375,10 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
           parsed.data.point?.lat ?? null,
           actor.userId,
           appointmentId,
+          // Which instrument ran the visit (section 6.1). The caller's one
+          // active amplifier when they have exactly one assigned; null
+          // otherwise, because a guess between two is worse than a blank.
+          contextRow.kit_id,
         ],
       );
       // Never a silent no-op: on conflict do nothing exists only for a
@@ -443,6 +463,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
               sessionId: row.id,
               checkedInAt: row.checked_in_at.toISOString(),
               photoConsent: await photoConsent(db, sessionId),
+              previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
             }),
             200,
           );
@@ -467,6 +488,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         sessionId,
         checkedInAt: projection.checkedInAt,
         photoConsent: await photoConsent(db, sessionId),
+        previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
       }),
       201,
     );

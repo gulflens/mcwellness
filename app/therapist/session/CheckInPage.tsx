@@ -95,6 +95,10 @@ const REASON_COPY: Record<CheckInResponseReason, string> = {
   already_checked_in: 'Already checked in on another device. Ask the practice if that was not you.',
   not_booked_today:
     'This visit is not booked for you today. Check the record number, or ask the practice.',
+  // Its own sentence, and it names the instrument rather than the register:
+  // the practitioner is standing at a door and needs to know what to say
+  // (docs/SPEC/practitioner-phone.md section 6.3).
+  kit_calibration_overdue: "The amplifier's calibration is overdue. Call the practice.",
 };
 
 const FORBIDDEN_MESSAGE =
@@ -190,6 +194,7 @@ function visitFromOpen(open: {
   of: number | null;
   lastSeq: number;
   photoConsent: boolean;
+  previousSetupPhotoDocumentId: string | null;
 }): RunnerVisit {
   const initial = (open.clientFamilyInitial ?? '').trim();
   const name = open.clientGivenName.trim();
@@ -201,6 +206,7 @@ function visitFromOpen(open: {
     of: open.of,
     serviceTypeId: open.serviceTypeId,
     photoConsent: open.photoConsent ? 'given' : 'refused',
+    previousSetupPhotoDocumentId: open.previousSetupPhotoDocumentId,
     lastSeq: open.lastSeq,
     // Conservative after a resume: the practitioner is told below that
     // sharing is off, rather than having a position taken they did not
@@ -326,6 +332,10 @@ export function CheckInPage() {
                 // says it cannot check rather than putting words in a
                 // family's mouth (design review, item 5).
                 photoConsent: 'unknown',
+                // A resume with no signal cannot ask which placement came
+                // before, and the pre-flight says so rather than offering a
+                // button that could only fail.
+                previousSetupPhotoDocumentId: null,
                 // The device's own high-water mark: an offline resume cannot
                 // ask the server where it got to, so it picks up from what it
                 // last wrote rather than from one.
@@ -471,6 +481,7 @@ export function CheckInPage() {
           of: null,
           serviceTypeId,
           photoConsent: parsed.data.photoConsent ? 'given' : 'refused',
+          previousSetupPhotoDocumentId: parsed.data.previousSetupPhotoDocumentId,
           lastSeq: 1,
           shareLocation,
         });

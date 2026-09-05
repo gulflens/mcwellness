@@ -64,7 +64,10 @@ export type Action =
   | { type: 'contact.write_own'; contactUserId: string | null }
   | { type: 'portal.request.write'; clientId: string }
   | { type: 'portal.request.handle' }
-  | { type: 'portal.access.manage' };
+  | { type: 'portal.access.manage' }
+  | { type: 'kit.manage' }
+  | { type: 'kit.read'; assignedToSelf: boolean }
+  | { type: 'routing.day.read'; scope: 'own' };
 
 export type ActionContext = {
   /** The clients this actor's contact rows point at; resolved by the API for a client contact. */
@@ -249,6 +252,36 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // class of act as granting a role, and db/policies/portal/access.sql
       // refuses the row underneath this.
       return hasRole(actor, 'owner', 'admin');
+    case 'kit.manage':
+      // The equipment register: listing it, adding an item, editing one,
+      // assigning it and recording a calibration
+      // (docs/SPEC/practitioner-phone.md section 6.2). The owner, an admin and
+      // the lead practitioner — the three who run the practice's instruments.
+      // A practitioner carries the kit and does not decide what the register
+      // says about it; db/policies/session/kit.sql refuses the write
+      // underneath this.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    case 'kit.read':
+      // The same three for the whole register, and a practitioner for the
+      // items assigned to them — which is what the check-in block is about,
+      // so somebody stopped at a door can see which amplifier is overdue.
+      // Whether an item is theirs is the route's to resolve and pass in, the
+      // way ctx.assigneeCapabilities already is; the row policy asks it again
+      // in the database, which is the answer that binds.
+      if (hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+        return true;
+      }
+      return hasRole(actor, 'practitioner') && action.assignedToSelf;
+    case 'routing.day.read':
+      // The drive between one's own stops, and the day's picture
+      // (docs/SPEC/practitioner-phone.md section 5). The audience of
+      // appointment.list's own scope, because it answers about exactly the
+      // stops that scope already shows: the day sheet's estimates are a
+      // reading of the day sheet.
+      return (
+        action.scope === 'own' &&
+        hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner')
+      );
     default: {
       const unreachable: never = action;
       return unreachable;

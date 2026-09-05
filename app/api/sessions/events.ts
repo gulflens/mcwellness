@@ -21,7 +21,7 @@ import {
   type EventRefusalReason,
   type SessionEventWire,
 } from './schema';
-import { PHOTO_STORAGE_AVAILABLE } from './photo-availability';
+import { photoStorageAvailable } from './photo-availability';
 
 /**
  * The rest of the outbox's flush: every event after the one that opened the
@@ -152,12 +152,11 @@ export async function appendEvents(
         refused.push({ id: event.id, reason: 'consent_missing_photo_video' });
         continue;
       }
-      if (!PHOTO_STORAGE_AVAILABLE) {
-        // Nowhere to put the bytes yet (./photo-availability.ts). Accepting
-        // the event would mean filing a document row against a key nothing
-        // ever uploads to, which is a record of a photograph that does not
-        // exist; refusing it is the honest answer and the device stops
-        // asking.
+      if (!photoStorageAvailable(c.get('storage'))) {
+        // Nowhere to put the bytes (./photo-availability.ts). Accepting the
+        // event would mean promising a photograph the device could never
+        // deliver, which is a record of one that does not exist; refusing it
+        // is the honest answer and the device stops asking.
         await logRefusal(db, 'session_event', event.id, session.client_id, [
           'photo_storage_unavailable',
         ]);

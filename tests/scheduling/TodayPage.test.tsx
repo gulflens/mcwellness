@@ -385,9 +385,19 @@ describe('TodayPage', () => {
     expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
   });
 
-  it('states plainly that it needs a connection, without describing a roadmap', async () => {
+  /**
+   * The blanket "Today needs a connection." line is gone, and had to go: from
+   * piece eight the service worker keeps this day's own reads, so the day is
+   * there with no signal and only the check-in needs one
+   * (docs/SPEC/practitioner-phone.md section 3.4). The band that replaced it
+   * says so, and only when the device is actually offline — which it is not
+   * here, so this screen says nothing about connections at all.
+   */
+  it('says nothing about connections while it has one, and no roadmap either', async () => {
     renderPage(dayOf());
-    expect(await screen.findByText('Today needs a connection.')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(screen.queryByText(/needs a connection/)).toBeNull();
+    expect(screen.queryByText(/You are offline/)).toBeNull();
     expect(screen.queryByText(/next piece of work/)).toBeNull();
   });
 });

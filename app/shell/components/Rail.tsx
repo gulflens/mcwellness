@@ -4,6 +4,7 @@ import {
   AuditIcon,
   BillingIcon,
   ClientsIcon,
+  KitIcon,
   PortalIcon,
   ScheduleIcon,
   SessionsIcon,
@@ -32,6 +33,10 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
   // Who can open a household's own record. AdminLayout shows it only to an
   // owner or an admin (adminAccess.ts), the two who may hand access out.
   { key: 'portal', label: 'Portal', to: '/admin/portal', icon: <PortalIcon /> },
+  // The practice's instruments. AdminLayout shows it only to somebody who may
+  // manage the register (adminAccess.ts): the owner, an admin and the lead
+  // practitioner.
+  { key: 'kit', label: 'Kit', to: '/admin/kit', icon: <KitIcon /> },
   // The practitioner's side. Listed last because it leaves the console;
   // AdminLayout shows it only to someone who treats (adminAccess.ts).
   { key: 'today', label: 'Today', to: '/today', icon: <TodayIcon /> },

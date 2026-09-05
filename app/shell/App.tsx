@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { hasRole } from '@domain/shared';
 import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
+import { KitPage } from '../admin/kit/KitPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { WeekPage } from '../admin/schedule/WeekPage';
 import { PracticePage } from '../admin/settings/PracticePage';
@@ -20,6 +21,7 @@ import { TodayLanding } from '../therapist/TodayLanding';
 import { AdminLayout } from './AdminLayout';
 import {
   canOpenBilling,
+  canOpenKit,
   canOpenPortalAccess,
   canOpenSchedule,
   canOpenSettings,
@@ -118,6 +120,20 @@ export function App() {
               {(actor) =>
                 canOpenPortalAccess(actor, new Date()) ? (
                   <PortalAccessPage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="kit"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenKit(actor, new Date()) ? (
+                  <KitPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )

@@ -3,6 +3,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import { timeout } from 'hono/timeout';
 import type { IdentityKeys } from '@domain/shared/identity';
+import type { RoutingProvider } from '../../domain/shared/routing';
 import { MeResponse } from './_middleware/actor-schema';
 import { withIdentityKeys } from './_middleware/identity-context';
 import { addressKey, DEFAULT_LIMITS, rateLimit, type RateLimits } from './_middleware/rate-limit';
@@ -25,6 +26,7 @@ import {
   securityHeaders,
   timedOut,
 } from './_middleware/security';
+import { isRoutingUnavailable, withRouting } from './_middleware/routing';
 import { mountAppointments } from './appointments/routes';
 import { mountTimeline } from './audit/timeline';
 import { mountBilling } from './billing/routes';
@@ -34,6 +36,8 @@ import { mountDevSession, type DevSessionOptions } from './dev-session';
 import { mountPortal, mountPortalDoor, type AuthAdminProvider } from './portal/mount';
 import { mountPractice } from './practice/routes';
 import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
+import { mountKit } from './kit/routes';
+import { mountRouting } from './routing/day';
 import { mountSessions } from './sessions/checkin';
 
 /**
@@ -62,6 +66,25 @@ export const BODY_LIMIT_BYTES = 64 * 1024;
 /** The one path with a larger envelope, and what it is allowed (see below). */
 const LOGO_PATH = '/api/practice/logo';
 export const LOGO_BODY_LIMIT_BYTES = MAX_LOGO_BASE64_LENGTH + LOGO_ENVELOPE_ALLOWANCE_BYTES;
+/**
+ * The other one, and it is raw bytes rather than a form: the setup photograph,
+ * compressed on the device to at most a megabyte
+ * (app/therapist/session/photo.ts, docs/SPEC/practitioner-phone.md section
+ * 4.3). There is no base64 envelope here because the body *is* the picture, so
+ * the cap is the picture's own.
+ */
+export const PHOTO_LIMIT_BYTES = 1024 * 1024;
+/** `PUT /api/sessions/:id/photo`, matched by shape because the id is in the path. */
+const PHOTO_PATH = /^\/api\/sessions\/[^/]+\/photo$/;
+/**
+ * The method as well as the path. The photograph's door is a `PUT` and only a
+ * `PUT`; every other method on that address is a 404 the router has not
+ * reached yet, and matching on the path alone handed those a megabyte of room
+ * and a pass out of `jsonOnly` for nothing.
+ */
+function isPhotoUpload(c: Context): boolean {
+  return c.req.method === 'PUT' && PHOTO_PATH.test(c.req.path);
+}
 export const REQUEST_TIMEOUT_MS = 10_000;
 const MINUTE = 60_000;
 
@@ -88,6 +111,12 @@ export type ApiOptions = RequestContextDeps & {
   identityKeys?: IdentityKeys;
   /** The document store (domain/shared/storage, docs/SEAMS.md). Absent: no route can read c.get('storage'). */
   storage?: ServerStorageProvider;
+  /**
+   * The routing seam (domain/shared/routing, docs/SEAMS.md). Absent: no route
+   * can read c.get('routing'), and the day's estimates answer 503 rather than
+   * a straight line nobody asked for.
+   */
+  routing?: RoutingProvider;
   /**
    * Whoever holds the sign-ins (app/api/portal/auth-admin.ts, docs/SEAMS.md).
    * Absent: the portal's invitation door is not mounted at all, so a
@@ -122,6 +151,13 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     if (isStorageConflict(error)) {
       console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
       return c.json({ error: 'document_exists', requestId }, 409);
+    }
+    // The same shape for the routing seam: a vendor that is down is not a bug
+    // in the day sheet. Every message this can carry is written in
+    // app/api/_middleware/routing and names no coordinate and no key.
+    if (isRoutingUnavailable(error)) {
+      console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
+      return c.json({ error: 'routing_unavailable', requestId }, 503);
     }
     console.error(
       JSON.stringify({ requestId, name: error.name, code: (error as { code?: string }).code }),
@@ -161,11 +197,17 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // path, one method's worth of bytes, and not a raised floor for everything.
   const defaultBodyLimit = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge });
   const logoBodyLimit = bodyLimit({ maxSize: LOGO_BODY_LIMIT_BYTES, onError: payloadTooLarge });
-  api.use('/api/*', async (c, next) =>
-    c.req.path === LOGO_PATH ? logoBodyLimit(c, next) : defaultBodyLimit(c, next),
-  );
+  const photoBodyLimit = bodyLimit({ maxSize: PHOTO_LIMIT_BYTES, onError: payloadTooLarge });
+  api.use('/api/*', async (c, next) => {
+    if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
+    if (isPhotoUpload(c)) return photoBodyLimit(c, next);
+    return defaultBodyLimit(c, next);
+  });
   api.use('/api/*', timeout(REQUEST_TIMEOUT_MS, timedOut));
-  api.use('/api/*', jsonOnly);
+  // One path carries an image rather than JSON, and it is the only one: the
+  // route itself refuses any type but the three it names and verifies the
+  // digest the device declared (app/api/sessions/photo.ts).
+  api.use('/api/*', async (c, next) => (isPhotoUpload(c) ? next() : jsonOnly(c, next)));
 
   // Public, registered before the fence. The payload carries nothing
   // environment-specific on purpose.
@@ -210,6 +252,12 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   }
 
   api.use('/api/*', withRequestContext(deps));
+  // After the fence, like identityKeys and unlike storage: no route ahead of
+  // authentication asks how long a drive takes, and the seam's key must not be
+  // reachable from one that does.
+  if (deps.routing) {
+    api.use('/api/*', withRouting(deps.routing));
+  }
   // After the fence, not before: no route ahead of authentication can ever
   // read c.get('identityKeys'), even by accident (security review, round 3).
   if (deps.identityKeys) {
@@ -258,6 +306,8 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   mountBilling(api, deps.now);
   mountAppointments(api, deps.now);
   mountSessions(api, deps.now);
+  mountKit(api, deps.now);
+  mountRouting(api, deps.now);
   mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
 
   // An unknown route answers in the same shape as every other refusal.

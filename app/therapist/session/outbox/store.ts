@@ -22,8 +22,10 @@
  * whatever the practitioner typed in the note beside them. So it is not left
  * lying about:
  *
- * - **Signing out empties it** (`forgetEverything`). A practitioner who signs
- *   out on a shared phone leaves nothing of the household behind.
+ * - **Signing out empties it** (`forgetEverything`), the photographs included:
+ *   a practitioner who signs out on a shared phone leaves nothing of the
+ *   household behind, and a picture of a child's head is the last thing that
+ *   should outlive a session.
  * - **A different person signing in empties it** (`claim`). The store records
  *   whose it is; a store claimed by somebody else is wiped before it is used,
  *   so a sign-out that never happened cannot leak into the next session.
@@ -40,6 +42,25 @@ export type OutboxRecord = {
   kind: string;
   deviceAt: string;
   payload: unknown;
+};
+
+/**
+ * The setup photograph's bytes, waiting for the event that names them to be
+ * acknowledged (docs/SPEC/practitioner-phone.md section 4.2).
+ *
+ * Keyed by session id, because `session.setup_photo_document_id` is singular:
+ * one photograph per visit. A retake before check-out replaces this record and
+ * appends a new event, and the projection's `photo` is already the last
+ * event's payload, so the server and the device agree about which picture is
+ * the one.
+ */
+export type OutboxBlob = {
+  sessionId: string;
+  bytes: Blob;
+  mimeType: string;
+  sha256: string;
+  /** The device clock that wrote it, so a blob is pruned on the same rule an event is. */
+  deviceAt: string;
 };
 
 /** What a reload needs to offer "resume session for Client L., started 14:32". */
@@ -70,6 +91,15 @@ export type OutboxStore = {
   forget(ids: readonly string[]): Promise<void>;
   readOpenVisit(): Promise<OpenVisitNote | null>;
   writeOpenVisit(note: OpenVisitNote | null): Promise<void>;
+  /**
+   * The photograph waiting for this visit, replacing whatever was there: a
+   * retake is one picture, not two.
+   */
+  putBlob(blob: OutboxBlob): Promise<void>;
+  /** Every photograph still waiting, oldest first by session. */
+  blobs(): Promise<OutboxBlob[]>;
+  /** Acknowledged, or refused in a way that will not change: either way it goes. */
+  forgetBlob(sessionId: string): Promise<void>;
   /** Every queued event and the open-visit note, gone. Sign-out, and a store claimed by somebody else. */
   forgetEverything(): Promise<void>;
   /**
@@ -89,8 +119,16 @@ export type OutboxStore = {
 export const PRUNE_AFTER_DAYS = 7;
 
 const DB_NAME = 'mcwellness-session';
-const DB_VERSION = 1;
+/**
+ * Two, from one: version 2 adds the `blobs` store beside the events
+ * (docs/SPEC/practitioner-phone.md section 4.2). A device that has run this
+ * app before opens at version 1 and is upgraded in place, keeping whatever
+ * events it was holding — an upgrade that dropped the queue would lose a
+ * visit somebody ran in a basement.
+ */
+const DB_VERSION = 2;
 const EVENTS = 'events';
+const BLOBS = 'blobs';
 const META = 'meta';
 const OPEN_VISIT_KEY = 'open-visit';
 const OWNER_KEY = 'owner';
@@ -101,8 +139,8 @@ function byOrder(a: OutboxRecord, b: OutboxRecord): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-/** How old a queued event is, judged on the device clock that wrote it. */
-function ageInDays(record: OutboxRecord, now: Date): number {
+/** How old a queued event or photograph is, judged on the device clock that wrote it. */
+function ageInDays(record: { deviceAt: string }, now: Date): number {
   const at = Date.parse(record.deviceAt);
   if (!Number.isFinite(at)) return Number.POSITIVE_INFINITY;
   return (now.getTime() - at) / 86_400_000;
@@ -111,6 +149,7 @@ function ageInDays(record: OutboxRecord, now: Date): number {
 /** The fallback: correct, in order, and gone when the tab is. */
 export function createMemoryStore(): OutboxStore {
   const records = new Map<string, OutboxRecord>();
+  const pictures = new Map<string, OutboxBlob>();
   let openVisit: OpenVisitNote | null = null;
   let owner: string | null = null;
   const store: OutboxStore = {
@@ -127,8 +166,19 @@ export function createMemoryStore(): OutboxStore {
     writeOpenVisit: async (note) => {
       openVisit = note;
     },
+    putBlob: async (blob) => {
+      // Replaced, not appended: one photograph per visit, and a retake is the
+      // one that counts.
+      pictures.set(blob.sessionId, blob);
+    },
+    blobs: async () =>
+      [...pictures.values()].sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
+    forgetBlob: async (sessionId) => {
+      pictures.delete(sessionId);
+    },
     forgetEverything: async () => {
       records.clear();
+      pictures.clear();
       openVisit = null;
       owner = null;
     },
@@ -142,6 +192,12 @@ export function createMemoryStore(): OutboxStore {
     prune: async (days, now) => {
       const stale = [...records.values()].filter((record) => ageInDays(record, now) > days);
       for (const record of stale) records.delete(record.id);
+      // A photograph goes with the events, on the same clock and for the same
+      // reason: a picture that has not reached the server in seven days is not
+      // going to, and keeping it is keeping a child's head on a device.
+      for (const [sessionId, blob] of pictures) {
+        if (ageInDays(blob, now) > days) pictures.delete(sessionId);
+      }
       return stale.length;
     },
   };
@@ -161,6 +217,10 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(EVENTS)) db.createObjectStore(EVENTS, { keyPath: 'id' });
+      // One record per visit, keyed by the session it belongs to.
+      if (!db.objectStoreNames.contains(BLOBS)) {
+        db.createObjectStore(BLOBS, { keyPath: 'sessionId' });
+      }
       if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
     };
     request.onsuccess = () => resolve(request.result);
@@ -222,8 +282,20 @@ function createIndexedDbStore(db: IDBDatabase): OutboxStore {
       );
       return note ?? null;
     },
+    putBlob: async (blob) => {
+      // `put`, not `add`: a retake before check-out replaces the picture.
+      await run<IDBValidKey>(BLOBS, 'readwrite', (store) => store.put(blob));
+    },
+    blobs: async () => {
+      const all = await run<OutboxBlob[]>(BLOBS, 'readonly', (store) => store.getAll());
+      return all.sort((a, b) => a.sessionId.localeCompare(b.sessionId));
+    },
+    forgetBlob: async (sessionId) => {
+      await run<undefined>(BLOBS, 'readwrite', (store) => store.delete(sessionId));
+    },
     forgetEverything: async () => {
       await run<undefined>(EVENTS, 'readwrite', (store) => store.clear());
+      await run<undefined>(BLOBS, 'readwrite', (store) => store.clear());
       await run<undefined>(META, 'readwrite', (store) => store.clear());
     },
     claim: async (userId) => {
@@ -234,12 +306,21 @@ function createIndexedDbStore(db: IDBDatabase): OutboxStore {
       const wiped = current !== undefined;
       if (wiped) {
         await run<undefined>(EVENTS, 'readwrite', (store) => store.clear());
+        await run<undefined>(BLOBS, 'readwrite', (store) => store.clear());
         await run<undefined>(META, 'readwrite', (store) => store.clear());
       }
       await run<IDBValidKey>(META, 'readwrite', (store) => store.put(userId, OWNER_KEY));
       return wiped;
     },
     prune: async (days, now) => {
+      // The photographs go on the same clock as the events, and first: a
+      // picture is the larger thing to be holding on to.
+      const pictures = await run<OutboxBlob[]>(BLOBS, 'readonly', (store) => store.getAll());
+      for (const blob of pictures) {
+        if (ageInDays(blob, now) > days) {
+          await run<undefined>(BLOBS, 'readwrite', (store) => store.delete(blob.sessionId));
+        }
+      }
       const all = await run<OutboxRecord[]>(EVENTS, 'readonly', (store) => store.getAll());
       const stale = all.filter((record) => ageInDays(record, now) > days);
       if (stale.length === 0) return 0;

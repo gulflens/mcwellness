@@ -104,6 +104,24 @@ export async function readEvents(db: Db, sessionId: string): Promise<SessionEven
   }));
 }
 
+/**
+ * The photograph on this client's most recent completed visit, or null
+ * (docs/SPEC/practitioner-phone.md section 4.5).
+ *
+ * Through the definer door in migration 306 rather than a plain select, for
+ * the reason app.session_history_for exists: a programme belongs to the client
+ * and not to one practitioner, and db/policies/session/practitioner_scope.sql
+ * will not show a practitioner another's visit. One id comes back and nothing
+ * else, and nothing is fetched until somebody taps the button it feeds.
+ */
+export async function previousSetupPhoto(db: Db, sessionId: string): Promise<string | null> {
+  const { rows } = await db.query<{ document_id: string | null }>(
+    'select app.previous_setup_photo($1) as document_id',
+    [sessionId],
+  );
+  return rows[0]?.document_id ?? null;
+}
+
 /** The highest seq the server holds for a visit, so a device knows where it stands. */
 export function lastSeqOf(events: readonly SessionEvent[]): number {
   return events.reduce((highest, event) => Math.max(highest, event.seq), 0);

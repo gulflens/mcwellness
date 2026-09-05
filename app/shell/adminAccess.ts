@@ -48,6 +48,18 @@ export function canOpenPortalAccess(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `kit.manage` (app/api/kit/routes.ts) — who may open Settings › Kit.
+ * The owner, an admin and the lead practitioner: the three who decide what the
+ * practice's equipment register says, and `db/policies/session/kit.sql` refuses
+ * the rows beneath both this screen and the routes
+ * (docs/SPEC/practitioner-phone.md section 6.2). A practitioner reads their own
+ * items through the check-in block's own sentence, not through this screen.
+ */
+export function canOpenKit(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'kit.manage' }, {}, now);
+}
+
+/**
  * Matches the `/today/check-in` gate in App.tsx: who may cross to the
  * practitioner's side. An owner who also treats holds `lead_practitioner`
  * alongside owner, so the console offers them "Today"; an admin-only or

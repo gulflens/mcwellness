@@ -36,6 +36,7 @@ function input(overrides: Partial<CheckInInput> = {}): CheckInInput {
     hasDateOfBirth: true,
     isMinor: false,
     activeConsentPurposes: ['participation', 'home_visit'],
+    kitCalibrationOverdue: false,
     ...overrides,
   };
 }
@@ -149,5 +150,32 @@ describe('canCheckIn', () => {
         'consent_missing_home_visit',
       ].sort(),
     );
+  });
+});
+
+describe('canCheckIn and the equipment register', () => {
+  it('blocks when an amplifier assigned to this practitioner is overdue', () => {
+    const result = canCheckIn(input({ kitCalibrationOverdue: true }), NOW);
+    expect(result.ok).toBe(false);
+    expect(result.reasons).toEqual(['kit_calibration_overdue']);
+  });
+
+  it('passes when nothing is assigned, which is what the register starts as', () => {
+    expect(canCheckIn(input({ kitCalibrationOverdue: false }), NOW)).toEqual({
+      ok: true,
+      reasons: [],
+    });
+  });
+
+  it('names the calibration last, after the consents', () => {
+    const result = canCheckIn(
+      input({ activeConsentPurposes: [], kitCalibrationOverdue: true }),
+      NOW,
+    );
+    expect(result.reasons).toEqual([
+      'consent_missing_participation',
+      'consent_missing_home_visit',
+      'kit_calibration_overdue',
+    ]);
   });
 });

@@ -548,6 +548,11 @@ describe('POST /api/sessions/:id/events', () => {
       // the camera (app/therapist/session/PostStep.tsx). The server refuses
       // a photo event either way.
       photoConsent: false,
+      // The last placement, for the pre-flight's own button
+      // (docs/SPEC/practitioner-phone.md section 4.5). Null here: this client
+      // has no completed visit behind them, so there is nothing to show and no
+      // button to show it with.
+      previousSetupPhotoDocumentId: null,
       checkedInAt: FIXED_NOW,
     });
 
@@ -610,6 +615,7 @@ describe('POST /api/sessions/:id/events', () => {
       status: 'checked_in',
       sessionId: SESSION_BY_MRN,
       photoConsent: false,
+      previousSetupPhotoDocumentId: null,
       checkedInAt: FIXED_NOW,
     });
 
@@ -745,6 +751,7 @@ describe('POST /api/sessions/:id/events', () => {
       status: 'checked_in',
       sessionId: SESSION_HAPPY,
       photoConsent: false,
+      previousSetupPhotoDocumentId: null,
       checkedInAt: FIXED_NOW,
     });
     const after = await owner.query('select count(*)::int as n from session_event where id = $1', [

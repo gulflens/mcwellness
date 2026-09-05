@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { MeResponse } from '../../api/_middleware/actor-schema';
+import { forgetDevice } from '../../therapist/session/outbox/store';
 import type { AuthProvider } from './types';
 
 /**
@@ -83,8 +84,28 @@ export function AuthProviderBoundary({
     [provider, fetchImpl],
   );
 
+  /**
+   * **A signed-out device keeps nothing of anybody**
+   * (docs/SPEC/practitioner-phone.md section 3.5,
+   * docs/CHANGE-REQUESTS/session-capture-02.md sections 1f and 5b,
+   * .claude/rules/compliance.md).
+   *
+   * Two caches, two owners, one sentence. The device's own queue and its
+   * open-visit note hold ratings, observation chips and a household's given
+   * name and initial; the worker's read cache holds the day sheet, which holds
+   * the same name again. `forgetDevice` is the session module's own function,
+   * so the rule stays written where it belongs and the shell only says when;
+   * `forget-reads` is the message the worker answers.
+   *
+   * Both run here rather than in a screen, because a practitioner who signs
+   * out from Today is signing out of a screen the session module does not own,
+   * and an effect there would never fire. Neither call throws on a device that
+   * has never run a visit, and neither needs a worker to be running.
+   */
   const signOut = useCallback(async () => {
     await provider.signOut();
+    await forgetDevice();
+    navigator.serviceWorker?.controller?.postMessage({ type: 'forget-reads' });
     setSession({ status: 'signed-out' });
   }, [provider]);
 

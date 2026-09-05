@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router';
 import {
   canOpenBilling,
+  canOpenKit,
   canOpenPortalAccess,
   canOpenSchedule,
   canOpenSettings,
@@ -28,6 +29,7 @@ function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
     if (section.key === 'today') return canOpenToday(actor);
     if (section.key === 'settings') return canOpenSettings(actor, now);
     if (section.key === 'portal') return canOpenPortalAccess(actor, now);
+    if (section.key === 'kit') return canOpenKit(actor, now);
     return true;
   });
 }

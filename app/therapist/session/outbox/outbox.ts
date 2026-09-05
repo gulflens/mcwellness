@@ -1,4 +1,4 @@
-import type { OpenVisitNote, OutboxRecord, OutboxStore } from './store';
+import type { OpenVisitNote, OutboxBlob, OutboxRecord, OutboxStore } from './store';
 
 /**
  * The single-writer outbox (docs/SPEC/session-capture.md section 2).
@@ -19,6 +19,15 @@ import type { OpenVisitNote, OutboxRecord, OutboxStore } from './store';
  * State is published to whoever is listening so the running screen can show
  * "3 events waiting to sync" as the calm band section 6.1 of the design
  * brief asks for, and never an alert.
+ *
+ * **Events first, then bytes** (docs/SPEC/practitioner-phone.md section 4.2).
+ * The setup photograph's bytes sit in a second store beside the queue, and a
+ * blob is posted only after the event that names its digest has been
+ * acknowledged — the server refuses a picture it has no `photo_captured` event
+ * for, and rightly, because the event log is the record and the bytes are
+ * evidence hanging off it. So the loop drains the events it can, and only then
+ * offers whatever pictures belong to visits it no longer has events queued
+ * for.
  */
 
 export type FlushOutcome = {
@@ -37,12 +46,29 @@ export type PostEvents = (
   events: readonly OutboxRecord[],
 ) => Promise<FlushOutcome | 'retry' | 'give-up' | 'too-large'>;
 
+/**
+ * How the photograph's bytes reach the server. Three answers, and they are the
+ * device's whole decision:
+ *
+ * - `'filed'` — the server holds it. The blob goes.
+ * - `'retry'` — no signal, or a failure that may pass, or the event that names
+ *   it has not been acknowledged yet (the server's own 409
+ *   `photo_event_pending`). The blob stays and the next tick tries again.
+ * - `'give-up'` — a refusal that will never change: the household has not
+ *   agreed, a retake has superseded this picture, or the visit already has
+ *   one. The blob goes, because keeping it would mean retrying it for ever and
+ *   holding a photograph nobody will ever file.
+ */
+export type PostPhoto = (blob: OutboxBlob) => Promise<'filed' | 'retry' | 'give-up'>;
+
 export type OutboxState = {
   pending: number;
   flushing: boolean;
   /** True once a flush has failed and not yet succeeded. Informational, never an alarm. */
   behind: boolean;
   durable: boolean;
+  /** Photographs still waiting. Counted apart, because one is worth its own line. */
+  photosPending: number;
 };
 
 export const RETRY_MS = 30_000;
@@ -95,11 +121,24 @@ export class Outbox {
 
   private readonly store: OutboxStore;
   private readonly post: PostEvents;
+  /**
+   * Absent on a device that will never take a photograph — a browser with no
+   * camera, a test that does not care — in which case blobs are simply never
+   * offered and the queue behaves exactly as it did before.
+   */
+  private readonly postPhoto: PostPhoto | null;
 
-  constructor(store: OutboxStore, post: PostEvents) {
+  constructor(store: OutboxStore, post: PostEvents, postPhoto: PostPhoto | null = null) {
     this.store = store;
     this.post = post;
-    this.state = { pending: 0, flushing: false, behind: false, durable: store.durable };
+    this.postPhoto = postPhoto;
+    this.state = {
+      pending: 0,
+      flushing: false,
+      behind: false,
+      durable: store.durable,
+      photosPending: 0,
+    };
   }
 
   subscribe(listener: Listener): () => void {
@@ -122,6 +161,17 @@ export class Outbox {
     void this.flush();
   }
 
+  /**
+   * Keeps the photograph's bytes for this visit, replacing whatever was there.
+   * The `photo_captured` event is appended separately and travels first; this
+   * is only the picture waiting behind it.
+   */
+  async keepPhoto(blob: OutboxBlob): Promise<void> {
+    await this.store.putBlob(blob);
+    await this.refreshCount();
+    void this.flush();
+  }
+
   async openVisit(): Promise<OpenVisitNote | null> {
     return this.store.readOpenVisit();
   }
@@ -131,7 +181,10 @@ export class Outbox {
   }
 
   private async refreshCount(): Promise<void> {
-    this.publish({ pending: (await this.store.pending()).length });
+    this.publish({
+      pending: (await this.store.pending()).length,
+      photosPending: (await this.store.blobs()).length,
+    });
   }
 
   /**
@@ -153,6 +206,14 @@ export class Outbox {
   }
 
   private async deliver(): Promise<void> {
+    await this.deliverEvents();
+    // Always, even when an event batch could not go: a visit whose events left
+    // long ago should not have its picture held back by a different visit's
+    // queue (section 4.2).
+    await this.deliverPhotos();
+  }
+
+  private async deliverEvents(): Promise<void> {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       // Working offline is normal, not a failure. Nothing is marked behind.
       await this.refreshCount();
@@ -205,6 +266,32 @@ export class Outbox {
   }
 
   /**
+   * The bytes, after the events (section 4.2). A picture is offered only when
+   * the visit it belongs to has nothing left in the event queue: the server
+   * refuses a photograph whose `photo_captured` event it does not yet hold, so
+   * posting one ahead of its own event is a round trip that was always going
+   * to be refused.
+   */
+  private async deliverPhotos(): Promise<void> {
+    if (this.postPhoto === null) return;
+    const waiting = await this.store.blobs();
+    if (waiting.length === 0) return;
+    const queued = new Set((await this.store.pending()).map((record) => record.sessionId));
+    for (const blob of waiting) {
+      if (queued.has(blob.sessionId)) continue;
+      const outcome = await this.postPhoto(blob);
+      if (outcome === 'retry') {
+        this.publish({ behind: true });
+        break;
+      }
+      // 'filed' and 'give-up' both mean the device is done with it: one
+      // because the server holds it, the other because it never will.
+      await this.store.forgetBlob(blob.sessionId);
+    }
+    this.publish({ photosPending: (await this.store.blobs()).length });
+  }
+
+  /**
    * Delivers everything, or reports that it could not. Used by the summary
    * screen, which must not post a close while the visit's own events are
    * still queued behind it — the server refuses a close it has no check-out
@@ -219,7 +306,7 @@ export class Outbox {
   /** Everything this device holds for this practitioner, gone (sign-out). */
   async forgetEverything(): Promise<void> {
     await this.store.forgetEverything();
-    this.publish({ pending: 0, behind: false });
+    this.publish({ pending: 0, behind: false, photosPending: 0 });
   }
 
   /** Starts the loop: on reconnection, on becoming visible again, and every 30 seconds. */

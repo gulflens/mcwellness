@@ -185,6 +185,26 @@ export type SeedContact = {
   /** Display form, 784-1900-*, only on the adult who consents for a minor. Sealed on write. */
   emiratesId: string | null;
 };
+/**
+ * One instrument on the practice's register (docs/SPEC/practitioner-phone.md
+ * section 6, `docs/SPEC/00-data-model.md` section 5).
+ *
+ * The serial is in the same reserved shape as an id, deliberately: a serial
+ * that looked like a real one would be a real manufacturer's number sitting in
+ * a fixture, and this way "no real serial" is a property of the text rather
+ * than of somebody's care. The model name is fictional for the same reason.
+ */
+export type SeedKit = {
+  id: string;
+  serial: string;
+  model: string;
+  kind: 'amplifier' | 'laptop' | 'electrode_set';
+  status: 'active' | 'inactive';
+  assignedPractitionerId: string | null;
+  lastCalibratedAt: string | null;
+  calibrationDueAt: string | null;
+};
+
 export type SeedDocument = {
   id: string;
   purpose: ConsentPurpose;
@@ -228,6 +248,7 @@ export type SeedData = {
   packages: SeedPackage[];
   practitioners: SeedPractitioner[];
   credentials: SeedCredential[];
+  kit: SeedKit[];
   locations: SeedLocation[];
   clients: SeedClient[];
   contacts: SeedContact[];
@@ -655,6 +676,42 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       homeBaseLocationId: studio.id,
     }));
 
+  /**
+   * The equipment register (docs/CHANGE-REQUESTS/session-capture-04.md item 9).
+   *
+   * An amplifier apiece, calibrated last year and in date for another one, so
+   * the staging demo's own visits check in; and one unassigned amplifier whose
+   * calibration lapsed a month ago, so the block is demonstrable without
+   * blocking anybody's day. That last row is the whole point of the pair: a
+   * spare on the shelf is exactly the case "no item assigned is no block" was
+   * written for, and a register with only in-date items would prove nothing.
+   */
+  const year = Number(today.slice(0, 4));
+  const kit: SeedKit[] = [
+    ...practitioners.map((person, i) => ({
+      id: seedId('e', i + 1),
+      serial: seedId('e', i + 1),
+      model: 'Synthetic Bench Amplifier',
+      kind: 'amplifier' as const,
+      status: 'active' as const,
+      assignedPractitionerId: person.id,
+      lastCalibratedAt: `${isoDate(year - 1, 6, 1)}T08:00:00+04:00`,
+      calibrationDueAt: `${isoDate(year + 1, 6, 1)}T08:00:00+04:00`,
+    })),
+    {
+      id: seedId('e', 90),
+      serial: seedId('e', 90),
+      model: 'Synthetic Bench Amplifier',
+      kind: 'amplifier',
+      status: 'active',
+      // Nobody's, so it stops nobody: the register can show an overdue item
+      // without a demonstration turning into a day of refused check-ins.
+      assignedPractitionerId: null,
+      lastCalibratedAt: `${isoDate(year - 2, 6, 1)}T08:00:00+04:00`,
+      calibrationDueAt: `${isoDate(year - 1, 6, 1)}T08:00:00+04:00`,
+    },
+  ];
+
   // Certifications: the owner may author, execute and sign; the second
   // practitioner executes both; the third executes sessions but their brain-map
   // certification has expired, so "not currently certified" exists in the data.
@@ -994,6 +1051,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     packages,
     practitioners,
     credentials,
+    kit,
     locations,
     clients,
     contacts,

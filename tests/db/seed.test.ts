@@ -7,6 +7,7 @@ import {
   SEED_REASON,
   SEED_TENANT_ID,
 } from '../../db/seed/generate';
+import { isCalibrationOverdue } from '../../domain/session';
 import { deriveIdentityKeys, openEmiratesId } from '../../domain/shared/identity';
 import { normaliseEmiratesId } from '../../domain/shared/emirates-id';
 import { asApiRole, freshDatabase, rolledBack } from './helpers';
@@ -31,6 +32,7 @@ const SEED_TABLES = [
   'package_price',
   'practitioner',
   'credential',
+  'kit',
   'location',
   'client',
   'contact',
@@ -77,6 +79,7 @@ describe('the synthetic seed', () => {
       package_price: data.packages.length,
       practitioner: data.practitioners.length,
       credential: data.credentials.length,
+      kit: data.kit.length,
       location: data.locations.length,
       client: data.clients.length,
       contact: data.contacts.length,
@@ -88,6 +91,46 @@ describe('the synthetic seed', () => {
       expect(counts[table], table).toBe(n);
     }
     expect(await isSeeded(owner)).toBe(true);
+  });
+
+  it('gives every practitioner an amplifier in date, and leaves one overdue on the shelf', () => {
+    // docs/CHANGE-REQUESTS/session-capture-04.md item 9 and the spec's own
+    // "done when": the register has to be demonstrable both ways. Every
+    // practitioner carries an in-date amplifier, so the staging demo's visits
+    // check in; exactly one item is nobody's and overdue, so the block can be
+    // shown without turning a demonstration into a day of refused check-ins.
+    //
+    // Asserted against the generator rather than the rows, because the
+    // generator is the thing a reader changes and it is pure.
+    const noon = new Date(`${data.today}T12:00:00+04:00`);
+    const overdue = (item: (typeof data.kit)[number]): boolean =>
+      isCalibrationOverdue(
+        {
+          status: item.status,
+          calibrationDueAt: item.calibrationDueAt === null ? null : new Date(item.calibrationDueAt),
+        },
+        noon,
+      );
+
+    expect(data.practitioners.length).toBeGreaterThan(0);
+    for (const person of data.practitioners) {
+      const theirs = data.kit.filter(
+        (item) =>
+          item.assignedPractitionerId === person.id &&
+          item.kind === 'amplifier' &&
+          item.status === 'active',
+      );
+      expect(theirs, person.id).toHaveLength(1);
+      expect(overdue(theirs[0]!), person.id).toBe(false);
+    }
+
+    const spare = data.kit.filter((item) => item.assignedPractitionerId === null);
+    expect(spare).toHaveLength(1);
+    expect(spare[0]?.status).toBe('active');
+    expect(overdue(spare[0]!)).toBe(true);
+    // And it is the only overdue item there is: an amplifier somebody carries
+    // that had lapsed would block that person's whole day.
+    expect(data.kit.filter(overdue)).toHaveLength(1);
   });
 
   it('leaves the synthetic practice unregistered for VAT, with a synthetic licence', async () => {

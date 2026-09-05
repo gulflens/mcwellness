@@ -1,0 +1,17 @@
+<!--
+  The app's own mark: achromatic, one glyph, no gradient and no accent — the
+  same restraint as the rest of the chrome (docs/DESIGN-BRIEF.md,
+  docs/CHANGE-REQUESTS/session-capture-02.md section 1b).
+
+  The two colours are the practitioner ground's --paper and --ink, copied
+  verbatim from app/shell/tokens.css. An SVG cannot read a CSS custom property
+  from another document, so a value has to be written out here. There are three
+  such places in this repository and no others: this file,
+  public/manifest.webmanifest, and the Static Maps style in
+  app/api/_middleware/routing/google.ts. If a token changes, all three change
+  with it.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="McWellness">
+  <rect width="512" height="512" rx="96" fill="#10191d"/>
+  <path d="M136 356V156h44l76 128 76-128h44v200h-42V232l-62 104h-32l-62-104v124z" fill="#eef2f1"/>
+</svg>

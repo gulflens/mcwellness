@@ -26,3 +26,16 @@ createRoot(root).render(
     </AuthProviderBoundary>
   </StrictMode>,
 );
+
+/**
+ * The practitioner app is installable and opens with no signal
+ * (docs/SPEC/practitioner-phone.md section 3.2). Registered after first render
+ * so it never delays first paint, only where the browser has it, and only in a
+ * production build — `import.meta.env.PROD` keeps it out of the dev server,
+ * where a worker caching the shell fights hot reload.
+ */
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  });
+}
