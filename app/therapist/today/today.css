@@ -229,14 +229,27 @@ a.stop__action {
 /*
   The day, as a picture. Sized to the column and never taller than a third of
   a phone: it is for orientation, and the stops are the screen.
+
+  The box is the picture's own 16:10 (640 by 400, section 5.3) and it is
+  reserved from the first paint: the placeholder below wears the same class,
+  so when the bytes land the picture replaces it in place and the stop list
+  does not drop by its height. Rows never reflow when data arrives (section
+  5.4), and a list that jumps under a thumb reaching for Check in is the
+  reason that rule exists.
 */
 .today__map {
   inline-size: 100%;
   block-size: auto;
+  aspect-ratio: 16 / 10;
   max-block-size: 40vh;
   object-fit: cover;
   border: var(--hairline) solid var(--rule);
   border-radius: var(--r-3);
+}
+
+/* The same box, empty and quiet, while the bytes are on their way. */
+.today__map--pending {
+  background: var(--surface);
 }
 
 /* The one calm line about putting this on the home screen, and the way out of it. */

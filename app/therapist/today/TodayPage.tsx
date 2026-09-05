@@ -751,7 +751,19 @@ export function TodayPage() {
         {stops.length > 0 && drives !== null ? (
           drives.pictureUrl === null ? (
             <p className="small muted">{MAP_UNAVAILABLE}</p>
-          ) : mapUrl === null ? null : (
+          ) : mapUrl === null ? (
+            // The box, reserved at the picture's own aspect ratio while the
+            // bytes are fetched, so the stop list does not drop by its height
+            // when they land: rows never reflow when data arrives (section
+            // 5.4). Nothing to announce — an empty box is not news — so it is
+            // hidden from the accessibility tree, and the picture that
+            // replaces it carries the alt text.
+            <div
+              className="today__map today__map--pending"
+              data-testid="day-picture-pending"
+              aria-hidden="true"
+            />
+          ) : (
             <img
               className="today__map"
               src={mapUrl}

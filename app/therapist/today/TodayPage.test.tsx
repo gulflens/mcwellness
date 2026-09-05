@@ -96,13 +96,16 @@ const PICTURE = new Uint8Array([137, 80, 78, 71]);
  * back the fetch it was given so a test can ask what was actually requested
  * and with which headers.
  */
-function mount(routing: unknown, stops: unknown = STOPS) {
+function mount(routing: unknown, stops: unknown = STOPS, pictureGate?: Promise<unknown>) {
   const fetchImpl = vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
     if (url.startsWith('/api/appointments')) return json({ appointments: stops });
     // Before the day itself: the picture's path begins with the day's.
     if (url.startsWith('/api/routing/day-picture')) {
+      // A gate, when a test wants to see the screen while the bytes are still
+      // on their way; without one the picture arrives as fast as any other read.
+      if (pictureGate !== undefined) await pictureGate;
       return new Response(PICTURE, { status: 200, headers: { 'content-type': 'image/png' } });
     }
     if (url.startsWith('/api/routing/day')) {
@@ -187,6 +190,29 @@ describe('the day sheet with the real implementation', () => {
     expect(String(call?.[0])).toBe(TRAFFIC.pictureUrl);
     const headers = new Headers(call?.[1]?.headers);
     expect(headers.get('authorization')).toBe('Bearer token');
+  });
+
+  it("reserves the picture's box from the first paint, and fills it in place", async () => {
+    // The bytes are held back so both states can be seen in order. The box is
+    // reserved at the picture's own 16:10 while it loads and the picture then
+    // replaces the placeholder, so the stop list never drops by its height
+    // when it lands: rows never reflow when data arrives (section 5.4).
+    let deliverPicture: () => void = () => undefined;
+    mount(
+      TRAFFIC,
+      STOPS,
+      new Promise<void>((resolve) => {
+        deliverPicture = resolve;
+      }),
+    );
+    const pending = await screen.findByTestId('day-picture-pending');
+    // The same class as the picture, which is what makes the box the same box.
+    expect(pending.className).toContain('today__map');
+    expect(screen.queryByRole('img', { name: /map of your/ })).toBeNull();
+
+    deliverPicture();
+    expect(await screen.findByRole('img', { name: /map of your 2 stops today/ })).toBeTruthy();
+    expect(screen.queryByTestId('day-picture-pending')).toBeNull();
   });
 
   it('reserves the line above the second stop from the first paint', async () => {
