@@ -83,6 +83,15 @@ export const PortalIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** The equipment register: a case with a handle (docs/SPEC/practitioner-phone.md section 6.4). */
+export const KitIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="2.75" y="6.5" width="14.5" height="10.75" rx="1.5" />
+    <path d="M7.5 6.5V4.25a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V6.5" />
+    <path d="M2.75 11h14.5" />
+  </Icon>
+);
+
 export const SignOutIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M8 3.25H4.5a1 1 0 0 0-1 1v11.5a1 1 0 0 0 1 1H8" />

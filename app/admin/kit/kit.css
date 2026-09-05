@@ -1,0 +1,18 @@
+/*
+  Settings › Kit (docs/SPEC/practitioner-phone.md section 6.4). The console's
+  own vocabulary: the shared table, the shared drawer, the shared status chip.
+  There is almost nothing here, and that is right — a register is a table, and
+  a screen that needed its own visual language for one would be inventing one.
+
+  Every value comes from app/shell/tokens.css and every rule is written in
+  logical properties (.claude/rules/ui.md).
+*/
+
+/*
+  The drawer's own fields sit on the form's rhythm; the one thing this screen
+  adds is room under the table for the drawer to open over, so the last row is
+  never hidden behind it on a short window.
+*/
+.page:has(.drawer) .ledger__scroll {
+  padding-block-end: var(--s-6);
+}
