@@ -480,6 +480,39 @@ database seeds is still not registered, so the laptop and staging still
 disagree about the money on an invoice. That remains a difference to decide
 about, not a defect to patch quietly.
 
+## What was done on 2026-09-05: the VAT switch corrected
+
+Not a pass: no migration merged, so the seventh pass is still the one that
+follows the next merge adding one. One column changed, at the operator's
+direction, and it is recorded here because the fifth and sixth passes both
+said this was the thing to correct.
+
+The operator confirmed on 2026-09-05 that the practice holds no VAT
+registration: the AED 375,000 threshold has not been crossed, and the
+registration recorded on 2026-09-04 was entered on the operator's word ahead
+of any certificate. The tenant row now says **not registered for VAT** and
+carries no VAT number, which is what the fourth pass recorded and what the
+synthetic practice on a fresh local database says (`db/seed/generate.ts`),
+so the laptop and staging agree again about the money on an invoice.
+
+How it was done: one `update` on `tenant` through the SQL tool, inside a
+transaction that stamped the owner's actor settings (`app.actor_id`,
+`app.actor_roles` of `owner`, `app.tenant_id`, a fresh `app.request_id`) so
+the identity guard admitted it and the audit trail names the owner, with
+`app.reason` saying the change was a correction at the operator's direction,
+entered by the assistant. Staging held no invoices, so nothing claimed a
+registration the row no longer shows; migration 950's guard and constraint
+had nothing to refuse. The demo server on port 3100 reads the row per
+request and needed no restart.
+
+What the switch means from here: it stays off until the Federal Tax
+Authority registers the practice and issues a number. The threshold is on
+taxable supplies over the trailing twelve months, or expected in the next
+thirty days; expenses count only towards the voluntary threshold of AED
+187,500. Turning the switch on is the operator's act in the practice
+settings, with the number typed in, and the platform's job is to say when
+the threshold is near (`docs/PLAN/pieces-seven-to-nine.md`, small things).
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
