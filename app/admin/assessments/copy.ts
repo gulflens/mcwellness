@@ -1,4 +1,5 @@
 import type { Band, RefusalReason, Unit } from '@domain/assessment';
+import type { AssessmentFileRole } from '../../api/assessments/schema';
 
 /**
  * The words the Assessments tab says (docs/SPEC/assessment.md sections 3.2 and
@@ -99,6 +100,43 @@ export const GATE_MESSAGES: Record<string, string> = {
   already_superseded: 'A newer version of this measurement already stands.',
   reason_required: 'Say why this is being corrected. The record keeps the reason.',
   reason_too_long: 'That reason is longer than the record holds.',
+};
+
+/**
+ * What a file filed against a measurement is. One brain map produces several —
+ * the recording the equipment wrote, and the software's own report — so the
+ * role is chosen when the file is attached and said when it is listed.
+ */
+export const FILE_ROLE_LABELS: Record<AssessmentFileRole, string> = {
+  raw: 'The recording',
+  vendor_report: 'The software’s report',
+};
+
+/** Attaching an export, and opening one. Said before anything is sent. */
+export const ATTACH_MESSAGES = {
+  empty: 'That file has nothing in it.',
+  too_large: 'That file is larger than this door takes. Twenty megabytes is the limit.',
+  failed: 'That export could not be filed. Try again.',
+  store_unavailable: 'The document store cannot be reached, so nothing was filed.',
+  link_failed: 'That file did not open.',
+};
+
+/**
+ * Why the door refused a file, by the word it answered with — its `code` where
+ * it names one and its `error` otherwise, because a refusal made before the
+ * route is reached (the body cap, the media type) carries only the latter.
+ */
+export const ATTACH_REFUSALS: Record<string, string> = {
+  not_a_pdf: 'That is not a PDF. The export is the software’s own PDF report.',
+  unsupported_media_type: 'That is not a PDF. The export is the software’s own PDF report.',
+  payload_too_large: ATTACH_MESSAGES.too_large,
+  empty_body: ATTACH_MESSAGES.empty,
+  digest_mismatch: 'The file changed on the way. Choose it again.',
+  digest_missing: 'The file changed on the way. Choose it again.',
+  storage_unavailable: ATTACH_MESSAGES.store_unavailable,
+  document_exists: 'Something is already filed under that name.',
+  forbidden: 'Filing an export against this measurement is not yours to do.',
+  not_found: 'That measurement is no longer there.',
 };
 
 /** Why a comparison could not be made. */

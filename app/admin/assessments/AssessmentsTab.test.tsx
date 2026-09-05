@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { createHash } from 'node:crypto';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
@@ -6,7 +7,10 @@ import type { AuthProvider } from '../../shell/auth/types';
 import { AssessmentsTab } from './AssessmentsTab';
 import { NOT_A_DIAGNOSIS } from './copy';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 /**
  * The Assessments tab against a fake API (docs/SPEC/assessment.md section 3).
@@ -100,16 +104,28 @@ const COMPARISON = {
   maximum: null,
 };
 
-type Sent = { url: string; method: string; body: unknown };
+type Sent = { url: string; method: string; body: unknown; headers?: Headers };
+
+const DOCUMENT = '0000000f-0000-4000-8000-000000000009';
+const SIGNED = 'https://example.test/signed?token=x';
+/** A one-page PDF's worth of nothing. What matters is that it starts as one. */
+const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x0a]);
+const PDF_DIGEST = createHash('sha256').update(PDF_BYTES).digest('hex');
+const pdfFile = (): File =>
+  new File([PDF_BYTES], 'synthetic-export.pdf', { type: 'application/pdf' });
 
 function mount(
   options: {
     listStatus?: number;
     chains?: unknown[];
+    /** What the list answers from the second request on, after something changed. */
+    chainsAfter?: unknown[];
     recordAnswer?: { status: number; body: unknown };
+    attachAnswer?: { status: number; body: unknown };
   } = {},
 ) {
   const sent: Sent[] = [];
+  let listed = 0;
   const chains = options.chains ?? [
     {
       current: row(CORRECTION, {
@@ -138,9 +154,24 @@ function mount(
       sent.push({ url, method, body: null });
       return json({ comparison: COMPARISON });
     }
+    if (url.includes('/file') && method === 'PUT') {
+      // The bytes, not a JSON envelope: kept as they arrived so a test can
+      // check the digest the browser declared against them.
+      sent.push({ url, method, body: init?.body ?? null, headers: new Headers(init?.headers) });
+      const answer = options.attachAnswer ?? {
+        status: 201,
+        body: { documentId: DOCUMENT, role: 'raw' },
+      };
+      return json(answer.body, answer.status);
+    }
+    if (url.includes('/assessments/file/') && url.endsWith('/link')) {
+      sent.push({ url, method, body: null });
+      return json({ url: SIGNED, expiresInSeconds: 300 });
+    }
     if (url.endsWith('/assessments') && method === 'GET') {
+      listed += 1;
       return options.listStatus === undefined
-        ? json({ assessments: chains })
+        ? json({ assessments: listed > 1 ? (options.chainsAfter ?? chains) : chains })
         : json({ error: 'forbidden' }, options.listStatus);
     }
     sent.push({
@@ -173,7 +204,8 @@ describe('the measurements table', () => {
     expect((await screen.findAllByText('1 Mar 2026')).length).toBe(2);
     expect(screen.getAllByText('Brain map').length).toBe(3);
     expect(screen.getAllByText('Rowan Meadow').length).toBeGreaterThan(0);
-    expect(screen.getByText('1 file')).toBeTruthy();
+    // A filed file is named by what it is, and it opens; the rest say so.
+    expect(screen.getByRole('button', { name: 'The recording, opens in a new tab' })).toBeTruthy();
     expect(screen.getAllByText('None attached').length).toBe(2);
   });
 
@@ -357,5 +389,111 @@ describe('recording one', () => {
       target: { value: '3' },
     });
     expect(await screen.findByText('Total 6 out of 12.')).toBeTruthy();
+  });
+});
+
+describe('the export', () => {
+  it('offers Attach the export on the version that stands, and not on a replaced one', async () => {
+    mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    expect(await screen.findByLabelText('Attach the export')).toBeTruthy();
+
+    cleanup();
+    mount();
+    await screen.findAllByText('1 Mar 2026');
+    // Three lines, two of them standing: the replaced one carries no control.
+    expect(screen.getAllByLabelText('Attach the export').length).toBe(2);
+  });
+
+  it('sends the bytes with the digest it computed in the browser', async () => {
+    const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    const input = await screen.findByLabelText('Attach the export');
+    expect(input.getAttribute('accept')).toBe('application/pdf');
+
+    fireEvent.change(input, { target: { files: [pdfFile()] } });
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+
+    const put = sent.find((call) => call.method === 'PUT')!;
+    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw`);
+    expect(put.headers?.get('content-type')).toBe('application/pdf');
+    // The fingerprint of the bytes that were sent, taken here and recomputed
+    // by the route over what actually arrived.
+    expect(put.headers?.get('x-sha256')).toBe(PDF_DIGEST);
+    expect(new Uint8Array(put.body as ArrayBuffer)).toEqual(PDF_BYTES);
+  });
+
+  it('files it as the software’s report when that is what it is', async () => {
+    const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    fireEvent.change(await screen.findByLabelText('What the file is'), {
+      target: { value: 'vendor_report' },
+    });
+    fireEvent.change(screen.getByLabelText('Attach the export'), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+    expect(sent.find((call) => call.method === 'PUT')!.url).toBe(
+      `/api/assessments/${BASELINE}/file?role=vendor_report`,
+    );
+  });
+
+  it('reads the row again, so the file appears where it was attached', async () => {
+    mount({
+      chains: [{ current: row(BASELINE), superseded: [] }],
+      chainsAfter: [
+        {
+          current: row(BASELINE, {
+            files: [{ documentId: DOCUMENT, role: 'raw', filedAt: '2026-03-01T09:00:00.000Z' }],
+          }),
+          superseded: [],
+        },
+      ],
+    });
+    fireEvent.change(await screen.findByLabelText('Attach the export'), {
+      target: { files: [pdfFile()] },
+    });
+    expect(
+      await screen.findByRole('button', { name: 'The recording, opens in a new tab' }),
+    ).toBeTruthy();
+  });
+
+  it('says why the door refused a file, in words', async () => {
+    mount({
+      chains: [{ current: row(BASELINE), superseded: [] }],
+      attachAnswer: { status: 415, body: { error: 'unsupported_media_type', code: 'not_a_pdf' } },
+    });
+    fireEvent.change(await screen.findByLabelText('Attach the export'), {
+      target: { files: [pdfFile()] },
+    });
+    expect(
+      await screen.findByText('That is not a PDF. The export is the software’s own PDF report.'),
+    ).toBeTruthy();
+  });
+
+  it('opens a filed file through the link route, and not before it is pressed', async () => {
+    const open = vi.fn(() => ({}) as Window);
+    vi.stubGlobal('open', open);
+    const sent = mount();
+    const button = await screen.findByRole('button', {
+      name: 'The recording, opens in a new tab',
+    });
+    // The link is a read and is audited as one, so it is asked for at the
+    // moment somebody presses and never rendered into the page in advance.
+    expect(sent.some((call) => call.url.includes('/link'))).toBe(false);
+
+    fireEvent.click(button);
+    await waitFor(() => expect(open).toHaveBeenCalledWith(SIGNED, '_blank', 'noopener,noreferrer'));
+    expect(sent.some((call) => call.url === `/api/assessments/file/${CLIENT}/link`)).toBe(true);
+  });
+
+  it('hands the link over when the browser blocks the tab', async () => {
+    vi.stubGlobal(
+      'open',
+      vi.fn(() => null),
+    );
+    mount();
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'The recording, opens in a new tab' }),
+    );
+    const link = await screen.findByRole('link', { name: 'Open it in a new tab' });
+    expect(link.getAttribute('href')).toBe(SIGNED);
   });
 });

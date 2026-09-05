@@ -10,6 +10,7 @@ import { Button, Note } from '../../shell/components/Controls';
 import { Table, type Column } from '../../shell/components/Table';
 import { Comparison } from './Comparison';
 import { COMPARISON_MESSAGES } from './copy';
+import { ExportFiles } from './ExportFiles';
 import { RecordDrawer } from './RecordDrawer';
 import './assessments.css';
 
@@ -174,14 +175,17 @@ export function AssessmentsTab({ clientId }: { clientId: string }) {
     {
       key: 'files',
       header: 'Export',
-      render: (line) =>
-        line.row.files.length === 0 ? (
-          <span className="small muted">None attached</span>
-        ) : (
-          <span className="small">
-            {line.row.files.length} {line.row.files.length === 1 ? 'file' : 'files'}
-          </span>
-        ),
+      render: (line) => (
+        // The equipment's own files, each opening through the link route, and
+        // the way to attach another — offered on the version that stands and
+        // on no other (section 3.2).
+        <ExportFiles
+          assessmentId={line.row.id}
+          files={line.row.files}
+          mayAttach={!line.superseded}
+          onAttached={load}
+        />
+      ),
     },
     {
       key: 'state',

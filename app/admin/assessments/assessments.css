@@ -35,6 +35,29 @@
   padding-block: var(--s-2);
 }
 
+/*
+  The files behind one measurement, and the way to attach another. A column of
+  small controls rather than a row: the cell is narrow, and a file's name is
+  the widest thing on the tab.
+*/
+.assessments__files {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--s-1);
+}
+
+.assessments__attach {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--s-1);
+}
+
+.assessments__attach input[type='file'] {
+  max-inline-size: 16rem;
+}
+
 .assessments__reason {
   display: block;
   color: var(--slate);
