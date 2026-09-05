@@ -57,6 +57,7 @@ export {
   type Shape,
 } from './shapes';
 
+export { ASSESSMENT_FILE_MIME_TYPE, bytesAreAPdf } from './fileType';
 export { INTERPRETATION_FIELDS, validateDerived } from './validateDerived';
 export { scoreQuestionnaire } from './scoreQuestionnaire';
 export {

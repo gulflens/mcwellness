@@ -30,6 +30,7 @@ import {
 } from './_middleware/security';
 import { isRoutingUnavailable, withRouting } from './_middleware/routing';
 import { mountAppointments } from './appointments/routes';
+import { mountAssessments } from './assessments/mount';
 import { mountTimeline } from './audit/timeline';
 import { mountBilling } from './billing/routes';
 import { mountClients } from './clients/list';
@@ -86,6 +87,26 @@ const PHOTO_PATH = /^\/api\/sessions\/[^/]+\/photo$/;
  */
 function isPhotoUpload(c: Context): boolean {
   return c.req.method === 'PUT' && PHOTO_PATH.test(c.req.path);
+}
+/**
+ * And the third, the largest, and raw for the same reason the photograph is:
+ * the equipment's own export, a vendor's PDF report with its pictures in it
+ * (docs/SPEC/assessment.md section 7.1, docs/CHANGE-REQUESTS/assessment-01.md
+ * item 2). The Documents tab cannot carry one — its envelope is 45 KB inside
+ * the 64 KB body every other route keeps — so this path has a cap of its own
+ * and a pass out of `jsonOnly`, matched by method and path together exactly as
+ * `isPhotoUpload` is. The route itself accepts one media type, checks the
+ * bytes against it and verifies the digest the browser declared
+ * (app/api/assessments/file.ts).
+ */
+export const ASSESSMENT_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
+const ASSESSMENT_FILE_PATH = /^\/api\/assessments\/[^/]+\/file$/;
+function isAssessmentFileUpload(c: Context): boolean {
+  return c.req.method === 'PUT' && ASSESSMENT_FILE_PATH.test(c.req.path);
+}
+/** The two raw-body doors, which are the only paths exempt from `jsonOnly`. */
+function isRawUpload(c: Context): boolean {
+  return isPhotoUpload(c) || isAssessmentFileUpload(c);
 }
 export const REQUEST_TIMEOUT_MS = 10_000;
 const MINUTE = 60_000;
@@ -207,16 +228,22 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   const defaultBodyLimit = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge });
   const logoBodyLimit = bodyLimit({ maxSize: LOGO_BODY_LIMIT_BYTES, onError: payloadTooLarge });
   const photoBodyLimit = bodyLimit({ maxSize: PHOTO_LIMIT_BYTES, onError: payloadTooLarge });
+  const assessmentFileLimit = bodyLimit({
+    maxSize: ASSESSMENT_FILE_LIMIT_BYTES,
+    onError: payloadTooLarge,
+  });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
     if (isPhotoUpload(c)) return photoBodyLimit(c, next);
+    if (isAssessmentFileUpload(c)) return assessmentFileLimit(c, next);
     return defaultBodyLimit(c, next);
   });
   api.use('/api/*', timeout(REQUEST_TIMEOUT_MS, timedOut));
-  // One path carries an image rather than JSON, and it is the only one: the
-  // route itself refuses any type but the three it names and verifies the
-  // digest the device declared (app/api/sessions/photo.ts).
-  api.use('/api/*', async (c, next) => (isPhotoUpload(c) ? next() : jsonOnly(c, next)));
+  // Two paths carry a file rather than JSON, and they are the only two: each
+  // route refuses any media type but the ones it names, checks the bytes
+  // against the type, and verifies the digest the caller declared
+  // (app/api/sessions/photo.ts, app/api/assessments/file.ts).
+  api.use('/api/*', async (c, next) => (isRawUpload(c) ? next() : jsonOnly(c, next)));
 
   // Public, registered before the fence. The payload carries nothing
   // environment-specific on purpose.
@@ -346,6 +373,9 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   mountAppointments(api, deps.now);
   mountSessions(api, deps.now);
   mountKit(api, deps.now);
+  // After the fence, like every other route group: nothing about a measurement
+  // is answered to somebody with no session.
+  mountAssessments(api, deps.now);
   mountRouting(api, deps.now);
   mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
 

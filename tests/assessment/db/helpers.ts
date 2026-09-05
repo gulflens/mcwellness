@@ -11,12 +11,23 @@ import type pg from 'pg';
  * instrument or a real piece of software.
  */
 
-/** Ids for this stream's fixtures, in the reserved shape. */
+/**
+ * Ids for this stream's fixtures, in the reserved shape
+ * (.claude/rules/testing.md). The scenario sits at the **end** of the tail
+ * rather than the start, because `seedClient` builds a record number from the
+ * last six characters of a client's id: with the scenario in front, every
+ * scenario's client would ask for the same MRN and the second would collide.
+ */
 export function assessmentId(scenario: string, slot: number): string {
-  return `0000000f-0000-4000-8000-${scenario}${String(slot).padStart(10, '0')}`;
+  return `0000000f-0000-4000-8000-${String(slot).padStart(6, '0')}${scenario.padStart(6, '0')}`;
 }
 
-/** A practice document to stand behind a consent's wording (00-data-model.md section 3). */
+/**
+ * A practice document to stand behind a consent's wording (00-data-model.md
+ * section 3). Filed as `consent` rather than `consent_text`: the latter is the
+ * published wording and migration 907 requires four more columns with it,
+ * which a fixture standing in for "some document" has no business inventing.
+ */
 export async function seedConsentDocument(
   client: pg.Client,
   tenantId: string,
@@ -25,7 +36,7 @@ export async function seedConsentDocument(
   const storageKey = `consent-wording-${id}`;
   await client.query(
     'insert into document (id, tenant_id, kind, storage_key, mime_type, sha256) ' +
-      "values ($1, $2, 'consent_text', $3, 'application/pdf', sha256($4::bytea))",
+      "values ($1, $2, 'consent', $3, 'application/pdf', sha256($4::bytea))",
     [id, tenantId, storageKey, storageKey],
   );
 }

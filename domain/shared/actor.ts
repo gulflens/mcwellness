@@ -67,7 +67,10 @@ export type Action =
   | { type: 'portal.access.manage' }
   | { type: 'kit.manage' }
   | { type: 'kit.read'; assignedToSelf: boolean }
-  | { type: 'routing.day.read'; scope: 'own' };
+  | { type: 'routing.day.read'; scope: 'own' }
+  | { type: 'assessment.read' }
+  | { type: 'assessment.record' }
+  | { type: 'assessment.file' };
 
 export type ActionContext = {
   /** The clients this actor's contact rows point at; resolved by the API for a client contact. */
@@ -282,6 +285,31 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
         action.scope === 'own' &&
         hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner')
       );
+    case 'assessment.read':
+      // A measurement and the files behind it (docs/SPEC/assessment.md
+      // sections 4 and 7). The practice's three oversight roles, and a
+      // practitioner — for a client on their own schedule, which is
+      // app.client_visible_to_practitioner's to decide and not this file's.
+      //
+      // **Finance and a client contact are absent, and that is the rule
+      // rather than an omission.** A household sees nothing of a measurement
+      // until a report is issued, because a qEEG export means nothing without
+      // the practitioner's reading of it; db/policies/assessment/access.sql
+      // refuses the rows underneath this, which is the answer that binds.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner');
+    case 'assessment.record':
+      // Taking a measurement, and correcting one. A practitioner, never an
+      // administrator: section 7.2 lets an admin file an export against an
+      // assessment a practitioner recorded, and lets nobody who did not take a
+      // measurement say that they did. Whether they hold a valid certification
+      // for that service today is asked in the database at the moment of
+      // writing (app.assessment_context, migration 500), never from a
+      // capability a token was minted with.
+      return hasRole(actor, 'practitioner', 'lead_practitioner');
+    case 'assessment.file':
+      // Filing the equipment's own export against a measurement somebody
+      // recorded. The reading audience, admin included (section 7.2).
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner');
     default: {
       const unreachable: never = action;
       return unreachable;
