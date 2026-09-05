@@ -17,9 +17,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * The scope is a fake because a service worker has no `window`: the module
  * registers its listeners on `self`, so `self` is replaced with an object that
  * collects them and each is then called with an event of the right shape.
+ *
+ * **`workbox-precaching` is the real thing here, not a mock.** It registers a
+ * fetch listener of its own, ahead of this file's, and a browser gives the
+ * first listener that calls `respondWith` the answer — so the two handlers'
+ * composed behaviour is the only behaviour that matters, and mocking the
+ * precache away proved the half that was never in doubt. The listeners are
+ * therefore collected as lists and run in the order they were registered, as
+ * a browser runs them.
  */
-
-vi.mock('workbox-precaching', () => ({ precacheAndRoute: vi.fn() }));
 
 type Listener = (event: Record<string, unknown>) => void;
 
@@ -27,11 +33,40 @@ type FakeCache = {
   put: (key: Request | string, response: Response) => Promise<void>;
   match: (key: Request | string) => Promise<Response | undefined>;
   add: (key: string) => Promise<void>;
+  keys: () => Promise<Request[]>;
+  delete: (key: Request | string) => Promise<boolean>;
   entries: Map<string, Response>;
 };
 
+/**
+ * The origin everything here is asked for. It is the environment's own rather
+ * than a name of our choosing, because `workbox-precaching` resolves every
+ * precached address against the global `location` — so a made-up origin would
+ * put the precache's list and these requests on two different hosts, and the
+ * composition this file exists to prove would never happen.
+ */
+const ORIGIN = location.origin;
+
+/**
+ * A precache list in the shape the build writes: hashed assets, and **no
+ * `index.html`**. That absence is the point (vite.shared.ts's `globIgnores`).
+ * The precache route answers a directory address by appending `index.html`, so
+ * a precached one would serve `/` from the cache before this worker's own
+ * listener ever ran, and rule 1's network-first navigation would not hold for
+ * the root — which is the address the app actually opens at.
+ */
+const MANIFEST = [{ url: '/assets/app-abcdef12.js', revision: null }];
+
+/** An install or activate event, of a class the precache will accept. */
+class FakeExtendableEvent {
+  readonly waited: Promise<unknown>[] = [];
+  waitUntil(work: Promise<unknown>): void {
+    this.waited.push(work);
+  }
+}
+
 const caches = new Map<string, FakeCache>();
-let listeners: Record<string, Listener>;
+let listeners: Record<string, Listener[]>;
 let fetchImpl: ReturnType<typeof vi.fn>;
 let posted: unknown[];
 
@@ -50,6 +85,8 @@ function fakeCache(): FakeCache {
     add: async (key) => {
       entries.set(new Request(key).url, new Response('the shell'));
     },
+    keys: async () => [...entries.keys()].map((url) => new Request(url)),
+    delete: async (key) => entries.delete(keyOf(key)),
   };
 }
 
@@ -66,15 +103,22 @@ const cacheStorage = {
   match: async () => undefined,
 };
 
-/** Runs the fetch listener and hands back what it decided to respond with. */
+/**
+ * Runs every fetch listener in the order they were registered and hands back
+ * what the first one to answer decided — which is what a browser does, and why
+ * the precache being registered first is the whole question here.
+ */
 async function handleFetch(request: Request): Promise<Response | 'not handled'> {
   let answered: Promise<Response> | null = null;
-  listeners.fetch?.({
-    request,
-    respondWith: (value: Promise<Response>) => {
-      answered = value;
-    },
-  } as unknown as Record<string, unknown>);
+  for (const listener of listeners.fetch ?? []) {
+    if (answered !== null) break;
+    listener({
+      request,
+      respondWith: (value: Promise<Response>) => {
+        answered = value;
+      },
+    } as unknown as Record<string, unknown>);
+  }
   if (answered === null) return 'not handled';
   return answered;
 }
@@ -87,20 +131,29 @@ beforeEach(async () => {
   fetchImpl = vi.fn(async (request: Request) => new Response(`live ${request.url}`));
 
   const scope = {
-    location: { origin: 'https://app.example.com' },
+    location: { origin: ORIGIN },
     addEventListener: (name: string, listener: Listener) => {
-      listeners[name] = listener;
+      (listeners[name] ??= []).push(listener);
     },
     skipWaiting: vi.fn(async () => undefined),
     clients: {
       claim: vi.fn(async () => undefined),
       matchAll: vi.fn(async () => [{ postMessage: (message: unknown) => posted.push(message) }]),
     },
-    __WB_MANIFEST: [],
+    // The precache reaches for the store through `self`, not the bare global.
+    caches: cacheStorage,
+    __WB_MANIFEST: MANIFEST,
   };
   vi.stubGlobal('self', scope);
   vi.stubGlobal('caches', cacheStorage);
   vi.stubGlobal('fetch', fetchImpl);
+  // Neither class exists outside a worker, and the precache checks both: it
+  // asks `options instanceof FetchEvent` to tell an event from a plain options
+  // object, and it insists an install event really is an `ExtendableEvent`. So
+  // the install and activate events below are instances of the one, and
+  // nothing is an instance of the other.
+  vi.stubGlobal('FetchEvent', class FetchEvent {});
+  vi.stubGlobal('ExtendableEvent', FakeExtendableEvent);
   // A service worker resolves a relative address against its own script URL;
   // Node's Request has no base at all and refuses one. The shim gives the
   // worker's own `new Request('/')` the base a browser would have given it.
@@ -109,35 +162,55 @@ beforeEach(async () => {
     'Request',
     class extends Real {
       constructor(input: RequestInfo | URL, init?: RequestInit) {
-        super(
-          typeof input === 'string' ? new URL(input, 'https://app.example.com').toString() : input,
-          init,
-        );
+        super(typeof input === 'string' ? new URL(input, ORIGIN).toString() : input, init);
       }
     },
   );
   await import('./sw');
-  // Install and activate, as a browser would.
-  const waited: Promise<unknown>[] = [];
-  listeners.install?.({ waitUntil: (work: Promise<unknown>) => waited.push(work) } as never);
-  listeners.activate?.({ waitUntil: (work: Promise<unknown>) => waited.push(work) } as never);
-  await Promise.all(waited);
+  // Install and activate, as a browser would — every listener, the precache's
+  // own included.
+  const event = new FakeExtendableEvent();
+  for (const listener of listeners.install ?? []) listener(event as never);
+  for (const listener of listeners.activate ?? []) listener(event as never);
+  await Promise.all(event.waited);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const day = () => new Request('https://app.example.com/api/appointments?date=2026-09-07&scope=own');
+const day = () => new Request(`${ORIGIN}/api/appointments?date=2026-09-07&scope=own`);
 
 describe('rule 1: a navigation falls back to the cached shell', () => {
   it('serves the shell when the network is gone', async () => {
-    const navigation = new Request('https://app.example.com/today/check-in');
+    const navigation = new Request(`${ORIGIN}/today/check-in`);
     Object.defineProperty(navigation, 'mode', { value: 'navigate' });
     fetchImpl.mockRejectedValueOnce(new Error('offline'));
     const response = await handleFetch(navigation);
     expect(response).not.toBe('not handled');
     expect(await (response as Response).text()).toBe('the shell');
+  });
+
+  it('holds for the root, with the real precache route registered ahead of it', async () => {
+    // The precache is registered first and would answer `/` from its own cache
+    // if `index.html` were in its list, before this worker's listener ever ran.
+    // It is not in the list, so the root is network-first like every other
+    // navigation — and the shell is what a lift gets.
+    expect((listeners.fetch ?? []).length).toBeGreaterThan(1);
+
+    const root = new Request(`${ORIGIN}/`);
+    Object.defineProperty(root, 'mode', { value: 'navigate' });
+
+    // With no signal, the shell the install put there — not a precached
+    // index.html, and not the browser's offline page.
+    fetchImpl.mockRejectedValueOnce(new Error('offline'));
+    const offline = await handleFetch(root);
+    expect(await (offline as Response).text()).toBe('the shell');
+
+    // And with signal, the network: network-first, which is the half a
+    // cache-first precache route would have taken away.
+    const online = await handleFetch(root);
+    expect(await (online as Response).text()).toBe(`live ${ORIGIN}/`);
   });
 });
 
@@ -150,7 +223,7 @@ describe('rule 3: the named reads keep their last good answer', () => {
 
     // A day never seen online has nothing to fall back to, and says so rather
     // than answering with a different day's sheet.
-    const other = new Request('https://app.example.com/api/appointments?date=2026-09-08&scope=own');
+    const other = new Request(`${ORIGIN}/api/appointments?date=2026-09-08&scope=own`);
     await expect(handleFetch(other)).rejects.toThrow('offline');
   });
 
@@ -161,7 +234,7 @@ describe('rule 3: the named reads keep their last good answer', () => {
       '/api/routing/day?date=2026-09-07',
       '/api/routing/day-picture?date=2026-09-07&v=3-abc',
     ]) {
-      await handleFetch(new Request(`https://app.example.com${path}`));
+      await handleFetch(new Request(`${ORIGIN}${path}`));
     }
     const reads = caches.get('mcwellness-reads-v1');
     expect([...(reads?.entries.keys() ?? [])]).toHaveLength(4);
@@ -182,7 +255,7 @@ describe('what is never cached, ever', () => {
       ['POST', '/api/sessions/00000000-0000-4000-8000-000000000001/close'],
     ] as const;
     for (const [method, path] of never) {
-      const answer = await handleFetch(new Request(`https://app.example.com${path}`, { method }));
+      const answer = await handleFetch(new Request(`${ORIGIN}${path}`, { method }));
       expect(answer, `${method} ${path}`).toBe('not handled');
     }
     expect(caches.get('mcwellness-reads-v1')).toBeUndefined();
@@ -201,10 +274,12 @@ describe('the two messages', () => {
     expect(caches.get('mcwellness-reads-v1')?.entries.size).toBe(1);
 
     const waited: Promise<unknown>[] = [];
-    listeners.message?.({
-      data: { type: 'forget-reads' },
-      waitUntil: (work: Promise<unknown>) => waited.push(work),
-    } as never);
+    for (const listener of listeners.message ?? []) {
+      listener({
+        data: { type: 'forget-reads' },
+        waitUntil: (work: Promise<unknown>) => waited.push(work),
+      } as never);
+    }
     await Promise.all(waited);
 
     expect(caches.has('mcwellness-reads-v1')).toBe(false);
@@ -215,15 +290,19 @@ describe('the two messages', () => {
 
   it('wakes the page to flush rather than re-implementing the outbox', async () => {
     const waited: Promise<unknown>[] = [];
-    listeners.sync?.({
-      tag: 'session-outbox',
-      waitUntil: (work: Promise<unknown>) => waited.push(work),
-    } as never);
+    for (const listener of listeners.sync ?? []) {
+      listener({
+        tag: 'session-outbox',
+        waitUntil: (work: Promise<unknown>) => waited.push(work),
+      } as never);
+    }
     await Promise.all(waited);
     expect(posted).toEqual([{ type: 'flush-outbox' }]);
 
     posted.length = 0;
-    listeners.sync?.({ tag: 'something-else', waitUntil: () => undefined } as never);
+    for (const listener of listeners.sync ?? []) {
+      listener({ tag: 'something-else', waitUntil: () => undefined } as never);
+    }
     expect(posted).toEqual([]);
   });
 });

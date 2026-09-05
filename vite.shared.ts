@@ -38,6 +38,15 @@ export const plugins = [
       // The fonts are the reason the precache matters: an Arabic subset never
       // fetched online is a screen with no Arabic in it, in a basement.
       globPatterns: ['**/*.{js,css,html,woff2,svg}'],
+      // Except the page itself. The precache route is cache-first and is
+      // registered before the worker's own fetch listener, and it answers a
+      // directory address by appending `index.html` — so precaching the page
+      // would serve `/` from the cache and rule 1's network-first navigation
+      // would not hold for the root, which is the address the app opens at.
+      // The SHELL cache holds the page instead (app/shell/sw.ts's install),
+      // which gives the same answer with no signal and asks the network first
+      // when there is one.
+      globIgnores: ['index.html'],
       // A classic worker, not a module one. A module worker would have to be
       // registered with `{ type: 'module' }`, and iOS Safari — which is the
       // browser this whole section exists for (spec section 3.3) — is the one
