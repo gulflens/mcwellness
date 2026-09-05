@@ -519,3 +519,57 @@ round only closed the half-inch left between the script and the document. A
 staging render must read `.env.staging` rather than the laptop's `.env`, which
 is why `docs/STAGING.md` writes that one command out in full, and it now says
 so rather than leaving a reader to notice.
+
+## Round 25, 2026-09-05 (the portal's doors, written down before the builder starts)
+
+Piece seven is the first piece built under the cost rules of
+`docs/HANDOVER.md` section 6, and this round is documentation only: the
+integrator read what the portal must stand on and wrote it down, so the
+builder reads files rather than a long prompt.
+
+### 1. The draft spec of 2026-09-02 is superseded
+
+`docs/SPEC/client-portal.md` on the unmerged `client-portal` branch was
+written before any of pieces one to six existed: it planned a policy folder to
+give a contact rows the `client_contact` arms in `db/policies/client/readers.sql`
+and `db/policies/billing/ledger.sql` have since granted, it had no sign-in door,
+and its screens were the record's rather than the plan's five. The new file on
+`main` replaces it; the branch stays in history and is not merged. Its four
+change requests (01 to 04) are folded into `client-portal-05.md`.
+
+### 2. What the portal reads today, and the two arms it lacks
+
+Every table the five screens need already admits a contact for their own
+client, with one exception in each direction. `appointment` has no contact arm
+in `scheduling_read_scope` (the scheduling spec's section 2 promised one for
+"Stage 2"), and `contact` has no self-update arm in `client_record_update_writers`
+(client-record's section 2 promised the same). Both are one line each and both
+are in another stream's file; neither stream has a session open, so the
+integrator authorised the portal's builder to add them, each with a deny test,
+in `client-portal-05.md` item 6. The column boundary on the self-update is a
+guard trigger in the portal's own range, the pattern of
+`app.guard_location_notes` (migration 100).
+
+### 3. The plan's builder note and the map disagreed; the map wins
+
+The plan named a worktree `portal` owning `app/portal/**`. The ownership map
+has said `client-portal` owning `app/client/**` since the scaffold, and the
+worktree script knows only the map's names and ports. The row is widened for
+the piece (an admin page, a small domain, a policy folder) and the name is
+unchanged.
+
+### 4. Shared-zone edits ride in the piece's pull request
+
+Eight items, listed in `client-portal-05.md`, would ordinarily be a trunk
+round of their own. Under cost rule 6 they are applied by the portal's builder
+in the same pull request, each named in its body, and reviewed there once.
+The only trunk-range migration among them, `910_practice_whatsapp.sql`, sits
+in the first half of the range because it alters `tenant`.
+
+### 5. Two things the plan carried from the old app that the record has no field for
+
+A guardian and an emergency-contact field on the Family screen. The platform's
+`contact` row has a relationship and a legal-guardian flag and nothing else of
+the kind; adding a field is a personal-data decision with a stated need
+(`.claude/rules/compliance.md`), so it is left out and named in the spec's
+section 12 for the operator to ask for.
