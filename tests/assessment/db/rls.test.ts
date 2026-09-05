@@ -532,14 +532,18 @@ describe('the door the recording gate reads', () => {
   type Context = {
     client_found: boolean;
     visible: boolean;
+    practitioner_id: string | null;
+    credential_ok: boolean;
+    has_date_of_birth: boolean;
+    is_minor: boolean;
     active_consent_purposes: string[];
   };
 
   async function contextFor(userId: string, roles: string, clientId: string): Promise<Context> {
     return as(userId, roles, async () => {
       const { rows } = await client.query<Context>(
-        'select client_found, visible, active_consent_purposes ' +
-          "from app.assessment_context($1, 'brain-map')",
+        'select client_found, visible, practitioner_id, credential_ok, has_date_of_birth, ' +
+          "is_minor, active_consent_purposes from app.assessment_context($1, 'brain-map')",
         [clientId],
       );
       return rows[0]!;
@@ -582,6 +586,46 @@ describe('the door the recording gate reads', () => {
     );
     expect(answer.visible).toBe(true);
     expect(answer.active_consent_purposes).toEqual(['home_visit']);
+  });
+
+  it('says nothing but found and visible about a record out of reach', async () => {
+    // A client of this practice, off this practitioner's schedule. The routes
+    // discard these columns on a refusal today, so nothing reaches a response
+    // either way — but a door that hands out what it has and trusts its
+    // callers to drop it is one edit away from being a door that leaks. 301
+    // and 306 both blank; so does this one.
+    await client.query('savepoint out_of_reach');
+    try {
+      await client.query('update client set date_of_birth = $2 where id = $1', [
+        OFF_SCHEDULE_CLIENT,
+        '2016-01-01',
+      ]);
+      const answer = await contextFor(
+        MORE_IDS.practitionerUserA,
+        'practitioner',
+        OFF_SCHEDULE_CLIENT,
+      );
+      expect(answer.client_found).toBe(true);
+      expect(answer.visible).toBe(false);
+      expect(answer.practitioner_id).toBeNull();
+      expect(answer.credential_ok).toBe(false);
+      // The date of birth is there, and is not handed over. Nor is the fact
+      // that the person it belongs to is a child.
+      expect(answer.has_date_of_birth).toBe(false);
+      expect(answer.is_minor).toBe(false);
+      expect(answer.active_consent_purposes).toEqual([]);
+    } finally {
+      await client.query('rollback to savepoint out_of_reach');
+    }
+  });
+
+  it('says nothing at all about a client of another practice', async () => {
+    const answer = await contextFor(MORE_IDS.practitionerUserA, 'practitioner', IDS.clientB);
+    expect(answer.client_found).toBe(false);
+    expect(answer.visible).toBe(false);
+    expect(answer.practitioner_id).toBeNull();
+    expect(answer.has_date_of_birth).toBe(false);
+    expect(answer.active_consent_purposes).toEqual([]);
   });
 
   it('counts one that has not run out, and one with no end at all', async () => {

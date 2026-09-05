@@ -294,7 +294,6 @@ begin
   end if;
 
   client_found := coalesce(v_client_found, false);
-  practitioner_id := case when client_found then v_practitioner end;
   -- Who may reach this record at all: the practice's three oversight roles,
   -- and a practitioner for a client on their own schedule (ninety days back,
   -- thirty forward, confirmed visits only —
@@ -305,16 +304,22 @@ begin
     or app.actor_has_role('lead_practitioner')
     or (v_practitioner is not null and app.client_visible_to_practitioner(p_client_id))
   );
-  credential_ok := client_found and v_credential_ok;
-  has_date_of_birth := client_found and v_dob is not null;
+  -- **A record this caller may not reach answers `client_found` and `visible`
+  -- and nothing else**, the rule 301 and 306 both keep. A client of another
+  -- practice is exactly as absent as one that does not exist; a client of this
+  -- one, off this practitioner's schedule, gives up no date of birth, no
+  -- consent list and no answer about anybody's certification. The routes
+  -- discard these columns on a refusal today, so nothing reaches a response
+  -- either way — but a door that hands out what it has and trusts its callers
+  -- to drop it is one edit away from being a door that leaks.
+  practitioner_id := case when visible then v_practitioner end;
+  credential_ok := visible and v_credential_ok;
+  has_date_of_birth := visible and v_dob is not null;
   -- "Minor" is judged on today's date in the practice's own zone, matching
   -- domain/session/canCheckIn.ts's own PRACTICE_TIME_ZONE.
-  is_minor := client_found
+  is_minor := visible
     and coalesce(v_dob is not null and v_dob > (v_today - interval '18 years')::date, false);
-  -- A client of another practice is exactly as absent as one that does not
-  -- exist: every other column comes back empty, so a caller can never probe an
-  -- id and learn that it is at least one of theirs (301's own rule).
-  active_consent_purposes := case when client_found then v_purposes else '{}'::text[] end;
+  active_consent_purposes := case when visible then v_purposes else '{}'::text[] end;
 
   return next;
 end
