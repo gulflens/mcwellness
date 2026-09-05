@@ -88,6 +88,9 @@ export const GATE_MESSAGES: Record<string, string> = {
   no_practitioner_row: 'You are not set up as a practitioner of this practice.',
   credential_invalid: 'Your certification for this service is not valid today.',
   consent_missing_participation: 'This household has no active agreement to take part.',
+  date_of_birth_unknown:
+    'No date of birth is recorded, so this app cannot tell whether a guardian must agree. ' +
+    'Ask the practice to add it.',
   consent_missing_minor_participation:
     'A guardian has not agreed on this child’s behalf. That agreement is its own.',
   consent_missing_home_visit: 'This household has not agreed to a home visit.',

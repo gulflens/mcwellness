@@ -65,6 +65,7 @@ export type RecordRefusal =
   | 'no_practitioner_row'
   | 'credential_invalid'
   | 'consent_missing_participation'
+  | 'date_of_birth_unknown'
   | 'consent_missing_minor_participation'
   | 'consent_missing_home_visit';
 
@@ -90,10 +91,19 @@ export function refusalsForRecording(
   if (!context.activeConsentPurposes.includes('participation')) {
     refusals.push('consent_missing_participation');
   }
+  // **No date of birth is a refusal, not an adult.** Without one the app
+  // cannot tell whether a guardian's own agreement is needed, and treating
+  // the person as an adult decides that question the dangerous way round.
+  // `canCheckIn` fails closed here for the same reason and in the same order
+  // (domain/session/canCheckIn.ts), and this practice sees children as the
+  // common case rather than the edge.
+  //
   // A guardian consents for a minor, and the purpose is its own row: a
   // household that agreed to take part has not thereby agreed on a child's
   // behalf (.claude/rules/compliance.md).
-  if (context.isMinor && !context.activeConsentPurposes.includes('minor_participation')) {
+  if (!context.hasDateOfBirth) {
+    refusals.push('date_of_birth_unknown');
+  } else if (context.isMinor && !context.activeConsentPurposes.includes('minor_participation')) {
     refusals.push('consent_missing_minor_participation');
   }
   if (deliveryMode === 'home' && !context.activeConsentPurposes.includes('home_visit')) {

@@ -135,6 +135,8 @@ async function seedHousehold(
   options: {
     consents?: readonly ('participation' | 'minor_participation' | 'home_visit')[];
     minor?: boolean;
+    /** Null leaves the record without one, which is a refusal of its own. */
+    dateOfBirth?: string | null;
     credentialTo?: string | null;
     familyName?: string;
   } = {},
@@ -169,7 +171,11 @@ async function seedHousehold(
   await seedClient(owner, IDS.tenantA, clientId, IDS.ownerA, options.familyName ?? 'Harbour');
   await owner.query('update client set date_of_birth = $2 where id = $1', [
     clientId,
-    options.minor ? '2016-01-01' : '1990-01-01',
+    options.dateOfBirth === undefined
+      ? options.minor
+        ? '2016-01-01'
+        : '1990-01-01'
+      : options.dateOfBirth,
   ]);
   await seedContact(owner, { id: contactId, tenantId: IDS.tenantA, clientId });
   const purposes = options.consents ?? ['participation', 'home_visit'];
@@ -364,6 +370,17 @@ describe('recording a measurement', () => {
     const res = await record(household);
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ code: 'consent_missing_home_visit' });
+  });
+
+  it('refuses a client with no date of birth rather than assuming an adult', async () => {
+    // Without one the app cannot tell whether the guardian's own agreement is
+    // needed, and treating the person as an adult decides that question the
+    // dangerous way round. canCheckIn fails closed here too.
+    const household = await seedHousehold('62', { dateOfBirth: null });
+    const res = await record(household);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'date_of_birth_unknown' });
+    expect(await refusals(household.clientId)).toContain('date_of_birth_unknown');
   });
 
   it('refuses a lapsed certification, with the reason named', async () => {
