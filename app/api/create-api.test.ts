@@ -66,11 +66,16 @@ describe('the API', () => {
 
     expect(response.status).toBe(503);
     expect(await response.text()).toBe('{"ok":false}');
-    // The driver's own words stay on this process's stderr, where the operator
-    // reads them, and even there it is the shape and never the message.
+    // One line on this process's stderr, in the shape every other failure
+    // writes, and even there it is the class and never the message.
     expect(stderr).toHaveBeenCalledTimes(1);
     const line = String(stderr.mock.calls[0]?.[0]);
-    expect(JSON.parse(line)).toEqual({ health: 'deep', name: 'AggregateError' });
+    expect(JSON.parse(line)).toMatchObject({
+      requestId: null,
+      route: '/api/health/deep',
+      status: 503,
+      name: 'AggregateError',
+    });
     expect(line).not.toContain('ECONNREFUSED');
   });
 
