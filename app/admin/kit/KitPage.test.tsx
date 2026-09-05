@@ -35,6 +35,17 @@ const DUBAI = 'Asia/Dubai';
 const IN_DATE = new Date(Date.now() + 200 * 86_400_000).toISOString();
 const LAPSED = new Date(Date.now() - 5 * 86_400_000).toISOString();
 
+/**
+ * Dubai midnights, which is how the route stores a calibration date
+ * (`atPracticeMidnight` in `app/api/kit/routes.ts`). They are written as the
+ * instants they are, because the answer's schema is `z.iso.datetime()` and
+ * takes Z and not an offset — but the point is the four hours: read in UTC
+ * these are the day before, so the drawer showing the 5th is the practice's
+ * zone doing its work and nothing else.
+ */
+const CALIBRATED_2026_01_05 = '2026-01-04T20:00:00.000Z'; // 2026-01-05T00:00:00+04:00
+const CALIBRATED_2025_01_05 = '2025-01-04T20:00:00.000Z'; // 2025-01-05T00:00:00+04:00
+
 const KIT = [
   {
     id: '00000009-0000-4000-8000-000000000001',
@@ -44,7 +55,7 @@ const KIT = [
     status: 'active',
     assignedPractitionerId: '00000005-0000-4000-8000-000000000001',
     assignedTo: 'Rowan Meadow',
-    lastCalibratedAt: '2026-01-05T00:00:00.000Z',
+    lastCalibratedAt: CALIBRATED_2026_01_05,
     calibrationDueAt: IN_DATE,
   },
   {
@@ -55,7 +66,7 @@ const KIT = [
     status: 'active',
     assignedPractitionerId: null,
     assignedTo: null,
-    lastCalibratedAt: '2025-01-05T00:00:00.000Z',
+    lastCalibratedAt: CALIBRATED_2025_01_05,
     calibrationDueAt: LAPSED,
   },
   {
@@ -187,7 +198,9 @@ describe('the drawer', () => {
 
     // The dates are read in the practice's own zone. The register stores a
     // calibration as Dubai midnight, so a field filled from the UTC date of
-    // that instant would show — and send back — the day before.
+    // that instant would show — and send back — the day before. The fixture is
+    // a Dubai midnight for exactly that reason: read in UTC it is the 4th, so
+    // this line fails if the zone is ever dropped.
     expect((screen.getByLabelText('Last calibrated') as HTMLInputElement).value).toBe('2026-01-05');
     const due = screen.getByLabelText('Calibration runs out') as HTMLInputElement;
     expect(due.value).toBe(new Date(IN_DATE).toLocaleDateString('en-CA', { timeZone: DUBAI }));
