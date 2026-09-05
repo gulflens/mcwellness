@@ -39,4 +39,14 @@ create policy scheduling_read_scope on public.appointment as restrictive for sel
       where p.user_id = nullif(current_setting('app.actor_id', true), '')::uuid
         and p.tenant_id = app.current_tenant_id()
     )
+    -- The household's own visits (docs/SPEC/client-portal.md section 6.5,
+    -- applied by the portal piece under docs/CHANGE-REQUESTS/client-portal-05.md
+    -- item 6). A client contact sees the appointments of the clients they are a
+    -- contact of, and no others: app.actor_is_contact_of (100) resolves that
+    -- from the actor stamp, never from anything a request claims. What the
+    -- portal then shows of them is narrower still — no practitioner, no note,
+    -- no coordinate (section 3.2) — but that is the route's discipline and
+    -- this is the floor beneath it. app.erase_client clears contact.user_id, so
+    -- an erased client's contacts lose this arm with the erasure itself.
+    or (app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id))
   );
