@@ -6,7 +6,7 @@ import pg from 'pg';
 import { createPool } from '../../../app/api/_middleware/db';
 import { localDiskStorage } from '../../../app/api/_middleware/storage';
 import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
-import { createApi } from '../../../app/api/create-api';
+import { createApi, type ApiOptions } from '../../../app/api/create-api';
 import { fakeAuthAdmin, type AuthAdminProvider } from '../../../app/api/portal/mount';
 import {
   freshDatabase,
@@ -546,6 +546,14 @@ export type PortalHarness = {
   api: ReturnType<typeof createApi>;
   storage: ReturnType<typeof localDiskStorage>;
   authAdmin: AuthAdminProvider;
+  /**
+   * The same API over the same fixture with an option or two the server would
+   * set differently — a deployment that is not a laptop, a public URL that was
+   * never configured, a seam that counts what the door asks of it.
+   */
+  apiWith: (overrides: Partial<ApiOptions>) => ReturnType<typeof createApi>;
+  /** A bearer header for that person, for a request built by hand. */
+  authHeader: (authId: string) => Promise<Record<string, string>>;
   /** A signed request as the person whose auth id is given. */
   callAs: (
     method: 'GET' | 'POST' | 'PATCH',
@@ -575,13 +583,19 @@ export async function startPortalHarness(
     signingSecret: Buffer.alloc(32, 9),
   });
   const authAdmin = fakeAuthAdmin();
-  const api = createApi({
+  const options: ApiOptions = {
     pool,
     verifier: createTokenVerifier({ issuer: PORTAL_ISSUER, secret: PORTAL_SECRET }),
     now,
     storage,
     authAdmin,
-  });
+    // What the server passes, from the environment it is running in. The
+    // database tests refuse to run outside development (tests/db/helpers.ts),
+    // so this is 'development' and the door and the invitation route read it
+    // as such.
+    appEnv: process.env.APP_ENV,
+  };
+  const api = createApi(options);
 
   const key = new TextEncoder().encode(PORTAL_SECRET);
   async function mint(sub: string): Promise<string> {
@@ -601,6 +615,12 @@ export async function startPortalHarness(
     api,
     storage,
     authAdmin,
+    apiWith(overrides) {
+      return createApi({ ...options, ...overrides });
+    },
+    async authHeader(authId) {
+      return { authorization: `Bearer ${await mint(authId)}` };
+    },
     async callAs(method, path, authId, body) {
       const headers: Record<string, string> = { authorization: `Bearer ${await mint(authId)}` };
       const init: RequestInit = { method, headers };

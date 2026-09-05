@@ -10,6 +10,7 @@ import type {
   OfficeRequestsResponse,
   VisitsResponse,
 } from '../../../app/api/portal/schema';
+import type { AuthAdminProvider } from '../../../app/api/portal/mount';
 import { IDS } from '../../db/helpers';
 import {
   PORTAL,
@@ -738,6 +739,66 @@ describe('the door, which is the one route outside the fence', () => {
       password: CHOSEN,
     });
     expect(second.status).toBe(410);
+  });
+
+  it('resets the password on an account that already signs in, and never rebinds it', async () => {
+    // The other half of the door (docs/SPEC/client-portal.md section 7): the
+    // adult has been through it once, so a fresh link is a password_reset and
+    // must move her password rather than mint a second sign-in and repoint the
+    // account at it. The seam is counted here, because "which half ran" is
+    // exactly the thing that cannot be read back off the row afterwards.
+    const asked = { created: 0, setPassword: [] as string[] };
+    const counting: AuthAdminProvider = {
+      ...h.authAdmin,
+      async createUser(input) {
+        asked.created += 1;
+        return h.authAdmin.createUser(input);
+      },
+      async setPassword(authId, password) {
+        asked.setPassword.push(authId);
+        return h.authAdmin.setPassword(authId, password);
+      },
+    };
+    const api = h.apiWith({ authAdmin: counting });
+    const office = {
+      'content-type': 'application/json',
+      ...(await h.authHeader(PORTAL.adminAuth)),
+    };
+
+    const issued = (await (
+      await api.request(`/api/portal/access/${PORTAL.adultContact}/invite`, {
+        method: 'POST',
+        headers: office,
+        body: '{}',
+      })
+    ).json()) as InviteResponse;
+    expect(issued.kind).toBe('password_reset');
+
+    const res = await api.request('/api/portal/invite/redeem', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        token: issued.url.split('/').pop() ?? '',
+        email: 'saffron.dune@example.com',
+        password: CHOSEN,
+      }),
+    });
+    expect(res.status).toBe(200);
+    // setPassword on the sign-in that already stands, and nothing created.
+    expect(asked.setPassword).toEqual([PORTAL.adultAuth]);
+    expect(asked.created).toBe(0);
+
+    const account = await h.owner.query<{ auth_id: string; email: string | null }>(
+      'select auth_id, email from app_user where id = $1',
+      [PORTAL.adultUser],
+    );
+    expect(account.rows[0]?.auth_id).toBe(PORTAL.adultAuth);
+    // And the link is spent, exactly as a first sign-in's would be.
+    const spent = await h.owner.query<{ used_at: Date | null }>(
+      'select used_at from portal_invite where contact_id = $1 order by created_at desc limit 1',
+      [PORTAL.adultContact],
+    );
+    expect(spent.rows[0]?.used_at).not.toBeNull();
   });
 
   it('refuses a password shorter than twelve characters, without saying more', async () => {

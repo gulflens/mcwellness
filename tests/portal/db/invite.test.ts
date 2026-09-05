@@ -106,11 +106,20 @@ async function refusedAtTheDoor(sql: string, params: unknown[]): Promise<string>
 
 const REDEEM = 'select app.redeem_portal_invite($1, $2, $3)';
 
-async function statusOf(hash: Buffer): Promise<string> {
+type InviteAnswer = { state: string; kind: string | null; auth_id: string | null };
+
+/** Everything the function will say about a link: the word, and the two facts. */
+async function answerFor(hash: Buffer): Promise<InviteAnswer> {
   const { rows } = await atTheDoor(() =>
-    owner.query<{ state: string }>('select app.portal_invite_status($1) as state', [hash]),
+    owner.query<InviteAnswer>('select state, kind, auth_id from app.portal_invite_status($1)', [
+      hash,
+    ]),
   );
-  return rows[0]?.state ?? '';
+  return rows[0] ?? { state: '', kind: null, auth_id: null };
+}
+
+async function statusOf(hash: Buffer): Promise<string> {
+  return (await answerFor(hash)).state;
 }
 
 beforeAll(async () => {
@@ -134,11 +143,33 @@ describe('app.portal_invite_status: one word, to somebody who is not signed in',
     });
   });
 
-  it('says valid while the link is alive', async () => {
+  it('says valid while the link is alive, with the two facts the door acts on', async () => {
     await rolledBack(owner, async () => {
       const { hash } = token();
-      await writeInvite({ id: INVITE, hash });
-      expect(await statusOf(hash)).toBe('valid');
+      await writeInvite({ id: INVITE, hash, kind: 'password_reset' });
+      await owner.query('update app_user set auth_id = $1 where id = $2', [
+        AUTH_ONE,
+        PORTAL.motherUser,
+      ]);
+      // Which half of the seam the door runs is decided here and nowhere else:
+      // under app_role with nothing stamped it can read neither table itself.
+      expect(await answerFor(hash)).toMatchObject({
+        state: 'valid',
+        kind: 'password_reset',
+        auth_id: AUTH_ONE,
+      });
+    });
+  });
+
+  it('says nothing about the account behind a link that is dead', async () => {
+    await rolledBack(owner, async () => {
+      const { hash } = token();
+      await writeInvite({ id: INVITE, hash, kind: 'password_reset', usedAt: new Date() });
+      await owner.query('update app_user set auth_id = $1 where id = $2', [
+        AUTH_ONE,
+        PORTAL.motherUser,
+      ]);
+      expect(await answerFor(hash)).toMatchObject({ state: 'used', kind: null, auth_id: null });
     });
   });
 

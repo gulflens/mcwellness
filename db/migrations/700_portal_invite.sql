@@ -20,7 +20,8 @@
 -- signing in belongs to, and — from outside the fence, with nobody signed in
 -- at all — whether a link works and, if it does, whose account it opens. Each
 -- pins its search_path, each is revoked from public, and the two that take a
--- token take its hash and answer either one word or one id.
+-- token take its hash and answer either a word about the link — with, only
+-- when the link is live, the two facts the door has to act on — or one id.
 --
 -- Needs: 000 (schema app, app.current_tenant_id, app.set_updated_at), 010
 -- (tenant), 020 (app_user, locale), 060 (client, contact), 080 (app.audit_row),
@@ -116,16 +117,26 @@ revoke execute on function app.portal_client_ids() from public;
 grant execute on function app.portal_client_ids() to app_role;
 
 ------------------------------------------------------------------------------
--- 2. app.portal_invite_status() — one word about a link, to somebody who is
---    not signed in.
+-- 2. app.portal_invite_status() — what the door may know about a link, to
+--    somebody who is not signed in.
 --
 --    The door (POST /api/portal/invite/redeem) runs with no tenant and no
 --    actor stamped, because the person on the other end of it has no account
---    yet. So this reads without a tenant filter and answers a word and
---    nothing else: never whose invitation it is, never when it was issued,
---    never which contact it names. The route turns 'unknown' into a 404 and
---    the other three into a 410, so a caller cannot tell a link that never
---    existed from one that has been revoked.
+--    yet. Under app_role with nothing stamped every row in this database is
+--    invisible (095), which is the point: the door cannot read portal_invite
+--    or app_user for itself, and this function is how it learns the three
+--    facts it must act on and no others — the state, and, only when the state
+--    is 'valid', which kind of link it is and whether a sign-in already stands
+--    behind the account. Never whose invitation it is, never when it was
+--    issued, never which contact it names. A dead link answers its word with
+--    two nulls beside it, so nothing about the account leaks to a caller
+--    holding a spent or invented token.
+--
+--    **The kind and the standing auth id decide which half of the seam runs**
+--    (docs/SPEC/client-portal.md sections 7 and 8): a first sign-in creates
+--    one, a password reset moves the password on the one already there. The
+--    door read them with a join of its own before, which returned no row ever
+--    and quietly made every redemption a creation.
 --
 --    The hash is unique per practice rather than globally, so in principle two
 --    practices could hold one; with 32 random bytes they will not, and the
@@ -140,38 +151,50 @@ grant execute on function app.portal_client_ids() to app_role;
 --    and this is the floor beneath it — the one thing standing between a
 --    hand-written portal_invite row and somebody else's console.
 ------------------------------------------------------------------------------
-create function app.portal_invite_status(p_token_hash bytea) returns text
+create function app.portal_invite_status(p_token_hash bytea)
+returns table (state text, kind text, auth_id uuid)
 language plpgsql stable security definer
 set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_invite record;
+  v_state  text;
 begin
-  select used_at, revoked_at, expires_at, user_id into v_invite
-    from public.portal_invite
-   where token_hash = p_token_hash
-   order by created_at desc, id
+  select pi.used_at, pi.revoked_at, pi.expires_at, pi.user_id,
+         pi.kind::text as kind, u.auth_id
+    into v_invite
+    from public.portal_invite pi
+    join public.app_user u on u.id = pi.user_id
+   where pi.token_hash = p_token_hash
+   order by pi.created_at desc, pi.id
    limit 1;
   if not found then
-    return 'unknown';
+    return query select 'unknown'::text, null::text, null::uuid;
+    return;
   end if;
+
   if exists (
     select 1 from public.user_role ur
      where ur.user_id = v_invite.user_id
        and ur.role <> 'client_contact'
   ) then
-    return 'not_a_household';
+    v_state := 'not_a_household';
+  elsif v_invite.revoked_at is not null then
+    v_state := 'revoked';
+  elsif v_invite.used_at is not null then
+    v_state := 'used';
+  elsif v_invite.expires_at <= now() then
+    v_state := 'expired';
+  else
+    v_state := 'valid';
   end if;
-  if v_invite.revoked_at is not null then
-    return 'revoked';
+
+  if v_state <> 'valid' then
+    -- A dead link says one word and nothing about the account behind it.
+    return query select v_state, null::text, null::uuid;
+    return;
   end if;
-  if v_invite.used_at is not null then
-    return 'used';
-  end if;
-  if v_invite.expires_at <= now() then
-    return 'expired';
-  end if;
-  return 'valid';
+  return query select v_state, v_invite.kind, v_invite.auth_id;
 end
 $$;
 revoke execute on function app.portal_invite_status(bytea) from public;

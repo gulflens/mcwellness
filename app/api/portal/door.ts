@@ -94,11 +94,19 @@ export function mountPortalDoor(api: Hono<ApiEnv>, options: PortalDoorOptions): 
       await client.query('set local role app_role');
       await client.query(STAMP_REQUEST_ID, [requestId]);
 
-      const state = await client.query<{ state: string }>(
-        'select app.portal_invite_status($1) as state',
-        [tokenHash],
-      );
-      const word = state.rows[0]?.state ?? 'unknown';
+      // One question, one answer: the state, and — only when the link is live
+      // — which kind it is and whether a sign-in already stands behind the
+      // account. Nothing here reads a table: with no tenant and no actor
+      // stamped every row is invisible to this transaction (migration 095),
+      // which is why the two facts arrive through the definer function rather
+      // than through a join of the door's own.
+      const state = await client.query<{
+        state: string;
+        kind: string | null;
+        auth_id: string | null;
+      }>('select state, kind, auth_id from app.portal_invite_status($1)', [tokenHash]);
+      const invite = state.rows[0];
+      const word = invite?.state ?? 'unknown';
       if (word !== 'valid') {
         await client.query('rollback');
         inTransaction = false;
@@ -112,14 +120,8 @@ export function mountPortalDoor(api: Hono<ApiEnv>, options: PortalDoorOptions): 
       }
 
       // Which half of the seam this is depends on whether the account already
-      // has a sign-in behind it, which is what `kind` on the row records.
-      const kindRow = await client.query<{ kind: string; auth_id: string | null }>(
-        'select kind::text as kind, auth_id from portal_invite pi ' +
-          'join app_user u on u.id = pi.user_id ' +
-          'where pi.token_hash = $1 order by pi.created_at desc, pi.id limit 1',
-        [tokenHash],
-      );
-      const existingAuthId = kindRow.rows[0]?.auth_id ?? null;
+      // has a sign-in behind it.
+      const existingAuthId = invite?.auth_id ?? null;
 
       let authId: string;
       if (existingAuthId === null) {
