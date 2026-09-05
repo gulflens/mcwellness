@@ -157,7 +157,6 @@ export function RecordDrawer({
           conditionNote: conditionNote.trim() === '' ? null : conditionNote.trim(),
           referenceAgeYears: referenceAge.trim() === '' ? null : Number(referenceAge),
           referenceSex: referenceSex === '' ? null : referenceSex,
-          deliveryMode: 'home',
         }),
       });
       if (res.ok) {

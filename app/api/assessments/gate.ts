@@ -78,10 +78,7 @@ export type RecordRefusal =
  * lapsed and then, on fixing it, told the consent is missing has been refused
  * twice for one attempt. The trail keeps the whole list too.
  */
-export function refusalsForRecording(
-  context: AssessmentContext,
-  deliveryMode: 'home' | 'studio' | 'remote',
-): readonly RecordRefusal[] {
+export function refusalsForRecording(context: AssessmentContext): readonly RecordRefusal[] {
   if (!context.clientFound) return ['client_not_found'];
   if (!context.visible) return ['not_visible'];
 
@@ -106,7 +103,13 @@ export function refusalsForRecording(
   } else if (context.isMinor && !context.activeConsentPurposes.includes('minor_participation')) {
     refusals.push('consent_missing_minor_participation');
   }
-  if (deliveryMode === 'home' && !context.activeConsentPurposes.includes('home_visit')) {
+  // **Always, and not on the caller's word for where the recording happened.**
+  // The brain map is a home service in the catalogue — ninety minutes, in the
+  // household — so the agreement is asked for every recording. An earlier
+  // draft took a delivery mode from the request, which meant the word
+  // `studio` walked past this gate with nothing on the server to check it
+  // against (docs/CHANGE-REQUESTS/assessment-01.md, the reversal of default 3).
+  if (!context.activeConsentPurposes.includes('home_visit')) {
     refusals.push('consent_missing_home_visit');
   }
   return refusals;

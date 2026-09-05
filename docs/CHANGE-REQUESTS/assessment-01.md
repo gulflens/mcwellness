@@ -118,6 +118,54 @@ and lets nobody who did not take a measurement say that they did), and
 
 ---
 
+## Defaults taken beyond the spec
+
+Six, all of them the builder's rather than the operator's, recorded here
+because the spec's own status line points at this file for the amendments the
+build made.
+
+1. **The questionnaire.** No instrument is named anywhere in the practice's
+   own material, and several of the seven `00-data-model.md` section 9 lists
+   are proprietary, so the mechanism ships exercised by one synthetic
+   instrument, `questionnaire.sample` — three questions, nought to four, no
+   category and no cut-off. The operator names the real one and it arrives as
+   one declared shape and one scoring function.
+2. **A questionnaire's certification gate.** A brain map needs a valid
+   certification for the `brain-map` service. A questionnaire has no service of
+   its own in the catalogue, so the gate asks only that the person holds some
+   valid `can_execute_session` credential. That is the floor rather than a
+   considered answer, and it is the one to revisit when a questionnaire becomes
+   a thing the practice charges for.
+3. **Where the recording happened — taken, then reversed in the fix round**
+   (review gap 6). The request carried a delivery mode, used for the
+   `home_visit` gate and never stored, defaulting to `home`. The word was the
+   caller's own: `studio` or `remote` walked past that gate with no fact on the
+   server to check it against, and no column on the row says where a
+   measurement was taken. The field is gone from the request schema and from
+   the drawer, and the `home_visit` agreement is now asked for **every**
+   recording, because the brain map is a home service in the catalogue —
+   ninety minutes, in the household.
+4. **The context function.** Section 7.2 says to read the gates from
+   check-in's own door. `app.checkin_context` (301) answers about a visit
+   booked *today*, because checking in only makes sense at the door of one, so
+   it would refuse every assessment typed up afterwards and the spec's sentence
+   is unsatisfiable as written. Migration 500 has `app.assessment_context`
+   instead, in the same shape and asking the same questions: the same three
+   consent purposes, active and not expired; the same Dubai-zone arithmetic for
+   whether the client is a minor; the same re-reading of the credential's dates
+   at the moment of writing. **The spec's sentence should be amended to say
+   so.**
+5. **The composite key** binds the link to the assessment's own client as 407
+   does; the document half is a guard trigger, because `document` has no
+   `(tenant_id, id, client_id)` key and adding one is the trunk's. The note
+   below sets out what the trunk would need for the key to replace it.
+6. **The erasure letter's words** live in `docs/CONSENT/erasure-letter/`, not
+   in `domain/client/erasureLetter.ts` as section 6 says; item 5 above records
+   where they were actually amended and why nothing in that file needed to
+   change.
+
+---
+
 ## Written and **not** applied: the column differences to `docs/SPEC/00-data-model.md`
 
 Spec section 6 says these are recorded here and not applied to the model, so

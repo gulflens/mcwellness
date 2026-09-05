@@ -39,15 +39,16 @@ export const ASSESSMENT_FILE_ROLES = ['raw', 'vendor_report'] as const;
 export type AssessmentFileRole = (typeof ASSESSMENT_FILE_ROLES)[number];
 
 /**
- * Where the recording happened, asked because section 7.2 requires the
- * `home_visit` consent "where the recording happens at home" and no column on
- * the row says where. It is used for the gate and never stored: an assessment
- * has no delivery mode of its own, and inventing a column for one would be a
- * change to the data model this piece was not asked to make. `home` is the
- * default because it is both the practice's ordinary case and the stricter
- * gate of the two.
+ * **There is no delivery mode on this request, and that is deliberate.** An
+ * earlier draft asked the caller where the recording happened, so that section
+ * 7.2's `home_visit` consent could be required "where the recording happens at
+ * home". But the word was the caller's own: `studio` or `remote` walked past
+ * that gate with no fact on the server to check it against, and nothing on the
+ * row records where a measurement was taken. The brain map is a home service
+ * in the catalogue — ninety minutes, at home — so the agreement is asked for
+ * every recording, and a client whose household has not made it is refused
+ * (docs/CHANGE-REQUESTS/assessment-01.md, the reversal of default 3).
  */
-export const DELIVERY_MODES = ['home', 'studio', 'remote'] as const;
 
 const Derived = z.record(z.string(), z.unknown());
 const ConditionNote = z.string().trim().max(MAX_CONDITION_NOTE_LENGTH).nullable().default(null);
@@ -63,7 +64,6 @@ export const RecordAssessmentRequest = z.object({
   conditionNote: ConditionNote,
   referenceAgeYears: ReferenceAge,
   referenceSex: ReferenceSex,
-  deliveryMode: z.enum(DELIVERY_MODES).default('home'),
 });
 export type RecordAssessmentRequest = z.infer<typeof RecordAssessmentRequest>;
 
@@ -74,7 +74,6 @@ export const SupersedeAssessmentRequest = z.object({
   conditionNote: ConditionNote,
   referenceAgeYears: ReferenceAge,
   referenceSex: ReferenceSex,
-  deliveryMode: z.enum(DELIVERY_MODES).default('home'),
   reason: z.string().trim().min(1).max(MAX_SUPERSEDE_REASON_LENGTH),
 });
 export type SupersedeAssessmentRequest = z.infer<typeof SupersedeAssessmentRequest>;

@@ -215,7 +215,6 @@ function recording(
     conditionNote: 'Eyes closed, quiet room.',
     referenceAgeYears: 9,
     referenceSex: 'female',
-    deliveryMode: 'home',
     ...overrides,
   };
 }
@@ -440,7 +439,6 @@ describe('reading the tab', () => {
         conditionNote: 'Eyes closed, quiet room.',
         referenceAgeYears: 9,
         referenceSex: 'female',
-        deliveryMode: 'home',
         reason: 'The alpha figure at Fz was typed from the wrong column.',
       },
     );
@@ -498,7 +496,6 @@ describe('correcting a measurement', () => {
       conditionNote: null,
       referenceAgeYears: 9,
       referenceSex: 'female',
-      deliveryMode: 'home',
       reason: 'The alpha figure at Fz was typed from the wrong column.',
     };
     expect(
@@ -527,7 +524,6 @@ describe('correcting a measurement', () => {
         conditionNote: null,
         referenceAgeYears: 9,
         referenceSex: 'female',
-        deliveryMode: 'home',
         reason: '   ',
       },
     );
@@ -574,7 +570,6 @@ describe('correcting a measurement', () => {
       conditionNote: null,
       referenceAgeYears: 9,
       referenceSex: 'female',
-      deliveryMode: 'home',
       reason: 'A colleague reaching for somebody else’s measurement.',
     });
     expect(res.status).toBe(403);

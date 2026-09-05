@@ -169,7 +169,7 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
     }
 
     const context = await assessmentContext(db, input.clientId, input.instrument);
-    const refusals = refusalsForRecording(context, input.deliveryMode);
+    const refusals = refusalsForRecording(context);
     if (refusals.length > 0) {
       await logRefusal(
         db,
@@ -268,7 +268,7 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
 
     // The same gates as a first recording: a correction is a measurement, and
     // a certification that has lapsed since does not authorise one.
-    const refusals = refusalsForRecording(context, input.deliveryMode);
+    const refusals = refusalsForRecording(context);
     if (refusals.length > 0) {
       await logRefusal(db, 'assessment', target.id, target.client_id, refusals);
       return c.json({ error: 'forbidden', code: refusals[0], refusals, requestId }, 403);
