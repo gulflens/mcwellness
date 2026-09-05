@@ -56,6 +56,9 @@ const ENTITY: Record<string, Text> = {
   // fallback below and nobody writes words for it.
   kit: t('instrument', 'الجهاز'),
   session: t('visit', 'الزيارة'),
+  // Piece ten's measurements (docs/SPEC/assessment.md section 8).
+  assessment: t('measurement', 'القياس'),
+  assessment_document: t("the measurement's file", 'ملف القياس'),
 };
 
 /** What an instrument is, for the register's own sentences (section 6.1). */
@@ -659,6 +662,65 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         t(
           `${actor} filed the setup photo for this visit`,
           `${actor} أودع صورة الإعداد لهذه الزيارة`,
+        ),
+        locale,
+      );
+    // Measurements (docs/SPEC/assessment.md section 8). The figures are never
+    // said here: the trail records that a measurement was taken and by whom,
+    // and what it holds is read on the record itself.
+    case 'assessment.insert': {
+      const version = Number(event.newValues?.version ?? 1);
+      return version > 1
+        ? pick(
+            t(
+              `${actor} recorded a corrected version of a measurement`,
+              `${actor} سجّل نسخة مصححة من قياس`,
+            ),
+            locale,
+          )
+        : pick(t(`${actor} recorded a measurement`, `${actor} سجّل قياسًا`), locale);
+    }
+    case 'assessment.update':
+      // Nothing but an erasure changes a measurement: the table grants the API
+      // no update at all and a guard trigger refuses one (migration 500).
+      return pick(
+        t(
+          `${actor} cleared the words kept beside this measurement`,
+          `${actor} أزال الكلمات المحفوظة بجانب هذا القياس`,
+        ),
+        locale,
+      );
+    case 'assessment.read':
+    case 'assessment.list':
+      return pick(t(`${actor} read a measurement`, `${actor} اطّلع على قياس`), locale);
+    case 'assessment.refused':
+      return pick(
+        t(`${actor} was refused a measurement`, `${actor} مُنع من الوصول إلى قياس`),
+        locale,
+      );
+    // The key is `${entityType}.${action}` and this action already carries its
+    // own entity in its name (app/api/assessments/file.ts writes
+    // `assessment.file_filed` against entity type `assessment`), so the case
+    // reads doubled — named as it actually arrives rather than tidied into
+    // something that would never match, exactly as the setup photo's is.
+    case 'assessment.assessment.file_filed':
+      return pick(
+        t(
+          `${actor} filed the software's own export against this measurement`,
+          `${actor} أودع ملف برنامج الجهاز مع هذا القياس`,
+        ),
+        locale,
+      );
+    case 'assessment_document.insert':
+      return pick(
+        t(`${actor} attached a file to a measurement`, `${actor} أرفق ملفًا بقياس`),
+        locale,
+      );
+    case 'assessment_document.delete':
+      return pick(
+        t(
+          `${actor} removed a measurement's file with the record`,
+          `${actor} أزال ملف القياس مع السجل`,
         ),
         locale,
       );

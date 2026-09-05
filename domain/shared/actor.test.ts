@@ -506,3 +506,37 @@ describe('the kit register and the day picture', () => {
     expect(canActor(actor([]), { type: 'routing.day.read', scope: 'own' }, {}, NOW)).toBe(false);
   });
 });
+
+describe('measurements', () => {
+  it('gives reading a measurement to the office and the practitioners, and to nobody else', () => {
+    // docs/SPEC/assessment.md section 4: the household sees nothing of a
+    // measurement until a report is issued, and finance has demographics and
+    // contacts. Both are refused here and refused again by
+    // db/policies/assessment/access.sql, which is the answer that binds.
+    for (const role of ['owner', 'admin', 'lead_practitioner', 'practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'assessment.read' }, {}, NOW), role).toBe(true);
+    }
+    for (const role of ['finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'assessment.read' }, {}, NOW), role).toBe(false);
+    }
+    expect(canActor(actor([]), { type: 'assessment.read' }, {}, NOW)).toBe(false);
+  });
+
+  it('gives recording one to a practitioner and never to an administrator', () => {
+    for (const role of ['practitioner', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'assessment.record' }, {}, NOW), role).toBe(true);
+    }
+    for (const role of ['owner', 'admin', 'finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'assessment.record' }, {}, NOW), role).toBe(false);
+    }
+  });
+
+  it('gives filing an export to the reading audience, an admin included', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner', 'practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'assessment.file' }, {}, NOW), role).toBe(true);
+    }
+    for (const role of ['finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'assessment.file' }, {}, NOW), role).toBe(false);
+    }
+  });
+});

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AssessmentsTab } from '../assessments/AssessmentsTab';
 import { RecordTimeline } from '../audit/RecordTimeline';
 import type { ClientRow } from '../../api/clients/schema';
 import { CloseIcon } from '../../shell/components/Icons';
@@ -23,6 +24,12 @@ const ALL_TABS: readonly Tab[] = [
   { id: 'consent', label: 'Consent' },
   { id: 'goals', label: 'Goals' },
   { id: 'documents', label: 'Documents' },
+  // Piece ten's measurements (docs/SPEC/assessment.md section 3.1;
+  // docs/CHANGE-REQUESTS/assessment-01.md item 3). It sits after Documents and
+  // before Timeline because a measurement is something the practice holds
+  // about this client, and Timeline is the record of what was done to the
+  // record itself.
+  { id: 'assessments', label: 'Assessments' },
   { id: 'timeline', label: 'Timeline' },
 ];
 /**
@@ -210,6 +217,9 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 erased={erased}
                 reason={reason.trim() || undefined}
               />
+            </TabPanel>
+            <TabPanel id="assessments" idPrefix="client" selected={tab}>
+              <AssessmentsTab clientId={client.id} />
             </TabPanel>
           </>
         ) : null}
