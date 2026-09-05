@@ -170,6 +170,14 @@ describe('app.portal_invite_status: one word, to somebody who is not signed in',
     });
   });
 
+  it('says not_a_household for a link naming a member of the practice', async () => {
+    await rolledBack(owner, async () => {
+      const { hash } = token();
+      await writeInvite({ id: INVITE, hash, userId: PORTAL.admin });
+      expect(await statusOf(hash)).toBe('not_a_household');
+    });
+  });
+
   it('gives seven days, the figure the domain holds', async () => {
     expect(INVITE_VALID_DAYS).toBe(7);
     const issued = new Date('2026-09-05T08:00:00.000Z');
@@ -236,6 +244,24 @@ describe('app.redeem_portal_invite: spend the link, once', () => {
         expect(await refusedAtTheDoor(REDEEM, [hash, AUTH_ONE, null])).toContain(code);
       });
     }
+  });
+
+  it('refuses a hand-built link against a member of the practice, and leaves the account alone', async () => {
+    // However the row came to exist — a bug in the issuing route, a hand
+    // written insert — redeeming it must not repoint the admin's sign-in at
+    // whatever the redeemer supplied. This is the floor beneath the route.
+    await rolledBack(owner, async () => {
+      const { hash } = token();
+      await writeInvite({ id: INVITE, hash, userId: PORTAL.admin });
+      expect(
+        await refusedAtTheDoor(REDEEM, [hash, AUTH_ONE, 'somebody.else@example.com']),
+      ).toContain('portal_invite_not_a_household');
+      const account = await owner.query<{ auth_id: string }>(
+        'select auth_id from app_user where id = $1',
+        [PORTAL.admin],
+      );
+      expect(account.rows[0]?.auth_id).toBe(PORTAL.adminAuth);
+    });
   });
 
   it('refuses a link that never existed', async () => {

@@ -52,6 +52,8 @@ const CONSENT_A = '00000001-0000-4000-8000-0000000000b4';
 const CONSENT_ADULT = '00000001-0000-4000-8000-0000000000b5';
 const INVOICE_DOCUMENT = '00000001-0000-4000-8000-0000000000b6';
 const BILLING_DOCUMENT = '00000001-0000-4000-8000-0000000000b7';
+/** A contact row whose account is the practice's own admin: the founder's case. */
+const OFFICE_CONTACT = '00000001-0000-4000-8000-0000000000c1';
 
 /**
  * The password every fixture chooses. Twelve characters and more, which is all
@@ -576,6 +578,33 @@ describe('the practice’s own Portal screen', () => {
   it('refuses a household both office routes', async () => {
     expect((await h.callAs('GET', '/api/portal/access', PORTAL.motherAuth)).status).toBe(403);
     expect((await h.callAs('GET', '/api/portal/requests', PORTAL.motherAuth)).status).toBe(403);
+  });
+
+  it('refuses to invite a contact whose account belongs to the practice', async () => {
+    // The founder's own case, written out: one person is a contact of a child's
+    // record and the practice's admin, and one account is both. A portal link
+    // rebinds the sign-in behind the account it names, so issuing one here
+    // would be issuing a way into the console. Nothing is written.
+    await h.owner.query(
+      'insert into contact (id, tenant_id, client_id, user_id, relationship, given_name, ' +
+        'family_name, is_legal_guardian, can_consent, can_receive_reports, can_pay) ' +
+        "values ($1, $2, $3, $4, 'mother', 'Iris', 'Harbour', true, true, true, true)",
+      [OFFICE_CONTACT, IDS.tenantA, PORTAL.strangerClient, PORTAL.admin],
+    );
+
+    const res = await h.callAs(
+      'POST',
+      `/api/portal/access/${OFFICE_CONTACT}/invite`,
+      PORTAL.adminAuth,
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'not_a_household' });
+
+    const invites = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from portal_invite where contact_id = $1',
+      [OFFICE_CONTACT],
+    );
+    expect(Number(invites.rows[0]?.n)).toBe(0);
   });
 
   it('issues a link once, stores only its hash, and drafts the message in both languages', async () => {

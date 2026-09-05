@@ -130,6 +130,15 @@ grant execute on function app.portal_client_ids() to app_role;
 --    The hash is unique per practice rather than globally, so in principle two
 --    practices could hold one; with 32 random bytes they will not, and the
 --    order below makes the answer deterministic if they ever did.
+--
+--    One word is not about the link's own state at all. 'not_a_household' is
+--    what an invitation naming a member of the practice answers, and it is
+--    asked before anything else, because the door acts on 'valid' by creating
+--    or repointing a sign-in: a link against an owner's or a member of staff's
+--    account must never reach that step, however it came to exist. The route
+--    that issues invitations refuses the same case (app/api/portal/access.ts),
+--    and this is the floor beneath it — the one thing standing between a
+--    hand-written portal_invite row and somebody else's console.
 ------------------------------------------------------------------------------
 create function app.portal_invite_status(p_token_hash bytea) returns text
 language plpgsql stable security definer
@@ -138,13 +147,20 @@ as $$
 declare
   v_invite record;
 begin
-  select used_at, revoked_at, expires_at into v_invite
+  select used_at, revoked_at, expires_at, user_id into v_invite
     from public.portal_invite
    where token_hash = p_token_hash
    order by created_at desc, id
    limit 1;
   if not found then
     return 'unknown';
+  end if;
+  if exists (
+    select 1 from public.user_role ur
+     where ur.user_id = v_invite.user_id
+       and ur.role <> 'client_contact'
+  ) then
+    return 'not_a_household';
   end if;
   if v_invite.revoked_at is not null then
     return 'revoked';
@@ -202,6 +218,20 @@ begin
   end if;
 
   select * into v_invite from public.portal_invite where id = v_id for update;
+  -- Only a household account is ever admitted through this door. An invitation
+  -- names an app_user, and an app_user may be several things at once: the
+  -- founder is a contact of her own child's record as well as the owner of the
+  -- practice. Rebinding auth_id on an account that holds any role but
+  -- client_contact would hand whoever redeemed the link her console, so the
+  -- state is refused here as well as in app.portal_invite_status, and the row
+  -- is left exactly as it was.
+  if exists (
+    select 1 from public.user_role ur
+     where ur.user_id = v_invite.user_id
+       and ur.role <> 'client_contact'
+  ) then
+    raise exception 'portal_invite_not_a_household' using errcode = 'invalid_parameter_value';
+  end if;
   if v_invite.revoked_at is not null then
     raise exception 'portal_invite_revoked' using errcode = 'invalid_parameter_value';
   end if;

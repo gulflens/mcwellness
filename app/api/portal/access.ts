@@ -19,6 +19,14 @@ import { AccessResponse, InviteResponse, OfficeRequestsResponse, RevokeResponse 
  * invitation, which is the right trade: a table of working links is a table
  * nobody should be able to steal.
  *
+ * **A link is only ever issued against a household account.** An invitation
+ * names an `app_user` and the door rebinds that account's sign-in, so a link
+ * against an account holding any role but `client_contact` would be a way into
+ * the practice's own console rather than into a record. One person is often
+ * several things — the founder is a contact of her own child's record — so the
+ * check is on the roles the account holds and not on which contact row it is.
+ * `app.redeem_portal_invite` refuses the same case beneath this.
+ *
  * **Revoking is the account, not the link.** `app_user.status = 'suspended'`
  * is what `app.resolve_actor` reads on the very next request, so a revoked
  * household is signed out of the shell rather than merely losing a link they
@@ -181,10 +189,13 @@ export function mountPortalAccess(api: Hono<ApiEnv>, now: () => Date = () => new
       user_status: 'active' | 'suspended' | 'archived' | null;
       preferred_locale: 'en' | 'ar';
       legal_name: string;
+      has_practice_role: boolean;
     }>(
       'select ct.id as contact_id, ct.client_id, ct.given_name, ct.family_name, ct.phone, ' +
         'ct.email, ct.user_id, u.auth_id, u.status::text as user_status, ' +
-        'c.preferred_locale, t.legal_name ' +
+        'c.preferred_locale, t.legal_name, ' +
+        'exists (select 1 from user_role ur where ur.tenant_id = ct.tenant_id ' +
+        "  and ur.user_id = ct.user_id and ur.role <> 'client_contact') as has_practice_role " +
         'from contact ct ' +
         'join client c on c.id = ct.client_id and c.tenant_id = ct.tenant_id ' +
         'join tenant t on t.id = ct.tenant_id ' +
@@ -194,6 +205,15 @@ export function mountPortalAccess(api: Hono<ApiEnv>, now: () => Date = () => new
     );
     const row = found.rows[0];
     if (!row) return c.json({ error: 'not_found', requestId }, 404);
+    if (row.has_practice_role) {
+      // A contact row whose account is also a member of the practice. The
+      // founder is the obvious one: she is a contact of her own child's record
+      // and the owner of the studio, and one account is both. A portal link
+      // rebinds the sign-in behind whatever account it names, so issuing one
+      // here would be issuing a way into her own console. Refused before
+      // anything is written, and refused again in app.redeem_portal_invite.
+      return c.json({ error: 'not_a_household', requestId }, 409);
+    }
 
     let userId = row.user_id;
     if (userId === null) {
