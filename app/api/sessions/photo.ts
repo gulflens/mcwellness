@@ -24,7 +24,12 @@ import { loadSession, readEvents, resolvePractitioner } from './session-row';
  * nothing itself (the middleware does), and verifies the digest the device
  * declared before a byte is stored.
  *
- * **The event comes first, always.** The device flushes events, then bytes: a
+ * **Consent is the first question of all**, before the event and before the
+ * document: a household that has not agreed is refused 403
+ * `consent_missing_photo_video` and the refusal is written to the trail,
+ * whatever else is or is not true about the visit (section 4.3's own order).
+ *
+ * **The event comes first among the rest.** The device flushes events, then bytes: a
  * picture is only ever filed against a `photo_captured` event the server
  * already holds, which is what keeps the record's own log the source of truth
  * (session-capture.md section 2). A digest with no event yet is 409
@@ -129,6 +134,27 @@ export function mountSessionPhoto(api: Hono<ApiEnv>, now: () => Date = () => new
       return c.json({ error: 'bad_request', requestId, detail: 'digest_mismatch' }, 400);
     }
 
+    // Consent now, at this moment, for this visit, and **before anything
+    // else in the transaction** — spec 4.3's own order. The door checked the
+    // event first, so a forged PUT for a household that had never agreed was
+    // answered 409 "the event has not arrived yet", with nothing on the trail:
+    // a refusal that told the caller to try again and left no record of the
+    // attempt. Consent is the first question, and its refusal is audited.
+    //
+    // The definer door reads through row security and answers about the
+    // caller's own visit alone (migration 306); unlike 304's it still answers
+    // after the close, because that is when these bytes arrive.
+    const consent = await db.query<{ active: boolean }>(
+      'select app.setup_photo_consent_active($1) as active',
+      [sessionId],
+    );
+    if (consent.rows[0]?.active !== true) {
+      await logRefusal(db, 'session', sessionId, session.client_id, [
+        'consent_missing_photo_video',
+      ]);
+      return c.json({ error: 'forbidden', requestId, detail: 'consent_missing_photo_video' }, 403);
+    }
+
     // Already filed? Same digest is an idempotent retry — a device whose
     // connection dropped after the server committed asks again, and gets the
     // same answer. A different digest is refused: a filed evidence document is
@@ -158,21 +184,6 @@ export function mountSessionPhoto(api: Hono<ApiEnv>, now: () => Date = () => new
     }
     if (photo.sha256 !== computed) {
       return c.json({ error: 'conflict', requestId, detail: 'photo_superseded' }, 409);
-    }
-
-    // Consent now, at this moment, for this visit. The definer door reads
-    // through row security and answers about the caller's own visit alone
-    // (migration 306); unlike 304's it still answers after the close, because
-    // that is when these bytes arrive.
-    const consent = await db.query<{ active: boolean }>(
-      'select app.setup_photo_consent_active($1) as active',
-      [sessionId],
-    );
-    if (consent.rows[0]?.active !== true) {
-      await logRefusal(db, 'session', sessionId, session.client_id, [
-        'consent_missing_photo_video',
-      ]);
-      return c.json({ error: 'forbidden', requestId, detail: 'consent_missing_photo_video' }, 403);
     }
 
     const documentId = randomUUID();

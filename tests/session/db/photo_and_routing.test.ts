@@ -341,10 +341,22 @@ describe('filing the setup photograph', () => {
   it('refuses a household that has not agreed, and audits the refusal', async () => {
     const visit = await seedVisit('05');
     // The event itself is refused for the same reason, so the picture reaches
-    // the door with nothing naming it: consent is checked first regardless.
+    // the door with nothing naming it. Consent is still the first question
+    // asked, so the answer is the consent's own and not "the event has not
+    // arrived yet" (spec section 4.3, section 13's forged PUT).
     await flushPhotoEvent(visit, PICTURE);
     const res = await putPhoto(visit.sessionId, visit.authSub, PICTURE);
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ detail: 'consent_missing_photo_video' });
+
+    const refusal = await owner.query<{ reason: string | null; client_id: string | null }>(
+      "select reason, client_id from audit_log where action = 'refused' " +
+        "and entity_type = 'session' and entity_id = $1",
+      [visit.sessionId],
+    );
+    expect(refusal.rows).toHaveLength(1);
+    expect(refusal.rows[0]?.reason).toBe('consent_missing_photo_video');
+    expect(refusal.rows[0]?.client_id).toBe(visit.clientId);
 
     const documents = await owner.query<{ n: string }>(
       "select count(*)::text as n from document where kind = 'setup_photo' and client_id = $1",
