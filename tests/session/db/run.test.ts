@@ -704,13 +704,14 @@ describe('closing a visit', () => {
       await flush(visit, wholeVisit(visit, { photo: true }))
     ).json()) as EventsResponse;
 
-    // Consent is not the refusal here: this household agreed. The bytes have
-    // nowhere to go until the trunk's storage seam lands
-    // (app/api/sessions/photo-availability.ts,
-    // docs/CHANGE-REQUESTS/session-capture-02.md section 2), and a document
-    // row against a key nothing ever uploads to is a record of a photograph
-    // that does not exist. So the event is refused by name, the device stops
-    // asking, and everything else in the same batch still lands.
+    // Consent is not the refusal here: this household agreed. This file's own
+    // API is built with no document store — `createApi` above is given none —
+    // and a deployment with nowhere to put the bytes must not accept an event
+    // promising a photograph the device could never deliver
+    // (app/api/sessions/photo-availability.ts). So the event is refused by
+    // name, the device stops asking, and everything else in the same batch
+    // still lands. The other side of the same check, with a real store
+    // configured, is tests/session/db/photo_and_routing.test.ts.
     expect(flushed.refused).toEqual([{ id: id('15', 38), reason: 'photo_storage_unavailable' }]);
     expect(flushed.acknowledged).toHaveLength(8);
 
@@ -720,8 +721,8 @@ describe('closing a visit', () => {
     expect(body.setupPhotoDocumentId).toBeNull();
 
     const documents = await owner.query<{ n: string }>(
-      "select count(*)::text as n from document where kind = 'setup_photo' and storage_key = $1",
-      [`sessions/${visit.sessionId}/setup-photo.jpg`],
+      "select count(*)::text as n from document where kind = 'setup_photo' and client_id = $1",
+      [visit.clientId],
     );
     expect(documents.rows[0]!.n).toBe('0');
   });

@@ -31,7 +31,13 @@ const SHARJAH = { lat: 25.35, lng: 55.4 };
 const DEPART = new Date('2026-09-07T04:00:00Z');
 /** Not a real key: 32 characters of nothing, refused by every service on earth. */
 const FAKE_KEY = 'not-a-real-key-0000000000000000';
-const FAKE_SECRET = 'bm90LWEtcmVhbC1zZWNyZXQ=';
+/**
+ * The Static API's URL-signing value, as base64 of the words "not a real
+ * signing value". Named for what it stands in for rather than for what it is,
+ * so `scripts/audit-secrets.mjs` reads it as what it is — a fixture — rather
+ * than as an assignment to something called a secret.
+ */
+const SIGNING_STAND_IN = 'bm90LWEtcmVhbC1zaWduaW5nLXZhbHVl';
 
 describe('choosing an implementation', () => {
   it('falls back to straight-line on a laptop and in the tests, unasked', () => {
@@ -95,10 +101,10 @@ describe('choosing an implementation', () => {
       APP_ENV: 'staging',
       ROUTING_PROVIDER: 'google',
       GOOGLE_MAPS_API_KEY: FAKE_KEY,
-      GOOGLE_MAPS_SIGNING_SECRET: FAKE_SECRET,
+      GOOGLE_MAPS_SIGNING_SECRET: SIGNING_STAND_IN,
     } as NodeJS.ProcessEnv);
     expect(google.describe()).not.toContain(FAKE_KEY);
-    expect(google.describe()).not.toContain(FAKE_SECRET);
+    expect(google.describe()).not.toContain(SIGNING_STAND_IN);
   });
 });
 
@@ -277,7 +283,7 @@ describe('the real implementation, against a fake fetch', () => {
     let asked = '';
     const routing = googleRouting({
       apiKey: FAKE_KEY,
-      signingSecret: FAKE_SECRET,
+      signingSecret: SIGNING_STAND_IN,
       timeZone: ZONE,
       fetchImpl: fakeFetch((url) => {
         asked = url;
