@@ -1,5 +1,6 @@
 import type pg from 'pg';
 import { describe, expect, it } from 'vitest';
+import { seededRandom, type Random } from '../../../db/seed/random';
 import { logAction, logRead, logReads, refuseContactDetails } from './audit';
 import type { Db } from './request-context';
 
@@ -19,6 +20,18 @@ function recordingDb(): { calls: { text: string; params: unknown[] }[]; db: Db }
     },
   };
   return { calls, db };
+}
+
+const HEX_DIGITS = [...'0123456789abcdef'];
+
+/**
+ * A version 4 uuid from a seeded source: the shape `randomUUID()` writes,
+ * without the randomness a test may not hold (.claude/rules/testing.md).
+ */
+function uuidFrom(random: Random): string {
+  const hex = (length: number): string =>
+    Array.from({ length }, () => random.pick(HEX_DIGITS)).join('');
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-${random.pick(['8', '9', 'a', 'b'])}${hex(3)}-${hex(12)}`;
 }
 
 /** Every context column the SQL takes for itself rather than from the caller. */
@@ -210,6 +223,173 @@ describe('what logAction refuses to write down', () => {
     expect(() => refuseContactDetails({ landline: '04 123 4567' })).toThrow(
       'may not carry a telephone number',
     );
+  });
+});
+
+describe('an id is not a way to ring anybody', () => {
+  /**
+   * The fault this closes (`docs/CHANGE-REQUESTS/assessment-01.md`, items 3
+   * and 4). A uuid is thirty-two hexadecimal characters in five hyphenated
+   * groups, and its letters cut the digits into shorter runs. Some of those
+   * runs are nine to twelve digits beginning with a nought, which is exactly
+   * what the check was looking for — so about one document id in eighty was
+   * refused, `logAction` threw, and the request that carried it rolled back.
+   * In production that is a practitioner's setup photograph failing to file,
+   * at random, with no reason anyone can act on.
+   *
+   * Every id here was refused before this round, on the run named beside it.
+   */
+  const IDS_THE_CHECK_USED_TO_REFUSE = [
+    ['eea04325-2317-4f6b-ada3-dd3a345ade00', '04325-2317-4'], // the change request's own
+    ['09147553-5deb-4c1a-a7ec-d9a670f92e1f', '09147553-5'],
+    ['f27ca5ea-d584-4d6b-95d0-f0679376378f', '0679376378'],
+    ['01112578-192c-483d-b03a-90485d6ac233', '01112578-192'],
+    ['de3f0169-5374-452d-aef5-f9902b118db8', '0169-5374-452'],
+    ['a2533d07-4601-439a-881a-ef76a04b7929', '07-4601-439'],
+    ['0d065905-9906-4b0b-8b95-b9f477145c36', '065905-9906-4'],
+    ['a0896548-742b-41bf-ade0-c4b61aa5c30a', '0896548-742'],
+    ['9921a075-9095-41d5-8a1f-39f1740a09d5', '075-9095-41'],
+    // No letter beside the run at all: three whole groups of digits between
+    // two hyphens. A rule that only asked what sits either side of a run
+    // would still refuse this one, which is why the uuid is set aside first.
+    ['abcdefab-0234-4567-8901-abcdefabcdef', '0234-4567-8901'],
+  ] as const;
+
+  it('lets through every id the check used to read as a telephone number', () => {
+    for (const [id] of IDS_THE_CHECK_USED_TO_REFUSE) {
+      expect(() => refuseContactDetails({ documentId: id })).not.toThrow();
+    }
+  });
+
+  it('lets an id through wherever in a value it sits', () => {
+    expect(() =>
+      refuseContactDetails({
+        alone: 'eea04325-2317-4f6b-ada3-dd3a345ade00',
+        inASentence: 'filed as eea04325-2317-4f6b-ada3-dd3a345ade00 by the device',
+        afterAnUnderscore: 'photo_eea04325-2317-4f6b-ada3-dd3a345ade00',
+        shouted: 'EEA04325-2317-4F6B-ADA3-DD3A345ADE00',
+        beside: 'eea04325-2317-4f6b-ada3-dd3a345ade00 and 01112578-192c-483d-b03a-90485d6ac233',
+      }),
+    ).not.toThrow();
+  });
+
+  it('lets through ten thousand ids of the shape the platform writes', () => {
+    // The table above proves the ids that were caught; this proves the shape.
+    // The source is seeded, so the ten thousand are the same ten thousand on
+    // every run and any failure reproduces from the seed alone
+    // (.claude/rules/testing.md: no randomness inside a test).
+    const random = seededRandom(20260906);
+    const refused: string[] = [];
+
+    for (let i = 0; i < 10_000; i += 1) {
+      const id = uuidFrom(random);
+      try {
+        refuseContactDetails({ documentId: id });
+      } catch {
+        refused.push(id);
+      }
+    }
+
+    expect(refused).toEqual([]);
+  });
+
+  it('lets through every id in the reserved shapes', () => {
+    // 0000000K-0000-4000-8000-* and 000000KK-0000-4000-8000-*, the two shapes
+    // .claude/rules/testing.md reserves and db/seed/apply.ts enforces.
+    const refused: string[] = [];
+
+    for (let kind = 0; kind < 256; kind += 1) {
+      const suffix = kind.toString(16).padStart(2, '0');
+      for (const n of [0, 1, 7, 12, 99, 909, 1234]) {
+        const tail = String(n).padStart(12, '0');
+        for (const id of [
+          `000000${suffix}-0000-4000-8000-${tail}`,
+          `0000000${suffix.slice(1)}-0000-4000-8000-${tail}`,
+        ]) {
+          try {
+            refuseContactDetails({ documentId: id });
+          } catch {
+            refused.push(id);
+          }
+        }
+      }
+    }
+
+    expect(refused).toEqual([]);
+  });
+
+  it('still refuses a number written beside an id, so setting the id aside hides nothing', () => {
+    expect(() =>
+      refuseContactDetails({
+        note: 'sent eea04325-2317-4f6b-ada3-dd3a345ade00 to +971 50 000 1234',
+      }),
+    ).toThrow('may not carry a telephone number');
+  });
+});
+
+describe('the shapes the rule names, all of them still refused', () => {
+  /**
+   * The fix narrows what counts as a telephone number, so every shape the
+   * rule names is asserted rather than assumed. The digits come from the
+   * reserved fake ranges only (.claude/rules/testing.md): mobiles
+   * +971 50 000 xxxx, Emirates IDs 784-1900-*.
+   */
+  const TELEPHONE_NUMBERS = [
+    '+971 50 000 1234', // as a person writes it
+    '+971500001234', // as a system strips it
+    '0500001234', // local, bare
+    '050 000 1234',
+    '050-000-1234',
+    '(050) 000 1234',
+    '971500001234', // the country code without the plus
+    '04 123 4567', // a landline
+  ] as const;
+
+  it('refuses every telephone shape, naming the key and never the number', () => {
+    for (const number of TELEPHONE_NUMBERS) {
+      expect(() => refuseContactDetails({ sentTo: number })).toThrow(
+        'may not carry a telephone number; "sentTo" does',
+      );
+      expect(() => refuseContactDetails({ sentTo: number })).not.toThrow(number);
+    }
+  });
+
+  it('refuses one inside a longer sentence, wherever in it the number sits', () => {
+    for (const note of [
+      'handed to +971 50 000 1234 at the door',
+      '+971 50 000 1234 was the number given',
+      'the number given was 050 000 1234',
+    ]) {
+      expect(() => refuseContactDetails({ note })).toThrow('may not carry a telephone number');
+    }
+  });
+
+  it('refuses an Emirates ID, naming the key and never the number', () => {
+    // Fifteen digits beginning 784 (domain/shared/emirates-id.ts). The rule
+    // names it beside the telephone number, and section 8 of the spec keeps
+    // it out of the trail for the same five years.
+    const displayed = '784-1900-1234567-1';
+    for (const id of [displayed, displayed.replace(/-/g, ' '), displayed.replace(/-/g, '')]) {
+      expect(() => refuseContactDetails({ heldFor: id })).toThrow(
+        'may not carry an Emirates ID; "heldFor" does',
+      );
+      expect(() => refuseContactDetails({ heldFor: id })).not.toThrow(id);
+    }
+  });
+
+  it('refuses an email address, and leaves a figure, a reference and a date alone', () => {
+    expect(() => refuseContactDetails({ sentTo: 'nobody@example.com' })).toThrow(
+      'may not carry an email address',
+    );
+    expect(() =>
+      refuseContactDetails({
+        reference: 'INV-000012',
+        grossFils: '103250',
+        issuedOn: '2026-09-04',
+        trn: '000000000000000',
+        channel: 'whatsapp',
+      }),
+    ).not.toThrow();
   });
 });
 
