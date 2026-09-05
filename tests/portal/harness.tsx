@@ -4,6 +4,8 @@ import type { ReactElement } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { vi } from 'vitest';
 import type { MeResponse } from '../../app/api/_middleware/actor-schema';
+import { HomeScreen } from '../../app/client/HomeScreen';
+import { MoneyScreen } from '../../app/client/MoneyScreen';
 import { PortalLanguage } from '../../app/client/i18n';
 import { PortalWithHome } from '../../app/client/PortalRoot';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
@@ -82,6 +84,46 @@ export function mountPortal(
           {/* The router's own composition, so a screen is tested inside the
               shell it actually renders in — Home's answer included. */}
           <PortalWithHome>{screenElement}</PortalWithHome>
+        </MemoryRouter>
+      </PortalLanguage>
+    </AuthProviderBoundary>,
+  );
+  return { ...view, calls };
+}
+
+/**
+ * The portal at one of its own paths, through the route table `app/shell/App.tsx`
+ * builds: the shell as the layout element and the screens beneath it. This is
+ * how a redirect is tested — `mountPortal` hands a screen to the shell directly,
+ * so a `Navigate` inside one has nothing to redirect to.
+ */
+export function mountPortalAt(
+  at: string,
+  options: { locale?: 'en' | 'ar'; answers?: Record<string, () => Response> } = {},
+) {
+  const calls: Call[] = [];
+  const answers = options.answers ?? {};
+
+  const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    calls.push({ path, init });
+    if (path === '/api/me') return json(PORTAL_ACTOR);
+    const match = Object.keys(answers)
+      .sort((a, b) => b.length - a.length)
+      .find((prefix) => path.startsWith(prefix));
+    return match ? (answers[match] as () => Response)() : json({ error: 'not_found' }, 404);
+  }) as unknown as typeof fetch;
+
+  const view = render(
+    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+      <PortalLanguage initial={options.locale ?? 'en'}>
+        <MemoryRouter initialEntries={[at]}>
+          <Routes>
+            <Route path="/portal" element={<PortalWithHome />}>
+              <Route index element={<HomeScreen />} />
+              <Route path="money" element={<MoneyScreen />} />
+            </Route>
+          </Routes>
         </MemoryRouter>
       </PortalLanguage>
     </AuthProviderBoundary>,

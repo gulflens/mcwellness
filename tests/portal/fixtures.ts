@@ -69,6 +69,18 @@ export const HOME: HomeResponse = {
   ],
 };
 
+/**
+ * The same record as a young person's own login sees it (section 3.3): one
+ * client, and not one this person may be shown figures for. No tab, and no
+ * money screen to open.
+ */
+export const HOME_NO_MONEY: HomeResponse = {
+  ...HOME,
+  clients: [{ ...CLIENTS[0]!, moneyVisible: false }],
+  money: [],
+  notices: [],
+};
+
 export const VISITS: VisitsResponse = {
   clients: CLIENTS,
   upcoming: [

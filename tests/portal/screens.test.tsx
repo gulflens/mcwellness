@@ -11,12 +11,13 @@ import {
   CHILD_A,
   FAMILY,
   HOME,
+  HOME_NO_MONEY,
   MONEY,
   MOTHER_CONTACT,
   VISITS,
   alone,
 } from './fixtures';
-import { forgetLanguage, json, mountPortal } from './harness';
+import { forgetLanguage, json, mountPortal, mountPortalAt } from './harness';
 
 /**
  * The five screens, against a fake API, in English and in Arabic
@@ -200,6 +201,31 @@ describe('Money', () => {
     expect(await screen.findByText('المبالغ بالدرهم')).toBeTruthy();
     expect(screen.getByText('الفواتير')).toBeTruthy();
     expect(screen.getByText('حوالة بنكية')).toBeTruthy();
+  });
+
+  it('is not offered at all where nobody on the record is shown money', async () => {
+    // A young person's own login. No tab, and the path itself lands on Home:
+    // the screen is absent rather than present and refusing (section 3.3).
+    mountPortalAt('/portal/money', {
+      answers: { '/api/portal/home': () => json(HOME_NO_MONEY) },
+    });
+    expect(await screen.findByText('Your next visit')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Money' })).toBeNull();
+    expect(screen.queryByText('Amounts in AED')).toBeNull();
+    // The four screens that are theirs are all still there.
+    for (const tab of ['Home', 'Visits', 'Family', 'Agreements']) {
+      expect(screen.getByRole('link', { name: tab })).toBeTruthy();
+    }
+  });
+
+  it('is not offered in Arabic either, and lands on Home the same way', async () => {
+    mountPortalAt('/portal/money', {
+      locale: 'ar',
+      answers: { '/api/portal/home': () => json(HOME_NO_MONEY) },
+    });
+    expect(await screen.findByText('زيارتك القادمة')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'الحساب' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'الزيارات' })).toBeTruthy();
   });
 });
 

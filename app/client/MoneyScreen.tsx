@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { Navigate } from 'react-router';
 import {
   DocumentLinkResponse,
   MoneyResponse,
@@ -10,16 +11,22 @@ import { useAuth } from '../shell/auth/AuthContext';
 import { Note } from '../shell/components/Controls';
 import { Sections } from './Layout';
 import { PHRASES, useWords } from './i18n';
+import { moneyIsShown, usePortalHome } from './PortalRoot';
 import { usePortalRead } from './usePortal';
 
 /**
  * `/portal/money` — what is owed, what is left, and the papers
  * (docs/SPEC/client-portal.md section 3.3).
  *
- * **A young person's own login never sees this screen.** The router sends them
- * home; if they arrive anyway the route answers 403 and the screen says so in a
- * sentence, because an empty money screen would read as "your household owes
- * nothing" rather than "this is not shown to you".
+ * **A young person's own login never sees this screen.** Where nobody on the
+ * record is somebody this person may be shown figures for, there is no tab and
+ * this path sends them home — the screen is absent rather than present and
+ * refusing, which is what the spec asks for and what the household reads as
+ * "this portal has four screens" rather than "one of them is locked".
+ *
+ * The refusal note below is still here and still reached: it is what a person
+ * sees if the answer says 403 while Home's own answer said otherwise — the
+ * database and the screen disagreeing, which is the one case worth a sentence.
  *
  * **A document opens through a short-lived signed link, fetched when the button
  * is pressed and never rendered into the page in advance.** That is the same
@@ -97,6 +104,16 @@ function PaymentRow({ payment }: { payment: PortalPayment }) {
 }
 
 export function MoneyScreen() {
+  const home = usePortalHome();
+  // Home's answer says who is shown money. Until it lands nothing is decided,
+  // and the body below says "Loading" as it would anyway.
+  if (home.kind === 'ready' && !moneyIsShown(home)) {
+    return <Navigate to="/portal" replace />;
+  }
+  return <MoneyBody />;
+}
+
+function MoneyBody() {
   const words = useWords();
   const money = usePortalRead('/api/portal/money', MoneyResponse);
 

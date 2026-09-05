@@ -50,11 +50,29 @@ export function usePortalHome(): HomeState {
   return value;
 }
 
+/**
+ * Whether this household is shown money at all (docs/SPEC/client-portal.md
+ * section 3.3): true when the record carries at least one client this person
+ * may be shown figures for.
+ *
+ * A young person's own login is shown none, and the answer to that is a portal
+ * with four screens rather than a fifth that refuses. So the tab is not
+ * rendered and `/portal/money` sends them home — an absence, not a locked door
+ * with a note on it. It takes Home's answer to know, so nothing is offered
+ * until that answer is in: a tab that appears and then vanishes would be the
+ * same mistake, briefly.
+ */
+export function moneyIsShown(home: Loaded<HomeResponse> | null): boolean {
+  return home?.kind === 'ready' && home.data.clients.some((client) => client.moneyVisible);
+}
+
 function Header({ practiceName }: { practiceName: string | null }) {
   const words = useWords();
   const { locale, setLocale } = usePortalLanguage();
   const { session, signOut } = useAuth();
   const person = session.status === 'signed-in' ? session.actor.displayName : '';
+  const home = useContext(HomeCtx);
+  const tabs = PORTAL_TABS.filter((tab) => tab.key !== 'money' || moneyIsShown(home));
 
   return (
     <header className="portal__header">
@@ -83,7 +101,7 @@ function Header({ practiceName }: { practiceName: string | null }) {
         </button>
       </div>
       <nav className="portal__nav" aria-label={say(WORDS.portal, locale)}>
-        {PORTAL_TABS.map((tab) => (
+        {tabs.map((tab) => (
           <NavLink key={tab.key} to={tab.to} end={tab.end}>
             {words.t(tab.key)}
           </NavLink>
