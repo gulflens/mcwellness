@@ -1,145 +1,112 @@
-# SPEC — Assessments and the brain map
+# SPEC — Assessments and the brain map (piece ten)
 
-*Worktree: `assessment`. Entities: `assessment` and a new `assessment_document`, reading `client`, `document`, `credential` and `service_type` from `00-data-model.md`. Migrations `500–599`. This spec describes behaviour first in plain language and puts the builder's detail at the end; where it needs a column the data model does not yet have, section 8 says which and why.*
+_Worktree: `assessment`, owning `domain/assessment/**`, `app/admin/assessments/**`, `app/api/assessments/**`, `db/policies/assessment/**`, `tests/assessment/**` and migrations `500–599` (`docs/SPEC/OWNERSHIP.md`; the policy path is one of the change requests in section 6). Entities are defined in `00-data-model.md` section 4. Builds on `session-capture.md`, `client-record.md` sections 4.2 and 8, and `docs/SEAMS.md`. This file defines behaviour._
+
+Status: **written 2026-09-05 for the operator's approval as piece ten** (`docs/PLAN/piece-ten.md`). **It replaces the draft of 2 September 2026**, which was written before pieces one to eight existed — before the brain map was a service in the catalogue, before a visit had a record, before the storage seam, and before an erasure reached anything. Where the two differ, this file stands. The decisions the draft raised are re-answered in section 10.
 
 ---
 
-## 1. What an assessment is here
+## 1. Purpose
 
 An assessment is a measurement, written down once and never rewritten.
 
-Two kinds of thing are measured.
+Two kinds of thing are measured. **The brain map (qEEG)** — the practitioner records the brain's own electrical activity with sensors on the scalp, and the equipment's software produces a set of files and a set of figures, comparing the recording with its own reference database for a person of that age and sex. The platform keeps both: the files as the equipment wrote them, and the figures in a form it can set beside the figures from another day. That pairing is the whole idea. The files are the evidence; the figures are what a comparison is made of. **Questionnaires** — a sleep or attention form the client or a parent fills in, scored to a total. These are self-report measures. They record what somebody said about themselves on a particular day, and nothing more.
 
-**The brain map (qEEG).** The practitioner records the brain's own electrical activity with sensors on the scalp, the same way a neurofeedback session records it, and the equipment's software produces a set of files and a set of numbers. The platform keeps both: the files exactly as the equipment wrote them, and the numbers in a form it can compare with the numbers from another day. That pairing is the whole idea. The files are the evidence; the numbers are what a comparison is made of.
+Everything else here follows from one sentence: a measurement is a fact about a day, and a fact about a day does not change. A figure entered wrongly is corrected by recording a new version of the old one, with a reason, and both stay.
 
-**Questionnaires and rating scales.** A sleep or attention questionnaire the client or a parent fills in, scored to a number. These are self-report measures. They record what somebody said about themselves on a particular day, and nothing more.
+The practice's own words for this are already written and already agreed with every household that signs the participation wording (`docs/CONSENT/participation.en.md`): a brain map shows patterns of activity, **it is not a diagnosis**, and McWellness is a wellness provider and not a medical clinic. Nothing on a screen, in an export or in a report may say anything stronger. A measurement and a comparison is the whole of what this offers.
 
-Everything else in this specification follows from one sentence: a measurement is a fact about a day, and a fact about a day does not change. If a number was entered wrongly, the practice records the corrected measurement as a new version of the old one, and both stay. Nothing is edited in place and nothing is deleted to tidy up.
+## 2. What exists on `main`, and what this adds
 
-The practice's own words for what this is are already written and already agreed with every client who signs the participation consent (`docs/CONSENT/participation.en.md`, section 2): a brain map shows patterns of activity, **it is not a diagnosis**, and McWellness is a wellness provider and not a medical clinic. This platform must not say anything stronger anywhere — not on a screen, not in an export, not in a report. A measurement plus a comparison is the whole of what it offers.
+| Already built | This piece adds |
+| --- | --- |
+| The brain map as a **service the practice sells and delivers**: `service_type` code `brain-map`, ninety minutes, at home, requiring a `vendor_qeeg` credential, priced net, with the three programmes entitling two, three and four of them. It is booked, checked in, run and closed as any other visit | The measurement that visit produces, which the platform has nowhere to put today |
+| `document`, the storage seam (`domain/shared/storage.ts`), `clientDocumentKey`, `documentRetentionUntil`, `auditDocumentRead` and short-lived signed links; the kind `assessment_raw` already in `CLIENT_UPLOAD_KINDS` | A door wide enough for a vendor's export: the Documents tab caps an upload at 45 KB inside a 64 KB JSON body (section 7.1) |
+| `credential` with `can_execute_session`, re-checked at execution time; `app.client_visible_to_practitioner` (ninety days back, thirty forward, confirmed visits only) | The same two gates on recording and on reading a measurement |
+| `app.erase_client` (migrations 100, 104, 105): a visit's files go and its measurements stay, anonymised, and the confirmation letter says so | The step that reaches the assessment, and the sentence in the letter that covers it |
+| The audit trigger and `app.audit_redact`; the five band hues of `docs/DESIGN-BRIEF.md` section 3.1 | The Assessments tab and the comparison view |
 
-## 2. Who uses it
+## 3. Screens
 
-| Role | Can |
-|---|---|
-| `owner`, `admin` | See every assessment for their practice; file a raw export against one; never sign or interpret |
-| `lead_practitioner` | All of the above, plus record an assessment and read the comparison view |
-| `practitioner` | Record an assessment for a client on their own schedule, if their credential allows it; read that client's comparison view |
-| `finance` | Nothing. Finance sees demographics and contacts, never measurements (`client-record.md` section 2) |
-| `client_contact` | Nothing at all until a report is issued (section 5) |
+**3.1 The Assessments tab** on the client record (`app/admin/assessments/`, mounted in `ClientDrawer.tsx`, which is `client-record`'s — a change request, section 6). A table in the console's manner: date, instrument, who recorded it, whether a file is attached, and a word for its state. A superseded version sits beneath the one that replaced it, quiet, with its reason. Two actions: **Record**, and **Compare**, which is offered once two assessments of one instrument exist.
 
-## 3. When an assessment is taken
+**3.2 Recording one.** A right-side drawer, not a wizard. The date and the instrument; then the figures, laid out from the instrument's own declared shape, so a brain map asks for band powers per site with their units and a questionnaire asks its questions and shows the total it computes. Beside the typed fields, one free-text line for recording conditions — eyes open or closed, the room, an artefact worth mentioning — never instead of them (CLAUDE.md rule 3). Then **Attach the export**, which files the software's own file against the assessment. The drawer refuses, with the field named, a figure without its unit, an unknown instrument, or a payload the shape does not recognise.
 
-- **Before a programme.** The brain map is the practice's front door: a consultation, a qEEG and a report are what a household buys first (`billing.md` section 2.2). A baseline exists before the first neurofeedback session, or the programme has nothing to be measured against.
-- **On the cadence the practice sets.** The packages already carry re-maps — one with Starter, two with Core, three with Full. A re-map is an ordinary assessment of the same instrument; nothing about it is special except that a comparison now has two points.
-- **At the end of a programme**, so the completion report has a closing measurement.
-- **Whenever the practitioner judges it useful.** Nothing in the platform forces a cadence or nags about one. The anti-engagement rule holds here as everywhere: the platform may show that a re-map is due, once, quietly, on the client's own record. It never chases.
+**3.3 The comparison.** Two or more assessments of one instrument for one client, side by side: the earlier figure, the later figure, the difference, and nothing else. A band figure carries its band's hue from the design brief and no other colour; nothing is red, nothing is labelled high, low or abnormal. The screen shows the age and sex each reference comparison was made against, because a comparison made against a nine-year-old is not the comparison made against a ten-year-old.
 
-*Decision for the operator:* whether the platform should carry a per-client re-map cadence in days, or simply count the re-maps a package entitles the client to and leave the timing to the practitioner. **Recommendation:** count the entitlement and leave the timing alone. A date-based cadence invents a deadline the practice does not actually work to, and the package already says how many re-maps were paid for.
+A table, not a chart, in the first version. The practice reads figures, and a chart invites a shape to be over-read. One fixed sentence, in English and Arabic, sits on the screen and on anything printed from it: **this is a comparison of measurements taken on different days; it is not a diagnosis.** The words are the consent's own, so the two can never drift apart.
 
-## 4. What the practitioner sees
+**3.4 The reference figures.** Where the equipment's software has compared a recording against its own database, the platform keeps what the software reported, with the age and sex it used, and computes no comparison of its own. It attaches no word to a figure. What a measurement means is the practitioner's judgement, written in a report and signed by a person (`reports-v1.md`). The screen does arithmetic; the practitioner does the reading.
 
-Two screens, and they are the point of the whole module.
+## 4. What the household sees
 
-**The list.** Every assessment for one client, newest first: the date, the instrument, who recorded it, and whether a raw file is attached. A superseded version sits underneath the one that replaced it, greyed, with the reason.
+Nothing, until a report is issued. Not the files, not the figures, not the comparison.
 
-**The comparison.** Two or more assessments of the same instrument, side by side, with the change between them. For a brain map that is band power per site and the ratios the practice uses; for a questionnaire it is the total score. Each row shows the earlier figure, the later figure and the difference, and nothing else.
+A qEEG export means nothing without the practitioner's reading of it, and a household left alone with band figures will make of them exactly what the consent promises the practice will not. The route by which a measurement reaches a family is a signed report, and it is the only route. The portal's own commitment already says so (`client-portal.md` section 1): no measurements until piece ten renders them, and what piece ten renders is a report.
 
-The comparison view carries one fixed sentence, in English and Arabic, on the screen and on anything printed or exported from it: **this is a comparison of measurements taken on different days; it is not a diagnosis.** The wording matches the consent the household signed, word for word, so the two documents can never drift apart.
+This is a rule in the database, not a screen with no link on it. No `client_contact` policy grants a read on `assessment` or `assessment_document` at all, and a deny test proves it for a contact's own client. `finance` sees nothing either: `client-record.md` section 2 gives that role demographics and contacts.
 
-The platform does not colour a number red, does not label a band "abnormal", and does not compare a client against a reference database. What a measurement means is the practitioner's judgement, written in a report and signed by a person (`reports-v1.md`). The screen does arithmetic; the practitioner does the interpretation.
+## 5. Rules (pure functions in `domain/assessment`, each tested)
 
-## 5. What the household sees
+1. `validateDerived(instrument, instrumentVersion, payload)` — the shape declared in `domain/assessment/shapes/`, refused with the field named. Every brain-map figure carries its unit; a questionnaire payload carries the answers, the total and the maximum. **No payload carries an interpretation band.** Storing "moderate" beside a score puts a label on a person in a field nobody signed.
+2. `scoreQuestionnaire(instrument, answers)` — the total the person's own answers produce, and only the total. Never a category, never a cut-off, never a word.
+3. `compare(earlier, later)` — paired figures and their differences, refusing two assessments of different instruments or different clients, and refusing a pair whose units disagree.
+4. `currentVersions(assessments)` — the current version of each measurement with its chain beneath it; the current one is the one nothing supersedes.
+5. `canSupersede(assessment, reason)` — refuses a supersede of an already-superseded version, and a supersede with no reason.
 
-Nothing, until a report is issued.
+## 6. Data owned
 
-Not the raw files, not the numbers, not the comparison. A qEEG export is a technical artefact that means nothing without the practitioner's reading of it, and a household left alone with band figures will make of them exactly what the consent promises the practice will not: a diagnosis. The route by which a measurement reaches a family is a signed report, and it is the only route.
-
-This is a rule in the database, not a screen that happens to have no link on it. The `client_contact` policies grant no read on `assessment` or on `assessment_document` at all, and a deny test proves it.
-
-## 6. What an erasure does
-
-When a household asks to be erased, the assessment is treated exactly as migration 105 treats a visit: **the raw files are deleted and the derived measurements are kept, anonymised.**
-
-- Every file behind an assessment goes from the store and its `document` row goes with it, under the existing step that deletes a client's documents (`client-record.md` section 8, step 2). A qEEG recording is the person's own brain activity and there is no version of it that is not personal.
-- The numbers stay. Band powers, ratios and questionnaire totals identify nobody once the record around them is anonymous, and the practice uses them in aggregate to know whether its work helps. This is the same judgement the session measurements were given, for the same reason.
-- Anything free-text on the assessment — the note about recording conditions — is nulled with the rest.
-
-The erasure confirmation letter already tells the household exactly this about their sessions. It must tell them the same about their assessments, in the same sentence, or the letter is wrong.
-
-## 7. The rules
-
-**7.1 Versioned, never edited.** An `assessment` is append-only, like `session`, `report`, `client_protocol` and `invoice` before it (`00-data-model.md` section 7). A correction inserts a new row carrying `version`, `supersedes_id` and a required reason. The current version is the one nothing supersedes. The API role holds no `update` and no `delete` on the table, so this is a grant and not a convention.
-
-**7.2 Raw files go through the storage seam.** Bytes are written with `put` from `domain/shared/storage.ts` under the client they belong to, never with `overwrite`, and a second write to the same key is a 409 and not a silent replacement. Each file gets a `document` row of kind `assessment_raw` — a kind that already exists in `domain/client/documentKinds.ts` — and therefore the ordinary five-year retention clock from upload. Nothing in SQL talks to a store; the row is written in the transaction and the bytes follow after the commit, as billing already does.
-
-**7.3 Derived results are typed at the edge.** `derived` is JSON, and the database checks only that it is an object. Its shape is declared per instrument in `domain/assessment/shapes/`, validated in the route before the row is written, and refused with a plain sentence naming the field that is wrong. The shape is versioned with `instrument_version`, so a payload written under version 1 stays readable when version 2 exists. A qEEG payload names its unit for every figure; a questionnaire payload carries the answers, the total and the maximum. **No payload carries an interpretation band.** Storing "moderate" beside a score is the practice putting a label on a person in a field nobody signed, and the report is where a judgement belongs.
-
-**7.4 Who may record one.** Credential-gated exactly as a session is: a valid `credential` for the assessment's own service type with `can_execute_session` true, re-checked against `valid_from` and `valid_to` at the moment of writing, never cached on a device. An admin may file a raw export against an assessment a practitioner recorded, and may not create one.
-
-*Decision for the operator:* whether recording a brain map should need its own capability column on `credential` rather than reusing `can_execute_session`. **Recommendation:** reuse it, and add nothing. The capability that actually matters is `can_sign_report`, which already exists and already gates the only thing a household ever sees.
-
-**7.5 Consent gates recording.** An active `participation` consent, plus `minor_participation` where the client is under 18, plus `home_visit` when the recording happens at home — the same check the session runner makes at the door, from the same function, at execution time on the server.
-
-**7.6 Audit and access follow the existing patterns.** The table is declared `audited: client`, so the row triggers attribute every change to the client without a join. Reading the assessments tab is a read worth logging (`audit.md` section 5). Access is the client-visibility rule the platform already has: same tenant first, then role, then a practitioner's own schedule. No new machinery.
-
-**7.7 Offline is not required.** A session is captured in a stranger's living room with one bar of signal; an assessment is recorded when the practice decides to record one, and the export file arrives from a laptop. The module is online-only, deliberately, and no part of the day sheet depends on it.
-
----
-
-## 8. Builder notes
-
-**8.1 The tables.** `00-data-model.md` section 4 defines `assessment` as `client_id`, `performed_at`, `performed_by_practitioner_id`, `instrument`, `instrument_version`, `raw_document_id`, `derived jsonb`, `version`, `supersedes_id`. Built as written, plus the conventions of section 1 (`id`, `tenant_id`, `created_at`, `updated_at`, `created_by`) and these changes:
+**`assessment`** (migration `500_assessment.sql`), as `00-data-model.md` section 4 defines it — `client_id`, `performed_at`, `performed_by_practitioner_id`, `instrument`, `instrument_version`, `derived jsonb`, `version`, `supersedes_id` — plus the section 1 conventions, the tenant-bound key of migration 099, `comment on table ... 'audited: client'`, and these differences. Each is a **change request to `00-data-model.md`, written and not applied** (`docs/CHANGE-REQUESTS/assessment-01.md`):
 
 | Change | Why |
-|---|---|
-| `supersede_reason text`, required when `version > 1` | The append-only rule elsewhere requires a reason; section 4 omits it here by oversight. `client_protocol` is the precedent. |
-| `condition_note text` null | Recording conditions — eyes open or closed, the room, an artefact worth mentioning. Free text beside typed fields, never instead of them. |
-| `raw_document_id` dropped in favour of `assessment_document` | One qEEG produces several files: an eyes-open recording, an eyes-closed recording, and the vendor's own PDF. A single column would force the practice to choose one and lose the rest. The link table carries `assessment_id`, `document_id`, `role` (`raw`, `vendor_report`), with a composite foreign key binding the document to the assessment's own client so a file can never be attached across records — the pattern `billing_document` (migration 407) already sets. |
-| No `session_id` link in this phase | The natural link is to `session`, which lives in the 300 range. `OWNERSHIP.md` is explicit that apply order across ranges is not fixed and a migration may depend only on what its own `Needs` names, so a 500 migration must not assume the session tables exist. `performed_at` and the client are enough for now; the link is a later migration guarded with `to_regclass`, as 105 does. |
+| --- | --- |
+| `supersede_reason text`, required when `version > 1` | Every other append-only entity requires a reason; section 4 omits it here by oversight. `client_protocol` is the precedent. |
+| `condition_note text` null | Recording conditions, beside the typed fields. |
+| `reference_age_years int` and `reference_sex`, both null | The age and sex the software's comparison was made against, snapshotted. A birthday and a corrected record both move the live answer; the comparison that was actually made does not. |
+| `raw_document_id` dropped in favour of **`assessment_document`** | One brain map produces several files — an eyes-open recording, an eyes-closed recording, the software's own report. One column forces a choice and loses the rest. The link table carries `assessment_id`, `document_id` and `role` (`raw`, `vendor_report`), with a composite key binding the document to the assessment's own client, the pattern `billing_document` (migration 407) already sets. |
+| **No `session_id` in this piece** | The honest link is to `session`, in the 300 range, and apply order across ranges is not fixed (`OWNERSHIP.md`), so a 500 migration must not assume it is there. The trunk's `950–999` half exists for exactly this: a trunk migration that builds on a stream's own table sorts last. The link is a change request for a `95x` migration once both ranges are on `main`, not a guard invented here. `performed_at` and the client are enough meanwhile. |
 
-**8.2 Migrations.** `500–599`, confirmed against `OWNERSHIP.md`'s Stage 2 table, which already carries the `assessment` row; nothing in that file needs changing for this worktree to open. Expect `500_assessment.sql`, `501_assessment_document.sql`, `502_assessment_policies.sql`. Each names its `Needs` and none names a number above its own.
+**The erasure step.** `app.erase_client` lives in `client-record`'s range (migration 100, replaced by 104 and 105), so this is a change request to that stream for a `106` migration, guarded with `to_regclass('public.assessment')` exactly as 105 guards the visit tables. **The files go and the figures stay.** Every file behind an assessment is deleted with the client's other documents — a qEEG recording is the person's own brain activity and there is no version of it that is not personal. The band powers, the reference figures and the questionnaire totals remain, as a visit's measurements already do, because they identify nobody once the record around them is anonymous and the practice uses them in aggregate. `condition_note` and `supersede_reason` are nulled with the rest of the free text. The confirmation letter (`domain/client/erasureLetter.ts`) must say this about assessments in the same sentence it says it about sessions, or the letter is wrong. **Both requests ship in the round that ships the first assessment, not later.**
 
-**8.3 Routes** under `app/api/assessments/`, thin, calling `domain/assessment`:
+Three smaller requests: the drawer's tab mount point; a seed generator giving three synthetic clients a baseline brain map, a re-map ninety days later and one questionnaire total, every figure from `db/seed/random.ts` under the fixed seed and **no file seeded at all**; and the `assessment` row in `OWNERSHIP.md`, which names no `db/policies/assessment/**` though every other row names its policy path.
 
-- `list.ts` — assessments for one client, current versions with their superseded history beneath.
-- `record.ts` — create one. Validates the derived payload against the instrument's declared shape, checks the credential and the consents, writes the row.
-- `attach.ts` — file a raw export against an existing assessment: the `document` row and the `assessment_document` link in one transaction, the bytes through the storage seam after the commit.
-- `supersede.ts` — a new version with a reason, refusing a supersede of anything that is not the current version.
-- `compare.ts` — two or more assessment ids of the same instrument for one client, returning the paired figures and their differences. It computes nothing the client could not compute itself; it exists so the arithmetic is in one tested place.
-- `schema.ts` — the request and response shapes, as every other route folder has.
+## 7. Routes (`app/api/assessments/`, thin, calling `domain/assessment`)
 
-**8.4 Screens.** An **Assessments tab** on the client record, and a **comparison view** opened from it. The tab's own components live in `app/admin/assessments/**`, which this worktree owns. The mount point does not: `app/admin/clients/ClientDrawer.tsx` belongs to `client-record`, so adding the tab to it is a change request (`docs/CHANGE-REQUESTS/assessment-01.md`), not an edit. The comparison view is a table, not a chart, in the first version: the practice reads figures, and a chart invites a shape to be over-read.
+| Route | Who | Notes |
+| --- | --- | --- |
+| `GET /api/clients/:id/assessments` | owner, admin, lead practitioner; a practitioner for a client visible to them | Current versions with their history beneath; one audit `list` row per row shown |
+| `POST /api/assessments` | a practitioner holding a valid credential for that service | Validates the payload, checks the credential and the consents, writes the row |
+| `PUT /api/assessments/:id/file` | the same | The export's bytes (7.1) |
+| `GET /api/assessments/file/:documentId/link` | the readers above | `auditDocumentRead`, then a short-lived signed link |
+| `POST /api/assessments/:id/supersede` | the recording practitioner, or the lead practitioner | A new version with a reason; refuses anything that is not current |
+| `GET /api/assessments/compare?ids=` | the readers above | Paired figures and differences; computes nothing a reader could not |
 
-**8.5 Importing a qEEG export.** `docs/CATALOGUE.md` does not exist in this repository and no document here names the practice's amplifier or its software, so the export format is not something this specification can settle.
+**7.1 The export's bytes.** The Documents tab cannot carry them: `MAX_DOCUMENT_BYTES` is 45 KB inside a 64 KB JSON body, and `KNOWN_MIME_TYPES` knows four file signatures. So the assessment gets its own door with a raw body, its own cap, and a declared `X-Sha256` the route recomputes over the bytes — the exemption the photograph's door already set the precedent for (`create-api.ts`, `PHOTO_LIMIT_BYTES`). The bytes go through `storage.put` with `overwrite` false, so a second file under one key is a conflict and never a silent replacement; the `document` row and the `assessment_document` link are written in the transaction and the bytes follow it. A filed evidence document is never replaced (`docs/SEAMS.md`).
 
-*Decision for the operator:* which equipment and software the practice uses, and what its export actually produces. **Recommendation:** ask before building the importer, and build the manual path first regardless. The two formats worth planning for are **EDF** (European Data Format, the standard container for raw electrophysiological recordings, which most amplifiers export) and **CSV** (the per-band summary tables the analysis software produces). Phase 1: the practitioner files the vendor's export as a document and types the derived figures, which is exactly what `session-capture.md` section 3.3 already decided for the signal check. Phase 2: `domain/assessment/import/` parses a named format into the declared shape, pure and tested against fixture files, with the practitioner confirming the parsed figures before they are written. No import ever writes an assessment without a person seeing the numbers first.
+**7.2 The gates, at execution time on the server.** A valid `credential` for the assessment's own service with `can_execute_session`, re-checked against its dates at the moment of writing and never cached on a device; an active `participation` consent, `minor_participation` where the client is a minor, and `home_visit` where the recording happens at home — the same purposes `canCheckIn` reads, from the same context function. An admin may file an export against an assessment a practitioner recorded, and may not create one.
 
-**8.6 Tests, and the deny cases they prove.** Under `tests/assessment/`, with database tests under `tests/assessment/db/` and nowhere else.
+## 8. Audit
 
-1. A `client_contact` reading `assessment` or `assessment_document` gets nothing, by policy, for their own client. The one that matters most.
-2. A practitioner whose credential lacks `can_execute_session`, or whose credential has expired, is refused with a sentence naming the reason.
-3. A practitioner not on that client's schedule cannot read or record, and the attempt is audited.
-4. Another tenant's user sees nothing, for every route.
-5. `update` and `delete` on `assessment` are refused to the API role.
-6. A supersede of an already-superseded version is refused; a supersede without a reason is refused.
-7. A derived payload of the wrong shape, an unknown instrument, and a figure without its unit are each refused at the edge with the field named.
-8. An `assessment_document` naming a document belonging to another client is refused by the composite foreign key.
-9. Recording without an active `participation` consent, and for a minor without `minor_participation`, are refused.
-10. After `app.erase_client`, the raw documents are gone from the store and the row, the `derived` numbers remain, and `condition_note` is null.
+The table is `audited: client`, so the row triggers attribute every change without a join. Opening the tab is a `list`; opening one assessment or the comparison is a `read` per assessment shown, through `logReads` — the distinction PR 5 drew and this stream keeps. Every signed link goes through `auditDocumentRead` before it is signed. Every refusal is written before the answer, as the check-in route writes its own. `derived` holds figures, so nothing in it needs redacting; `condition_note` is free text and takes the trail's 200-character rule like any other.
 
-**8.7 Seed.** The synthetic practice gets, for three of its clients, a baseline qEEG and a re-map ninety days later with plausible band figures generated from `db/seed/random.ts` under a fixed seed, and one questionnaire with a total score. **No file is seeded** — the derived numbers alone. A seeded recording would be a file shaped like a real person's brain activity sitting in a repository, and there is no need for one. `db/seed/**` is the trunk's, so the generator arrives as a change request (`assessment-02`).
+## 9. Deliberately left out
 
-**8.8 What this worktree owes the trunk.** Three change requests, all small: the drawer tab mount point (8.4); the seed generator (8.7); and an amendment to `00-data-model.md` section 4 recording the column changes in 8.1. A fourth, if the reviewer agrees: the `assessment` row in `OWNERSHIP.md` names no `db/policies/assessment/**`, though every Stage 1 row names its policy path. The worktree writes the request rather than editing the map.
+A normative comparison of the platform's own. Any automatic interpretation of a figure. Charts. A parser for the equipment's export (section 10, decision 2). Anything that reaches a household directly — that is `reports-v1.md`. Protocol suggestion from a measurement: a machine reading a brain map and proposing electrode sites is not something this practice does or claims to do. Offline working: a visit is captured in a stranger's living room, an assessment is recorded from a laptop afterwards, so this module is online-only and no part of the day sheet depends on it.
 
-## 9. Out of scope
+## 10. Decisions, with the defaults taken
 
-Reference databases and normative comparison of any kind. Automatic interpretation. Charts. Anything that reaches the household directly — that is `reports-v1.md`. Protocol suggestion from a measurement: the practitioner authors a protocol, and a machine reading a brain map and proposing electrode sites is not a thing this practice does or claims to do.
+1. _The re-map cadence._ Default (Claude's): none. The programmes already entitle two, three and four brain maps and the entitlement ledger already counts what is left. A date-based cadence would invent a deadline the practice does not work to, and the anti-engagement rule forbids chasing one.
+2. _The equipment and its export._ Nothing in this repository names the practice's amplifier or its software, so the export format cannot be settled here. Default (Claude's): **the export is a file a person uploads, never an integration.** Phase 1 accepts the software's own file and the practitioner types the figures, which is what `session-capture.md` section 3.3 already decided for the signal check. A parser is a later piece, pure and tested against fixture files, and no import ever writes an assessment without a person seeing the figures first. The operator's answer about the equipment is what unblocks it.
+3. _The file cap and the types accepted._ Default (Claude's): 20 MB, and `application/pdf` alone until the equipment is named; a new file signature is a change request to `domain/client/fileSignature.ts` in the trunk.
+4. _A capability of its own for recording a brain map._ Default (Claude's): no. Reuse `can_execute_session` on a credential for the `brain-map` service, which the catalogue already requires a `vendor_qeeg` certification for. The capability that decides what a household ever sees is `can_sign_report`, and it already exists.
+5. _Which questionnaires._ `00-data-model.md` section 9 named seven, before any was licensed and before this practice used one. Default (Claude's): build the brain-map shape and **one** questionnaire — whichever the operator names — and add the rest one declared shape and one scoring function at a time, as the practice licenses them. Several are proprietary, and the licence is the operator's to hold.
+6. _A measurement's provenance._ Default (Claude's): every derived payload names the software and the version that produced it, beside `instrument_version`, so a figure can always be traced to what computed it.
 
-## 10. Done when
+## 11. Done when
 
-- Every function in `domain/assessment` has tests covering each branch, including a payload with a missing unit and a supersede of a superseded row.
-- On staging, a synthetic client can be given a baseline and a re-map, and the comparison view shows the difference with the "not a diagnosis" sentence in both languages.
-- All ten deny cases in 8.6 pass.
-- An erasure of that client removes the files and leaves the figures.
-- `pnpm verify` green; the combined review passes.
+- Every function in `domain/assessment` has tests covering each branch, including a payload with a missing unit, a comparison of mismatched units, and a supersede of a superseded row.
+- The deny cases pass: a `client_contact` reads neither table for their own client; `finance` reads neither; a practitioner off that client's schedule can neither read nor record, and the attempt is audited; another tenant sees nothing on every route; `update` and `delete` on `assessment` are refused to the API role; an `assessment_document` naming another client's document is refused by the composite key; recording without `participation`, and for a minor without `minor_participation`, is refused; a lapsed credential is refused with the reason named.
+- On staging, a synthetic client is given a baseline and a re-map, a file is attached to each, and the comparison shows the difference with the "not a diagnosis" sentence in both languages.
+- An erasure of that client leaves no assessment bytes, keeps the figures, and the confirmation letter says so.
+- Migrations 500 and 501 apply on a fresh database and on one carrying every stream's range; the audit trigger and the classification comment are on both tables.
+- `pnpm verify` and `pnpm test:db` green; one combined review and one re-check under `docs/HANDOVER.md` section 6, with the record posted.
