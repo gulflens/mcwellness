@@ -149,19 +149,47 @@ anybody else. If the trunk would rather have the key, `document` needs
 2. **The link from a measurement to the visit that produced it**, as a `95x`
    trunk migration once the 300 and 500 ranges are both on `main` (spec
    section 6). Nothing in this piece assumes it.
-3. **A flaky test in `tests/session/db/photo_and_routing.test.ts`**, found by
-   this piece's CI run and **not caused by it**. "is idempotent on the same
-   digest and refuses a different one" intermittently sees the second `PUT
-   /api/sessions/:id/photo` answer 201 where it expects 200 — the second call
-   files a photograph rather than finding the first one. It reproduces about
-   one run in three to five on a laptop, and it reproduces the same way with
-   `origin/main`'s own `app/api/create-api.ts` restored in place of this
-   branch's, which is how it was ruled out as this piece's doing; five clean
-   runs on the untouched file, then a failure, then six clean runs. When it
-   passes, the first `PUT` answers 201 with a document id every time, so the
-   suspicion is that the second request occasionally does not see the link
-   `app.file_setup_photo` wrote — the route writes the row, then the bytes,
-   then the link, and the link is the last of the three. It is
-   `session-capture`'s file and `session-capture`'s route, so this is a request
-   rather than a fix (`docs/SPEC/OWNERSHIP.md` rule 1).
+3. **`app/api/_middleware/audit.ts` refuses about one document id in eighty,
+   and the filing fails with it.** This is the trunk's file, so it is a request
+   and not a fix — but it is a live fault rather than a tidiness point, and it
+   is the reason `tests/session/db/photo_and_routing.test.ts` has been failing
+   about one run in three to five on this branch's CI and on a laptop with
+   `origin/main`'s own `app/api/create-api.ts` restored.
 
+   `refuseContactDetails` reads any run of nine to twelve digits beginning with
+   a nought — with spaces, hyphens and brackets allowed inside it — as a
+   telephone number, and throws. The hyphens are the trouble: **1.21 per cent
+   of `randomUUID()` values contain such a run** (measured over 100,000 ids;
+   `eea04325-2317-4f6b-ada3-dd3a345ade00` is one, on the run `04325-2317-4`).
+   The file's own comment reasons about `00000000-0000-4000-8000-0000000000e6`,
+   a seeded id of thirty-four digits, and is right about that one; a random id
+   with letters in it breaks into shorter runs, and some of those read as a
+   number.
+
+   So any route that passes a fresh document id through `logAction`'s details
+   throws about one call in eighty. The throw rolls the whole request back:
+   `PUT /api/sessions/:id/photo` (`app/api/sessions/photo.ts`, which passes
+   `{ documentId }`) answers 500, files nothing, and a device that retries with
+   the same digest files afresh rather than being handed the first one — which
+   is exactly the shape of that test's intermittent failure, "expected 201 to
+   be 200". In production it is a practitioner's setup photograph failing to
+   file, at random, with no reason anyone can act on.
+
+   **The fix belongs in the helper**: a value that is a uuid is not a way to
+   ring anybody, and the digit-run check should say so — either by excluding a
+   uuid-shaped value before scanning it, or by refusing to treat a run that
+   contains a hyphen-separated group of four hexadecimal-looking characters as
+   a number. This piece's own file door works around it by not passing the id
+   at all (`app/api/assessments/file.ts`; the `assessment_document` row it
+   writes is itself audited and its `new_values` name the document), so nothing
+   here waits on the answer. `app/api/sessions/photo.ts` does wait on it.
+
+4. **`tests/session/db/photo_and_routing.test.ts` is intermittently red**, and
+   item 3 is why: "is idempotent on the same digest and refuses a different
+   one" sees the second `PUT` answer 201 where it expects 200, because the
+   first threw at `logAction` after the link was written and rolled it back.
+   It reproduces about one run in three to five on a laptop, including with
+   `origin/main`'s own `app/api/create-api.ts` restored in place of this
+   branch's, which is how it was ruled out as this piece's doing. It goes when
+   item 3 does. It is `session-capture`'s file and `session-capture`'s route,
+   so this is a request rather than a fix (`docs/SPEC/OWNERSHIP.md` rule 1).

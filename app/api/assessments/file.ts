@@ -158,13 +158,26 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
 
     await storage.put(storageKey, body, ASSESSMENT_FILE_MIME_TYPE);
 
-    // The document id and nothing else. Bytes never appear in a payload, a log
+    // What was filed, and nothing else: bytes never appear in a payload, a log
     // line or the trail.
+    //
+    // **The document's id is deliberately not among the details**, and that is
+    // not a preference. `refuseContactDetails` in
+    // app/api/_middleware/audit.ts reads any run of nine to twelve digits
+    // beginning with a nought as a telephone number, and a random uuid
+    // contains one about **1.2 per cent of the time** — so a filing whose id
+    // happened to look like that would throw, roll its own transaction back,
+    // and answer 500, at random, about one filing in eighty. The trail loses
+    // nothing: the `assessment_document` row this filing writes is itself
+    // audited and its `new_values` name the document. Written up as a request
+    // to the trunk in docs/CHANGE-REQUESTS/assessment-01.md, where the same
+    // fault is recorded against the setup photograph's own door, which passes
+    // its id and does fail this way.
     await logAction(
       db,
       'assessment.file_filed',
       { type: 'assessment', id: assessmentId, clientId: assessment.client_id },
-      { documentId, role: role.data },
+      { role: role.data },
     );
     return c.json(
       FileFiledResponse.parse({ documentId, role: role.data as AssessmentFileRole }),

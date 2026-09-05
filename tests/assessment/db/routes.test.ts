@@ -651,12 +651,25 @@ describe('the export’s own door', () => {
       `tenant/${IDS.tenantA}/client/${household.clientId}/${filed.documentId}`,
     );
 
-    const trail = await owner.query<{ new_values: { documentId?: string } | null }>(
+    // The act, with what was filed and no id: a random uuid trips the trail's
+    // own telephone-number guard about one time in eighty
+    // (docs/CHANGE-REQUESTS/assessment-01.md).
+    const trail = await owner.query<{ new_values: { role?: string } | null }>(
       "select new_values from audit_log where action = 'assessment.file_filed' and entity_id = $1",
       [created.assessment.id],
     );
     expect(trail.rows).toHaveLength(1);
-    expect(trail.rows[0]?.new_values).toEqual({ documentId: filed.documentId, role: 'raw' });
+    expect(trail.rows[0]?.new_values).toEqual({ role: 'raw' });
+
+    // And the document is named where it belongs: on the link row's own entry,
+    // written by the audit trigger.
+    const link = await owner.query<{ new_values: { document_id?: string } | null }>(
+      "select new_values from audit_log where entity_type = 'assessment_document' " +
+        "and action = 'insert' and client_id = $1",
+      [household.clientId],
+    );
+    expect(link.rows).toHaveLength(1);
+    expect(link.rows[0]?.new_values?.document_id).toBe(filed.documentId);
   });
 
   it('is idempotent on the same bytes and takes a second, different file', async () => {
