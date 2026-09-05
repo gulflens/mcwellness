@@ -211,3 +211,38 @@ a.stop__action {
   font-weight: var(--w-medium);
   color: var(--ink);
 }
+
+/*
+  The drive from the stop before (docs/SPEC/practitioner-phone.md section 5.4).
+  A quiet line between two cards, not a card of its own: it is one fact about
+  the road, and the day is a list of households.
+
+  It keeps its own height whether or not it has a figure yet, which is the
+  whole reason the placeholder exists — a line that appeared under a thumb
+  would move Navigate and Check in at a front door.
+*/
+.stop__drive {
+  min-block-size: var(--lh-small);
+  margin-block-end: var(--s-2);
+}
+
+/*
+  The day, as a picture. Sized to the column and never taller than a third of
+  a phone: it is for orientation, and the stops are the screen.
+*/
+.today__map {
+  inline-size: 100%;
+  block-size: auto;
+  max-block-size: 40vh;
+  object-fit: cover;
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+}
+
+/* The one calm line about putting this on the home screen, and the way out of it. */
+.today__install {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+}

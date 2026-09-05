@@ -12,8 +12,10 @@ import {
   type StopPhase,
 } from '@domain/scheduling';
 import { DayStopListResponse, type DayStop } from '../../api/appointments/schema';
+import { RoutingDayResponse, type DayLegRow } from '../../api/routing/schema';
 import { StopBalanceResponse } from '../../api/billing/document-schema';
 import { formatFils } from '../../admin/billing/money';
+import { requestPersistentStorage } from '../session/outbox/store';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ChevronIcon } from '../../shell/components/Icons';
@@ -32,9 +34,12 @@ import './today.css';
  * - **Brief.** Section 5.1 asks for one, and it needs the client brief the
  *   client-record stream owns (protocol summary, last session notes, access
  *   notes, contacts). Nothing on this screen invents a shortcut to it.
- * - **Offline.** Section 5.1 also asks this screen to render from the last
- *   sync, and section 11 makes that a condition of the stage. There is no
- *   local store yet, so the screen states the plain fact and no more.
+ *
+ * **Offline, from piece eight.** The service worker caches this day's own
+ * reads — the stops, the drives and the picture — so the app opens in a
+ * basement car park with the day it last showed (docs/SPEC/
+ * practitioner-phone.md sections 3.2 and 3.4). The check-in itself still needs
+ * a bar of signal, which is where the practitioner is standing anyway.
  *
  * Nothing here shows an identity number or a clinical note (section 11), and
  * the family name never reaches the browser at all: the wire carries a single
@@ -115,7 +120,58 @@ const CLOCK_TICK_MS = 60_000;
 
 const LOAD_ERROR = 'Your day could not be loaded. Check your connection, then try again.';
 
+/**
+ * The drive line's own placeholder (docs/SPEC/practitioner-phone.md section
+ * 5.4). Rendered from the first paint and replaced in place when the estimate
+ * arrives, so a row never moves under a thumb reaching for Check in — the same
+ * reason the money slot keeps its height.
+ */
+const NO_ESTIMATE = '\u2013 \u2013';
+
+const MAP_UNAVAILABLE = "The map needs the practice's key.";
+
+/**
+ * The two taps that put this app on an iPhone's home screen (section 3.3).
+ * Safari has no install prompt and evicts a site's storage after seven days
+ * unused unless it is there, so the practitioner is told once, calmly, and the
+ * dismissal is remembered on the device.
+ */
+const INSTALL_KEY = 'mcwellness-install-note-dismissed';
+const INSTALL_NOTE =
+  'Add this to your home screen so it opens with no signal: press Share, then Add to Home Screen.';
+
+/** "about 25 min \u00b7 18 km, estimate from traffic" (section 5.4). */
+export function describeLeg(leg: DayLegRow | undefined): string {
+  if (leg === undefined) return NO_ESTIMATE;
+  const minutes = Math.max(1, Math.round(leg.seconds / 60));
+  const km = leg.metres / 1000;
+  const distance = km < 10 ? km.toFixed(1) : String(Math.round(km));
+  const source = leg.source === 'traffic' ? 'estimate from traffic' : 'straight-line estimate';
+  // Always the word estimate, and never a point time: neither implementation
+  // knows when anybody will arrive (docs/SEAMS.md).
+  return `about ${minutes} min \u00b7 ${distance} km, ${source}`;
+}
+
+/**
+ * Whether this browser is Safari on an iPhone, running in a tab rather than
+ * from the home screen. Deliberately narrow: the note is about two taps that
+ * only exist there, and showing it anywhere else would be an instruction
+ * nobody can follow.
+ */
+export function wantsInstallNote(nav: Navigator, standalone: boolean): boolean {
+  if (standalone) return false;
+  const agent = nav.userAgent;
+  const iOS = /iPhone|iPad|iPod/.test(agent);
+  // Chrome and Firefox on iOS are Safari underneath but have no Share sheet
+  // entry of their own for this, so the note names the tap only where it works.
+  const safari = /Safari/.test(agent) && !/CriOS|FxiOS|EdgiOS/.test(agent);
+  return iOS && safari;
+}
+
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; stops: readonly DayStop[] };
+
+/** The drives and the picture, or nothing at all when the route could not answer. */
+type Drives = { legs: readonly DayLegRow[]; pictureUrl: string | null; mapAvailable: boolean };
 
 /**
  * The window, in the practice's zone and in that order in both languages:
@@ -230,6 +286,22 @@ function owedLine(outstandingFils: number): string {
   return 'Nothing owed';
 }
 
+/**
+ * The day's drives. A failure is not an error state: the stops still render
+ * and every line keeps its placeholder, because a day sheet that refused to
+ * open because an estimate could not be got would be worse than a day sheet
+ * with a blank in it.
+ */
+function fetchDrives(apiFetch: ApiFetch, date: string): Promise<Drives | null> {
+  return apiFetch(`/api/routing/day?date=${date}`)
+    .then(async (res) => {
+      if (!res.ok) return null;
+      const parsed = RoutingDayResponse.safeParse(await res.json());
+      return parsed.success ? parsed.data : null;
+    })
+    .catch(() => null);
+}
+
 function fetchDay(apiFetch: ApiFetch, date: string): Promise<State> {
   return apiFetch(`/api/appointments?date=${date}&scope=own`)
     .then(async (res) => {
@@ -245,6 +317,7 @@ function Stop({
   stop,
   phase,
   balance,
+  drive,
   onCheckIn,
 }: {
   stop: DayStop;
@@ -252,6 +325,13 @@ function Stop({
   /** Null while billing has not answered yet: the line appears when it does,
    * rather than a placeholder standing in for it. */
   balance: StopBalance | null;
+  /**
+   * The drive to this stop from the one before it, or undefined while the
+   * estimate has not arrived. Null on the first stop of the day, where there
+   * is no previous stop to have driven from — and the line is not rendered at
+   * all there, rather than reserved for a leg that may never exist.
+   */
+  drive: { leg: DayLegRow | undefined } | null;
   onCheckIn: (stop: DayStop) => void;
 }) {
   const name = shortName(stop.client.givenName, stop.client.familyInitial);
@@ -351,6 +431,14 @@ function Stop({
 
   return (
     <li className={`stop stop--${phase}`} aria-current={phase === 'current' ? 'step' : undefined}>
+      {/* The drive from the stop before. Rendered from the first paint with its
+          placeholder in it, so the row does not move when the estimate lands
+          (docs/SPEC/practitioner-phone.md section 5.4). */}
+      {drive === null ? null : (
+        <p className="stop__drive small muted numeric" aria-live="polite">
+          {describeLeg(drive.leg)}
+        </p>
+      )}
       {phase === 'past' ? (
         // A real disclosure, not a stub: a stop behind the practitioner folds
         // down to when it was and who it was, and opens again in full — the
@@ -380,6 +468,17 @@ export function TodayPage() {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
   const [balances, setBalances] = useState<Record<string, StopBalance>>({});
+  const [drives, setDrives] = useState<Drives | null>(null);
+  const [installDismissed, setInstallDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(INSTALL_KEY) === 'yes';
+    } catch {
+      // A browser with storage blocked shows the note every time, which is the
+      // safe way round: the note is one calm line, and losing it would lose the
+      // only place the two taps are named.
+      return false;
+    }
+  });
   // Which day each household's balance was last asked for. A ref rather than
   // state, because it decides whether to make a request and must not itself
   // cause a render: one fetch per household per day, so refreshing the day
@@ -424,10 +523,20 @@ export function TodayPage() {
     void fetchDay(apiFetch, date).then((next) => {
       if (live) setState(next);
     });
+    void fetchDrives(apiFetch, date).then((next) => {
+      if (live) setDrives(next);
+    });
     return () => {
       live = false;
     };
   }, [apiFetch, date, reloadToken]);
+
+  // Asked once, the first time this screen renders for a practitioner (section
+  // 3.3). Best effort by definition: a browser may decline, and a decline is
+  // not an error worth showing anybody.
+  useEffect(() => {
+    void requestPersistentStorage();
+  }, []);
 
   // The money at the door, one household at a time. Every request is its own,
   // so a household billing declines does not take the others down with it,
@@ -494,6 +603,14 @@ export function TodayPage() {
   // way back so the two faces are one app, not two sign-ins (round 10).
   const hasConsole = session.status === 'signed-in' && homeFor(session.actor).startsWith('/admin');
   const stops = state.kind === 'ready' ? state.stops : [];
+  const legsByStop = new Map((drives?.legs ?? []).map((leg) => [leg.toStopId, leg]));
+  const installNote =
+    !installDismissed &&
+    typeof navigator !== 'undefined' &&
+    wantsInstallNote(
+      navigator,
+      typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)').matches,
+    );
   const phases = stopPhases(
     stops.map((stop) => ({ windowStart: new Date(stop.windowStart), status: stop.status })),
     now,
@@ -527,6 +644,42 @@ export function TodayPage() {
             </Button>
           </div>
         ) : null}
+        {installNote ? (
+          <div className="today__install">
+            <Note>{INSTALL_NOTE}</Note>
+            <Button
+              variant="quiet"
+              onClick={() => {
+                setInstallDismissed(true);
+                try {
+                  localStorage.setItem(INSTALL_KEY, 'yes');
+                } catch {
+                  // Nothing to do: the note simply comes back next time.
+                }
+              }}
+            >
+              Not now
+            </Button>
+          </div>
+        ) : null}
+
+        {/* The day, as a picture. Above the stops and sized to the column: it
+            is for orientation, and the Navigate hand-off does the driving
+            (section 5.3, decision 2). */}
+        {stops.length > 0 && drives !== null ? (
+          drives.pictureUrl === null ? (
+            <p className="small muted">{MAP_UNAVAILABLE}</p>
+          ) : (
+            <img
+              className="today__map"
+              src={drives.pictureUrl}
+              alt={`A map of your ${stops.length === 1 ? 'stop' : `${stops.length} stops`} today`}
+              width={640}
+              height={400}
+            />
+          )
+        ) : null}
+
         {state.kind === 'ready' && stops.length === 0 ? (
           <Note>Nothing is booked for you today.</Note>
         ) : null}
@@ -538,13 +691,17 @@ export function TodayPage() {
                 stop={stop}
                 phase={phases[index] ?? 'later'}
                 balance={balances[stop.clientId] ?? null}
+                // Between consecutive stops, one line (section 5.4). The leg
+                // from the practitioner's home base to the first stop is
+                // estimated and drawn on the picture, but no line is reserved
+                // above the first card: a practice that records no home base
+                // would leave a placeholder there for ever.
+                drive={index === 0 ? null : { leg: legsByStop.get(stop.id) }}
                 onCheckIn={checkIn}
               />
             ))}
           </ol>
         ) : null}
-
-        <Note>Today needs a connection.</Note>
 
         {/* The account controls, set apart from the day by a rule and sized to
             themselves: full-width slabs here would read as two more actions of
