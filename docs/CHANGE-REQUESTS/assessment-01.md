@@ -28,6 +28,19 @@ head of pull request 73, so every other method on that address stays a plain
 404 with a 64 KB envelope. The route group is mounted after the authentication
 fence, beside `mountKit`.
 
+**And the clock, added in the fix round** (review gap 1).
+`ASSESSMENT_FILE_TIMEOUT_MS` (two minutes) and `requestTimeoutMs`, the one
+place either budget is chosen. `timeout` races the whole handler and the body
+read is inside it, so the ten seconds every other path keeps asked for better
+than 16 Mbit/s sustained and the door the cap exists for could not be used at
+all — the upload died at ten seconds whatever the practitioner did. Two minutes
+asks for about 1.4 Mbit/s. It is a longer budget rather than an exemption,
+because a request with no clock on it is a transaction held open for as long as
+somebody cares to dribble bytes at it; the real bound stays the body cap.
+Matched by method and path exactly as the cap is, and
+`tests/assessment/request-timeout.test.ts` proves every other method on that
+address and every other path in the API keeps the ordinary ten seconds.
+
 Why: spec section 7.1. The Documents tab cannot carry a vendor's export —
 `MAX_DOCUMENT_BYTES` is 45 KB inside a 64 KB JSON body — and a PDF report with
 its pictures in it is megabytes. The route itself accepts one media type,
