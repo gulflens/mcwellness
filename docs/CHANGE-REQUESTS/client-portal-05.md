@@ -1,0 +1,16 @@
+# client-portal-05 — the shared-zone changes piece seven needs
+
+**Status.** Authorised by the integrator on 2026-09-05 and, under cost rule 6 of `docs/HANDOVER.md`, applied in the portal's own pull request rather than a separate trunk round. The builder edits the paths below for this piece only and lists each edit in the pull-request body. Requests 01 to 04 on the unmerged `client-portal` branch of 2026-09-02 are superseded by this file and by `docs/SPEC/client-portal.md`.
+
+**What, and why.**
+
+1. `domain/shared/actor.ts` (and its test): four actions — `contact.write_own` (`contactUserId`), `portal.request.write` (`clientId`), `portal.request.handle`, `portal.access.manage` — with the audiences in the spec's section 5. The portal's reads use `client.read`, which already admits a contact for a client in `clientIds`.
+2. `app/api/_middleware/actor-schema.ts` and `create-api.ts`'s `/api/me`: `preferredLocale` in the answer, read from `app_user.preferred_locale` in the same query, so the portal opens in the person's language.
+3. `app/api/create-api.ts` and `server.ts`: mount `app/api/portal`'s signed-in routes after the fence; mount its door before the fence with its own budget (`RATE_LIMIT_INVITE_DOOR_PER_MINUTE`, `rate-limit.ts`'s `limitsFromEnv` and `.env.example`); an `authAdmin` option built by `authAdminFromEnv` in the portal's folder, the way `storage` is.
+4. `app/shell/App.tsx`, `adminAccess.ts`, `components/Rail.tsx`: `/portal/*` renders the portal root; `/portal/invite/:token` renders the invitation page without a session; `/admin/portal` renders the household-access page behind `canOpenPortalAccess` (`portal.access.manage`), with the rail entry "Portal". `routing.test.ts` is unchanged: `/portal` stays where a contact lands.
+5. `db/migrations/910_practice_whatsapp.sql` (trunk range, first half): `tenant.whatsapp_number`. `app/admin/settings/PracticePage.tsx`, `app/api/practice/routes.ts` and `schema.ts`: the field, beneath the identity, owner and admin.
+6. `db/policies/scheduling/appointment_access.sql` and `db/policies/client/writers.sql`: the two arms in the spec's section 6.5, each with its deny test in `tests/portal/db/`.
+7. `db/seed/generate.ts`, `apply.ts`, `render.ts` and `tests/db/seed.test.ts`: two client contacts with logins (the mother of a minor with a second parent on the record; the `self` contact of an Arabic-first adult, `preferred_locale` `ar`), `SeedContact.userId`, `RoleKind` gaining `client_contact`, the practice's WhatsApp number in the reserved block. The README's "four people with logins" becomes six.
+8. `domain/shared/audit-narrative.ts`: sentences for `portal_invite` and `portal_request` rows and for the `portal.invite.sent`, `portal.invite.redeemed` and `portal.access.revoked` actions, in both languages.
+
+**Spec.** `docs/SPEC/client-portal.md` sections 5 to 9 and 11.
