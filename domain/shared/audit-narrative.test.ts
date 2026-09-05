@@ -26,6 +26,83 @@ function event(overrides: Partial<AuditEvent>): AuditEvent {
 }
 
 const CASES: { name: string; event: AuditEvent; en: string; ar: string }[] = [
+  // The client portal (docs/SPEC/client-portal.md section 9,
+  // docs/CHANGE-REQUESTS/client-portal-05.md item 8).
+  {
+    name: 'inviting a household to the portal',
+    event: event({ entityType: 'portal_invite' }),
+    en: 'Hazel Harbour invited this household to the portal',
+    ar: 'Hazel Harbour دعا هذه الأسرة إلى البوابة',
+  },
+  {
+    name: 'the household spending its invitation',
+    event: event({
+      entityType: 'portal_invite',
+      action: 'update',
+      changedFields: ['used_at', 'updated_at'],
+    }),
+    en: 'The household used its portal invitation',
+    ar: 'استخدمت الأسرة دعوة البوابة الخاصة بها',
+  },
+  {
+    name: 'revoking an invitation',
+    event: event({
+      entityType: 'portal_invite',
+      action: 'update',
+      changedFields: ['revoked_at'],
+    }),
+    en: 'Hazel Harbour revoked a portal invitation',
+    ar: 'Hazel Harbour ألغى دعوة البوابة',
+  },
+  {
+    name: 'a household asking for a consent to be withdrawn',
+    event: event({
+      entityType: 'portal_request',
+      newValues: { kind: 'consent_withdrawal' },
+    }),
+    en: 'Hazel Harbour asked the practice, through the portal, to withdraw a consent',
+    ar: 'Hazel Harbour طلب من المركز، عبر البوابة، سحب موافقة',
+  },
+  {
+    name: 'a household asking to be forgotten',
+    event: event({ entityType: 'portal_request', newValues: { kind: 'erasure' } }),
+    en: 'Hazel Harbour asked the practice, through the portal, to erase the record',
+    ar: 'Hazel Harbour طلب من المركز، عبر البوابة، محو السجل',
+  },
+  {
+    name: 'the office marking a request handled',
+    event: event({
+      entityType: 'portal_request',
+      action: 'update',
+      changedFields: ['status', 'handled_at'],
+    }),
+    en: 'Hazel Harbour marked a portal request as handled',
+    ar: 'Hazel Harbour حدّد طلب البوابة كمُعالج',
+  },
+  {
+    name: 'sending a household its link',
+    event: event({ entityType: 'portal_invite', action: 'portal.invite.sent' }),
+    en: 'Hazel Harbour sent this household a link to the portal',
+    ar: 'Hazel Harbour أرسل لهذه الأسرة رابطًا إلى البوابة',
+  },
+  {
+    name: 'a household coming through the door',
+    event: event({ entityType: 'portal_invite', action: 'portal.invite.redeemed' }),
+    en: 'The household came through the portal door',
+    ar: 'دخلت الأسرة عبر باب البوابة',
+  },
+  {
+    name: "ending a household's access",
+    event: event({ entityType: 'app_user', action: 'portal.access.revoked' }),
+    en: "Hazel Harbour ended this household's access to the portal",
+    ar: 'Hazel Harbour أنهى وصول هذه الأسرة إلى البوابة',
+  },
+  {
+    name: 'a household correcting its own details',
+    event: event({ entityType: 'contact', action: 'portal.contact.corrected' }),
+    en: 'The household corrected its own contact details',
+    ar: 'صحّحت الأسرة بيانات الاتصال الخاصة بها',
+  },
   {
     name: 'creating a record',
     event: event({}),

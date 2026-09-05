@@ -47,6 +47,15 @@ const ENTITY: Record<string, Text> = {
   user_role: t('role', 'الدور'),
   service_type: t('service', 'الخدمة'),
   tenant: t('practice', 'المركز'),
+  // The client portal (docs/SPEC/client-portal.md section 9).
+  portal_invite: t('portal invitation', 'دعوة البوابة'),
+  portal_request: t('portal request', 'طلب من البوابة'),
+};
+
+/** What a household asked the practice for (docs/SPEC/client-portal.md 3.5). */
+const REQUEST_KIND: Record<string, Text> = {
+  consent_withdrawal: t('withdraw a consent', 'سحب موافقة'),
+  erasure: t('erase the record', 'محو السجل'),
 };
 
 const STATUS: Record<string, Text> = {
@@ -490,6 +499,103 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
     case 'erasure_request.insert':
       return pick(
         t(`${actor} requested erasure of this record`, `${actor} طلب محو هذا السجل`),
+        locale,
+      );
+    case 'portal_invite.insert':
+      // The practice handing a household the way in. The link itself is never
+      // in the trail: only its sha256 is stored at all (migration 700).
+      return pick(
+        t(`${actor} invited this household to the portal`, `${actor} دعا هذه الأسرة إلى البوابة`),
+        locale,
+      );
+    case 'portal_invite.update': {
+      // Two things move an invitation: it is spent, or it is revoked.
+      if (fields.includes('used_at')) {
+        return pick(
+          t('The household used its portal invitation', 'استخدمت الأسرة دعوة البوابة الخاصة بها'),
+          locale,
+        );
+      }
+      if (fields.includes('revoked_at')) {
+        return pick(
+          t(`${actor} revoked a portal invitation`, `${actor} ألغى دعوة البوابة`),
+          locale,
+        );
+      }
+      return pick(t(`${actor} changed a portal invitation`, `${actor} غيّر دعوة البوابة`), locale);
+    }
+    case 'portal_invite.read':
+    case 'portal_invite.list':
+      return pick(
+        t(`${actor} looked at this household's access`, `${actor} اطّلع على وصول هذه الأسرة`),
+        locale,
+      );
+    case 'portal_request.insert': {
+      const kind = label(REQUEST_KIND, event.newValues?.kind, locale);
+      return kind
+        ? pick(
+            t(
+              `${actor} asked the practice, through the portal, to ${kind}`,
+              `${actor} طلب من المركز، عبر البوابة، ${kind}`,
+            ),
+            locale,
+          )
+        : pick(t(`${actor} asked the practice something`, `${actor} طلب شيئًا من المركز`), locale);
+    }
+    case 'portal_request.update':
+      return fields.includes('status')
+        ? pick(
+            t(`${actor} marked a portal request as handled`, `${actor} حدّد طلب البوابة كمُعالج`),
+            locale,
+          )
+        : pick(t(`${actor} changed a portal request`, `${actor} غيّر طلب البوابة`), locale);
+    case 'portal_request.read':
+    case 'portal_request.list':
+      return pick(t(`${actor} read a portal request`, `${actor} اطّلع على طلب من البوابة`), locale);
+
+    // The three acts the routes record themselves (app/api/portal): the trail
+    // would otherwise show a row moving and never say who meant what by it.
+    case 'portal_invite.portal.invite.sent':
+      return pick(
+        t(
+          `${actor} sent this household a link to the portal`,
+          `${actor} أرسل لهذه الأسرة رابطًا إلى البوابة`,
+        ),
+        locale,
+      );
+    case 'portal_invite.portal.invite.redeemed':
+      return pick(
+        t('The household came through the portal door', 'دخلت الأسرة عبر باب البوابة'),
+        locale,
+      );
+    case 'app_user.portal.access.revoked':
+      return pick(
+        t(
+          `${actor} ended this household's access to the portal`,
+          `${actor} أنهى وصول هذه الأسرة إلى البوابة`,
+        ),
+        locale,
+      );
+    case 'portal_request.portal.request.made': {
+      const kind = label(REQUEST_KIND, event.newValues?.kind, locale);
+      return kind
+        ? pick(
+            t(`The household asked the practice to ${kind}`, `طلبت الأسرة من المركز ${kind}`),
+            locale,
+          )
+        : pick(
+            t('The household asked the practice something', 'طلبت الأسرة شيئًا من المركز'),
+            locale,
+          );
+    }
+    case 'portal_request.portal.request.handled':
+      return pick(t(`${actor} handled a portal request`, `${actor} عالج طلب البوابة`), locale);
+    case 'contact.portal.contact.corrected':
+      return pick(
+        t(
+          'The household corrected its own contact details',
+          'صحّحت الأسرة بيانات الاتصال الخاصة بها',
+        ),
         locale,
       );
     case 'client.erase':
