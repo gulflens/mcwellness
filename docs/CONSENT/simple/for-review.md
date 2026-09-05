@@ -24,11 +24,10 @@ recommendation is what happens if you say nothing.
    takes longer to set up. *Recommendation: Mumbai for now; move later if a
    client or a rule ever requires it.*
 
-5. **VAT.** The system currently records the practice as registered for VAT
-   under 105466777700001, which means every invoice adds 5%. If the practice
-   is not registered for VAT yet, say so and the switch is turned off; if it
-   is, please send a copy of the VAT certificate. *Recommendation: off until
-   you are registered.*
+5. **VAT.** The practice is not registered for VAT, so no invoice adds it.
+   The switch is turned on, with the number from the certificate, once the
+   Federal Tax Authority registers the practice, and the system will say when
+   sales are close to the threshold. **Settled 5 September 2026.**
 
 One more, only if it applies: for a child, one parent or guardian signs the
 agreement. If you would rather both parents sign, say so.
