@@ -9,14 +9,23 @@
 -- practice's own time zone, and domain/portal/money.ts asks the identical one
 -- of the same rows before the route ever reads them.
 --
--- **Restrictive, and written as "not a contact, or an adult contact".** A
--- restrictive policy can only narrow what a permissive one grants, so this can
--- never widen anybody's reach; and the first half of the condition is what
--- keeps every staff role untouched, including a staff member who is also a
--- contact of some client — they keep their staff reach, because the policy
--- asks whether they hold client_contact at all rather than assuming a person
--- is only ever one thing (docs/SPEC/00-data-model.md section 2: one user may
--- be several things at once).
+-- **Restrictive, and written as "not a household, or an adult of this one".**
+-- A restrictive policy can only narrow what a permissive one grants, so this
+-- can never widen anybody's reach.
+--
+-- The condition names the staff roles as well as asking whether the actor
+-- holds client_contact, because one user may be several things at once
+-- (docs/SPEC/00-data-model.md section 2) and the founder's own record is the
+-- obvious case: a person who is both an admin and a contact of her own
+-- child's record must keep her admin reach over every other household's
+-- money. The spec's section 6.5 says exactly that — "a staff member who is
+-- also a contact keeps their staff reach" — and the two-term predicate
+-- printed beside the sentence does not deliver it: `not
+-- actor_has_role('client_contact')` is false for such a person, so the
+-- remaining term would narrow them to the households they are a contact of.
+-- The sentence is the requirement and this is what satisfies it. The only
+-- actor this policy narrows is one who holds client_contact and no practice
+-- role at all, which is the household, which is the rule.
 --
 -- The six tables are the ones a figure can be read from: what was bought, what
 -- credits remain, what was invoiced and on which lines, what was paid, and
@@ -35,6 +44,9 @@ begin
     execute format(
       'create policy portal_money_adults on public.%I as restrictive for select to app_role '
       'using (not app.actor_has_role(''client_contact'') '
+      '       or app.actor_has_role(''owner'') or app.actor_has_role(''admin'') '
+      '       or app.actor_has_role(''lead_practitioner'') '
+      '       or app.actor_has_role(''practitioner'') or app.actor_has_role(''finance'') '
       '       or app.actor_is_adult_contact_of(client_id))', t);
   end loop;
 end
