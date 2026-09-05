@@ -6,7 +6,7 @@ import {
   whatsAppHandoff,
   type DocumentSender,
   type SendOutcome,
-} from '../../../domain/billing/sending';
+} from '../../../domain/shared/sending';
 import {
   clientDocumentKey,
   documentRetentionUntil,
@@ -26,7 +26,7 @@ import {
 import { invoiceDocument, receiptDocument } from './document-source';
 import { documentFonts } from './fonts';
 import { isUuid } from './ids';
-import { documentSender } from './sending';
+import { documentSender } from '../_middleware/sending';
 
 /**
  * `POST /api/billing/documents` — render an invoice or a receipt and file it.
@@ -315,7 +315,7 @@ const CONTACT_SQL =
  * **A hand-off, not a broadcast.** WhatsApp answers with a `wa.me` link the
  * person opens and presses send in; email answers through the sending seam,
  * whose only implementation today hands the link back for the share sheet
- * (`domain/billing/sending.ts`). Either way the practice is the one who sends,
+ * (`domain/shared/sending.ts`). Either way the practice is the one who sends,
  * which is how it works now and is what keeps an unapproved vendor out of a
  * family's contact details.
  *

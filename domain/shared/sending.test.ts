@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { draftMessage, whatsAppHandoff } from '../../domain/billing/sending';
-import { shareSheetSender, documentSender } from '../../app/api/billing/sending';
+import { draftMessage, whatsAppHandoff } from './sending';
 
 /**
  * The message a family receives, and the hand-off that carries it.
  *
- * The forced-fallback proof for this seam (CLAUDE.md's seam rule,
- * docs/SEAMS.md) is the last block: with no email vendor configured — which is
- * the state today and will be until one is approved — sending still works, and
- * works by handing the person the link to share themselves.
+ * The pure half of the seam: what is written and where the link points, with
+ * no vendor and no network anywhere near it. The forced-fallback proof — that
+ * the platform sends documents with no email vendor configured, which is the
+ * state today and will be until one is approved — is next to the
+ * implementations, in `app/api/_middleware/sending/seam.test.ts`.
  */
 
 const INVOICE = {
@@ -69,28 +69,5 @@ describe('the WhatsApp hand-off', () => {
     expect(whatsAppHandoff('050 000 0012', draftMessage(INVOICE))).toBeNull();
     expect(whatsAppHandoff('+0500000012', draftMessage(INVOICE))).toBeNull();
     expect(whatsAppHandoff('', draftMessage(INVOICE))).toBeNull();
-  });
-});
-
-describe('the sending seam with no vendor behind it', () => {
-  it('is what the platform chooses when nothing names one', () => {
-    expect(documentSender({}).name).toBe('share sheet');
-    expect(documentSender({ DOCUMENT_EMAIL_VENDOR: '  ' }).name).toBe('share sheet');
-  });
-
-  it('refuses at startup when something names a vendor that does not exist', () => {
-    // Rather than on the first send, weeks later, to a family that never got it.
-    expect(() => documentSender({ DOCUMENT_EMAIL_VENDOR: 'not-a-vendor' })).toThrow(
-      /approved in docs\/COMPLIANCE/,
-    );
-  });
-
-  it('sends nothing and says so, so the person shares the link themselves', async () => {
-    const outcome = await shareSheetSender().sendDocument({
-      to: 'nobody@example.com',
-      message: draftMessage(INVOICE),
-    });
-    expect(outcome.delivered).toBe(false);
-    expect(outcome.channel).toBe('email');
   });
 });

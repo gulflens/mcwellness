@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SEND_CHANNELS } from '../../../domain/billing/sending';
+import { SEND_CHANNELS } from '../../../domain/shared/sending';
 
 /**
  * The shapes the document routes accept and answer. Imported by the routes and
