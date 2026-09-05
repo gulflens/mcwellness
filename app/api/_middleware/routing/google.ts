@@ -48,12 +48,16 @@ const MAX_LEGS = 25;
  * The day's picture, as section 5.3 describes it: dark, achromatic, 640 by 400
  * at scale 2, numbered markers in stop order and a hairline path between them.
  *
- * The style parameters are Google's own vocabulary for a basemap and are the
- * one place in this repository where colours are written outside
- * `app/shell/tokens.css` — they are not CSS, they cannot read a custom
- * property, and they are a vendor's request format rather than the app's own
- * chrome. They are copied from the practitioner ground's ink and paper, and if
- * those tokens change these change with them.
+ * The style parameters are Google's own vocabulary for a basemap: they are not
+ * CSS, they cannot read a custom property, and they are a vendor's request
+ * format rather than the app's own chrome. So they are written out, and they
+ * are copied from the practitioner ground in `app/shell/tokens.css`; if a
+ * token changes, these change with it.
+ *
+ * **There are exactly three places in this repository where a token's value is
+ * written out** (.claude/rules/ui.md's named exceptions):
+ * `public/manifest.webmanifest`, `public/icon.svg` and the block below. Each
+ * says so, and each names the token it copied.
  */
 const PICTURE_WIDTH = 640;
 const PICTURE_HEIGHT = 400;
@@ -61,13 +65,16 @@ const PICTURE_SCALE = 2;
 const MAP_STYLE: readonly string[] = [
   // --paper on the dark ground.
   'feature:all|element:geometry|color:0x10191d',
-  // --ink-2, so a road reads without shouting.
+  // --rule, so a road reads without shouting. (Not --ink-2, which is #c6d1d4:
+  // this label was wrong and the colour was always the hairline's.)
   'feature:road|element:geometry|color:0x2b3b41',
+  // --slate on --paper: a label, and the ground behind its stroke.
   'feature:all|element:labels.text.fill|color:0x8fa0a6',
   'feature:all|element:labels.text.stroke|color:0x10191d',
   'feature:poi|element:all|visibility:off',
   'feature:transit|element:all|visibility:off',
   'feature:administrative|element:geometry|visibility:off',
+  // --surface, so water is a band lifted off the ground rather than a colour.
   'feature:water|element:geometry|color:0x16242a',
 ];
 
@@ -237,6 +244,7 @@ export function googleRouting(options: GoogleRoutingOptions): RoutingProvider {
       if (points.length > 1) {
         parameters.append(
           'path',
+          // --slate again, at full opacity: a hairline between the stops.
           `weight:1|color:0x8fa0a6ff|${points
             .map((point) => `${round(point.lat)},${round(point.lng)}`)
             .join('|')}`,

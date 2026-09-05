@@ -5,9 +5,11 @@
 
   The two colours are the practitioner ground's --paper and --ink, copied
   verbatim from app/shell/tokens.css. An SVG cannot read a CSS custom property
-  from another document, so this and public/manifest.webmanifest are the two
-  places in this repository where those values are written out; if the token
-  changes, these change with it.
+  from another document, so a value has to be written out here. There are three
+  such places in this repository and no others: this file,
+  public/manifest.webmanifest, and the Static Maps style in
+  app/api/_middleware/routing/google.ts. If a token changes, all three change
+  with it.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="McWellness">
   <rect width="512" height="512" rx="96" fill="#10191d"/>

@@ -1,4 +1,5 @@
 {
+  "comment": "background_color and theme_color are the practitioner ground's --paper, copied verbatim from app/shell/tokens.css. A manifest is JSON and cannot read a CSS custom property, so the value is written out here; the other two such places are public/icon.svg and the Static Maps style in app/api/_middleware/routing/google.ts. If the token changes, all three change with it. Browsers ignore a member they do not know.",
   "name": "McWellness",
   "short_name": "McWellness",
   "start_url": "/today",
