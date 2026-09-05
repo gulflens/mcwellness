@@ -94,7 +94,19 @@ Three functions in schema `app`, `security definer`, `set search_path = pg_catal
 
 `db/policies/portal/access.sql` — `portal_invite`: tenant isolation; select, insert and update for owner and admin only; nobody else, and never a contact, not even their own. `portal_request`: tenant isolation; select for owner, admin, lead practitioner, and a contact for their own client; insert for a contact for their own client (and the three office roles); update of the handling columns for the three office roles; delete for nobody. Every condition passes through `app.client_erasure_gate` as the ledger's do.
 
-`db/policies/portal/money.sql` — one restrictive select policy on each of `package_purchase`, `entitlement`, `invoice`, `invoice_line`, `payment` and `billing_document`: `not app.actor_has_role('client_contact') or app.actor_is_adult_contact_of(client_id)`. Restrictive, so it can only narrow what `ledger_readers` grants, and a staff member who is also a contact keeps their staff reach.
+`db/policies/portal/money.sql` — one restrictive select policy on each of `package_purchase`, `entitlement`, `invoice`, `invoice_line`, `payment` and `billing_document`:
+
+```
+not app.actor_has_role('client_contact')
+  or app.actor_has_role('owner') or app.actor_has_role('admin')
+  or app.actor_has_role('lead_practitioner')
+  or app.actor_has_role('practitioner') or app.actor_has_role('finance')
+  or app.actor_is_adult_contact_of(client_id)
+```
+
+Restrictive, so it can only narrow what `ledger_readers` grants; the only actor it narrows is one holding `client_contact` and no practice role at all, which is the household, which is the rule.
+
+**The practice's own roles are named because the two-term form did not deliver the sentence beside it.** This section printed `not app.actor_has_role('client_contact') or app.actor_is_adult_contact_of(client_id)` until 2026-09-05, and for a staff member who is also a contact the first term is false — the founder is a contact of her own child's record — so the second would have narrowed her to the households she is a contact of and taken her admin reach over every other household's money. One person is several things at once (`00-data-model.md` section 2), and a policy written as though a role were exclusive says something other than what it means to. The added disjuncts can only relax a narrowing and never widen past `ledger_readers`.
 
 Two arms in files other streams own, applied by this piece under the same authorisation:
 
