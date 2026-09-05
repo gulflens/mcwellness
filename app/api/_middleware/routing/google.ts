@@ -55,9 +55,10 @@ const MAX_LEGS = 25;
  * token changes, these change with it.
  *
  * **There are exactly three places in this repository where a token's value is
- * written out** (.claude/rules/ui.md's named exceptions):
- * `public/manifest.webmanifest`, `public/icon.svg` and the block below. Each
- * says so, and each names the token it copied.
+ * written out** (docs/SPEC/practitioner-phone.md section 3.1, which names them;
+ * .claude/rules/ui.md's own line is "never hardcode colours", with no
+ * exceptions of its own): `public/manifest.webmanifest`, `public/icon.svg` and
+ * the block below. Each says so, and each names the token it copied.
  */
 const PICTURE_WIDTH = 640;
 const PICTURE_HEIGHT = 400;
