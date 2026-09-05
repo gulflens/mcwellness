@@ -160,12 +160,38 @@ function neighboursOf(codes: readonly number[]): {
 }
 
 /**
+ * A glyph to draw, and the characters it was made from.
+ *
+ * The two are not the same thing and the difference is what a reader copies. A
+ * letter is drawn as the presentation form it takes in its word, and a lam
+ * followed by an alef is drawn as one glyph standing for two letters; neither
+ * is what somebody would type or search for. So every step below carries the
+ * source characters along beside the glyph, and `pdf.ts` writes *those* into
+ * the `/ToUnicode` map the clipboard reads.
+ *
+ * `from` is in the order the characters are drawn, not the order they are
+ * read: the run around them is placed right to left, and a reader's
+ * bidirectional algorithm turns the whole line round in one piece.
+ */
+export type Placed = {
+  /** The presentation form, or the character itself where it takes none. */
+  readonly code: number;
+  /** The characters this glyph stands for, in drawing order. Never empty. */
+  readonly from: readonly number[];
+};
+
+/**
  * Replaces the letters of an Arabic run with the shapes they take in it, still
  * in reading order. A character with no entry — a digit, a comma, a space —
  * passes through untouched.
  */
 export function shape(codes: readonly number[]): number[] {
-  const shaped: number[] = [];
+  return shapePlaced(codes).map((placed) => placed.code);
+}
+
+/** `shape`, keeping hold of which characters each glyph came from. */
+function shapePlaced(codes: readonly number[]): Placed[] {
+  const shaped: Placed[] = [];
   const { before, after } = neighboursOf(codes);
   for (let index = 0; index < codes.length; index += 1) {
     const code = codes[index];
@@ -179,34 +205,39 @@ export function shape(codes: readonly number[]): number[] {
     if (code === LAM && next !== null && LAM_ALEF.has(next)) {
       const ligature = LAM_ALEF.get(next);
       if (ligature) {
-        shaped.push(joinedBefore ? ligature[1] : ligature[0]);
+        // One glyph standing for two letters, so it is two letters that go in
+        // the map: a reader copying it gets the word it is spelt with.
+        const from: number[] = [code];
         // Skip the alef, and any marks that sat between the two letters.
         while (index + 1 < codes.length) {
           const skipped = codes[index + 1];
           if (skipped === undefined) break;
           index += 1;
+          from.push(skipped);
           if (skipped === next) break;
         }
+        shaped.push({ code: joinedBefore ? ligature[1] : ligature[0], from });
         continue;
       }
     }
 
     const forms = FORMS.get(code);
     if (!forms) {
-      shaped.push(code);
+      shaped.push({ code, from: [code] });
       continue;
     }
     const joinedAfter = next !== null && joinsToPrevious(next) && joinsToNext(code);
     const medial = forms[3];
     const initial = forms[2];
+    const from = [code];
     if (joinedBefore && joinedAfter && medial !== undefined) {
-      shaped.push(medial);
+      shaped.push({ code: medial, from });
     } else if (joinedBefore) {
-      shaped.push(forms[1]);
+      shaped.push({ code: forms[1], from });
     } else if (joinedAfter && initial !== undefined) {
-      shaped.push(initial);
+      shaped.push({ code: initial, from });
     } else {
-      shaped.push(forms[0]);
+      shaped.push({ code: forms[0], from });
     }
   }
   return shaped;
@@ -275,28 +306,33 @@ function isNeutral(code: number): boolean {
  * gap.
  */
 export function toVisualOrder(codes: readonly number[]): number[] {
+  return orderPlaced(codes.map((code) => ({ code, from: [code] }))).map((placed) => placed.code);
+}
+
+/** `toVisualOrder`, keeping hold of which characters each glyph came from. */
+function orderPlaced(shaped: readonly Placed[]): Placed[] {
   // Built by pushing and reversed once at the end, rather than unshifted.
   // `out.unshift(...codes.slice(…))` spreads a run into the argument list, so a
   // long enough line blew the call stack — on the path that renders a client's
   // financial record, from a string somebody typed. A left-to-right stretch is
   // pushed backwards so that the single reverse below leaves it reading
   // forwards.
-  const out: number[] = [];
+  const out: Placed[] = [];
   let index = 0;
-  while (index < codes.length) {
-    const code = codes[index];
-    if (code === undefined) break;
-    if (isLeftToRight(code)) {
+  while (index < shaped.length) {
+    const placed = shaped[index];
+    if (placed === undefined) break;
+    if (isLeftToRight(placed.code)) {
       // Take the whole left-to-right stretch, including spaces and punctuation
       // inside it, and keep it as it stands.
       const start = index;
       let end = index;
-      for (let look = index; look < codes.length; look += 1) {
-        const at = codes[look];
+      for (let look = index; look < shaped.length; look += 1) {
+        const at = shaped[look];
         if (at === undefined) break;
-        if (isLeftToRight(at)) {
+        if (isLeftToRight(at.code)) {
           end = look;
-        } else if (isNeutral(at)) {
+        } else if (isNeutral(at.code)) {
           // Carried along, but never extending the run on its own: a space
           // between a number and the Arabic that follows belongs to the Arabic.
           continue;
@@ -305,15 +341,24 @@ export function toVisualOrder(codes: readonly number[]): number[] {
         }
       }
       for (let at = end; at >= start; at -= 1) {
-        const value = codes[at];
+        const value = shaped[at];
         if (value !== undefined) out.push(value);
       }
       index = end + 1;
       continue;
     }
     // Right-to-left, so a mirrored character is drawn as its pair: the bracket
-    // that opens the phrase is the one on the right.
-    out.push(MIRRORED.get(code) ?? code);
+    // that opens the phrase is the one on the right. The character it stands
+    // for is still the one that was written — a reader copying "(" should not
+    // be handed ")" — so only the drawn glyph is turned round.
+    //
+    // A glyph standing for more than one character has those characters put
+    // into drawing order too, so that the whole run comes off the page in one
+    // direction and a reader turning it round gets the word back.
+    out.push({
+      code: MIRRORED.get(placed.code) ?? placed.code,
+      from: placed.from.length > 1 ? [...placed.from].reverse() : placed.from,
+    });
     index += 1;
   }
   out.reverse();
@@ -325,5 +370,13 @@ export function toVisualOrder(codes: readonly number[]): number[] {
  * The one call the renderer makes.
  */
 export function forDrawing(text: string): number[] {
-  return toVisualOrder(shape([...text].map((character) => character.codePointAt(0) ?? 0)));
+  return place(text).map((placed) => placed.code);
+}
+
+/**
+ * `forDrawing`, keeping hold of which characters each glyph came from, so the
+ * writer can tell a reader what the page says as well as draw it.
+ */
+export function place(text: string): Placed[] {
+  return orderPlaced(shapePlaced([...text].map((character) => character.codePointAt(0) ?? 0)));
 }

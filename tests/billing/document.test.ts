@@ -3,8 +3,8 @@ import { documentFonts } from '../../app/api/billing/fonts';
 import {
   extractAll,
   extractText,
-  forDrawing,
   renderDocument,
+  toVisualOrder,
   WORDS,
   type InvoiceDocument,
   type ReceiptDocument,
@@ -15,7 +15,7 @@ import {
  * What a rendered invoice says, read back off the page.
  *
  * The text is extracted through the same `/ToUnicode` map a PDF viewer uses to
- * let a person select and copy it (`domain/billing/document/extract.ts`), so
+ * let a person select and copy it (`domain/shared/document/extract.ts`), so
  * these are assertions about the document a family actually receives, not about
  * the object that produced it.
  *
@@ -30,8 +30,15 @@ import {
 
 const fonts = documentFonts();
 
-/** The same string the page draws it as: shaped, and in right-to-left order. */
-const asDrawn = (arabic: string): string => String.fromCodePoint(...forDrawing(arabic));
+/**
+ * The same string as a person copying it off the page gets it: the letters
+ * themselves, in the order the glyphs are drawn, which for a right-to-left run
+ * is the reverse of the order it is read in. Not the presentation forms the
+ * page draws — the writer's `/ToUnicode` map hands a reader the letters
+ * (`domain/shared/document/pdf.test.ts`).
+ */
+const asCopied = (arabic: string): string =>
+  String.fromCodePoint(...toVisualOrder([...arabic].map((c) => c.codePointAt(0) ?? 0)));
 
 const UNREGISTERED: SupplierSnapshot = {
   legalName: 'Synthetic Wellness Studio',
@@ -87,8 +94,8 @@ describe('an invoice from a practice that is not registered for VAT', () => {
   it('is headed "Invoice", and never "Tax Invoice"', () => {
     expect(page).toContain('Invoice');
     expect(page).not.toContain('Tax Invoice');
-    expect(page).toContain(asDrawn(WORDS.invoice.ar));
-    expect(page).not.toContain(asDrawn(WORDS.taxInvoice.ar));
+    expect(page).toContain(asCopied(WORDS.invoice.ar));
+    expect(page).not.toContain(asCopied(WORDS.taxInvoice.ar));
   });
 
   it('carries no VAT registration number, no rate and no VAT line', () => {
@@ -106,7 +113,7 @@ describe('an invoice from a practice that is not registered for VAT', () => {
 
   it('states plainly why there is no VAT on it, in both languages', () => {
     expect(page).toContain('The practice is not registered for VAT');
-    expect(page).toContain(asDrawn('المنشأة غير مسجلة في ضريبة القيمة المضافة'));
+    expect(page).toContain(asCopied('المنشأة غير مسجلة في ضريبة القيمة المضافة'));
   });
 
   it('names the corporate-tax registration at length, never as a tax registration number', () => {
@@ -125,7 +132,7 @@ describe('an invoice from a practice that is registered', () => {
 
   it('is headed "Tax Invoice", in both languages', () => {
     expect(page).toContain('Tax Invoice');
-    expect(page).toContain(asDrawn(WORDS.taxInvoice.ar));
+    expect(page).toContain(asCopied(WORDS.taxInvoice.ar));
   });
 
   it('carries the VAT registration number, the rate and the VAT line', () => {
@@ -155,7 +162,7 @@ describe('every invoice, whatever the registration', () => {
 
   it('carries the practice, its licence and its address', () => {
     expect(page).toContain('Synthetic Wellness Studio');
-    expect(page).toContain(asDrawn('استوديو العافية التجريبي'));
+    expect(page).toContain(asCopied('استوديو العافية التجريبي'));
     expect(page).toContain('Unit 1, Synthetic Tower, Dubai');
     expect(page).toContain('SYN-000000');
     expect(page).toContain('Synthetic Department of Economy and Tourism');
@@ -170,7 +177,7 @@ describe('every invoice, whatever the registration', () => {
 
   it("carries each line's description in both languages, with its quantity and unit price", () => {
     expect(page).toContain('Neurofeedback session');
-    expect(page).toContain(asDrawn('جلسة نيوروفيدباك'));
+    expect(page).toContain(asCopied('جلسة نيوروفيدباك'));
     expect(page).toContain('Quantity');
     expect(page).toContain('Unit price (AED)');
   });
@@ -278,7 +285,7 @@ describe('a receipt', () => {
   it('is headed "Receipt" and never "Invoice"', () => {
     expect(page).toContain('Receipt');
     expect(page).not.toContain('Tax Invoice');
-    expect(page).toContain(asDrawn(WORDS.receipt.ar));
+    expect(page).toContain(asCopied(WORDS.receipt.ar));
   });
 
   it('carries its own number, from its own book', () => {

@@ -10,22 +10,17 @@
  * an unregistered practice's invoice.
  *
  * It works because the writer embeds a `/ToUnicode` map for every face, which a
- * real PDF wants anyway.
+ * real PDF wants anyway. So what this reads is what a person selecting the line
+ * and copying it gets, not a private channel between the writer and its tests.
  *
- * **One thing that map does not yet give a reader.** Arabic is shaped and put
- * into drawing order before it is written (`arabic.ts`), so the map's entries
- * are presentation forms in visual order: text copied out of an Arabic run
- * comes back reversed and spelt in the FE70 block rather than in the letters
- * somebody would search for. It is legible to this extractor, which is reading
- * the same glyphs the page draws, and to a person reading the page — but it is
- * not usable text on the clipboard. Mapping each glyph back to the logical
- * character it came from would fix it, and is a small change to the writer
- * rather than to this file; it is recorded in
- * `docs/CHANGE-REQUESTS/billing-04.md` rather than done here, because it is not
- * what this round is for and the English half copies correctly today.
- *
- * So: what this reads is what the page draws, which is what the tests are
- * about. It is not a promise about the clipboard.
+ * **What the map says, and what it does not.** Since 2026-09-06 the writer maps
+ * each glyph to the characters it was made from rather than to the shape it
+ * draws (`pdf.ts`), so an Arabic run comes back as the letters somebody would
+ * type and search for rather than as the FE70 block. What it comes back in is
+ * still the order the glyphs are drawn, which for a right-to-left run is the
+ * reverse of the order it is read: turning that round is the reader's
+ * bidirectional algorithm's job, and it can only do it correctly when it is
+ * handed real letters, which is the half the writer owed it.
  *
  * Deliberately narrow: it understands the small subset `pdf.ts` writes
  * (uncompressed streams, hexadecimal strings, one `Tj` per run) and nothing
@@ -49,7 +44,7 @@ function objectsOf(pdf: string): Objects {
   return objects;
 }
 
-/** The `beginbfchar` pairs of a ToUnicode CMap: glyph id to the text it draws. */
+/** The `beginbfchar` pairs of a ToUnicode CMap: glyph id to the text it stands for. */
 function bfcharsOf(body: string): Map<number, string> {
   const map = new Map<number, string>();
   const pattern = /<([0-9A-Fa-f]{4})> <([0-9A-Fa-f]{4,})>/g;
