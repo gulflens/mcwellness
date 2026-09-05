@@ -22,7 +22,9 @@ type Workflow = { name?: unknown; on?: unknown; jobs?: Record<string, unknown> }
 describe('.github/workflows', () => {
   it('holds the workflows this repository expects', () => {
     // Named rather than counted, so adding one is free and losing one is not.
-    expect(files).toEqual(expect.arrayContaining(['audit.yml', 'release.yml', 'verify.yml']));
+    expect(files).toEqual(
+      expect.arrayContaining(['audit.yml', 'backup.yml', 'release.yml', 'verify.yml']),
+    );
   });
 
   it.each(files)('%s parses as YAML and declares a name, a trigger and jobs', (file) => {
