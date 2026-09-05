@@ -128,6 +128,8 @@ To the seam table in `docs/SEAMS.md`:
 | Documents out | `domain/billing/sending.ts` | an email vendor, once one is approved | the message composed and the link handed back for the share sheet | `DOCUMENT_EMAIL_VENDOR` |
 ```
 
+_Closed in trunk round 29, 2026-09-06._
+
 And to the WhatsApp row of `docs/COMPLIANCE/approved-vendors.md`:
 
 ```markdown
@@ -316,6 +318,8 @@ correctly. The fix is to record, per drawn glyph, the logical character it came
 from and map *that* into `/ToUnicode`, which is a change to the writer alone. It
 is written up in `domain/billing/document/extract.ts` so nobody reads that
 extractor as a promise about the clipboard.
+
+_Closed in trunk round 29, 2026-09-06._
 
 **And one thing that is intended.** `invoice.supplied_on` (migration 406) exists
 and nothing writes it. A single visit is supplied on the day it is invoiced, so
