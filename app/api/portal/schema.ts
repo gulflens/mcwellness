@@ -101,6 +101,7 @@ export const MoneySummary = z.object({
   sessionsUsed: z.number().int().nonnegative().nullable(),
   sessionsTotal: z.number().int().nonnegative().nullable(),
 });
+export type MoneySummary = z.infer<typeof MoneySummary>;
 
 /** Something waiting on the household (section 3.1). */
 export const Notice = z.object({

@@ -1,0 +1,208 @@
+/*
+  The record: calm, generous, low density (docs/DESIGN-BRIEF.md section 6.3,
+  docs/SPEC/client-portal.md section 3).
+
+  One column at the 68-character measure, a header across the top and no rail.
+  Below 720px the same column at full width. Every value comes from
+  app/shell/tokens.css — no colour literal appears here — and every rule is
+  written in logical properties, so the Arabic edition is a mirrored layout
+  rather than a flipped English one: `dir` on the portal's own root is all the
+  browser needs.
+*/
+
+.portal {
+  min-block-size: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.portal__header {
+  border-block-end: var(--hairline) solid var(--rule);
+  background: var(--surface);
+}
+
+.portal__bar {
+  max-inline-size: var(--measure);
+  margin-inline: auto;
+  padding: var(--s-4) var(--s-6);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-3) var(--s-4);
+}
+
+.portal__mark {
+  font-weight: var(--w-medium);
+}
+
+.portal__practice {
+  color: var(--ink-2);
+  flex: 1 1 auto;
+}
+
+.portal__person {
+  color: var(--ink-2);
+}
+
+/* The language switch: two buttons, the standing one marked, no flag and no
+   globe. A language is a word in its own script. */
+.portal__languages {
+  display: flex;
+  gap: var(--s-1);
+}
+
+.portal__language {
+  min-block-size: var(--tap);
+  padding-inline: var(--s-3);
+  border: var(--hairline) solid transparent;
+  border-radius: var(--r-2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.portal__language[aria-pressed='true'] {
+  border-color: var(--rule);
+  background: var(--paper);
+  font-weight: var(--w-medium);
+}
+
+.portal__nav {
+  max-inline-size: var(--measure);
+  margin-inline: auto;
+  padding: 0 var(--s-6) var(--s-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+}
+
+.portal__nav a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--tap);
+  color: var(--ink-2);
+  text-decoration: none;
+  border-block-end: 2px solid transparent;
+}
+
+.portal__nav a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: var(--w-medium);
+  border-block-end-color: var(--ink);
+}
+
+.portal__main {
+  max-inline-size: var(--measure);
+  margin-inline: auto;
+  padding: var(--s-8) var(--s-6) var(--s-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-8);
+}
+
+.portal__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* A client's name as a section heading. One client, no heading (section 3). */
+.portal__client {
+  padding-block-end: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.portal__client-ar {
+  display: block;
+  color: var(--ink-2);
+}
+
+/* An editorial block: a fact and its answer, generously spaced. */
+.portal__facts {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) 1fr;
+  gap: var(--s-2) var(--s-5);
+  margin: 0;
+}
+
+.portal__facts dt {
+  color: var(--ink-2);
+}
+
+.portal__facts dd {
+  margin: 0;
+}
+
+.portal__figure {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--w-medium);
+}
+
+.portal__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.portal__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2) var(--s-4);
+  padding-block: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.portal__row > :first-child {
+  flex: 1 1 12rem;
+}
+
+.portal__row-note {
+  flex-basis: 100%;
+  color: var(--ink-2);
+}
+
+.portal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.portal__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding: var(--s-5);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+}
+
+.portal__check {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-block-size: var(--tap);
+}
+
+.portal__scroll {
+  overflow-x: auto;
+}
+
+@media (max-width: 720px) {
+  .portal__bar,
+  .portal__nav,
+  .portal__main {
+    max-inline-size: none;
+    padding-inline: var(--s-4);
+  }
+
+  .portal__facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 0;
+  }
+
+  .portal__facts dt {
+    padding-block-start: var(--s-3);
+  }
+}

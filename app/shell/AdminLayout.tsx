@@ -1,5 +1,11 @@
 import { Outlet } from 'react-router';
-import { canOpenBilling, canOpenSchedule, canOpenSettings, canOpenToday } from './adminAccess';
+import {
+  canOpenBilling,
+  canOpenPortalAccess,
+  canOpenSchedule,
+  canOpenSettings,
+  canOpenToday,
+} from './adminAccess';
 import type { Actor } from './auth/AuthContext';
 import { useAuth } from './auth/AuthContext';
 import { ADMIN_SECTIONS, Rail, type RailSection } from './components/Rail';
@@ -21,6 +27,7 @@ function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
     if (section.key === 'schedule') return canOpenSchedule(actor, now);
     if (section.key === 'today') return canOpenToday(actor);
     if (section.key === 'settings') return canOpenSettings(actor, now);
+    if (section.key === 'portal') return canOpenPortalAccess(actor, now);
     return true;
   });
 }

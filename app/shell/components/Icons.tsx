@@ -75,6 +75,14 @@ export const SettingsIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** A door with a way through it: the household's own way into its record. */
+export const PortalIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M11.5 3.25h3.25a1 1 0 0 1 1 1v11.5a1 1 0 0 1-1 1H11.5" />
+    <path d="M8 6.5 4.5 10 8 13.5M4.5 10h8" />
+  </Icon>
+);
+
 export const SignOutIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M8 3.25H4.5a1 1 0 0 0-1 1v11.5a1 1 0 0 0 1 1H8" />

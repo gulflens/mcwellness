@@ -37,6 +37,17 @@ export function canOpenSettings(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `portal.access.manage` (app/api/portal/access.ts) — who may open
+ * Settings › Portal. Handing out access to a household's own record is the
+ * same class of act as granting a role, so the audience is the owner and an
+ * admin, and `db/policies/portal/access.sql` refuses the rows beneath both
+ * this screen and the route (docs/SPEC/client-portal.md section 3.8).
+ */
+export function canOpenPortalAccess(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'portal.access.manage' }, {}, now);
+}
+
+/**
  * Matches the `/today/check-in` gate in App.tsx: who may cross to the
  * practitioner's side. An owner who also treats holds `lead_practitioner`
  * alongside owner, so the console offers them "Today"; an admin-only or
