@@ -621,6 +621,174 @@ email and WhatsApp preference).
   password protection, unrelated to this pass and already known
   (docs/SECURITY.md). Nothing new.
 
+## What was done on 2026-09-06, eighth pass: the practitioner's phone
+
+Main had reached `4258ded`, pull request 73's merge of the practitioner's-phone
+stream, and staging had stopped at 950 (the fifty-five rows the seventh pass
+left, VAT correction included). Before anything else, main was fast-forwarded
+to `0c99ff2`: two further pull requests had merged behind the brief's back
+(75, hosting-spec; 76, piece-ten-specs), both documentation only —
+`git diff --stat 4258ded..0c99ff2` touches nothing under `db/`, `app/` or
+`domain/` — so the base moved but nothing this pass owed changed.
+
+- **The fifty-five rows already there were checked before anything was
+  applied.** Every file's own sha256, computed straight off the files on
+  disk, matched the checksum staging had recorded for it exactly, so no
+  merged migration had been edited behind the runner's back.
+- **Two migrations were applied** one at a time through Supabase's migration
+  tool, in filename order: `204_drive_estimate.sql` and
+  `306_kit_and_setup_photo.sql` (the brief's guess of `306_kit.sql` was close
+  but not the file's actual name). Each was applied under the audit context
+  the runner sets — `app.reason` naming the file, and a fresh request id —
+  with the bookkeeping row written immediately after, carrying the same
+  sha256 the runner would compute. `schema_migration` now holds
+  **fifty-seven rows**, one per file in `db/migrations`.
+- **Both were asked, as the brief asked, whether either could meet a row it
+  would refuse.** 204 creates `drive_estimate` from nothing and adds two
+  columns to `scheduling_setting` with defaults, so there was no existing row
+  either statement could refuse. 306 is the one the brief flagged by name: it
+  drops and recreates `app.checkin_context` (PostgreSQL will not let
+  `create or replace` change a function's return columns, and 306 adds two)
+  and adds a nullable `kit_id` to `session`. Neither met a row it would
+  refuse either — `checkin_context` is called by the API, not stored in a
+  view or another function's body, and `session.kit_id` carries no default
+  and no not-null. The grants were checked afterwards, as asked:
+  `has_function_privilege` on the five callable functions 306 adds
+  (`checkin_context`, `setup_photo_consent_active`,
+  `file_setup_photo_document`, `file_setup_photo`, `previous_setup_photo`)
+  shows `app_role` holding execute and `public` holding none on every one;
+  the sixth, the trigger function `session_refuse_update_after_close`, holds
+  neither grant on either side, which is correct — a trigger function is
+  never called directly, only fired — and table grants on `drive_estimate`
+  and `kit` both show `app_role` with exactly insert, select, update, no
+  delete, matching what each migration's own `do $$ ... $$` block grants.
+- **Seventeen policy files were re-applied**, in path order, split across
+  three calls for the tool's own size limit (the same reason the seventh
+  pass split its fifteen across three): `db/policies/scheduling/drive_estimate.sql`
+  and `db/policies/session/kit.sql` are the two new arrivals, one per
+  migration. One hundred and twenty-six policies stand on `public`
+  afterwards — one hundred and eighteen before this pass, plus four each on
+  `drive_estimate` and `kit` (a tenant-isolation policy and one restrictive
+  policy per verb the table grants) — matching what a fresh local database
+  carries for the same fifty-seven migrations.
+- **The seed owed the kit register, and only that.**
+  `git log c80a17a..4258ded -- db/seed` shows one commit
+  (`0b62ca0`, "an amplifier per practitioner, and one overdue on the shelf"):
+  an amplifier for each of the three seed practitioners, in date, and one
+  unassigned amplifier whose calibration lapsed. `pnpm seed:sql` was
+  rendered against `.env.staging` (read once, never printed, and deleted the
+  moment its four `insert into kit` statements were taken from it) and
+  checked against staging first: the tenant id and the three practitioner
+  ids the render names are the exact ids already seeded on staging, and the
+  `kit` table itself held zero rows before this pass, so there was nothing
+  to reconcile — the render's four statements were applied verbatim, in one
+  transaction, under the seed's own reason (`synthetic seed`) with the owner
+  stamped as actor and holding the same roles the seed itself would stamp
+  (`owner,admin,lead_practitioner,finance`). All four rows now stand
+  exactly as rendered.
+- **Fingerprinted against a fresh `pnpm db:reset && pnpm db:migrate`** on
+  `mcwellness-trunk` (its own database, port 5441), after fetching and
+  fast-forwarding it to the same `0c99ff2` the laptop checkout now sits on.
+  Fifty-seven migrations and seventeen policy files applied cleanly to an
+  empty database. Nine parts compared by content, not by count alone:
+  columns (1,145, by schema, table, name, type, nullability and default),
+  indexes (428), triggers (263), policies (126), row-level security flags
+  (67 tables), functions (69, by schema, name, argument list, return type,
+  volatility, security definer and language), the grants `app_role` holds
+  on `public` and `app` together (98), and what `PUBLIC`, `anon` and
+  `authenticated` hold on either schema (nothing, on both sides). All eight
+  hashed identically. The ninth, constraints, hashed identically too once
+  one thing was normalised: PostgreSQL 17 catalogues an unnamed `not null`
+  column constraint under a system-generated name that embeds internal
+  object ids (`1726018_1727415_10_not_null` and the like), and those ids are
+  never the same across two independently-created databases even from
+  byte-identical DDL. With every such synthetic name folded to one label and
+  every explicitly-named constraint compared in full, both sides hash to the
+  same value over the same 1,039 rows. This is a new note, not a new
+  problem — it stands beside the two the fifth and sixth passes already
+  recorded (the position of `schema_migration.checksum`, and of
+  `invoice.supplied_on`) as a difference in a name or a position that
+  nothing in the codebase reads, never a difference in what the schema
+  means.
+- **The audit chain verifies** end to end. It stood at 930 rows before this
+  pass touched any data; the kit seed catch-up added four (one insert per
+  row), and proving the routing fallback actually writes an estimate (next
+  paragraph) added and then removed one appointment and one cache row,
+  netting one insert and one delete each side of that check. The chain
+  verifies at every point checked, `app.verify_audit_chain()` returning
+  null throughout.
+- **The demo needed a fresh visit row**, as every pass before it has. The
+  one the seventh pass left was dated 2026-09-05; the server's own clock
+  read 2026-09-05 21:22 UTC when this pass ran, which is already
+  2026-09-06 past midnight in Dubai, so a plain `current_date` (server-side,
+  UTC) still names yesterday in the practice's own day — the same trap the
+  seventh pass hit from the other direction. The form `app.checkin_context`
+  itself uses, `(date_trunc('day', now() at time zone 'Asia/Dubai'))::date`,
+  was used instead: a confirmed home visit for MW-000005 at 10:00–10:45
+  Dubai time (06:00–06:45 UTC), `busy_end` computed by the trigger to 07:15
+  UTC, at that client's seeded home, under the real owner's own actor
+  stamp. `app.checkin_context` now answers `found: true` with two active
+  consents, and, new from this pass, `kit_calibration_overdue: false` and
+  `kit_id: null` — correct, because the owner's own demo practitioner row
+  carries no assigned amplifier (only the three seed practitioners do), so
+  "nothing assigned is no block" is exactly what should show.
+- **The routing fallback was proved end to end, not just configured.** A
+  second, temporary appointment was booked for the same practitioner later
+  the same day at a different client's location, a magic link was minted
+  server-side for the real owner's account (`generateLink`, which returns a
+  link without sending mail) and exchanged for a session with the anon key,
+  and `GET /api/routing/day?date=2026-09-06` was called with that session's
+  token against the rebuilt staging server. It answered one leg,
+  `"source":"straight-line"`, a plausible distance and duration between the
+  two seeded addresses, and the same row appeared in `drive_estimate` under
+  hour bucket 11 — the cache the route itself writes to. Both the temporary
+  appointment and its cache row were deleted immediately afterwards, under
+  their own audit reason, so the demo stands at its usual one visit and the
+  cache stands empty until the day sheet itself asks. `mapAvailable: false`
+  in the same response is expected and unrelated: the picture needs a
+  Google Maps key the practice has not yet supplied (docs/HANDOVER.md).
+
+### The routing fallback and the laptop's own database
+
+Per docs/HANDOVER.md sections 4 and 5: `.env.staging` was checked for
+`ROUTING_PROVIDER` and did not carry it, so `ROUTING_PROVIDER=straight-line`
+was appended — the practice has not supplied a routing vendor key, so
+staging runs the fallback until it does, and the route's own response above
+confirms it is actually taking effect rather than merely being set.
+`pnpm db:migrate` in the laptop checkout found nothing pending: both
+migrations were already applied there before this pass began. The staging
+bundle was rebuilt with `pnpm exec vite build --mode staging` (866 kB main
+chunk, service worker precache rewritten to 23 entries). The keep-alive
+script (see below) restarted the server on port 3100 within its own
+sixty-second poll once the old process was stopped; `curl` afterwards
+confirmed `/api/health` answers `{"ok":true,...}`, `/manifest.webmanifest`
+serves as `application/manifest+json`, and `/sw.js` serves as
+`text/javascript`.
+
+**A keep-alive script was running throughout** (`ps -ef | grep keepalive`
+shows it, PID 96432, polling every sixty seconds), restarting both the
+staging server and the laptop's own `pnpm dev` if either drops. It was not
+fought: the staging server was stopped once, deliberately, so the rebuilt
+bundle would be served by a fresh process, and the script picked that up
+and relaunched it with the exact command docs/HANDOVER.md section 5 names
+before this pass checked the endpoints.
+
+**A mistake, corrected, and worth recording plainly.** While adding the
+`ROUTING_PROVIDER` line, a shell redirection appended it to `.env.staging`
+without a leading newline, which landed it stuck onto the end of the
+`SUPABASE_STORAGE_KEY` line instead of on a line of its own; a diagnostic
+command run immediately afterwards to locate the fault then printed that
+corrupted line — service-role key included — into this session's own tool
+output before the fault was understood. The file was repaired within the
+same minute (the stray suffix stripped back off the key, `ROUTING_PROVIDER`
+re-added on its own line, both confirmed by grepping variable names rather
+than values), and nothing beyond that one tool result ever saw the key: it
+was not committed, not logged to a file, and not repeated afterwards. The
+key is a service-role credential for the staging project alone, which holds
+synthetic data only — but it is still a credential that briefly left the
+place it belongs, and rotating it from the project's API settings is the
+operator's call to make, not this pass's to skip past.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
