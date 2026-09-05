@@ -184,6 +184,11 @@ function fingerprint(bytes: Uint8Array): string {
  */
 type Used = Map<FontSlot, Map<number, readonly number[]>>;
 
+/** Whether two glyphs stand for the same characters, in the same order. */
+function sameSource(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((code, at) => code === b[at]);
+}
+
 /** Draws one page's operations, recording which glyphs each face was asked for. */
 function contentOf(
   page: Page,
@@ -239,7 +244,28 @@ function contentOf(
         // not something to paper over on a tax invoice.
         if (glyph === null) continue;
         glyphs += hex4(glyph);
-        seen.set(glyph, placed.from);
+        // One glyph, one entry in the map — but a document can reach the same
+        // glyph from two different sources. A bracket inside a right-to-left
+        // run is drawn as its mirror image, so the shape that closes an Arabic
+        // line stands for the bracket that opened it, while the identical shape
+        // in "Total (AED)" stands for itself; both are drawn by the Latin face,
+        // which has one `/ToUnicode` map between them. Letting whichever was
+        // drawn last win hands the English half the Arabic half's answer, so an
+        // Arabic legal name or line description carrying brackets would make
+        // "Total (AED)" copy as "Total )AED(".
+        //
+        // When the sources disagree the glyph therefore falls back to the
+        // character it itself draws. The English reading is then right, and the
+        // mirrored bracket in the Arabic run comes off the clipboard as the
+        // shape on the page rather than as the wrong bracket: a bracket the
+        // reader can see is the smaller loss, and the letters either side of it
+        // — the half that could not be searched for at all — are untouched.
+        const already = seen.get(glyph);
+        if (already === undefined) {
+          seen.set(glyph, placed.from);
+        } else if (!sameSource(already, placed.from)) {
+          seen.set(glyph, [placed.code]);
+        }
       }
       if (glyphs.length === 0) continue;
       out.push(`/${resource} ${num(op.style.size)} Tf`);

@@ -133,4 +133,44 @@ describe('copying Arabic off a rendered page', () => {
     };
     expect(extractText(renderPdf([page], fonts, 'Synthetic')).join('')).toBe('Invoice INV-000001');
   });
+
+  it('does not let a bracket in an Arabic run change what an English label copies as', () => {
+    // Both brackets below are drawn by the Latin face, which has one
+    // `/ToUnicode` map between them, and the Arabic run draws each as its
+    // mirror image. So the glyph that draws ")" stands for ")" in the label and
+    // for "(" in the Arabic line, and the map has one entry to say it with.
+    // The Arabic line is drawn second, so before this was fixed the label
+    // copied as "Total )AED(" — a real invoice's English half broken by a pair
+    // of brackets in a legal name or a line description.
+    const page: Page = {
+      ops: [
+        {
+          kind: 'text',
+          x: 60,
+          y: PAGE_HEIGHT - 100,
+          text: 'Total (AED)',
+          style: { font: 'regular', size: 10 },
+        },
+        {
+          kind: 'text',
+          x: 535,
+          y: PAGE_HEIGHT - 120,
+          text: '(فاتورة)',
+          style: { font: 'regular', size: 10 },
+          rtl: true,
+        },
+      ],
+    };
+    const lines = extractText(renderPdf([page], fonts, 'Synthetic'));
+
+    expect(lines[0]).toBe('Total (AED)');
+
+    // And the Arabic run still hands back its own letters rather than the
+    // shapes it draws them as. Its brackets are the one thing that gives way:
+    // a glyph cannot stand for two characters at once, so they come off the
+    // page as drawn, while the word between them is intact and searchable.
+    const arabic = lines.slice(1).join('');
+    expect(arabic).not.toMatch(PRESENTATION_FORMS);
+    expect([...arabic].reverse().join('')).toBe(')فاتورة(');
+  });
 });
