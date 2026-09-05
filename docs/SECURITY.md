@@ -24,10 +24,10 @@ credential); every read and write of a record is logged, hash-chained.
    `/api/*` access logs (a search term is typed by staff about a client).
 2. **Protective headers** on every answer (`app/api/_middleware/security.ts`):
    a content security policy allowing only the app's own scripts, styles,
-   fonts and connections (`'self'`, images also `data:`, and the Supabase
-   project's origin as the one outside connection, for sign-in), no framing
-   (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), no sniffing, no
-   referrer, no camera or microphone, and location only for the app's own
+   fonts and connections (`'self'`, images also `data:` and `blob:`, and the
+   Supabase project's origin as the one outside connection, for sign-in), no
+   framing (`frame-ancestors 'none'`, `X-Frame-Options: DENY`), no sniffing,
+   no referrer, no camera or microphone, and location only for the app's own
    origin (the check-in and enrolment ask for it on a tap; no embedded
    third party may), `Cross-Origin-Resource-
    Policy: same-origin`, and in production `Strict-Transport-Security` for a

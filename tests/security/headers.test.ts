@@ -25,6 +25,15 @@ describe('protective headers', () => {
       expect(csp).toContain("script-src 'self'");
       expect(csp).toContain("frame-ancestors 'none'");
       expect(csp).toContain("object-src 'none'");
+      // The images directive exactly, because this is the one the second round
+      // widened: `blob:` beside `data:`, and nothing else. The app fetches the
+      // day's picture and the last sensor placement itself, through `apiFetch`
+      // with its bearer header, and shows them from revocable object URLs; a
+      // `blob:` URL can be created only by this app's own scripts, so nothing
+      // third-party is admitted (docs/SPEC/practitioner-phone.md section 3.6).
+      expect(csp.split(';').map((directive) => directive.trim())).toContain(
+        "img-src 'self' data: blob:",
+      );
       expect(res.headers.get('x-frame-options')).toBe('DENY');
       expect(res.headers.get('x-content-type-options')).toBe('nosniff');
       expect(res.headers.get('referrer-policy')).toBe('no-referrer');

@@ -28,7 +28,14 @@ export function securityHeaders(
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'"],
-      imgSrc: ["'self'", 'data:'],
+      // `blob:` beside `data:` for the pictures the app fetches itself: the
+      // day's map and the last sensor placement are asked for through
+      // `apiFetch`, because every route below the fence authenticates on a
+      // bearer header, and the bytes are then shown from a revocable object
+      // URL. A `blob:` URL can be created only by this app's own scripts, so
+      // this admits nothing third-party (docs/SPEC/practitioner-phone.md
+      // section 3.6, amended in the second round).
+      imgSrc: ["'self'", 'data:', 'blob:'],
       fontSrc: ["'self'"],
       connectSrc,
       frameAncestors: ["'none'"],

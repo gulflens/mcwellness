@@ -37,7 +37,7 @@ And the two messages from the same draft: `forget-reads` empties the read cache,
 
 **3.5 Sign-out.** A signed-out device keeps nothing of anybody. `AuthContext.signOut` calls the outbox's own `forgetDevice()` and posts `forget-reads` to the worker, exactly change request 02 sections 1f and 5b, so the rule holds from whichever screen the person signs out of. The blob queue in section 4.2 is emptied by the same call.
 
-**3.6 The content security policy is unchanged.** The worker, the manifest and every picture come from the app's own origin. No script, style, image or connection is added to the policy in `app/api/_middleware/security.ts`; section 5 keeps Google on the server side for exactly this reason.
+**3.6 The content security policy is all but unchanged.** The worker, the manifest and every picture come from the app's own origin. No script, style, image or connection is added to the policy in `app/api/_middleware/security.ts`; section 5 keeps Google on the server side for exactly this reason. **Amended in the second round, 2026-09-06:** the one change to the policy is `blob:` on images — `img-src 'self' data: blob:` — for the pictures the app itself fetched with its bearer header and holds as revocable object URLs (the day's map here and the last sensor placement in section 4.5), which `'self'` cannot match because a `blob:` URL's scheme is `blob`; a `blob:` URL can be created only by this app's own scripts, so nothing third-party is admitted, and `tests/security/headers.test.ts` pins the directive exactly.
 
 ## 4. The sensor photograph
 
