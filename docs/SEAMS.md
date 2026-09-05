@@ -16,6 +16,7 @@ capability that sends personal data anywhere is approved before it exists.
 |---|---|---|---|---|
 | Documents | `domain/shared/storage.ts` | Supabase Storage, private bucket `documents` | a folder on this machine | `STORAGE_PROVIDER` |
 | Documents out | `domain/billing/sending.ts` | an email vendor, once one is approved | the message composed and the link handed back for the share sheet | `DOCUMENT_EMAIL_VENDOR` |
+| Drive estimates | `domain/shared/routing.ts` | Google Maps Platform: the Routes API's compute route matrix, and the Maps Static API for the day's picture | straight-line distance times a road factor and an hour multiplier, and no picture | `ROUTING_PROVIDER` |
 
 ---
 
@@ -272,3 +273,38 @@ context.
 5. Write the forced-fallback test before the seam is used anywhere.
 6. Add the row to the table above, and the vendor to
    `docs/COMPLIANCE/approved-vendors.md`.
+
+---
+
+## Drive estimates (the routing seam)
+
+**The interface** — `domain/shared/routing.ts`, browser-safe, two calls
+(`docs/SPEC/practitioner-phone.md` section 5):
+
+```
+driveMatrix(legs: { from, to, departAt }[]) -> { seconds, metres, source }[]
+dayPicture(points: GeoPoint[])              -> Uint8Array | null
+```
+
+**What leaves the server is coordinates and a departure time.** Never a name,
+a record number, an address, a Makani number or an id: the request is built
+from `location.entrance_point` or `parking_point` and nothing else, and the
+vendor row in `docs/COMPLIANCE/approved-vendors.md` approves exactly that.
+The key is a server key held in `GOOGLE_MAPS_API_KEY`, never shipped to a
+browser; the content security policy is untouched because every picture
+reaches the phone from the app's own origin.
+
+**Every answer is an estimate and is labelled as one**, on the screen and in
+the `source` field: `traffic` from the real implementation, `straight-line`
+from the fallback. The fallback's road factor and peak multiplier are rows in
+`scheduling_setting`, data the owner edits, not constants.
+
+**Cached per pair.** A leg's estimate is written to `drive_estimate` keyed by
+the two locations and the hour bucket and read back for thirty days, so a day
+is looked up once; the picture is held in process memory until the day ends
+and cached on the device by the worker, and is written to no table.
+
+**Chosen by `ROUTING_PROVIDER`**, `google` or `straight-line`, explicit
+outside development or the API refuses to start, exactly as `STORAGE_PROVIDER`
+is. The forced-fallback test in `app/api/_middleware/routing/seam.test.ts`
+proves Today renders whole with the real one switched off.

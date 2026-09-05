@@ -582,3 +582,25 @@ passes alone and on re-run. Untouched by piece seven, not reproduced in CI,
 and not fixed in passing (it is the trunk's file and the round was the
 portal's). A small thing for the next trunk round: wait for the element to
 receive focus rather than assert it on the same tick.
+
+## Round 26, 2026-09-05 (the practitioner's phone, written down before the builder starts)
+
+### 1. Three old asks are met, in the form the spec decides
+
+`session-capture-02.md` asked, on 2 September, for installability (section 1), a door for the photo's bytes (section 2) and the shell's half of the sign-out rule (section 5). All three are answered by `docs/SPEC/practitioner-phone.md` and authorised in `session-capture-04.md`. The worker takes the plugin the old request said would be "a better answer" rather than the hand-written file it drafted, keeping that draft's three rules and two messages inside a source file of our own; the reason is the precache, which is what makes "the screens are cached" true by construction rather than only for screens already opened online.
+
+### 2. The plan's builder note and the spec differ in three places, and the spec says why
+
+The note named the Distance Matrix API; the spec takes the Routes API's compute route matrix, which is the product Google now sells. The note said "a map library loaded from cdnjs"; the content security policy allows only the app's own files and the vendor register bars third-party scripts, so the picture is fetched by the server and cached with the day, and the browser loads nothing from anybody. The note put the calibration rule in `checkConflicts`; the spec keeps it at check-in, where `session-capture.md` section 3.1 has always had it, and gives the reason in section 6.3.
+
+### 3. Two tables were weighed and one was refused
+
+`drive_estimate` is created: two location ids, a duration and a source, naming no person. A table for the day's picture was refused: a picture of several households' positions is personal data with no single `client_id` to file it under, and the audit trigger would write a fingerprint of it on every insert. It lives in process memory until the day ends and on the device, where the worker caches it beside the day sheet the device already holds.
+
+### 4. Shared-zone edits ride in the piece's pull request
+
+Eleven items, listed in `session-capture-04.md`; the three documentation items are done here so the builder starts against a register and a model that already describe what it builds. Same decision as round 25, same reason: one review instead of two.
+
+### 5. What waits for the operator
+
+Enabling the two Google products and minting a server key restricted to them (the old app's key is embedded in mobile binaries and is not reused); the cap in the console; and, for the real iPhone check, either piece nine's HTTPS address or a local tunnel asked for earlier. Staging runs `ROUTING_PROVIDER=straight-line` until the key exists, and Today says so on the screen.

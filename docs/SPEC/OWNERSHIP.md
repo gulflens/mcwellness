@@ -61,6 +61,8 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `session-capture` | `domain/session/**`, `app/therapist/session/**`, `app/api/sessions/**`, `db/policies/session/**`, `tests/session/**` | `300–399` | `SPEC/session-capture.md` |
 | `billing` | `domain/billing/**`, `app/admin/billing/**`, `app/api/billing/**`, `db/policies/billing/**`, `jobs/billing/**`, `tests/billing/**` | `400–499` | `SPEC/billing.md` |
 
+> Widened for piece eight (2026-09-05, `docs/SPEC/practitioner-phone.md`): the `session-capture` worktree, on branch `session-capture-4`, owns for this piece the whole practitioner face `app/therapist/**` (Today included; scheduling has nothing in flight there), `app/api/sessions/**`, `app/api/kit/**`, `app/api/routing/**`, `app/admin/kit/**`, `domain/session/**`, the one file `domain/scheduling/legs.ts` and its test, `db/policies/session/**`, `db/policies/scheduling/drive_estimate.sql`, `tests/session/**`, migrations `306–399` and the one scheduling migration `204` (`drive_estimate` and two settings columns, which `scheduling-manual.md` section 7 names as scheduling's). The shared-zone edits the piece needs are listed in `docs/CHANGE-REQUESTS/session-capture-04.md` and, by the integrator's decision under the cost rules of `docs/HANDOVER.md`, ride in the piece's own pull request.
+
 ## Stage 2 worktrees (open only after Stage 1 is merged)
 
 | Worktree | Owns exclusively | Migrations | Spec |

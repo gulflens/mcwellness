@@ -1,0 +1,19 @@
+# session-capture-04 — the shared-zone changes piece eight needs
+
+**Status.** Authorised by the integrator on 2026-09-05 and, under cost rule 6 of `docs/HANDOVER.md`, applied in the piece's own pull request rather than a separate trunk round, as `client-portal-05.md` was for piece seven. The builder edits the paths below for this piece only and lists each edit in the pull-request body. Sections 1 (installability), 2 (the photo's bytes) and 5 (sign-out) of `session-capture-02.md` are met by this file, in the form `docs/SPEC/practitioner-phone.md` decides.
+
+**What, and why.**
+
+1. `package.json` and the lockfile: `vite-plugin-pwa` as a development dependency; `vite.shared.ts` gains the plugin in `injectManifest` mode with `app/shell/sw.ts` as the source and development disabled (spec section 3.2, decision 1). `pnpm audit:deps` covers it from the next weekly run.
+2. `app/shell/sw.ts` (new), `public/manifest.webmanifest` (new), `public/icon.svg` (new), `index.html` (the manifest link and the touch icon), `app/shell/main.tsx` (the registration after first render, production only): spec sections 3.1 and 3.2. The worker's rules and its two messages are those of `session-capture-02.md` section 1d, on top of the precache.
+3. `app/shell/auth/AuthContext.tsx`: sign-out calls the outbox's own `forgetDevice()` and posts `forget-reads` to the worker (spec section 3.5; `session-capture-02.md` sections 1f and 5b, unchanged).
+4. `app/api/create-api.ts`: `PHOTO_LIMIT_BYTES` and the one exemption from the body cap and from `jsonOnly` for `PUT /api/sessions/:id/photo` (spec section 4.3); the routing seam built from the environment by `routingFromEnv` in `app/api/_middleware/routing/`, passed as an option the way `storage` is; `app/api/kit` and `app/api/routing` mounted after the fence.
+5. `app/api/serve-app.ts`: `manifest.webmanifest`, `icon.svg` and `sw.js` served from the build's root with their own content types, the worker with `Cache-Control: no-cache`, everything else as today.
+6. `domain/shared/routing.ts` (new, with its test): the seam interface, the straight-line arithmetic and the hour bucket (spec sections 5.1 and 5.6). `app/api/_middleware/routing/index.ts`, `google.ts`, `straight-line.ts` and `seam.test.ts` (new): the two implementations, the choice by `ROUTING_PROVIDER`, the refusal to start without an explicit choice outside development, and the forced-fallback test. `.env.example`: `ROUTING_PROVIDER` and `GOOGLE_MAPS_SIGNING_SECRET` beside the existing `GOOGLE_MAPS_API_KEY`, with the comment saying the key is a server key.
+7. `domain/shared/actor.ts` (and its test): `kit.manage` (owner, admin, lead practitioner), `kit.read` (the same three, and a practitioner for their own items), `routing.day.read` (a practitioner for their own day). Spec section 6.2.
+8. `app/shell/App.tsx`, `adminAccess.ts`, `components/Rail.tsx`: `/admin/kit` behind `canOpenKit` (`kit.manage`), rail entry "Kit". `routing.test.ts` is unchanged.
+9. `db/seed/generate.ts`, `apply.ts`, `render.ts` and `tests/db/seed.test.ts`: an amplifier per seeded practitioner, calibrated and in date, and one unassigned amplifier whose calibration is overdue, so the block is demonstrable without blocking the staging demo's own visit. Serial numbers in the reserved shape the README describes for ids; no real model name.
+10. `domain/shared/audit-narrative.ts`: sentences for a `kit` row and for the action `session.photo_filed`, both languages; `drive_estimate` takes the generic fallback on purpose (spec section 10).
+11. `docs/SEAMS.md`, `docs/COMPLIANCE/approved-vendors.md`, `docs/SPEC/00-data-model.md`: **done by the integrator in the spec's own pull request**, so the builder starts against a register and a model that already describe what it builds.
+
+**Spec.** `docs/SPEC/practitioner-phone.md` sections 3 to 9 and 12.
