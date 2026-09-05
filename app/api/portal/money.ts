@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { z } from 'zod';
 import { packageProgress } from '../../../domain/portal';
 import { DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../../domain/shared';
 import { logRead } from '../_middleware/audit';
@@ -168,6 +169,9 @@ export async function householdMoney(db: Db, household: Household): Promise<Hous
   };
 }
 
+/** The one parameter this route takes, as its siblings guard theirs. */
+const DocumentParams = z.object({ documentId: z.uuid() });
+
 /** The document, if it is this household's and has bytes filed against it. */
 const DOCUMENT_SQL =
   'select bd.document_id, bd.client_id, d.storage_key from billing_document bd ' +
@@ -215,6 +219,12 @@ export function mountPortalMoney(api: Hono<ApiEnv>, now: () => Date = () => new 
   api.get('/api/portal/documents/:documentId/link', async (c) => {
     const requestId = c.get('requestId');
     const db = c.get('db');
+    // Parsed before it reaches a query, as every other portal route parses its
+    // own: a malformed id is a 400 here rather than a raise in Postgres and a
+    // 500 that says the platform broke when the caller simply mistyped.
+    const params = DocumentParams.safeParse(c.req.param());
+    if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
+
     const household = await readHousehold(db, c.get('actor'), now());
     if (household === null) return c.json({ error: 'forbidden', requestId }, 403);
 
@@ -230,7 +240,7 @@ export function mountPortalMoney(api: Hono<ApiEnv>, now: () => Date = () => new 
       document_id: string;
       client_id: string;
       storage_key: string;
-    }>(DOCUMENT_SQL, [c.req.param('documentId'), visible]);
+    }>(DOCUMENT_SQL, [params.data.documentId, visible]);
     const row = found.rows[0];
     if (!row) {
       // Another household's, or a document nobody has rendered. A 404 either

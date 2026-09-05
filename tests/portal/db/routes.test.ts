@@ -363,6 +363,11 @@ describe('GET /api/portal/documents/:documentId/link', () => {
     );
     expect(res.status).toBe(403);
   });
+
+  it('answers 400 for an id that is not one, rather than raising in Postgres', async () => {
+    const res = await h.callAs('GET', '/api/portal/documents/not-an-id/link', PORTAL.motherAuth);
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('GET /api/portal/family and PATCH /api/portal/contacts/:contactId', () => {
