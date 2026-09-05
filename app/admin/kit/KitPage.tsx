@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KIT_KINDS, isCalibrationOverdue, type KitKind } from '@domain/session';
 import { KitListResponse, KitOptionsResponse, type KitRow } from '../../api/kit/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
@@ -46,9 +46,26 @@ function on(iso: string | null): string {
   return iso === null ? '' : dateFormat.format(new Date(iso));
 }
 
-/** A timestamp back as the date the drawer's own field wants. */
+/**
+ * A timestamp back as the date the drawer's own field wants, read in the
+ * practice's own zone.
+ *
+ * It has to be Dubai and not UTC. The route stores a calibration date as Dubai
+ * midnight (`app/api/kit/routes.ts`'s `atPracticeMidnight`), so
+ * `2027-06-30T00:00:00+04:00` comes back out as an instant whose UTC date is
+ * the 29th; a field filled from that and sent again would walk the calibration
+ * back a day on every edit. `en-CA` is the locale whose numeric date is
+ * already the `YYYY-MM-DD` an `<input type="date">` wants.
+ */
+const dateInputFormat = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Dubai',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 function asDateInput(iso: string | null): string {
-  return iso === null ? '' : new Date(iso).toISOString().slice(0, 10);
+  return iso === null ? '' : dateInputFormat.format(new Date(iso));
 }
 
 /**
@@ -94,6 +111,39 @@ function draftFrom(row: KitRow | null): Draft {
   };
 }
 
+/** What the field carries on the wire: a date, or nothing at all. */
+function orNull(value: string): string | null {
+  return value === '' ? null : value;
+}
+
+/**
+ * What the drawer actually changed, and nothing else (section 6.4: "a
+ * calibration is a PATCH of two dates").
+ *
+ * Sending the whole draft on every edit meant that changing an item's model
+ * also re-sent both calibration dates, so a field the person never touched was
+ * written back — and any rounding in the way it was read became a real move of
+ * the date. A PATCH now carries the fields that differ from the item as it was
+ * opened, so an edit to one thing is an edit to one thing.
+ */
+function changedFields(before: Draft, after: Draft): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (after.serial.trim() !== before.serial.trim()) body.serial = after.serial.trim();
+  if (after.model.trim() !== before.model.trim()) body.model = after.model.trim();
+  if (after.kind !== before.kind) body.kind = after.kind;
+  if (after.status !== before.status) body.status = after.status;
+  if (after.assignedPractitionerId !== before.assignedPractitionerId) {
+    body.assignedPractitionerId = orNull(after.assignedPractitionerId);
+  }
+  if (after.lastCalibratedAt !== before.lastCalibratedAt) {
+    body.lastCalibratedAt = orNull(after.lastCalibratedAt);
+  }
+  if (after.calibrationDueAt !== before.calibrationDueAt) {
+    body.calibrationDueAt = orNull(after.calibrationDueAt);
+  }
+  return body;
+}
+
 const SAVE_ERRORS: Record<string, string> = {
   serial_exists: 'The practice already has an item with that serial number.',
   calibration_dates: 'A calibration cannot run out before the day it was done.',
@@ -117,25 +167,35 @@ function KitDrawer({
   const { apiFetch } = useAuth();
   const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const [draft, setDraft] = useState<Draft>(() => draftFrom(item));
+  // The item as it was opened, which is what an edit is measured against.
+  const opened = useMemo(() => draftFrom(item), [item]);
+  const [draft, setDraft] = useState<Draft>(opened);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useDrawer(drawerRef, closeRef, onClose);
 
   const save = useCallback(async () => {
+    const body =
+      item === null
+        ? {
+            serial: draft.serial.trim(),
+            model: draft.model.trim(),
+            kind: draft.kind,
+            assignedPractitionerId: orNull(draft.assignedPractitionerId),
+            lastCalibratedAt: orNull(draft.lastCalibratedAt),
+            calibrationDueAt: orNull(draft.calibrationDueAt),
+          }
+        : changedFields(opened, draft);
+    if (Object.keys(body).length === 0) {
+      // Nothing was changed, so there is nothing to say. Closing is the honest
+      // answer; a PATCH with an empty body would be refused, and one carrying
+      // the whole item would write fields nobody touched.
+      onSaved();
+      return;
+    }
     setBusy(true);
     setError(null);
-    const body = {
-      serial: draft.serial.trim(),
-      model: draft.model.trim(),
-      kind: draft.kind,
-      assignedPractitionerId:
-        draft.assignedPractitionerId === '' ? null : draft.assignedPractitionerId,
-      lastCalibratedAt: draft.lastCalibratedAt === '' ? null : draft.lastCalibratedAt,
-      calibrationDueAt: draft.calibrationDueAt === '' ? null : draft.calibrationDueAt,
-      ...(item === null ? {} : { status: draft.status }),
-    };
     try {
       const res = await apiFetch(item === null ? '/api/kit' : `/api/kit/${item.id}`, {
         method: item === null ? 'POST' : 'PATCH',
@@ -159,7 +219,7 @@ function KitDrawer({
     } finally {
       setBusy(false);
     }
-  }, [apiFetch, draft, item, onSaved, reason]);
+  }, [apiFetch, draft, item, onSaved, opened, reason]);
 
   const canSave =
     draft.serial.trim().length > 0 &&

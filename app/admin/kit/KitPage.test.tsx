@@ -31,6 +31,7 @@ const provider: AuthProvider = {
   onChange: () => () => undefined,
 };
 
+const DUBAI = 'Asia/Dubai';
 const IN_DATE = new Date(Date.now() + 200 * 86_400_000).toISOString();
 const LAPSED = new Date(Date.now() - 5 * 86_400_000).toISOString();
 
@@ -176,7 +177,41 @@ describe('the drawer', () => {
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]?.method).toBe('PATCH');
     expect(sent[0]?.reason).toBe('Calibration certificate received.');
-    expect(sent[0]?.body).toMatchObject({ calibrationDueAt: '2027-06-30' });
+    // Only the field that changed: an edit to one thing is an edit to one thing.
+    expect(sent[0]?.body).toEqual({ calibrationDueAt: '2027-06-30' });
+  });
+
+  it('opens an item and saves it unchanged without moving either date', async () => {
+    const sent = mount();
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Open' }))[0]!);
+
+    // The dates are read in the practice's own zone. The register stores a
+    // calibration as Dubai midnight, so a field filled from the UTC date of
+    // that instant would show — and send back — the day before.
+    expect((screen.getByLabelText('Last calibrated') as HTMLInputElement).value).toBe('2026-01-05');
+    const due = screen.getByLabelText('Calibration runs out') as HTMLInputElement;
+    expect(due.value).toBe(new Date(IN_DATE).toLocaleDateString('en-CA', { timeZone: DUBAI }));
+
+    // A reason, and nothing else touched: the drawer closes and asks for
+    // nothing, because there is nothing to say.
+    fireEvent.change(screen.getByLabelText('Reason'), {
+      target: { value: 'Checked the certificate against the register.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(sent).toEqual([]);
+  });
+
+  it('sends the field that changed and leaves both dates alone', async () => {
+    const sent = mount();
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Open' }))[0]!);
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'Synthetic Bench Two' } });
+    fireEvent.change(screen.getByLabelText('Reason'), {
+      target: { value: 'The label on the case was wrong.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]?.body).toEqual({ model: 'Synthetic Bench Two' });
   });
 
   it('offers standing an item down and never deleting it', async () => {
