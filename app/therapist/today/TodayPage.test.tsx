@@ -88,27 +88,39 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-/** Mounts the day sheet with the routing route answering `routing`. */
+/** A PNG's first four bytes. What matters is that they are not JSON. */
+const PICTURE = new Uint8Array([137, 80, 78, 71]);
+
+/**
+ * Mounts the day sheet with the routing route answering `routing`, and hands
+ * back the fetch it was given so a test can ask what was actually requested
+ * and with which headers.
+ */
 function mount(routing: unknown, stops: unknown = STOPS) {
-  const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchImpl = vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
     if (url.startsWith('/api/appointments')) return json({ appointments: stops });
+    // Before the day itself: the picture's path begins with the day's.
+    if (url.startsWith('/api/routing/day-picture')) {
+      return new Response(PICTURE, { status: 200, headers: { 'content-type': 'image/png' } });
+    }
     if (url.startsWith('/api/routing/day')) {
       return routing === null ? json({ error: 'internal' }, 500) : json(routing);
     }
     // Billing declines for this practitioner, which the card already treats as
     // an answer rather than an error.
     return json({ error: 'not_found' }, 404);
-  }) as unknown as typeof fetch;
+  });
 
-  return render(
+  render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
       <MemoryRouter initialEntries={['/today']}>
         <TodayPage />
       </MemoryRouter>
     </AuthProviderBoundary>,
   );
+  return fetchImpl;
 }
 
 const TRAFFIC: { legs: DayLegRow[]; pictureUrl: string | null; mapAvailable: boolean } = {
@@ -158,7 +170,21 @@ describe('the day sheet with the real implementation', () => {
       expect(screen.getByText('about 25 min · 18 km, estimate from traffic')).toBeTruthy(),
     );
     const map = await screen.findByRole('img', { name: /map of your 2 stops today/ });
-    expect(map.getAttribute('src')).toBe(TRAFFIC.pictureUrl);
+    // Not the route's own address: the bytes were fetched and are shown from
+    // an object URL, because the route answers a bearer header and nothing else.
+    expect(map.getAttribute('src')).toMatch(/^blob:/);
+  });
+
+  it('asks for the picture with the session on it, as every other read is asked for', async () => {
+    const fetchImpl = mount(TRAFFIC);
+    await screen.findByRole('img', { name: /map of your 2 stops today/ });
+    const call = fetchImpl.mock.calls.find(([input]) =>
+      String(input).startsWith('/api/routing/day-picture'),
+    );
+    expect(call, 'the picture was never fetched').toBeTruthy();
+    expect(String(call?.[0])).toBe(TRAFFIC.pictureUrl);
+    const headers = new Headers(call?.[1]?.headers);
+    expect(headers.get('authorization')).toBe('Bearer token');
   });
 
   it('reserves the line above the second stop from the first paint', async () => {

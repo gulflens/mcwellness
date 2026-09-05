@@ -189,6 +189,28 @@ type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; stops: r
 type Drives = { legs: readonly DayLegRow[]; pictureUrl: string | null; mapAvailable: boolean };
 
 /**
+ * The day's picture, fetched rather than pointed at
+ * (docs/SPEC/practitioner-phone.md section 5.3).
+ *
+ * A plain `<img src="/api/routing/day-picture…">` cannot work here: every
+ * route below the fence authenticates on a bearer header and this API sets no
+ * cookie (app/api/_middleware/request-context.ts), so the browser's own image
+ * request would arrive with nothing on it and answer 401 — and a 401 is not
+ * something the worker can cache either. So the bytes are asked for the way
+ * every other read on this screen is asked for, through `apiFetch`, and shown
+ * from an object URL.
+ *
+ * The object URL is revoked when the day changes and when the screen goes
+ * away: a picture of several households' positions is personal data, and it
+ * has no business outliving the screen that asked for it.
+ */
+function fetchPicture(apiFetch: ApiFetch, path: string): Promise<Blob | null> {
+  return apiFetch(path)
+    .then(async (res) => (res.ok ? res.blob() : null))
+    .catch(() => null);
+}
+
+/**
  * The window, in the practice's zone and in that order in both languages:
  * `formatArrivalWindow` isolates the range so an Arabic name beside it cannot
  * reverse the two clock times (domain/scheduling/window.ts). The admin
@@ -487,6 +509,8 @@ export function TodayPage() {
   const [reloadToken, setReloadToken] = useState(0);
   const [balances, setBalances] = useState<Record<string, StopBalance>>({});
   const [drives, setDrives] = useState<Drives | null>(null);
+  // The day's picture as an object URL, or null while there is none to show.
+  const [mapUrl, setMapUrl] = useState<string | null>(null);
   const [installDismissed, setInstallDismissed] = useState(() => {
     try {
       return localStorage.getItem(INSTALL_KEY) === 'yes';
@@ -554,6 +578,25 @@ export function TodayPage() {
       live = false;
     };
   }, [apiFetch, date, reloadToken]);
+
+  const pictureUrl = drives?.pictureUrl ?? null;
+  useEffect(() => {
+    // Nothing to fetch, and nothing to clear either: the run before this one
+    // revoked its own object URL and emptied the slot on its way out.
+    if (pictureUrl === null) return;
+    let live = true;
+    let objectUrl: string | null = null;
+    void fetchPicture(apiFetch, pictureUrl).then((blob) => {
+      if (!live || blob === null) return;
+      objectUrl = URL.createObjectURL(blob);
+      setMapUrl(objectUrl);
+    });
+    return () => {
+      live = false;
+      setMapUrl(null);
+      if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
+    };
+  }, [apiFetch, pictureUrl]);
 
   // Asked once, the first time this screen renders for a practitioner (section
   // 3.3). Best effort by definition: a browser may decline, and a decline is
@@ -695,10 +738,10 @@ export function TodayPage() {
         {stops.length > 0 && drives !== null ? (
           drives.pictureUrl === null ? (
             <p className="small muted">{MAP_UNAVAILABLE}</p>
-          ) : (
+          ) : mapUrl === null ? null : (
             <img
               className="today__map"
-              src={drives.pictureUrl}
+              src={mapUrl}
               alt={`A map of your ${stops.length === 1 ? 'stop' : `${stops.length} stops`} today`}
               width={640}
               height={400}
