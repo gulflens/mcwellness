@@ -149,3 +149,19 @@ anybody else. If the trunk would rather have the key, `document` needs
 2. **The link from a measurement to the visit that produced it**, as a `95x`
    trunk migration once the 300 and 500 ranges are both on `main` (spec
    section 6). Nothing in this piece assumes it.
+3. **A flaky test in `tests/session/db/photo_and_routing.test.ts`**, found by
+   this piece's CI run and **not caused by it**. "is idempotent on the same
+   digest and refuses a different one" intermittently sees the second `PUT
+   /api/sessions/:id/photo` answer 201 where it expects 200 — the second call
+   files a photograph rather than finding the first one. It reproduces about
+   one run in three to five on a laptop, and it reproduces the same way with
+   `origin/main`'s own `app/api/create-api.ts` restored in place of this
+   branch's, which is how it was ruled out as this piece's doing; five clean
+   runs on the untouched file, then a failure, then six clean runs. When it
+   passes, the first `PUT` answers 201 with a document id every time, so the
+   suspicion is that the second request occasionally does not see the link
+   `app.file_setup_photo` wrote — the route writes the row, then the bytes,
+   then the link, and the link is the last of the three. It is
+   `session-capture`'s file and `session-capture`'s route, so this is a request
+   rather than a fix (`docs/SPEC/OWNERSHIP.md` rule 1).
+
