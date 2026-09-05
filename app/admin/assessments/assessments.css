@@ -1,0 +1,136 @@
+/*
+  The Assessments tab (docs/SPEC/assessment.md section 3). The console's own
+  vocabulary: the shared table, the shared drawer, the shared status chip.
+  Almost nothing is added here, and that is right — a list of measurements is a
+  table, and a comparison is a table.
+
+  Every value comes from app/shell/tokens.css and every rule is written in
+  logical properties (.claude/rules/ui.md).
+
+  **Hue appears in exactly one place**: the small square that says which band a
+  figure belongs to, taking that band's own token (docs/DESIGN-BRIEF.md section
+  3.1). Nothing else on this tab carries colour — no figure is red, nothing is
+  shaded by how large it is, and there is no scale of any kind. What a
+  measurement means is the practitioner's judgement, and a screen that tinted a
+  number would be making it.
+*/
+
+.assessments__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  padding-block: var(--s-4);
+}
+
+.assessments__actions {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* A superseded version sits beneath the one that replaced it, quiet. */
+.assessments__superseded td {
+  color: var(--slate);
+  padding-block: var(--s-2);
+}
+
+.assessments__reason {
+  display: block;
+  color: var(--slate);
+}
+
+/* The band's own square, and the only hue on this tab. */
+.band {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.band__swatch {
+  inline-size: 10px;
+  block-size: 10px;
+  border-radius: var(--r-1);
+  flex: none;
+}
+
+.band__swatch--delta {
+  background: var(--delta);
+}
+.band__swatch--theta {
+  background: var(--theta);
+}
+.band__swatch--alpha {
+  background: var(--alpha);
+}
+.band__swatch--beta {
+  background: var(--beta);
+}
+.band__swatch--gamma {
+  background: var(--gamma);
+}
+
+/* The two recordings a comparison was made from, side by side above it. */
+.comparison__against {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-6);
+}
+
+.comparison__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-inline-size: 200px;
+}
+
+/*
+  The fixed sentence, in both languages, sitting under the comparison. Not a
+  Note: it is not a state, it is the thing the table is always accompanied by.
+*/
+.comparison__standing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding-block: var(--s-3);
+  border-block-start: var(--hairline) solid var(--rule);
+  max-inline-size: var(--measure);
+}
+
+.comparison__standing p {
+  margin: 0;
+}
+
+/* The figures grid in the recording drawer: one row per site, one column per band. */
+.figures {
+  overflow-x: auto;
+}
+
+.figures table {
+  border-collapse: collapse;
+  inline-size: 100%;
+}
+
+.figures th,
+.figures td {
+  padding: var(--s-1);
+  text-align: start;
+  border-block-end: var(--hairline) solid var(--rule);
+  white-space: nowrap;
+}
+
+.figures input {
+  inline-size: 6rem;
+  font: inherit;
+  font-feature-settings: 'tnum' 1;
+  color: var(--ink);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  padding: var(--s-1) var(--s-2);
+}
+
+.figures input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
