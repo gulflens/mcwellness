@@ -458,3 +458,51 @@ describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 
     expect(canActor(actor([]), { type: 'portal.access.manage' }, {}, NOW)).toBe(false);
   });
 });
+
+describe('the kit register and the day picture', () => {
+  it('gives managing the register to the owner, an admin and the lead practitioner', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'kit.manage' }, {}, NOW), role).toBe(true);
+    }
+    for (const role of ['practitioner', 'finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'kit.manage' }, {}, NOW), role).toBe(false);
+    }
+    expect(canActor(actor([]), { type: 'kit.manage' }, {}, NOW)).toBe(false);
+  });
+
+  it('gives the whole register to those three and their own items to a practitioner', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'kit.read', assignedToSelf: false }, {}, NOW),
+        role,
+      ).toBe(true);
+    }
+    const practitioner = actor(['practitioner']);
+    expect(canActor(practitioner, { type: 'kit.read', assignedToSelf: true }, {}, NOW)).toBe(true);
+    expect(canActor(practitioner, { type: 'kit.read', assignedToSelf: false }, {}, NOW)).toBe(
+      false,
+    );
+    for (const role of ['finance', 'client_contact'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'kit.read', assignedToSelf: true }, {}, NOW),
+        role,
+      ).toBe(false);
+    }
+  });
+
+  it('gives a practitioner the drive between their own stops, and finance none of it', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner', 'practitioner'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'routing.day.read', scope: 'own' }, {}, NOW),
+        role,
+      ).toBe(true);
+    }
+    for (const role of ['finance', 'client_contact'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'routing.day.read', scope: 'own' }, {}, NOW),
+        role,
+      ).toBe(false);
+    }
+    expect(canActor(actor([]), { type: 'routing.day.read', scope: 'own' }, {}, NOW)).toBe(false);
+  });
+});

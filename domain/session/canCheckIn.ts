@@ -8,7 +8,8 @@ export type CheckInBlockReason =
   | 'consent_missing_participation'
   | 'consent_missing_minor_participation'
   | 'consent_missing_home_visit'
-  | 'date_of_birth_unknown';
+  | 'date_of_birth_unknown'
+  | 'kit_calibration_overdue';
 
 export type CheckInInput = {
   actor: Actor;
@@ -21,6 +22,15 @@ export type CheckInInput = {
   isMinor: boolean;
   /** The purposes with an active consent row for this client, as of `now`. */
   activeConsentPurposes: readonly CheckInConsentPurpose[];
+  /**
+   * Whether at least one active kit item assigned to this practitioner has a
+   * calibration that fell due before now (docs/SPEC/practitioner-phone.md
+   * section 6.3). `domain/session/kit.ts` is the rule; the caller reads the
+   * answer from `app.checkin_context`, whose SQL mirrors it. **No item
+   * assigned is false**, not true: the register starts empty and the day it
+   * ships must not stop every visit in the practice.
+   */
+  kitCalibrationOverdue: boolean;
   timeZone?: string;
 };
 
@@ -37,11 +47,13 @@ export type CheckInResult = { ok: boolean; reasons: readonly CheckInBlockReason[
  *
  * Takes `hasDateOfBirth` and `isMinor` rather than an actual date of birth:
  * the caller (app/api/sessions/checkin.ts) reads these from
- * app.checkin_context (db/migrations/301_checkin_context.sql), a database
- * door that deliberately never hands back the real date — only whether one
- * is on file and whether it makes the client a minor today, judged in
- * PRACTICE_TIME_ZONE by that same function. This gate never needed the date
- * itself, only those two facts.
+ * app.checkin_context (db/migrations/301_checkin_context.sql, replaced by
+ * 306), a database door that deliberately never hands back the real date —
+ * only whether one is on file and whether it makes the client a minor today,
+ * judged in PRACTICE_TIME_ZONE by that same function. This gate never needed
+ * the date itself, only those two facts. `kitCalibrationOverdue` arrives the
+ * same way and for the same reason: a boolean, from the same door, rather
+ * than a register this pure function would have to be handed.
  *
  * A client with no recorded date of birth blocks rather than being assumed
  * an adult. Client-record's own rule requires one at activation (see the
@@ -75,6 +87,13 @@ export function canCheckIn(input: CheckInInput, now: Date): CheckInResult {
 
   if (input.deliveryMode === 'home' && !input.activeConsentPurposes.includes('home_visit')) {
     reasons.push('consent_missing_home_visit');
+  }
+
+  // The instruments, last: a household's consent is the more important thing
+  // to be told about, and a practitioner reads the reasons in the order they
+  // are given (docs/SPEC/practitioner-phone.md section 6.3).
+  if (input.kitCalibrationOverdue) {
+    reasons.push('kit_calibration_overdue');
   }
 
   return { ok: reasons.length === 0, reasons };

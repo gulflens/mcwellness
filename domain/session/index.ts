@@ -39,6 +39,13 @@ export {
   type CheckInInput,
   type CheckInResult,
 } from './canCheckIn';
+export {
+  KIT_KINDS,
+  anyCalibrationOverdue,
+  isCalibrationOverdue,
+  type CalibratableKit,
+  type KitKind,
+} from './kit';
 export { replayEvents } from './replayEvents';
 export { scoreSignalQuality } from './scoreSignalQuality';
 export { deriveObservationFlag } from './deriveObservationFlag';
