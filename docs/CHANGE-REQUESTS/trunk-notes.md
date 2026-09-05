@@ -809,3 +809,118 @@ does not pretend to be one" — the subset a bilingual invoice needs. Whoever
 builds the report's layout should say plainly whether that subset is enough for
 a paragraph, and ask for a real implementation if it is not, rather than
 widening this one quietly.
+
+---
+
+## Round 30, 2026-09-06 (the audit trail mistook identifiers for telephone numbers)
+
+One defect, raised by the assessment stream as items 3 and 4 of
+`docs/CHANGE-REQUESTS/assessment-01.md`. It is the trunk's file, so it was a
+request rather than a fix, and this is the fix.
+
+### 1. What was wrong
+
+`refuseContactDetails` in `app/api/_middleware/audit.ts` keeps a way of
+reaching a family out of the audit trail: no value passed to `logAction` may
+read as a telephone number, because the trail is kept five years and read by
+people who have no business knowing how to ring anybody
+(`docs/SPEC/audit.md` section 8).
+
+It found those numbers by breaking a value into runs of digits — with the
+spaces, hyphens and brackets a person types allowed inside a run — and
+refusing any run of nine to twelve digits beginning with a nought. That is
+sound for a number and wrong for an identifier. A uuid is thirty-two
+hexadecimal characters in five hyphenated groups, and its **letters cut the
+digits into shorter runs**; some of those runs are nine to twelve digits
+beginning with a nought. `eea04325-2317-4f6b-ada3-dd3a345ade00` was refused on
+the run `04325-2317-4`.
+
+The file's own comment reasoned about a seeded id,
+`00000000-0000-4000-8000-0000000000e6`, whose characters are all digits and
+make one run far too long to be a telephone number. It was right about that
+one and wrong about every random one. Measured here over 300,000 values from
+`randomUUID()`, **1.25 per cent were refused** — the stream measured 1.21 per
+cent over 100,000.
+
+The consequence was not cosmetic. `logAction` throws rather than dropping the
+value, and the throw rolls the whole request back. So any route passing a
+fresh document id through the details failed about one call in eighty:
+`PUT /api/sessions/:id/photo` (`app/api/sessions/photo.ts`, which passes
+`{ documentId }`) answered 500, filed nothing, and a device retrying with the
+same digest filed afresh rather than being handed the first one. In production
+that is a practitioner's setup photograph failing to file, at random, with no
+reason anyone can act on.
+
+### 2. What the check now says
+
+A telephone number is a run of digits with the separators a person types,
+**standing on its own**. Two rules hold that, and neither is the other's
+spare:
+
+- **A uuid anywhere in a value is set aside before the value is read.** Set
+  aside, not skipped: a value may be a sentence with an id inside it and a
+  number beside that, so each id is replaced by a space and the number is
+  still refused. The id is recognised by its own shape — eight hexadecimal
+  characters, three groups of four, then twelve — with no further hexadecimal
+  character crowding either end, so it cannot swallow half of something
+  longer.
+- **A run counts only where it stands on its own**, with no letter or digit
+  pressed against either end, and it ends on a digit rather than on a trailing
+  separator. This is what catches a hexadecimal-looking token that is not
+  quite a uuid.
+
+Each rule leaves a hole the other closes. Setting the uuid aside alone would
+miss an id glued into a longer token; standing on its own alone would still
+refuse `abcdefab-0234-4567-8901-abcdefabcdef`, whose twelve digits sit between
+two hyphens with no letter beside them at all.
+
+Nothing else moved. `readsAsTelephone` is untouched — the same two shapes,
+international with a plus and local or bare with `971` or a nought — and the
+refusal's message and its wording are exactly what they were, so a route
+author reading a stack trace sees the sentence they saw before.
+
+Proved in `app/api/_middleware/audit.test.ts`: the ten ids the measurement
+turned up, including the change request's own; an id alone, in a sentence,
+after an underscore, in capitals and beside another; ten thousand seeded ids
+of the shape the platform writes; and every id in the reserved shapes
+`0000000K-0000-4000-8000-*` and `000000KK-0000-4000-8000-*`. Beside them,
+every telephone shape the rule names is asserted still refused rather than
+assumed, from the reserved fake range only.
+
+### 3. One thing found while writing that test: the Emirates ID
+
+The rule names three things that may not reach an audit detail — a telephone
+number, an Emirates ID and a name (`.claude/rules/compliance.md`,
+`docs/SPEC/audit.md` section 8). Only the first was ever checked, and an
+Emirates ID is fifteen digits, which is longer than any telephone shape the
+helper knows, so `784-1900-1234567-1` passed straight through it. It is the
+one value the rest of the platform refuses to hold in clear at all
+(`domain/shared/identity.ts` seals it; `domain/shared/emirates-id.ts` is where
+its shape is defined).
+
+It is now refused too, in the same loop and in the same sentence shape,
+naming the key and never the number. The check is narrow — fifteen digits
+beginning 784, and a leading plus rules it out — so a tax registration number
+and a money figure are left alone. A name is not attempted: it cannot be
+recognised from its characters, and pretending otherwise would be worse than
+saying so.
+
+### 4. What the streams should know
+
+**Who.** `session-capture` above all, whose
+`tests/session/db/photo_and_routing.test.ts` has been intermittently red on
+exactly this — "is idempotent on the same digest and refuses a different one"
+seeing the second `PUT` answer 201 where it expects 200. Item 4 of
+`assessment-01.md` is closed with item 3; the test is untouched, because there
+was never anything wrong with it.
+
+Also `assessment`, whose file door works around the fault by not passing the
+document id at all (`app/api/assessments/file.ts`). Nothing obliges that
+route to keep the workaround now, and the `assessment_document` row it writes
+is audited either way, so the choice is the stream's.
+
+Everyone else: `logAction` may now be passed a document id, a client id or any
+other uuid without ceremony, in a value of its own or inside a sentence. What
+it still refuses is a telephone number, an Emirates ID and an email address.
+The details a sensitive action records are the contact's **id** and the
+channel.
