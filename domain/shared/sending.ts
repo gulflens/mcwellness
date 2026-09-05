@@ -1,10 +1,16 @@
 /**
- * Sending a money document to the family it belongs to.
+ * Sending a document to the family it belongs to.
  *
  * Two ways, one seam. Both are pure here: this file composes the message and
  * the hand-off link and decides nothing about the network
- * (`app/api/billing/sending.ts` holds the implementations, CLAUDE.md's seam
+ * (`app/api/_middleware/sending/` holds the implementations, CLAUDE.md's seam
  * rule and docs/SEAMS.md).
+ *
+ * **In `shared` rather than in billing**, because a document is not only an
+ * invoice: the reports stream sends session and progress reports through this
+ * same seam (`docs/SPEC/reports-v1.md` section 5), and `docs/SPEC/OWNERSHIP.md`
+ * rule 3 forbids it importing billing's `domain/` to do so. Nothing here knows
+ * what kind of document it is beyond the word on the front of it.
  *
  * **WhatsApp is a hand-off, not an integration.** The practice already talks to
  * families on WhatsApp, and the WhatsApp Business API is not an approved vendor
@@ -106,7 +112,7 @@ export type SendOutcome =
 
 /**
  * The seam. One method, two implementations
- * (`app/api/billing/sending.ts`): a real one behind an environment setting, and
+ * (`app/api/_middleware/sending/`): a real one behind an environment setting, and
  * a fallback that composes the message and hands the link back so a person can
  * send it themselves.
  */

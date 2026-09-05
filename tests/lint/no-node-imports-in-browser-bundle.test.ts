@@ -47,6 +47,16 @@ const ENTRY_POINTS: ReadonlyArray<{ readonly label: string; readonly file: strin
   { label: "domain/billing's own barrel", file: join(ROOT, 'domain/billing/index.ts') },
   { label: "domain/scheduling's own barrel", file: join(ROOT, 'domain/scheduling/index.ts') },
   { label: "domain/session's own barrel", file: join(ROOT, 'domain/session/index.ts') },
+  // Not a stream barrel: the document writer's byte-level half, which no
+  // barrel re-exports (`domain/shared/document/index.ts` says why) and which
+  // would therefore be walked from nowhere. It renders a client's financial
+  // record and, from `docs/SPEC/reports-v1.md` section 5, their reports, and
+  // both faces of the app can reach it, so its browser-safety is the same
+  // promise as everything above and is proved the same way.
+  {
+    label: "the document writer's own barrel",
+    file: join(ROOT, 'domain/shared/document/index.ts'),
+  },
 ];
 
 // A walk this shallow cannot be trusted: it would mean most of the graph

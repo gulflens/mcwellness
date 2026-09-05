@@ -22,7 +22,7 @@
  * bytes from `app/api/billing/fonts.ts`.
  */
 
-import { forDrawing, isArabic } from './arabic';
+import { isArabic, place, type Placed } from './arabic';
 import { glyphFor, widthOf, type Font } from './truetype';
 
 /** A4 in points, which is what the practice prints and what a phone shows. */
@@ -59,7 +59,7 @@ export type Op =
 export type Page = { ops: Op[] };
 
 /** A run of text one font can draw, already in the order it is placed. */
-type Run = { slot: FontSlot; codes: number[] };
+type Run = { slot: FontSlot; glyphs: Placed[] };
 
 /**
  * Splits a string into runs by which face can draw it.
@@ -73,18 +73,27 @@ type Run = { slot: FontSlot; codes: number[] };
  * and not four.
  */
 function runsOf(text: string, latin: FontSlot, rtl: boolean): Run[] {
-  const codes = rtl ? forDrawing(text) : [...text].map((c) => c.codePointAt(0) ?? 0);
+  // Each glyph arrives with the characters it was made from, because the two
+  // differ for Arabic and it is the characters, not the shapes, that the
+  // `/ToUnicode` map below owes a reader. Left to right the two are the same
+  // thing, so a character stands for itself.
+  const glyphs: Placed[] = rtl
+    ? place(text)
+    : [...text].map((c) => {
+        const code = c.codePointAt(0) ?? 0;
+        return { code, from: [code] };
+      });
   const runs: Run[] = [];
-  for (const code of codes) {
-    const slot: FontSlot = isArabic(code) ? 'arabic' : latin;
+  for (const glyph of glyphs) {
+    const slot: FontSlot = isArabic(glyph.code) ? 'arabic' : latin;
     const last = runs[runs.length - 1];
     // A space belongs to the run it follows: starting a new one on every space
     // would split a phrase into a run per word for no gain.
-    if (last && (last.slot === slot || code === 0x20)) {
-      last.codes.push(code);
+    if (last && (last.slot === slot || glyph.code === 0x20)) {
+      last.glyphs.push(glyph);
       continue;
     }
-    runs.push({ slot, codes: [code] });
+    runs.push({ slot, glyphs: [glyph] });
   }
   return runs;
 }
@@ -93,8 +102,8 @@ function runsOf(text: string, latin: FontSlot, rtl: boolean): Run[] {
 function widthOfRun(run: Run, fonts: FontSet, size: number): number {
   const font = fonts[run.slot];
   let total = 0;
-  for (const code of run.codes) {
-    const glyph = glyphFor(font, code);
+  for (const placed of run.glyphs) {
+    const glyph = glyphFor(font, placed.code);
     if (glyph === null) continue;
     total += widthOf(font, glyph);
   }
@@ -168,7 +177,17 @@ function fingerprint(bytes: Uint8Array): string {
 // The content stream
 // --------------------------------------------------------------------------
 
-type Used = Map<FontSlot, Map<number, number>>;
+/**
+ * Per face, every glyph the document drew with and the characters it stands
+ * for — which is what the `/ToUnicode` map is written from, and so what a
+ * person selecting a line and copying it gets back.
+ */
+type Used = Map<FontSlot, Map<number, readonly number[]>>;
+
+/** Whether two glyphs stand for the same characters, in the same order. */
+function sameSource(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((code, at) => code === b[at]);
+}
 
 /** Draws one page's operations, recording which glyphs each face was asked for. */
 function contentOf(
@@ -217,15 +236,36 @@ function contentOf(
         seen = new Map();
         used.set(run.slot, seen);
       }
-      for (const code of run.codes) {
-        const glyph = glyphFor(font, code);
+      for (const placed of run.glyphs) {
+        const glyph = glyphFor(font, placed.code);
         // A character this face cannot draw is dropped rather than replaced
         // with a box: every string on these documents comes from a row the
         // practice wrote, and a missing glyph is a fault to notice in review,
         // not something to paper over on a tax invoice.
         if (glyph === null) continue;
         glyphs += hex4(glyph);
-        seen.set(glyph, code);
+        // One glyph, one entry in the map — but a document can reach the same
+        // glyph from two different sources. A bracket inside a right-to-left
+        // run is drawn as its mirror image, so the shape that closes an Arabic
+        // line stands for the bracket that opened it, while the identical shape
+        // in "Total (AED)" stands for itself; both are drawn by the Latin face,
+        // which has one `/ToUnicode` map between them. Letting whichever was
+        // drawn last win hands the English half the Arabic half's answer, so an
+        // Arabic legal name or line description carrying brackets would make
+        // "Total (AED)" copy as "Total )AED(".
+        //
+        // When the sources disagree the glyph therefore falls back to the
+        // character it itself draws. The English reading is then right, and the
+        // mirrored bracket in the Arabic run comes off the clipboard as the
+        // shape on the page rather than as the wrong bracket: a bracket the
+        // reader can see is the smaller loss, and the letters either side of it
+        // — the half that could not be searched for at all — are untouched.
+        const already = seen.get(glyph);
+        if (already === undefined) {
+          seen.set(glyph, placed.from);
+        } else if (!sameSource(already, placed.from)) {
+          seen.set(glyph, [placed.code]);
+        }
       }
       if (glyphs.length === 0) continue;
       out.push(`/${resource} ${num(op.style.size)} Tf`);
@@ -242,25 +282,32 @@ function contentOf(
 // The file
 // --------------------------------------------------------------------------
 
-function toUnicodeCMap(glyphs: ReadonlyMap<number, number>): string {
+/** One code point as a PDF's UTF-16BE bfchar target wants it. */
+function utf16(code: number): string {
+  // Above the basic plane a code point is written as a surrogate pair.
+  return code > 0xffff
+    ? hex4(0xd800 + ((code - 0x10000) >> 10)) + hex4(0xdc00 + ((code - 0x10000) & 0x3ff))
+    : hex4(code);
+}
+
+/**
+ * What each glyph says, for a reader selecting a line and copying it.
+ *
+ * The entries map a glyph to the *characters it was made from*, not to the
+ * shape it draws. For Latin those are the same thing. For Arabic they are not:
+ * a letter is drawn as the presentation form it takes in its word, and lam
+ * followed by alef is drawn as one glyph standing for two letters, so a map
+ * built from the shapes hands back the FE70 block — legible on the page,
+ * unusable on the clipboard, and unfindable by a search for the word.
+ */
+function toUnicodeCMap(glyphs: ReadonlyMap<number, readonly number[]>): string {
   const entries = [...glyphs.entries()].sort((a, b) => a[0] - b[0]);
   const chunks: string[] = [];
   for (let at = 0; at < entries.length; at += 100) {
     const slice = entries.slice(at, at + 100);
     chunks.push(
       `${slice.length} beginbfchar\n` +
-        slice
-          .map(([glyph, code]) => {
-            // Above the basic plane a code point is written as a surrogate
-            // pair, which is what a PDF's UTF-16BE bfchar target wants.
-            const text =
-              code > 0xffff
-                ? hex4(0xd800 + ((code - 0x10000) >> 10)) +
-                  hex4(0xdc00 + ((code - 0x10000) & 0x3ff))
-                : hex4(code);
-            return `<${hex4(glyph)}> <${text}>`;
-          })
-          .join('\n') +
+        slice.map(([glyph, from]) => `<${hex4(glyph)}> <${from.map(utf16).join('')}>`).join('\n') +
         '\nendbfchar',
     );
   }
@@ -274,7 +321,7 @@ function toUnicodeCMap(glyphs: ReadonlyMap<number, number>): string {
   );
 }
 
-function widthsArray(font: Font, glyphs: ReadonlyMap<number, number>): string {
+function widthsArray(font: Font, glyphs: ReadonlyMap<number, readonly number[]>): string {
   const entries = [...glyphs.keys()].sort((a, b) => a - b);
   return `[${entries.map((glyph) => `${glyph}[${widthOf(font, glyph)}]`).join(' ')}]`;
 }
@@ -340,7 +387,7 @@ export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string)
 
   for (const slot of embedded) {
     const font = fonts[slot];
-    const glyphs = used.get(slot) ?? new Map<number, number>();
+    const glyphs = used.get(slot) ?? new Map<number, readonly number[]>();
     const base = fontObject.get(slot) ?? 0;
     const descendant = base + 1;
     const descriptor = base + 2;

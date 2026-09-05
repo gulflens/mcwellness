@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { forDrawing, isArabic, shape, toVisualOrder } from '../../domain/billing/document';
+import { forDrawing, isArabic, shape, toVisualOrder } from './arabic';
 
 /**
  * Arabic is set by choosing the shape each letter takes and then placing the
- * glyphs right to left (`domain/billing/document/arabic.ts`). Both halves are
+ * glyphs right to left (`arabic.ts`). Both halves are
  * pure arithmetic over code points, so both are tested without a font.
  *
  * The expectations are written as the presentation-form code points they should

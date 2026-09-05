@@ -1,6 +1,18 @@
 /**
  * Rendering an invoice or a receipt to a PDF the practice can send.
  *
+ * **What is here and what is next door.** The half that knows about money —
+ * the document's model, its wording in both languages, and the layout that
+ * puts it on an A4 sheet — is here, in billing, where an invoice's own
+ * sentences belong. The half that knows about bytes — the PDF file format,
+ * TrueType, Arabic shaping and the extractor that reads a finished page back
+ * — is `domain/shared/document`, because the reports stream renders documents
+ * too and `docs/SPEC/OWNERSHIP.md` rule 3 forbids it reaching into billing's
+ * `domain/` to do so.
+ *
+ * This barrel exports both halves under the names billing's callers have
+ * always used, so the move cost nothing outside these two folders.
+ *
  * Pure and browser-safe throughout: the font programs arrive as bytes
  * (`app/api/billing/fonts.ts` reads them), and the document arrives as a
  * snapshot off its own row (`model.ts`). Nothing here reads a clock, a
@@ -8,11 +20,22 @@
  * re-renderable to the same bytes years later.
  */
 
-export { renderPdf, measure, PAGE_HEIGHT, PAGE_WIDTH } from './pdf';
-export type { Align, FontSet, FontSlot, Op, Page, Style } from './pdf';
-export { readFont, glyphFor, widthOf } from './truetype';
-export type { Font } from './truetype';
-export { forDrawing, isArabic, shape, toVisualOrder } from './arabic';
+export {
+  extractAll,
+  extractText,
+  forDrawing,
+  glyphFor,
+  isArabic,
+  measure,
+  PAGE_HEIGHT,
+  PAGE_WIDTH,
+  readFont,
+  renderPdf,
+  shape,
+  toVisualOrder,
+  widthOf,
+} from '../../shared/document';
+export type { Align, Font, FontSet, FontSlot, Op, Page, Style } from '../../shared/document';
 export { chargesVat } from './model';
 export type {
   InvoiceDocument,
@@ -34,10 +57,9 @@ export {
   WORDS,
 } from './strings';
 export type { Phrase } from './strings';
-export { extractAll, extractText } from './extract';
 
 import { layout, titleOf } from './render';
-import { renderPdf, type FontSet } from './pdf';
+import { renderPdf, type FontSet } from '../../shared/document';
 import type { MoneyDocument } from './model';
 
 /** The one call: a document and the faces, in; the file, out. */

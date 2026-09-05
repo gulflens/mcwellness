@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
   extractAll,
   extractText,
-  forDrawing,
   renderDocument,
+  toVisualOrder,
   WORDS,
   type InvoiceDocument,
   type ReceiptDocument,
@@ -15,7 +16,7 @@ import {
  * What a rendered invoice says, read back off the page.
  *
  * The text is extracted through the same `/ToUnicode` map a PDF viewer uses to
- * let a person select and copy it (`domain/billing/document/extract.ts`), so
+ * let a person select and copy it (`domain/shared/document/extract.ts`), so
  * these are assertions about the document a family actually receives, not about
  * the object that produced it.
  *
@@ -30,8 +31,15 @@ import {
 
 const fonts = documentFonts();
 
-/** The same string the page draws it as: shaped, and in right-to-left order. */
-const asDrawn = (arabic: string): string => String.fromCodePoint(...forDrawing(arabic));
+/**
+ * The same string as a person copying it off the page gets it: the letters
+ * themselves, in the order the glyphs are drawn, which for a right-to-left run
+ * is the reverse of the order it is read in. Not the presentation forms the
+ * page draws — the writer's `/ToUnicode` map hands a reader the letters
+ * (`domain/shared/document/pdf.test.ts`).
+ */
+const asCopied = (arabic: string): string =>
+  String.fromCodePoint(...toVisualOrder([...arabic].map((c) => c.codePointAt(0) ?? 0)));
 
 const UNREGISTERED: SupplierSnapshot = {
   legalName: 'Synthetic Wellness Studio',
@@ -87,8 +95,8 @@ describe('an invoice from a practice that is not registered for VAT', () => {
   it('is headed "Invoice", and never "Tax Invoice"', () => {
     expect(page).toContain('Invoice');
     expect(page).not.toContain('Tax Invoice');
-    expect(page).toContain(asDrawn(WORDS.invoice.ar));
-    expect(page).not.toContain(asDrawn(WORDS.taxInvoice.ar));
+    expect(page).toContain(asCopied(WORDS.invoice.ar));
+    expect(page).not.toContain(asCopied(WORDS.taxInvoice.ar));
   });
 
   it('carries no VAT registration number, no rate and no VAT line', () => {
@@ -106,7 +114,7 @@ describe('an invoice from a practice that is not registered for VAT', () => {
 
   it('states plainly why there is no VAT on it, in both languages', () => {
     expect(page).toContain('The practice is not registered for VAT');
-    expect(page).toContain(asDrawn('المنشأة غير مسجلة في ضريبة القيمة المضافة'));
+    expect(page).toContain(asCopied('المنشأة غير مسجلة في ضريبة القيمة المضافة'));
   });
 
   it('names the corporate-tax registration at length, never as a tax registration number', () => {
@@ -125,7 +133,7 @@ describe('an invoice from a practice that is registered', () => {
 
   it('is headed "Tax Invoice", in both languages', () => {
     expect(page).toContain('Tax Invoice');
-    expect(page).toContain(asDrawn(WORDS.taxInvoice.ar));
+    expect(page).toContain(asCopied(WORDS.taxInvoice.ar));
   });
 
   it('carries the VAT registration number, the rate and the VAT line', () => {
@@ -155,7 +163,7 @@ describe('every invoice, whatever the registration', () => {
 
   it('carries the practice, its licence and its address', () => {
     expect(page).toContain('Synthetic Wellness Studio');
-    expect(page).toContain(asDrawn('استوديو العافية التجريبي'));
+    expect(page).toContain(asCopied('استوديو العافية التجريبي'));
     expect(page).toContain('Unit 1, Synthetic Tower, Dubai');
     expect(page).toContain('SYN-000000');
     expect(page).toContain('Synthetic Department of Economy and Tourism');
@@ -170,7 +178,7 @@ describe('every invoice, whatever the registration', () => {
 
   it("carries each line's description in both languages, with its quantity and unit price", () => {
     expect(page).toContain('Neurofeedback session');
-    expect(page).toContain(asDrawn('جلسة نيوروفيدباك'));
+    expect(page).toContain(asCopied('جلسة نيوروفيدباك'));
     expect(page).toContain('Quantity');
     expect(page).toContain('Unit price (AED)');
   });
@@ -278,7 +286,7 @@ describe('a receipt', () => {
   it('is headed "Receipt" and never "Invoice"', () => {
     expect(page).toContain('Receipt');
     expect(page).not.toContain('Tax Invoice');
-    expect(page).toContain(asDrawn(WORDS.receipt.ar));
+    expect(page).toContain(asCopied(WORDS.receipt.ar));
   });
 
   it('carries its own number, from its own book', () => {
@@ -298,5 +306,51 @@ describe('a receipt', () => {
   it('shows the amount received, to the fils', () => {
     expect(page).toContain('Amount received (AED)');
     expect(page).toContain('700.00');
+  });
+});
+
+/**
+ * The rendered bytes themselves, pinned.
+ *
+ * The test above proves the writer is deterministic — the same row rendered
+ * twice is the same file — but determinism says nothing about *which* file, so
+ * a refactor that quietly moved a byte would pass it. These three hashes are
+ * the missing half: they say that the invoice, the registered invoice and the
+ * receipt are the documents they were when this was written, so any change to
+ * the writer has to declare itself here.
+ *
+ * **When one of these fails.** It is a fact to explain, not a number to
+ * refresh. If the change was deliberate, move the golden in the same commit
+ * that made it and say in the message what moved and why. If it was not, the
+ * writer changed a document nobody meant to change.
+ *
+ * These depend on the version of the font package the faces are read from
+ * (`app/api/billing/fonts.ts` embeds the programs verbatim), so upgrading it
+ * moves all three at once — which is itself worth seeing rather than not.
+ */
+describe('the bytes of a rendered document', () => {
+  const sha256 = (bytes: Uint8Array): string =>
+    createHash('sha256').update(Buffer.from(bytes)).digest('hex');
+
+  const GOLDEN: ReadonlyArray<readonly [string, () => Uint8Array, string]> = [
+    [
+      'an invoice from an unregistered practice',
+      () => renderDocument(invoiceFor(UNREGISTERED), fonts),
+      'be2d58f7062ce25bbd68b81f088d5f494ac0eaf5b01e42ec07f2289e32368dbb',
+    ],
+    [
+      'an invoice from a registered practice',
+      () => renderDocument(invoiceFor(REGISTERED), fonts),
+      'e810db7bb5c027dfde70daf39ff56fdf9af434281ac700daeac3b6bb0c697563',
+    ],
+    [
+      'a receipt',
+      () => renderDocument(receiptFor(UNREGISTERED), fonts),
+      'ad3aca707e149e85e3787aedf500c008ecafe52b6fa31e0f823b8da5c94b1e77',
+    ],
+  ];
+
+  it.each(GOLDEN)('%s renders to the bytes it always has', (_name, render, golden) => {
+    expect(sha256(render())).toBe(golden);
   });
 });

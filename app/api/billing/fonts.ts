@@ -2,8 +2,7 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { inflateSync } from 'node:zlib';
-import { readFont, type Font } from '../../../domain/billing/document/truetype';
-import type { FontSet } from '../../../domain/billing/document/pdf';
+import { readFont, type Font, type FontSet } from '../../../domain/shared/document';
 
 /**
  * The three faces a rendered document is set in, read off disk once.
@@ -13,7 +12,7 @@ import type { FontSet } from '../../../domain/billing/document/pdf';
  * dependencies because the browser loads them. So a document is set in the type
  * the screens are set in, and no font is added to the repository to do it.
  *
- * **This is the server side of the seam.** `domain/billing/document` is pure and
+ * **This is the server side of the seam.** `domain/shared/document` is pure and
  * browser-safe: it takes font programs as bytes. Reading a file and inflating a
  * `.woff` are Node's, so they live here.
  *
@@ -26,7 +25,7 @@ import type { FontSet } from '../../../domain/billing/document/pdf';
  *
  * **What is dropped on the way.** The layout tables — GSUB, GPOS, GDEF, STAT —
  * go. This renderer does its own Arabic shaping
- * (`domain/billing/document/arabic.ts`) and no PDF viewer applies them to
+ * (`domain/shared/document/arabic.ts`) and no PDF viewer applies them to
  * already-positioned glyphs, so embedding them would put about forty kilobytes
  * of unread data into every invoice the practice sends.
  */

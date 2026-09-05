@@ -15,7 +15,7 @@ capability that sends personal data anywhere is approved before it exists.
 | Seam | Interface | Real | Fallback | Chosen by |
 |---|---|---|---|---|
 | Documents | `domain/shared/storage.ts` | Supabase Storage, private bucket `documents` | a folder on this machine | `STORAGE_PROVIDER` |
-| Documents out | `domain/billing/sending.ts` | an email vendor, once one is approved | the message composed and the link handed back for the share sheet | `DOCUMENT_EMAIL_VENDOR` |
+| Documents out | `domain/shared/sending.ts` | an email vendor, once one is approved | the message composed and the link handed back for the share sheet | `DOCUMENT_EMAIL_VENDOR` |
 | Drive estimates | `domain/shared/routing.ts` | Google Maps Platform: the Routes API's compute route matrix, and the Maps Static API for the day's picture | straight-line distance times a road factor and an hour multiplier, and no picture | `ROUTING_PROVIDER` |
 
 ---
@@ -153,7 +153,7 @@ covers the choice itself, including every way of choosing wrong.
 
 ## Documents out (the sending seam)
 
-**The interface** — `domain/billing/sending.ts`, browser-safe, one call:
+**The interface** — `domain/shared/sending.ts`, browser-safe, one call:
 
 ```
 sendDocument({ to, message }) -> { delivered: true, channel }
@@ -163,7 +163,12 @@ sendDocument({ to, message }) -> { delivered: true, channel }
 Beside it, the pure helpers that compose what is sent: `draftMessage` writes
 the sentence in English with the Arabic beneath it, and `whatsAppHandoff` turns
 a number and that message into a `wa.me` link. Both decide nothing about the
-network.
+network. The implementations are `app/api/_middleware/sending/`:
+`share-sheet.ts` is the fallback and `index.ts` chooses from the environment.
+(_Amended in the build, 2026-09-06:_ interface and implementations both moved
+out of billing, because the reports stream sends documents through this same
+seam and `docs/SPEC/OWNERSHIP.md` rule 3 forbids it importing billing's
+`domain/`.)
 
 **Today the fallback is the whole of it, and that is an answer rather than a
 stub.** No email vendor is on `docs/COMPLIANCE/approved-vendors.md`, and
@@ -201,7 +206,9 @@ read that.
 never an id out of a URL, and a short-lived signed link to the bytes. Nothing
 in it says what the visit was for.
 
-**The forced-fallback test** — `tests/billing/sending.test.ts`.
+**The forced-fallback test** — `app/api/_middleware/sending/seam.test.ts`, beside the
+implementations as the other two seams keep theirs; the pure half of the seam is
+tested in `domain/shared/sending.test.ts`.
 
 ---
 

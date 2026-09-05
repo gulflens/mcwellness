@@ -620,3 +620,88 @@ The API runs its TypeScript through `tsx`, which is a development dependency, so
 ### 3. The production Supabase project is not created yet, and that is the sequencing point
 
 A Supabase project's region cannot be changed after creation, so creating one in Mumbai before the lawyer answers is not a setting that can be flipped later but a new project and a migration of every row and every file. Everything else in the piece — the tagged release, the migration guard, the backups and the rehearsed restore, both health routes, the error lines without a third-party tracker, the weekly dependency audit already in place, and the deep security scan — is written so the region is a setting and can be built now. `pg-boss` is named in `CLAUDE.md` and in the plan as the job runner but is not a dependency today, so the spec hosts no jobs and says so instead of pretending.
+
+---
+
+## Round 29, 2026-09-06 (the document writer's byte-level half, and the sending seam)
+
+Piece ten opens two worktrees, and one of them renders documents. The writer
+that renders invoices lived inside billing, and `docs/SPEC/OWNERSHIP.md` rule 3
+forbids one module importing another's `domain/` — so the choice was to move it
+or to copy it, and a copied Arabic shaper is a copy that drifts. This round is
+the move, taken before the worktree opens exactly as `docs/PLAN/piece-ten.md`'s
+builder notes and `docs/SPEC/reports-v1.md` section 10, decision 1 asked for.
+
+### 1. What moved, and what deliberately did not
+
+`pdf.ts`, `truetype.ts`, `arabic.ts` and `extract.ts` are now
+`domain/shared/document`, with a barrel of their own and the Arabic test beside
+them. `model.ts`, `render.ts` and `strings.ts` stayed in
+`domain/billing/document`: an invoice's wording, its layout and its model are
+billing's and always were. Billing's own barrel exports the same names it
+always did, so nothing outside those two folders changed an import except
+`app/api/billing/fonts.ts`, which reads the font programs off disk and now
+names their new home. All by `git mv`, so history follows.
+
+The new barrel is **not** re-exported through `domain/shared/index.ts`. A
+barrel every screen imports should not carry a PDF writer's names, and the two
+modules that render documents import it by its own path. Because no barrel
+reaches it, the browser-safety walk in
+`tests/lint/no-node-imports-in-browser-bundle.test.ts` would have walked it from
+nowhere, so it gains the new barrel as an entry point of its own — otherwise
+"nothing under `domain/shared/document` imports from Node" would be a comment
+rather than a proof.
+
+### 2. The sending decision, and the precedent it was taken on
+
+`domain/billing/sending.ts` was already pure — the seam's types, `draftMessage`
+and `whatsAppHandoff` — so it moved whole to `domain/shared/sending.ts`. Its
+implementations were already the API's, in `app/api/billing/sending.ts`, and
+`docs/SEAMS.md`'s own "Adding a seam", step 2, says both implementations of a
+seam live under `app/api/_middleware/<seam>/`. Storage and routing both do.
+**So they moved there too**, in the routing seam's shape:
+`app/api/_middleware/sending/index.ts` chooses from the environment,
+`share-sheet.ts` is the one implementation there is, and `seam.test.ts` is the
+forced-fallback proof beside them. The pure half of the old test stayed with
+the pure half of the seam, in `domain/shared/sending.test.ts`.
+
+One difference from the storage and routing seams is deliberate and now says so
+in the code: an unset `DOCUMENT_EMAIL_VENDOR` falls back everywhere, not only
+on a laptop, because there is no second implementation a deployment could have
+meant instead.
+
+### 3. The Arabic-copy defect, closed
+
+`docs/PLAN/pieces-seven-to-nine.md` folded one defect into this round:
+"Arabic copied out of a rendered PDF comes back as unreadable glyphs", written
+up in `docs/CHANGE-REQUESTS/billing-04.md`. It is fixed. The writer shapes each
+letter into the form it takes in its word and reverses the run before drawing
+it, and the `/ToUnicode` map beside each face was built from the glyphs drawn —
+so a family copying the Arabic off their invoice got the Presentation Forms-B
+block in visual order, unusable on the clipboard and unfindable by a search.
+The shaper now carries the characters each glyph was made from along beside it
+and the map is written from those, ligature and mirrored bracket included. The
+run still comes off the page in drawing order, which is what a reader's
+bidirectional algorithm expects to be handed and can only turn round correctly
+when it is holding real letters.
+
+### 4. What the streams should know
+
+**Who.** `reports`, `assessment`, and `billing`.
+
+Import the writer from `domain/shared/document` and the sending seam from
+`domain/shared/sending`; call `documentSender()` from
+`app/api/_middleware/sending`. Nothing that reads or writes a `document` row
+changed, and nothing about a filed document changed: the same fixture invoice
+and receipt rendered to the same bytes across the move, hash for hash. They
+differ by eight, four and twelve bytes after the defect fix, all of it inside
+the `/ToUnicode` streams; every figure, word and rule on the page is untouched.
+
+**Still open, and not this round's.** `docs/SPEC/reports-v1.md` says a report is
+bilingual and that the practitioner's own narrative renders in the locale
+chosen at issue. A narrative is a paragraph rather than a short label, and the
+Arabic in `arabic.ts` is deliberately "not a full bidirectional algorithm and
+does not pretend to be one" — the subset a bilingual invoice needs. Whoever
+builds the report's layout should say plainly whether that subset is enough for
+a paragraph, and ask for a real implementation if it is not, rather than
+widening this one quietly.
