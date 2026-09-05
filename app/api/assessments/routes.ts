@@ -325,6 +325,27 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
     if (rows.length !== 2) {
       // One of them is another practice's, or a record this person may not
       // reach: row security answered, and the answer is the same either way.
+      //
+      // **The attempt is written before the answer** (section 8), one row per
+      // id that did not come back, because a practitioner reaching for a
+      // measurement off their own schedule is exactly what section 11 asks to
+      // be audited and a silent 404 records nothing.
+      //
+      // The client is null, and deliberately. The list route can name one
+      // because its path carries a client id and `assessmentContext` is asked
+      // about that id before anything else; here the path carries assessment
+      // ids, row security has already hidden whatever is out of reach, and the
+      // door takes a client rather than an assessment. Filing the attempt
+      // against the client of whichever row *did* come back would write a
+      // false line onto a household that has nothing to do with it, and a
+      // refusal that filed itself against an id the caller supplied would let
+      // anybody write rows onto anybody's trail (./audit.ts).
+      const reached = new Set(rows.map((row) => row.id));
+      for (const id of ids.data) {
+        if (!reached.has(id)) {
+          await logRefusal(db, 'assessment', id, null, ['not_found']);
+        }
+      }
       return c.json({ error: 'not_found', requestId }, 404);
     }
     const [first, second] = rows as [DbAssessment, DbAssessment];
@@ -375,6 +396,13 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
       // Row security decides which links this actor can see, so a file of
       // another practice's — or of a client this person may not read — is
       // simply not there. A 404, never a 403 that confirms it exists.
+      //
+      // Written before the answer, as the file door's own refusal is
+      // (./file.ts) and for the same reason: reaching for the export of a
+      // client off your schedule is an attempt worth recording. The client is
+      // null because the one row that would name it is the row row security
+      // has just refused to hand over.
+      await logRefusal(db, 'document', params.data.documentId, null, ['not_found']);
       return c.json({ error: 'not_found', requestId }, 404);
     }
     // Handing somebody the means to open a client's file is the read worth

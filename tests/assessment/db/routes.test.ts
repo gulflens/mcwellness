@@ -627,7 +627,7 @@ describe('the comparison', () => {
     expect(await res.json()).toMatchObject({ code: 'different_clients' });
   });
 
-  it('answers not found when one of the two is out of reach', async () => {
+  it('answers not found when one of the two is out of reach, and audits the attempt', async () => {
     const household = await seedHousehold('46');
     const stranger = await seedHousehold('47', { familyName: 'Lagoon' });
     const a = (await (await record(household)).json()) as { assessment: { id: string } };
@@ -637,6 +637,17 @@ describe('the comparison', () => {
       household.authSub,
     );
     expect(res.status).toBe(404);
+    // Section 8: the refusal is written before the answer. One row, for the
+    // measurement that was out of reach, and none for the one that was not.
+    expect(await refusals(b.assessment.id)).toEqual(['not_found']);
+    expect(await refusals(a.assessment.id)).toEqual([]);
+    // And against no household: nothing about that record has been shown to
+    // belong to a client this caller may name.
+    const row = await owner.query<{ client_id: string | null }>(
+      "select client_id from audit_log where action = 'refused' and entity_id = $1",
+      [b.assessment.id],
+    );
+    expect(row.rows[0]?.client_id).toBeNull();
   });
 });
 
@@ -850,5 +861,9 @@ describe('a link to an export', () => {
     expect(
       (await get(`/api/assessments/file/${filed.documentId}/link`, stranger.authSub)).status,
     ).toBe(404);
+    // Both attempts are written before their answers (section 8): the wrong
+    // role by role, the practitioner off the schedule because row security
+    // handed over nothing.
+    expect(await refusals(filed.documentId)).toEqual(['wrong_role', 'not_found']);
   });
 });
