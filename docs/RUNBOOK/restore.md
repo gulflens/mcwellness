@@ -174,10 +174,14 @@ Or from a terminal, with the GitHub CLI signed in as the owner:
 
 ```bash
 gh api --method PUT repos/gulflens/mcwellness/environments/production \
-  --raw-field 'wait_timer=0' \
+  --field 'wait_timer=0' \
   --field 'reviewers[][type]=User' \
-  --raw-field "reviewers[][id]=$(gh api user --jq .id)"
+  --field "reviewers[][id]=$(gh api user --jq .id)"
 ```
+
+`--field` on the two numbers is not a matter of taste: GitHub's environment
+endpoint validates `wait_timer` and `reviewers[][id]` as integers, and
+`--raw-field` would send them as strings and be answered 422.
 
 Then confirm it exists:
 
