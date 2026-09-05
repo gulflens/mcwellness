@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # PreToolUse on Bash: block commands that touch production.
 # Patterns: the production project name, the previous McWellness app's Supabase
-# project (never touched from this repo), and the production URL variable.
+# project (never touched from this repo), the production URL variable, and the
+# word that unlocks the migration guard for a production database.
 input=$(cat)
 cmd="$input"
 
@@ -21,7 +22,13 @@ OLD_APP_PROJECT_REF='gqvpapvdqcfjlifgwhpk'
 # MIGRATE_TARGET names it, so it needs no reference to be complete.
 PLATFORM_PRODUCTION_PROJECT_REF=''
 
-pattern='mcwellness-prod|mcwellness-app|PROD_DATABASE_URL'
+# MIGRATE_TARGET=production is the one word that lets `pnpm db:migrate` past
+# the guard in db/runner/plan.ts and onto a production database, and the guard's
+# own comment says it stops a mistake rather than a determined person. A Claude
+# session is exactly the mistake-maker it describes, so the word is stopped a
+# layer earlier here. The optional character admits a quote, so
+# MIGRATE_TARGET="production" and MIGRATE_TARGET='production' are caught too.
+pattern='mcwellness-prod|mcwellness-app|PROD_DATABASE_URL|MIGRATE_TARGET=.?production'
 pattern="${pattern}|${OLD_APP_PROJECT_REF}"
 if [ -n "$PLATFORM_PRODUCTION_PROJECT_REF" ]; then
   pattern="${pattern}|${PLATFORM_PRODUCTION_PROJECT_REF}"
