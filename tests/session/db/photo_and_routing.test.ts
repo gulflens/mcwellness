@@ -6,7 +6,7 @@ import { SignJWT } from 'jose';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '../../../app/api/_middleware/db';
-import { straightLineRouting } from '../../../app/api/_middleware/routing';
+import { googleRouting, straightLineRouting } from '../../../app/api/_middleware/routing';
 import { localDiskStorage } from '../../../app/api/_middleware/storage';
 import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
 import { createApi } from '../../../app/api/create-api';
@@ -547,6 +547,110 @@ describe("the day's drives, under the fallback", () => {
         "and new_values::text like '%55.2%'",
     );
     expect(trail.rows[0]?.n).toBe('0');
+  });
+});
+
+describe("the day's drives, asked for by the hour", () => {
+  /**
+   * The one place in this file where the real implementation is used, and it
+   * reaches nothing: a fake `fetch` collects what would have been sent
+   * (docs/SEAMS.md, and the same rule as
+   * app/api/_middleware/routing/seam.test.ts — **no test calls Google**).
+   *
+   * What is proved: a compute-route-matrix request carries a single departure
+   * time, so the route asks once per hour bucket rather than once for the day.
+   * Asked in one call, an afternoon drive was priced with the morning's
+   * traffic and then written to the cache under the afternoon's own hour — a
+   * wrong figure, kept for thirty days.
+   */
+  const FAKE_KEY = 'not-a-real-key-0000000000000000';
+
+  type MatrixCall = { departureTime: string | undefined; origins: number };
+
+  function googleApi(calls: MatrixCall[]): ReturnType<typeof createApi> {
+    const fetchImpl = ((_url: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        departureTime?: string;
+        origins: unknown[];
+      };
+      calls.push({ departureTime: body.departureTime, origins: body.origins.length });
+      return Promise.resolve(
+        Response.json(
+          body.origins.map((_origin, index) => ({
+            originIndex: index,
+            destinationIndex: index,
+            duration: '900s',
+            distanceMeters: 9000,
+          })),
+        ),
+      );
+    }) as unknown as typeof fetch;
+    return createApi({
+      pool,
+      verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }),
+      storage: localDiskStorage({ dir, signingSecret: Buffer.alloc(32, 5) }),
+      routing: googleRouting({ apiKey: FAKE_KEY, timeZone: 'Asia/Dubai', fetchImpl }),
+    });
+  }
+
+  it('asks once per hour bucket, each with its own departure', async () => {
+    const visit = await seedVisit('20', { hour: '19' });
+    // A day a week out, so every departure is still to come and the request
+    // carries one rather than being asked about a drive already made.
+    const marker = new Date(`${today}T12:00:00Z`);
+    marker.setUTCDate(marker.getUTCDate() + 7);
+    const date = marker.toISOString().slice(0, 10);
+
+    // Three stops, four hours apart: two legs, leaving in two different hours.
+    for (const [index, hour] of ['08', '12', '16'].entries()) {
+      const clientId = id('20', 60 + index);
+      const locationId = id('20', 70 + index);
+      await seedClient(owner, IDS.tenantA, clientId, IDS.ownerA, `Ridge${index}`);
+      await seedLocation(owner, IDS.tenantA, locationId, clientId, IDS.ownerA);
+      await owner.query(
+        'update location set entrance_point = ' +
+          `extensions.st_geogfromtext('SRID=4326;POINT(55.${40 + index} 25.${30 + index})') ` +
+          'where id = $1',
+        [locationId],
+      );
+      await seedAppointment(owner, {
+        id: id('20', 80 + index),
+        tenantId: IDS.tenantA,
+        clientId,
+        practitionerId: visit.practitionerId,
+        serviceTypeId: SERVICE_TYPE,
+        locationId,
+        windowStart: `${date}T${hour}:00:00+04:00`,
+        status: 'confirmed',
+      });
+    }
+
+    const calls: MatrixCall[] = [];
+    const api = googleApi(calls);
+    const res = await api.request(`/api/routing/day?date=${date}`, {
+      headers: { authorization: `Bearer ${await mint(visit.authSub)}` },
+    });
+    expect(res.status).toBe(200);
+    const day = (await res.json()) as RoutingDayResponse;
+    expect(day.legs).toHaveLength(2);
+    expect(day.legs.every((leg) => leg.source === 'traffic')).toBe(true);
+
+    // One call per hour bucket, each carrying that hour's own leg and its own
+    // departure — not one call for the day under the first leg's hour.
+    expect(calls).toHaveLength(2);
+    expect(calls.map((call) => call.origins)).toEqual([1, 1]);
+    const departures = calls.map((call) => call.departureTime);
+    expect(departures.every((departure) => typeof departure === 'string')).toBe(true);
+    expect(new Set(departures).size).toBe(2);
+
+    // And each figure is cached under the hour it was actually asked about.
+    const cached = await owner.query<{ hour_bucket: number }>(
+      'select hour_bucket from drive_estimate where from_location_id = any($1::uuid[]) ' +
+        'order by hour_bucket',
+      [[id('20', 70), id('20', 71)]],
+    );
+    expect(cached.rows.map((row) => row.hour_bucket)).toHaveLength(2);
+    expect(new Set(cached.rows.map((row) => row.hour_bucket)).size).toBe(2);
   });
 });
 

@@ -85,6 +85,8 @@ export type GoogleRoutingOptions = {
   /** Tests inject a fetch; the server uses the runtime's own. Never a real call in a test. */
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** The clock, so a test can say what "already left" means. */
+  now?: () => Date;
 };
 
 type MatrixElement = {
@@ -118,6 +120,7 @@ function signedPath(path: string, secret: string): string {
 export function googleRouting(options: GoogleRoutingOptions): RoutingProvider {
   const doFetch = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const now = options.now ?? (() => new Date());
 
   /** One call. A vendor's own message never reaches a caller; only its status is kept. */
   async function call(url: string, init?: RequestInit): Promise<Response> {
@@ -148,8 +151,19 @@ export function googleRouting(options: GoogleRoutingOptions): RoutingProvider {
       }
       // One origin and one destination per leg, paired by index: the matrix is
       // asked for the diagonal and nothing else, so a day of six stops is six
-      // elements rather than thirty-six. departureTime is per request, so the
-      // legs are grouped by the minute they leave.
+      // elements rather than thirty-six. departureTime is per request, and
+      // app/api/routing/day.ts sends one call per hour bucket, so every leg in
+      // a call leaves in the same hour and the first leg's departure stands
+      // for it honestly.
+      //
+      // **And it is omitted when it has already gone.** Google refuses a
+      // compute-route-matrix call whose departureTime is in the past, and it
+      // refuses the whole call — so a practitioner opening this morning's day
+      // sheet in the afternoon lost every uncached leg, not just the ones
+      // behind them. Without it the answer is the road as it is now, which is
+      // the honest thing to say about a drive that has already happened.
+      const departAt = legs[0]?.departAt;
+      const inFuture = departAt !== undefined && departAt.getTime() > now().getTime();
       const body = {
         origins: legs.map((leg) => ({
           waypoint: { location: { latLng: { latitude: leg.from.lat, longitude: leg.from.lng } } },
@@ -160,10 +174,7 @@ export function googleRouting(options: GoogleRoutingOptions): RoutingProvider {
         })),
         travelMode: 'DRIVE',
         routingPreference: 'TRAFFIC_AWARE',
-        // The first leg's departure stands for the call. Every leg of a day
-        // sheet is asked for its own hour bucket by the route above this, so a
-        // call only ever carries legs leaving in the same hour.
-        departureTime: legs[0]?.departAt.toISOString(),
+        ...(inFuture && departAt ? { departureTime: departAt.toISOString() } : {}),
       };
       const response = await call(ROUTE_MATRIX_URL, {
         method: 'POST',

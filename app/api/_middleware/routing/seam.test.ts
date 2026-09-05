@@ -29,6 +29,8 @@ const DUBAI = { lat: 25.2, lng: 55.27 };
 const SHARJAH = { lat: 25.35, lng: 55.4 };
 /** A Monday at eight in the morning, Dubai time. */
 const DEPART = new Date('2026-09-07T04:00:00Z');
+/** An hour before it, so `DEPART` is a departure still to come. */
+const BEFORE_DEPART = () => new Date('2026-09-07T03:00:00Z');
 /** Not a real key: 32 characters of nothing, refused by every service on earth. */
 const FAKE_KEY = 'not-a-real-key-0000000000000000';
 /**
@@ -146,6 +148,7 @@ describe('the real implementation, against a fake fetch', () => {
     const routing = googleRouting({
       apiKey: FAKE_KEY,
       timeZone: ZONE,
+      now: BEFORE_DEPART,
       fetchImpl: fakeFetch((url, init) => {
         sent = {
           url,
@@ -181,6 +184,29 @@ describe('the real implementation, against a fake fetch', () => {
     // anybody's access log.
     expect(request.headers['x-goog-api-key']).toBe(FAKE_KEY);
     expect(request.url).not.toContain(FAKE_KEY);
+  });
+
+  it('sends no departure time for a drive that has already left', async () => {
+    // Google refuses a compute-route-matrix call whose departureTime is in the
+    // past, and refuses the whole call — so a practitioner opening this
+    // morning's day sheet in the afternoon lost every uncached leg, not only
+    // the ones behind them. Without it the answer is the road as it is now.
+    let sent: Record<string, unknown> = {};
+    const routing = googleRouting({
+      apiKey: FAKE_KEY,
+      timeZone: ZONE,
+      now: () => new Date('2026-09-07T09:00:00Z'),
+      fetchImpl: fakeFetch((_url, init) => {
+        sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Response.json([
+          { originIndex: 0, destinationIndex: 0, duration: '1500s', distanceMeters: 18000 },
+        ]);
+      }),
+    });
+    await routing.driveMatrix([{ from: DUBAI, to: SHARJAH, departAt: DEPART }], FACTORS);
+    expect('departureTime' in sent).toBe(false);
+    // The call still goes, and still asks about traffic.
+    expect(sent.routingPreference).toBe('TRAFFIC_AWARE');
   });
 
   it('answers the diagonal in order, whatever order the vendor answers in', async () => {

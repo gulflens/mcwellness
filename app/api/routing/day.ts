@@ -40,6 +40,12 @@ import { RoutingDayResponse, type DayLegRow } from './schema';
  * no record number, no address, no Makani number, no id — and the audit trail
  * gets no coordinate either, because nothing here writes one.
  *
+ * **One call per hour, never one call for the day.** A compute-route-matrix
+ * request carries a single departure time, so the missing legs are gathered
+ * into their hour buckets and each bucket is asked for on its own — otherwise
+ * an afternoon drive is priced with the morning's traffic and then cached
+ * under its own hour, which is a wrong figure kept for thirty days.
+ *
  * **The cache is the reason this is affordable.** A leg's estimate is written
  * to `drive_estimate` keyed by the two locations and the hour of the practice's
  * own day, and read back for thirty days: a day of six stops is at most six
@@ -249,7 +255,14 @@ async function estimateLegs(
     ]),
   );
 
-  const missing: { leg: DayLeg; hour: number }[] = [];
+  // The missing legs, gathered into the hour they leave in. One call per hour
+  // and not one call for the day: a compute-route-matrix request carries a
+  // single departureTime, so a day sheet asked in one call priced the
+  // afternoon's drive with the morning's traffic and then cached that figure
+  // under the afternoon's own hour — a wrong answer, kept. A day of six stops
+  // is at most six legs, so this is a handful of calls at the very worst and
+  // usually two or three.
+  const missing = new Map<number, DayLeg[]>();
   for (const leg of legs) {
     const hour = hourBucket(leg.departAt, PRACTICE_TIME_ZONE);
     const hit = fresh.get(cacheKey(leg.fromLocationId, leg.toLocationId, hour));
@@ -257,39 +270,46 @@ async function estimateLegs(
       answers.set(leg.toStopId, hit);
       continue;
     }
-    missing.push({ leg, hour });
+    const bucket = missing.get(hour);
+    if (bucket) bucket.push(leg);
+    else missing.set(hour, [leg]);
   }
-  if (missing.length === 0) return answers;
+  if (missing.size === 0) return answers;
 
-  let estimates: DriveEstimate[];
-  try {
-    estimates = await routing.driveMatrix(
-      missing.map(({ leg }) => ({ from: leg.from, to: leg.to, departAt: leg.departAt })),
-      factors,
-    );
-  } catch (error) {
-    if (isRoutingUnavailable(error)) {
-      // The cached legs stand; the rest render as "– –". A day sheet that
-      // refused to open because a vendor was down would be worse than a day
-      // sheet with a blank in it.
-      return answers;
+  // In the day's own order, so the drives are asked for in the order they will
+  // be driven and a vendor that goes down mid-day answers the earlier stops.
+  for (const hour of [...missing.keys()].sort((a, b) => a - b)) {
+    const bucket = missing.get(hour) ?? [];
+    let estimates: DriveEstimate[];
+    try {
+      estimates = await routing.driveMatrix(
+        bucket.map((leg) => ({ from: leg.from, to: leg.to, departAt: leg.departAt })),
+        factors,
+      );
+    } catch (error) {
+      if (isRoutingUnavailable(error)) {
+        // The cached legs stand; the rest render as "– –". A day sheet that
+        // refused to open because a vendor was down would be worse than a day
+        // sheet with a blank in it.
+        return answers;
+      }
+      throw error;
     }
-    throw error;
-  }
 
-  for (const [index, { leg, hour }] of missing.entries()) {
-    const estimate = estimates[index];
-    if (!estimate) continue;
-    answers.set(leg.toStopId, estimate);
-    await db.query(WRITE_SQL, [
-      leg.fromLocationId,
-      leg.toLocationId,
-      hour,
-      estimate.seconds,
-      estimate.metres,
-      estimate.source,
-      actorUserId,
-    ]);
+    for (const [index, leg] of bucket.entries()) {
+      const estimate = estimates[index];
+      if (!estimate) continue;
+      answers.set(leg.toStopId, estimate);
+      await db.query(WRITE_SQL, [
+        leg.fromLocationId,
+        leg.toLocationId,
+        hour,
+        estimate.seconds,
+        estimate.metres,
+        estimate.source,
+        actorUserId,
+      ]);
+    }
   }
   return answers;
 }
