@@ -1,7 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { formatLetterDate, parseErasureLetterTemplate, renderErasureLetter } from './erasureLetter';
+import {
+  formatLetterDate,
+  parseErasureLetterTemplate,
+  renderErasureLetter,
+  REPORTS_ERASED_SENTENCE,
+} from './erasureLetter';
 
 /**
  * The real templates, read from docs/CONSENT/erasure-letter/, for the reason
@@ -151,5 +156,42 @@ describe('rendering the letter', () => {
         practiceLegalName: '   ',
       }),
     ).toThrow(/names the practice/);
+  });
+  it('fills the reports sentence, in the language the letter is written in', () => {
+    // The round that ships the first report owes the letter this
+    // (docs/SPEC/reports-v1.md section 6, migration 107). Neither practice
+    // template carries the placeholder yet — adopting it is asked for in
+    // docs/CHANGE-REQUESTS/reports-01.md — so the sentence is proved here on a
+    // template that does, and the two real letters render exactly as before.
+    const english = renderErasureLetter(
+      {
+        locale: 'en',
+        version: '0.1-draft',
+        status: 'draft',
+        body: 'On {{erased_on}}, {{practice_legal_name}} erased it. {{reports_erased}}',
+      },
+      { erasedOn: '2026-09-06', practiceLegalName: 'Synthetic Studio' },
+    );
+    expect(english).toContain(REPORTS_ERASED_SENTENCE.en);
+    expect(english).toContain('The reports we wrote for you are gone as well');
+
+    const arabic = renderErasureLetter(
+      {
+        locale: 'ar',
+        version: '0.1-draft',
+        status: 'draft',
+        body: '{{reports_erased}}',
+      },
+      { erasedOn: '2026-09-06', practiceLegalName: 'Synthetic Studio' },
+    );
+    expect(arabic).toBe(REPORTS_ERASED_SENTENCE.ar);
+  });
+
+  it('says the same thing in both languages: the file went and so did the words', () => {
+    expect(REPORTS_ERASED_SENTENCE.en).toContain('the files themselves and the words');
+    expect(REPORTS_ERASED_SENTENCE.ar).toContain('الملفات نفسها والكلمات');
+    for (const sentence of Object.values(REPORTS_ERASED_SENTENCE)) {
+      expect(sentence.trim().length).toBeGreaterThan(60);
+    }
   });
 });

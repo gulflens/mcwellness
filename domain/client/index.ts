@@ -12,6 +12,7 @@ export {
   formatLetterDate,
   parseErasureLetterTemplate,
   renderErasureLetter,
+  REPORTS_ERASED_SENTENCE,
 } from './erasureLetter';
 export type { ErasureLetterLocale, ErasureLetterTemplate } from './erasureLetter';
 export {

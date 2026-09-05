@@ -46,6 +46,10 @@ export type Action =
   | { type: 'practice.settings.write' }
   | { type: 'session.execute'; serviceTypeId: string; on: IsoDate }
   | { type: 'report.sign'; serviceTypeId?: string }
+  | { type: 'report.list'; clientId: string }
+  | { type: 'report.read'; clientId: string }
+  | { type: 'report.draft'; clientId: string }
+  | { type: 'report.deliver' }
   | { type: 'audit.read'; clientId: string }
   | { type: 'appointment.list'; scope: 'practice' | 'own' }
   | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
@@ -154,6 +158,34 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
         )
       );
     }
+    case 'report.list':
+    case 'report.read':
+      // Who may see that a report exists, and open it
+      // (docs/SPEC/reports-v1.md section 7.1). The four practice roles that
+      // are not finance, and a contact for their own client — whose reach is
+      // narrower still in the database, which shows them issued versions only
+      // (db/policies/reports/reports.sql). **Finance is deliberately absent**:
+      // every other client-scoped read in this platform admits it, because
+      // money reaches everywhere, and a report is a household's most personal
+      // document. A coordinator who records payments has no business in one.
+      if (hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner')) {
+        return true;
+      }
+      return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(action.clientId);
+    case 'report.draft':
+      // Writing one, before anybody signs it. The owner, the lead
+      // practitioner, and a practitioner for a client visible to them — how
+      // far that reaches is app.client_visible_to_practitioner's to decide,
+      // not this file's. An admin reads and delivers and never drafts; the row
+      // policy says the same underneath.
+      return hasRole(actor, 'owner', 'lead_practitioner', 'practitioner');
+    case 'report.deliver':
+      // Putting a signed report in front of a household. The owner, an admin
+      // and the lead practitioner. Whether this particular household may be
+      // sent this particular report is `canDeliver` in domain/reports, which
+      // asks the consent and the contact's own flag at the moment of sending;
+      // this only says the role is allowed to ask.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'audit.read':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.list':

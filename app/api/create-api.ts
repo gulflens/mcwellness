@@ -38,6 +38,7 @@ import { mountClientRecord } from './clients/mount';
 import { mountDevSession, type DevSessionOptions } from './dev-session';
 import { mountPortal, mountPortalDoor, type AuthAdminProvider } from './portal/mount';
 import { mountPractice } from './practice/routes';
+import { mountReports } from './reports/routes';
 import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
 import { mountKit } from './kit/routes';
 import { mountRouting } from './routing/day';
@@ -412,6 +413,10 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // is answered to somebody with no session.
   mountAssessments(api, deps.now);
   mountRouting(api, deps.now);
+  // After the fence and with no raw body: a report is rendered by the server,
+  // so nothing in this group ever reads bytes a caller uploaded
+  // (docs/CHANGE-REQUESTS/reports-01.md item 2).
+  mountReports(api, deps.now);
   mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
 
   // An unknown route answers in the same shape as every other refusal.
