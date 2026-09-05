@@ -1,0 +1,13 @@
+{
+  "name": "McWellness",
+  "short_name": "McWellness",
+  "start_url": "/today",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#10191d",
+  "theme_color": "#10191d",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

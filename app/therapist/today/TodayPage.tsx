@@ -131,6 +131,21 @@ const NO_ESTIMATE = '\u2013 \u2013';
 const MAP_UNAVAILABLE = "The map needs the practice's key.";
 
 /**
+ * The offline band (docs/DESIGN-BRIEF.md section 6.1: "a persistent, calm
+ * band — not a red alert"). Working offline is normal.
+ *
+ * This screen used to carry one unconditional line, "Today needs a
+ * connection", because there was no local store and the day could not be
+ * shown without one. From piece eight the worker keeps this day's own reads,
+ * so the day is there in a basement car park; what still needs a bar of signal
+ * is the check-in at the door, which is where the practitioner is standing
+ * anyway (docs/SPEC/practitioner-phone.md section 3.4). So the line says that,
+ * and only when it is true.
+ */
+const OFFLINE_NOTE =
+  'You are offline. This is the day as it last loaded; checking in needs a signal.';
+
+/**
  * The two taps that put this app on an iPhone's home screen (section 3.3).
  * Safari has no install prompt and evicts a site's storage after seven days
  * unused unless it is there, so the practitioner is told once, calmly, and the
@@ -465,6 +480,9 @@ export function TodayPage() {
   const navigate = useNavigate();
 
   const [now, setNow] = useState(() => new Date());
+  const [online, setOnline] = useState(
+    () => typeof navigator === 'undefined' || navigator.onLine !== false,
+  );
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
   const [balances, setBalances] = useState<Record<string, StopBalance>>({});
@@ -512,9 +530,15 @@ export function TodayPage() {
       }
     };
     document.addEventListener('visibilitychange', onVisible);
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     return () => {
       clearInterval(tick);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
     };
   }, []);
 
@@ -644,6 +668,8 @@ export function TodayPage() {
             </Button>
           </div>
         ) : null}
+        {online ? null : <Note>{OFFLINE_NOTE}</Note>}
+
         {installNote ? (
           <div className="today__install">
             <Note>{INSTALL_NOTE}</Note>

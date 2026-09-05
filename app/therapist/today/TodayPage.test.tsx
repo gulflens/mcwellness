@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
+import type { DayLegRow } from '../../api/routing/schema';
 import { TodayPage, describeLeg, wantsInstallNote } from './TodayPage';
 
 afterEach(() => {
@@ -110,7 +111,7 @@ function mount(routing: unknown, stops: unknown = STOPS) {
   );
 }
 
-const TRAFFIC = {
+const TRAFFIC: { legs: DayLegRow[]; pictureUrl: string | null; mapAvailable: boolean } = {
   legs: [
     {
       toStopId: STOP_B,
@@ -126,20 +127,18 @@ const TRAFFIC = {
   mapAvailable: true,
 };
 
+const TRAFFIC_LEG = TRAFFIC.legs[0]!;
+
 const FALLBACK = {
-  legs: [{ ...TRAFFIC.legs[0], seconds: 1800, metres: 20000, source: 'straight-line' }],
+  legs: [{ ...TRAFFIC_LEG, seconds: 1800, metres: 20000, source: 'straight-line' as const }],
   pictureUrl: null,
   mapAvailable: false,
 };
 
 describe('describeLeg', () => {
   it('always says the word estimate, and never a point time', () => {
-    expect(describeLeg(TRAFFIC.legs[0] as never)).toBe(
-      'about 25 min · 18 km, estimate from traffic',
-    );
-    expect(describeLeg(FALLBACK.legs[0] as never)).toBe(
-      'about 30 min · 20 km, straight-line estimate',
-    );
+    expect(describeLeg(TRAFFIC_LEG)).toBe('about 25 min · 18 km, estimate from traffic');
+    expect(describeLeg(FALLBACK.legs[0])).toBe('about 30 min · 20 km, straight-line estimate');
   });
 
   it('renders a placeholder rather than nothing while the figure is missing', () => {
@@ -147,9 +146,7 @@ describe('describeLeg', () => {
   });
 
   it('never rounds a real drive down to nothing', () => {
-    expect(describeLeg({ ...(TRAFFIC.legs[0] as never), seconds: 20, metres: 300 })).toContain(
-      'about 1 min',
-    );
+    expect(describeLeg({ ...TRAFFIC_LEG, seconds: 20, metres: 300 })).toContain('about 1 min');
   });
 });
 
@@ -208,5 +205,25 @@ describe('the install note', () => {
     expect(wantsInstallNote({ userAgent: IPHONE_SAFARI } as Navigator, true)).toBe(false);
     // Android Chrome has its own prompt and no Share sheet entry to name.
     expect(wantsInstallNote({ userAgent: ANDROID_CHROME } as Navigator, false)).toBe(false);
+  });
+});
+
+describe('the offline band', () => {
+  it('is a calm line, and only when the device is actually offline', async () => {
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    mount(FALLBACK);
+    expect(
+      await screen.findByText(
+        'You are offline. This is the day as it last loaded; checking in needs a signal.',
+      ),
+    ).toBeTruthy();
+    // Calm, not critical: working offline is normal (docs/DESIGN-BRIEF.md 6.1).
+    expect(screen.queryByRole('alert')).toBeNull();
+    online.mockRestore();
+
+    cleanup();
+    mount(FALLBACK);
+    expect(await screen.findByText('Rowan M.')).toBeTruthy();
+    expect(screen.queryByText(/You are offline/)).toBeNull();
   });
 });
