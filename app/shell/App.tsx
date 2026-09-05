@@ -13,6 +13,7 @@ import { FamilyScreen } from '../client/FamilyScreen';
 import { HomeScreen } from '../client/HomeScreen';
 import { InvitePage } from '../client/InvitePage';
 import { MoneyScreen } from '../client/MoneyScreen';
+import { ReportsScreen } from '../client/ReportsScreen';
 import { PortalRoot } from '../client/PortalRoot';
 import { VisitsScreen } from '../client/VisitsScreen';
 import { CheckInPage } from '../therapist/session/CheckInPage';
@@ -188,6 +189,7 @@ export function App() {
         <Route index element={<HomeScreen />} />
         <Route path="visits" element={<VisitsScreen />} />
         <Route path="money" element={<MoneyScreen />} />
+        <Route path="reports" element={<ReportsScreen />} />
         <Route path="family" element={<FamilyScreen />} />
         <Route path="agreements" element={<AgreementsScreen />} />
       </Route>

@@ -1,16 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
-import { canIssue, type SigningCredential } from '../../../domain/reports';
+import { canIssue } from '../../../domain/reports';
 import { renderReport } from '../../../domain/reports/document';
 import { isoDateIn } from '../../../domain/shared';
 import { clientDocumentKey, documentRetentionUntil } from '../../../domain/shared/storage';
 import { documentFonts } from '../billing/fonts';
 import { logAction } from '../_middleware/audit';
-import type { ApiEnv, Db } from '../_middleware/request-context';
+import type { ApiEnv } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
 import { practiceTimeZone } from './gather';
 import { IssueInput, IssueResponse } from './schema';
 import { asRow, documentFrom, readRecipient, readReport } from './source';
+import { signerFor, signingCredentials } from './signer';
 
 /**
  * `POST /api/reports/:id/issue` — the atomic sign-and-render of
@@ -41,12 +42,6 @@ import { asRow, documentFrom, readRecipient, readReport } from './source';
  * the row and refuses when the fingerprint differs.
  */
 
-const CREDENTIALS_SQL =
-  'select practitioner_id, service_type_id, can_sign_report, ' +
-  "to_char(valid_from, 'YYYY-MM-DD') as valid_from, " +
-  "to_char(valid_to, 'YYYY-MM-DD') as valid_to " +
-  'from credential where tenant_id = app.current_tenant_id() and practitioner_id = $1';
-
 /** The refusal a person reads, per reason the credential failed. */
 const SIGNING_REFUSALS: Record<string, string> = {
   no_credential: 'no_signing_credential',
@@ -54,23 +49,6 @@ const SIGNING_REFUSALS: Record<string, string> = {
   credential_lapsed: 'credential_lapsed',
   credential_not_yet_valid: 'credential_not_yet_valid',
 };
-
-async function signingCredentials(db: Db, practitionerId: string): Promise<SigningCredential[]> {
-  const found = await db.query<{
-    practitioner_id: string;
-    service_type_id: string;
-    can_sign_report: boolean;
-    valid_from: string;
-    valid_to: string | null;
-  }>(CREDENTIALS_SQL, [practitionerId]);
-  return found.rows.map((row) => ({
-    practitionerId: row.practitioner_id,
-    serviceTypeId: row.service_type_id,
-    canSignReport: row.can_sign_report,
-    validFrom: row.valid_from,
-    validTo: row.valid_to,
-  }));
-}
 
 export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.post('/api/reports/:id/issue', async (c) => {
@@ -101,10 +79,21 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
     const timeZone = await practiceTimeZone(db);
     const today = isoDateIn(now(), timeZone);
 
+    // Ordinarily the person doing it. A caller may name somebody else, and
+    // that person's own credential is what is then checked.
+    const own = await signerFor(db, actor.userId);
+    const practitionerId = body.data.practitionerId ?? own?.practitionerId;
+    if (!practitionerId) {
+      // Not a practitioner at all, so there is no certificate to sign on. A
+      // sentence rather than a raise: nothing about their role is wrong, they
+      // simply are not the person who signs.
+      return c.json({ error: 'forbidden', code: 'not_a_practitioner', requestId }, 403);
+    }
+
     // The credential, at this moment. Asked here for the sentence; asked again
     // inside app.issue_report, which is the answer that binds.
-    const answer = canIssue(await signingCredentials(db, body.data.practitionerId), {
-      practitionerId: body.data.practitionerId,
+    const answer = canIssue(await signingCredentials(db, practitionerId), {
+      practitionerId,
       serviceTypeId: draft.service_type_id,
       on: today,
     });
@@ -125,7 +114,7 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
 
     const issued = await db.query<{ id: string }>(
       'select id from app.issue_report($1::uuid, $2::uuid, $3::date)',
-      [reportId, body.data.practitionerId, today],
+      [reportId, practitionerId, today],
     );
     if (!issued.rows[0]) {
       throw new Error('Issuing a report did not return a row.');

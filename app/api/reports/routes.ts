@@ -5,6 +5,7 @@ import { mountReportDraft } from './draft';
 import { mountReportGet } from './get';
 import { mountReportIssue } from './issue';
 import { mountReportList } from './list';
+import { mountReportPreview } from './preview';
 import { mountReportSupersede } from './supersede';
 
 /**
@@ -25,6 +26,7 @@ export function mountReports(api: Hono<ApiEnv>, now: () => Date = () => new Date
   mountReportList(api, now);
   mountReportDraft(api, now);
   mountReportIssue(api, now);
+  mountReportPreview(api, now);
   mountReportSupersede(api, now);
   mountReportDeliver(api, now);
   mountReportGet(api, now);

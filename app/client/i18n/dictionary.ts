@@ -142,6 +142,19 @@ export const WORDS = {
   ),
   noAgreements: t('Nothing has been agreed yet.', 'لم تتم الموافقة على شيء بعد.'),
 
+  // Reports (docs/SPEC/reports-v1.md section 7.3).
+  reports: t('Reports', 'التقارير'),
+  reportsBody: t(
+    'The reports the practice has written for you. Each one opens as a document you can keep.',
+    'التقارير التي كتبها المركز لك. يفتح كل تقرير كمستند يمكنك الاحتفاظ به.',
+  ),
+  noReports: t('No reports have been written yet.', 'لم تُكتب أي تقارير بعد.'),
+  sessionReport: t('Session report', 'تقرير الجلسة'),
+  progressReport: t('Progress report', 'تقرير التقدّم'),
+  reportCovers: t('Covers', 'يغطي'),
+  reportIssued: t('Issued', 'صدر في'),
+  reportReplaced: t('Replaced by a newer version', 'استُبدل بإصدار أحدث'),
+
   // The invitation page.
   setUpSignIn: t('Set up your sign-in', 'أنشئ تسجيل الدخول'),
   setUpSignInBody: t(
@@ -225,6 +238,7 @@ export const PHRASES = {
   sessionOf: (used: number, total: number): Phrase =>
     t(`Session ${used} of ${total}`, `الجلسة ${used} من ${total}`),
   windowFromTo: (from: string, to: string): Phrase => t(`${from} to ${to}`, `من ${from} إلى ${to}`),
+  coversFromTo: (from: string, to: string): Phrase => t(`${from} to ${to}`, `من ${from} إلى ${to}`),
   greeting: (name: string): Phrase => t(`Hello, ${name}`, `مرحبًا، ${name}`),
   practiceIs: (name: string): Phrase => t(name, name),
 };

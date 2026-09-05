@@ -476,3 +476,104 @@ describe('measurements', () => {
     }
   });
 });
+
+
+describe('reports (docs/SPEC/reports-v1.md section 8)', () => {
+  it('says a report was signed and issued, naming its kind and reference', () => {
+    const sentence = narrate(
+      event({
+        entityType: 'report',
+        action: 'report.issued',
+        newValues: { kind: 'progress', reference: 'RPT-000001', version: '1' },
+      }),
+      'en',
+    );
+    expect(sentence?.sentence).toBe('Hazel Harbour signed and issued a progress report RPT-000001');
+  });
+
+  it('says a report was replaced, and leaves the reason to the reason column', () => {
+    const sentence = narrate(
+      event({
+        entityType: 'report',
+        action: 'report.superseded',
+        newValues: { reason: 'The visit date was wrong.', version: '2' },
+        reason: 'The visit date was wrong.',
+      }),
+      'en',
+    );
+    expect(sentence?.sentence).toBe('Hazel Harbour replaced this report with version 2');
+    expect(sentence?.reason).toBe('The visit date was wrong.');
+  });
+
+  it('says a report was sent and by which door, and never who to', () => {
+    // The contact's id is on the row; a telephone number is nowhere near the
+    // trail (docs/SPEC/audit.md section 8).
+    const sentence = narrate(
+      event({
+        entityType: 'report',
+        action: 'send',
+        newValues: {
+          channel: 'whatsapp',
+          contactId: '00000001-0000-4000-8000-000000000003',
+          delivered: 'false',
+        },
+      }),
+      'en',
+    );
+    expect(sentence?.sentence).toBe('Hazel Harbour sent this report to the household on WhatsApp');
+    expect(sentence?.sentence).not.toContain('000000000003');
+    expect(sentence?.sentence).not.toMatch(/\+?971/);
+  });
+
+  it('says by email where that was the door', () => {
+    const sentence = narrate(
+      event({ entityType: 'report', action: 'send', newValues: { channel: 'email' } }),
+      'en',
+    );
+    expect(sentence?.sentence).toContain('by email');
+  });
+
+  it('says a report was read, whether one or a list', () => {
+    for (const action of ['read', 'list']) {
+      expect(narrate(event({ entityType: 'report', action }), 'en')?.sentence).toBe(
+        'Hazel Harbour read this report',
+      );
+    }
+  });
+
+  it('says a refused signature was refused', () => {
+    expect(
+      narrate(
+        event({
+          entityType: 'report',
+          action: 'report.issue_refused',
+          newValues: { reason: 'credential_lapsed' },
+        }),
+        'en',
+      )?.sentence,
+    ).toBe('Hazel Harbour tried to sign a report and was refused');
+  });
+
+  it('falls back to a plain sentence for an ordinary draft moving', () => {
+    expect(narrate(event({ entityType: 'report', action: 'insert' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added a report',
+    );
+  });
+
+  it('writes every one of them in Arabic too', () => {
+    for (const overrides of [
+      { entityType: 'report', action: 'report.issued', newValues: { kind: 'progress' } },
+      { entityType: 'report', action: 'report.superseded', newValues: { version: '2' } },
+      { entityType: 'report', action: 'send', newValues: { channel: 'whatsapp' } },
+      { entityType: 'report', action: 'send', newValues: { channel: 'email' } },
+      { entityType: 'report', action: 'read' },
+      { entityType: 'report', action: 'report.issue_refused' },
+      { entityType: 'report', action: 'report.supersede_refused' },
+      { entityType: 'report', action: 'report.deliver_refused' },
+      { entityType: 'report', action: 'insert' },
+    ] as Partial<AuditEvent>[]) {
+      const sentence = narrate(event(overrides), 'ar')?.sentence ?? '';
+      expect(/[\u0600-\u06FF]/.test(sentence), JSON.stringify(overrides)).toBe(true);
+    }
+  });
+});

@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { isoDateIn } from '../../../domain/shared';
-import { validateContent, type ProgressNarrative } from '../../../domain/reports';
+import { validateContent } from '../../../domain/reports';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
@@ -52,26 +52,33 @@ const UPDATE_SQL =
 /**
  * What the practitioner has written, pulled out of the body they posted so it
  * can be put back into a freshly gathered one. Free text is boundary-cleaned
- * the way every other note in this platform is.
+ * the way every other note in this platform is (`cleanText`).
+ *
+ * **The goals are paired by position, not by id**, because a goal's id is not
+ * in the report's body: `content` is what a household's document is rendered
+ * from years later, and an internal row id has no business being in it. Both
+ * sides read the record's own order — the gathering query orders by primary
+ * first, then by when the goal was set, then by id — so the movement a
+ * practitioner typed against the third goal lands on the third goal. A goal
+ * added between the gathering and the save shifts the order, and the answer
+ * comes back with every movement beside the goal it now belongs to, which the
+ * editor shows before anything is signed.
  */
-function narrativeOf(content: unknown): ProgressNarrative {
-  const body = (content ?? {}) as {
-    summary?: unknown;
-    suggestion?: unknown;
-    goals?: unknown;
-  };
-  const movementByGoal: Record<string, string> = {};
-  if (Array.isArray(body.goals)) {
-    for (const goal of body.goals as { id?: unknown; movement?: unknown }[]) {
-      if (typeof goal?.id === 'string' && typeof goal.movement === 'string') {
-        movementByGoal[goal.id] = cleanText(goal.movement, 1000);
-      }
-    }
-  }
+function narrativeOf(content: unknown): {
+  summary: string;
+  suggestion: string;
+  movements: string[];
+} {
+  const body = (content ?? {}) as { summary?: unknown; suggestion?: unknown; goals?: unknown };
+  const movements: string[] = Array.isArray(body.goals)
+    ? (body.goals as { movement?: unknown }[]).map((goal) =>
+        typeof goal?.movement === 'string' ? cleanText(goal.movement, 1000) : '',
+      )
+    : [];
   return {
     summary: typeof body.summary === 'string' ? cleanText(body.summary, 4000) : '',
     suggestion: typeof body.suggestion === 'string' ? cleanText(body.suggestion, 2000) : '',
-    movementByGoal,
+    movements,
   };
 }
 
@@ -142,9 +149,17 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
         clientId: input.clientId,
         coverage: { from: input.coverageFrom, to: input.coverageTo },
         timeZone,
-        narrative: narrativeOf(input.content),
       });
-      content = gathered.content;
+      const typed = narrativeOf(input.content);
+      content = {
+        ...gathered.content,
+        summary: typed.summary,
+        suggestion: typed.suggestion,
+        goals: gathered.content.goals.map((goal, at) => ({
+          ...goal,
+          movement: typed.movements[at] ?? '',
+        })),
+      };
     }
 
     const checked = validateContent(input.kind, content);

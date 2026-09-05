@@ -128,3 +128,34 @@ describe('GET /api/clients/:id', () => {
     expect(Array.isArray(body.contacts)).toBe(true);
   });
 });
+
+describe('GET /api/reports', () => {
+  it("answers the seeded owner with a client's reports, not the unmounted-route 404", async () => {
+    // docs/CHANGE-REQUESTS/reports-01.md item 2: the reports group is mounted
+    // after the fence and with no raw body, because a report is rendered by
+    // the server and nothing in the group reads bytes a caller uploaded.
+    const client = data.clients[0];
+    if (!client) throw new Error('No seeded client.');
+    const res = await call('GET', `/api/reports?clientId=${client.id}`, authIdOf(0));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { reports: unknown[] };
+    expect(Array.isArray(body.reports)).toBe(true);
+  });
+
+  it('answers the declared shapes, so a screen builds its form from them', async () => {
+    const res = await call('GET', '/api/reports/schema', authIdOf(0));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { kinds: string[] };
+    expect(body.kinds).toEqual(['session', 'progress']);
+  });
+});
+
+describe('GET /api/portal/reports', () => {
+  it('is mounted, and refuses a member of the practice rather than 404ing', async () => {
+    // The household's sixth screen (docs/SPEC/reports-v1.md section 7.3). A
+    // staff account is not a household, so a 403 here is the route answering
+    // and a 404 would mean it was never mounted.
+    const res = await call('GET', '/api/portal/reports', authIdOf(0));
+    expect(res.status).toBe(403);
+  });
+});

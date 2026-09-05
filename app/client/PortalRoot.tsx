@@ -8,8 +8,9 @@ import { usePortalRead, type Loaded } from './usePortal';
 import './portal.css';
 
 /**
- * The portal's own root: `dir` and `lang`, the header, and the five screens
- * (docs/SPEC/client-portal.md section 3).
+ * The portal's own root: `dir` and `lang`, the header, and the six screens
+ * (docs/SPEC/client-portal.md section 3, and Reports from
+ * docs/SPEC/reports-v1.md section 7.3).
  *
  * **One column and no rail.** The wordmark, the practice's name, the language
  * switch, the person's name and sign out across the top, then the screens' own
@@ -31,11 +32,17 @@ import './portal.css';
  * to fetch it.
  */
 
-/** The five screens, in the order the header lists them. */
+/**
+ * The six screens, in the order the header lists them. Reports sits after
+ * Money and before Family: it is a thing the practice gives the household,
+ * like an invoice, rather than something about the household itself
+ * (docs/SPEC/reports-v1.md section 7.3).
+ */
 export const PORTAL_TABS = [
   { key: 'home', to: '/portal', end: true },
   { key: 'visits', to: '/portal/visits', end: false },
   { key: 'money', to: '/portal/money', end: false },
+  { key: 'reports', to: '/portal/reports', end: false },
   { key: 'family', to: '/portal/family', end: false },
   { key: 'agreements', to: '/portal/agreements', end: false },
 ] as const;
