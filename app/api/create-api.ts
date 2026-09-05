@@ -10,6 +10,7 @@ import { addressKey, DEFAULT_LIMITS, rateLimit, type RateLimits } from './_middl
 import {
   withRequestContext,
   type ApiEnv,
+  type PoolClientLike,
   type RequestContextDeps,
 } from './_middleware/request-context';
 import {
@@ -212,6 +213,35 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // Public, registered before the fence. The payload carries nothing
   // environment-specific on purpose.
   api.get('/api/health', (c) => c.json({ ok: true, service: 'mcwellness-api' }));
+  // The second one (docs/SPEC/hosting.md section 7.2). The route above touches
+  // no connection, so a monitor watching only it stays green through a complete
+  // Postgres outage: the screens would be broken and the monitor happy. This one
+  // takes a connection from the pool and runs one `select 1`. Public and ahead of
+  // the fence like its neighbour, and inside the per-address budget registered
+  // above, so it cannot be used to knock on the database over and over.
+  //
+  // The body is `{"ok":true}` or `{"ok":false}` and nothing else: no version, no
+  // host, no driver message. A stranger learns whether the practice's system is
+  // working and nothing about its shape. The reason goes to this process's own
+  // stderr instead, in the shape the error handler above uses — the name and the
+  // code of the failure, never its message, because a database message can carry
+  // a row's values.
+  api.get('/api/health/deep', async (c) => {
+    let client: PoolClientLike | null = null;
+    try {
+      client = await deps.pool.connect();
+      await client.query('select 1');
+    } catch (error) {
+      // Destroyed rather than returned: a connection that failed mid-answer is
+      // in an unknown state and the pool should not hand it to a real request.
+      client?.release(true);
+      const shape = error as { name?: string; code?: string };
+      console.error(JSON.stringify({ health: 'deep', name: shape.name, code: shape.code }));
+      return c.json({ ok: false }, 503);
+    }
+    client.release();
+    return c.json({ ok: true });
+  });
   // Only when the local implementation is the one chosen: it is the only one
   // whose signed URLs point back here (app/api/_middleware/storage).
   if (deps.storage) {
