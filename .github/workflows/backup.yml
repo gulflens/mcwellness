@@ -67,13 +67,22 @@ jobs:
       # is not guaranteed to be, so the dump runs from the Postgres image itself.
       # The connection string reaches the container as an environment variable
       # and never as an argument, so it cannot appear in a process list.
+      #
+      # The two schemas are the platform's own and the flags are the ones the
+      # rehearsal of 2026-09-06 arrived at the hard way (docs/RUNBOOK/restore.md).
+      # A whole-database dump carries Supabase's own schemas, and restoring those
+      # fails on the first table the restoring role does not own; --clean adds
+      # DROP statements for objects that belong to the host and not to us. What
+      # is not in here, and the runbook says so plainly, is the sign-in accounts,
+      # which live in Supabase's `auth` schema and come back from Supabase's own
+      # daily snapshot or from the owner's hand.
       - name: Dump the production database
         run: |
           set -euo pipefail
           name="mcwellness-$(date --utc +%Y-%m-%d).sql.gz"
           echo "NAME=$name" >> "$GITHUB_ENV"
           docker run --rm --env PGURL="$BACKUP_DATABASE_URL" postgres:17 \
-            sh -c 'pg_dump --no-owner --clean --if-exists "$PGURL"' \
+            sh -c 'pg_dump --no-owner --schema=public --schema=app "$PGURL"' \
             | gzip --best > "$name"
           # An empty dump is a failure wearing a success's clothes.
           size=$(wc -c < "$name")
