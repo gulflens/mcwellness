@@ -38,6 +38,12 @@ export const plugins = [
       // The fonts are the reason the precache matters: an Arabic subset never
       // fetched online is a screen with no Arabic in it, in a basement.
       globPatterns: ['**/*.{js,css,html,woff2,svg}'],
+      // A classic worker, not a module one. A module worker would have to be
+      // registered with `{ type: 'module' }`, and iOS Safari — which is the
+      // browser this whole section exists for (spec section 3.3) — is the one
+      // with the patchiest support for that. A classic script registers
+      // everywhere.
+      rollupFormat: 'iife',
     },
   }),
 ];
