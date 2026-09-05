@@ -315,3 +315,79 @@ describe('narrate', () => {
     );
   });
 });
+
+describe('the equipment register and the setup photograph', () => {
+  it('names an instrument by its kind and its serial when one is added', () => {
+    const sentence = narrate(
+      event({
+        entityType: 'kit',
+        action: 'insert',
+        newValues: { kind: 'amplifier', serial: '0000000e-0000-4000-8000-000000000001' },
+      }),
+      'en',
+    );
+    expect(sentence?.sentence).toContain('added an instrument');
+    expect(sentence?.sentence).toContain('amplifier');
+  });
+
+  it('says a calibration was recorded rather than listing two column names', () => {
+    const sentence = narrate(
+      event({
+        entityType: 'kit',
+        action: 'update',
+        changedFields: ['last_calibrated_at', 'calibration_due_at', 'updated_at'],
+      }),
+      'en',
+    );
+    expect(sentence?.sentence).toContain('recorded a calibration');
+  });
+
+  it('says who carries it, and says standing it down in words', () => {
+    expect(
+      narrate(
+        event({
+          entityType: 'kit',
+          action: 'update',
+          changedFields: ['assigned_practitioner_id'],
+        }),
+        'en',
+      )?.sentence,
+    ).toContain('who carries this instrument');
+    expect(
+      narrate(
+        event({
+          entityType: 'kit',
+          action: 'update',
+          changedFields: ['status'],
+          newValues: { status: 'inactive' },
+        }),
+        'en',
+      )?.sentence,
+    ).toContain('stood this instrument down');
+  });
+
+  it('says the setup photo was filed, and never says the document id', () => {
+    const sentence = narrate(
+      event({
+        entityType: 'session',
+        action: 'session.photo_filed',
+        newValues: { documentId: '00000000-0000-4000-8000-0000000000f9' },
+      }),
+      'en',
+    );
+    expect(sentence?.sentence).toContain('filed the setup photo');
+    expect(sentence?.sentence).not.toContain('0000000000f9');
+  });
+
+  it('writes all four in Arabic too', () => {
+    for (const overrides of [
+      { entityType: 'kit', action: 'insert', newValues: { kind: 'amplifier' } },
+      { entityType: 'kit', action: 'update', changedFields: ['calibration_due_at'] },
+      { entityType: 'kit', action: 'update', changedFields: ['assigned_practitioner_id'] },
+      { entityType: 'session', action: 'session.photo_filed' },
+    ] as Partial<AuditEvent>[]) {
+      const sentence = narrate(event(overrides), 'ar')?.sentence ?? '';
+      expect(/[\u0600-\u06FF]/.test(sentence), JSON.stringify(overrides)).toBe(true);
+    }
+  });
+});

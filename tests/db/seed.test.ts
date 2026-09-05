@@ -31,6 +31,7 @@ const SEED_TABLES = [
   'package_price',
   'practitioner',
   'credential',
+  'kit',
   'location',
   'client',
   'contact',

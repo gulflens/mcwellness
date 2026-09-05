@@ -50,6 +50,19 @@ const ENTITY: Record<string, Text> = {
   // The client portal (docs/SPEC/client-portal.md section 9).
   portal_invite: t('portal invitation', 'دعوة البوابة'),
   portal_request: t('portal request', 'طلب من البوابة'),
+  // The practitioner's phone (docs/SPEC/practitioner-phone.md section 10).
+  // `drive_estimate` is deliberately absent: two location ids, an hour and a
+  // duration are not a sentence anybody reads, so it takes the generic
+  // fallback below and nobody writes words for it.
+  kit: t('instrument', 'الجهاز'),
+  session: t('visit', 'الزيارة'),
+};
+
+/** What an instrument is, for the register's own sentences (section 6.1). */
+const KIT_KIND: Record<string, Text> = {
+  amplifier: t('amplifier', 'مضخم'),
+  laptop: t('laptop', 'حاسوب محمول'),
+  electrode_set: t('electrode set', 'مجموعة أقطاب'),
 };
 
 /** What a household asked the practice for (docs/SPEC/client-portal.md 3.5). */
@@ -595,6 +608,57 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         t(
           'The household corrected its own contact details',
           'صحّحت الأسرة بيانات الاتصال الخاصة بها',
+        ),
+        locale,
+      );
+    case 'kit.insert': {
+      // The serial names a box, not a person, so it may be said plainly.
+      const kind = label(KIT_KIND, event.newValues?.kind, locale);
+      const serial = scalar(event.newValues, 'serial');
+      const what = [kind, serial].filter(Boolean).join(' ');
+      return what
+        ? pick(
+            t(`${actor} added an instrument (${what})`, `${actor} أضاف جهازًا (${what})`),
+            locale,
+          )
+        : pick(t(`${actor} added an instrument`, `${actor} أضاف جهازًا`), locale);
+    }
+    case 'kit.update': {
+      // Three things move an instrument, and each is worth its own sentence:
+      // a calibration recorded, who carries it, and standing it down.
+      if (fields.includes('last_calibrated_at') || fields.includes('calibration_due_at')) {
+        return pick(t(`${actor} recorded a calibration`, `${actor} سجّل معايرة`), locale);
+      }
+      if (fields.includes('assigned_practitioner_id')) {
+        return pick(
+          t(`${actor} changed who carries this instrument`, `${actor} غيّر من يحمل هذا الجهاز`),
+          locale,
+        );
+      }
+      if (fields.includes('status')) {
+        return event.newValues?.status === 'inactive'
+          ? pick(t(`${actor} stood this instrument down`, `${actor} أوقف هذا الجهاز`), locale)
+          : pick(
+              t(`${actor} put this instrument back in service`, `${actor} أعاد هذا الجهاز للخدمة`),
+              locale,
+            );
+      }
+      return pick(t(`${actor} changed an instrument`, `${actor} غيّر جهازًا`), locale);
+    }
+    // The key is `${entityType}.${action}`, and this action already carries its
+    // own entity in its name (app/api/sessions/photo.ts writes
+    // `session.photo_filed` against entity type `session`), so the case reads
+    // doubled. Named as it actually arrives rather than tidied into something
+    // that would never match.
+    case 'session.session.photo_filed':
+      // The document id is on the row and is not said: what a reader needs is
+      // that a photograph of the setup was filed against this visit, and by
+      // whom (docs/SPEC/practitioner-phone.md section 4.7). The bytes are
+      // nowhere near the trail.
+      return pick(
+        t(
+          `${actor} filed the setup photo for this visit`,
+          `${actor} أودع صورة الإعداد لهذه الزيارة`,
         ),
         locale,
       );

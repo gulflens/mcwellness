@@ -10,7 +10,9 @@ afterEach(cleanup);
 /**
  * Settings › Kit against a fake API (docs/SPEC/practitioner-phone.md section
  * 6.4). Every id, name and serial is synthetic and inside the reserved ranges
- * (.claude/rules/testing.md); no real model name appears anywhere.
+ * (.claude/rules/testing.md) — a serial takes the same shape an id does, so
+ * "no real serial" is a property of the text — and no real model name appears
+ * anywhere.
  */
 
 const ME = {
@@ -35,7 +37,7 @@ const LAPSED = new Date(Date.now() - 5 * 86_400_000).toISOString();
 const KIT = [
   {
     id: '00000009-0000-4000-8000-000000000001',
-    serial: 'SYN-AMP-000001',
+    serial: '0000000e-0000-4000-8000-000000000001',
     model: 'Synthetic Bench Unit',
     kind: 'amplifier',
     status: 'active',
@@ -46,7 +48,7 @@ const KIT = [
   },
   {
     id: '00000009-0000-4000-8000-000000000002',
-    serial: 'SYN-AMP-000002',
+    serial: '0000000e-0000-4000-8000-000000000002',
     model: 'Synthetic Bench Unit',
     kind: 'amplifier',
     status: 'active',
@@ -57,7 +59,7 @@ const KIT = [
   },
   {
     id: '00000009-0000-4000-8000-000000000003',
-    serial: 'SYN-LAP-000001',
+    serial: '0000000e-0000-4000-8000-000000000003',
     model: 'Synthetic Field Laptop',
     kind: 'laptop',
     status: 'inactive',
@@ -100,7 +102,10 @@ function mount(options: { listStatus?: number } = {}) {
       reason: headers.get('x-reason'),
       body: init?.body === undefined ? null : (JSON.parse(String(init.body)) as unknown),
     });
-    return json({ ...KIT[0], serial: 'SYN-AMP-000009' }, method === 'POST' ? 201 : 200);
+    return json(
+      { ...KIT[0], serial: '0000000e-0000-4000-8000-000000000009' },
+      method === 'POST' ? 201 : 200,
+    );
   }) as unknown as typeof fetch;
 
   render(
@@ -114,8 +119,8 @@ function mount(options: { listStatus?: number } = {}) {
 describe('the register', () => {
   it('shows every item with its serial, who carries it and its calibration', async () => {
     mount();
-    expect(await screen.findByText('SYN-AMP-000001')).toBeTruthy();
-    expect(screen.getByText('SYN-LAP-000001')).toBeTruthy();
+    expect(await screen.findByText('0000000e-0000-4000-8000-000000000001')).toBeTruthy();
+    expect(screen.getByText('0000000e-0000-4000-8000-000000000003')).toBeTruthy();
     expect(screen.getByText('Rowan Meadow')).toBeTruthy();
     // An unassigned item says so rather than showing a blank.
     expect(screen.getAllByText('Nobody').length).toBeGreaterThan(0);
@@ -139,7 +144,7 @@ describe('the drawer', () => {
     const sent = mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Add an item' }));
     fireEvent.change(screen.getByLabelText('Serial number'), {
-      target: { value: 'SYN-AMP-000009' },
+      target: { value: '0000000e-0000-4000-8000-000000000009' },
     });
     fireEvent.change(screen.getByLabelText('Model'), {
       target: { value: 'Synthetic Bench Unit' },
@@ -149,7 +154,7 @@ describe('the drawer', () => {
     expect(sent[0]?.method).toBe('POST');
     expect(sent[0]?.reason).toBeNull();
     expect(sent[0]?.body).toMatchObject({
-      serial: 'SYN-AMP-000009',
+      serial: '0000000e-0000-4000-8000-000000000009',
       kind: 'amplifier',
       assignedPractitionerId: null,
     });

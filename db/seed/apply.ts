@@ -167,6 +167,7 @@ export function assertSynthetic(data: SeedData): void {
     data.packages.map((p) => p.price),
     data.practitioners,
     data.credentials,
+    data.kit,
     data.locations,
     data.clients,
     data.contacts,
@@ -390,6 +391,23 @@ export async function applySeed(
       });
     }
 
+    // The equipment register, after the practitioners it is assigned to
+    // (docs/CHANGE-REQUESTS/session-capture-04.md item 9).
+    for (const k of data.kit) {
+      await insert('kit', {
+        id: k.id,
+        tenant_id: t.id,
+        serial: k.serial,
+        model: k.model,
+        kind: k.kind,
+        status: k.status,
+        assigned_practitioner_id: k.assignedPractitionerId,
+        last_calibrated_at: k.lastCalibratedAt,
+        calibration_due_at: k.calibrationDueAt,
+        created_by: owner,
+      });
+    }
+
     for (const c of data.credentials) {
       await insert('credential', {
         id: c.id,
@@ -539,6 +557,7 @@ export function describeSeed(counts: SeedCounts): string {
     'package_price',
     'practitioner',
     'credential',
+    'kit',
     'location',
     'client',
     'contact',

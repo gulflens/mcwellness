@@ -69,15 +69,20 @@ const KIT_BARE_AMPLIFIER = '00000000-0000-4000-8000-000000304005';
 const KIT_BARE_SECOND = '00000000-0000-4000-8000-000000304006';
 const KIT_BARE_LAPTOP = '00000000-0000-4000-8000-000000304007';
 
-/** Serials in the reserved shape: a fictional prefix and a synthetic number. */
+/**
+ * Serials in the same reserved shape ids take (.claude/rules/testing.md,
+ * docs/CHANGE-REQUESTS/session-capture-04.md item 9). A serial that looked
+ * like a real one would be a manufacturer's number sitting in a fixture; this
+ * way "no real serial" is a property of the text.
+ */
 const SERIAL = {
-  callerAmplifier: 'SYN-AMP-000001',
-  otherAmplifier: 'SYN-AMP-000002',
-  spare: 'SYN-AMP-000003',
-  laptop: 'SYN-LAP-000001',
-  bareAmplifier: 'SYN-AMP-000004',
-  bareSecond: 'SYN-AMP-000005',
-  bareLaptop: 'SYN-LAP-000002',
+  callerAmplifier: '0000000e-0000-4000-8000-000000000101',
+  otherAmplifier: '0000000e-0000-4000-8000-000000000102',
+  spare: '0000000e-0000-4000-8000-000000000103',
+  laptop: '0000000e-0000-4000-8000-000000000104',
+  bareAmplifier: '0000000e-0000-4000-8000-000000000105',
+  bareSecond: '0000000e-0000-4000-8000-000000000106',
+  bareLaptop: '0000000e-0000-4000-8000-000000000107',
 } as const;
 
 /** When a calibration runs out, relative to now. Null is never calibrated at all. */
@@ -398,7 +403,10 @@ describe('who may change the register', () => {
           IDS.tenantA,
           async () => {
             await client.query("select set_config('app.actor_id', $1, true)", [userId]);
-            await client.query(insert, [IDS.tenantA, `SYN-AMP-90000${index}`]);
+            await client.query(insert, [
+              IDS.tenantA,
+              `0000000e-0000-4000-8000-00000000090${index}`,
+            ]);
           },
           roles as string,
         );
@@ -420,7 +428,7 @@ describe('who may change the register', () => {
             await client.query("select set_config('app.actor_id', $1, true)", [userId]);
             await rejectsWith(client, RLS_VIOLATION, insert, [
               IDS.tenantA,
-              `SYN-AMP-91000${index}`,
+              `0000000e-0000-4000-8000-00000000091${index}`,
             ]);
           },
           roles as string,
