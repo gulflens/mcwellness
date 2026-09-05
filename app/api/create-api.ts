@@ -5,11 +5,13 @@ import { timeout } from 'hono/timeout';
 import type { IdentityKeys } from '@domain/shared/identity';
 import type { RoutingProvider } from '../../domain/shared/routing';
 import { MeResponse } from './_middleware/actor-schema';
+import { logError, withRequestTiming } from './_middleware/error-log';
 import { withIdentityKeys } from './_middleware/identity-context';
 import { addressKey, DEFAULT_LIMITS, rateLimit, type RateLimits } from './_middleware/rate-limit';
 import {
   withRequestContext,
   type ApiEnv,
+  type PoolClientLike,
   type RequestContextDeps,
 } from './_middleware/request-context';
 import {
@@ -135,36 +137,43 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     if (error instanceof HTTPException) {
       return error.getResponse();
     }
-    // A database message can carry row values; only the shape of the failure is logged.
+    // One line per failure, on this process's own stderr and nowhere else
+    // (app/api/_middleware/error-log.ts, docs/SPEC/hosting.md section 7.3): the
+    // request id, the route pattern, the status, the duration and the class of
+    // the failure. A database message can carry row values, so only the shape
+    // of the failure is logged.
     const requestId = c.get('requestId') ?? c.res.headers.get('X-Request-Id') ?? null;
-    // A store that is down is not a bug in the record it belongs to: it says
-    // so. The message is logged here, unlike a database's: every one of them
-    // is written in domain/shared/storage.ts and its implementations, none
-    // names a key or echoes a vendor's body, and without it an outage and a
-    // refusal are the same line in the log.
+    // The three seams below get their own status and their own answer, and no
+    // more of the line than any other failure gets. Section 7.3 provides for
+    // the error's class and not its message, and the class already tells the
+    // seams apart — StorageUnavailableError, StorageConflictError and
+    // RoutingUnavailableError each name themselves — so the message would have
+    // bought a distinction the line already draws, at the cost of a rule with
+    // an exception in it.
+    //
+    // A store that is down is not a bug in the record it belongs to: it says so.
     if (isStorageUnavailable(error)) {
-      console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
+      logError(c, error, 503);
       return c.json({ error: 'storage_unavailable', requestId }, 503);
     }
     // Something is already filed under that key and the caller did not ask to
     // replace it. Not an outage, and not an internal error: a plain refusal.
     if (isStorageConflict(error)) {
-      console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
+      logError(c, error, 409);
       return c.json({ error: 'document_exists', requestId }, 409);
     }
     // The same shape for the routing seam: a vendor that is down is not a bug
-    // in the day sheet. Every message this can carry is written in
-    // app/api/_middleware/routing and names no coordinate and no key.
+    // in the day sheet.
     if (isRoutingUnavailable(error)) {
-      console.error(JSON.stringify({ requestId, name: error.name, message: error.message }));
+      logError(c, error, 503);
       return c.json({ error: 'routing_unavailable', requestId }, 503);
     }
-    console.error(
-      JSON.stringify({ requestId, name: error.name, code: (error as { code?: string }).code }),
-    );
+    logError(c, error, 500);
     return c.json({ error: 'internal', requestId }, 500);
   });
 
+  // Outermost, so the duration on the line above covers the whole request.
+  api.use('*', withRequestTiming);
   api.use('*', securityHeaders(deps.appEnv, { supabaseUrl: deps.supabaseUrl }));
   // Ahead of the fence, unlike identityKeys: the local store's own signed-URL
   // route below carries its authorisation in the link and has no session.
@@ -212,6 +221,36 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // Public, registered before the fence. The payload carries nothing
   // environment-specific on purpose.
   api.get('/api/health', (c) => c.json({ ok: true, service: 'mcwellness-api' }));
+  // The second one (docs/SPEC/hosting.md section 7.2). The route above touches
+  // no connection, so a monitor watching only it stays green through a complete
+  // Postgres outage: the screens would be broken and the monitor happy. This one
+  // takes a connection from the pool and runs one `select 1`. Public and ahead of
+  // the fence like its neighbour, and inside the per-address budget registered
+  // above, so it cannot be used to knock on the database over and over.
+  //
+  // The body is `{"ok":true}` or `{"ok":false}` and nothing else: no version, no
+  // host, no driver message. A stranger learns whether the practice's system is
+  // working and nothing about its shape. The reason goes to this process's own
+  // stderr instead, in the shape the error handler above uses — the name and the
+  // code of the failure, never its message, because a database message can carry
+  // a row's values.
+  api.get('/api/health/deep', async (c) => {
+    let client: PoolClientLike | null = null;
+    try {
+      client = await deps.pool.connect();
+      await client.query('select 1');
+    } catch (error) {
+      // Destroyed rather than returned: a connection that failed mid-answer is
+      // in an unknown state and the pool should not hand it to a real request.
+      client?.release(true);
+      // The same line every other failure writes, so the operator reads one
+      // shape and not two (app/api/_middleware/error-log.ts).
+      logError(c, error, 503);
+      return c.json({ ok: false }, 503);
+    }
+    client.release();
+    return c.json({ ok: true });
+  });
   // Only when the local implementation is the one chosen: it is the only one
   // whose signed URLs point back here (app/api/_middleware/storage).
   if (deps.storage) {

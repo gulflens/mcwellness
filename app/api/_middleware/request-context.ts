@@ -57,11 +57,16 @@ export type AfterCommitWork = () => void | Promise<void>;
 // never be reachable from one that does (./routing/index.ts's withRouting).
 // afterCommit is published by this middleware, so — like actor, db and
 // requestId — it exists for every route below the fence and for none above it.
+// startedAt is the exception to all of that: ./error-log.ts's withRequestTiming
+// is the outermost middleware in the stack, so it exists for every request,
+// including the ones refused long before the fence. One place reads it, the
+// error line's builder, and no route ever does.
 export type ApiEnv = {
   Variables: {
     actor: Actor;
     db: Db;
     requestId: string;
+    startedAt: number;
     afterCommit: (work: AfterCommitWork) => void;
     identityKeys: IdentityKeys | undefined;
     storage: ServerStorageProvider | undefined;

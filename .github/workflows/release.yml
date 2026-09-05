@@ -1,0 +1,189 @@
+# The only road to production (docs/SPEC/hosting.md section 4).
+#
+# Pushing a version tag is the act that proposes a release. There is no deploy
+# button, no branch that deploys itself, and `main` moving reaches nothing. A
+# person still releases it: the `deploy` job runs in the `production` GitHub
+# Environment, which requires the repository owner's approval, so a tag proposes
+# and the operator releases (decision 7).
+#
+# Nothing in this file has ever been run. At the time it was written no host had
+# been bought, no production Supabase project existed and no address answered
+# (decision 1 is the operator's). It is written so that the host lives in exactly
+# one step, the one named "Deploy to the host", and every value it needs is read
+# by name from the `production` environment. No secret value appears here, and
+# none ever will.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# One release at a time, and never cancelled halfway: a cancelled deploy leaves
+# the database migrated and the code not, which is the one state worth avoiding.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Everything that can fail without touching the practice's system, before the
+  # operator is asked to approve anything. A release does not get the pull
+  # request's excuse for an npm advisory outage: the audit is strict here.
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      # The pnpm version comes from the "packageManager" field in package.json.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm audit:deps
+        env:
+          AUDIT_DEPS_STRICT: 'true'
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The gate. GitHub asks the environment's required reviewers before this job
+    # starts, records the deployment against `production`, and only then hands
+    # over the environment's secrets.
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_APP_URL }}
+    env:
+      # Every one of these is set once by the operator on the `production`
+      # environment and never appears in this repository. The build settings are
+      # baked into the bundle; the rest are used by the steps below. The API's
+      # own runtime settings are not here at all: they live in the host's secret
+      # store and never pass through GitHub (spec section 4.4).
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      DATABASE_URL: ${{ secrets.PRODUCTION_MIGRATION_DATABASE_URL }}
+      HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+      HOSTINGER_USERNAME: ${{ secrets.HOSTINGER_USERNAME }}
+      HOSTINGER_DOMAIN: ${{ secrets.HOSTINGER_DOMAIN }}
+      PUBLIC_APP_URL: ${{ vars.PUBLIC_APP_URL }}
+    steps:
+      # Nothing is missing quietly. Without this the first symptom of a
+      # half-configured environment is a migration against an empty string.
+      - name: Check the environment is complete
+        run: |
+          missing=""
+          for name in VITE_SUPABASE_URL VITE_SUPABASE_ANON_KEY DATABASE_URL \
+            HOSTINGER_API_TOKEN HOSTINGER_USERNAME HOSTINGER_DOMAIN PUBLIC_APP_URL; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "The production environment is missing:$missing" >&2
+            echo "Set them on the repository's production environment; see docs/SPEC/hosting.md section 4.4." >&2
+            exit 1
+          fi
+
+      # fetch-depth 0 and the tags with it: the migration guard checks that the
+      # revision it is migrating genuinely carries the tag being released
+      # (db/runner/plan.ts), and a shallow checkout without tags cannot prove it.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The --mode flag is not optional: a plain `pnpm build` reads .env and the
+      # sign-in page falls back to the laptop door (docs/STAGING.md section 6).
+      - name: Build the screens for production
+        run: pnpm exec vite build --mode production
+
+      # Forward-only, and behind the approval gate rather than in front of it: a
+      # migration changes the practice's own database, which is the thing the
+      # operator is approving. The guard refuses unless both of these are set and
+      # this revision carries the tag (docs/SPEC/hosting.md section 5).
+      - name: Migrate the production database
+        run: pnpm db:migrate
+        env:
+          MIGRATE_TARGET: production
+          RELEASE_TAG: ${{ github.ref_name }}
+
+      # What ships: the built screens, the API's source, and the manifests the
+      # host installs from. The API runs its TypeScript through tsx, which is a
+      # development dependency, so the host installs development dependencies
+      # too (spec sections 4.3 and decision 3) — that is a build setting in the
+      # host's own panel, not something this archive can carry.
+      - name: Pack the release
+        run: |
+          tar --create --gzip --file release.tar.gz \
+            dist app domain db jobs \
+            package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json .nvmrc
+          ls -l release.tar.gz
+
+      # THE ONE PLACE THE HOST APPEARS.
+      #
+      # The default is decision 1's: Hostinger's managed Node.js product on the
+      # practice's own account, in Mumbai beside the database. Three published
+      # calls — ask for a one-time upload URL, PUT the archive to it, start the
+      # build — against api.hostinger.com with a token the operator mints.
+      #
+      # This has never been run against a live account, so the day decision 1
+      # settles, check the request and response fields against Hostinger's own
+      # API reference at developers.hostinger.com before the first tag.
+      #
+      # The alternatives of spec section 3 replace this step and nothing else in
+      # this file:
+      #   - Hostinger VPS: rsync the archive over SSH and restart the service,
+      #     with the key held as a secret on this same environment.
+      #   - Another host that runs Node persistently: that host's own action or
+      #     CLI, plus a row in docs/COMPLIANCE/approved-vendors.md first.
+      #   - The split (screens on the Premium plan, API elsewhere): two steps
+      #     instead of one, and docs/SECURITY.md layer 2 loses the property that
+      #     one process serves both, which is why the spec rejected it.
+      - name: Deploy to the host
+        run: |
+          set -euo pipefail
+          api="https://api.hostinger.com/api/hosting/v1"
+          auth="Authorization: Bearer ${HOSTINGER_API_TOKEN}"
+
+          upload_url=$(curl --fail --silent --show-error \
+            --request POST "${api}/files/upload-urls" \
+            --header "$auth" --header 'Content-Type: application/json' \
+            --data '{"filename":"release.tar.gz"}' \
+            | jq --raw-output '.data.url // .url')
+          if [ -z "$upload_url" ] || [ "$upload_url" = "null" ]; then
+            echo "Hostinger did not return an upload URL." >&2
+            exit 1
+          fi
+
+          curl --fail --silent --show-error \
+            --request PUT "$upload_url" \
+            --upload-file release.tar.gz
+
+          curl --fail --silent --show-error \
+            --request POST \
+            "${api}/accounts/${HOSTINGER_USERNAME}/websites/${HOSTINGER_DOMAIN}/nodejs/builds" \
+            --header "$auth" --header 'Content-Type: application/json' \
+            --data '{"filename":"release.tar.gz"}'
+
+      # The last word, and deliberately the shallow route: the deploy's gate must
+      # not fail for a reason outside the process (spec section 7.2). Whether the
+      # database is reachable is /api/health/deep's question and the uptime
+      # monitor's, not this step's. Retried because a restarting process takes a
+      # few seconds; if it never answers, the release has failed and says so.
+      - name: Ask the live address whether it is alive
+        run: |
+          set -euo pipefail
+          body=$(curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors --max-time 20 \
+            "${PUBLIC_APP_URL}/api/health")
+          echo "$body"
+          echo "$body" | jq --exit-status '.ok == true and .service == "mcwellness-api"' > /dev/null

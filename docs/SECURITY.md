@@ -22,6 +22,12 @@ credential); every read and write of a record is logged, hash-chained.
    only. Set `HOST` to what the proxy reaches; the laptop door refuses to open
    on any host that is not loopback. Strip query strings from
    `/api/*` access logs (a search term is typed by staff about a client).
+   **Amended in the build, 2026-09-06**: the edge under consideration very
+   likely cannot do that — Hostinger terminates TLS, fronts the sites with its
+   own content delivery network and keeps its own access logs, which
+   `docs/SPEC/hosting.md` 2.3 records as a limitation to note rather than a
+   thing to fix — so this stays the requirement and is confirmed one way or the
+   other when decision 1 settles where the API runs.
 2. **Protective headers** on every answer (`app/api/_middleware/security.ts`):
    a content security policy allowing only the app's own scripts, styles,
    fonts and connections (`'self'`, images also `data:` and `blob:`, and the

@@ -621,6 +621,110 @@ The API runs its TypeScript through `tsx`, which is a development dependency, so
 
 A Supabase project's region cannot be changed after creation, so creating one in Mumbai before the lawyer answers is not a setting that can be flipped later but a new project and a migration of every row and every file. Everything else in the piece — the tagged release, the migration guard, the backups and the rehearsed restore, both health routes, the error lines without a third-party tracker, the weekly dependency audit already in place, and the deep security scan — is written so the region is a setting and can be built now. `pg-boss` is named in `CLAUDE.md` and in the plan as the job runner but is not a dependency today, so the spec hosts no jobs and says so instead of pretending.
 
+## Round 28, 2026-09-06 (a home for the platform, built)
+
+### 1. The repository facts the build reconciled
+
+**Staging cannot be dumped from this laptop, and that is not a fault in
+staging.** The only staging credential on the machine is the API's own role,
+`mcwellness_api`, which is deliberately restricted: it holds no direct table
+grants and works only through `app_role` inside a request's transaction.
+`pg_dump` needs an access share lock on every table, so it stops on the first
+one. The weekly dump therefore needs a credential of its own, read-only,
+created with the production project — which `.github/workflows/backup.yml`
+already names and `docs/RUNBOOK/restore.md` records. The rehearsal used a
+local stand-in built from the same migrations and the same synthetic
+practice, and says so plainly rather than implying it dumped staging.
+
+**A dump of one database is not a dump of a cluster.** `app_role` and
+`mcwellness_api` are created by migrations `000` and `096` as cluster roles,
+and `grant app_role to mcwellness_api` is a cluster fact too; none of the
+three is in a `pg_dump` of the database, so a restore recreates them by hand
+or the API fails on its first `set local role`. The same is true of the
+`extensions` schema: the platform's tables are declared with
+`extensions.geography(...)`, so PostGIS must exist in the target before the
+first table is created. Both are steps in the runbook now.
+
+**A whole-database dump cannot be restored by the role that made it.** Three
+separate refusals proved it — an event trigger owned by PostgREST, PostGIS's
+`spatial_ref_sys`, and Supabase's `vault.secrets` — all of them objects that
+belong to the host and not to the practice. Naming the platform's own two
+schemas, `public` and `app`, ends the class rather than excluding tables one
+at a time. The cost is that the sign-in accounts, which live in Supabase's
+`auth` schema, are not in the weekly dump; they come back from Supabase's own
+daily snapshot or from the owner's hand, and the runbook says so.
+
+**The `production` GitHub Environment does not exist and this build could not
+create it.** The repository has no environments at all. The attempt was
+refused by the session's own permission layer, because creating one changes
+the repository's settings. Both ways of doing it are written out in
+`docs/RUNBOOK/restore.md` section 3 for the operator. Until it exists the
+release workflow's `deploy` job cannot run, which is the safe direction to
+fail in.
+
+**`c.req.routePath` is what a log line may carry.** The API's paths hold
+opaque ids and the query string holds staff's search terms, so the error line
+logs the pattern the router matched and never the path or the URL. This is
+the same rule `.claude/rules/ui.md` states for the browser, applied to the
+log file.
+
+### 2. Every default taken beyond the spec's wording
+
+1. **The migration guard is written from the local end.** The spec says the
+   guard refuses "when the URL names the production project", and no
+   production project exists to name. So the rule is the other way round: any
+   database that is not on this machine is refused unless `MIGRATE_TARGET`
+   says which it is, and `production` additionally wants `RELEASE_TAG` to be
+   a `v*` tag the checked-out revision genuinely carries. It needs no list to
+   be complete and it fails closed for a database nobody has named. Recorded
+   in the spec's section 5 as an amendment.
+2. **The release tag is read from the checkout, not from a second variable.**
+   `git tag --points-at HEAD` in `db/migrate.ts`, so the tag has to be on the
+   revision rather than merely asserted beside it. It still stops a mistake
+   and not a determined person, which the spec now says.
+3. **`/api/health/deep` answers `{"ok":true}` or `{"ok":false}`, with a 503
+   for the second.** The spec says "ok or not-ok and nothing else", so the
+   `service` name its neighbour carries is left out; a monitor needs a
+   non-2xx to notice, hence the 503.
+4. **The migration step sits inside the approval gate, not in front of it.**
+   The spec lists the steps in order and the migration comes before the
+   deploy job in that list; putting it before the gate would mean a tag push
+   changes the practice's database with no person in the loop, which is what
+   decision 7 exists to prevent.
+5. **The deploy job builds the screens.** `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY` are environment secrets and only a job in the
+   environment may read them, so the production build happens behind the
+   gate. The checks that need no secret run before it, so the operator is
+   never asked to approve something that then fails lint.
+6. **The weekly dump's flags.** `--no-owner --schema=public --schema=app`,
+   and no `--clean`, arrived at by the rehearsal above rather than chosen.
+7. **The uptime candidate is Better Stack's free tier**, marked as Claude's
+   default in the register. What decision 5 actually requires is a free tier
+   that sends a telephone alert rather than only drawing a graph; the
+   operator may name any other that does.
+8. **`yaml` is a new development dependency**, and the only dependency this
+   piece adds. It exists so that a test can prove every workflow file parses
+   and that the release trigger and the environment gate are what they say
+   they are. Adding it re-keyed the lockfile's `vite` entries, because vite
+   declares `yaml` as an optional peer; nothing about the build changes.
+9. **A first step in each new workflow checks its own secrets.** Neither
+   workflow can run today, and a workflow that half-runs on empty strings is
+   worse than one that stops on its first line saying which name is missing.
+10. **Both rounds of this file were kept** when the branch met `main`, round 28
+    ahead of round 29, rather than one of them overwriting the other. The
+    conflict was a rebase artefact and neither round is a draft of the other.
+
+All ten are also listed on the pull request itself, one line each, so the
+operator can overrule any of them from the page they approve on.
+
+### 3. What is still the operator's, and what was deliberately left undone
+
+The operator's list is the pull request's own, and it is section 11 of the
+spec plus the production GitHub Environment. Deliberately not built: every
+item in the spec's section 12, and the deep security scan of section 9, which
+runs in its own session against the first tag's revision and not against
+`main`, which moves.
+
 ---
 
 ## Round 29, 2026-09-06 (the document writer's byte-level half, and the sending seam)

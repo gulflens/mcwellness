@@ -7,6 +7,7 @@ import {
   isLocalDatabaseUrl,
   listMigrationFiles,
   listPolicyFiles,
+  migrationRefusal,
   parseNeeds,
   planChecksums,
   planMigrations,
@@ -141,6 +142,149 @@ describe('isLocalDatabaseUrl', () => {
     expect(
       isLocalDatabaseUrl('postgresql://postgres:postgres@localhost:5432/x?sslmode=disable'),
     ).toBe(true);
+  });
+});
+
+describe('migrationRefusal', () => {
+  // A reserved host that resolves nowhere, with the same throwaway password
+  // every other connection string in these tests uses: nothing here reaches any
+  // real project, and the secrets scan knows the shape (scripts/audit-secrets.mjs).
+  const LOCAL = 'postgresql://postgres:postgres@localhost:5432/postgres';
+  const HOSTED = 'postgresql://postgres:postgres@db.example.invalid:5432/postgres';
+  const noTags: string[] = [];
+
+  it('lets a local database through however the environment is set', () => {
+    expect(
+      migrationRefusal({ url: LOCAL, target: undefined, releaseTag: undefined, checkoutTags: [] }),
+    ).toBeNull();
+    expect(
+      migrationRefusal({
+        url: LOCAL,
+        target: 'production',
+        releaseTag: undefined,
+        checkoutTags: [],
+      }),
+    ).toBeNull();
+  });
+
+  it('refuses a database that is not local when nothing has named it', () => {
+    const refusal = migrationRefusal({
+      url: HOSTED,
+      target: undefined,
+      releaseTag: 'v1.0.0',
+      checkoutTags: ['v1.0.0'],
+    });
+
+    expect(refusal).toContain('MIGRATE_TARGET is not set');
+    // The sentence never carries the connection string, which holds the
+    // password, and never even the host: db/migrate.ts names the database
+    // through describeDatabase and this half names nothing.
+    expect(refusal).not.toContain('postgresql://');
+    expect(refusal).not.toContain('db.example.invalid');
+  });
+
+  it('refuses a MIGRATE_TARGET that names none of the three', () => {
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'prod',
+        releaseTag: undefined,
+        checkoutTags: noTags,
+      }),
+    ).toContain('It must be staging, scratch or production');
+  });
+
+  it('allows a scratch database on the word alone', () => {
+    // A hosted database that is neither of the other two and that nothing
+    // depends on: the throwaway project a backup is restored into, where
+    // docs/RUNBOOK/restore.md re-applies the policies before anybody signs in.
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'scratch',
+        releaseTag: undefined,
+        checkoutTags: noTags,
+      }),
+    ).toBeNull();
+  });
+
+  it('allows staging on the word alone', () => {
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'staging',
+        releaseTag: undefined,
+        checkoutTags: noTags,
+      }),
+    ).toBeNull();
+  });
+
+  it('refuses production without the release tag', () => {
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'production',
+        releaseTag: undefined,
+        checkoutTags: noTags,
+      }),
+    ).toContain('RELEASE_TAG is not set');
+  });
+
+  it('refuses production when the release tag is not a release tag', () => {
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'production',
+        releaseTag: 'main',
+        checkoutTags: ['main'],
+      }),
+    ).toContain('not a release tag');
+  });
+
+  it('refuses production when the revision does not carry the tag it names', () => {
+    // The laptop case the guard exists for: the words are right and the
+    // checkout is somebody's working branch.
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'production',
+        releaseTag: 'v1.0.0',
+        checkoutTags: ['v0.9.0'],
+      }),
+    ).toContain('does not carry that tag');
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'production',
+        releaseTag: 'v1.0.0',
+        checkoutTags: noTags,
+      }),
+    ).toContain('does not carry that tag');
+  });
+
+  it('allows production with both conditions met', () => {
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'production',
+        releaseTag: 'v1.0.0',
+        checkoutTags: ['trunk-v1', 'v1.0.0'],
+      }),
+    ).toBeNull();
+  });
+
+  it('treats blank words as unsaid rather than as answers', () => {
+    expect(
+      migrationRefusal({ url: HOSTED, target: '  ', releaseTag: undefined, checkoutTags: noTags }),
+    ).toContain('MIGRATE_TARGET is not set');
+    expect(
+      migrationRefusal({
+        url: HOSTED,
+        target: 'production',
+        releaseTag: '   ',
+        checkoutTags: noTags,
+      }),
+    ).toContain('RELEASE_TAG is not set');
   });
 });
 

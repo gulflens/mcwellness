@@ -277,6 +277,106 @@ export function isLocalDatabaseUrl(url: string): boolean {
 }
 
 /**
+ * The three things `MIGRATE_TARGET` may say a database is. Anything else, the
+ * empty string included, is treated as unsaid.
+ *
+ * `scratch` is a hosted database that is neither of the other two and that
+ * nothing depends on: the throwaway project a backup is restored into, where
+ * the policies are re-applied before anybody signs in (docs/RUNBOOK/restore.md
+ * section 1), or a short-lived project made to try something. Without a word of
+ * its own, a restore rehearsal has to call itself staging — a word typed to get
+ * past a refusal rather than because it is true, which is the very habit this
+ * guard exists to discourage.
+ */
+export const MIGRATE_TARGETS = ['staging', 'scratch', 'production'] as const;
+export type MigrateTarget = (typeof MIGRATE_TARGETS)[number];
+
+/** What the guard below is given. Nothing here is read from the environment: see db/migrate.ts. */
+export type MigrationGuardFacts = {
+  /** DATABASE_URL. Never printed by anything in this file. */
+  url: string;
+  /** MIGRATE_TARGET: what the caller says this database is. */
+  target: string | undefined;
+  /** RELEASE_TAG: the version tag the release is deploying. */
+  releaseTag: string | undefined;
+  /** Every tag the checked-out revision actually carries. */
+  checkoutTags: readonly string[];
+};
+
+/**
+ * The shape the release workflow's trigger matches (`on: push: tags: ['v*']`),
+ * and deliberately no stricter: a tag that starts a release must not be refused
+ * here for a reason the workflow does not share, so `v1.1` and `v1.0.0-rc.1`
+ * both pass and only the leading `v` is required.
+ */
+const RELEASE_TAG_SHAPE = /^v.+/;
+
+/**
+ * The rule behind the production guard (docs/SPEC/hosting.md section 5).
+ * Answers null when the migration may go ahead, and otherwise the reason it may
+ * not — a plain sentence, with no database named in it, because the caller adds
+ * that through `describeDatabase` (db/runner/apply.ts) and the URL carries the
+ * password.
+ *
+ * The rule is written from the local end rather than from a list of production
+ * projects, because no production project exists yet to list: any database that
+ * is not on this machine is refused unless `MIGRATE_TARGET` says deliberately
+ * which one it is, and `production` additionally wants the release's own `v*`
+ * tag on the revision being migrated. So it needs no list to be complete, and it
+ * fails closed for a database nobody has named.
+ *
+ * It stops a mistake and not a determined person: both `MIGRATE_TARGET` and
+ * `RELEASE_TAG` can be set on a laptop, and a laptop can tag a commit. That is
+ * the right size for one practice. What is being prevented is a session or a
+ * shell that believed it was pointed at the database on this machine.
+ */
+export function migrationRefusal(facts: MigrationGuardFacts): string | null {
+  if (isLocalDatabaseUrl(facts.url)) {
+    return null;
+  }
+  const target = facts.target?.trim() ?? '';
+  if (target === '') {
+    return (
+      'it is not on this machine and MIGRATE_TARGET is not set. ' +
+      'Set MIGRATE_TARGET=staging, MIGRATE_TARGET=scratch for a throwaway database, ' +
+      'or MIGRATE_TARGET=production with RELEASE_TAG, to say deliberately which ' +
+      'database this is.'
+    );
+  }
+  if (!(MIGRATE_TARGETS as readonly string[]).includes(target)) {
+    return (
+      `it is not on this machine and MIGRATE_TARGET is "${target}", which names nothing. ` +
+      'It must be staging, scratch or production.'
+    );
+  }
+  if (target !== 'production') {
+    return null;
+  }
+  const releaseTag = facts.releaseTag?.trim() ?? '';
+  if (releaseTag === '') {
+    return (
+      'MIGRATE_TARGET is production and RELEASE_TAG is not set. ' +
+      'Production is migrated by the release workflow, which sets RELEASE_TAG to the ' +
+      'version tag it is deploying (.github/workflows/release.yml).'
+    );
+  }
+  if (!RELEASE_TAG_SHAPE.test(releaseTag)) {
+    return (
+      `MIGRATE_TARGET is production and RELEASE_TAG is "${releaseTag}", which is not a ` +
+      'release tag. A release tag begins with "v", as the workflow that pushes it does.'
+    );
+  }
+  if (!facts.checkoutTags.includes(releaseTag)) {
+    return (
+      `MIGRATE_TARGET is production and RELEASE_TAG is "${releaseTag}", but the revision ` +
+      'checked out here does not carry that tag. Production is migrated from the tagged ' +
+      'revision the release is deploying and from nothing else.'
+    );
+  }
+  return null;
+}
+
+/**
  * Lists policy files: every .sql path under db/policies, in path order, so a
  * worktree's policies apply after core's and the order is the same on every
  * machine. Dotfiles and anything that is not .sql are ignored.

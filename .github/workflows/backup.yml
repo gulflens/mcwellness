@@ -1,0 +1,153 @@
+# The second copy (docs/SPEC/hosting.md section 6).
+#
+# Supabase takes its own daily snapshot of the production project, and that is
+# the fast path for "yesterday was fine". This is the other copy: one weekly
+# pg_dump written to a private `backups` bucket in a SECOND Supabase project, in
+# a different region, so that losing an account, a project or a region does not
+# take both copies at once. Weekly dumps are kept ninety days (decision 6).
+#
+# It runs from GitHub because GitHub is already on the vendor register and the
+# dump therefore passes through nobody new. That means one database credential
+# does live in GitHub's secret store after all, and it is not one of the API's:
+# it is a separate, read-only credential that can read the rows and change
+# nothing (spec section 4.4, as amended). The API's own settings still live with
+# the host and never enter GitHub.
+#
+# Nothing here can run today. The production project does not exist (spec
+# section 10 holds it until the founder's lawyer answers the region question),
+# the second project does not exist, and none of the three secrets is set. The
+# first step is there so that this fails on the first line with a plain sentence
+# naming what is missing, rather than filing an empty file every Sunday for a
+# year and being discovered on the day it is needed.
+name: backup
+
+on:
+  schedule:
+    # Sundays at 03:00 UTC, which is 07:00 in Dubai: after the week's work and
+    # before the practice's day starts.
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # The read-only credential on the production database, created by the
+      # operator with the production project. Not the API's role and not the
+      # owner's: a role made `login bypassrls` and then given
+      # `grant pg_read_all_data`, which reads every row and writes none.
+      # `bypassrls` is what makes it a backup credential rather than merely a
+      # restricted one: every table in `public` has row security enabled, so
+      # without it pg_dump stops on the first such table with "query would be
+      # affected by row-level security policy", and the obvious workaround,
+      # --enable-row-security, files the whole schema with none of the
+      # practice's rows inside it.
+      BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      # The second Supabase project, in a different region from production, and
+      # its service key. It holds one private bucket, `backups`, and nothing else.
+      BACKUP_SUPABASE_URL: ${{ secrets.BACKUP_SUPABASE_URL }}
+      BACKUP_SUPABASE_SERVICE_KEY: ${{ secrets.BACKUP_SUPABASE_SERVICE_KEY }}
+      BUCKET: backups
+      KEEP_DAYS: '90'
+    steps:
+      - name: Check the secrets are set
+        run: |
+          missing=""
+          for name in BACKUP_DATABASE_URL BACKUP_SUPABASE_URL BACKUP_SUPABASE_SERVICE_KEY; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "The weekly backup cannot run. These repository secrets are not set:$missing" >&2
+            echo "They wait on the production project and on the second project that holds the dumps (docs/SPEC/hosting.md section 6)." >&2
+            exit 1
+          fi
+
+      # pg_dump must be at least the server's own major version and the runner's
+      # is not guaranteed to be, so the dump runs from the Postgres image itself.
+      # The connection string reaches the container as an environment variable
+      # and never as an argument, so it cannot appear in a process list.
+      #
+      # The two schemas are the platform's own and the flags are the ones the
+      # rehearsal of 2026-09-06 arrived at the hard way (docs/RUNBOOK/restore.md).
+      # A whole-database dump carries Supabase's own schemas, and restoring those
+      # fails on the first table the restoring role does not own; --clean adds
+      # DROP statements for objects that belong to the host and not to us. What
+      # is not in here, and the runbook says so plainly, is the sign-in accounts,
+      # which live in Supabase's `auth` schema and come back from Supabase's own
+      # daily snapshot or from the owner's hand.
+      - name: Dump the production database
+        run: |
+          set -euo pipefail
+          name="mcwellness-$(date --utc +%Y-%m-%d).sql.gz"
+          echo "NAME=$name" >> "$GITHUB_ENV"
+          docker run --rm --env PGURL="$BACKUP_DATABASE_URL" postgres:17 \
+            sh -c 'pg_dump --no-owner --schema=public --schema=app "$PGURL"' \
+            | gzip --best > "$name"
+          # An empty dump is a failure wearing a success's clothes.
+          size=$(wc -c < "$name")
+          echo "Dump: $name, $size bytes."
+          if [ "$size" -lt 4096 ]; then
+            echo "That dump is too small to be a database. Refusing to file it." >&2
+            exit 1
+          fi
+          # A dump of the schema with none of the rows in it is the exact
+          # failure a read-only role without `bypassrls` produces, and it is far
+          # bigger than the floor above, so the floor alone would wave it
+          # through. So the dump must also carry the practice itself: the COPY
+          # block for public.tenant, with at least one line of data under it
+          # before the block's own "\." terminator. The whole stream is read
+          # rather than stopped at the first row, because a pipe closed early
+          # would fail gzip under `pipefail` and read as the opposite answer.
+          tenant_rows=$(gzip -dc "$name" | awk '
+            /^COPY public\.tenant /{ copying = 1; next }
+            copying { if ($0 == "\\.") { copying = 0 } else { rows++ } }
+            END { print rows + 0 }
+          ')
+          echo "Rows in public.tenant: $tenant_rows."
+          if [ "$tenant_rows" -lt 1 ]; then
+            echo "That dump carries the schema and no practice rows, which is what row security does to a credential without bypassrls. Refusing to file it." >&2
+            echo "The dump's role wants login bypassrls plus grant pg_read_all_data (docs/RUNBOOK/restore.md)." >&2
+            exit 1
+          fi
+
+      - name: File it in the second project
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --request POST "${BACKUP_SUPABASE_URL}/storage/v1/object/${BUCKET}/weekly/${NAME}" \
+            --header "Authorization: Bearer ${BACKUP_SUPABASE_SERVICE_KEY}" \
+            --header 'Content-Type: application/gzip' \
+            --data-binary "@${NAME}" > /dev/null
+          echo "Filed weekly/${NAME}."
+
+      # Ninety days: long enough to survive a fault discovered late, short enough
+      # that section 6's erasure limitation stays bounded — a dump taken before
+      # an erasure still holds those rows until it ages out.
+      - name: Drop anything older than ninety days
+        run: |
+          set -euo pipefail
+          cutoff=$(date --utc --date="${KEEP_DAYS} days ago" +%Y-%m-%dT%H:%M:%S)
+          listing=$(curl --fail --silent --show-error \
+            --request POST "${BACKUP_SUPABASE_URL}/storage/v1/object/list/${BUCKET}" \
+            --header "Authorization: Bearer ${BACKUP_SUPABASE_SERVICE_KEY}" \
+            --header 'Content-Type: application/json' \
+            --data '{"prefix":"weekly/","limit":1000,"sortBy":{"column":"name","order":"asc"}}')
+          old=$(echo "$listing" | jq --arg cutoff "$cutoff" --raw-output \
+            '[.[] | select(.created_at < $cutoff) | "weekly/" + .name]')
+          count=$(echo "$old" | jq 'length')
+          echo "Dumps older than ${KEEP_DAYS} days: ${count}."
+          if [ "$count" -gt 0 ]; then
+            curl --fail --silent --show-error \
+              --request DELETE "${BACKUP_SUPABASE_URL}/storage/v1/object/${BUCKET}" \
+              --header "Authorization: Bearer ${BACKUP_SUPABASE_SERVICE_KEY}" \
+              --header 'Content-Type: application/json' \
+              --data "$(jq --null-input --argjson p "$old" '{prefixes: $p}')" > /dev/null
+          fi
