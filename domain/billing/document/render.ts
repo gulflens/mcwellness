@@ -44,7 +44,14 @@ import {
   type ReceiptDocument,
   type SupplierSnapshot,
 } from './model';
-import { measure, PAGE_HEIGHT, PAGE_WIDTH, type FontSet, type Op, type Page } from './pdf';
+import {
+  measure,
+  PAGE_HEIGHT,
+  PAGE_WIDTH,
+  type FontSet,
+  type Op,
+  type Page,
+} from '../../shared/document';
 import {
   arabicDocumentDate,
   formatDocumentDate,
