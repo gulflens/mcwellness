@@ -7,6 +7,12 @@ for piece seven and `session-capture-04.md` for piece eight. The builder edits
 the paths below for this piece only, and each edit is listed in the
 pull-request body under "Shared-zone changes".
 
+**The spec's own status line** — `docs/SPEC/assessment.md`, "approved by the
+operator on 2026-09-06 with `docs/PLAN/piece-ten.md`, and amended in the build"
+— **was written at the integrator's instruction**, in the brief this piece was
+built from, and the operator's approval it records is real. It points at this
+file for the amendments, which are the items above and the six defaults below.
+
 **Spec.** `docs/SPEC/assessment.md`, sections 3, 6, 7 and 8.
 
 ---
@@ -211,11 +217,13 @@ anybody else. If the trunk would rather have the key, `document` needs
    trunk migration once the 300 and 500 ranges are both on `main` (spec
    section 6). Nothing in this piece assumes it.
 3. **`app/api/_middleware/audit.ts` refuses about one document id in eighty,
-   and the filing fails with it.** This is the trunk's file, so it is a request
-   and not a fix — but it is a live fault rather than a tidiness point, and it
-   is the reason `tests/session/db/photo_and_routing.test.ts` has been failing
-   about one run in three to five on this branch's CI and on a laptop with
-   `origin/main`'s own `app/api/create-api.ts` restored.
+   and the filing fails with it.** **Answered: the trunk fixed it** in round 30
+   of `docs/CHANGE-REQUESTS/trunk-notes.md`, which closes this item and item 4.
+   What follows is the report as it was raised. This is the trunk's file, so it
+   was a request and not a fix — but it is a live fault rather than a tidiness
+   point, and it is the reason `tests/session/db/photo_and_routing.test.ts` had
+   been failing about one run in three to five on this branch's CI and on a
+   laptop with `origin/main`'s own `app/api/create-api.ts` restored.
 
    `refuseContactDetails` reads any run of nine to twelve digits beginning with
    a nought — with spaces, hyphens and brackets allowed inside it — as a
