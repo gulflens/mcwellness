@@ -16,8 +16,8 @@ import './portal.css';
  *
  * **A dead link says one sentence and no more.** Expired, used, revoked and
  * never-existed all read the same — "this link no longer works; ask the
- * practice for a new one" — because the door itself answers 404 and 410 without
- * saying which, and a page that guessed would undo that (section 10).
+ * practice for a new one" — because the door itself answers one status, 404,
+ * for all four, and a page that guessed would undo that (section 10).
  *
  * **The token stays in the path and goes nowhere else.** It is not logged, not
  * put in a query string and never rendered into the page; it is read from the
@@ -66,7 +66,7 @@ function InviteForm() {
         body: JSON.stringify({ token, email, password }),
       })
         .then(async (res) => {
-          if (res.status === 404 || res.status === 410) {
+          if (res.status === 404) {
             setState('dead');
             return;
           }

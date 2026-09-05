@@ -21,9 +21,11 @@ import { RedeemInput, RedeemResponse } from './schema';
  * - Its own budget, `RATE_LIMIT_INVITE_DOOR_PER_MINUTE`, ten per address a
  *   minute by default (app/api/create-api.ts). A link is 32 random bytes;
  *   the budget is what makes guessing pointless rather than merely hard.
- * - Its own vocabulary of refusals, which says as little as it can:
- *   **404 for a link that never existed and 410 for every dead one**, so a
- *   caller cannot tell an invented token from one that has been revoked.
+ * - Its own vocabulary of refusals, which says as little as it can: **404 for
+ *   every link that does not work**, invented, expired, spent and revoked
+ *   alike, so a caller cannot tell one from another. Two statuses did tell
+ *   them apart — a 404 meant "no such token" and a 410 meant "there was one" —
+ *   and one status costs nothing, so this is the one.
  *
  * **The order is the sign-in first and the database second, and it is undone
  * if the second half fails.** A sign-in with no account behind it is a person
@@ -119,12 +121,11 @@ export function mountPortalDoor(api: Hono<ApiEnv>, options: PortalDoorOptions): 
         await client.query('rollback');
         inTransaction = false;
         client.release();
-        // Unknown is 404 and the three dead states are 410, and neither says
-        // which: a link that never existed and one that has been revoked look
-        // the same from outside.
-        return word === 'unknown'
-          ? c.json({ error: 'not_found' }, 404)
-          : c.json({ error: 'gone' }, 410);
+        // One answer for every state that is not 'valid'. A link that never
+        // existed, one whose seven days are up, one already spent and one the
+        // practice has revoked are indistinguishable from out here, which is
+        // the whole of what this refusal is for.
+        return c.json({ error: 'not_found' }, 404);
       }
 
       // Which half of the seam this is depends on whether the account already

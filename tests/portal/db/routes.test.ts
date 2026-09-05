@@ -736,7 +736,7 @@ describe('the practice’s own Portal screen', () => {
 });
 
 describe('the door, which is the one route outside the fence', () => {
-  it('answers 404 for a link that never existed and 410 for one that is dead', async () => {
+  it('answers 404 for a link that never existed and for one that is dead alike', async () => {
     const unknown = await h.callOpen('POST', '/api/portal/invite/redeem', {
       token: NOTHING_LINK,
       email: 'cedar.meadow@example.com',
@@ -757,8 +757,10 @@ describe('the door, which is the one route outside the fence', () => {
       email: 'jasper.meadow@example.com',
       password: CHOSEN,
     });
-    expect(revoked.status).toBe(410);
-    expect((await revoked.json()) as { error: string }).toEqual({ error: 'gone' });
+    // The same status and the same body as the invented token above: from out
+    // here a revoked link and one that never existed are one thing.
+    expect(revoked.status).toBe(404);
+    expect((await revoked.json()) as { error: string }).toEqual({ error: 'not_found' });
   });
 
   it('lets a household in, once, and refuses the second attempt', async () => {
@@ -789,7 +791,7 @@ describe('the door, which is the one route outside the fence', () => {
       email: 'jasper.meadow@example.com',
       password: CHOSEN,
     });
-    expect(second.status).toBe(410);
+    expect(second.status).toBe(404);
   });
 
   it('resets the password on an account that already signs in, and never rebinds it', async () => {

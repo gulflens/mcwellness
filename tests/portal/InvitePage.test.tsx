@@ -141,8 +141,10 @@ describe('the invitation page', () => {
   });
 
   it('says one sentence for a dead link, whichever kind of dead it is', async () => {
-    for (const status of [404, 410]) {
-      const view = mount(() => json({ error: 'gone' }, status));
+    // The door answers one status for all four states (section 7), so there is
+    // one to read; the page would say the same sentence for any of them.
+    for (const status of [404]) {
+      const view = mount(() => json({ error: 'not_found' }, status));
       fillIn();
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       expect(
