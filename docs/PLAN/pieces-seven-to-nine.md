@@ -125,6 +125,20 @@ be built now from the one question that belongs to the lawyer.
    `app.mcwellnessuae.com`, which needs one record added where the website's
    domain is managed. Default: that name, added by the operator when piece
    nine asks for it.
+   **Answered by the operator on 5 September 2026:** `app.mcwellnessuae.com`,
+   on the practice's existing Hostinger account, which the operator has
+   opened to Claude through the Hostinger API. The account holds one plan,
+   Premium shared hosting, the same one that serves the website and its
+   `intake` and `qeeg` subdomains; the platform would be a fifth site on it.
+   Three things the checkpoint confirms before the first deploy, none of them
+   assumed: whether that plan runs a persistent Node.js application (the API is
+   one process serving the screens, holding database connections and running
+   the background jobs); which data centre the plan sits in, since Hostinger
+   has none in the UAE; and Hostinger's line in
+   `docs/COMPLIANCE/approved-vendors.md`, because the API handles personal
+   data in transit. The database, sign-in and documents stay on Supabase
+   unless the lawyer's region answer says otherwise; Hostinger offers no
+   Postgres.
 
 ## Decisions already waiting, outside these pieces
 

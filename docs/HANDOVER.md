@@ -1,6 +1,6 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026. This file exists so that the next Claude session,
+Written 4 September 2026, updated 5 September after piece seven. This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -12,8 +12,10 @@ session reads first.
 Paste this into a fresh Claude Code session opened in the repository:
 
 > Read docs/HANDOVER.md and docs/PLAN/pieces-seven-to-nine.md, then start
-> piece seven under the cost rules in the hand-over. Do not re-plan; the
-> plan is approved.
+> piece eight under the cost rules in the hand-over: its design checkpoint
+> first, as a short spec that builds on docs/SPEC/session-capture.md and
+> docs/SPEC/navigation.md, then the build. Do not re-plan; the plan is
+> approved.
 
 If the session is short on budget, add "one builder, one combined review,
 no re-check on documentation-only changes" and it will keep to the lean
@@ -21,22 +23,24 @@ rules in section 6.
 
 ## 2. Where things stand
 
-- `main` is at `66a6c3c` (4 September 2026, 22:31 Dubai) with fifty
-  migrations. Every merged pull request through #61 carries its review
-  record as a comment; #62 to #65, all documentation, followed the one
-  that added this file (piece ten's two specifications, the simple wording
-  and the founder's two changes to it).
-- Pieces one to six are built, reviewed and merged: the client record and
+- `main` is at `c80a17a` (5 September 2026, 21:03 Dubai) plus this file's
+  own pull request, with fifty-five migrations and fifteen policy files.
+  Every merged pull request through #69 carries its review record as a
+  comment. #66 and #67 were the VAT switch's documentation; #68 was piece
+  seven's spec; #69 was piece seven itself.
+- Pieces one to seven are built, reviewed and merged: the client record and
   enrolment, consent capture and erasure, the diary with moves and
   cancellations, the session runner, packages, invoices and receipts as
-  PDFs, the practice's identity with VAT charged only while registered.
-- Staging (Supabase project `ajjkvjtqxktkgrvcrzkh`, Mumbai) is level with
-  `main`: fifty migrations, thirteen policy files, the synthetic practice,
-  two real staff accounts, the practice's identity on the tenant row with
-  VAT recorded as not registered (corrected 5 September, see section 8),
-  and the documents bucket with the eight consent wordings. Every pass is
-  recorded in `docs/STAGING.md`; the seventh pass follows the next merge
-  that adds a migration.
+  PDFs, the practice's identity with VAT charged only while registered, and
+  now the household's own portal — five screens in English and Arabic, an
+  invitation the practice sends by WhatsApp that the contact opens once to
+  set a password, the practice's own Settings › Portal page for issuing and
+  revoking access and answering the household's requests. Piece seven was
+  the first built under the cost rules of section 6; what it cost is
+  recorded there.
+- Staging (Supabase project `ajjkvjtqxktkgrvcrzkh`, Mumbai): level with `main` after the seventh pass (pull request 70, 5 September): fifty-five migrations, fifteen policy files, the two seeded households with logins and the practice's synthetic WhatsApp number, the schema fingerprint identical to a fresh local build in all nine parts, the audit chain verified at 657 rows, and the demo visit re-booked for the day under the owner's account.
+  Every pass is recorded in `docs/STAGING.md`. Invitations cannot be issued
+  on the staging demo until the two variables in section 8 are set.
 - The old Flutter app (`McWellness UAE`, a separate repository) is not this
   platform. Nothing in it needs revisiting for this work.
 - Nothing is in flight. No pull request is open.
@@ -44,7 +48,10 @@ rules in section 6.
 ## 3. What is approved
 
 `docs/PLAN/pieces-seven-to-nine.md`, approved by the operator on 4
-September 2026. The decisions inside it were not answered individually;
+September 2026; piece seven is done, piece eight is next, and piece nine's
+domain and host were answered by the operator on 5 September (the plan's
+piece nine, decision 2: `app.mcwellnessuae.com` on the practice's Hostinger
+account, with three things to confirm at the checkpoint before any deploy). The decisions inside it were not answered individually;
 the recommendation beside each is the default and is marked as Claude's.
 Piece ten (assessments, brain-map reports, signed session reports) needs
 its two specifications written and approved first; that writing is
@@ -113,10 +120,16 @@ rules apply from now on unless the operator says otherwise:
    (security, schema, compliance and design in a single brief) and one
    re-check, not four reviews. Documentation-only pull requests get the
    integrator's own read and no agent review.
-3. **Cheaper models where quality holds.** Builders and the combined review
-   on Opus; re-checks, staging passes, CI polling and surveys on Sonnet.
-   The operator previously asked for Opus everywhere; this replaces that
-   for the mechanical passes and keeps it for the two that catch defects.
+3. **Which model does what** (operator's instruction of 5 September 2026,
+   21:19 Dubai, replacing the 4 September version of this rule). Builders,
+   including fix rounds, on Opus. The combined review and the re-check on
+   Fable 5.1, as sub-agents reading the diff in their own context rather
+   than in the main conversation; and the approval to merge is Fable 5.1's
+   in the main session, as it already was. Staging passes, CI polling and
+   surveys stay on Sonnet: they are mechanical and the operator's
+   instruction named builds and review, not those. Piece seven was
+   reviewed under the earlier rule (review on Opus); piece eight is the
+   first under this one.
 4. **No idle wake-ups.** Poll CI with one background command per pull
    request, not a loop of turns; do not respond to the desktop app's CI
    events when the cause is already known and being fixed.
@@ -129,6 +142,18 @@ rules apply from now on unless the operator says otherwise:
 7. **Say the cost.** Each pull-request record names the agents used and
    their approximate token use, so the operator can see where the
    allowance goes.
+
+**What piece seven cost under these rules (5 September).** Builder on Opus
+about 0.94 million in two runs (the first stalled after four commits on a
+long silent command and reported no figure; 0.25 million is the estimate for
+it, 0.69 million the second run's own figure), the combined review 0.25
+million, the fix round 0.33 million, the re-check on Sonnet 0.16 million, the
+staging pass on Sonnet 0.33 million; the integrator's own conversation on
+top. Two lessons kept in the briefs: a builder must run `pnpm test:db`,
+`pnpm verify` and `pnpm build` with an explicit timeout and run single test
+files while iterating, because a silent ten-minute command is what stalled
+the first run; and a stalled agent cannot be resumed from this desktop
+session, so the continuation note in the brief is what saved its work.
 
 ## 7. The failed-run emails
 
@@ -158,6 +183,21 @@ the web notification; or watch the repository's Actions tab instead. The
 desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
+
+- Two variables in `.env.staging` before an invitation can be issued on the
+  staging demo: `SUPABASE_AUTH_ADMIN_KEY` (the staging project's service
+  role key, pasted deliberately for this purpose, never the anon key; Claude
+  does not handle it) and `PUBLIC_APP_URL` (the address the demo is reached
+  at, which is what the invitation link is built from). Until both are set
+  the door answers "unavailable" and nothing is written. Then restart the
+  staging server.
+- The guardian and emergency-contact fields the plan's Family screen named
+  do not exist on the platform's record (a contact has a relationship and a
+  legal-guardian flag); adding one is a personal-data decision with a stated
+  need, so it waits for the operator to ask (spec section 12).
+- The registration number that pull request 67 removed from the founder's
+  review page is still in the repository's history. Rewriting history is the
+  operator's call; nothing is done about it unasked.
 
 - The VAT switch. The practice is not registered for VAT (operator, 5
   September 2026): the AED 375,000 threshold has not been crossed. Staging
