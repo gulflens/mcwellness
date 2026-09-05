@@ -22,7 +22,7 @@
 -- practice, and it reads nothing outside `document`. A household learns that
 -- the words have moved on, which is what the screen exists to say.
 --
--- **Why it is written in plpgsql and guards its own columns.** The five
+-- **Why it is written in plpgsql and guards its own columns.** The four
 -- consent-text columns it reads (`purpose`, `locale`, `status`, `retired_at`)
 -- arrive in the trunk's 902, which sorts after every stream's range and is
 -- therefore applied after this file — and, as docs/SPEC/OWNERSHIP.md says, a
@@ -47,12 +47,15 @@ begin
     return false;
   end if;
   -- The consent-text columns, or nothing to compare (see the note above).
-  if not exists (
-    select 1 from pg_catalog.pg_attribute a
+  -- Every column the body below reads is probed, not one of them: a database
+  -- given some of 902 and not the rest would otherwise pass this guard and
+  -- fail on the first execution of the statement instead.
+  if (
+    select count(*) from pg_catalog.pg_attribute a
      where a.attrelid = 'public.document'::pg_catalog.regclass
-       and a.attname = 'retired_at'
+       and a.attname in ('purpose', 'locale', 'status', 'retired_at')
        and not a.attisdropped
-  ) then
+  ) < 4 then
     return false;
   end if;
 
