@@ -1,3 +1,6 @@
+import { useCallback, useState } from 'react';
+import { PhotoLinkResponse } from '../../api/sessions/schema';
+import { useAuth } from '../../shell/auth/AuthContext';
 import { Button } from '../../shell/components/Controls';
 import { Slider } from './Slider';
 import { midpoint, type Answers, type ServiceSettings } from './steps';
@@ -12,9 +15,20 @@ import { midpoint, type Answers, type ServiceSettings } from './steps';
  * the step is a single confirmation. That is deliberate: the settings are
  * data (service_type), and an empty setting is a valid one, not a gap to be
  * papered over with defaults invented here.
+ *
+ * **The last placement** (docs/SPEC/practitioner-phone.md section 4.5): when
+ * the household has a photograph on their most recent completed visit, this
+ * step offers a button, and only that tap fetches it. Nothing is pre-loaded,
+ * so the trail records the practitioner who actually looked, once, and never a
+ * photograph nobody opened. Offline, the button says the picture needs a
+ * connection rather than failing at a door.
  */
+const PHOTO_OFFLINE = 'The last placement is not available without a connection.';
+const PHOTO_FAILED = 'The last placement could not be opened. Carry on without it.';
+
 export function PreflightStep({
   service,
+  previousPhotoDocumentId,
   checked,
   onToggle,
   answers,
@@ -22,13 +36,45 @@ export function PreflightStep({
   onContinue,
 }: {
   service: ServiceSettings;
+  /** The photograph on this client's last completed visit, or null. */
+  previousPhotoDocumentId: string | null;
   checked: Readonly<Record<string, boolean>>;
   onToggle: (key: string, done: boolean) => void;
   answers: Answers;
   onAnswer: (key: string, value: number) => void;
   onContinue: () => void;
 }) {
+  const { apiFetch } = useAuth();
+  const [photoState, setPhotoState] = useState<'idle' | 'asking' | 'offline' | 'failed'>('idle');
   const outstanding = service.preflightChecklist.filter((item) => !checked[item.key]);
+
+  const showLastPlacement = useCallback(async () => {
+    if (previousPhotoDocumentId === null) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      setPhotoState('offline');
+      return;
+    }
+    setPhotoState('asking');
+    try {
+      const res = await apiFetch(`/api/sessions/photo/${previousPhotoDocumentId}/link`);
+      if (!res.ok) {
+        setPhotoState('failed');
+        return;
+      }
+      const parsed = PhotoLinkResponse.safeParse(await res.json());
+      if (!parsed.success) {
+        setPhotoState('failed');
+        return;
+      }
+      // A new tab rather than an image on this screen: the link is short-lived
+      // and the picture is a reference, not part of the record being made here.
+      window.open(parsed.data.url, '_blank', 'noopener,noreferrer');
+      setPhotoState('idle');
+    } catch {
+      setPhotoState('offline');
+    }
+  }, [apiFetch, previousPhotoDocumentId]);
+
   return (
     <div className="step">
       <h1>Before you start</h1>
@@ -59,6 +105,18 @@ export function PreflightStep({
             </li>
           ))}
         </ul>
+      )}
+
+      {previousPhotoDocumentId === null ? null : (
+        <section>
+          <h2>Last placement</h2>
+          <Button onClick={() => void showLastPlacement()} disabled={photoState === 'asking'}>
+            Show last placement
+          </Button>
+          <p className="note small" role="status">
+            {photoState === 'offline' ? PHOTO_OFFLINE : photoState === 'failed' ? PHOTO_FAILED : ''}
+          </p>
+        </section>
       )}
 
       {service.ratingQuestions.length > 0 ? (

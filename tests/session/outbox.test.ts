@@ -8,6 +8,7 @@ import {
 import {
   PRUNE_AFTER_DAYS,
   createMemoryStore,
+  type OutboxBlob,
   type OutboxRecord,
 } from '../../app/therapist/session/outbox/store';
 
@@ -315,5 +316,166 @@ describe('the device store', () => {
 
     expect(await store.prune(PRUNE_AFTER_DAYS, now)).toBe(1);
     expect((await store.pending()).map((r) => r.seq)).toEqual([1]);
+  });
+});
+
+/**
+ * The photograph's bytes (docs/SPEC/practitioner-phone.md section 4.2). The
+ * whole rule is one sentence — events first, then bytes — and everything below
+ * is what that sentence costs.
+ */
+function blob(sessionId = SESSION, deviceAt = '2026-09-03T06:30:00.000Z'): OutboxBlob {
+  return {
+    sessionId,
+    // jsdom has Blob; the bytes are four of nothing.
+    bytes: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }),
+    mimeType: 'image/jpeg',
+    sha256: 'a'.repeat(64),
+    deviceAt,
+  };
+}
+
+describe('the photograph, after its event', () => {
+  it('holds the bytes back while the visit still has events queued', async () => {
+    const store = createMemoryStore();
+    const posted: string[] = [];
+    const outbox = new Outbox(
+      store,
+      async () => 'retry',
+      async (picture) => {
+        posted.push(picture.sessionId);
+        return 'filed';
+      },
+    );
+    await outbox.append(record(1));
+    await outbox.keepPhoto(blob());
+    await outbox.flush();
+    // The event could not go, so neither did the picture.
+    expect(posted).toEqual([]);
+    expect(await store.blobs()).toHaveLength(1);
+  });
+
+  it('posts the bytes once the events have gone', async () => {
+    const store = createMemoryStore();
+    const posted: string[] = [];
+    const outbox = new Outbox(
+      store,
+      async (_sessionId, events): Promise<FlushOutcome> => ({
+        acknowledged: events.map((event) => event.id),
+        refused: [],
+      }),
+      async (picture) => {
+        posted.push(picture.sha256);
+        return 'filed';
+      },
+    );
+    await outbox.append(record(1));
+    await outbox.keepPhoto(blob());
+    await outbox.flush();
+    expect(posted).toEqual(['a'.repeat(64)]);
+    expect(await store.blobs()).toEqual([]);
+  });
+
+  it('keeps the bytes when the server says to try again', async () => {
+    const store = createMemoryStore();
+    const outbox = new Outbox(
+      store,
+      async (_sessionId, events): Promise<FlushOutcome> => ({
+        acknowledged: events.map((event) => event.id),
+        refused: [],
+      }),
+      async () => 'retry',
+    );
+    await outbox.keepPhoto(blob());
+    await outbox.flush();
+    expect(await store.blobs()).toHaveLength(1);
+  });
+
+  it('drops the bytes on a refusal that will never change', async () => {
+    const store = createMemoryStore();
+    const outbox = new Outbox(
+      store,
+      async (_sessionId, events): Promise<FlushOutcome> => ({
+        acknowledged: events.map((event) => event.id),
+        refused: [],
+      }),
+      async () => 'give-up',
+    );
+    await outbox.keepPhoto(blob());
+    await outbox.flush();
+    expect(await store.blobs()).toEqual([]);
+  });
+
+  it('keeps one photograph per visit, so a retake replaces rather than queues', async () => {
+    const store = createMemoryStore();
+    await store.putBlob(blob());
+    await store.putBlob({ ...blob(), sha256: 'b'.repeat(64) });
+    const waiting = await store.blobs();
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]?.sha256).toBe('b'.repeat(64));
+  });
+
+  it('offers another visit its picture even while this one is stuck', async () => {
+    const store = createMemoryStore();
+    const posted: string[] = [];
+    const outbox = new Outbox(
+      store,
+      async () => 'retry',
+      async (picture) => {
+        posted.push(picture.sessionId);
+        return 'filed';
+      },
+    );
+    // One visit still has events queued; the other's went long ago.
+    await outbox.append(record(1, SESSION));
+    await outbox.keepPhoto(blob(SESSION));
+    await outbox.keepPhoto(blob(OTHER_SESSION));
+    await outbox.flush();
+    expect(posted).toEqual([OTHER_SESSION]);
+  });
+
+  it('counts the photographs apart, for a line of their own', async () => {
+    const store = createMemoryStore();
+    const outbox = new Outbox(store, async () => 'retry', null);
+    let seen = 0;
+    outbox.subscribe((state) => {
+      seen = state.photosPending;
+    });
+    await outbox.keepPhoto(blob());
+    expect(seen).toBe(1);
+  });
+
+  it('empties the photographs with everything else on sign-out', async () => {
+    const store = createMemoryStore();
+    const outbox = new Outbox(store, async () => 'retry', null);
+    await outbox.append(record(1));
+    await outbox.keepPhoto(blob());
+    await outbox.forgetEverything();
+    expect(await store.blobs()).toEqual([]);
+    expect(await store.pending()).toEqual([]);
+  });
+
+  it('prunes a photograph on the same seven days an event goes on', async () => {
+    const store = createMemoryStore();
+    await store.putBlob(blob(SESSION, '2026-09-03T06:30:00.000Z'));
+    await store.prune(PRUNE_AFTER_DAYS, new Date('2026-09-11T06:30:00.000Z'));
+    expect(await store.blobs()).toEqual([]);
+  });
+
+  it('never offers a photograph on a device that cannot post one', async () => {
+    const store = createMemoryStore();
+    const outbox = new Outbox(
+      store,
+      async (_sessionId, events): Promise<FlushOutcome> => ({
+        acknowledged: events.map((event) => event.id),
+        refused: [],
+      }),
+      null,
+    );
+    await outbox.keepPhoto(blob());
+    await outbox.flush();
+    // Still there, and nothing threw: a device with no camera path behaves
+    // exactly as it did before.
+    expect(await store.blobs()).toHaveLength(1);
   });
 });

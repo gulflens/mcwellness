@@ -65,6 +65,7 @@ const VISIT: RunnerVisit = {
   of: 30,
   serviceTypeId: SERVICE_TYPE_ID,
   photoConsent: 'refused',
+  previousSetupPhotoDocumentId: null,
   lastSeq: 1,
   shareLocation: false,
 };
@@ -89,10 +90,18 @@ function mount(
   } = {},
 ) {
   const posted: Posted[] = [];
+  const put: { url: string; type: string | null }[] = [];
   const store = options.store ?? createMemoryStore();
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
+    if (init?.method === 'PUT' && url.endsWith('/photo')) {
+      put.push({ url, type: init.headers ? new Headers(init.headers).get('content-type') : null });
+      return json({ status: 'filed', documentId: '00000000-0000-4000-8000-0000000000f9' }, 201);
+    }
+    if (url.includes('/api/sessions/photo/')) {
+      return json({ url: 'https://example.com/link', expiresInSeconds: 300 });
+    }
     if (init?.method === 'POST') {
       posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
       if (url.endsWith('/close')) {
@@ -143,7 +152,7 @@ function mount(
       />
     </AuthProviderBoundary>,
   );
-  return { ...utils, posted, store };
+  return { ...utils, posted, put, store };
 }
 
 /** Ending takes two taps now: the first arms the control, the second ends it. */
@@ -571,5 +580,79 @@ describe('what the outbox is given', () => {
     open();
     await waitFor(() => expect(kinds(posted)).toContain('observation_recorded'));
     expect(kinds(posted)).toContain('rating_recorded');
+  });
+});
+
+/**
+ * The setup photograph (docs/SPEC/practitioner-phone.md section 4). The camera
+ * appears only under an active consent, the bytes wait behind their own event,
+ * and the pre-flight offers the last placement only when there is one.
+ */
+describe('the setup photograph', () => {
+  /** A one-pixel file: `preparePhoto` needs a real decode, so this is stubbed. */
+  function stubPreparedPhoto(): void {
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async () => ({ width: 100, height: 80, close: () => undefined })),
+    );
+    // jsdom's canvas has no 2d context and no toBlob; both are stood in for.
+    const canvas = HTMLCanvasElement.prototype as unknown as {
+      getContext: unknown;
+      toBlob: unknown;
+    };
+    canvas.getContext = () => ({ drawImage: () => undefined });
+    canvas.toBlob = (callback: (blob: Blob | null) => void) => {
+      callback(new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }));
+    };
+  }
+
+  it('offers the camera when the household has agreed, and keeps what it takes', async () => {
+    stubPreparedPhoto();
+    const { posted, put, store } = await reachRun({ visit: { photoConsent: 'given' } });
+    endSession();
+    await screen.findByRole('heading', { name: 'After the session' });
+
+    const camera = screen.getByLabelText('Take the setup photo');
+    fireEvent.change(camera, {
+      target: { files: [new File([new Uint8Array([1, 2, 3, 4])], 'placement.jpg')] },
+    });
+
+    // The event names the digest; the bytes follow it.
+    await waitFor(() => expect(kinds(posted)).toContain('photo_captured'));
+    await waitFor(() => expect(put).toHaveLength(1));
+    expect(put[0]?.type).toBe('image/jpeg');
+    // Filed, so the device is done with it.
+    await waitFor(async () => expect(await store.blobs()).toEqual([]));
+    expect(screen.getByRole('button', { name: 'Take it again' })).toBeTruthy();
+  });
+
+  it('never offers the camera when the household has not agreed', async () => {
+    await reachRun({ visit: { photoConsent: 'refused' } });
+    endSession();
+    await screen.findByRole('heading', { name: 'After the session' });
+    expect(screen.queryByLabelText('Take the setup photo')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Take the photo' })).toBeNull();
+  });
+
+  it('offers the last placement only when there is one', async () => {
+    mount();
+    await screen.findByRole('heading', { name: 'Before you start' });
+    expect(screen.queryByRole('button', { name: 'Show last placement' })).toBeNull();
+
+    cleanup();
+    mount({ visit: { previousSetupPhotoDocumentId: '00000000-0000-4000-8000-0000000000f8' } });
+    await screen.findByRole('heading', { name: 'Before you start' });
+    expect(screen.getByRole('button', { name: 'Show last placement' })).toBeTruthy();
+  });
+
+  it('says the last placement needs a connection rather than failing at a door', async () => {
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    mount({ visit: { previousSetupPhotoDocumentId: '00000000-0000-4000-8000-0000000000f8' } });
+    await screen.findByRole('heading', { name: 'Before you start' });
+    fireEvent.click(screen.getByRole('button', { name: 'Show last placement' }));
+    expect(
+      await screen.findByText('The last placement is not available without a connection.'),
+    ).toBeTruthy();
+    online.mockRestore();
   });
 });

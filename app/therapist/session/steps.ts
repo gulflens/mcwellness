@@ -21,6 +21,17 @@ export type GeoPoint = { lat: number; lng: number };
  */
 export type PhotoConsent = 'given' | 'refused' | 'unknown';
 
+/**
+ * What became of the setup photograph on this device, for the one line the
+ * post step shows about it. Never an alarm: a picture waiting to sync is the
+ * ordinary case in a living room with no signal.
+ */
+export type PhotoState =
+  | { kind: 'none' }
+  | { kind: 'preparing' }
+  | { kind: 'kept'; sizeBytes: number }
+  | { kind: 'failed' };
+
 export type SiteReading = { site: string; quality: number };
 
 /** A reading typed off the amplifier's own software (section 3.3, section 3.4). */

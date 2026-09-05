@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { OBSERVATION_CHIPS } from '@domain/session';
 import { Button } from '../../shell/components/Controls';
 import { PercentSlider, Slider } from './Slider';
@@ -6,6 +7,7 @@ import {
   type Answers,
   type Observations,
   type PhotoConsent,
+  type PhotoState,
   type Reading,
   type ServiceSettings,
 } from './steps';
@@ -15,15 +17,19 @@ import {
  * questions as before, the structured observations as chips with a note
  * beside them, and what became of the setup photo.
  *
- * The photo has three states, not two. `given` would offer the camera;
- * `refused` says the household has not agreed; `unknown` — a visit resumed
- * with no signal — says the device cannot check, because telling a
- * practitioner a family refused something nobody has asked them is a lie
- * about a person. Today all three end in no camera: there is nowhere to put
- * the bytes until the trunk's storage seam lands
- * (app/api/sessions/photo-availability.ts,
- * docs/CHANGE-REQUESTS/session-capture-02.md section 2), and offering to
- * take a photograph that is then thrown away is worse than not offering.
+ * The photo has three states, not two. `given` offers the camera; `refused`
+ * says the household has not agreed; `unknown` — a visit resumed with no
+ * signal — says the device cannot check, because telling a practitioner a
+ * family refused something nobody has asked them is a lie about a person.
+ * Only `given` shows the control (docs/SPEC/practitioner-phone.md section
+ * 4.1); the wording above it does not change in any of the three, because the
+ * promise the practice makes about what is photographed is the same promise
+ * whether or not a picture is taken.
+ *
+ * The picture never waits for the network. It is shrunk and digested on the
+ * device, the `photo_captured` event is queued, and the bytes follow the event
+ * through the outbox — so a photograph taken in a basement is kept exactly as
+ * a rating is, and the line below says so rather than showing a spinner.
  *
  * The summary reading appears only when nothing was recorded during the run
  * — section 3.4's "Phase 1 accepts a single end-of-session summary if
@@ -44,8 +50,9 @@ const PHOTO_REFUSED =
   'This household has not agreed to photographs, so no photo can be taken. The practice can ask them.';
 const PHOTO_UNKNOWN =
   'This device cannot check whether the household has agreed to photographs until it is back online.';
-const PHOTO_UNAVAILABLE =
-  'Setup photos are not being taken yet. The practice will say when they are.';
+const PHOTO_TAKEN = 'Kept on this device. It goes when the visit has synced.';
+const PHOTO_FAILED =
+  'That picture could not be prepared on this device. Try again, or carry on without one.';
 
 export function PostStep({
   service,
@@ -58,6 +65,8 @@ export function PostStep({
   summaryReadingTaken,
   onSummaryReading,
   photoConsent,
+  photo,
+  onPhoto,
   onContinue,
 }: {
   service: ServiceSettings;
@@ -70,8 +79,11 @@ export function PostStep({
   summaryReadingTaken: boolean;
   onSummaryReading: (reading: Reading) => void;
   photoConsent: PhotoConsent;
+  photo: PhotoState;
+  onPhoto: (file: File) => void;
   onContinue: () => void;
 }) {
+  const cameraRef = useRef<HTMLInputElement>(null);
   const toggleChip = (chip: string) => {
     const has = observations.chips.includes(chip);
     // "Nothing to note" is an answer, not a filter: choosing it clears the
@@ -163,13 +175,48 @@ export function PostStep({
       <section>
         <h2>Setup photo</h2>
         <p className="note small">{PHOTO_PROMISE}</p>
-        <p className="note small">
-          {photoConsent === 'refused'
-            ? PHOTO_REFUSED
-            : photoConsent === 'unknown'
-              ? PHOTO_UNKNOWN
-              : PHOTO_UNAVAILABLE}
-        </p>
+        {photoConsent === 'given' ? (
+          <>
+            {/*
+              `capture="environment"` asks the rear camera directly, which is
+              the one pointed at the electrodes. A device without one falls
+              back to its own picker, which is the right degradation: the
+              practitioner still gets a photograph in.
+            */}
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="visually-hidden"
+              aria-label="Take the setup photo"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // The value is cleared so choosing the same file twice still
+                // fires: a retake of an identical picture is a real thing.
+                event.target.value = '';
+                if (file) onPhoto(file);
+              }}
+            />
+            <Button
+              onClick={() => cameraRef.current?.click()}
+              disabled={photo.kind === 'preparing'}
+            >
+              {photo.kind === 'kept' ? 'Take it again' : 'Take the photo'}
+            </Button>
+            <p className="note small" role="status">
+              {photo.kind === 'kept'
+                ? PHOTO_TAKEN
+                : photo.kind === 'failed'
+                  ? PHOTO_FAILED
+                  : photo.kind === 'preparing'
+                    ? 'Preparing the picture.'
+                    : ''}
+            </p>
+          </>
+        ) : (
+          <p className="note small">{photoConsent === 'refused' ? PHOTO_REFUSED : PHOTO_UNKNOWN}</p>
+        )}
       </section>
 
       <div className="step__dock">
