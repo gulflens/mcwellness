@@ -40,9 +40,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      # The read-only credential on the production database. Not the API's role
-      # and not the owner's: a role that may select and nothing else, created by
-      # the operator when the production project is created.
+      # The read-only credential on the production database, created by the
+      # operator with the production project. Not the API's role and not the
+      # owner's: a role made `login bypassrls` and then given
+      # `grant pg_read_all_data`, which reads every row and writes none.
+      # `bypassrls` is what makes it a backup credential rather than merely a
+      # restricted one: every table in `public` has row security enabled, so
+      # without it pg_dump stops on the first such table with "query would be
+      # affected by row-level security policy", and the obvious workaround,
+      # --enable-row-security, files the whole schema with none of the
+      # practice's rows inside it.
       BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
       # The second Supabase project, in a different region from production, and
       # its service key. It holds one private bucket, `backups`, and nothing else.
@@ -89,6 +96,25 @@ jobs:
           echo "Dump: $name, $size bytes."
           if [ "$size" -lt 4096 ]; then
             echo "That dump is too small to be a database. Refusing to file it." >&2
+            exit 1
+          fi
+          # A dump of the schema with none of the rows in it is the exact
+          # failure a read-only role without `bypassrls` produces, and it is far
+          # bigger than the floor above, so the floor alone would wave it
+          # through. So the dump must also carry the practice itself: the COPY
+          # block for public.tenant, with at least one line of data under it
+          # before the block's own "\." terminator. The whole stream is read
+          # rather than stopped at the first row, because a pipe closed early
+          # would fail gzip under `pipefail` and read as the opposite answer.
+          tenant_rows=$(gzip -dc "$name" | awk '
+            /^COPY public\.tenant /{ copying = 1; next }
+            copying { if ($0 == "\\.") { copying = 0 } else { rows++ } }
+            END { print rows + 0 }
+          ')
+          echo "Rows in public.tenant: $tenant_rows."
+          if [ "$tenant_rows" -lt 1 ]; then
+            echo "That dump carries the schema and no practice rows, which is what row security does to a credential without bypassrls. Refusing to file it." >&2
+            echo "The dump's role wants login bypassrls plus grant pg_read_all_data (docs/RUNBOOK/restore.md)." >&2
             exit 1
           fi
 

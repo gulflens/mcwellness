@@ -76,6 +76,18 @@ share lock on every table, so it stops on the first one:
 which is exactly what `backup.yml` names as `BACKUP_DATABASE_URL` and what
 the operator creates with the production project.
 
+**What that credential is, exactly.** A role created `login bypassrls` and
+then given `grant pg_read_all_data` — still read-only, since it may select
+from everything and write to nothing. `bypassrls` is the part that is easy to
+leave out and fatal to leave out: every table in `public` has row security
+enabled (migrations 090, 100, 200 and on), so a plain read-only role makes
+`pg_dump` stop on the first such table with
+`query would be affected by row-level security policy`, and the workaround
+that suggests itself, `--enable-row-security`, files the whole schema with
+none of the practice's rows in it. `backup.yml` therefore checks for a data
+row under the `COPY public.tenant` block as well as for a size, so a dump of
+an empty-looking database fails instead of being filed.
+
 So the rehearsal ran against a stand-in: a local database rebuilt from the
 same 57 migrations and seeded with the same synthetic practice staging holds.
 That proves the procedure, the flags, the restore mechanics and every check
