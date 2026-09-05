@@ -25,7 +25,7 @@ Status: **v1 — owner decisions resolved. Ready to derive the trunk schema.**
 ## 2. Identity, tenancy and access
 
 ### `tenant`
-The practice. One row. Legal name, TRN (VAT), default emirate, timezone, studio `location_id`.
+The practice. One row. Legal name, TRN (VAT), default emirate, timezone, studio `location_id`, and `whatsapp_number` (E.164, nullable): the number a household messages the practice on, shown on the client portal's Home as a `wa.me` hand-off and written from Practice settings by the owner or an admin (migration 910, `SPEC/client-portal.md` section 6.4).
 
 ### `user`
 Anyone who logs in — staff or client contact. Auth record lives in Supabase Auth; this table holds the profile. `auth_id`, `display_name`, `email`, `phone`, `preferred_locale` (`en`/`ar`), `status` (`active`/`suspended`/`archived`).
@@ -122,6 +122,16 @@ The bytes behind `storage_key` are reached only through the storage seam (`docs/
 For kind `consent_text` only, five further columns say which wording a row is and whether it is the current one (migration 902, `SPEC/client-record.md` section 7): `purpose` (the consent purpose), `locale` (`en` or `ar`), `version` (from the wording file's own front matter), `status` (`draft` until the practice's lawyer approves that version) and `retired_at` (when a newer approved version replaced this one). No other kind may carry any of them, within a row the first four are all present or all absent, a wording belongs to no client (`client_id` is null), and `(tenant_id, purpose, locale, version)` is unique — so a consent row can point at the exact text a person was shown and mean it. The texts live in `docs/CONSENT`, one file per purpose per language; a change is a new version and a new row, never an edit in place.
 
 At most one **current** wording exists per practice, purpose and language: a partial unique index over the approved, unretired rows. Superseding is two writes in one transaction, in this order — retire the standing version, then file the replacement — because that index is checked as each statement finishes, so filing first collides with the version still standing. Only the owner or an admin may do either (migration 903). A consent already given keeps pointing at the retired row, which is the whole point: it records what that person was actually shown.
+
+### `portal_invite`
+One row per invitation to the client portal — the link the practice hands a household (`SPEC/client-portal.md` section 6.1). `client_id` (the contact's own client, carried directly so the audit trigger attributes the row to that record), `contact_id`, `user_id` (the account the link opens), `kind` (`first_sign_in` | `password_reset`), `locale`, `token_hash` (the sha256 of 32 random bytes; the token itself is never written down), `expires_at` (seven days), `used_at`, `revoked_at`.
+
+Single use, revocable, and never deleted: a link is closed, not removed, so the record of who was let in and when survives. The owner and an admin alone read or write it — never a contact, not even one whose own invitation it is. Two security-definer functions do the rest: one answers a word about a link to somebody who is not signed in, the other spends it once under a row lock.
+
+### `portal_request`
+One row per ask a household makes of the practice (`SPEC/client-portal.md` section 6.2). `client_id`, `contact_id` (who asked), `kind` (`consent_withdrawal` | `erasure`), `consent_id` (required when the kind is a withdrawal, null otherwise, by check), `note` (200 characters, boundary-cleaned), `status` (`open` | `handled`), `handled_at`, `handled_by`.
+
+Append-only but for those two handling columns, and no delete grant at all. Asking is not doing: the withdrawal or the erasure itself is carried out through the record's own screens, and this row is the request and the fact that it was handled.
 
 ---
 

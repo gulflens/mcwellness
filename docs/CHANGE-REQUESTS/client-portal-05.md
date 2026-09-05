@@ -12,5 +12,6 @@
 6. `db/policies/scheduling/appointment_access.sql` and `db/policies/client/writers.sql`: the two arms in the spec's section 6.5, each with its deny test in `tests/portal/db/`.
 7. `db/seed/generate.ts`, `apply.ts`, `render.ts` and `tests/db/seed.test.ts`: two client contacts with logins (the mother of a minor with a second parent on the record; the `self` contact of an Arabic-first adult, `preferred_locale` `ar`), `SeedContact.userId`, `RoleKind` gaining `client_contact`, the practice's WhatsApp number in the reserved block. The README's "four people with logins" becomes six.
 8. `domain/shared/audit-narrative.ts`: sentences for `portal_invite` and `portal_request` rows and for the `portal.invite.sent`, `portal.invite.redeemed` and `portal.access.revoked` actions, in both languages.
+9. `docs/SPEC/00-data-model.md`: `portal_invite` and `portal_request` join section 3 and `tenant.whatsapp_number` joins the `tenant` line in section 2, in the register the other streams' tables are written in. **Added by the integrator on 2026-09-05**, in the portal's fix round: the model describes every other stream's tables, these three were absent, and a schema review then has nothing to check the migrations against.
 
 **Spec.** `docs/SPEC/client-portal.md` sections 5 to 9 and 11.
