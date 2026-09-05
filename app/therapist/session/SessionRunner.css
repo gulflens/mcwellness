@@ -374,3 +374,17 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/*
+ * The last placement, shown on this screen rather than opened elsewhere
+ * (docs/SPEC/practitioner-phone.md section 4.5). Sized to the column and no
+ * larger: it is a reference for where the sensors went, looked at once.
+ */
+.placement {
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  block-size: auto;
+  margin-block: var(--s-3);
+  border-radius: var(--r-2);
+}

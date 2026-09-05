@@ -99,8 +99,21 @@ function mount(
       put.push({ url, type: init.headers ? new Headers(init.headers).get('content-type') : null });
       return json({ status: 'filed', documentId: '00000000-0000-4000-8000-0000000000f9' }, 201);
     }
-    if (url.includes('/api/sessions/photo/')) {
-      return json({ url: 'https://example.com/link', expiresInSeconds: 300 });
+    if (url.includes('/api/sessions/photo/') && url.endsWith('/link')) {
+      // Same origin, as the local store's own signed links are, so the bytes
+      // below are asked for through apiFetch.
+      return json({
+        url: '/api/storage/a-signed-key',
+        mimeType: 'image/jpeg',
+        expiresInSeconds: 300,
+      });
+    }
+    if (url.startsWith('/api/storage/')) {
+      return new Response(new Uint8Array([255, 216, 255, 224]), {
+        status: 200,
+        // The local store answers this, with content-disposition: attachment.
+        headers: { 'content-type': 'application/octet-stream' },
+      });
     }
     if (init?.method === 'POST') {
       posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
@@ -643,6 +656,28 @@ describe('the setup photograph', () => {
     mount({ visit: { previousSetupPhotoDocumentId: '00000000-0000-4000-8000-0000000000f8' } });
     await screen.findByRole('heading', { name: 'Before you start' });
     expect(screen.getByRole('button', { name: 'Show last placement' })).toBeTruthy();
+  });
+
+  it('shows the last placement on this screen, and never opens or downloads it', async () => {
+    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
+    mount({ visit: { previousSetupPhotoDocumentId: '00000000-0000-4000-8000-0000000000f8' } });
+    await screen.findByRole('heading', { name: 'Before you start' });
+    fireEvent.click(screen.getByRole('button', { name: 'Show last placement' }));
+
+    // An image on this screen, from an object URL — not a new tab, and not a
+    // file in the device's Downloads folder beyond forgetDevice's reach.
+    const picture = await screen.findByRole('img', { name: 'The sensor placement last time' });
+    expect(picture.getAttribute('src')).toMatch(/^blob:/);
+    expect(opened).not.toHaveBeenCalled();
+    expect(document.querySelector('a[download]')).toBeNull();
+
+    // Closing it puts the button back, and takes the picture away.
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('img', { name: 'The sensor placement last time' })).toBeNull(),
+    );
+    expect(screen.getByRole('button', { name: 'Show last placement' })).toBeTruthy();
+    opened.mockRestore();
   });
 
   it('says the last placement needs a connection rather than failing at a door', async () => {

@@ -338,6 +338,14 @@ export type PhotoFiledResponse = z.infer<typeof PhotoFiledResponse>;
 /** `GET /api/sessions/photo/:documentId/link` (app/api/sessions/photo-link.ts). */
 export const PhotoLinkResponse = z.object({
   url: z.string(),
+  /**
+   * The document's own media type. The pre-flight step fetches the bytes and
+   * shows them inline rather than opening a link (section 4.5), and a blob
+   * needs its type named: the local store answers `application/octet-stream`
+   * with `content-disposition: attachment`, which is a download, not a
+   * picture.
+   */
+  mimeType: z.string(),
   expiresInSeconds: z.number().int().positive(),
 });
 export type PhotoLinkResponse = z.infer<typeof PhotoLinkResponse>;

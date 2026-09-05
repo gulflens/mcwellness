@@ -42,7 +42,7 @@ const Params = z.object({ documentId: z.uuid() });
  * is a link route to the whole filing cabinet.
  */
 const DOCUMENT_SQL =
-  'select id, client_id, storage_key from document ' +
+  'select id, client_id, storage_key, mime_type from document ' +
   "where id = $1 and tenant_id = app.current_tenant_id() and kind = 'setup_photo'";
 
 export function mountSessionPhotoLink(api: Hono<ApiEnv>): void {
@@ -66,6 +66,7 @@ export function mountSessionPhotoLink(api: Hono<ApiEnv>): void {
       id: string;
       client_id: string | null;
       storage_key: string;
+      mime_type: string;
     }>(DOCUMENT_SQL, [params.data.documentId]);
     const row = rows[0];
     if (!row) {
@@ -77,7 +78,11 @@ export function mountSessionPhotoLink(api: Hono<ApiEnv>): void {
     await auditDocumentRead(db, { id: row.id, clientId: row.client_id });
     const url = await storage.getSignedUrl(row.storage_key, DEFAULT_SIGNED_URL_TTL_SECONDS);
     return c.json(
-      PhotoLinkResponse.parse({ url, expiresInSeconds: DEFAULT_SIGNED_URL_TTL_SECONDS }),
+      PhotoLinkResponse.parse({
+        url,
+        mimeType: row.mime_type,
+        expiresInSeconds: DEFAULT_SIGNED_URL_TTL_SECONDS,
+      }),
     );
   });
 }
