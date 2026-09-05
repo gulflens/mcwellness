@@ -80,6 +80,17 @@ export type RecordRefusal =
  */
 export function refusalsForRecording(context: AssessmentContext): readonly RecordRefusal[] {
   if (!context.clientFound) return ['client_not_found'];
+  // **Reachable, which is not the same as on the schedule.** The door answers
+  // `visible` true for the practice's three oversight roles by role, and for a
+  // practitioner only for a client on their own schedule (migration 500). So a
+  // lead practitioner correcting a figure for a household they have not
+  // visited inside the ninety-day window passes here, because oversight is
+  // what the role is for — and `db/policies/assessment/access.sql` says the
+  // same underneath, which is the half that binds (review gap 12).
+  //
+  // Nothing else is waived with it: the credential below is asked for the
+  // assessment's own service at the moment of writing, because a new version
+  // is a recording, and the household's consents are asked the same way.
   if (!context.visible) return ['not_visible'];
 
   const refusals: RecordRefusal[] = [];

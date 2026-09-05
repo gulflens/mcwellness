@@ -172,6 +172,39 @@ build made.
 
 ---
 
+## An amendment to spec section 7: what the lead practitioner reaches
+
+Section 7 gives a correction to "the recording practitioner, or the lead
+practitioner", and names no condition on the second. The build read the lead's
+reach as every other practitioner's — the client on their own schedule, ninety
+days back and thirty forward — so a lead who had not visited a household inside
+that window could not put right a figure in its record, and could not type up a
+measurement they took on the ninety-first day. That is the opposite of what an
+oversight role is for.
+
+**The reading, settled by the integrator in the fix round** (review gap 12):
+a lead practitioner reaches every client of the practice for recording and for
+correcting, as they already do for reading. `db/policies/assessment/access.sql`
+says so — `app.actor_has_role('lead_practitioner') or
+app.client_visible_to_practitioner(client_id)` — and `refusalsForRecording`
+reads the same answer from `app.assessment_context`, whose `visible` has always
+admitted the three oversight roles by role rather than by schedule.
+
+**What does not move with it.** The own-row half of the same policy: the row
+still names the lead's own practitioner row, so a correction says who is
+answerable for the new figures and nobody records a measurement in another
+person's name. The certification, which `app.assessment_context` asks for the
+assessment's own service at the moment of writing, because a new version is a
+recording. And the household's consents, asked the same way. An admin is still
+refused outright: they may file an export against a measurement somebody
+recorded, and may not say that they took one.
+
+Proved off the schedule, with the certification and without it, in
+`tests/assessment/db/routes.test.ts` and at the table in
+`tests/assessment/db/rls.test.ts`.
+
+---
+
 ## Written and **not** applied: the column differences to `docs/SPEC/00-data-model.md`
 
 Spec section 6 says these are recorded here and not applied to the model, so

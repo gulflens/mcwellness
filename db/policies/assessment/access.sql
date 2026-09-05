@@ -34,19 +34,32 @@ create policy assessment_read on public.assessment as restrictive for select to 
   );
 
 ------------------------------------------------------------------------------
--- Recording. A practitioner, for a client on their own schedule, writing the
+-- Recording. A practitioner, for a client on their own schedule, or the lead
+-- practitioner for any client of the practice — and either way, writing the
 -- measurement against their own practitioner row.
 --
--- Two halves, and both are needed. The schedule half is the same door reading
+-- Two halves, and both are needed. The reach half is the same door reading
 -- uses. The own-row half is what stops one practitioner recording a
 -- measurement in another's name: `performed_by_practitioner_id` says who took
 -- it, and a record of who did a thing that anybody may write is not a record.
 --
+-- **The lead practitioner reaches every client of the practice**, as they
+-- already do for reading, and this was the narrowing the fix round removed
+-- (review gap 12, docs/CHANGE-REQUESTS/assessment-01.md, the amendment to
+-- spec section 7). Oversight is what the role is for: a lead who has not
+-- visited a household inside the ninety-day window could not correct a figure
+-- in that household's record, nor type up a measurement they took on the
+-- ninety-first day, which is the opposite of what an oversight role means.
+-- What does not move with it: the own-row half above, so the correction still
+-- names the lead as the person answerable for the new figures; the
+-- credential, which `app.assessment_context` asks for the assessment's own
+-- service at the moment of writing, because a new version is a recording; and
+-- the household's consents, asked the same way.
+--
 -- An admin is deliberately absent: section 7.2 lets an admin file an export
 -- against an assessment a practitioner recorded, and lets nobody who did not
--- take a measurement say that they did. The owner and the lead practitioner
--- reach this door as practitioners — they have practitioner rows and their own
--- credentials — not as roles.
+-- take a measurement say that they did. The owner reaches this door as a
+-- practitioner — a practitioner row and their own credential — not as a role.
 --
 -- The credential itself is not asked here: row security asks which rows, and
 -- "does this person hold a valid certification for this service today" is a
@@ -56,7 +69,7 @@ create policy assessment_read on public.assessment as restrictive for select to 
 drop policy if exists assessment_record on public.assessment;
 create policy assessment_record on public.assessment as restrictive for insert to app_role
   with check (
-    app.client_visible_to_practitioner(client_id)
+    (app.actor_has_role('lead_practitioner') or app.client_visible_to_practitioner(client_id))
     and performed_by_practitioner_id in (
       select id from public.practitioner
        where user_id = nullif(current_setting('app.actor_id', true), '')::uuid

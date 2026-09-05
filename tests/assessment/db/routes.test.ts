@@ -202,6 +202,41 @@ async function seedHousehold(
   return { scenario, authSub, practitionerUserId: userId, practitionerId, clientId };
 }
 
+/**
+ * A lead practitioner with a practitioner row of their own and, unless told
+ * otherwise, a valid certification for the brain map — and **no appointment
+ * with anybody**, so no client is on their schedule. Oversight is the whole
+ * point of the role, and this is the person the fix round's gap 12 is about.
+ */
+async function seedLead(
+  scenario: string,
+  options: { credentialled?: boolean } = {},
+): Promise<{ authSub: string; practitionerId: string }> {
+  const userId = assessmentId(scenario, 1);
+  const authSub = assessmentId(scenario, 2);
+  const practitionerId = assessmentId(scenario, 3);
+  await seedUser(owner, {
+    id: userId,
+    tenantId: IDS.tenantA,
+    authId: authSub,
+    displayName: 'Synthetic Lead',
+    roles: ['lead_practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, practitionerId, userId);
+  if (options.credentialled !== false) {
+    await seedCredential(owner, {
+      tenantId: IDS.tenantA,
+      practitionerId,
+      serviceTypeId: BRAIN_MAP_SERVICE,
+      certification: 'vendor_qeeg',
+      validFrom: '2020-01-01',
+      validTo: null,
+      canExecuteSession: true,
+    });
+  }
+  return { authSub, practitionerId };
+}
+
 function recording(
   household: Household,
   overrides: Record<string, unknown> = {},
@@ -574,6 +609,81 @@ describe('correcting a measurement', () => {
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ code: 'not_your_measurement' });
+  });
+});
+
+describe('the lead practitioner’s oversight', () => {
+  const correction = (reason: string) => ({
+    instrumentVersion: '1',
+    performedAt: `${today}T09:00:00+04:00`,
+    derived: brainMapPayload(12.5),
+    conditionNote: null,
+    referenceAgeYears: 9,
+    referenceSex: 'female',
+    reason,
+  });
+
+  it('corrects a measurement for a household they have never visited', async () => {
+    // Oversight is what the role is for: a lead who has not been to that
+    // house inside the ninety-day window could not otherwise put right a
+    // figure in its record. The correction still names the lead as the person
+    // answerable for the new figures.
+    const household = await seedHousehold('63');
+    const lead = await seedLead('64');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+
+    const res = await post(
+      `/api/assessments/${created.assessment.id}/supersede`,
+      lead.authSub,
+      correction('The alpha figure at Fz was typed from the wrong column.'),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { assessment: Record<string, unknown> };
+    expect(body.assessment).toMatchObject({
+      version: 2,
+      supersedesId: created.assessment.id,
+      performedByPractitionerId: lead.practitionerId,
+    });
+  });
+
+  it('refuses one whose certification for that service is not valid today', async () => {
+    // A new version is a recording, so the certification is asked for the
+    // assessment's own service exactly as a first recording asks it. The role
+    // widens whose record may be reached, and nothing else.
+    const household = await seedHousehold('65');
+    const lead = await seedLead('66', { credentialled: false });
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+
+    const res = await post(
+      `/api/assessments/${created.assessment.id}/supersede`,
+      lead.authSub,
+      correction('A correction attempted without a certification for the service.'),
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'credential_invalid' });
+    expect(await refusals(created.assessment.id)).toContain('credential_invalid');
+  });
+
+  it('records a measurement for a client of the practice they are not booked with', async () => {
+    // The same widening, and for the same reason: a brain map taken on the
+    // ninety-first day is still that lead's own measurement to type up.
+    const household = await seedHousehold('67');
+    const lead = await seedLead('68');
+    const res = await post('/api/assessments', lead.authSub, recording(household));
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses a practitioner who is not a lead the same reach', async () => {
+    const household = await seedHousehold('69');
+    const stranger = await seedHousehold('70', { familyName: 'Lagoon' });
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await post(
+      `/api/assessments/${created.assessment.id}/supersede`,
+      stranger.authSub,
+      correction('A colleague reaching for somebody else’s household.'),
+    );
+    // Row security hid the measurement itself, so there is nothing to correct.
+    expect(res.status).toBe(404);
   });
 });
 

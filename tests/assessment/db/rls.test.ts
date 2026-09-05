@@ -335,6 +335,33 @@ describe('what the API role may do to a measurement', () => {
     });
   });
 
+  it('lets the lead practitioner record for a client off their own schedule', async () => {
+    // Oversight reaches every client of the practice, the same as it does for
+    // reading. The row still has to name the lead's own practitioner row.
+    await as(MORE_IDS.practitionerUserA, 'lead_practitioner', async () => {
+      await client.query('savepoint lead_recorded');
+      await client.query(
+        'insert into assessment (id, tenant_id, client_id, performed_by_practitioner_id, ' +
+          "performed_at, instrument, instrument_version, derived) values ($1, $2, $3, $4, now(), 'qeeg', '1', '{}'::jsonb)",
+        [assessmentId('d5', 1), IDS.tenantA, OFF_SCHEDULE_CLIENT, MORE_IDS.practitionerA],
+      );
+      await client.query('rollback to savepoint lead_recorded');
+    });
+  });
+
+  it("refuses the lead practitioner a measurement in somebody else's name", async () => {
+    // The reach half widens for the role; the own-row half does not move.
+    await as(MORE_IDS.practitionerUserA, 'lead_practitioner', async () => {
+      await rejectsWith(
+        client,
+        RLS_VIOLATION,
+        'insert into assessment (id, tenant_id, client_id, performed_by_practitioner_id, ' +
+          "performed_at, instrument, instrument_version, derived) values ($1, $2, $3, $4, now(), 'qeeg', '1', '{}'::jsonb)",
+        [assessmentId('d6', 1), IDS.tenantA, OFF_SCHEDULE_CLIENT, OTHER_PRACTITIONER],
+      );
+    });
+  });
+
   it('refuses an admin recording one, who may file an export and may not take a measurement', async () => {
     await as(ADMIN_USER, 'admin', async () => {
       await rejectsWith(
