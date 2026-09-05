@@ -28,7 +28,9 @@
 -- with the age and sex it used snapshotted beside it, and the platform
 -- computes no comparison of its own (spec section 3.4).
 --
--- Needs: 010 (tenant), 020 (app_user, for created_by), 050 (practitioner),
+-- Needs: 010 (tenant), 020 (app_user, for created_by), 040 (service_type,
+-- which the context function at the foot of this file joins to read a
+-- credential's own service code), 050 (practitioner),
 -- 060 (client, and the `sex_at_birth` enum this table's reference column
 -- reuses), 070/080 (app.audit_row, app.set_updated_at), 095
 -- (app.current_actor_id), 098 (app.erasure_active, which the append-only guard
@@ -129,6 +131,15 @@ comment on column public.assessment.reference_age_years is
   'was made. The live answer moves with a birthday; the comparison that was made does not.';
 
 create index assessment_tenant_idx on assessment (tenant_id);
+-- `performed_at desc` rather than the `(client_id, created_at)` the tables
+-- around this one carry (`document`, `consent`, 060). A measurement is a fact
+-- about a day, and the day it was taken is not the day it was typed: a brain
+-- map is recorded at the household and entered from a laptop afterwards,
+-- sometimes days later. Every query written against this table orders by
+-- `performed_at desc` — the tab, the comparison, the follow-up — and none
+-- orders by `created_at`, so an index on the creation time would be one
+-- nothing sorts by. Descending because a client's most recent measurement is
+-- the one every screen wants first.
 create index assessment_client_idx on assessment (client_id, performed_at desc);
 create index assessment_practitioner_idx on assessment (performed_by_practitioner_id);
 create index assessment_created_by_idx on assessment (created_by);
