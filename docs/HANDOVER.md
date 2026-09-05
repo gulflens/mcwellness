@@ -21,17 +21,20 @@ rules in section 6.
 
 ## 2. Where things stand
 
-- `main` is at `24243f6` (4 September 2026, 05:28 Dubai) with fifty
+- `main` is at `66a6c3c` (4 September 2026, 22:31 Dubai) with fifty
   migrations. Every merged pull request through #61 carries its review
-  record as a comment.
+  record as a comment; #62 to #65, all documentation, followed the one
+  that added this file (piece ten's two specifications, the simple wording
+  and the founder's two changes to it).
 - Pieces one to six are built, reviewed and merged: the client record and
   enrolment, consent capture and erasure, the diary with moves and
   cancellations, the session runner, packages, invoices and receipts as
   PDFs, the practice's identity with VAT charged only while registered.
 - Staging (Supabase project `ajjkvjtqxktkgrvcrzkh`, Mumbai) is level with
   `main`: fifty migrations, thirteen policy files, the synthetic practice,
-  two real staff accounts, the practice's identity on the tenant row, and
-  the documents bucket with the eight consent wordings. Every pass is
+  two real staff accounts, the practice's identity on the tenant row with
+  VAT recorded as not registered (corrected 5 September, see section 8),
+  and the documents bucket with the eight consent wordings. Every pass is
   recorded in `docs/STAGING.md`; the seventh pass follows the next merge
   that adds a migration.
 - The old Flutter app (`McWellness UAE`, a separate repository) is not this
@@ -156,9 +159,14 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
-- A VAT certificate into the practice's Documents folder if one exists;
-  staging records the practice as VAT-registered on the operator's word,
-  and since migration 950 that switch decides whether invoices carry VAT.
+- The VAT switch. The practice is not registered for VAT (operator, 5
+  September 2026): the AED 375,000 threshold has not been crossed. Staging
+  now records it as not registered, matching the seed, and the switch in
+  the practice settings stays off until the Federal Tax Authority registers
+  the practice and issues a number. The operator wants the platform to watch
+  the threshold and say when it is near; the switch itself stays a hand's
+  act, because an invoice may not carry VAT without the number. The watch
+  is listed under the plan's small things.
 - The lawyer's review of the eight consent wordings and the erasure letter
   (`docs/CONSENT/README.md` lists the seven points), and the hosting-region
   question (`docs/ADR/0003`).

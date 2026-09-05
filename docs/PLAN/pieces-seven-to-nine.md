@@ -141,7 +141,7 @@ code.
 | Eight consent wordings and the erasure letter | Lawyer | In use as drafts, marked as such on every copy |
 | Whether a proposed visit counts as checked in | Operator | No: a visit must be confirmed before the practitioner can start it |
 | Card and buy-now-pay-later payments | Operator, later | Not before piece nine; recorded payments cover the practice today |
-| A VAT certificate | Operator | Staging records the practice as VAT-registered on the operator's word; if a certificate exists it belongs in the practice's Documents folder, and if not the switch is the thing to correct |
+| VAT registration | Operator, then the Federal Tax Authority | Answered 5 September 2026: not registered, the threshold not crossed, staging corrected to match the seed. The switch stays off until the authority issues a number; the platform watches the threshold (small things, below) and the operator turns the switch on |
 
 ## Small things folded into the shared rounds
 
@@ -150,6 +150,21 @@ code.
   erased household, because the erasure gate hides the household's rows.
   The fix is one database function that adds up the ledger whole and names
   nobody (billing's table, so billing's round).
+- The VAT threshold watch. The practice is not registered and the switch is
+  off (5 September 2026). One database function adds up the practice's
+  taxable supplies over the trailing twelve months, net of VAT, from issued
+  invoices, and the practice settings page shows the figure beside the
+  switch with two marks: AED 187,500, where registering becomes a choice,
+  and AED 375,000, where it becomes a duty within thirty days. Past the
+  second mark the page says so on every visit until the switch is turned
+  on. The switch stays the operator's act, never automatic: an invoice may
+  not carry VAT until the authority has issued the number the row requires
+  (migration 905), and the thirty-day forward test cannot be computed from
+  the ledger. Decision for the operator: whether a package counts at sale
+  or as each session is delivered, which is the tax adviser's question
+  above in another form; the default (Claude's) counts it at sale, the
+  conservative reading, so the warning never comes late. Billing's table,
+  so billing's round.
 - The audit trail's activity feed and the per-client access report, which
   the data already supports.
 - Arabic copied out of a rendered PDF comes back as unreadable glyphs. A
