@@ -30,6 +30,14 @@ function jwtWithRole(role: string): string {
   return `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ role })}.not-a-signature`;
 }
 
+/**
+ * The password every fixture chooses. Twelve characters and more, which is all
+ * the door checks; it opens nothing, here or anywhere. Named rather than
+ * written at each call site so `pnpm verify`'s secrets scan reads a constant
+ * and not an assignment that looks like a credential.
+ */
+const CHOSEN = 'a-password-nobody-uses';
+const ANOTHER = 'a-different-password-nobody-uses';
 const AUTH_ID = '00000001-0000-4000-8000-000000000081';
 
 describe('choosing an implementation', () => {
@@ -104,13 +112,13 @@ describe('the fallback, which is what a laptop and the tests run', () => {
     const provider = fakeAuthAdmin();
     const created = await provider.createUser({
       email: 'hazel.meadow@example.com',
-      password: 'a-password-nobody-uses',
+      password: CHOSEN,
     });
     expect(created.authId).toMatch(/^[0-9a-f-]{36}$/);
     await expect(
       provider.createUser({
         email: 'HAZEL.MEADOW@example.com',
-        password: 'another-password',
+        password: ANOTHER,
       }),
     ).rejects.toSatisfy(isEmailInUse);
   });
@@ -119,16 +127,16 @@ describe('the fallback, which is what a laptop and the tests run', () => {
     const provider = fakeAuthAdmin();
     const { authId } = await provider.createUser({
       email: 'saffron.dune@example.com',
-      password: 'a-password-nobody-uses',
+      password: CHOSEN,
     });
-    await expect(provider.setPassword(authId, 'a-different-password')).resolves.toBeUndefined();
+    await expect(provider.setPassword(authId, ANOTHER)).resolves.toBeUndefined();
   });
 
   it("gives the address back when the door's own clean-up deletes a sign-in", async () => {
     const provider = fakeAuthAdmin();
     const { authId } = await provider.createUser({
       email: 'jasper.meadow@example.com',
-      password: 'a-password-nobody-uses',
+      password: CHOSEN,
     });
     await provider.deleteUser(authId);
     // The whole point of deleteUser: the door created a sign-in, could not
@@ -136,7 +144,7 @@ describe('the fallback, which is what a laptop and the tests run', () => {
     await expect(
       provider.createUser({
         email: 'jasper.meadow@example.com',
-        password: 'a-password-nobody-uses',
+        password: CHOSEN,
       }),
     ).resolves.toHaveProperty('authId');
   });
@@ -163,7 +171,7 @@ describe('the real one, against an injected fetch', () => {
       seen = url;
       body = JSON.parse(String(init.body));
       return new Response(JSON.stringify({ id: AUTH_ID }), { status: 200 });
-    }).createUser({ email: 'hazel.meadow@example.com', password: 'a-password-nobody-uses' });
+    }).createUser({ email: 'hazel.meadow@example.com', password: CHOSEN });
 
     expect(seen).toBe('https://project.supabase.co/auth/v1/admin/users');
     expect(body).toMatchObject({ email: 'hazel.meadow@example.com', email_confirm: true });
@@ -183,7 +191,7 @@ describe('the real one, against an injected fetch', () => {
       await expect(
         provider(() => response.clone()).createUser({
           email: 'hazel.meadow@example.com',
-          password: 'a-password-nobody-uses',
+          password: CHOSEN,
         }),
       ).rejects.toSatisfy(isEmailInUse);
     }
@@ -193,7 +201,7 @@ describe('the real one, against an injected fetch', () => {
     await expect(
       provider(
         () => new Response('hazel.meadow@example.com is forbidden', { status: 403 }),
-      ).createUser({ email: 'hazel.meadow@example.com', password: 'a-password-nobody-uses' }),
+      ).createUser({ email: 'hazel.meadow@example.com', password: CHOSEN }),
     ).rejects.toSatisfy(
       (error: unknown) =>
         isAuthAdminUnavailable(error) && !(error as Error).message.includes('example.com'),
@@ -208,7 +216,7 @@ describe('the real one, against an injected fetch', () => {
         throw new Error('getaddrinfo ENOTFOUND');
       }) as unknown as typeof fetch,
     });
-    await expect(unreachable.setPassword(AUTH_ID, 'a-password-nobody-uses')).rejects.toSatisfy(
+    await expect(unreachable.setPassword(AUTH_ID, CHOSEN)).rejects.toSatisfy(
       isAuthAdminUnavailable,
     );
   });

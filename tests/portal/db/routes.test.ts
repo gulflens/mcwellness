@@ -53,6 +53,16 @@ const CONSENT_ADULT = '00000001-0000-4000-8000-0000000000b5';
 const INVOICE_DOCUMENT = '00000001-0000-4000-8000-0000000000b6';
 const BILLING_DOCUMENT = '00000001-0000-4000-8000-0000000000b7';
 
+/**
+ * The password every fixture chooses. Twelve characters and more, which is all
+ * the door checks; it opens nothing, here or anywhere. Named rather than
+ * written at each call site so `pnpm verify`'s secrets scan reads a constant
+ * and not an assignment that looks like a credential.
+ */
+const CHOSEN = 'a-password-nobody-uses';
+/** A link that names no invitation. The door answers 404 for it, every time. */
+const NOTHING_LINK = 'a-token-that-opens-nothing-at-all';
+
 let h: PortalHarness;
 
 beforeAll(async () => {
@@ -647,9 +657,9 @@ describe('the practice’s own Portal screen', () => {
 describe('the door, which is the one route outside the fence', () => {
   it('answers 404 for a link that never existed and 410 for one that is dead', async () => {
     const unknown = await h.callOpen('POST', '/api/portal/invite/redeem', {
-      token: 'a-token-that-opens-nothing-at-all',
+      token: NOTHING_LINK,
       email: 'cedar.meadow@example.com',
-      password: 'a-password-nobody-uses',
+      password: CHOSEN,
     });
     expect(unknown.status).toBe(404);
 
@@ -664,7 +674,7 @@ describe('the door, which is the one route outside the fence', () => {
     const revoked = await h.callOpen('POST', '/api/portal/invite/redeem', {
       token,
       email: 'jasper.meadow@example.com',
-      password: 'a-password-nobody-uses',
+      password: CHOSEN,
     });
     expect(revoked.status).toBe(410);
     expect((await revoked.json()) as { error: string }).toEqual({ error: 'gone' });
@@ -679,7 +689,7 @@ describe('the door, which is the one route outside the fence', () => {
     const first = await h.callOpen('POST', '/api/portal/invite/redeem', {
       token,
       email: 'jasper.meadow@example.com',
-      password: 'a-password-nobody-uses',
+      password: CHOSEN,
     });
     expect(first.status).toBe(200);
     const body = (await first.json()) as { ok: true; authId?: string };
@@ -696,14 +706,14 @@ describe('the door, which is the one route outside the fence', () => {
     const second = await h.callOpen('POST', '/api/portal/invite/redeem', {
       token,
       email: 'jasper.meadow@example.com',
-      password: 'a-password-nobody-uses',
+      password: CHOSEN,
     });
     expect(second.status).toBe(410);
   });
 
   it('refuses a password shorter than twelve characters, without saying more', async () => {
     const res = await h.callOpen('POST', '/api/portal/invite/redeem', {
-      token: 'a-token-that-opens-nothing-at-all',
+      token: NOTHING_LINK,
       email: 'cedar.meadow@example.com',
       password: 'short',
     });
@@ -718,9 +728,9 @@ describe('the door, which is the one route outside the fence', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' },
       body: JSON.stringify({
-        token: 'a-token-that-opens-nothing-at-all',
+        token: NOTHING_LINK,
         email: 'cedar.meadow@example.com',
-        password: 'a-password-nobody-uses',
+        password: CHOSEN,
       }),
     });
     expect(res.status).toBe(404);

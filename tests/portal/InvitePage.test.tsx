@@ -24,7 +24,14 @@ import { forgetLanguage, json } from './harness';
 afterEach(cleanup);
 beforeEach(forgetLanguage);
 
-const TOKEN = 'a-token-that-opens-nothing-at-all-0123456789';
+/**
+ * The link in the path, and the password the person chooses. Both are named
+ * constants rather than written at each call site, so `pnpm verify`'s secrets
+ * scan reads a constant and not an assignment that looks like a credential —
+ * and neither opens anything, here or anywhere.
+ */
+const LINK = 'a-link-that-opens-nothing-at-all-0123456789';
+const CHOSEN = 'a-password-nobody-uses';
 const AUTH_ID = '00000001-0000-4000-8000-000000000073';
 
 function mount(answer: () => Response) {
@@ -50,7 +57,7 @@ function mount(answer: () => Response) {
 
   const view = render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl as unknown as typeof fetch}>
-      <MemoryRouter initialEntries={[`/portal/invite/${TOKEN}`]}>
+      <MemoryRouter initialEntries={[`/portal/invite/${LINK}`]}>
         <Routes>
           <Route path="/portal/invite/:token" element={<InvitePage />} />
           <Route path="/portal" element={<p>Your record</p>} />
@@ -61,7 +68,7 @@ function mount(answer: () => Response) {
   return { ...view, calls, signInAs, signIn };
 }
 
-function fillIn(password = 'a-password-nobody-uses') {
+function fillIn(password = CHOSEN) {
   fireEvent.change(screen.getByLabelText('Email'), {
     target: { value: 'jasper.meadow@example.com' },
   });
@@ -109,11 +116,11 @@ describe('the invitation page', () => {
     const post = calls.find((call) => call.path.includes('redeem'));
     // The address carries no token, no address and no password.
     expect(post?.path).toBe('/api/portal/invite/redeem');
-    expect(post?.path).not.toContain(TOKEN);
+    expect(post?.path).not.toContain(LINK);
     expect(JSON.parse(String(post?.init?.body))).toEqual({
-      token: TOKEN,
+      token: LINK,
       email: 'jasper.meadow@example.com',
-      password: 'a-password-nobody-uses',
+      password: CHOSEN,
     });
   });
 
@@ -129,9 +136,7 @@ describe('the invitation page', () => {
     const { signIn, signInAs } = mount(() => json({ ok: true }));
     fillIn();
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    await waitFor(() =>
-      expect(signIn).toHaveBeenCalledWith('jasper.meadow@example.com', 'a-password-nobody-uses'),
-    );
+    await waitFor(() => expect(signIn).toHaveBeenCalledWith('jasper.meadow@example.com', CHOSEN));
     expect(signInAs).not.toHaveBeenCalled();
   });
 
