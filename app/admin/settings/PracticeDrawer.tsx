@@ -3,6 +3,7 @@ import {
   EMIRATES,
   PracticeResponse,
   VAT_TRN_DIGITS,
+  WHATSAPP_MESSAGE,
   type Emirate,
   type Practice,
 } from '../../api/practice/schema';
@@ -39,6 +40,7 @@ type FieldErrors = {
   legalName?: string;
   taxRegistrationNumber?: string;
   vatTrn?: string;
+  whatsappNumber?: string;
   displayAddress?: string;
   latitude?: string;
   longitude?: string;
@@ -49,6 +51,7 @@ const FIELD_IDS: Record<keyof FieldErrors, string> = {
   legalName: 'practice-legal-name',
   taxRegistrationNumber: 'practice-tax-registration',
   vatTrn: 'practice-vat-trn',
+  whatsappNumber: 'practice-whatsapp-number',
   displayAddress: 'practice-address',
   latitude: 'practice-latitude',
   longitude: 'practice-longitude',
@@ -102,6 +105,7 @@ export function PracticeDrawer({
   );
   const [vatRegistered, setVatRegistered] = useState(practice.vatRegistered);
   const [vatTrn, setVatTrn] = useState(practice.vatTrn ?? '');
+  const [whatsappNumber, setWhatsappNumber] = useState(practice.whatsappNumber ?? '');
   const [displayAddress, setDisplayAddress] = useState(practice.address?.displayAddress ?? '');
   const [emirate, setEmirate] = useState<Emirate>(
     practice.address?.emirate ?? practice.defaultEmirate,
@@ -144,6 +148,10 @@ export function PracticeDrawer({
     const typedVatTrn = vatTrn.replace(/\s/g, '');
     if (vatRegistered && !new RegExp(`^\\d{${VAT_TRN_DIGITS}}$`).test(typedVatTrn)) {
       errors.vatTrn = typedVatTrn.length === 0 ? VAT_TRN_REQUIRED_MESSAGE : VAT_TRN_LENGTH_MESSAGE;
+    }
+    const typedWhatsapp = whatsappNumber.replace(/[\s()-]/g, '');
+    if (typedWhatsapp.length > 0 && !/^\+[1-9][0-9]{6,14}$/.test(typedWhatsapp)) {
+      errors.whatsappNumber = WHATSAPP_MESSAGE;
     }
     const typedAddress = displayAddress.trim();
     if (hasAddressOnRecord && typedAddress.length === 0) {
@@ -204,6 +212,7 @@ export function PracticeDrawer({
           licenceExpiresOn: licenceExpiresOn.trim().length === 0 ? null : licenceExpiresOn,
           vatRegistered,
           vatTrn: vatRegistered ? typedVatTrn : '',
+          whatsappNumber: typedWhatsapp,
           address,
         }),
       });
@@ -311,6 +320,21 @@ export function PracticeDrawer({
             maxLength={120}
             value={licensingAuthority}
             onChange={(e) => setLicensingAuthority(e.target.value)}
+          />
+
+          <Field
+            id={FIELD_IDS.whatsappNumber}
+            label="WhatsApp number (optional)"
+            hint="What the client portal's ask-for-a-visit button opens. Leave it empty and the portal says to contact the practice, without a button."
+            type="tel"
+            inputMode="tel"
+            maxLength={40}
+            value={whatsappNumber}
+            onChange={(e) => {
+              setWhatsappNumber(e.target.value);
+              clearFieldError('whatsappNumber');
+            }}
+            error={fieldErrors.whatsappNumber}
           />
 
           <Field

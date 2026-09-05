@@ -53,6 +53,8 @@ const PRACTICE = {
   licenceExpiresOn: null,
   vatRegistered: false,
   vatTrn: null,
+  // What the client portal's ask-for-a-visit button opens (migration 910).
+  whatsappNumber: null,
   defaultEmirate: 'DXB',
   timezone: 'Asia/Dubai',
   address: null,

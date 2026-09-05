@@ -4,7 +4,8 @@ import { FAMILY_NAMES, GIVEN_NAMES, type Name } from './names';
 import { at, seededRandom } from './random';
 
 /**
- * The synthetic practice: one tenant, four people with logins, three
+ * The synthetic practice: one tenant, six people with logins (four of the
+ * practice's own, and two households in the client portal), three
  * practitioners with certifications, six services with the practice's own
  * prices and its three programmes, twenty clients with contacts, home
  * locations and consents. Pure: the same options give the same
@@ -15,7 +16,8 @@ import { at, seededRandom } from './random';
  */
 
 export type Emirate = 'DXB' | 'AUH' | 'SHJ' | 'AJM' | 'UAQ' | 'RAK' | 'FUJ';
-export type RoleKind = 'owner' | 'admin' | 'lead_practitioner' | 'practitioner' | 'finance';
+export type RoleKind =
+  'owner' | 'admin' | 'lead_practitioner' | 'practitioner' | 'finance' | 'client_contact';
 export type DeliveryMode = 'home' | 'studio' | 'remote';
 export type ClientStatus = 'lead' | 'active' | 'paused' | 'closed';
 export type Relationship = 'self' | 'mother' | 'father';
@@ -42,6 +44,12 @@ export type SeedTenant = {
   vatTrn: null;
   defaultEmirate: Emirate;
   timezone: string;
+  /**
+   * The number a household messages the practice on (migration 910). The
+   * portal's "ask for a visit" opens WhatsApp on it, so a practice without one
+   * shows the sentence and no button.
+   */
+  whatsappNumber: string;
 };
 export type SeedUser = {
   id: string;
@@ -154,6 +162,12 @@ export type SeedClient = {
 export type SeedContact = {
   id: string;
   clientId: string;
+  /**
+   * The portal account, on the two households that have one; null on the rest,
+   * which is the ordinary case (`contact.user_id` is nullable precisely
+   * because most contacts never sign in).
+   */
+  userId: string | null;
   /** The person to ask for at the door, and the person a consent was given by. */
   givenName: string;
   familyName: string;
@@ -442,6 +456,20 @@ const PHOTO_CONSENT = new Set([5, 6, 17]);
 const WITHDRAWN_PHOTO_CONSENT = 7;
 const SECOND_PARENT = new Set([13, 17, 19]);
 
+/**
+ * The two households with a portal login (docs/CHANGE-REQUESTS/client-portal-05.md
+ * item 7). Client 17 is an active fourteen-year-old with both parents on the
+ * record; client 5 is an active Arabic-first adult who is her own contact.
+ */
+const PORTAL_LOGINS: readonly {
+  client: number;
+  relationship: Relationship;
+  locale: 'en' | 'ar';
+}[] = [
+  { client: 17, relationship: 'mother', locale: 'en' },
+  { client: 5, relationship: 'self', locale: 'ar' },
+];
+
 /** +971 50 000 1xxx: the reserved synthetic block. Tests keep 0001 to 0099. */
 function phone(n: number): string {
   return `+97150000${String(1000 + n).padStart(4, '0')}`;
@@ -507,6 +535,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     vatTrn: null,
     defaultEmirate: 'DXB',
     timezone: 'Asia/Dubai',
+    whatsappNumber: phone(999),
   };
 
   const studio: SeedLocation = {
@@ -820,6 +849,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       contacts.push({
         id: seedId('9', ++contactCount),
         clientId,
+        userId: null,
         ...named(at(GIVEN_NAMES, (n + 6) % GIVEN_NAMES.length)),
         relationship: parent,
         isLegalGuardian: true,
@@ -836,6 +866,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
         contacts.push({
           id: seedId('9', ++contactCount),
           clientId,
+          userId: null,
           ...named(at(GIVEN_NAMES, (n + 12) % GIVEN_NAMES.length)),
           relationship: other,
           isLegalGuardian: true,
@@ -852,6 +883,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       contacts.push({
         id: seedId('9', ++contactCount),
         clientId,
+        userId: null,
         ...named(given),
         relationship: 'self',
         isLegalGuardian: false,
@@ -912,6 +944,44 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
         });
       }
     }
+  }
+
+  // The two households in the client portal (docs/SPEC/client-portal.md,
+  // docs/CHANGE-REQUESTS/client-portal-05.md item 7). Both are ordinary
+  // contacts who happen to have been invited: a login is a `user_id` on a
+  // contact row and nothing else.
+  //
+  // One of each shape the portal has to render. The mother of a fourteen-year
+  // old with a second parent on the record reads in English and sees the
+  // household's money, because a parent does; the Arabic-first adult is the
+  // `self` contact of her own record and reads the portal right to left. A
+  // young person's own login — the one case that sees no figure — is
+  // deliberately not seeded: the rule is proved on the boundary day in
+  // tests/portal/db, where the birthday can be moved, and a synthetic practice
+  // is a poor place to invent a child's sign-in.
+  for (const login of PORTAL_LOGINS) {
+    const clientId = seedId('8', login.client);
+    const contact = contacts.find(
+      (c) => c.clientId === clientId && c.relationship === login.relationship,
+    );
+    if (!contact) {
+      throw new Error(`No ${login.relationship} on client ${login.client} to give a login to.`);
+    }
+    const n = users.length + 1;
+    const user: SeedUser = {
+      id: seedId('2', n),
+      authId: seedId('3', n),
+      displayName: `${contact.givenName} ${contact.familyName}`,
+      // Their own address, distinct from the contact row's: the account and
+      // the contact are two records of the same person and the seed keeps
+      // every address and every number unique so a test can tell them apart.
+      email: email(`${contact.givenName}.${contact.familyName}.portal`),
+      phone: phone(200 + users.length),
+      preferredLocale: login.locale,
+    };
+    users.push(user);
+    roles.push({ id: seedId('c', ++roleCount), userId: user.id, role: 'client_contact' });
+    contact.userId = user.id;
   }
 
   return {

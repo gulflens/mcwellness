@@ -401,4 +401,60 @@ describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 
     expect(canActor(a, { type: 'billing.invoice.read' }, ctx, NOW)).toBe(false);
     expect(canActor(a, { type: 'billing.payment.write' }, ctx, NOW)).toBe(false);
   });
+  it('lets a contact correct their own row and no other', () => {
+    // docs/SPEC/client-portal.md section 5, rule 2. The route reads the
+    // contact row's user_id; migration 702's guard trigger holds the same
+    // rule underneath, and narrows the columns as well.
+    const a = actor(['client_contact']);
+    expect(canActor(a, { type: 'contact.write_own', contactUserId: a.userId }, {}, NOW)).toBe(true);
+    expect(
+      canActor(a, { type: 'contact.write_own', contactUserId: 'somebody-else' }, {}, NOW),
+    ).toBe(false);
+    expect(canActor(a, { type: 'contact.write_own', contactUserId: null }, {}, NOW)).toBe(false);
+    for (const role of [
+      'owner',
+      'admin',
+      'lead_practitioner',
+      'practitioner',
+      'finance',
+    ] as const) {
+      const staff = actor([role]);
+      expect(
+        canActor(staff, { type: 'contact.write_own', contactUserId: staff.userId }, {}, NOW),
+        role,
+      ).toBe(false);
+    }
+  });
+
+  it('lets a contact ask only for their own household, and never handle the ask', () => {
+    const a = actor(['client_contact']);
+    const ctx = { clientIds: [CLIENT] };
+    expect(canActor(a, { type: 'portal.request.write', clientId: CLIENT }, ctx, NOW)).toBe(true);
+    expect(canActor(a, { type: 'portal.request.write', clientId: OTHER_CLIENT }, ctx, NOW)).toBe(
+      false,
+    );
+    expect(canActor(a, { type: 'portal.request.write', clientId: CLIENT }, {}, NOW)).toBe(false);
+    expect(canActor(a, { type: 'portal.request.handle' }, ctx, NOW)).toBe(false);
+  });
+
+  it('gives handling a request to the office and access to the owner and an admin', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'portal.request.handle' }, {}, NOW), role).toBe(true);
+    }
+    for (const role of ['practitioner', 'finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'portal.request.handle' }, {}, NOW), role).toBe(false);
+    }
+    for (const role of ['owner', 'admin'] as const) {
+      expect(canActor(actor([role]), { type: 'portal.access.manage' }, {}, NOW), role).toBe(true);
+    }
+    for (const role of [
+      'lead_practitioner',
+      'practitioner',
+      'finance',
+      'client_contact',
+    ] as const) {
+      expect(canActor(actor([role]), { type: 'portal.access.manage' }, {}, NOW), role).toBe(false);
+    }
+    expect(canActor(actor([]), { type: 'portal.access.manage' }, {}, NOW)).toBe(false);
+  });
 });

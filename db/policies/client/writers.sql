@@ -40,8 +40,17 @@ create policy client_record_update_writers on public.client as restrictive for u
   and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
 );
 
--- contact: create and edit. A client contact's own edit of their own contact
--- details is Stage 2 (client-record.md section 2); not built here.
+-- contact: create and edit. The update arm also carries the household's own
+-- correction of its own contact details (docs/SPEC/client-portal.md section
+-- 6.5, applied by the portal piece under
+-- docs/CHANGE-REQUESTS/client-portal-05.md item 6): a client contact may
+-- update the row that carries their own sign-in, in `using` and in
+-- `with check` both, so the row they may reach is the row they may still
+-- reach afterwards. Which columns may then move is
+-- app.guard_contact_self_service (migration 702) — the telephone, the email
+-- and the WhatsApp preference, and nothing else, compared structurally so a
+-- column added later is guarded without anyone naming it. The erasure gate
+-- stands in front of both arms as it always did.
 drop policy if exists client_record_writers on public.contact;
 create policy client_record_writers on public.contact as restrictive for insert to app_role with check (
   app.client_status_for(client_id) <> 'erased'
@@ -50,10 +59,12 @@ create policy client_record_writers on public.contact as restrictive for insert 
 drop policy if exists client_record_update_writers on public.contact;
 create policy client_record_update_writers on public.contact as restrictive for update to app_role using (
   app.client_status_for(client_id) <> 'erased'
-  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+       or (app.actor_has_role('client_contact') and user_id = app.current_actor_id()))
 ) with check (
   app.client_status_for(client_id) <> 'erased'
-  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner'))
+  and (app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+       or (app.actor_has_role('client_contact') and user_id = app.current_actor_id()))
 );
 
 -- location: creating one is staff-only; a practitioner may update one their

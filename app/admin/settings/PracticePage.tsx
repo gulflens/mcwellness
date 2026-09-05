@@ -155,6 +155,17 @@ export function PracticePage() {
                   <span className="numeric">{formatDate(practice.licenceExpiresOn)}</span>
                 ) : null}
               </Fact>
+              {/*
+                The number the client portal's "ask for a visit" button opens
+                (migration 910, docs/SPEC/client-portal.md section 3.1).
+                Beneath the identity because it is a fact about the practice
+                rather than about an invoice.
+              */}
+              <Fact label="WhatsApp number">
+                {practice.whatsappNumber ? (
+                  <span className="numeric">{practice.whatsappNumber}</span>
+                ) : null}
+              </Fact>
             </dl>
           </section>
 

@@ -104,9 +104,27 @@ export const PracticeAddress = z.object({
 });
 export type PracticeAddress = z.infer<typeof PracticeAddress>;
 
+/**
+ * The number a household messages the practice on (migration 910,
+ * docs/SPEC/client-portal.md section 6.4): E.164, the same shape the column's
+ * own check holds, or nothing at all. A practice that has recorded none shows
+ * the portal's "ask the practice" sentence without a button.
+ */
+export const WHATSAPP_MESSAGE = 'A WhatsApp number is +971 50 000 0000.';
+const WhatsappNumber = z
+  .string()
+  .nullable()
+  .transform((value) => {
+    const cleaned = cleanText(value ?? '', 40).replace(/[\s()-]/g, '');
+    return cleaned.length === 0 ? null : cleaned;
+  })
+  .refine((value) => value === null || /^\+[1-9][0-9]{6,14}$/.test(value), WHATSAPP_MESSAGE);
+
 export const Practice = z.object({
   legalName: z.string(),
   legalNameAr: z.string().nullable(),
+  /** What the portal's "ask for a visit" button opens (migration 910). */
+  whatsappNumber: z.string().nullable(),
   /** The corporate-tax registration, never the VAT one (migration 905). */
   taxRegistrationNumber: z.string().nullable(),
   licenceNumber: z.string().nullable(),
@@ -150,6 +168,7 @@ export const UpdatePracticeInput = z
     licenceExpiresOn: IsoDate.nullable(),
     vatRegistered: z.boolean(),
     vatTrn: VatTrn,
+    whatsappNumber: WhatsappNumber,
     address: AddressInput.nullable(),
   })
   .refine((value) => !value.vatRegistered || value.vatTrn !== null, {

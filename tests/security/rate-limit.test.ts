@@ -120,13 +120,21 @@ describe('the API budgets', () => {
 
   it('reads budgets from the environment and falls back to the defaults', () => {
     expect(
-      limitsFromEnv({ RATE_LIMIT_PER_MINUTE: '10', RATE_LIMIT_ACTOR_PER_MINUTE: 'lots' }),
+      limitsFromEnv({
+        RATE_LIMIT_PER_MINUTE: '10',
+        RATE_LIMIT_ACTOR_PER_MINUTE: 'lots',
+        // The portal's invitation door, which answers somebody with no session
+        // (docs/CHANGE-REQUESTS/client-portal-05.md item 3).
+        RATE_LIMIT_INVITE_DOOR_PER_MINUTE: '4',
+      }),
     ).toEqual({
       perMinute: 10,
       actorPerMinute: 600,
       authFailuresPerMinute: 20,
       devDoorPerMinute: 30,
+      inviteDoorPerMinute: 4,
     });
+    expect(limitsFromEnv({}).inviteDoorPerMinute).toBe(10);
   });
 
   it('trusts X-Forwarded-For only for the configured number of proxies', async () => {

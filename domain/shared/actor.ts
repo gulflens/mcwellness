@@ -60,7 +60,11 @@ export type Action =
   | { type: 'billing.waiver.write' }
   | { type: 'billing.invoice.read' }
   | { type: 'billing.refund.read' }
-  | { type: 'billing.balance.read'; clientId: string };
+  | { type: 'billing.balance.read'; clientId: string }
+  | { type: 'contact.write_own'; contactUserId: string | null }
+  | { type: 'portal.request.write'; clientId: string }
+  | { type: 'portal.request.handle' }
+  | { type: 'portal.access.manage' };
 
 export type ActionContext = {
   /** The clients this actor's contact rows point at; resolved by the API for a client contact. */
@@ -215,6 +219,36 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
         return true;
       }
       return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(action.clientId);
+    case 'contact.write_own':
+      // A household correcting its own telephone, email or WhatsApp
+      // preference (docs/SPEC/client-portal.md section 5, rule 2). The route
+      // reads the contact row's own user_id and passes it; a row belonging to
+      // anybody else is not this person's to touch, and the guard trigger
+      // app.guard_contact_self_service (migration 702) says the same beneath,
+      // for the columns as well as the row. Deliberately not widened to staff:
+      // an owner or an admin edits a contact through the record's own routes,
+      // where the whole row is theirs to change.
+      return (
+        hasRole(actor, 'client_contact') &&
+        action.contactUserId !== null &&
+        action.contactUserId === actor.userId
+      );
+    case 'portal.request.write':
+      // Asking the practice to withdraw a consent or to erase the record. A
+      // contact, for a client in their own household; ctx.clientIds is
+      // resolved by the route from app.portal_client_ids() on every request,
+      // never from anything the caller claims.
+      return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(action.clientId);
+    case 'portal.request.handle':
+      // Marking one as dealt with. The office roles: the act itself —
+      // withdrawing, erasing — happens on the record's own screens.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    case 'portal.access.manage':
+      // Inviting a household in, resending and revoking. The owner and an
+      // admin, and nobody else: handing out access to a record is the same
+      // class of act as granting a role, and db/policies/portal/access.sql
+      // refuses the row underneath this.
+      return hasRole(actor, 'owner', 'admin');
     default: {
       const unreachable: never = action;
       return unreachable;

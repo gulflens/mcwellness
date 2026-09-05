@@ -34,9 +34,9 @@ describe('generateSeed', () => {
     expect(JSON.stringify(generateSeed({ seed: 1 }))).not.toBe(text);
   });
 
-  it('builds one practice, four logins, three practitioners, six services and twenty clients', () => {
+  it('builds one practice, six logins, three practitioners, six services and twenty clients', () => {
     expect(data.tenant.id).toBe(SEED_TENANT_ID);
-    expect(data.users).toHaveLength(4);
+    expect(data.users).toHaveLength(6);
     expect(data.users[0]?.id).toBe(SEED_OWNER_USER_ID);
     expect(data.practitioners).toHaveLength(3);
     expect(data.serviceTypes).toHaveLength(6);

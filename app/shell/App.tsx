@@ -6,12 +6,25 @@ import { ClientsPage } from '../admin/clients/ClientsPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { WeekPage } from '../admin/schedule/WeekPage';
 import { PracticePage } from '../admin/settings/PracticePage';
-import { PortalLanding } from '../client/PortalLanding';
+import { PortalAccessPage } from '../admin/portal/PortalAccessPage';
+import { AgreementsScreen } from '../client/AgreementsScreen';
+import { FamilyScreen } from '../client/FamilyScreen';
+import { HomeScreen } from '../client/HomeScreen';
+import { InvitePage } from '../client/InvitePage';
+import { MoneyScreen } from '../client/MoneyScreen';
+import { PortalRoot } from '../client/PortalRoot';
+import { VisitsScreen } from '../client/VisitsScreen';
 import { CheckInPage } from '../therapist/session/CheckInPage';
 import { TodayPage } from '../therapist/today/TodayPage';
 import { TodayLanding } from '../therapist/TodayLanding';
 import { AdminLayout } from './AdminLayout';
-import { canOpenBilling, canOpenSchedule, canOpenSettings, canOpenToday } from './adminAccess';
+import {
+  canOpenBilling,
+  canOpenPortalAccess,
+  canOpenSchedule,
+  canOpenSettings,
+  canOpenToday,
+} from './adminAccess';
 import { useAuth, type Actor } from './auth/AuthContext';
 import { Note } from './components/Controls';
 import { NoAccessPage } from './pages/NoAccessPage';
@@ -93,6 +106,25 @@ export function App() {
             </RequireAuth>
           }
         />
+        {/*
+          Who can open a household's own record (docs/SPEC/client-portal.md
+          section 3.8). The same rule the route enforces, so the rail never
+          offers a link a route would bounce the person straight out of.
+        */}
+        <Route
+          path="portal"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenPortalAccess(actor, new Date()) ? (
+                  <PortalAccessPage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
         <Route
           path="settings/practice"
           element={
@@ -130,7 +162,19 @@ export function App() {
           </RequireAuth>
         }
       />
-      <Route path="/portal" element={<RequireAuth>{() => <PortalLanding />}</RequireAuth>} />
+      {/*
+        The invitation page is deliberately outside RequireAuth: the person on
+        the other end of the link has no session yet, and getting one is what
+        the page is for (docs/SPEC/client-portal.md section 3.7).
+      */}
+      <Route path="/portal/invite/:token" element={<InvitePage />} />
+      <Route path="/portal" element={<RequireAuth>{() => <PortalRoot />}</RequireAuth>}>
+        <Route index element={<HomeScreen />} />
+        <Route path="visits" element={<VisitsScreen />} />
+        <Route path="money" element={<MoneyScreen />} />
+        <Route path="family" element={<FamilyScreen />} />
+        <Route path="agreements" element={<AgreementsScreen />} />
+      </Route>
       <Route path="/no-access" element={<RequireAuth>{() => <NoAccessPage />}</RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

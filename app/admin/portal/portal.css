@@ -1,0 +1,46 @@
+/*
+  Settings › Portal (docs/SPEC/client-portal.md section 3.8). The console's own
+  vocabulary: hairline rules, no cards, no hue but the status dot the shared
+  chip already carries. Every value comes from app/shell/tokens.css, and every
+  rule is written in logical properties.
+*/
+
+.portal-access__heading {
+  margin-block-start: var(--s-8);
+  margin-block-end: var(--s-3);
+}
+
+/*
+  The link, shown once. A panel rather than a row, because it is the one thing
+  on this screen that cannot be looked up again: it wants the space.
+*/
+.portal-access__issued {
+  margin-block-start: var(--s-6);
+  padding: var(--s-5);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.portal-access__link {
+  overflow-wrap: anywhere;
+}
+
+.portal-access__link code {
+  font: inherit;
+}
+
+.portal-access__actions,
+.portal-access__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.portal-access__row-actions {
+  justify-content: flex-end;
+}

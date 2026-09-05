@@ -75,7 +75,7 @@ Input rules are zod schemas at the API boundary: a telephone in E.164 (the colum
 Three functions in schema `app`, `security definer`, `set search_path = pg_catalog, pg_temp`, execute revoked from public and granted to `app_role`:
 
 - `app.portal_client_ids() returns uuid[]` — the ids of clients in the current tenant with a contact row whose `user_id` is the current actor, excluding erased clients. Empty with no actor stamped.
-- `app.portal_invite_status(p_token_hash bytea) returns text` — `valid`, `expired`, `used`, `revoked` or `unknown`, and nothing else about the row. Runs with no tenant stamped, because the caller is not signed in.
+- `app.portal_invite_status(p_token_hash bytea) returns table (state text, kind text, auth_id uuid)` — the state is `valid`, `expired`, `used`, `revoked`, `not_a_household` (the invitation names an account holding a practice role) or `unknown`. `kind` and the account's standing `auth_id` travel beside it **only when the state is `valid`**, because they are what decides which half of the auth-admin seam the door runs and the door can read no table for itself; a dead link answers its word with two nulls. Nothing else about the row: never whose invitation it is, never when it was issued, never which contact it names. Runs with no tenant stamped, because the caller is not signed in.
 - `app.redeem_portal_invite(p_token_hash bytea, p_auth_id uuid, p_email text) returns uuid` — locks the invite `for update`, re-checks it is valid, links `app_user.auth_id` (and, for a first sign-in, writes the email onto `app_user.email`), sets `used_at`, and returns the user id. Raises with a plain code on any other state, so a race between two redemptions of one link ends with one winner. Writes its own audit row through the row triggers with no actor, which the trail already reads as the system.
 
 **6.2 Migration `701_portal_request.sql`.**
@@ -94,7 +94,19 @@ Three functions in schema `app`, `security definer`, `set search_path = pg_catal
 
 `db/policies/portal/access.sql` — `portal_invite`: tenant isolation; select, insert and update for owner and admin only; nobody else, and never a contact, not even their own. `portal_request`: tenant isolation; select for owner, admin, lead practitioner, and a contact for their own client; insert for a contact for their own client (and the three office roles); update of the handling columns for the three office roles; delete for nobody. Every condition passes through `app.client_erasure_gate` as the ledger's do.
 
-`db/policies/portal/money.sql` — one restrictive select policy on each of `package_purchase`, `entitlement`, `invoice`, `invoice_line`, `payment` and `billing_document`: `not app.actor_has_role('client_contact') or app.actor_is_adult_contact_of(client_id)`. Restrictive, so it can only narrow what `ledger_readers` grants, and a staff member who is also a contact keeps their staff reach.
+`db/policies/portal/money.sql` — one restrictive select policy on each of `package_purchase`, `entitlement`, `invoice`, `invoice_line`, `payment` and `billing_document`:
+
+```
+not app.actor_has_role('client_contact')
+  or app.actor_has_role('owner') or app.actor_has_role('admin')
+  or app.actor_has_role('lead_practitioner')
+  or app.actor_has_role('practitioner') or app.actor_has_role('finance')
+  or app.actor_is_adult_contact_of(client_id)
+```
+
+Restrictive, so it can only narrow what `ledger_readers` grants; the only actor it narrows is one holding `client_contact` and no practice role at all, which is the household, which is the rule.
+
+**The practice's own roles are named because the two-term form did not deliver the sentence beside it.** This section printed `not app.actor_has_role('client_contact') or app.actor_is_adult_contact_of(client_id)` until 2026-09-05, and for a staff member who is also a contact the first term is false — the founder is a contact of her own child's record — so the second would have narrowed her to the households she is a contact of and taken her admin reach over every other household's money. One person is several things at once (`00-data-model.md` section 2), and a policy written as though a role were exclusive says something other than what it means to. The added disjuncts can only relax a narrowing and never widen past `ledger_readers`.
 
 Two arms in files other streams own, applied by this piece under the same authorisation:
 
@@ -121,7 +133,7 @@ Every signed-in route runs inside the request context, resolves `clientIds` with
 | `GET /api/portal/access`, `POST /api/portal/access/:contactId/invite`, `POST …/revoke` | section 3.8; `portal.access.manage`. Invite answers the link once and the drafted message; the token is never readable again |
 | `GET /api/portal/requests`, `POST /api/portal/requests/:id/handle` | the office side; `portal.request.handle` |
 
-**The door**, `POST /api/portal/invite/redeem`, is public and mounted ahead of the authentication fence with its own budget (`RATE_LIMIT_INVITE_DOOR_PER_MINUTE`, default 10 per address). Body `{ token, email, password }`. It opens a transaction as `app_role` with only the request id stamped, asks `app.portal_invite_status`, and answers 404 for `unknown` and 410 for the other three, without saying which. For `valid` it creates the sign-in through the auth-admin seam (section 8) — or, for a `password_reset`, sets the new password on the existing one — then calls `app.redeem_portal_invite`. If the database step fails after the sign-in was created, the sign-in is deleted again through the seam and the failure logged by request id; the person is told to try the link again. Answers `{ ok: true }`; on a laptop, where the seam is the fake, it also answers `authId` so the development door can sign the person in.
+**The door**, `POST /api/portal/invite/redeem`, is public and mounted ahead of the authentication fence with its own budget (`RATE_LIMIT_INVITE_DOOR_PER_MINUTE`, default 10 per address). Body `{ token, email, password }`. It opens a transaction as `app_role` with only the request id stamped, asks `app.portal_invite_status`, and answers **404 for every state that is not `valid`** — unknown, expired, used, revoked and an invitation naming a practice account alike. One status, not two: a 404 for an invented token beside a 410 for a dead one tells a caller which links once existed, and saying nothing costs nothing. The invitation page's own sentence (section 3.7) is the same in all five cases and does not change. For `valid` it creates the sign-in through the auth-admin seam (section 8) — or, for a `password_reset`, sets the new password on the existing one — then calls `app.redeem_portal_invite`. If the database step fails after the sign-in was created, the sign-in is deleted again through the seam and the failure logged by request id; the person is told to try the link again. Answers `{ ok: true }`; on a laptop, where the seam is the fake, it also answers `authId` so the development door can sign the person in.
 
 Invite issuing (`POST …/invite`): if the contact has no `app_user`, creates one (`display_name` from the contact's names, `preferred_locale` from the client's, status active) with a `client_contact` role and writes `contact.user_id`; if one exists and is suspended, reactivates it; issues a 32-byte random token, stores its sha256, kind `first_sign_in` when `auth_id` is null and `password_reset` otherwise, expiry seven days; answers the link and the message. Revoke: `app_user.status = 'suspended'` (so `app.resolve_actor` refuses the next request and the shell signs the person out) and `revoked_at` on every open invite. Both write `logAction` rows naming the contact's id and nothing else.
 

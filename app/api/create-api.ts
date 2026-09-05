@@ -31,6 +31,7 @@ import { mountBilling } from './billing/routes';
 import { mountClients } from './clients/list';
 import { mountClientRecord } from './clients/mount';
 import { mountDevSession, type DevSessionOptions } from './dev-session';
+import { mountPortal, mountPortalDoor, type AuthAdminProvider } from './portal/mount';
 import { mountPractice } from './practice/routes';
 import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
 import { mountSessions } from './sessions/checkin';
@@ -50,6 +51,11 @@ import { mountSessions } from './sessions/checkin';
  * The document store (docs/SEAMS.md) is the one dependency published ahead of
  * the fence: the local implementation's signed URLs point back at this API's
  * own /api/storage route, whose authorisation is the signature in the link.
+ *
+ * Two routes answer somebody with no session, and both are mounted before the
+ * fence with a budget of their own: the development sign-in door, which exists
+ * only on a laptop, and the portal's invitation door, whose authorisation is
+ * the one-time token in the link (docs/SPEC/client-portal.md section 7).
  */
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
@@ -66,6 +72,13 @@ export type ApiOptions = RequestContextDeps & {
   appEnv?: string;
   /** The Supabase project the browser signs in against; named in the content security policy. */
   supabaseUrl?: string;
+  /**
+   * PUBLIC_APP_URL: where this deployment's app answers, as the practice hands
+   * it out. The portal's invitation link is built on it and never on the
+   * request's own Host, which is whatever the caller typed
+   * (docs/SPEC/client-portal.md section 7).
+   */
+  publicAppUrl?: string;
   limits?: Partial<RateLimits>;
   /** How many proxies in front of the API are trusted for X-Forwarded-For (0: none). */
   trustedProxyHops?: number;
@@ -75,6 +88,13 @@ export type ApiOptions = RequestContextDeps & {
   identityKeys?: IdentityKeys;
   /** The document store (domain/shared/storage, docs/SEAMS.md). Absent: no route can read c.get('storage'). */
   storage?: ServerStorageProvider;
+  /**
+   * Whoever holds the sign-ins (app/api/portal/auth-admin.ts, docs/SEAMS.md).
+   * Absent: the portal's invitation door is not mounted at all, so a
+   * deployment that has not been given one answers 404 there rather than
+   * appearing to work (docs/CHANGE-REQUESTS/client-portal-05.md item 3).
+   */
+  authAdmin?: AuthAdminProvider;
 };
 
 export function createApi(deps: ApiOptions): Hono<ApiEnv> {
@@ -168,6 +188,27 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     mountDevSession(api, deps.devSession);
   }
 
+  // The portal's invitation door: public, ahead of the fence, with its own
+  // budget, because the person on the other end has no account yet
+  // (docs/SPEC/client-portal.md section 7). It opens its own transaction and
+  // stamps only the request id; nothing else in this API answers unsigned.
+  if (deps.authAdmin) {
+    api.use(
+      '/api/portal/invite/*',
+      rateLimit({
+        name: 'invite-door',
+        windowMs: MINUTE,
+        max: limits.inviteDoorPerMinute,
+        keyOf: byAddress,
+      }),
+    );
+    mountPortalDoor(api, {
+      pool: deps.pool,
+      authAdmin: deps.authAdmin,
+      appEnv: deps.appEnv,
+    });
+  }
+
   api.use('/api/*', withRequestContext(deps));
   // After the fence, not before: no route ahead of authentication can ever
   // read c.get('identityKeys'), even by accident (security review, round 3).
@@ -192,9 +233,10 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     // The person's own row, read as themselves under row security.
     const { rows } = await c
       .get('db')
-      .query<{ display_name: string }>('select display_name from app_user where id = $1', [
-        actor.userId,
-      ]);
+      .query<{ display_name: string; preferred_locale: 'en' | 'ar' }>(
+        'select display_name, preferred_locale from app_user where id = $1',
+        [actor.userId],
+      );
     return c.json(
       MeResponse.parse({
         userId: actor.userId,
@@ -202,6 +244,9 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
         tenantId: actor.tenantId,
         roles: actor.roles,
         capabilities: actor.capabilities,
+        // The person's own language, read in the same query the name comes
+        // from, so the portal's first render is in it (client-portal-05 item 2).
+        preferredLocale: rows[0]?.preferred_locale ?? 'en',
       }),
     );
   });
@@ -213,6 +258,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   mountBilling(api, deps.now);
   mountAppointments(api, deps.now);
   mountSessions(api, deps.now);
+  mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
 
   // An unknown route answers in the same shape as every other refusal.
   api.notFound((c) => c.json({ error: 'not_found', requestId: c.get('requestId') ?? null }, 404));
