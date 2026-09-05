@@ -47,6 +47,7 @@ const api = createApi({
   devSession,
   appEnv: process.env.APP_ENV,
   supabaseUrl: process.env.SUPABASE_URL,
+  publicAppUrl: process.env.PUBLIC_APP_URL,
   limits: limitsFromEnv(process.env),
   trustedProxyHops: trustedProxyHopsFromEnv(process.env),
   identityKeys,

@@ -5,6 +5,7 @@ import { describeAccess, inviteExpiry } from '../../../domain/portal';
 import { canActor } from '../../../domain/shared';
 import { logAction, logReads } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
+import { isLoopback } from '../dev-session';
 import { fullName } from './household';
 import { AccessResponse, InviteResponse, OfficeRequestsResponse, RevokeResponse } from './schema';
 
@@ -116,7 +117,50 @@ export function invitationUrl(origin: string, token: string): string {
   return `${origin.replace(/\/+$/, '')}/portal/invite/${token}`;
 }
 
-export function mountPortalAccess(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+export type PortalAccessOptions = {
+  /** `PUBLIC_APP_URL`: where this deployment's app answers, as the practice hands it out. */
+  publicAppUrl?: string | undefined;
+  /** The deployment's own `APP_ENV`. Only a laptop may fall back to the request. */
+  appEnv?: string | undefined;
+};
+
+/**
+ * The origin an invitation link is built on, or null when there is none this
+ * server may vouch for.
+ *
+ * A `Host` header is whatever the caller typed, and the answer to this route
+ * is a live token that the practice then copies into WhatsApp. Reading the
+ * origin off the request means a forged header on the owner's own request
+ * produces a working link at somebody else's domain — so the origin comes from
+ * a configured `PUBLIC_APP_URL` and from nothing else.
+ *
+ * The one exception is the laptop it is developed on, where no such variable is
+ * set and the app answers on a port on this machine: in development, and only
+ * when the request itself names this machine, the request's own origin is used.
+ * Anywhere else an unset variable means no link is issued at all.
+ */
+function linkOrigin(requestUrl: string, options: PortalAccessOptions): string | null {
+  const configured = options.publicAppUrl?.trim();
+  if (configured !== undefined && configured.length > 0) {
+    try {
+      const url = new URL(configured);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+      return configured.replace(/\/+$/, '');
+    } catch {
+      // Not a URL at all, which is the same as absent: a link cannot be built.
+      return null;
+    }
+  }
+  if (options.appEnv !== 'development') return null;
+  const request = new URL(requestUrl);
+  return isLoopback(request.host) ? request.origin : null;
+}
+
+export function mountPortalAccess(
+  api: Hono<ApiEnv>,
+  now: () => Date = () => new Date(),
+  options: PortalAccessOptions = {},
+): void {
   api.get('/api/portal/access', async (c) => {
     const requestId = c.get('requestId');
     const actor = c.get('actor');
@@ -175,6 +219,14 @@ export function mountPortalAccess(api: Hono<ApiEnv>, now: () => Date = () => new
     }
     const params = ContactParams.safeParse(c.req.param());
     if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
+
+    // Before anything is written. An invitation whose link cannot be built is
+    // an account created, a token spent and a row in the table for nothing, so
+    // the deployment's own address is settled first or nothing is issued.
+    const origin = linkOrigin(c.req.url, options);
+    if (origin === null) {
+      return c.json({ error: 'public_app_url_unset', requestId }, 503);
+    }
     const db = c.get('db');
 
     const found = await db.query<{
@@ -281,7 +333,6 @@ export function mountPortalAccess(api: Hono<ApiEnv>, now: () => Date = () => new
       { contactId: row.contact_id, kind },
     );
 
-    const origin = new URL(c.req.url).origin;
     const url = invitationUrl(origin, token);
     return c.json(
       InviteResponse.parse({

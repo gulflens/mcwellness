@@ -72,6 +72,13 @@ export type ApiOptions = RequestContextDeps & {
   appEnv?: string;
   /** The Supabase project the browser signs in against; named in the content security policy. */
   supabaseUrl?: string;
+  /**
+   * PUBLIC_APP_URL: where this deployment's app answers, as the practice hands
+   * it out. The portal's invitation link is built on it and never on the
+   * request's own Host, which is whatever the caller typed
+   * (docs/SPEC/client-portal.md section 7).
+   */
+  publicAppUrl?: string;
   limits?: Partial<RateLimits>;
   /** How many proxies in front of the API are trusted for X-Forwarded-For (0: none). */
   trustedProxyHops?: number;
@@ -251,7 +258,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   mountBilling(api, deps.now);
   mountAppointments(api, deps.now);
   mountSessions(api, deps.now);
-  mountPortal(api, deps.now);
+  mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
 
   // An unknown route answers in the same shape as every other refusal.
   api.notFound((c) => c.json({ error: 'not_found', requestId: c.get('requestId') ?? null }, 404));

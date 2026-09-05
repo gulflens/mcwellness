@@ -638,6 +638,52 @@ describe('the practice’s own Portal screen', () => {
     expect(Number(raw.rows[0]?.n)).toBe(0);
   });
 
+  it('builds the link on the configured public URL, whatever the request claims to be', async () => {
+    // The answer to this route is a live token the practice copies into
+    // WhatsApp. A Host header is whatever the caller typed, so the origin comes
+    // from PUBLIC_APP_URL and from nowhere else.
+    const api = h.apiWith({ publicAppUrl: 'https://portal.example.com/' });
+    const res = await api.request(
+      `https://not-this-host.example.net/api/portal/access/${PORTAL.fatherContact}/invite`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await h.authHeader(PORTAL.adminAuth)) },
+        body: '{}',
+      },
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as InviteResponse;
+    expect(body.url.startsWith('https://portal.example.com/portal/invite/')).toBe(true);
+    expect(body.url).not.toContain('not-this-host');
+  });
+
+  it('issues nothing at all where no public URL is configured', async () => {
+    // A laptop is the one place the request's own origin will do, and only
+    // because it names this machine. Everywhere else an unset variable means
+    // no account is created, no token is spent and no row is written.
+    const cases = [
+      { api: h.apiWith({ appEnv: 'staging' }), url: '/api/portal/access' },
+      // Development, but a request that does not name this machine.
+      { api: h.api, url: 'https://portal.example.net/api/portal/access' },
+    ];
+    for (const { api, url } of cases) {
+      const res = await api.request(`${url}/${PORTAL.motherSecondContact}/invite`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await h.authHeader(PORTAL.adminAuth)) },
+        body: '{}',
+      });
+      expect(res.status).toBe(503);
+      expect((await res.json()) as { error: string }).toMatchObject({
+        error: 'public_app_url_unset',
+      });
+    }
+    const invites = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from portal_invite where contact_id = $1',
+      [PORTAL.motherSecondContact],
+    );
+    expect(Number(invites.rows[0]?.n)).toBe(0);
+  });
+
   it('revokes the account rather than the link, and closes every open invitation', async () => {
     const res = await h.callAs(
       'POST',
