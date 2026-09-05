@@ -41,6 +41,14 @@
   gap: var(--s-1);
 }
 
+/* One filed file: the button that opens it, and whatever it has to say after. */
+.assessments__file {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--s-1);
+}
+
 .assessments__attach {
   display: flex;
   flex-direction: column;
