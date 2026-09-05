@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
@@ -305,5 +306,51 @@ describe('a receipt', () => {
   it('shows the amount received, to the fils', () => {
     expect(page).toContain('Amount received (AED)');
     expect(page).toContain('700.00');
+  });
+});
+
+/**
+ * The rendered bytes themselves, pinned.
+ *
+ * The test above proves the writer is deterministic — the same row rendered
+ * twice is the same file — but determinism says nothing about *which* file, so
+ * a refactor that quietly moved a byte would pass it. These three hashes are
+ * the missing half: they say that the invoice, the registered invoice and the
+ * receipt are the documents they were when this was written, so any change to
+ * the writer has to declare itself here.
+ *
+ * **When one of these fails.** It is a fact to explain, not a number to
+ * refresh. If the change was deliberate, move the golden in the same commit
+ * that made it and say in the message what moved and why. If it was not, the
+ * writer changed a document nobody meant to change.
+ *
+ * These depend on the version of the font package the faces are read from
+ * (`app/api/billing/fonts.ts` embeds the programs verbatim), so upgrading it
+ * moves all three at once — which is itself worth seeing rather than not.
+ */
+describe('the bytes of a rendered document', () => {
+  const sha256 = (bytes: Uint8Array): string =>
+    createHash('sha256').update(Buffer.from(bytes)).digest('hex');
+
+  const GOLDEN: ReadonlyArray<readonly [string, () => Uint8Array, string]> = [
+    [
+      'an invoice from an unregistered practice',
+      () => renderDocument(invoiceFor(UNREGISTERED), fonts),
+      'be2d58f7062ce25bbd68b81f088d5f494ac0eaf5b01e42ec07f2289e32368dbb',
+    ],
+    [
+      'an invoice from a registered practice',
+      () => renderDocument(invoiceFor(REGISTERED), fonts),
+      'e810db7bb5c027dfde70daf39ff56fdf9af434281ac700daeac3b6bb0c697563',
+    ],
+    [
+      'a receipt',
+      () => renderDocument(receiptFor(UNREGISTERED), fonts),
+      'ad3aca707e149e85e3787aedf500c008ecafe52b6fa31e0f823b8da5c94b1e77',
+    ],
+  ];
+
+  it.each(GOLDEN)('%s renders to the bytes it always has', (_name, render, golden) => {
+    expect(sha256(render())).toBe(golden);
   });
 });
