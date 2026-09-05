@@ -276,12 +276,20 @@ begin
     -- The three purposes the recording gate branches on, and no others: a
     -- household's photo, research or marketing answers are real rows and are
     -- not this door's business.
+    --
+    -- **Active and not expired**, both, exactly as 301's app.checkin_context
+    -- asks it. `status` alone would let a participation consent that ran out
+    -- last month admit this afternoon's recording, which is the one thing
+    -- reading the gates at the moment of writing exists to prevent
+    -- (.claude/rules/compliance.md). The shared rule is the point of the two
+    -- functions being the same shape.
     select coalesce(array_agg(distinct co.purpose::text), '{}'::text[])
       into v_purposes
       from public.consent co
      where co.client_id = p_client_id
        and co.tenant_id = v_tenant_id
        and co.status = 'active'
+       and (co.expires_at is null or co.expires_at > now())
        and co.purpose in ('participation', 'minor_participation', 'home_visit');
   end if;
 

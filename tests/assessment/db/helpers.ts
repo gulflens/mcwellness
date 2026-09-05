@@ -69,11 +69,19 @@ export async function seedConsent(
     purpose: 'participation' | 'minor_participation' | 'home_visit';
     textDocumentId: string;
     status?: 'active' | 'withdrawn' | 'expired' | 'superseded';
+    /**
+     * When the agreement runs out. Nothing in the schema stops a row from
+     * saying `active` with a date already past — the status is what a person
+     * did, the date is what time did — so the gate must read both, and a
+     * fixture that can set one without the other is how that is proved.
+     */
+    expiresAt?: string | null;
   },
 ): Promise<void> {
   await client.query(
     'insert into consent (id, tenant_id, client_id, given_by_contact_id, purpose, version, ' +
-      "text_document_id, status, method) values ($1, $2, $3, $4, $5, 1, $6, $7, 'app_signature')",
+      'text_document_id, status, expires_at, method) values ($1, $2, $3, $4, $5, 1, $6, $7, $8, ' +
+      "'app_signature')",
     [
       consent.id,
       consent.tenantId,
@@ -82,6 +90,7 @@ export async function seedConsent(
       consent.purpose,
       consent.textDocumentId,
       consent.status ?? 'active',
+      consent.expiresAt ?? null,
     ],
   );
 }

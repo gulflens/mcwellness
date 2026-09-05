@@ -18,6 +18,8 @@ import {
   seedAppointment,
   seedAssessment,
   seedClientDocument,
+  seedConsent,
+  seedConsentDocument,
   seedContact,
 } from './helpers';
 
@@ -56,6 +58,7 @@ const OTHER_CLIENT_DOCUMENT = assessmentId('c2', 1);
 const LINK = assessmentId('c3', 1);
 const FOREIGN_PRACTITIONER_USER = assessmentId('a7', 1);
 const FOREIGN_PRACTITIONER = assessmentId('a7', 2);
+const WORDING = assessmentId('a8', 1);
 
 let client: pg.Client;
 
@@ -176,6 +179,8 @@ beforeAll(async () => {
     clientId: IDS.clientB,
     practitionerId: FOREIGN_PRACTITIONER,
   });
+
+  await seedConsentDocument(client, IDS.tenantA, WORDING);
 
   await seedClientDocument(client, {
     id: DOCUMENT_A,
@@ -515,5 +520,75 @@ describe('the constraints a measurement carries', () => {
     );
     expect(link.rows[0]?.description).toBe('audited: client');
     expect(link.rows[0]?.triggers).toBe(1);
+  });
+});
+
+/** An instant either side of now, as a timestamp the column takes. */
+function daysFromNow(days: number): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+describe('the door the recording gate reads', () => {
+  type Context = {
+    client_found: boolean;
+    visible: boolean;
+    active_consent_purposes: string[];
+  };
+
+  async function contextFor(userId: string, roles: string, clientId: string): Promise<Context> {
+    return as(userId, roles, async () => {
+      const { rows } = await client.query<Context>(
+        'select client_found, visible, active_consent_purposes ' +
+          "from app.assessment_context($1, 'brain-map')",
+        [clientId],
+      );
+      return rows[0]!;
+    });
+  }
+
+  /** Consents for the client on the schedule, taken away again afterwards. */
+  async function withConsents<T>(
+    rows: readonly { purpose: 'participation' | 'home_visit'; expiresAt?: string | null }[],
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    await client.query('savepoint consents');
+    try {
+      for (const [index, row] of rows.entries()) {
+        await seedConsent(client, {
+          id: assessmentId('d1', 10 + index),
+          tenantId: IDS.tenantA,
+          clientId: IDS.clientA,
+          givenByContactId: CONTACT,
+          purpose: row.purpose,
+          textDocumentId: WORDING,
+          expiresAt: row.expiresAt ?? null,
+        });
+      }
+      return await fn();
+    } finally {
+      await client.query('rollback to savepoint consents');
+    }
+  }
+
+  it('counts a consent active only while it has not run out', async () => {
+    // `status` is what a person did and `expires_at` is what time did. A
+    // participation agreement that ran out last month still says 'active', and
+    // reading the status alone would let it admit this afternoon's recording —
+    // which is the drift asking the gates at the moment of writing exists to
+    // prevent. app.checkin_context (301) asks both; so does this door.
+    const answer = await withConsents(
+      [{ purpose: 'participation', expiresAt: daysFromNow(-30) }, { purpose: 'home_visit' }],
+      async () => contextFor(MORE_IDS.practitionerUserA, 'practitioner', IDS.clientA),
+    );
+    expect(answer.visible).toBe(true);
+    expect(answer.active_consent_purposes).toEqual(['home_visit']);
+  });
+
+  it('counts one that has not run out, and one with no end at all', async () => {
+    const answer = await withConsents(
+      [{ purpose: 'participation', expiresAt: daysFromNow(30) }, { purpose: 'home_visit' }],
+      async () => contextFor(MORE_IDS.practitionerUserA, 'practitioner', IDS.clientA),
+    );
+    expect([...answer.active_consent_purposes].sort()).toEqual(['home_visit', 'participation']);
   });
 });
