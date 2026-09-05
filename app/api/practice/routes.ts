@@ -35,7 +35,7 @@ import { Practice, PracticeResponse, UpdatePracticeInput } from './schema';
 const SELECT_PRACTICE =
   'select t.legal_name, t.legal_name_ar, t.trn, t.licence_number, t.licensing_authority, ' +
   "to_char(t.licence_expires_on, 'YYYY-MM-DD') as licence_expires_on, " +
-  't.vat_registered, t.vat_trn, t.default_emirate, t.timezone, ' +
+  't.vat_registered, t.vat_trn, t.whatsapp_number, t.default_emirate, t.timezone, ' +
   'l.id as location_id, l.display_address, l.emirate, ' +
   'extensions.st_y(l.entrance_point::extensions.geometry) as latitude, ' +
   'extensions.st_x(l.entrance_point::extensions.geometry) as longitude ' +
@@ -51,6 +51,7 @@ type PracticeRow = {
   licence_expires_on: string | null;
   vat_registered: boolean;
   vat_trn: string | null;
+  whatsapp_number: string | null;
   default_emirate: string;
   timezone: string;
   location_id: string | null;
@@ -78,6 +79,7 @@ function view(row: PracticeRow): Practice {
     licenceExpiresOn: row.licence_expires_on,
     vatRegistered: row.vat_registered,
     vatTrn: row.vat_trn,
+    whatsappNumber: row.whatsapp_number,
     defaultEmirate: row.default_emirate,
     timezone: row.timezone,
     address:
@@ -124,7 +126,13 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const body = UpdatePracticeInput.safeParse(bodyJson);
     if (!body.success) {
       // A code, never zod's own message: the screen holds the sentences.
-      const code = body.error.issues[0]?.path[0] === 'vatTrn' ? 'vat_trn_required' : 'bad_request';
+      const field = body.error.issues[0]?.path[0];
+      const code =
+        field === 'vatTrn'
+          ? 'vat_trn_required'
+          : field === 'whatsappNumber'
+            ? 'whatsapp_number_invalid'
+            : 'bad_request';
       return c.json({ error: 'bad_request', code, requestId }, 400);
     }
     const current = await readPractice(db);
@@ -144,8 +152,8 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
 
     await db.query(
       'update tenant set legal_name = $1, legal_name_ar = $2, trn = $3, licence_number = $4, ' +
-        'licensing_authority = $5, licence_expires_on = $6, vat_registered = $7, vat_trn = $8 ' +
-        'where id = app.current_tenant_id()',
+        'licensing_authority = $5, licence_expires_on = $6, vat_registered = $7, vat_trn = $8, ' +
+        'whatsapp_number = $9 where id = app.current_tenant_id()',
       [
         wanted.legalName,
         wanted.legalNameAr,
@@ -155,6 +163,7 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         wanted.licenceExpiresOn,
         wanted.vatRegistered,
         wanted.vatTrn,
+        wanted.whatsappNumber,
       ],
     );
 

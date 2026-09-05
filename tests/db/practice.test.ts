@@ -83,6 +83,7 @@ async function form(overrides: Record<string, unknown> = {}): Promise<Record<str
     licenceExpiresOn: practice.licenceExpiresOn,
     vatRegistered: practice.vatRegistered,
     vatTrn: practice.vatTrn ?? '',
+    whatsappNumber: practice.whatsappNumber ?? '',
     address: practice.address,
     ...overrides,
   };
@@ -194,6 +195,34 @@ describe('PATCH /api/practice', () => {
     });
     expect(res.status).toBe(200);
     expect(await read(authIdOf(0))).toMatchObject({ vatRegistered: false, vatTrn: null });
+  });
+
+  it("records the practice's own WhatsApp number, and refuses one that is not E.164", async () => {
+    // What the client portal's ask-for-a-visit button opens (migration 910,
+    // docs/SPEC/client-portal.md section 6.4).
+    const refused = await call('PATCH', authIdOf(0), {
+      reason: 'The practice number changed.',
+      body: await form({ whatsappNumber: '0501234' }),
+    });
+    expect(refused.status).toBe(400);
+    expect((await refused.json()) as { code?: string }).toMatchObject({
+      code: 'whatsapp_number_invalid',
+    });
+
+    const saved = await call('PATCH', authIdOf(0), {
+      reason: 'The practice number changed.',
+      body: await form({ whatsappNumber: '+971 50 000 0024' }),
+    });
+    expect(saved.status).toBe(200);
+    expect(await read(authIdOf(0))).toMatchObject({ whatsappNumber: '+971500000024' });
+
+    // And cleared again: a practice that records none shows the portal's
+    // sentence without a button.
+    await call('PATCH', authIdOf(0), {
+      reason: 'The practice has no WhatsApp number for now.',
+      body: await form({ whatsappNumber: '' }),
+    });
+    expect(await read(authIdOf(0))).toMatchObject({ whatsappNumber: null });
   });
 
   it('saves the registered address onto the practice’s own location row', async () => {

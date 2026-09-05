@@ -31,6 +31,8 @@ const PRACTICE = {
   licenceExpiresOn: '2027-12-31',
   vatRegistered: false,
   vatTrn: null,
+  // What the client portal's ask-for-a-visit button opens (migration 910).
+  whatsappNumber: null,
   defaultEmirate: 'DXB',
   timezone: 'Asia/Dubai',
   address: {
@@ -209,6 +211,27 @@ describe('Practice settings — the save', () => {
     // The drawer closes and the page shows what came back, not what was typed.
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByText('Synthetic Wellness Studio FZ-LLC')).toBeTruthy();
+  });
+
+  it("saves the practice's WhatsApp number, and refuses one that is not a number", async () => {
+    const { calls } = mount(() =>
+      json({ practice: { ...PRACTICE, whatsappNumber: '+971500000024' } }),
+    );
+    await openTheDrawer();
+    type('WhatsApp number (optional)', 'not a number');
+    type('Why this changes', 'The practice number changed.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(await screen.findByText('A WhatsApp number is +971 50 000 0000.')).toBeTruthy();
+    expect(saves(calls)).toHaveLength(0);
+
+    // The spaces a person types are stripped: the column holds E.164.
+    type('WhatsApp number (optional)', '+971 50 000 0024');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({
+      whatsappNumber: '+971500000024',
+    });
+    expect(await screen.findByText('+971500000024')).toBeTruthy();
   });
 
   it('will not save without a reason, and never reaches the API to find out', async () => {
