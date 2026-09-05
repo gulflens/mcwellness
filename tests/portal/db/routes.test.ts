@@ -857,6 +857,27 @@ describe('the door, which is the one route outside the fence', () => {
     expect((await res.json()) as { code?: string }).toMatchObject({ code: 'password' });
   });
 
+  it('refuses to open at all where the seam is the fallback and the deployment is not a laptop', async () => {
+    // Staging with no SUPABASE_AUTH_ADMIN_KEY is the case: the fallback would
+    // spend the invitation and write a fabricated uuid onto app_user.auth_id
+    // with no sign-in behind it. Development and the tests are the two words
+    // that pass, which is what authAdminFromEnv asks as well.
+    for (const appEnv of ['staging', 'production', undefined]) {
+      const api = h.apiWith({ appEnv });
+      const res = await api.request('/api/portal/invite/redeem', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          token: NOTHING_LINK,
+          email: 'cedar.meadow@example.com',
+          password: CHOSEN,
+        }),
+      });
+      expect(res.status).toBe(503);
+      expect((await res.json()) as { error: string }).toEqual({ error: 'auth_admin_unavailable' });
+    }
+  });
+
   it('needs no session at all, and a session-bearing request is no different', async () => {
     // The door sits ahead of the fence, so an authorization header is simply
     // not read: what decides is the token in the body and nothing else.

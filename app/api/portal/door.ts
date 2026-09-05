@@ -44,12 +44,16 @@ const INVITE_DOOR_PATH = '/api/portal/invite/redeem';
  */
 const STAMP_REQUEST_ID = "select set_config('app.request_id', $1, true)";
 
+/** The two environments where a sign-in that verifies nothing is the point. */
+const LAPTOP = new Set(['development', 'test']);
+
 export type PortalDoorOptions = {
   pool: PoolLike;
   authAdmin: AuthAdminProvider;
   /**
-   * The deployment's own APP_ENV. The door refuses to mint sign-ins that
-   * verify nothing on a production deployment whose key was never configured.
+   * The deployment's own APP_ENV. Anywhere but a laptop or the tests, the door
+   * refuses to mint sign-ins that verify nothing — the same two words
+   * `authAdminFromEnv` chooses the fallback by.
    */
   appEnv?: string | undefined;
 };
@@ -78,10 +82,14 @@ export function mountPortalDoor(api: Hono<ApiEnv>, options: PortalDoorOptions): 
     const { token, email, password } = body.data;
     const tokenHash = createHash('sha256').update(token).digest();
 
-    if (options.authAdmin.kind === 'fake' && options.appEnv === 'production') {
-      // Belt and braces beneath the environment check in authAdminFromEnv: a
-      // production deployment with no key configured must not mint sign-ins
-      // that verify nothing.
+    if (options.authAdmin.kind === 'fake' && !LAPTOP.has(options.appEnv ?? '')) {
+      // Belt and braces beneath the environment check in authAdminFromEnv,
+      // which asks the same question of the same two words: a deployment that
+      // is not a laptop and has no SUPABASE_AUTH_ADMIN_KEY must not mint
+      // sign-ins that verify nothing. Staging is such a deployment — the
+      // fallback would spend the invitation, write a fabricated uuid onto
+      // app_user.auth_id and leave nobody able to sign in behind it — and so
+      // is a deployment whose APP_ENV was never set at all.
       return c.json({ error: 'auth_admin_unavailable' }, 503);
     }
 
