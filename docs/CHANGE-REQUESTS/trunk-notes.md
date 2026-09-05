@@ -573,3 +573,12 @@ A guardian and an emergency-contact field on the Family screen. The platform's
 the kind; adding a field is a personal-data decision with a stated need
 (`.claude/rules/compliance.md`), so it is left out and named in the spec's
 section 12 for the operator to ask for.
+
+### 6. A flaky focus assertion, noted for the trunk (added after piece seven merged)
+
+`app/admin/settings/PracticeLogo.test.tsx`, the focus assertion near line
+208, fails under full-suite load about two runs in five on the laptop and
+passes alone and on re-run. Untouched by piece seven, not reproduced in CI,
+and not fixed in passing (it is the trunk's file and the round was the
+portal's). A small thing for the next trunk round: wait for the element to
+receive focus rather than assert it on the same tick.
