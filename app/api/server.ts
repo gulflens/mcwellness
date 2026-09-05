@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { createPool } from './_middleware/db';
 import { identityKeysFromEnv } from './_middleware/identity-key';
 import { limitsFromEnv, trustedProxyHopsFromEnv } from './_middleware/rate-limit';
+import { routingFromEnv } from './_middleware/routing';
 import { storageFromEnv } from './_middleware/storage';
 import { issuerFor, verifierFromEnv } from './_middleware/token-verifier';
 import { createApi } from './create-api';
@@ -15,7 +16,7 @@ if (!apiDatabaseUrl) {
   process.exit(1);
 }
 
-// All four throw a plain-language message at startup rather than failing per
+// All five throw a plain-language message at startup rather than failing per
 // request. The store is chosen here and never reached until a call is made, so
 // a project that is down cannot stop the API from starting (docs/SEAMS.md).
 const pool = createPool(apiDatabaseUrl);
@@ -23,6 +24,11 @@ const verifier = verifierFromEnv(process.env);
 const identityKeys = identityKeysFromEnv(process.env);
 const storage = storageFromEnv(process.env);
 console.log(`Documents: ${storage.describe()}.`);
+// The routing seam (docs/SEAMS.md). Chosen here and never reached until a day
+// sheet asks for an estimate, so a vendor that is down cannot stop the API
+// from starting; the key never leaves this process.
+const routing = routingFromEnv(process.env);
+console.log(`Drive estimates: ${routing.describe()}.`);
 // The portal's sign-ins (docs/SEAMS.md). Chosen here and never reached until
 // somebody redeems an invitation, so a project that is down cannot stop the
 // API from starting.
@@ -52,6 +58,7 @@ const api = createApi({
   trustedProxyHops: trustedProxyHopsFromEnv(process.env),
   identityKeys,
   storage,
+  routing,
   authAdmin,
 });
 

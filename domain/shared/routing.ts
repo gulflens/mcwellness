@@ -39,8 +39,20 @@ export type RoutingProvider = {
   readonly kind: 'google' | 'straight-line';
   /** One line naming the implementation. Never the key. */
   describe(): string;
-  /** One estimate per leg, in the order the legs were given. */
-  driveMatrix(legs: readonly DriveLeg[]): Promise<DriveEstimate[]>;
+  /**
+   * One estimate per leg, in the order the legs were given.
+   *
+   * `factors` are the practice's own editable figures
+   * (`scheduling_setting.drive_road_factor` and `drive_peak_multiplier`,
+   * migration 204). They are on the call rather than on the implementation
+   * because the fallback is the thing that reads them and the caller is the
+   * thing that has the practice's row in hand; the real implementation ignores
+   * them, because a vendor that measures the traffic has no use for a guess at
+   * it. The spec's own sketch of this interface (section 5.1) shows one
+   * argument; this second one is what keeps "the fallback's figures are data,
+   * not code" true without the seam reading a table.
+   */
+  driveMatrix(legs: readonly DriveLeg[], factors: DriveFactors): Promise<DriveEstimate[]>;
   /** A PNG of the day's stops in order, or null when this implementation draws none. */
   dayPicture(points: readonly GeoPoint[]): Promise<Uint8Array | null>;
 };

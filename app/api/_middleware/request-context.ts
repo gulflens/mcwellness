@@ -7,6 +7,7 @@ import { cleanText } from './text';
 import type { Actor } from '@domain/shared';
 import type { IdentityKeys } from '@domain/shared/identity';
 import { ResolvedActorRow } from './actor-schema';
+import type { RoutingProvider } from '../../../domain/shared/routing';
 import type { ServerStorageProvider } from './storage/types';
 import type { TokenVerifier } from './token-verifier';
 
@@ -51,6 +52,9 @@ export type AfterCommitWork = () => void | Promise<void>;
 // (./storage/index.ts's withStorage), and unlike identityKeys it is published
 // ahead of the fence, because the local signed-URL route must answer without
 // a session.
+// routing is the same shape as storage but sits below the fence: no route
+// ahead of authentication asks how long a drive takes, and the seam's key must
+// never be reachable from one that does (./routing/index.ts's withRouting).
 // afterCommit is published by this middleware, so — like actor, db and
 // requestId — it exists for every route below the fence and for none above it.
 export type ApiEnv = {
@@ -61,6 +65,7 @@ export type ApiEnv = {
     afterCommit: (work: AfterCommitWork) => void;
     identityKeys: IdentityKeys | undefined;
     storage: ServerStorageProvider | undefined;
+    routing: RoutingProvider | undefined;
   };
 };
 

@@ -34,10 +34,15 @@ import { loadSession, readEvents, resolvePractitioner, type SessionRow } from '.
  * 4. the audit rows: the triggers write what changed, and `session_closed`
  *    is written here as the sensitive action it is, carrying the request id.
  *
- * The setup photo files no `document` row, because there is nowhere to put
- * its bytes yet: see ./photo-availability.ts, and
- * docs/CHANGE-REQUESTS/session-capture-02.md section 2. The route refuses
- * the event itself, so a visit never reaches here holding a photograph.
+ * The setup photo files no `document` row here, and deliberately not: its
+ * bytes travel after their event and may arrive after this close has run
+ * (docs/SPEC/practitioner-phone.md section 4.4, decision 4). `PUT
+ * /api/sessions/:id/photo` (./photo.ts) files the row, the bytes and the link,
+ * and migration 306's close guard admits that one link on a frozen visit. The
+ * session-derived key this file once sketched — `sessions/<id>/setup-photo.jpg`
+ * — is retired: a key is made of ids alone, through the seam's own
+ * `clientDocumentKey`, so that a key that leaks says nothing about whose file
+ * it is.
  *
  * The check-out coordinate is not written here either. It is recorded when
  * the check-out event arrives (./events.ts), session-level and once, and it
@@ -59,21 +64,6 @@ import { loadSession, readEvents, resolvePractitioner, type SessionRow } from '.
 const PRACTITIONER_ROLES = ['practitioner', 'lead_practitioner'] as const;
 
 const Params = z.object({ id: z.uuid() });
-
-/**
- * Where the setup photo will live once there is somewhere to put it: derived
- * from the session's own id, never from anything the device said, because a
- * caller-supplied key is a key that can name another visit's object. Kept
- * here, unused, as the convention the storage seam's `put` will be given —
- * see ./photo-availability.ts.
- */
-export function setupPhotoKey(
-  sessionId: string,
-  mimeType: 'image/jpeg' | 'image/webp' | 'image/png',
-): string {
-  const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType === 'image/webp' ? 'webp' : 'png';
-  return `sessions/${sessionId}/setup-photo.${extension}`;
-}
 
 function durationSeconds(projection: SessionProjection): number | null {
   if (!projection.startedAt || !projection.endedAt) return null;

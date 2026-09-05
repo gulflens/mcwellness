@@ -479,6 +479,48 @@ revoke execute on function app.file_setup_photo(uuid, uuid) from public;
 grant execute on function app.file_setup_photo(uuid, uuid) to app_role;
 
 ------------------------------------------------------------------------------
+-- 6b. The last placement, for the pre-flight's own button.
+--
+-- Section 4.5: the check-in answer gains `previousSetupPhotoDocumentId` — the
+-- photograph on the client's most recent completed visit, or null — and the
+-- pre-flight step shows a button that fetches it on a tap and never before.
+--
+-- A door rather than a query, for the reason 304's own history door exists: a
+-- programme belongs to the client and not to one practitioner, and
+-- db/policies/session/practitioner_scope.sql will not show a practitioner
+-- another's visit. Bound the same way as every other door here — the caller's
+-- own open visit, in the caller's own tenant, and a practitioner the practice
+-- still has working — and it hands back one id and nothing else: not a date,
+-- not a service, not who took it.
+--
+-- The current visit is excluded by `closed_at is not null`: a photograph filed
+-- on the visit in progress is the one the practitioner has just taken, not a
+-- previous placement to compare it with.
+------------------------------------------------------------------------------
+create function app.previous_setup_photo(p_session_id uuid) returns uuid
+language sql stable security definer
+set search_path = pg_catalog, pg_temp
+as $$
+  select h.setup_photo_document_id
+    from public.session s
+    join public.practitioner p on p.id = s.practitioner_id
+    join public.session h on h.client_id = s.client_id and h.tenant_id = s.tenant_id
+   where s.id = p_session_id
+     and s.tenant_id = app.current_tenant_id()
+     and p.tenant_id = app.current_tenant_id()
+     and p.user_id = app.current_actor_id()
+     and p.status = 'active'
+     and h.id <> s.id
+     and h.status = 'completed'
+     and h.closed_at is not null
+     and h.setup_photo_document_id is not null
+   order by h.checked_in_at desc, h.id desc
+   limit 1
+$$;
+revoke execute on function app.previous_setup_photo(uuid) from public;
+grant execute on function app.previous_setup_photo(uuid) to app_role;
+
+------------------------------------------------------------------------------
 -- 7. The close guard, extended by exactly one column.
 --
 -- Replaced rather than edited: 302 is merged, and this is a new definition of
@@ -534,6 +576,7 @@ $$;
 --   drop policy if exists tenant_isolation on public.kit;
 --   -- Section 7 back to 302's own definition: re-run that migration's body for
 --   -- app.session_refuse_update_after_close.
+--   drop function if exists app.previous_setup_photo(uuid);
 --   drop function if exists app.file_setup_photo(uuid, uuid);
 --   drop table if exists app.setup_photo_filing;
 --   drop function if exists app.file_setup_photo_document(uuid, uuid, text, text, bytea, timestamptz);

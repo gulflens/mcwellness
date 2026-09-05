@@ -95,6 +95,14 @@ export const CheckInResponse = z.discriminatedUnion('status', [
      * older server's answer simply does not offer the camera.
      */
     photoConsent: z.boolean().default(false),
+    /**
+     * The photograph on this client's most recent completed visit, or null
+     * (docs/SPEC/practitioner-phone.md section 4.5). The pre-flight step shows
+     * a button and fetches the picture only on the tap, so nothing is read
+     * unasked; this is only the handle the button needs. An opaque document
+     * id, which is what `.claude/rules/ui.md` means by routing by ids alone.
+     */
+    previousSetupPhotoDocumentId: z.uuid().nullable().default(null),
   }),
   z.object({
     status: z.literal('blocked'),
@@ -293,6 +301,8 @@ export const OpenSession = z.object({
   lastSeq: z.number().int().min(0),
   /** As on the check-in response: whether the setup photo may be offered at all. */
   photoConsent: z.boolean().default(false),
+  /** As on the check-in response: the last placement, for the pre-flight's own button. */
+  previousSetupPhotoDocumentId: z.uuid().nullable().default(null),
 });
 export type OpenSession = z.infer<typeof OpenSession>;
 
@@ -313,6 +323,24 @@ export const VisitActualsInput = z.object({
   accessIssues: z.string().max(1000).nullable().default(null),
 });
 export type VisitActualsInput = z.infer<typeof VisitActualsInput>;
+
+/**
+ * `PUT /api/sessions/:id/photo` (app/api/sessions/photo.ts). 201 the first
+ * time, 200 on an idempotent retry of the same digest; the body is the same
+ * either way, because the device only wants to know it may drop the blob.
+ */
+export const PhotoFiledResponse = z.object({
+  status: z.literal('filed'),
+  documentId: z.uuid(),
+});
+export type PhotoFiledResponse = z.infer<typeof PhotoFiledResponse>;
+
+/** `GET /api/sessions/photo/:documentId/link` (app/api/sessions/photo-link.ts). */
+export const PhotoLinkResponse = z.object({
+  url: z.string(),
+  expiresInSeconds: z.number().int().positive(),
+});
+export type PhotoLinkResponse = z.infer<typeof PhotoLinkResponse>;
 
 export const CloseRequest = z.object({ visitActuals: VisitActualsInput });
 export type CloseRequest = z.infer<typeof CloseRequest>;

@@ -13,7 +13,9 @@ import { appendEvents } from './events';
 import { mountClose } from './close';
 import { mountOpenSession } from './open';
 import { CheckInRequest, CheckInResponse, SessionEventsRequest } from './schema';
-import { resolvePractitioner } from './session-row';
+import { previousSetupPhoto, resolvePractitioner } from './session-row';
+import { mountSessionPhoto } from './photo';
+import { mountSessionPhotoLink } from './photo-link';
 import { mountServiceTypes } from './service-types';
 
 /**
@@ -95,6 +97,8 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
   mountServiceTypes(api, now);
   mountOpenSession(api);
   mountClose(api, now);
+  mountSessionPhoto(api, now);
+  mountSessionPhotoLink(api);
 
   api.post('/api/sessions/:id/events', async (c) => {
     const actor = c.get('actor');
@@ -192,6 +196,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
             sessionId: existingRow.id,
             checkedInAt: existingRow.checked_in_at.toISOString(),
             photoConsent: await photoConsent(db, sessionId),
+            previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
           }),
           200,
         );
@@ -458,6 +463,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
               sessionId: row.id,
               checkedInAt: row.checked_in_at.toISOString(),
               photoConsent: await photoConsent(db, sessionId),
+              previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
             }),
             200,
           );
@@ -482,6 +488,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         sessionId,
         checkedInAt: projection.checkedInAt,
         photoConsent: await photoConsent(db, sessionId),
+        previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
       }),
       201,
     );
