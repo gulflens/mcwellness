@@ -1422,3 +1422,150 @@ Everything else is the shared zone or the trunk's own: `domain/shared/**`,
    round 31's own default 18, because the harness that issues a report and
    signs a portal request is there and rebuilding it under `tests/db/` would
    prove less.
+
+## Round 32, 2026-09-06 (the first practice, and what a fresh database is missing)
+
+One item. `docs/PRODUCTION.md` records a production project holding the whole
+schema and nothing else — zero rows in `tenant`, `app_user` and `client` — and
+the only thing in this repository that has ever written a practice is
+`db/seed/apply.ts`, which writes a synthetic one and refuses to run anywhere
+but a laptop or staging. So there was no supported way to open the product and
+the founder could not sign in. Migration `956_bootstrap_practice.sql` is that
+way, `tests/db/bootstrap-practice.test.ts` is what holds it to its promise, and
+`docs/PRODUCTION.md` gains the section "The first practice" written for the
+operator rather than for a developer.
+
+### What a practice must start with, and where each default comes from
+
+The round began by reading every migration that writes a per-practice default
+(`grep -ln "from tenant" db/migrations` gives eight files; two of them, 702 and
+950, are the phrase appearing in prose and are not data steps). Six real ones
+remain, and the finding that shaped the whole round is that **every one of
+them writes its default twice**: a data step at the end of the migration, for
+a practice that already existed when it ran, and an after-insert trigger on
+`tenant` for every practice created from then on.
+
+| Table | Rows | From | The trigger that gives a new practice its own |
+|---|---|---|---|
+| `goal_category` | 6 | `100_client_record.sql` | `seed_goal_categories` |
+| `scheduling_setting` | 1 | `202_scheduling_setting.sql` | `default_scheduling_setting` |
+| `vat_setting` | 1 | `400_billing_catalogue.sql` | `default_vat_setting` |
+| `invoice_number_series` | 1 | `402_billing_document.sql` | `default_invoice_number_series` |
+| `payment_receipt_series` | 1 | `405_billing_receipt.sql` | `default_receipt_series` |
+| `report_number_series` | 1 | `600_report.sql` | `default_report_number_series` |
+
+The routing factors the brief asked after are not a table of their own: they
+are `drive_road_factor` and `drive_peak_multiplier`, two columns
+`204_drive_estimate.sql` added to the `scheduling_setting` row, and they arrive
+with it. The practice identity placeholders are columns on `tenant` itself
+(`905_practice_identity.sql`), not rows, and decision 5 below is what the
+function does about them.
+
+### The decisions
+
+1. **The defaults are not copied. The triggers do the work.** The brief
+   offered two shapes — factor each data step into a function both callers
+   use, or copy each `insert ... select` with a comment naming its migration —
+   and reading the migrations showed a third that is better than either: the
+   triggers already exist, they were written for exactly this case, and
+   `app.bootstrap_practice` inserts the tenant and lets them run. A copy is a
+   second implementation that drifts the first time either side changes; there
+   is nothing here to drift. What the function adds is a **check**: after the
+   insert it asks each of the six tables whether the new practice has any rows
+   at all, and refuses with the table's name and its migration's if one is
+   empty. A future migration that adds a per-practice default and forgets its
+   trigger is then refused loudly at the one moment it matters, instead of
+   leaving a practice quietly short of a row nobody thinks about until an
+   invoice cannot be numbered.
+
+2. **The check reads `to_regclass` and skips what is absent.** Apply order
+   across the ranges is not fixed (`docs/SPEC/OWNERSHIP.md`): a database may
+   carry the trunk's migrations and one stream's and not another's. A table
+   that is not on this database is not a missing default. This is the guard
+   `app.erase_client` already uses when it reaches into a stream's tables, and
+   it is why the `-- Needs:` line names only 010 and 020: the function must be
+   creatable on any database, whichever streams that database has seen.
+
+3. **The `950–999` half, not `900–949`.** The completeness check names tables
+   the streams own, so the file must sort after them. The brief said the same;
+   the reasoning is recorded here because the two halves are easy to confuse.
+
+4. **The arguments are the brief's six, and nothing more.** Legal name,
+   Arabic legal name, the Supabase Auth user id, the owner's display name, the
+   owner's email, and the time zone with `Asia/Dubai` as its default. No
+   phone, no emirate, no licence: `tenant.default_emirate` already defaults to
+   `DXB`, and everything else is a fact only the owner holds.
+
+5. **What it deliberately leaves null**: the corporate-tax registration
+   number, the trade licence with its authority and expiry, the VAT
+   registration, and the practice's own address. Every one of them is editable
+   in Settings (`app/api/practice/routes.ts`, migration 905), and a
+   placeholder that later reads as a fact is worse than a gap — a printed
+   invoice is the thing at the end of that mistake. The address in particular
+   is a `location` row that the settings screen creates on the first save;
+   until then an invoice carries a blank supplier address, which is true
+   rather than wrong.
+
+6. **`created_by` stays null on the tenant, the owner and the role**, and so
+   does `user_role.granted_by`. `tenant.created_by` could not be anything else
+   — the user it references does not exist at that instant — and writing the
+   owner into the other two would say she granted herself ownership. Nobody
+   granted it; the bootstrap did, and the audit rows say `system` with this
+   file as the reason.
+
+7. **The arguments are checked before the state.** A blank name is then
+   reported as a blank name whether or not a practice already stands, which is
+   the more useful message of the two, and it lets every refusal be proved on
+   one database in the test rather than on a rebuilt one per case.
+
+8. **The SQLSTATEs**: `22023` (`invalid_parameter_value`) for anything the
+   caller typed, `23505` (`unique_violation`) for a second practice — the
+   platform holds one, and that is what the code means — and `P0002`
+   (`no_data_found`) for a default that did not arrive, which is the one
+   refusal that is not about the caller at all. The API role's refusal is
+   Postgres's own `42501`.
+
+9. **Execute is revoked from `public` and from `app_role`.** The second is
+   redundant against the first and is written anyway, because "the API cannot
+   reach this" is the claim being made and a reader should not have to reason
+   about role membership to check it. Supabase's `service_role` is granted
+   execute **only where that role exists**, inside a `do` block: a laptop has
+   no such role and an unconditional grant would fail every local migration
+   run. The function is `security definer` with a pinned search path, in the
+   pattern every function in this schema uses, so it writes as the table owner
+   however it was reached.
+
+10. **The audit context is the runner's own shape**: `app.reason` naming the
+    file, a fresh `app.request_id`, both transaction-local, and no actor. Every
+    row the function makes is therefore logged as a system action under one
+    reason, the way a data migration's rows are. Nobody was signed in when the
+    practice was created and the trail says so.
+
+11. **The test compares against a seeded practice over every tenant-scoped
+    table in the schema, not a list written by hand.** It builds a seeded
+    database, snapshots what the synthetic practice holds in all 41 tables that
+    carry a `tenant_id`, discards it, rebuilds, bootstraps, and snapshots
+    again; the two must agree table by table and row by row once the seed's own
+    synthetic people, catalogue and money are set aside. That exclusion list is
+    `tests/db/seed.test.ts`'s own `SEED_TABLES`, which already exists and
+    already means exactly this. A migration that adds a per-practice default
+    without a trigger fails that comparison, which is what keeps decision 1
+    honest over time. The two practices cannot share a database — a second
+    practice is what the function refuses — so the file pays for two builds,
+    and takes about two seconds.
+
+12. **`docs/STAGING.md` is untouched.** Its section 7 is the exit test and
+    names no first-owner step: staging's practice comes from the seed and its
+    section 4 links the seeded people to dashboard accounts by hand. Nothing
+    there is made wrong by this round.
+
+### Deliberately not built
+
+No route, no screen and no command-line wrapper: this is run once, by the
+operator, in the project's own SQL editor, and every extra door is another
+thing that has to be kept out of the API's reach. Nothing that makes a second
+practice — a multi-practice platform is a decision nobody has taken. And
+nothing that repoints an existing owner at a new Auth user id, which is the
+other thing an operator locked out might want; it is one `update`, it is
+described in `docs/PRODUCTION.md`'s first refusal, and inventing a function
+for it would be inventing a door before anyone has asked to walk through it.
