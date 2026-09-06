@@ -116,6 +116,15 @@ const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37
 const PDF_DIGEST = createHash('sha256').update(PDF_BYTES).digest('hex');
 const pdfFile = (): File =>
   new File([PDF_BYTES], 'synthetic-export.pdf', { type: 'application/pdf' });
+/**
+ * A recording, as far as the browser is concerned: bytes under a name the
+ * browser knows no type for, which is what both of the practice's recording
+ * formats are. The name is synthetic and names nobody; what the console sends
+ * from it is the extension alone.
+ */
+const EDF_BYTES = new Uint8Array([0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20]);
+const recordingFile = (extension: string): File =>
+  new File([EDF_BYTES], `synthetic-recording.${extension}`, { type: '' });
 
 function mount(
   options: {
@@ -135,7 +144,14 @@ function mount(
         version: 2,
         supersedesId: BASELINE,
         supersedeReason: 'The alpha figure at Fz was typed from the wrong column.',
-        files: [{ documentId: CLIENT, role: 'raw', filedAt: '2026-03-01T09:00:00.000Z' }],
+        files: [
+          {
+            documentId: CLIENT,
+            role: 'raw_recording',
+            condition: 'eyes-open',
+            filedAt: '2026-03-01T09:00:00.000Z',
+          },
+        ],
       }),
       superseded: [
         row(BASELINE, {
@@ -163,7 +179,7 @@ function mount(
       sent.push({ url, method, body: init?.body ?? null, headers: new Headers(init?.headers) });
       const answer = options.attachAnswer ?? {
         status: 201,
-        body: { documentId: DOCUMENT, role: 'raw' },
+        body: { documentId: DOCUMENT, role: 'raw_recording', condition: null },
       };
       return json(answer.body, answer.status);
     }
@@ -208,7 +224,9 @@ describe('the measurements table', () => {
     expect(screen.getAllByText('Brain map').length).toBe(3);
     expect(screen.getAllByText('Rowan Meadow').length).toBeGreaterThan(0);
     // A filed file is named by what it is, and it opens; the rest say so.
-    expect(screen.getByRole('button', { name: 'The recording, opens in a new tab' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'The recording, eyes open, opens in a new tab' }),
+    ).toBeTruthy();
     expect(screen.getAllByText('None attached').length).toBe(2);
   });
 
@@ -448,18 +466,60 @@ describe('the export', () => {
   it('sends the bytes with the digest it computed in the browser', async () => {
     const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
     const input = await screen.findByLabelText('Attach the export');
-    expect(input.getAttribute('accept')).toBe('application/pdf');
+    expect(input.getAttribute('accept')).toBe('application/pdf,.edf,.eeg');
 
     fireEvent.change(input, { target: { files: [pdfFile()] } });
     await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
 
     const put = sent.find((call) => call.method === 'PUT')!;
-    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw`);
+    // The role is the extension's answer, because nobody gave another one: a
+    // PDF is the software's report, and the door refuses one filed as the
+    // recording.
+    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=vendor_report&extension=pdf`);
     expect(put.headers?.get('content-type')).toBe('application/pdf');
     // The fingerprint of the bytes that were sent, taken here and recomputed
     // by the route over what actually arrived.
     expect(put.headers?.get('x-sha256')).toBe(PDF_DIGEST);
     expect(new Uint8Array(put.body as ArrayBuffer)).toEqual(PDF_BYTES);
+  });
+
+  it('shows the role the extension chose, so nothing is filed behind the person', async () => {
+    // The control opens on the recording and the file chosen is a report, so
+    // the default moves the control as well as the request. A screen that sent
+    // one word and displayed another would be filing behind somebody's back.
+    mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    const what = (await screen.findByLabelText('What the file is')) as HTMLSelectElement;
+    expect(what.value).toBe('raw_recording');
+    fireEvent.change(screen.getByLabelText('Attach the export'), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(what.value).toBe('vendor_report'));
+  });
+
+  it('says so when the file is not the thing it is being filed as', async () => {
+    // The person overrode the default and called a PDF the recording. The
+    // door refuses it on the bytes, and the screen says why in words.
+    const sent = mount({
+      chains: [{ current: row(BASELINE), superseded: [] }],
+      attachAnswer: { status: 400, body: { error: 'bad_request', code: 'kind_and_role_disagree' } },
+    });
+    fireEvent.change(await screen.findByLabelText('What the file is'), {
+      target: { value: 'raw_recording' },
+    });
+    fireEvent.change(screen.getByLabelText('Attach the export'), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+    // The person's own answer is sent, not the extension's: they said it.
+    expect(sent.find((call) => call.method === 'PUT')!.url).toBe(
+      `/api/assessments/${BASELINE}/file?role=raw_recording&extension=pdf`,
+    );
+    expect(
+      await screen.findByText(
+        'That file is not the thing it is being filed as. A PDF is the software’s report or a ' +
+          'session export; a recording is an EDF file or the amplifier software’s own.',
+      ),
+    ).toBeTruthy();
   });
 
   it('files it as the software’s report when that is what it is', async () => {
@@ -472,8 +532,64 @@ describe('the export', () => {
     });
     await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
     expect(sent.find((call) => call.method === 'PUT')!.url).toBe(
-      `/api/assessments/${BASELINE}/file?role=vendor_report`,
+      `/api/assessments/${BASELINE}/file?role=vendor_report&extension=pdf`,
     );
+  });
+
+  it('declares a recording as bytes and sends the extension, never the name', async () => {
+    for (const extension of ['edf', 'eeg']) {
+      const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+      fireEvent.change(await screen.findByLabelText('Attach the export'), {
+        target: { files: [recordingFile(extension)] },
+      });
+      await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+
+      const put = sent.find((call) => call.method === 'PUT')!;
+      expect(put.url).toBe(
+        `/api/assessments/${BASELINE}/file?role=raw_recording&extension=${extension}`,
+      );
+      expect(put.headers?.get('content-type')).toBe('application/octet-stream');
+      // The name the file was chosen under goes nowhere: the practice's own
+      // files are named after the people in them.
+      expect(put.url).not.toContain('synthetic-recording');
+      cleanup();
+    }
+  });
+
+  it('offers the condition where the file is a recording, and not otherwise', async () => {
+    mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    // A recording is taken under a condition; the software's report is not.
+    expect(await screen.findByLabelText('The condition it was taken under')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('What the file is'), {
+      target: { value: 'vendor_report' },
+    });
+    expect(screen.queryByLabelText('The condition it was taken under')).toBeNull();
+  });
+
+  it('sends the condition a recording was taken under, as its own field', async () => {
+    const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    fireEvent.change(await screen.findByLabelText('The condition it was taken under'), {
+      target: { value: 'eyes-closed' },
+    });
+    fireEvent.change(screen.getByLabelText('Attach the export'), {
+      target: { files: [recordingFile('edf')] },
+    });
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+    expect(sent.find((call) => call.method === 'PUT')!.url).toBe(
+      `/api/assessments/${BASELINE}/file?role=raw_recording&extension=edf&condition=eyes-closed`,
+    );
+  });
+
+  it('sends no condition where the recording covers both, which is ordinary', async () => {
+    // The practice's own native recordings carry eyes open and eyes closed in
+    // one file, so the control opens on neither and that answer is sent as an
+    // absence rather than as a word.
+    const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    fireEvent.change(await screen.findByLabelText('Attach the export'), {
+      target: { files: [recordingFile('eeg')] },
+    });
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+    expect(sent.find((call) => call.method === 'PUT')!.url).not.toContain('condition');
   });
 
   it('reads the row again, so the file appears where it was attached', async () => {
@@ -482,7 +598,14 @@ describe('the export', () => {
       chainsAfter: [
         {
           current: row(BASELINE, {
-            files: [{ documentId: DOCUMENT, role: 'raw', filedAt: '2026-03-01T09:00:00.000Z' }],
+            files: [
+              {
+                documentId: DOCUMENT,
+                role: 'raw_recording',
+                condition: null,
+                filedAt: '2026-03-01T09:00:00.000Z',
+              },
+            ],
           }),
           superseded: [],
         },
@@ -505,7 +628,7 @@ describe('the export', () => {
       target: { files: [pdfFile()] },
     });
     expect(
-      await screen.findByText('That is not a PDF. The export is the software’s own PDF report.'),
+      await screen.findByText('That is not a PDF. A report is the software’s own PDF.'),
     ).toBeTruthy();
   });
 
@@ -514,7 +637,7 @@ describe('the export', () => {
     vi.stubGlobal('open', open);
     const sent = mount();
     const button = await screen.findByRole('button', {
-      name: 'The recording, opens in a new tab',
+      name: 'The recording, eyes open, opens in a new tab',
     });
     // The link is a read and is audited as one, so it is asked for at the
     // moment somebody presses and never rendered into the page in advance.
@@ -532,7 +655,7 @@ describe('the export', () => {
     );
     mount();
     fireEvent.click(
-      await screen.findByRole('button', { name: 'The recording, opens in a new tab' }),
+      await screen.findByRole('button', { name: 'The recording, eyes open, opens in a new tab' }),
     );
     const link = await screen.findByRole('link', { name: 'Open it in a new tab' });
     expect(link.getAttribute('href')).toBe(SIGNED);

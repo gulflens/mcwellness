@@ -1,10 +1,16 @@
 import { z } from 'zod';
 import {
   ASSESSMENT_FILE_MIME_TYPE,
+  ASSESSMENT_FILE_MIME_TYPES,
+  BRAIN_MAP_CONDITIONS,
+  EDF_RECORDING_EXTENSION,
   INSTRUMENTS,
   MAX_CONDITION_NOTE_LENGTH,
   MAX_SUPERSEDE_REASON_LENGTH,
+  NATIVE_RECORDING_EXTENSION,
+  RECORDING_MIME_TYPE,
   REFERENCE_SEXES,
+  type AssessmentFileKind,
 } from '@domain/assessment';
 
 /**
@@ -26,17 +32,77 @@ import {
 export const FILE_LINK_TTL_SECONDS = 300;
 
 /**
- * The cap on an export's bytes, and the one media type accepted
- * (spec section 10, decision 3). Twenty megabytes is a vendor's own PDF
- * report with its pictures in it; `application/pdf` alone until the operator
- * names the practice's equipment, and a new file signature is a change request
- * to `domain/shared/fileSignature.ts` rather than a guess made here.
+ * The cap on an export's bytes, and the media types accepted (spec section 7.1
+ * and decision 3, amended on the founder's equipment answer of 2026-09-06).
+ *
+ * **Sixty-four megabytes**, because the practice's own raw recordings are 22
+ * to 33 MB apiece and a longer recording is bigger. The browser reads this to
+ * say so before it sends anything; the body cap in `app/api/create-api.ts` is
+ * the one that binds, and `tests/assessment/request-timeout.test.ts` proves the
+ * two agree. This constant cannot simply be imported from there: that module
+ * is the server's and pulls in Node, and this one is read by the console.
+ *
+ * **Two declared types**, and three kinds behind them: a PDF, an EDF recording
+ * and the amplifier software's own recording, each recognised by
+ * `classifyAssessmentFile` in `domain/assessment` rather than by the caller's
+ * word (`domain/assessment/fileType.ts` says how, and why the third is
+ * recognised by its extension).
  */
-export const ASSESSMENT_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
-export { ASSESSMENT_FILE_MIME_TYPE };
+export const ASSESSMENT_FILE_LIMIT_BYTES = 64 * 1024 * 1024;
+export {
+  ASSESSMENT_FILE_MIME_TYPE,
+  ASSESSMENT_FILE_MIME_TYPES,
+  EDF_RECORDING_EXTENSION,
+  NATIVE_RECORDING_EXTENSION,
+  RECORDING_MIME_TYPE,
+};
 
-export const ASSESSMENT_FILE_ROLES = ['raw', 'vendor_report'] as const;
+/**
+ * What a filed file is, in the practice's own words (migration 503): the
+ * recording as the equipment wrote it, the analysis software's own report, or
+ * what the neurofeedback software exports at the end of a session.
+ */
+export const ASSESSMENT_FILE_ROLES = ['raw_recording', 'vendor_report', 'session_export'] as const;
 export type AssessmentFileRole = (typeof ASSESSMENT_FILE_ROLES)[number];
+
+/** The roles that are a recording, and so may carry a condition. */
+export const RECORDING_ROLES: readonly AssessmentFileRole[] = ['raw_recording'];
+
+/**
+ * Which role each kind of file may be filed under.
+ *
+ * The role is the caller's word and the kind is the bytes' own answer
+ * (`classifyAssessmentFile` in `domain/assessment`), and the two must agree.
+ * A PDF filed as the recording would put the software's report on an immutable
+ * document row as the person's brain activity, condition and all, and a
+ * recording filed as a report would hide the recording from every screen that
+ * looks for one. Neither is recoverable by editing: these rows are never
+ * amended, only added to.
+ *
+ * Read as a map from the kind rather than as a rule about roles, so that a
+ * fourth kind cannot be filed under anything at all until this table says
+ * where it belongs.
+ */
+export const ROLES_FOR_KIND: Record<AssessmentFileKind, readonly AssessmentFileRole[]> = {
+  vendor_pdf: ['vendor_report', 'session_export'],
+  edf_recording: ['raw_recording'],
+  native_recording: ['raw_recording'],
+};
+
+/**
+ * Which condition a recording was taken under, where it was taken under one.
+ *
+ * The same two words the brain map's own figures use, so a recording and the
+ * figures read from it never describe the same thing differently. Null is
+ * ordinary rather than a gap: the practice's native recordings carry both
+ * conditions in one file.
+ *
+ * **Said by the person filing, never read out of a file name.** The practice's
+ * exports are named after the people in them and this platform holds no part
+ * of that (docs/SPEC/assessment.md section 7.1).
+ */
+export const ASSESSMENT_FILE_CONDITIONS = BRAIN_MAP_CONDITIONS;
+export type AssessmentFileCondition = (typeof ASSESSMENT_FILE_CONDITIONS)[number];
 
 /**
  * **There is no delivery mode on this request, and that is deliberate.** An
@@ -106,6 +172,7 @@ export type AssessmentVisitsResponse = z.infer<typeof AssessmentVisitsResponse>;
 export const AssessmentFile = z.object({
   documentId: z.uuid(),
   role: z.enum(ASSESSMENT_FILE_ROLES),
+  condition: z.enum(ASSESSMENT_FILE_CONDITIONS).nullable(),
   filedAt: z.iso.datetime(),
 });
 export type AssessmentFile = z.infer<typeof AssessmentFile>;
@@ -150,6 +217,7 @@ export type AssessmentResponse = z.infer<typeof AssessmentResponse>;
 export const FileFiledResponse = z.object({
   documentId: z.uuid(),
   role: z.enum(ASSESSMENT_FILE_ROLES),
+  condition: z.enum(ASSESSMENT_FILE_CONDITIONS).nullable(),
 });
 export type FileFiledResponse = z.infer<typeof FileFiledResponse>;
 

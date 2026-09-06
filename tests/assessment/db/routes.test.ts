@@ -21,6 +21,7 @@ import {
   seedTenant,
   seedUser,
 } from '../../db/helpers';
+import { minimalEdf, nativeRecording } from '../fixtures/edf';
 import {
   assessmentId,
   brainMapPayload,
@@ -61,6 +62,9 @@ const CONTACT_AUTH = assessmentId('14', 2);
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x0a, 0x25]);
 const OTHER_PDF = new Uint8Array([...PDF, 0x0a]);
 const digestOf = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+/** A recording of each kind, built from the format's own layout, never copied. */
+const EDF = minimalEdf();
+const NATIVE = nativeRecording();
 /** The key the seam builds for a client's document (domain/shared/storage.ts). */
 const keyFor = (clientId: string, documentId: string): string =>
   `tenant/${IDS.tenantA}/client/${clientId}/${documentId}`;
@@ -102,14 +106,32 @@ async function putFile(
   assessment: string,
   sub: string,
   bytes: Uint8Array,
-  options: { digest?: string; type?: string; role?: string } = {},
+  options: {
+    digest?: string;
+    type?: string;
+    role?: string;
+    extension?: string;
+    condition?: string;
+  } = {},
 ): Promise<Response> {
-  const role = options.role === undefined ? '' : `?role=${options.role}`;
-  return api.request(`/api/assessments/${assessment}/file${role}`, {
+  const query = new URLSearchParams();
+  // What the console would send where the test does not say (the extension's
+  // own answer, app/admin/assessments/ExportFiles.tsx): a PDF is the software's
+  // report and bytes are a recording. The door refuses a role its bytes
+  // disagree with, so something has to be said, and repeating the word in
+  // every call would say nothing a reader did not already know.
+  const type = options.type ?? 'application/pdf';
+  query.set(
+    'role',
+    options.role ?? (type === 'application/pdf' ? 'vendor_report' : 'raw_recording'),
+  );
+  if (options.extension !== undefined) query.set('extension', options.extension);
+  if (options.condition !== undefined) query.set('condition', options.condition);
+  return api.request(`/api/assessments/${assessment}/file?${query.toString()}`, {
     method: 'PUT',
     headers: {
       authorization: `Bearer ${await mint(sub)}`,
-      'content-type': options.type ?? 'application/pdf',
+      'content-type': type,
       'x-sha256': options.digest ?? digestOf(bytes),
     },
     // `BodyInit` is typed from the DOM lib, which does not know a Uint8Array
@@ -767,8 +789,15 @@ describe('the export’s own door', () => {
     const created = (await (await record(household)).json()) as { assessment: { id: string } };
     const res = await putFile(created.assessment.id, household.authSub, PDF);
     expect(res.status).toBe(201);
-    const filed = (await res.json()) as { documentId: string; role: string };
-    expect(filed.role).toBe('raw');
+    const filed = (await res.json()) as {
+      documentId: string;
+      role: string;
+      condition: string | null;
+    };
+    // The report, because that is what a PDF is; a PDF filed as the recording
+    // is refused on its bytes.
+    expect(filed.role).toBe('vendor_report');
+    expect(filed.condition).toBeNull();
 
     const document = await owner.query<{
       kind: string;
@@ -799,7 +828,7 @@ describe('the export’s own door', () => {
       [created.assessment.id],
     );
     expect(trail.rows).toHaveLength(1);
-    expect(trail.rows[0]?.new_values).toEqual({ role: 'raw' });
+    expect(trail.rows[0]?.new_values).toEqual({ role: 'vendor_report' });
 
     // And the document is named where it belongs: on the link row's own entry,
     // written by the audit trigger.
@@ -881,13 +910,13 @@ describe('the export’s own door', () => {
     expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(PDF);
   });
 
-  it('refuses a media type that is not a PDF', async () => {
+  it('refuses a media type the door does not take', async () => {
     const household = await seedHousehold('50');
     const created = (await (await record(household)).json()) as { assessment: { id: string } };
-    const res = await putFile(created.assessment.id, household.authSub, PDF, {
-      type: 'image/png',
-    });
-    expect(res.status).toBe(415);
+    for (const type of ['image/png', 'text/html', 'application/x-edf']) {
+      const res = await putFile(created.assessment.id, household.authSub, PDF, { type });
+      expect(res.status, type).toBe(415);
+    }
   });
 
   it('refuses bytes that are not a PDF whatever the caller calls them', async () => {
@@ -897,6 +926,226 @@ describe('the export’s own door', () => {
     const res = await putFile(created.assessment.id, household.authSub, page);
     expect(res.status).toBe(415);
     expect(await res.json()).toMatchObject({ code: 'not_a_pdf' });
+  });
+
+  it('files an EDF recording, as bytes, by its own signature', async () => {
+    // The founder's equipment writes one of these per condition
+    // (docs/SPEC/assessment.md decision 3, amended 2026-09-06). The fixture is
+    // built from the published layout in tests/assessment/fixtures/edf.ts.
+    const household = await seedHousehold('71');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, EDF, {
+      type: 'application/octet-stream',
+      extension: 'edf',
+    });
+    expect(res.status).toBe(201);
+    const filed = (await res.json()) as { documentId: string };
+
+    const document = await owner.query<{ mime_type: string; sha256: Buffer }>(
+      'select mime_type, sha256 from document where id = $1',
+      [filed.documentId],
+    );
+    // The row records what the bytes were declared as, so a signed link hands
+    // them back as bytes rather than as something a browser would open.
+    expect(document.rows[0]?.mime_type).toBe('application/octet-stream');
+    expect(document.rows[0]?.sha256.toString('hex')).toBe(digestOf(EDF));
+  });
+
+  it('files the amplifier software’s own recording on its extension', async () => {
+    // The format is a vendor's own and begins with nothing this stream can
+    // rely on, so the extension is what tells it apart (the default recorded
+    // in domain/assessment/fileType.ts).
+    const household = await seedHousehold('72');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, NATIVE, {
+      type: 'application/octet-stream',
+      extension: 'eeg',
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses the same recording when no extension came with it', async () => {
+    const household = await seedHousehold('73');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, NATIVE, {
+      type: 'application/octet-stream',
+    });
+    expect(res.status).toBe(415);
+    expect(await res.json()).toMatchObject({ code: 'not_a_recording' });
+  });
+
+  it('refuses a page of markup called a recording, and audits the refusal', async () => {
+    const household = await seedHousehold('74');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const page = new TextEncoder().encode('<html><body>anything</body></html>');
+    const res = await putFile(created.assessment.id, household.authSub, page, {
+      type: 'application/octet-stream',
+      extension: 'eeg',
+    });
+    expect(res.status).toBe(415);
+    expect(await res.json()).toMatchObject({ code: 'not_a_recording' });
+    expect(await refusals(created.assessment.id)).toContain('not_a_recording');
+  });
+
+  it('files a recording under the condition it was taken in, as its own field', async () => {
+    const household = await seedHousehold('76');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, EDF, {
+      type: 'application/octet-stream',
+      extension: 'edf',
+      role: 'raw_recording',
+      condition: 'eyes-closed',
+    });
+    expect(res.status).toBe(201);
+    const filed = (await res.json()) as { documentId: string; condition: string | null };
+    expect(filed.condition).toBe('eyes-closed');
+
+    // On the row, and never taken from a file name: this door was sent an
+    // extension and nothing else about what the file was called.
+    const link = await owner.query<{ role: string; condition: string | null }>(
+      'select role::text as role, condition::text as condition from assessment_document ' +
+        'where document_id = $1',
+      [filed.documentId],
+    );
+    expect(link.rows[0]).toEqual({ role: 'raw_recording', condition: 'eyes-closed' });
+
+    // And it comes back on the measurement's own row, so the tab can say it.
+    const listed = (await (
+      await get(`/api/clients/${household.clientId}/assessments`, household.authSub)
+    ).json()) as { assessments: { current: { files: { condition: string | null }[] } }[] };
+    expect(listed.assessments[0]?.current.files[0]?.condition).toBe('eyes-closed');
+  });
+
+  it('takes the session export as its own kind of file', async () => {
+    // What the neurofeedback software writes at the end of a session
+    // (migration 503). A PDF today, a numeric export when the founder sends
+    // one (spec decision 2).
+    const household = await seedHousehold('77');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, PDF, {
+      role: 'session_export',
+      extension: 'pdf',
+    });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { role: string }).role).toBe('session_export');
+  });
+
+  it('refuses a condition on anything that is not a recording', async () => {
+    // A report is not taken under a condition, and a column that held one
+    // would invite a screen to show a fact nobody recorded. The route says so
+    // and migration 503's check constraint says it again underneath.
+    const household = await seedHousehold('78');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, PDF, {
+      role: 'vendor_report',
+      extension: 'pdf',
+      condition: 'eyes-open',
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'condition_without_recording' });
+  });
+
+  /**
+   * The role is the caller's word for a file and the kind is what the bytes
+   * themselves say; where the two disagree the door refuses, because an
+   * `assessment_document` row is never amended. A report standing as somebody's
+   * brain activity, or a recording hidden from every screen that looks for one,
+   * would be a mistake nothing could take back.
+   */
+  const DISAGREEMENTS = [
+    {
+      what: 'the software’s report filed as the recording',
+      bytes: PDF,
+      type: 'application/pdf',
+      extension: 'pdf',
+      role: 'raw_recording',
+      scenario: '82',
+    },
+    {
+      what: 'an EDF recording filed as the report',
+      bytes: EDF,
+      type: 'application/octet-stream',
+      extension: 'edf',
+      role: 'vendor_report',
+      scenario: '83',
+    },
+    {
+      what: 'an EDF recording filed as a session export',
+      bytes: EDF,
+      type: 'application/octet-stream',
+      extension: 'edf',
+      role: 'session_export',
+      scenario: '84',
+    },
+    {
+      what: 'the amplifier software’s own recording filed as the report',
+      bytes: NATIVE,
+      type: 'application/octet-stream',
+      extension: 'eeg',
+      role: 'vendor_report',
+      scenario: '85',
+    },
+    {
+      what: 'the amplifier software’s own recording filed as a session export',
+      bytes: NATIVE,
+      type: 'application/octet-stream',
+      extension: 'eeg',
+      role: 'session_export',
+      scenario: '86',
+    },
+  ];
+
+  it.each(DISAGREEMENTS)('refuses $what, and audits the refusal', async (pairing) => {
+    const household = await seedHousehold(pairing.scenario);
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, pairing.bytes, {
+      type: pairing.type,
+      extension: pairing.extension,
+      role: pairing.role,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'kind_and_role_disagree' });
+    expect(await refusals(created.assessment.id)).toContain('kind_and_role_disagree');
+    // And nothing was filed: the refusal is before the row, not after it.
+    const filed = await owner.query<{ count: string }>(
+      'select count(*) as count from assessment_document where assessment_id = $1',
+      [created.assessment.id],
+    );
+    expect(filed.rows[0]?.count).toBe('0');
+  });
+
+  it('refuses a condition that is not one of the two the practice records', async () => {
+    const household = await seedHousehold('79');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, EDF, {
+      type: 'application/octet-stream',
+      extension: 'edf',
+      condition: 'eyes-half-open',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuses a role that is not one of the three', async () => {
+    const household = await seedHousehold('80');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, PDF, {
+      role: 'whatever',
+      extension: 'pdf',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuses a whole file name where an extension belongs', async () => {
+    // A file name is a person's name in this practice. The door takes the
+    // extension alone, and anything longer is read as nothing at all.
+    const household = await seedHousehold('75');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, NATIVE, {
+      type: 'application/octet-stream',
+      extension: 'a-household.eeg',
+    });
+    expect(res.status).toBe(415);
+    expect(await res.json()).toMatchObject({ code: 'not_a_recording' });
   });
 
   it('refuses a digest that does not match the bytes', async () => {
@@ -930,6 +1179,98 @@ describe('the export’s own door', () => {
     const created = (await (await record(household)).json()) as { assessment: { id: string } };
     expect((await putFile(created.assessment.id, FINANCE_AUTH, PDF)).status).toBe(403);
     expect((await putFile(created.assessment.id, CONTACT_AUTH, PDF)).status).toBe(403);
+  });
+});
+
+describe('the identity inside a recording', () => {
+  /**
+   * A recording's header carries the person's own identity in a field eighty
+   * bytes wide, and the practice's real files have a name in it. The platform
+   * keeps the file exactly as the practice sent it and reads that field into
+   * nothing at all: not a column, not a log line, not a response
+   * (docs/SPEC/assessment.md section 7.1).
+   *
+   * The sentinel below is plainly not a person's name, because
+   * .claude/rules/testing.md forbids a hand-written one and a realistic one
+   * would be the very thing this test exists to keep out.
+   */
+  const SENTINEL = 'EDFHEADERIDENTITYSENTINEL';
+  const RECORDED_BY = 'EDFRECORDINGFIELDSENTINEL';
+
+  it('files the bytes as they came and reads no part of the header into anything', async () => {
+    const household = await seedHousehold('81');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const withIdentity = minimalEdf({ identification: SENTINEL, recording: RECORDED_BY });
+
+    const answers: string[] = [];
+    const keep = async (res: Response): Promise<string> => {
+      const text = await res.text();
+      answers.push(text);
+      return text;
+    };
+
+    const filedText = await keep(
+      await putFile(created.assessment.id, household.authSub, withIdentity, {
+        type: 'application/octet-stream',
+        extension: 'edf',
+        condition: 'eyes-open',
+      }),
+    );
+    const filed = JSON.parse(filedText) as { documentId: string };
+
+    // Every route this measurement can be read through, in turn.
+    await keep(await get(`/api/clients/${household.clientId}/assessments`, household.authSub));
+    await keep(
+      await get(`/api/assessments/visits?clientId=${household.clientId}`, household.authSub),
+    );
+    await keep(
+      await post(`/api/assessments/${created.assessment.id}/supersede`, household.authSub, {
+        instrumentVersion: '1',
+        performedAt: `${today}T09:00:00+04:00`,
+        derived: brainMapPayload(11),
+        conditionNote: 'Eyes closed, quiet room.',
+        referenceAgeYears: 9,
+        referenceSex: 'female',
+        reason: 'The alpha figure at Fz was typed from the wrong column.',
+      }),
+    );
+    const linkText = await keep(
+      await get(`/api/assessments/file/${filed.documentId}/link`, household.authSub),
+    );
+    // Five answers, each of them something rather than an empty refusal: a
+    // sweep over nothing would pass for the wrong reason.
+    expect(answers).toHaveLength(5);
+    for (const answer of answers) {
+      expect(answer.length).toBeGreaterThan(2);
+      expect(answer).not.toContain(SENTINEL);
+      expect(answer).not.toContain(RECORDED_BY);
+    }
+    expect(answers.some((answer) => answer.includes(created.assessment.id))).toBe(true);
+
+    // Nor anywhere on the trail: every row of it, columns and json alike.
+    const trail = await owner.query<{ row: string }>(
+      'select to_jsonb(audit_log.*)::text as row from audit_log',
+    );
+    expect(trail.rows.length).toBeGreaterThan(0);
+    for (const row of trail.rows) {
+      expect(row.row).not.toContain(SENTINEL);
+      expect(row.row).not.toContain(RECORDED_BY);
+    }
+
+    // Nor on the document's own row, whose key is ids and nothing else.
+    const document = await owner.query<{ row: string }>(
+      'select to_jsonb(document.*)::text as row from document where id = $1',
+      [filed.documentId],
+    );
+    expect(document.rows[0]?.row).not.toContain(SENTINEL);
+    expect(document.rows[0]?.row).not.toContain(RECORDED_BY);
+
+    // And the file itself is untouched: the practice's evidence is kept as the
+    // practice sent it, header and all. Reading none of it is the platform's
+    // discipline, not an edit to somebody's recording.
+    const { url } = JSON.parse(linkText) as { url: string };
+    const bytes = new Uint8Array(await (await api.request(url)).arrayBuffer());
+    expect(bytes).toEqual(withIdentity);
   });
 });
 

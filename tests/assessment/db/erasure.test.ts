@@ -109,7 +109,7 @@ async function seedMeasurements(): Promise<void> {
   });
   await owner.query(
     'insert into assessment_document (id, tenant_id, client_id, assessment_id, document_id, role) ' +
-      "values ($1, $2, $3, $4, $5, 'raw')",
+      "values ($1, $2, $3, $4, $5, 'raw_recording')",
     [LINK, IDS.tenantA, IDS.clientA, BASELINE, EXPORT],
   );
 }
