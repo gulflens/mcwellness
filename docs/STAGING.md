@@ -970,6 +970,194 @@ own clinical report unaccompanied, the fix is a narrowing on
 shape `portal/money.sql` already narrows the money tables, not a rewrite of
 the table or the route.
 
+## What was done on 2026-09-06, tenth pass: the takings figure, the session link, and the narrower report room
+
+Main had reached `5e008fb` (the ninth pass's own base) and staging had
+stopped at 63 rows. The checkout was fast-forwarded twice: first through
+pull requests 86 (the ninth pass's own report), 87 (trunk round 31, the
+brief's own subject), 88 (a security scan) and 89 (a QA walk) to `3e7c403`;
+then, once that work was under way, origin gained pull request 85 as well
+and the checkout was fast-forwarded again to `2ef44f7`. 85 merged out of
+order — opened before 86 to 89 but landing after them — and is
+documentation only (`docs/OPERATOR/2026-09-06-decisions.md`, `git diff
+--stat` touching nothing under `db/`, `app/` or `domain/`); 88 and 89
+between them net to nothing under `db/` either, once both are counted (88's
+merge diff shows the seven migrations below and `db/policies/reports/reports.sql`
+disappearing, and 89's restores them byte for byte — a history artefact of
+how 88 branched, not a real edit; the files were verified byte-identical to
+what 87 wrote before anything on staging was touched). Only 87 owed staging
+anything, and it is the seven migrations the brief named, found by exactly
+that name: `502_assessment_document_key.sql`, `911_document_client_key.sql`,
+`951_assessment_session.sql`, `952_practice_money_ledger.sql`,
+`953_vat_taxable_supplies.sql`, `954_drop_invoice_document_id.sql` and
+`955_report_guardian_reader.sql` — the last one filed under a different
+name than the brief's guess (`955_report_readers_guardians.sql`), close but
+not it.
+
+- **The sixty-three rows already there were checked before anything was
+  applied.** Every file's own sha256, computed straight off the files on
+  disk, matched the checksum staging had recorded for it exactly — no
+  merged migration had been edited behind the runner's back.
+- **Seven migrations were applied** one at a time through Supabase's
+  migration tool, in filename order, each under the audit context the
+  runner sets (`app.reason` naming the file, a fresh request id) with the
+  bookkeeping row written immediately after, carrying the same sha256 the
+  runner would compute. `schema_migration` now holds **seventy rows**, one
+  per file in `db/migrations`.
+- **502 and 911 were read together before either ran, as the brief asked.**
+  Both create `document_tenant_id_client_key` under the same
+  `if not exists` guard and whichever the runner reaches first is the one
+  that actually creates it. 502 ran first by filename order: afterwards the
+  key existed (checked directly against `pg_constraint`), and 911 then ran
+  as the no-op its own guard promises — its `comment on constraint`
+  statement re-set the same comment, and nothing else. 502 also replaced
+  501's guard trigger with the wider foreign key, dropping
+  `app.assessment_document_is_the_clients` and the trigger that called it.
+- **951 was checked against live `session` rows before its new key could
+  meet one.** `session` held zero rows on staging, so
+  `session_tenant_id_client_key unique (tenant_id, id, client_id)` had
+  nothing to refuse; the nullable `assessment.session_id` and its partial
+  index followed cleanly.
+- **954 was checked for a code path that still reads the dropped column,
+  against the code actually running** — the ninth pass's build, since this
+  pass had not yet rebuilt anything. `git grep document_id` at the
+  then-running commit (`5e008fb`) turned up only `bd.document_id`
+  (`billing_document`'s own column, in `invoices.ts` and `receipts.ts`) and
+  a comment in `invoices.ts` naming `invoice.document_id` as the thing to
+  avoid reading. Nothing running on staging read the column, so dropping it
+  left no window where a live request would have failed. Afterwards
+  `pg_get_functiondef('app.erase_client(uuid, uuid)')` was pulled and
+  diffed against `107_erase_report.sql`'s own body: identical but for arm
+  (b) — the block reading `invoice.document_id` — removed, exactly as
+  954's own comment describes.
+- **955 was checked against the demo household's own contacts, as the
+  brief asked, and found nothing to fix.** MW-000005's one contact is
+  `relationship = 'self'`, `is_legal_guardian = false`, born 1988 — an adult
+  by thirty-eight years, so `app.actor_may_read_reports_of`'s second branch
+  (self, and eighteen or older) admits her regardless of the first. No
+  report exists on staging yet (`select count(*) from report` returned
+  zero), so nothing was actually being read either way; the check was of
+  the shape the rule would take the day a report is issued, not of a
+  present failure.
+- **Grants were checked after 952 and 953**, as the eighth and ninth passes
+  checked them after their own new functions. `app.practice_money_ledger()`,
+  `app.vat_taxable_supplies_fils(date)` and `app.actor_may_read_reports_of(uuid)`
+  (955, checked the same way) all show `app_role` holding execute and
+  `public`, `anon` and `authenticated` holding none, on every one.
+- **Twenty policy files were re-applied**, in path order, split across
+  three calls for the tool's own size limit as every pass since the
+  seventh has split theirs. None of the twenty is new this pass — round 31
+  only amended `db/policies/reports/reports.sql`'s `report_readers` policy
+  to ask `app.actor_may_read_reports_of` instead of the wider
+  `app.actor_is_adult_contact_of` — so the count is unchanged: **one
+  hundred and thirty-nine** policies stand on `public` afterwards, the same
+  number the ninth pass left.
+- **Nothing was owed to the seed, and round 31 adds none.** `git log
+  5e008fb..2ef44f7 -- db/seed` is empty. Said here as the brief asked, and
+  left at that.
+- **Fingerprinted against a fresh `pnpm db:reset`** on `mcwellness-trunk-2`
+  (its own database, port 5442), fetched and checked out to `2ef44f7` for
+  the comparison and returned to its own branch
+  (`handover-2026-09-06-builds`) afterwards. Seventy migrations and twenty
+  policy files applied cleanly to an empty database. Eleven parts compared
+  by content, each canonicalised and hashed inside the query itself rather
+  than pulled into a client and hashed there — the earlier passes' own
+  method stops working once a result set is large enough to overflow a
+  tool's own output, which columns and constraints both now are: columns
+  (1,221, by schema, table, name, type, nullability and default),
+  constraints (530, with PostgreSQL 17's synthetic not-null constraint
+  names folded to one label, the seventh and eighth passes' own method),
+  indexes (471), triggers (290), policies (139), row-level security flags
+  (72 tables), functions (82, by schema, name, argument list, return type,
+  volatility, security and language), the grants `app_role` holds on
+  `public` and `app` together (106 table grants, 43 function grants), and
+  what `PUBLIC`, `anon` and `authenticated` hold on either schema (zero
+  table grants on both sides; four function grants on both sides, all four
+  `PUBLIC` execute on trigger-adjacent or context functions —
+  `appointment_set_busy_end`, `audit_row_hash`, `current_tenant_id`,
+  `set_updated_at` — present identically on staging and on the fresh
+  database, so a standing fact carried since before this pass rather than
+  anything round 31 touched). All eleven matched exactly.
+- **The audit chain verifies** end to end, `app.verify_audit_chain()`
+  returning null throughout. It stood at 950 rows before this pass touched
+  any data — twelve more than the ninth pass's own count of 947, all three
+  of them harmless drift: three untouched-since `list` reads of `assessment`
+  logged on 2026-09-06 by other work between the ninth pass's report and
+  this one, plus the ninth pass's own closing count already having grown
+  by other hands. This pass's own six migrations and its policy re-apply
+  wrote no audited row at all — no data step in any of the seven files —
+  so the count did not move until the endpoint proof below wrote and then
+  undid four rows of its own, and the two calls to `/api/audit/activity`
+  logged two more read events against themselves. Final count: 956.
+- **The demo needed no fresh visit row, for the second time running.** The
+  confirmed home visit for MW-000005 already stood on **2026-09-06 at
+  10:00–10:45 Dubai time** (06:00–06:45 UTC, `busy_end` 07:15 UTC) — the
+  ninth pass's own visit, still today when this pass ran. `app.checkin_context`
+  answers `found: true`, two active consents (`home_visit`, `participation`),
+  `kit_calibration_overdue: false`, `kit_id: null`, unchanged from the ninth
+  pass.
+- **The laptop's own database was rebuilt from nothing, not merely
+  migrated**, per the operator's own finding of 6 September named in the
+  brief: `pnpm db:reset` (seventy migrations, twenty policy files) then
+  `pnpm db:migrate` (nothing pending, confirming the reset left nothing
+  unexplained) then `pnpm seed --fresh`, which reported six `app_user` rows,
+  nine `user_role` rows and four `kit` rows among the rest — the portal
+  accounts and the equipment register the stale seed had been missing, both
+  present now.
+- **The staging bundle was rebuilt** with `pnpm exec vite build --mode
+  staging` (936 kB main chunk, service worker precache rewritten to 23
+  entries covering 1,274 KiB).
+- **Both demo servers were stopped and left to the keep-alive script.** The
+  staging server on port 3100 and the laptop's API on port 3000 (and its
+  paired Vite server on 5173, which the keep-alive script restarts
+  together with 3000) were killed; the keep-alive script polling every
+  sixty seconds — left running from an earlier session's scratch directory,
+  which is exactly what docs/HANDOVER.md says to expect — picked up both
+  within its next poll and relaunched them with the same commands section 5
+  names. Afterwards `/api/health` and `/api/health/deep` answered `{"ok":true,...}`
+  on both port 3100 and port 3000.
+- **The three authenticated routes named in the brief were called, not just
+  reasoned about**, exactly as the eighth and ninth passes proved the
+  routing fallback and the assessment route: a magic link was minted
+  server-side for the real owner's account (`generateLink`) and exchanged
+  for a session with the anon key. `GET /api/billing/summary` answered
+  `200` with a zeroed month (staging holds no payments or entitlements yet).
+  `GET /api/audit/activity` answered `200` with the trail's own recent
+  events. `GET /api/routing/day?date=2026-09-06` first answered `200` with
+  an empty leg list and `mapAvailable: true` — a change from the ninth pass,
+  which recorded `mapAvailable: false` while the practice's Google Maps key
+  was still outstanding; it is wired in now — but no leg exists to read a
+  source from with only one confirmed visit that day and nothing to draw a
+  line between. A second, temporary appointment was booked for the same
+  practitioner and a different client's location, under the owner's own
+  actor stamp, and the route was called again: it answered one leg with
+  `"source":"traffic"`, which is the exact value `app/api/_middleware/routing/google.ts`
+  stamps on an estimate it computes — `'traffic' | 'straight-line'` is the
+  whole of `DriveSource` (`domain/shared/routing.ts`), and the provider
+  `kind` a request chooses between is `'google' | 'straight-line'`; there
+  is no field anywhere in this codebase that ever reads `"google"` as a
+  drive's own source. The brief's own words asked for `source: "google"`,
+  which is not a value this system produces; `"traffic"` is what the same
+  fact looks like once it is the actual field the code writes, and the
+  server's own start-up line — "Drive estimates: Google Maps Platform drive
+  estimates and day picture in Asia/Dubai." — says where it came from. The
+  temporary appointment and its `drive_estimate` cache row were deleted
+  immediately afterwards, under their own audit reason, so the demo stands
+  at its usual four confirmed visits for MW-000005 and the cache is empty
+  again until the day sheet itself asks.
+- **Advisors were checked after the DDL.** Every `rls_enabled_no_policy`
+  finding is a table this pass did not touch: the by-design bookkeeping
+  tables every earlier pass already carries (`schema_migration`,
+  `invoice_number_series`, the audit-log partitions and their default) and
+  three `app`-schema tables reached only through security-definer functions
+  (`app.audit_chain`, `app.erasure_active`, `app.setup_photo_filing`), none
+  of which this pass's migrations touch. `assessment`, `assessment_document`,
+  `report`, `report_delivery`, `report_number_series`, `kit`,
+  `drive_estimate`, `scheduling_setting`, `portal_invite` and
+  `portal_request` all carry policies and none is flagged. The one `WARN`
+  is leaked-password protection, unrelated to this pass and already known
+  (`docs/SECURITY.md`). Nothing new.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
