@@ -545,3 +545,19 @@ ids; then a sign-in as her returned an ES256 token and `GET /api/practice`
 on the live address answered 200 naming the practice. Her email and password
 are two lines in the secrets file for the password manager. The Hostinger vendor row in `docs/COMPLIANCE/approved-vendors.md`
 still waits for the operator's tick.
+
+**The sign-in round, deployed (02:00, 7 September).** On the operator's request
+at 00:43 the sign-in page gained a show-or-hide button on the password and a
+"Keep me signed in on this browser" box (pull request 107, branch `signin-2`,
+stacked on 106; reviewed, fixed and re-checked under the usual rules, the
+record on the pull request). Production now runs `dd90787`: `main` plus 106
+plus 107, until both merge. Two things learned on this deploy: Hostinger's
+deploy tool uploads an archive and starts a build with settings it guesses
+from `package.json` (pnpm, `dist/index.js`), which fails harmlessly, and the
+explicit build then runs against the same uploaded archive; and for about
+twenty minutes after two builds in a row the site answered slowly (a shallow
+health request took over two minutes, no error in the log, the process never
+restarting), then returned to under two seconds, which reads as the shared
+plan's processor limit after the builds' installs. The name now resolves to
+Hostinger's CDN edge (`server: hcdn`), so the CDN is in the path again and
+`TRUSTED_PROXY_HOPS` is still to be measured with that in mind.

@@ -193,6 +193,12 @@ an unanswered decision. The next session's first act is section 10.
   serves the app. The full account is `docs/PRODUCTION.md`, "the first live
   pass", and `docs/RUNBOOK/go-live.md` section 7. The secrets are in
   `~/Documents/mcwellness-production-secrets.env` for the password manager.
+- **The founder can sign in (00:30)** and her password is the one the operator
+  chose (00:41). **The sign-in page gained a show-or-hide button and a "Keep
+  me signed in on this browser" box** (pull request 107, `signin-2`, stacked on
+  106; built, reviewed, fixed and re-checked; deployed at 02:00, so production
+  runs `dd90787`, `main` plus 106 plus 107). Merge order when the checks run
+  again: 106, 107, then 103, 104, 105 (105 re-based on `main` first).
 - The operator's morning page is `docs/OPERATOR/2026-09-06-decisions.md`
   (pull request 85): every decision and action that is theirs, with the
   Hostinger question and the lawyer's note drafted.
