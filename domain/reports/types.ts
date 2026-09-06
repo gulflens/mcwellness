@@ -36,13 +36,20 @@ export const REPORT_LOCALES = ['en', 'ar'] as const;
 export type ReportLocale = (typeof REPORT_LOCALES)[number];
 
 /**
- * The five bands, slow to fast (docs/DESIGN-BRIEF.md section 3.1). Named here
- * rather than imported from `domain/session`, which is another module's
- * (docs/SPEC/OWNERSHIP.md rule 3); the list is the design brief's, not that
- * module's, and both read it from the same place.
+ * The five bands, slow to fast (docs/DESIGN-BRIEF.md section 3.1).
+ *
+ * **Re-exported from `domain/shared/bands.ts`**, under the names this folder
+ * has always used, so no caller moved. They were declared here because the
+ * only other copy was another module's and `docs/SPEC/OWNERSHIP.md` rule 3
+ * forbids reaching for it; the trunk's round 34 answered that by putting the
+ * five where rule 3 says they belong, with their words in both languages and
+ * their hues beside them (`docs/CHANGE-REQUESTS/qa-01.md`). It is the same
+ * five keys in the same order — `BAND_RGB` is keyed by them, which is how a
+ * ribbon slice reaches its colour.
  */
-export const BAND_KEYS = ['delta', 'theta', 'alpha', 'beta', 'gamma'] as const;
-export type BandKey = (typeof BAND_KEYS)[number];
+import type { Band as BandKey } from '../shared/bands';
+export { BANDS as BAND_KEYS } from '../shared/bands';
+export type { Band as BandKey } from '../shared/bands';
 
 /**
  * Who signed, as it was true at signing (section 3). Four values off the

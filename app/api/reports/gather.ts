@@ -11,6 +11,7 @@ import {
   type SessionReportContent,
   type VisitRow,
 } from '../../../domain/reports';
+import { BAND_NAMES, UNIT_NAMES } from '@domain/shared';
 import type { Db } from '../_middleware/request-context';
 
 /**
@@ -121,34 +122,25 @@ function bandsOf(telemetry: unknown): Record<string, number> {
 type DerivedFigure = { site?: unknown; band?: unknown; unit?: unknown; value?: unknown };
 
 /**
- * The words a figure is named and measured in, exactly as the comparison
- * screen names them (`BAND_LABELS` and `UNIT_SHORT`,
- * app/admin/assessments/copy.ts). `docs/SPEC/reports-v1.md` section 5 asks
- * for "the same figures ... the comparison view shows", so the two say one
- * thing; quoted rather than imported, because that file is another stream's
- * and a screen's copy is not a route's to depend on (OWNERSHIP.md rule 3 is
- * about `domain/`, and the same reasoning holds a route out of a component
- * folder).
+ * The words a figure is named and measured in.
  *
- * An unlisted band or unit is not renamed and not dropped: it is quoted as
- * the database holds it, which is honest and is what a figure the practice
+ * These were two tables in this file, quoted from the comparison screen's own
+ * copy because that file is another stream's and a route may not reach into a
+ * component folder. Both are now `domain/shared/bands.ts`'s — the trunk's
+ * round 34 gave the five bands one home, in both languages, so this route and
+ * that screen name a band from the same place and cannot drift
+ * (`docs/CHANGE-REQUESTS/qa-01.md`). `docs/SPEC/reports-v1.md` section 5 asks
+ * for "the same figures ... the comparison view shows", and now there is one
+ * vocabulary for both to read.
+ *
+ * An unlisted band or unit is still not renamed and not dropped: it is quoted
+ * as the database holds it, which is honest and is what a figure the practice
  * starts recording tomorrow deserves.
  */
-const BAND_WORDS: Record<string, string> = {
-  delta: 'Delta',
-  theta: 'Theta',
-  alpha: 'Alpha',
-  beta: 'Beta',
-  gamma: 'Gamma',
-};
-
-const UNIT_WORDS: Record<string, string> = {
-  uV2: 'µV²',
-  percent: '%',
-  ratio: 'ratio',
-  sd: 'SD',
-  points: 'points',
-};
+function bandWord(band: string, locale: 'en' | 'ar'): string {
+  const known = (BAND_NAMES as Record<string, { en: string; ar: string }>)[band];
+  return known ? known[locale] : band;
+}
 
 function figuresOf(derived: unknown): AssessmentRow['figures'] {
   if (derived === null || typeof derived !== 'object') return [];
@@ -171,14 +163,19 @@ function figuresOf(derived: unknown): AssessmentRow['figures'] {
     out.push({
       // The pair is what a comparison lines two maps up by (`figureKey`,
       // domain/assessment/shapes/brain-map.ts) and it is also what a reader
-      // sees, so one string is both. `labelAr` is null on purpose: the site
-      // is written in the international 10-20 system in every language, and
-      // this repository holds no Arabic word for a band — inventing one in a
-      // route is not the place, and the renderer falls back to the label it
-      // has.
-      label: `${figure.site} ${BAND_WORDS[figure.band] ?? figure.band}`,
-      labelAr: null,
-      unit: UNIT_WORDS[figure.unit] ?? figure.unit,
+      // sees, so one string is both.
+      //
+      // **The site does not change language.** An electrode site is written in
+      // the international 10-20 system everywhere, so "Fz" is already the
+      // Arabic word for Fz; only the band's own word turns over. That is why
+      // both halves start with the same `figure.site` and why the Arabic half
+      // is not a translation of the English one but the same pair said twice.
+      // `labelAr` was null until round 34, because the repository held no
+      // Arabic word for a band; it holds five now, and the renderer prefers
+      // this half on a right-to-left page.
+      label: `${figure.site} ${bandWord(figure.band, 'en')}`,
+      labelAr: `${figure.site} ${bandWord(figure.band, 'ar')}`,
+      unit: (UNIT_NAMES as Record<string, string>)[figure.unit] ?? figure.unit,
       value: figure.value,
     });
   }
