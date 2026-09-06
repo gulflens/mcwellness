@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -15,15 +16,23 @@ import { asApiRole, AUTH, freshDatabase, rejectsWith, rolledBack } from './helpe
  * ever seen the migrations gets its first practice and its owner, with none of
  * the seed's synthetic people and money.
  *
- * The test that matters is the third one. Every per-practice default in this
- * schema is written twice over: once by a data step in the migration that
- * introduces it, covering a practice that already existed, and from then on by
- * an after-insert trigger on `tenant` for every practice created afterwards.
- * The bootstrap therefore copies no statement — it inserts the tenant and lets
- * those triggers run. What keeps that honest is a comparison against a seeded
- * practice, table by table, over every tenant-scoped table the schema has
- * rather than a list written by hand: a future migration that adds a default
- * without a trigger fails here, rather than on the day production opens.
+ * Two tests carry the weight, and they guard different mistakes. Every
+ * per-practice default in this schema is written twice over: once by a data
+ * step in the migration that introduces it, covering a practice that already
+ * existed, and from then on by an after-insert trigger on `tenant` for every
+ * practice created afterwards. The bootstrap therefore copies no statement —
+ * it inserts the tenant and lets those triggers run.
+ *
+ * What keeps that honest is, first, a comparison against a seeded practice,
+ * table by table, over every tenant-scoped table the schema has rather than a
+ * list written by hand. Both practices in that comparison are trigger-fed —
+ * the seed inserts its tenant only after every migration has run, so no data
+ * step fires for either of them — so what it catches is a seventh *trigger-fed*
+ * default that migration 956's hand-written list has fallen behind. And,
+ * second, a scan of the migrations for every `insert ... from tenant` data
+ * step, whose tables must be exactly the tables on that list: that is what
+ * catches a default written as a data step and given no trigger at all, which
+ * no comparison between two trigger-fed practices can see.
  */
 
 const KEYS = deriveIdentityKeys(Buffer.alloc(32, 7));
@@ -142,6 +151,109 @@ async function snapshot(client: pg.Client, tenantId: string): Promise<Snapshot> 
   return snap;
 }
 
+/**
+ * A migration file with its comments gone and the contents of every string
+ * literal and dollar-quoted body blanked, so only top-level statements are
+ * left to read. Without this, prose about a tenant (702), a hint naming
+ * `tenant.vat_registered` (950) and this file's own explanation (956) would
+ * all read as data steps, and a semicolon inside a quoted string would cut a
+ * statement in half.
+ */
+function topLevelStatements(sql: string): string {
+  let out = '';
+  let i = 0;
+  while (i < sql.length) {
+    if (sql.startsWith('--', i)) {
+      const end = sql.indexOf('\n', i);
+      i = end === -1 ? sql.length : end;
+      continue;
+    }
+    if (sql.startsWith('/*', i)) {
+      // Postgres block comments nest.
+      let depth = 1;
+      i += 2;
+      while (i < sql.length && depth > 0) {
+        if (sql.startsWith('/*', i)) depth += 1;
+        else if (sql.startsWith('*/', i)) depth -= 1;
+        else {
+          i += 1;
+          continue;
+        }
+        i += 2;
+      }
+      out += ' ';
+      continue;
+    }
+    if (sql[i] === "'") {
+      i += 1;
+      while (i < sql.length) {
+        if (sql.startsWith("''", i)) i += 2;
+        else if (sql[i] === "'") {
+          i += 1;
+          break;
+        } else i += 1;
+      }
+      out += "''";
+      continue;
+    }
+    const dollar = /^\$[a-z_]*\$/i.exec(sql.slice(i));
+    if (dollar) {
+      const tag = dollar[0];
+      const end = sql.indexOf(tag, i + tag.length);
+      i = end === -1 ? sql.length : end + tag.length;
+      out += ' ';
+      continue;
+    }
+    out += sql[i];
+    i += 1;
+  }
+  return out;
+}
+
+/** `insert into <table> ... ;`, one match per top-level insert. */
+const INSERT = /insert\s+into\s+(?:public\.)?"?([a-z_][a-z0-9_]*)"?\b([^;]*);/gi;
+/** `from tenant`, the table — never `from tenant.something`, which is a column. */
+const FROM_TENANT = /\bfrom\s+(?:public\.)?"?tenant"?(?![.\w"])/i;
+
+/**
+ * Every table filled by an `insert ... from tenant` data step in the
+ * migrations, mapped to the file that step lives in. This is the set migration
+ * 956 must check, and the reason it must: a table here is a per-practice
+ * default, and a default that arrives only from a data step reaches no
+ * practice made after that migration ran.
+ */
+function dataStepTables(): Map<string, string> {
+  const directory = new URL('../../db/migrations/', import.meta.url);
+  const found = new Map<string, string>();
+  for (const file of readdirSync(directory)
+    .filter((name) => name.endsWith('.sql'))
+    .sort()) {
+    const sql = topLevelStatements(readFileSync(new URL(file, directory), 'utf8'));
+    for (const [, table, body] of sql.matchAll(INSERT)) {
+      if (table && body && FROM_TENANT.test(body)) found.set(table, file);
+    }
+  }
+  return found;
+}
+
+/** The table and source file of every default migration 956 checks for. */
+async function checkedTables(client: pg.Client): Promise<Map<string, string>> {
+  const { rows } = await client.query<{ definition: string }>(
+    `select pg_get_functiondef(p.oid) as definition
+       from pg_catalog.pg_proc p
+       join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'app' and p.proname = 'bootstrap_practice'`,
+  );
+  const definition = rows[0]?.definition ?? '';
+  const block = /\(values([\s\S]*?)\)\s*as\s+d\(table_name,\s*source_file\)/i.exec(definition);
+  if (!block?.[1]) throw new Error('migration 956 no longer carries a list this test can read.');
+  const listed = new Map<string, string>();
+  for (const [, table, source] of block[1].matchAll(/\(\s*'([a-z_]+)',\s*'([^']+)'\s*\)/g)) {
+    if (table && source) listed.set(table, source);
+  }
+  return listed;
+}
+
 /** The same snapshot with the seed's own synthetic content set aside. */
 function defaultsOnly(snap: Snapshot): Snapshot {
   const kept = Object.keys(snap.counts).filter((table) => !SEED_TABLES.includes(table));
@@ -254,6 +366,24 @@ describe('the first practice', () => {
       'scheduling_setting',
       'vat_setting',
     ]);
+  });
+
+  it('checks for exactly the defaults the migrations write from tenant', async () => {
+    // The comparison above cannot see this one. Both practices it weighs are
+    // trigger-fed, so a default that a migration writes as a data step and
+    // never gives a trigger is absent from both sides and the comparison stays
+    // green — while every practice made after that migration goes without the
+    // row. The two sets are therefore read from where each actually lives: the
+    // migrations themselves, and the function's own list, read back out of the
+    // database rather than copied into this file.
+    const written = dataStepTables();
+    const checked = await checkedTables(owner);
+    const named = (list: Map<string, string>): string[] =>
+      [...list].map(([table, file]) => `${table} (${file})`).sort();
+    expect(named(checked)).toEqual(named(written));
+    // The scan reads the shapes these steps are really written in, not one of
+    // them: 100's spans four lines and cross joins a values list.
+    expect(written.get('goal_category')).toBe('100_client_record.sql');
   });
 
   it('writes every row it makes as the system, under one reason', async () => {

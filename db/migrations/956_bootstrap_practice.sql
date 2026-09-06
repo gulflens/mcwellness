@@ -30,14 +30,24 @@
 -- lets the very triggers those migrations installed do their own work, which
 -- is a stronger guarantee than any copy: a copy is a second implementation
 -- that drifts the first time either side changes, and there is nothing here to
--- drift. What it does instead is *check*, table by table, that each default
--- arrived — so a future migration that adds a per-practice default and forgets
--- its trigger is refused loudly at the one moment it matters, rather than
+-- drift. What it does instead is *check*, table by table, that each default on
+-- the list below arrived — so a trigger that is missing or switched off on
+-- this database is refused loudly at the one moment it matters, rather than
 -- leaving a practice quietly short of a row nobody thinks about until an
--- invoice cannot be numbered. `tests/db/bootstrap-practice.test.ts` is the
--- other half of that: it compares a bootstrapped practice with a seeded one
--- over every tenant-scoped table in the schema, so the list below cannot fall
--- behind the schema without a test going red.
+-- invoice cannot be numbered.
+--
+-- That list is hand-written, and nothing in this function makes a new table
+-- join it. Keeping it level with the schema is the work of
+-- `tests/db/bootstrap-practice.test.ts`, and it takes two tests, because there
+-- are two ways to fall behind. It compares a bootstrapped practice with a
+-- seeded one over every tenant-scoped table in the schema, which catches a
+-- seventh *trigger-fed* default the list has not been told about; and it scans
+-- every migration for `insert ... from tenant` data steps and requires that
+-- set to be exactly the list below, which catches the other case — a
+-- per-practice default written as a data step and given no trigger. No
+-- comparison between two practices can see that one: both practices in it were
+-- made after the migrations ran, so the data step fired for neither, and it is
+-- every practice made afterwards that goes short of the row.
 --
 -- **The check reads `to_regclass` and skips what is absent.** Apply order
 -- across the ranges is not fixed (docs/SPEC/OWNERSHIP.md): a database may

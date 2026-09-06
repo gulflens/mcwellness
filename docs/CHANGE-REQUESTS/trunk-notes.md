@@ -1548,11 +1548,18 @@ function does about them.
     again; the two must agree table by table and row by row once the seed's own
     synthetic people, catalogue and money are set aside. That exclusion list is
     `tests/db/seed.test.ts`'s own `SEED_TABLES`, which already exists and
-    already means exactly this. A migration that adds a per-practice default
-    without a trigger fails that comparison, which is what keeps decision 1
-    honest over time. The two practices cannot share a database — a second
-    practice is what the function refuses — so the file pays for two builds,
-    and takes about two seconds.
+    already means exactly this. What that comparison catches is a seventh
+    *trigger-fed* default missing from the function's hand-written list: both
+    practices in it are made after every migration has run, so a data step
+    fires for neither, and a default written as a data step with no trigger is
+    absent from both sides and passes unseen. That case is the second test's,
+    added in the fix round: it scans `db/migrations/*.sql` for every table an
+    `insert ... from tenant` data step writes, reads the function's own list
+    back out of the database with `pg_get_functiondef`, and requires the two to
+    be the same set — so between them the pair is what keeps decision 1 honest
+    over time. The two practices cannot share a database — a second practice is
+    what the function refuses — so the file pays for two builds, and takes
+    about two seconds.
 
 12. **`docs/STAGING.md` is untouched.** Its section 7 is the exit test and
     names no first-owner step: staging's practice comes from the seed and its
