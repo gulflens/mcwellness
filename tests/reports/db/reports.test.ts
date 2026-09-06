@@ -62,6 +62,40 @@ async function issued(clientIndex: number): Promise<string> {
   return id;
 }
 
+/**
+ * A questionnaire for a client on a given day, which is an assessment and is
+ * not a brain map. Written here rather than in `db/seed` because the point of
+ * it is where it sits: after the later of the two maps, so the pair the
+ * comparison takes can only be right if `derived->>'kind'` is doing the work
+ * (`ASSESSMENTS_SQL`, app/api/reports/gather.ts). Synthetic answers, as
+ * everything in these fixtures is.
+ */
+async function questionnaireOn(clientIndex: number, day: string): Promise<void> {
+  const answers = [
+    { key: 'q1', value: 2 },
+    { key: 'q2', value: 3 },
+    { key: 'q3', value: 1 },
+  ];
+  await h.owner.query(
+    'insert into assessment (tenant_id, client_id, performed_at, ' +
+      'performed_by_practitioner_id, instrument, instrument_version, derived) values ' +
+      "($1, $2, $3::timestamptz, $4, 'questionnaire.sample', '1', $5::jsonb)",
+    [
+      h.data.tenant.id,
+      h.clientId(clientIndex),
+      `${day}T15:00:00+04:00`,
+      h.practitionerIdOf(SEEDED.practitioner),
+      JSON.stringify({
+        kind: 'questionnaire',
+        provenance: { software: 'Synthetic Mapping Suite', softwareVersion: '3.2.1' },
+        answers,
+        total: answers.reduce((sum, answer) => sum + answer.value, 0),
+        maximum: 12,
+      }),
+    ],
+  );
+}
+
 describe('drafting', () => {
   it('creates a draft with no reference, no signature and no document', async () => {
     const id = await draftFor(0);
@@ -175,6 +209,12 @@ describe('drafting', () => {
     // could stand at either end of the pair and make it a comparison across
     // two instruments, which is refused.
     //
+    // The seed's own questionnaire sits *between* the two maps, so it would
+    // have been passed over by the sort alone and the kind filter would have
+    // been proved by nothing. This fixture puts one after the later map, where
+    // only the filter can keep it out of the pair.
+    await questionnaireOn(5, '2026-07-15');
+    //
     // `docs/SPEC/reports-v1.md` section 5 is what settles which figures may be
     // printed: the progress report carries "the same figures ... the
     // comparison view shows". The sentence about electrode sites in the same
@@ -201,8 +241,9 @@ describe('drafting', () => {
     ).comparison;
     expect(comparison).not.toBeNull();
     expect(comparison?.instrument).toBe('qeeg');
-    // The earliest and the latest brain map, and never the questionnaire that
-    // sits between them.
+    // The earliest and the latest brain map, and never a questionnaire —
+    // neither the one the seed puts between them nor the one just written
+    // after both.
     expect(comparison?.earlierOn).toBe('2026-03-06');
     expect(comparison?.laterOn).toBe('2026-06-04');
     // Five sites by five bands, each named as the Compare screen names it.
