@@ -17,7 +17,7 @@
  * **The Arabic words are proposed, not held.** The repository has no Arabic
  * vocabulary for the bands, so these are the plain transliterations of the
  * Greek letters, which is what the bands are called in Arabic-language
- * clinical writing. They are the operator's to approve, as every Arabic string
+ * writing. They are the operator's to approve, as every Arabic string
  * in this repository is, and they are written in exactly one place so that
  * approving them changes one file (`docs/CHANGE-REQUESTS/trunk-notes.md`,
  * round 34).
