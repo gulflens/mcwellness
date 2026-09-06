@@ -322,10 +322,17 @@ describe('selling a Silver package', () => {
       net_fils: number;
       vat_fils: number;
       gross_fils: number;
-      document_id: string | null;
+      documents: number;
     }>(
-      'select reference, kind, net_fils, vat_fils, gross_fils, document_id from invoice ' +
-        'where package_purchase_id = $1',
+      'select i.reference, i.kind, i.net_fils, i.vat_fils, i.gross_fils, ' +
+        // The rendered PDF hangs off `billing_document` and never off the
+        // invoice row: an invoice grants no update, so a column on it could
+        // only be filled at insert time and the PDF does not exist then
+        // (migration 407). `invoice.document_id` was the column that tried,
+        // and the trunk dropped it in migration 954; this is what replaced
+        // the assertion that it stayed null.
+        '  (select count(*)::int from billing_document b where b.invoice_id = i.id) as documents ' +
+        'from invoice i where i.package_purchase_id = $1',
       [purchaseId],
     );
     expect(invoices).toEqual([
@@ -335,10 +342,7 @@ describe('selling a Silver package', () => {
         net_fils: 1_032_500,
         vat_fils: 0,
         gross_fils: 1_032_500,
-        // `invoice.document_id` stays null and nothing writes it: an invoice
-        // grants no update, so the rendered PDF hangs off `billing_document`
-        // instead (migration 407).
-        document_id: null,
+        documents: 0,
       },
     ]);
 
