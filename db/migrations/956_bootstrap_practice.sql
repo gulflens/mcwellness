@@ -168,6 +168,16 @@ begin
   end if;
   -- One practice. A second is not a thing this platform has been asked for, and
   -- a decision nobody has taken is not one a bootstrap gets to take by accident.
+  --
+  -- The lock comes first because the check below is a read and what follows it
+  -- is a write: two callers in that gap would both find no practice and both
+  -- make one, and the sentence above would be false the one time it mattered.
+  -- One operator in one SQL editor is not that, but "only the first" is the
+  -- claim being made, so it is held rather than hoped for. The lock is
+  -- transaction-local: it is released when the transaction ends, whichever way
+  -- it ends, and it blocks nothing else in the schema — the key names this
+  -- function and only this function.
+  perform pg_advisory_xact_lock(hashtext('bootstrap_practice'));
   if exists (select 1 from public.tenant) then
     raise exception 'this platform already has a practice, and bootstrap_practice makes the first one only'
       using errcode = 'unique_violation',
