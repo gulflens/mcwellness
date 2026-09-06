@@ -273,3 +273,62 @@ describe('tenant-scoped keys (099_tenant_scoped_keys.sql)', () => {
     });
   });
 });
+
+describe('the client-scoped key on document (911_document_client_key.sql)', () => {
+  it('carries unique (tenant_id, id, client_id), whichever migration created it', async () => {
+    const { rows } = await client.query<{ conname: string }>(
+      'select c.conname from pg_constraint c ' +
+        "where c.conrelid = 'public.document'::regclass and c.contype = 'u' " +
+        'and (' +
+        '  select array_agg(a.attname::text order by a.attname) ' +
+        '    from pg_attribute a ' +
+        '   where a.attrelid = c.conrelid and a.attnum = any(c.conkey)' +
+        ") = array['client_id', 'id', 'tenant_id']",
+    );
+    expect(rows.map((row) => row.conname)).toEqual(['document_tenant_id_client_key']);
+  });
+
+  it('refuses a row naming another client’s document, and accepts the client’s own', async () => {
+    await rolledBack(client, async () => {
+      const ours = '00000000-0000-4000-8000-0000000000f7';
+      const practice = '00000000-0000-4000-8000-0000000000f9';
+      for (const [documentId, owning] of [
+        [ours, IDS.clientA],
+        [practice, null],
+      ] as const) {
+        await client.query(
+          'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256) ' +
+            "values ($1, $2, $3, 'assessment_raw', $4, 'application/pdf', sha256($5::bytea))",
+          [documentId, IDS.tenantA, owning, `key-${documentId}`, documentId],
+        );
+      }
+
+      // The shape migration 502 puts on `assessment_document`, as a throwaway
+      // table so this proves the key rather than that one stream wired it up.
+      await client.query(
+        'create table stream_document_ref (' +
+          'id uuid primary key default gen_random_uuid(), ' +
+          'tenant_id uuid not null, ' +
+          'client_id uuid not null, ' +
+          'document_id uuid not null, ' +
+          'foreign key (tenant_id, document_id, client_id) ' +
+          '  references document (tenant_id, id, client_id)' +
+          ')',
+      );
+
+      await client.query(
+        'insert into stream_document_ref (tenant_id, client_id, document_id) values ($1, $2, $3)',
+        [IDS.tenantA, IDS.clientA, ours],
+      );
+
+      // A practice document — filed against nobody — is not evidence of
+      // anybody's record either, and MATCH SIMPLE is what says so.
+      await rejectsWith(
+        client,
+        FOREIGN_KEY_VIOLATION,
+        'insert into stream_document_ref (tenant_id, client_id, document_id) values ($1, $2, $3)',
+        [IDS.tenantA, IDS.clientA, practice],
+      );
+    });
+  });
+});
