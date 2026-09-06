@@ -2169,14 +2169,20 @@ not have to find it in a diff.
    does not reach it, and writing the token's own bytes makes the
    correspondence readable at a glance. The test against `tokens.css` is what
    proves it either way.
-6. **The step-3 tests live beside the components** in
-   `app/admin/audit/AuditPage.test.tsx` and `RecordTimeline.test.tsx`, not in a
-   new `tests/audit/` folder. Both paths are `audit-ui`'s, and those two files
-   already carry the harness — the auth boundary, the fetch stub, the fixtures
-   — that a new folder would have had to duplicate. The precedent is the
-   trunk's own: round 31 created `AuditPage.test.tsx` beside the screen it
-   wrote. `tests/audit/` still does not exist, and this round did not create it
-   for two tests.
+6. **The round's own brief named `tests/audit/` for the step-3 tests, and the
+   tests were put beside the components instead** — in
+   `app/admin/audit/AuditPage.test.tsx` and `RecordTimeline.test.tsx`, which is
+   not where the brief said to put them. The reasons, stated plainly because
+   the brief's letter was not followed. Both paths are `audit-ui`'s, so nothing
+   about ownership turns on the choice. Those two files already carry the
+   harness — the auth boundary, the fetch stub, the fixtures — that a new
+   folder would have had to duplicate. The precedent is the trunk's own: round
+   31 created `AuditPage.test.tsx` beside the screen it wrote, for these same
+   two components. And `docs/SPEC/OWNERSHIP.md` rule 4, the one rule that fixes
+   where a test lives, governs **database tests only** — `tests/<worktree>/db/`
+   is the only path the database runner scans — and neither of these touches a
+   database. `tests/audit/` still does not exist, and this round did not create
+   it for two tests.
 7. **The link is a react-router `Link`, not a plain anchor.** An anchor would
    have needed no router above the component and would have cost two test files
    nothing — and it would also have reloaded the whole console, re-authenticated
