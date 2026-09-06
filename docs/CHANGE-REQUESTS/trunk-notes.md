@@ -1884,3 +1884,393 @@ default 6 gives; move it if you would rather own it.
 **Everyone.** A migration that only comments another stream's column is a
 migration in **that stream's** range with a `Needs` naming only what it needs
 to exist. A comment describes; it does not depend.
+
+## Round 34, 2026-09-06 (the bands in both languages and in colour, one press to the access report, and who reads what)
+
+Five items in one round: four requests already written — `qa-01.md`'s Arabic
+band vocabulary, `reports-01.md`'s R3 and R4, and the "one press" round 31's
+fix round left at the audit stream's door — and one that closes with a reading
+and builds nothing. Four of the five reach outside the trunk's own paths, so —
+as rounds 31, 32 and 33 did, and by the integrator's widening for one round —
+one branch answers all five rather than four branches answering pieces of it.
+Every file outside the trunk's own paths is listed below by name, and a
+widening note stands beside it in `docs/SPEC/OWNERSHIP.md`.
+
+This round **stacks on round 33** (pull request 103, reviewed and waiting on a
+GitHub billing block): both edit the same record files, so its pull request is
+opened against `trunk-round-33` and the integrator rebases it onto `main` once
+103 merges.
+
+### 1. The five bands have one home
+
+`qa-01.md`, "Requested: an Arabic vocabulary for the five bands". **Closed.**
+
+`domain/shared/bands.ts` is that home: `BANDS` and `Band` (the five keys, slow
+to fast, which is the hue ramp's order), `BAND_NAMES` with an English and an
+Arabic word each, `UNITS`, `UNIT_NAMES`, and `BAND_RGB` — the design brief's
+five hexes as the 0-to-1 triples a printed page can carry.
+
+Why it had to be here rather than in either stream. The names existed twice, in
+English only: `BAND_LABELS` in `app/admin/assessments/copy.ts`, which the
+comparison screen renders, and `BAND_WORDS` in `app/api/reports/gather.ts`,
+which quoted it rather than importing it because rule 3 holds a route out of
+another stream's folder. Neither was the place to invent an Arabic half:
+whichever added it first, the other would copy it, and two copies of a
+vocabulary drift. The precedent is round 31's `fileSignature` and round 33's
+`bytesAreAnEdf`.
+
+**The five Arabic words want the operator's approval**, and are marked as such
+here and under their own heading in the pull-request body. They are the plain
+transliterations of the Greek letters — دلتا، ثيتا، ألفا، بيتا، غاما — which is
+what the bands are called in Arabic-language writing, but they are not strings
+this repository already held. They are in one file, so approving them or
+replacing them changes one place.
+
+What moved, and what did not. `domain/assessment/types.ts` re-exports `BANDS`,
+`Band`, `UNITS` and `Unit` from shared under the names it already used;
+`domain/reports/types.ts` re-exports the same five as `BAND_KEYS` and
+`BandKey`. **No caller moved** — `z.enum(BAND_KEYS)` in the progress shape,
+`RibbonSlice.band`, `validateDerived`'s `unknown_band` refusal and
+`dominantBand`'s tie-breaking order are all untouched, and a test in each
+module reads the re-export itself so it cannot silently rot into a copy.
+`BAND_LABELS` and `UNIT_SHORT` are derived from the shared vocabulary and keep
+their export names. `gather.ts` drops both its local tables and fills `labelAr`
+as `${site} ${BAND_NAMES[band].ar}`: the site does not turn over, because an
+electrode site is written in the international 10-20 system in every language,
+so the Arabic half is the same pair said twice rather than a translation. The
+null-`labelAr` fixture in `tests/reports/document.test.ts` stays, because a
+report already filed may carry one and the renderer's fallback is still a
+branch worth proving.
+
+`domain/shared/bands.test.ts` reads `app/shell/tokens.css` and proves the five
+triples are the five `--<band>-base` declarations, so the paper and the screen
+cannot drift apart. That test is the reason no component needed a hex literal.
+
+**One home means one, so the other two copies went as well.** The request named
+two, but a search for the five keys found four: `domain/session/events.ts`'s
+`BAND_KEYS`, which is what a telemetry chunk's per-band amplitudes are checked
+against, and `MAP_BANDS` in `db/seed/generate.ts`, which is what every brain-map
+fixture in the seed is built from. `events.ts` now re-exports the shared list
+under the two names it already exported, the way `domain/reports/types.ts`
+does, and its test reads the re-export and checks that `BandAmplitudes` accepts
+exactly those five keys in that order. `generate.ts` imports `BANDS` — it
+already imported `domain/shared/dates` and `domain/shared/storage`, so it was
+one import — and the local list went; a fixture whose bands could drift from
+the software's would prove nothing about the screens and reports it exists to
+fill. `grep "'delta'"` over the repository now finds `domain/shared/bands.ts`
+and nothing else. `events.ts` is `session-capture`'s path and is named in the
+file list below and in the widening note.
+
+### 2. Colour reaches paper
+
+`reports-01.md` R3. **Closed.**
+
+`domain/shared/document/pdf.ts` gains an optional `rgb` on `Style` and on the
+rule op, written as `r g b rg` for a fill and `r g b RG` for a stroke beside
+the existing `g` and `G`, each value clamped to 0 to 1 and written by the same
+`num` as every other number in the file.
+
+**When it is absent the grey path is taken unchanged, and that is proved rather
+than asserted.** `pdf.test.ts` holds `GREY_STREAM_BEFORE_COLOUR`: the content
+stream the writer produced for a page of text and rules, captured from the
+running writer *before* the emitter was touched and kept verbatim as the
+expectation. A page with no colour on it renders to exactly that text, contains
+no `rg` and no `RG`, and still says a grey once for two ops that share it. If a
+later change makes that test fail, the change moved a document somebody has
+already been handed.
+
+The writer keeps **one** fill state for both paths, and that is the point: a
+colour set with `rg` has to be undone by the grey after it and a grey by the
+colour after it, and two counters — one tracking a number, one a triple — would
+each think the other's op had left the fill where it wanted it, so a line would
+come out in the colour of the line before it. A rule's stroke stays inside its
+own `q`/`Q`, exactly as it always has, so nothing after it inherits one.
+
+Then `Sheet.ruleAt` takes an optional colour and is the only primitive on a
+report's sheet that offers one, and `ribbonFigure` draws each slice in
+`BAND_RGB[slice.band]`. Three things on the strip deliberately carry no hue: a
+hairline marks a brain map, which is a day rather than a band; an empty slice
+is a session not yet delivered, which has trained nothing; and a slice whose
+visit recorded no band is ink, because a colour chosen for it would say a band
+was trained that was not. The two comment blocks that explained why the strip
+was ink-only say what is now true. `tests/reports/document.test.ts` proves each
+slice's triple, the ink slice, and — the design brief's own claim — that no
+other op on either page of a report carries a colour at all.
+
+### 3. One press to the access report
+
+`trunk-notes.md` round 31's fix round, section 3. **Closed.**
+
+`app/admin/audit/RecordTimeline.tsx` gains a link at its head, "Who has opened
+this record", to `/admin/audit` with the record named — which is the prefix
+`app/shell/App.tsx` mounts the screen under. It is shown only when
+`canActor(actor, { type: 'audit.read', clientId })` holds, so finance, who sees
+this tab and reads money rather than the trail, is not offered a link the route
+would refuse. It stands at the head whatever the feed below it is doing,
+including a record nothing has touched and one whose timeline would not load:
+who has opened a record is a different question from what the record's own feed
+says.
+
+`app/admin/audit/AuditPage.tsx` reads that parameter on its first render and
+opens the report as if the line's own button had been pressed, then clears it
+from the address — with `replace`, so the address the link came from is not one
+press of Back away from re-opening what was just closed. The report is a state
+of the screen from that moment on, so closing it closes it and a reload opens
+the feed.
+
+**`app/admin/clients/ClientDrawer.tsx` is not edited.** The link lives in the
+component the drawer already mounts, which is where round 31's fix round said
+the press belonged. Its *test* is in the list below, because the component now
+renders a `Link` and a `Link` needs a router above it.
+
+`docs/SPEC/audit.md` section 9, view 4 carries one sentence saying where the
+one click now is and who is offered it, marked "Amended 2026-09-06".
+
+### 4. Who reads what
+
+`reports-01.md` R4. **Closed.**
+
+`docs/SECURITY.md` gains "Who may read what" after "The layers": a row per
+client-scoped group of tables — the record with its contacts, consents,
+locations and documents; visits; sessions; money; measurements and their files;
+reports; portal invitations and requests; the audit trail with the activity
+feed and the access report — a column per role in `ROLES`, and every cell read
+off `db/policies/**` and `domain/shared/actor.ts` with its policy file named
+beside it.
+
+Three cells were widened or corrected in the fix round, and none of them
+changed a policy. The **portal row** is new: `portal_invite` and
+`portal_request` are client-scoped and personal and were outside the request's
+own list of groups, so a page claiming to say who reads what had a hole in it —
+invitations are the owner's and an admin's alone, requests add the lead
+practitioner and the household's own, both erasure-gated, and a practitioner
+and a finance account read neither. The **reports** row's household cell now
+names the superseded version the household was actually sent
+(`app.report_was_delivered`), which `report_readers` grants and the cell's
+"issued reports" alone did not. And the **money** row's `catalogue_readers`
+citation now says what it is: the catalogue itself — `package`,
+`package_component`, `package_price` — is the four office roles' alone and is
+neither a practitioner's nor a household's, which a row whose cells read "own
+schedule" and "own record" would otherwise have been read as granting.
+
+**Where a policy and the actor rule disagree the row says so.** There are six
+worth a reader knowing about, and they all run the same way — the database is
+the boundary and the API rule is the courtesy — but not all in the same
+direction. `client.read` admits a practitioner the row policy scopes to their
+own schedule, and knows nothing of the erasure gate. `billing.invoice.read` is
+narrower than `ledger_readers`, deliberately and by `actor.ts`'s own comment.
+`report.list` admits any contact of the record where the policy asks for a
+legal guardian, or the person themselves once adult, and for an issued
+document. No `appointment.list` scope admits a household at all, where the
+appointment policy does. There is **no session-read action** in `canActor`, so
+the session routes use `hasRole` directly and one of them lists finance as a
+reader where the `document` policy does not. And on the audit trail the role
+lists agree exactly, while the erasure gate, the reason a sensitive read must
+carry and the 404 for a record the caller may not name all live in the routes
+and not in the policy.
+
+Beneath the table the two absences the request named stand as decisions with
+their sources: finance reads no report (`docs/SPEC/reports-v1.md` 7.1,
+`db/policies/reports/reports.sql`) and finance reads no audit trail
+(`domain/shared/actor.ts`, `audit.activity`). And the section says that it is
+rewritten in the same pull request as any policy that changes it — a page
+describing row level security that is updated a round later is a page that has
+been wrong for a round.
+
+### 5. The household's own step in confirming a booking
+
+Owed to a later round by `docs/HANDOVER.md` section 10 step 3, conditionally:
+"if the scheduling spec names one". **Closed with a reading; nothing built.**
+
+It names none. `docs/SPEC/scheduling-manual.md` section 3 defines `confirmed`
+as "client informed (manual toggle in Phase 1; WhatsApp in Phase 2)" — an act
+the practice performs and records, not one it asks the household to perform.
+Section 4.3's "New appointment" gives the household no part either.
+`docs/SPEC/client-portal.md` section 3.2 does not show a household a `proposed`
+visit at all — "the practice has not told the household yet" — so there is
+nothing on any household screen for a family to accept.
+
+The qa-fixes-1 round reached the same reading when it built the confirm toggle
+and wrote it into `qa-01.md` item 1: "No household step exists to build."
+This closes it in the record so a later round does not go looking again. If the
+founder wants a household to accept a proposed visit, that is a new decision
+about the lifecycle rather than a gap in the build, and it starts with a change
+to section 3.
+
+---
+
+### Every file this round touched outside the trunk's own paths
+
+Listed by name, as a widening requires. Each is a change the item above it
+could not be made without.
+
+**assessment** (item 1)
+`domain/assessment/types.ts` and `domain/assessment/validateDerived.test.ts`;
+`app/admin/assessments/copy.ts` and `copy.test.ts` (new).
+
+**reports** (items 1 and 2)
+`domain/reports/types.ts` and `domain/reports/gatherProgress.test.ts`;
+`domain/reports/document/sheet.ts` and `render.ts`;
+`app/api/reports/gather.ts`;
+`tests/reports/document.test.ts` and `tests/reports/db/reports.test.ts`.
+
+**audit-ui** (item 3)
+`app/admin/audit/RecordTimeline.tsx` and `RecordTimeline.test.tsx`;
+`app/admin/audit/AuditPage.tsx` and `AuditPage.test.tsx`.
+
+**client-record** (item 3)
+`app/admin/clients/ClientDrawer.test.tsx` — a `MemoryRouter` around its three
+renders and nothing else. `ClientDrawer.tsx` itself is untouched.
+
+**session-capture** (item 1)
+`domain/session/events.ts` and `domain/session/events.test.ts` — the fourth
+copy of the five band keys, replaced by a re-export of the shared list under
+the two names this folder already exported. No caller in that stream moved.
+
+Everything else is the shared zone or the trunk's own: `domain/shared/bands.ts`
+with its test, `domain/shared/index.ts`, `domain/shared/document/pdf.ts` with
+its test; `db/seed/generate.ts`, whose `MAP_BANDS` was a fifth copy of the five
+and now imports `BANDS`; `app/shell/shell.css`; `tests/security/xss.test.tsx`;
+`docs/SPEC/`, `docs/SECURITY.md` and `docs/CHANGE-REQUESTS/`. No migration and no policy
+file: nothing this round decided is a database's to enforce, and the one page
+that describes what the database enforces is documentation of policies that did
+not change. `docs/SPEC/00-data-model.md` is deliberately **not** edited: it
+lists neither a vocabulary module nor a content-stream operator. Nothing in the
+stream paths above is the trunk's beyond this round.
+
+### Every default taken
+
+Fifteen, all the builder's. Each is here because a reader of this round should
+not have to find it in a diff.
+
+1. **The five Arabic band names are the plain transliterations**, and they are
+   marked for the operator's approval here and in the pull-request body rather
+   than shipped as settled. The repository held no Arabic vocabulary for the
+   bands, and the alternative — leaving `labelAr` null for another round — is
+   the state `qa-01.md` filed as a defect. They are in one file, so replacing
+   any of them is one edit.
+2. **`UNIT_NAMES` is one string per unit, not an English and an Arabic half.**
+   `µV²` and `%` are symbols in every language, and `ComparisonLine` carries a
+   single `unit` with no Arabic twin to fill, so a bilingual table would have
+   put three more strings in front of the operator that nothing on any page
+   would print. The band names got the pair because a band name is the one
+   thing on that line that changes language.
+3. **`UNITS` and `Unit` moved to shared beside the bands**, though the request
+   and the round's own brief named only the bands. The units stand beside the
+   bands in the vocabulary `qa-01.md` asked for; leaving a second list of the
+   same five words one file away is the drift the request exists to end. What
+   each unit *means* — the paragraph the assessment specification wrote — stays
+   in `domain/assessment/types.ts`, because that is a definition and not a name.
+4. **`UNIT_SHORT` is derived as well as `BAND_LABELS`**, for the same reason.
+   `UNIT_LABELS`, the long English sentences the screen sets beside a table,
+   stays the screen's own: that is prose.
+5. **`BAND_RGB` is written as `0x3b / 255`** rather than as decimals. It is a
+   domain module and not a component, so the colour rule's ban on hex literals
+   does not reach it, and writing the token's own bytes makes the
+   correspondence readable at a glance. The test against `tokens.css` is what
+   proves it either way.
+6. **The round's own brief named `tests/audit/` for the step-3 tests, and the
+   tests were put beside the components instead** — in
+   `app/admin/audit/AuditPage.test.tsx` and `RecordTimeline.test.tsx`, which is
+   not where the brief said to put them. The reasons, stated plainly because
+   the brief's letter was not followed. Both paths are `audit-ui`'s, so nothing
+   about ownership turns on the choice. Those two files already carry the
+   harness — the auth boundary, the fetch stub, the fixtures — that a new
+   folder would have had to duplicate. The precedent is the trunk's own: round
+   31 created `AuditPage.test.tsx` beside the screen it wrote, for these same
+   two components. And `docs/SPEC/OWNERSHIP.md` rule 4, the one rule that fixes
+   where a test lives, governs **database tests only** — `tests/<worktree>/db/`
+   is the only path the database runner scans — and neither of these touches a
+   database. `tests/audit/` still does not exist, and this round did not create
+   it for two tests.
+7. **The link is a react-router `Link`, not a plain anchor.** An anchor would
+   have needed no router above the component and would have cost two test files
+   nothing — and it would also have reloaded the whole console, re-authenticated
+   and re-fetched, to reach a screen already in the bundle.
+8. **The parameter is cleared with `replace`.** Pushing a second entry would
+   leave the address one press of Back away from re-opening a report somebody
+   had just closed.
+9. **`reportFor` is seeded in the `useState` initialiser**, not in an effect.
+   The report is open on the first paint rather than after one, which is what
+   "as if the line's own button had been pressed" means; the effect that clears
+   the address is separate and runs after.
+10. **The link is rendered above every state of the timeline**, which meant
+    wrapping three early returns rather than adding it to the ready case. A
+    record nothing has touched is exactly a record somebody might want the
+    access report for.
+11. **~~`domain/session/events.ts` keeps its own `BAND_KEYS`.~~ Reversed in the
+    fix round.** It was left standing as `session-capture`'s path, written up
+    for that stream rather than closed here. The review's reading is the right
+    one: while a fourth copy stood — and a fifth, `MAP_BANDS` in
+    `db/seed/generate.ts`, which is the trunk's own path and was named nowhere
+    — "the five bands have one home" was a claim this round could not make, in
+    `bands.ts`, in `qa-01.md` or in item 1 above. Both are closed: `events.ts`
+    re-exports the shared list under `BAND_KEYS` and `BandKey`, `generate.ts`
+    imports `BANDS`, and the widening was extended to name `events.ts` and its
+    test. The alternative — leaving them and rewriting the claim to say which
+    copies stand and why — would have left the request half answered for the
+    sake of a boundary that a one-line re-export does not strain.
+12. **`rgb` sits beside `grey` rather than replacing it.** A caller that passes
+    both gets the colour; every caller that passes neither is exactly where it
+    was, which is the whole promise of the item.
+13. **A non-finite colour component clamps to 0**, not to an error. This is on
+    the path that files a household's most personal document, and a rendered
+    black rule is a smaller fault than a refusal to render at all; the values
+    come from a table proved against `tokens.css`, so nothing reachable can
+    send one. The default stands; the branch is no longer untested — the fix
+    round added a triple with `NaN` in it and asserts the component reaches the
+    stream as `0` and that the word never does.
+14. **The rule's stroke is not tracked in the fill state.** It has always sat
+    inside its own `q`/`Q`, so what it sets is discarded at the `Q` and the fill
+    state genuinely does not need to know a rule happened. Tracking it would
+    have been a second thing to keep honest for no benefit.
+15. **The SECURITY table uses a five-word legend** — all, own schedule, own
+    rows, own record, and a dash — rather than spelling the narrowing into
+    forty-two cells. Six columns of prose is a table nobody reads; the
+    narrowing each word stands for names its own helper function above the
+    table.
+
+### What the streams should know
+
+**assessment.** `BANDS`, `Band`, `UNITS` and `Unit` are `domain/shared`'s,
+re-exported by `domain/assessment/types.ts` under the same names, so nothing
+that imports them moved. `BAND_LABELS` and `UNIT_SHORT` in
+`app/admin/assessments/copy.ts` are derived from the shared vocabulary and keep
+their export names; `copy.test.ts` is new and proves the derivation. If the
+operator changes an Arabic band word, nothing in this stream changes.
+
+**reports.** `BAND_KEYS` and `BandKey` are `domain/shared`'s under this
+folder's own names. `app/api/reports/gather.ts` now fills `labelAr`, so an
+Arabic progress report names a band in Arabic; the renderer already preferred
+that half on a right-to-left page and did not change. `Sheet.ruleAt` takes an
+optional colour and `ribbonFigure` uses it — **the printed ribbon now carries
+the band's hue**, which closes R3, and it is still the only thing on either
+page of a report that carries any. `reports-01.md` has no open item left.
+
+**audit-ui.** The Audit screen reads a `report` query parameter and the record
+timeline carries the link that sets it; both files are yours from here, as
+round 31's widening already said. `docs/SPEC/audit.md` section 9 view 4 records
+the amendment.
+
+**client-record.** `app/admin/clients/ClientDrawer.test.tsx` gained a
+`MemoryRouter` around its three renders. The component is untouched. Any new
+test that mounts the drawer, or the record timeline on its own, needs the same
+wrapper.
+
+**session-capture.** `domain/session/events.ts`'s `BAND_KEYS` and `BandKey` are
+`domain/shared/bands.ts`'s now, re-exported under the two names this folder
+already exported, the way `domain/reports/types.ts` does. **Nothing that
+imports them moved** — `domain/session/index.ts` re-exports the same two names,
+and `BandAmplitudes` still declares the same five optional keys, which
+`events.test.ts` now checks against the shared list rather than against a
+second copy written beside it. The file was left alone in the round itself and
+closed in the fix round, so it is named in the widening note; that is the whole
+of the trunk's reach into this path.
+
+**Everyone.** A colour on a document is `Style.rgb` and the rule op's `rgb`,
+each a triple from `domain/shared/bands.ts` and nowhere else — no hex literal,
+no colour typed at a call site. The design brief allows a hue on the session
+ribbon and on nothing else in a document, and a test in
+`tests/reports/document.test.ts` now enforces that for a report rather than
+leaving it to a comment. And `docs/SECURITY.md`'s "Who may read what" is
+rewritten in the same pull request as any policy that changes it.

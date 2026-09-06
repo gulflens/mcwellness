@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { BANDS as SHARED_BANDS } from '../shared/bands';
+import { BAND_KEYS } from './types';
 import {
   compareBrainMaps,
   dominantBand,
@@ -362,5 +364,22 @@ describe('gatherProgress', () => {
     expect(content.kind).toBe('progress');
     expect(content.coverageFrom).toBe('2026-06-01');
     expect(content.coverageTo).toBe('2026-09-01');
+  });
+});
+
+describe('the five bands a slice may carry', () => {
+  it('are the shared vocabulary’s, under this folder’s own name', () => {
+    // `BAND_KEYS` was declared here because the only other copy was another
+    // module's and OWNERSHIP rule 3 forbids reaching for it. Round 34 put the
+    // five where rule 3 says they belong; the name here did not move, so
+    // `RibbonSlice.band` and the progress shape's `z.enum(BAND_KEYS)` did not
+    // either. Reading the re-export is what stops it rotting into a copy.
+    expect(BAND_KEYS).toBe(SHARED_BANDS);
+  });
+
+  it('are still slow to fast, which is the order a tie is broken in', () => {
+    // `dominantBand` walks `BAND_KEYS` in order and keeps the first of equals,
+    // so the order is behaviour and not presentation.
+    expect(BAND_KEYS).toEqual(['delta', 'theta', 'alpha', 'beta', 'gamma']);
   });
 });

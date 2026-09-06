@@ -1,3 +1,4 @@
+import { BAND_NAMES, BANDS, UNIT_NAMES } from '@domain/shared';
 import type { Band, RefusalReason, Unit } from '@domain/assessment';
 import type { AssessmentFileCondition, AssessmentFileRole } from '../../api/assessments/schema';
 
@@ -22,14 +23,19 @@ export const NOT_A_DIAGNOSIS = {
   ar: 'هذه مقارنة بين قياسات أُخذت في أيام مختلفة. وهي ليست تشخيصاً.',
 } as const;
 
-/** The five bands, named for a reader. The hue is the token's, never a word's. */
-export const BAND_LABELS: Record<Band, string> = {
-  delta: 'Delta',
-  theta: 'Theta',
-  alpha: 'Alpha',
-  beta: 'Beta',
-  gamma: 'Gamma',
-};
+/**
+ * The five bands, named for a reader. The hue is the token's, never a word's.
+ *
+ * **Derived, not typed.** The words are `BAND_NAMES`' in `domain/shared`,
+ * which the trunk's round 34 made the one home for the five so that this
+ * screen and the report route could stop holding a copy each
+ * (`docs/CHANGE-REQUESTS/qa-01.md`). The console is English, so the English
+ * half is what is taken; the export keeps its name, so nothing that renders
+ * it moved.
+ */
+export const BAND_LABELS: Record<Band, string> = Object.fromEntries(
+  BANDS.map((band) => [band, BAND_NAMES[band].en]),
+) as Record<Band, string>;
 
 /**
  * What a figure is in. Written out rather than abbreviated, because a person
@@ -44,14 +50,12 @@ export const UNIT_LABELS: Record<Unit, string> = {
   points: 'Points',
 };
 
-/** The same, short enough for a column head. */
-export const UNIT_SHORT: Record<Unit, string> = {
-  uV2: 'µV²',
-  percent: '%',
-  ratio: 'ratio',
-  sd: 'SD',
-  points: 'points',
-};
+/**
+ * The same, short enough for a column head — and, like the band names,
+ * `domain/shared`'s rather than this screen's, so the table and the printed
+ * report cannot come to disagree about what a figure is measured in.
+ */
+export const UNIT_SHORT: Record<Unit, string> = UNIT_NAMES;
 
 /**
  * Why a payload was refused, said plainly. The field the API names is shown

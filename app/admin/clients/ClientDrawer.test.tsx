@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
@@ -85,9 +86,13 @@ function mount(recordBody: unknown = record, me: unknown = ADMIN) {
     return json({ error: 'not_found' }, 404);
   }) as unknown as typeof fetch;
   render(
-    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <ClientDrawer client={client} onClose={vi.fn()} />
-    </AuthProviderBoundary>,
+    // The Timeline tab carries a link to the access report since the trunk's
+    // round 34, so the drawer needs a router above it.
+    <MemoryRouter initialEntries={['/admin/clients']}>
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <ClientDrawer client={client} onClose={vi.fn()} />
+      </AuthProviderBoundary>
+    </MemoryRouter>,
   );
 }
 
@@ -95,12 +100,18 @@ describe('ClientDrawer', () => {
   it('names the client, takes focus, and closes on the button and on Escape', () => {
     const onClose = vi.fn();
     render(
-      <AuthProviderBoundary
-        provider={provider}
-        fetchImpl={vi.fn(async () => json({ error: 'not_found' }, 404)) as unknown as typeof fetch}
-      >
-        <ClientDrawer client={client} onClose={onClose} />
-      </AuthProviderBoundary>,
+      // The Timeline tab carries a link to the access report since the trunk's
+      // round 34, so the drawer needs a router above it.
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <AuthProviderBoundary
+          provider={provider}
+          fetchImpl={
+            vi.fn(async () => json({ error: 'not_found' }, 404)) as unknown as typeof fetch
+          }
+        >
+          <ClientDrawer client={client} onClose={onClose} />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
     expect(screen.getByRole('dialog', { name: 'Dahlia Bay' })).toBeTruthy();
     expect(screen.getByText('MW-000005')).toBeTruthy();
@@ -218,9 +229,13 @@ describe('ClientDrawer', () => {
       return json({ error: 'not_found' }, 404);
     }) as unknown as typeof fetch;
     render(
-      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <ClientDrawer client={client} onClose={vi.fn()} />
-      </AuthProviderBoundary>,
+      // The Timeline tab carries a link to the access report since the trunk's
+      // round 34, so the drawer needs a router above it.
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <ClientDrawer client={client} onClose={vi.fn()} />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
     expect(await screen.findByText(/erased/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Reason'), {

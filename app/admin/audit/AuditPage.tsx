@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { z } from 'zod';
 import {
   AccessReportResponse,
   ActivityFilters,
@@ -253,7 +255,47 @@ export function AuditPage() {
     entityTypes: [],
     actions: [],
   });
-  const [reportFor, setReportFor] = useState<string | null>(null);
+  // **The one press.** A record's own timeline links here with the record in
+  // the address (`app/admin/audit/RecordTimeline.tsx`), so somebody already
+  // looking at a household can ask who else has been without first finding a
+  // line for that household in whichever pages of the feed happen to be
+  // loaded — which is what round 31's default 16 fell short of
+  // (docs/CHANGE-REQUESTS/trunk-notes.md, round 31's fix round, section 3).
+  //
+  // Read once, on the first render, and then cleared from the address: the
+  // report is a state of this screen from that moment on, so closing it closes
+  // it and a reload opens the feed rather than re-opening a report somebody
+  // had shut. A client id is an opaque uuid and not personal data, which is
+  // what `.claude/rules/ui.md` keeps out of a query string.
+  //
+  // Read once means read on mount, in the initialiser below: a `?report=`
+  // that arrives while this screen is already mounted is cleared by the effect
+  // beneath without opening anything. Nothing reaches that today, because the
+  // only link carrying the parameter lives on the record's own timeline —
+  // `/admin/clients` and `/admin/schedule`, never this page — so following it
+  // always mounts this screen afresh. Were a link to the parameter ever added
+  // to this page itself, the read would have to move into that effect with a
+  // `setReportFor` beside the clearing.
+  const [params, setParams] = useSearchParams();
+  const [reportFor, setReportFor] = useState<string | null>(() => {
+    // Anything may be typed into an address bar, so the value is held only
+    // when it is a record id — the same rule the route itself holds
+    // (`app/api/audit/activity.ts`'s `ClientQuery`, `z.uuid()`), read from the
+    // same library rather than written out a second time as a pattern. A
+    // malformed parameter opens nothing, rather than a panel whose note about
+    // an erased record is untrue of a request the API refuses with 400.
+    const asked = z.uuid().safeParse(params.get('report'));
+    return asked.success ? asked.data : null;
+  });
+
+  useEffect(() => {
+    if (!params.has('report')) return;
+    const next = new URLSearchParams(params);
+    next.delete('report');
+    // `replace`, so the address the link came from is not left one press of
+    // Back away from re-opening what was just closed.
+    setParams(next, { replace: true });
+  }, [params, setParams]);
 
   useEffect(() => {
     let live = true;

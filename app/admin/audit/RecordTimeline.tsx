@@ -1,4 +1,6 @@
+import { canActor } from '@domain/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { TimelineResponse, type TimelineEvent } from '../../api/audit/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
@@ -52,6 +54,43 @@ function groupByDay(events: readonly TimelineEvent[]): { day: string; events: Ti
     }
   }
   return groups;
+}
+
+/**
+ * "Who has opened this record", to the Audit screen with this record named.
+ *
+ * **The press round 31 owed.** Round 31 reached the access report from a line
+ * of the activity feed, which is not one press for a household with no line in
+ * the pages that happen to be loaded; its fix round said the press belongs
+ * beside the record's own timeline, where somebody already looking at a
+ * household can ask who else has been
+ * (docs/CHANGE-REQUESTS/trunk-notes.md, round 31's fix round, section 3;
+ * docs/SPEC/audit.md section 9, view 4).
+ *
+ * **Shown only to whoever may read the report.** `audit.read` is the owner's,
+ * an administrator's and the lead practitioner's; finance sees this tab and
+ * reads money rather than the trail, so finance is not offered a link the
+ * route would refuse. It is a courtesy and not a boundary — the route
+ * (`app/api/audit/activity.ts`) and the row policy
+ * (`db/policies/core/audit_log.sql`) are the boundary.
+ *
+ * The address is `/admin/audit`, which is where `app/shell/App.tsx` mounts the
+ * screen, with the record as an opaque id: a uuid is not personal data, which
+ * is what `.claude/rules/ui.md` keeps out of a query string.
+ */
+function WhoHasOpenedIt({ clientId }: { clientId: string }) {
+  const { session } = useAuth();
+  const actor = session.status === 'signed-in' ? session.actor : null;
+  if (actor === null || !canActor(actor, { type: 'audit.read', clientId }, {}, new Date())) {
+    return null;
+  }
+  return (
+    <p className="timeline__access">
+      <Link className="link" to={`/admin/audit?report=${clientId}`}>
+        Who has opened this record
+      </Link>
+    </p>
+  );
 }
 
 export function RecordTimeline({ clientId }: { clientId: string }) {
@@ -129,13 +168,37 @@ export function RecordTimeline({ clientId }: { clientId: string }) {
     return shown;
   }, [state]);
 
-  if (state.kind === 'loading') return <Note>Loading the timeline.</Note>;
+  // The press stands at the head of the tab whatever the feed below it is
+  // doing: who has opened a record is a different question from what the
+  // record's own trail says, and it is worth asking of a record nothing has
+  // touched and of one whose timeline would not load.
+  const head = <WhoHasOpenedIt clientId={clientId} />;
+
+  if (state.kind === 'loading')
+    return (
+      <section className="timeline" aria-label="Timeline">
+        {head}
+        <Note>Loading the timeline.</Note>
+      </section>
+    );
   if (state.kind === 'error')
-    return <Note tone="critical">The timeline could not be loaded. Try again.</Note>;
-  if (state.events.length === 0) return <Note>Nothing has touched this record yet.</Note>;
+    return (
+      <section className="timeline" aria-label="Timeline">
+        {head}
+        <Note tone="critical">The timeline could not be loaded. Try again.</Note>
+      </section>
+    );
+  if (state.events.length === 0)
+    return (
+      <section className="timeline" aria-label="Timeline">
+        {head}
+        <Note>Nothing has touched this record yet.</Note>
+      </section>
+    );
 
   return (
     <section className="timeline" aria-label="Timeline">
+      {head}
       {groups.map((group) => (
         <div key={group.day} className="timeline__group">
           <h4 className="timeline__day">{group.day}</h4>

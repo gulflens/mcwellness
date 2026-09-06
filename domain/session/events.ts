@@ -57,9 +57,19 @@ export const SignalCheckedPayload = z.object({
 });
 export type SignalCheckedPayload = z.infer<typeof SignalCheckedPayload>;
 
-/** The five bands, slow to fast (docs/DESIGN-BRIEF.md section 3.1). */
-export const BAND_KEYS = ['delta', 'theta', 'alpha', 'beta', 'gamma'] as const;
-export type BandKey = (typeof BAND_KEYS)[number];
+/**
+ * The five bands, slow to fast (docs/DESIGN-BRIEF.md section 3.1), under the
+ * name this module has always exported them by.
+ *
+ * They are the trunk's now, not a fourth copy: the round that gave the five a
+ * single home (`domain/shared/bands.ts`, round 34) made `BANDS` the one list,
+ * with the band words in both languages and the band hues beside it. What a
+ * session records and what a report draws must be the same five in the same
+ * order, so this is a re-export and no caller moves — the precedent is
+ * `domain/reports/types.ts`, which does the same under `BAND_KEYS`.
+ */
+export { BANDS as BAND_KEYS } from '../shared/bands';
+export type { Band as BandKey } from '../shared/bands';
 
 /**
  * Per-band amplitude, every band optional: Phase 1 accepts whatever the

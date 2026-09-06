@@ -8,6 +8,8 @@ export { addFils, fils, formatFils } from './fils';
 export type { Fils } from './fils';
 export { ROLES, canActor, hasRole, isCredentialValidOn, isoDateIn } from './actor';
 export type { Action, ActionContext, Actor, Capability, IsoDate, Role } from './actor';
+export { BAND_NAMES, BAND_RGB, BANDS, UNIT_NAMES, UNITS } from './bands';
+export type { Band, Unit } from './bands';
 export {
   KNOWN_MIME_TYPES,
   bytesAreAnEdf,

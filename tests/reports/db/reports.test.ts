@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { BAND_NAMES } from '../../../domain/shared';
 import { extractAll } from '../../../domain/shared/document';
 import { renderReport } from '../../../domain/reports/document';
 import { documentFonts } from '../../../app/api/billing/fonts';
@@ -235,7 +236,13 @@ describe('drafting', () => {
           instrument: string;
           earlierOn: string;
           laterOn: string;
-          lines: { label: string; unit: string; earlier: number; later: number }[];
+          lines: {
+            label: string;
+            labelAr: string | null;
+            unit: string;
+            earlier: number;
+            later: number;
+          }[];
         } | null;
       }
     ).comparison;
@@ -251,6 +258,13 @@ describe('drafting', () => {
     const first = comparison?.lines[0];
     expect(first?.label).toBe('Fz Delta');
     expect(first?.unit).toBe('µV²');
+    // And the same pair in Arabic, which is what a household reading their own
+    // report in Arabic meets in the one column that is theirs. The site does
+    // not turn over — an electrode site is written in the international 10-20
+    // system in every language — so only the band's own word changes
+    // (`BAND_NAMES`, domain/shared/bands.ts; docs/CHANGE-REQUESTS/qa-01.md).
+    expect(first?.labelAr).toBe(`Fz ${BAND_NAMES.delta.ar}`);
+    expect(comparison?.lines.every((line) => line.labelAr !== null)).toBe(true);
     expect(typeof first?.earlier).toBe('number');
     expect(typeof first?.later).toBe('number');
   });

@@ -269,5 +269,30 @@ fixed in the same round, in the one line that comment proposed.
 and in the same round: a minor's own portal login no longer reads reports about
 themselves. Item 4 above carries what was built and why.
 
-**R3 is still open**: the shared writer still sets type and strokes rules in
-greyscale only, so a printed ribbon carries the figure's shape and no hue.
+**R3 and R4 are answered in trunk round 34** (2026-09-06,
+`docs/CHANGE-REQUESTS/trunk-notes.md`).
+
+**R3.** `domain/shared/document/pdf.ts` has the colour operator: an optional
+`rgb` on `Style` and on the rule op, written as `r g b rg` and `r g b RG`
+beside the existing `g` and `G`, each value clamped to 0 to 1. When it is
+absent the grey path is taken **unchanged** — `pdf.test.ts` holds the greyscale
+content stream captured from the writer before the change and asserts it
+verbatim, so every document already filed renders to the bytes it was filed as.
+`Sheet.ruleAt` takes the colour and is the only primitive on a report's sheet
+that offers one; `ribbonFigure` draws each slice in `BAND_RGB[slice.band]` and
+a slice with no band in ink, with the hairlines and the empty slices as they
+were. The bands are still never named in words: the hue is the whole of what
+says which, which is what the design brief asks. `BAND_RGB` is
+`app/shell/tokens.css`'s own five `--<band>-base` values, proved against that
+file by a test, so the paper and the screen cannot drift.
+
+**R4.** `docs/SECURITY.md` has a section, "Who may read what", after "The
+layers": a row per client-scoped group of tables, a column per role, every cell
+derived from `db/policies/**` and `domain/shared/actor.ts` and citing its
+policy file, with each disagreement between a policy and the actor rule stated
+in its own row rather than resolved. Both absences this file asked for are
+written beneath it as decisions with their sources: finance reads no report
+(this file's section 7.1 and `db/policies/reports/reports.sql`) and finance
+reads no audit trail (`audit.activity` in `domain/shared/actor.ts`). The
+section says that it is rewritten in the same pull request as any policy that
+changes it.

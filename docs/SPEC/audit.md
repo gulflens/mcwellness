@@ -246,7 +246,7 @@ Four views. Build the first two in Phase 1.
 
 **3. Sensitive-action digest.** A weekly email listing only the §6 actions. Solo, this is how you stay across your own system without reading logs. When you have staff, it's how you supervise.
 
-**4. Access report per client.** "Everyone who has viewed this record, ever." Generate on demand. You will need this the first time a client asks who has seen their child's data, and having it ready in one click is a genuinely good moment.
+**4. Access report per client.** "Everyone who has viewed this record, ever." Generate on demand. You will need this the first time a client asks who has seen their child's data, and having it ready in one click is a genuinely good moment. *Amended 2026-09-06 (trunk round 34):* the one click is a link at the head of a record's own Timeline tab, "Who has opened this record", which opens the Audit screen with that record's report already open — shown only to whoever `audit.read` admits, so finance, who sees the tab and reads money rather than the trail, is not offered it.
 
 **Rendering rule:** the log stores structured data; the UI renders it into sentences using a message catalogue keyed by `(entity_type, action)`. Never show a user a raw JSON diff. And translate the catalogue for Arabic alongside everything else.
 

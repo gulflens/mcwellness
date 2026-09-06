@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 import { RecordTimeline } from '../../app/admin/audit/RecordTimeline';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
@@ -50,9 +51,14 @@ describe('hostile text in the timeline', () => {
           }),
     ) as unknown as typeof fetch;
     const { container } = render(
-      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <RecordTimeline clientId="00000008-0000-4000-8000-000000000001" />
-      </AuthProviderBoundary>,
+      // The timeline carries a link to the access report since the trunk's
+      // round 34, so it needs a router above it; nothing else about this test
+      // moved.
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <RecordTimeline clientId="00000008-0000-4000-8000-000000000001" />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
     expect(await screen.findByText(`${HOSTILE} created the record`)).toBeTruthy();
     expect(screen.getByText(`Reason: ${HOSTILE}`)).toBeTruthy();

@@ -36,9 +36,17 @@ export function isInstrument(value: string): value is Instrument {
  * The five frequency bands, slow to fast, as `docs/DESIGN-BRIEF.md` section
  * 3.1 orders them. The order is the hue ramp's order and the screen reads
  * them in it.
+ *
+ * **Re-exported from `domain/shared/bands.ts`**, which the trunk's round 34
+ * made the one home for the five: their order, their words in both languages
+ * and their hues (`docs/CHANGE-REQUESTS/qa-01.md`). The names are unchanged,
+ * so no caller moved — the shape round 31 used when `fileSignature` went the
+ * same way. `docs/SPEC/OWNERSHIP.md` rule 3 is why it is there: two modules
+ * need it.
  */
-export const BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma'] as const;
-export type Band = (typeof BANDS)[number];
+import type { Band } from '../shared/bands';
+export { BANDS } from '../shared/bands';
+export type { Band } from '../shared/bands';
 
 /**
  * The scalp positions a brain map reports, in the international 10-20 system.
@@ -85,9 +93,17 @@ export type Site = (typeof SITES)[number];
  *   word (section 3.4).
  * - `points` — a questionnaire's own scale, in whole points of the scale the
  *   shape declares. Never a brain-map figure's unit.
+ *
+ * **Re-exported from `domain/shared/bands.ts`** for the reason the bands are,
+ * and in the same round: the units stand beside the bands in the vocabulary
+ * `docs/CHANGE-REQUESTS/qa-01.md` asked for, and a second list of the same
+ * five words is the drift that request exists to end. The words each unit is
+ * written in for a reader are `UNIT_NAMES` there; what each one *means* is the
+ * paragraph above, which is the assessment specification's and stays here.
  */
-export const UNITS = ['uV2', 'percent', 'ratio', 'sd', 'points'] as const;
-export type Unit = (typeof UNITS)[number];
+import type { Unit } from '../shared/bands';
+export { UNITS } from '../shared/bands';
+export type { Unit } from '../shared/bands';
 
 /** What the software's reference comparison was made against, as it was made. */
 export const REFERENCE_SEXES = ['female', 'male', 'unknown'] as const;

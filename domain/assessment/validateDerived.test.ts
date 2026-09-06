@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { BANDS as SHARED_BANDS, UNITS as SHARED_UNITS } from '../shared/bands';
+import { BANDS, UNITS } from './types';
 import { INTERPRETATION_FIELDS, validateDerived } from './validateDerived';
 
 /**
@@ -353,5 +355,16 @@ describe('validating a questionnaire', () => {
       field: 'kind',
       reason: 'wrong_kind',
     });
+  });
+});
+
+describe('the five bands this module recognises', () => {
+  it('are the shared vocabulary’s, not a second list of its own', () => {
+    // Round 34 moved the five to `domain/shared/bands.ts` and left this
+    // module's names in place, so no caller moved (the shape round 31 used for
+    // `fileSignature`, and round 33 for `bytesAreAnEdf`). Reading the
+    // re-export itself is what stops it silently rotting into a copy.
+    expect(BANDS).toBe(SHARED_BANDS);
+    expect(UNITS).toBe(SHARED_UNITS);
   });
 });

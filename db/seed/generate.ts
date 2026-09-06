@@ -1,3 +1,4 @@
+import { BANDS } from '../../domain/shared/bands';
 import { ageOn } from '../../domain/shared/dates';
 import { practiceDocumentKey } from '../../domain/shared/storage';
 import { CONSENT_TEXT_MIME_TYPE, loadConsentTexts, type ConsentText } from './consent-text';
@@ -1105,11 +1106,13 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
   const assessments: SeedAssessment[] = [];
   const MEASURED_CLIENTS = [5, 6, 7] as const;
   const MAP_SITES = ['Fz', 'Cz', 'Pz', 'O1', 'O2'] as const;
-  const MAP_BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma'] as const;
+  // The bands are `domain/shared/bands.ts`'s, not a sixth copy of the five:
+  // a fixture whose bands could drift from the software's would prove nothing
+  // about the screens and the reports it exists to fill.
   const SOFTWARE = { software: 'Synthetic Mapping Suite', softwareVersion: '3.2.1' };
   const mapFigures = () =>
     MAP_SITES.flatMap((site) =>
-      MAP_BANDS.map((band) => ({
+      BANDS.map((band) => ({
         site,
         band,
         value: Number((rng.int(200, 2400) / 100).toFixed(2)),

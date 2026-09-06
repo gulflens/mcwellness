@@ -1,13 +1,16 @@
 /**
- * A very small PDF writer: enough to set bilingual type, rule a line, and
- * embed the two faces the app already uses.
+ * A very small PDF writer: enough to set bilingual type, rule a line, embed
+ * the two faces the app already uses, and set one hue.
  *
  * **Why this exists rather than a library.** An invoice is a document the
  * practice hands to a family and a tax authority may read, so it has to carry
  * its own type and be byte-identical every time it is rendered from the same
  * row. What that needs from a PDF is narrow: pages, text in an embedded
- * TrueType font, and horizontal rules. No images, no colour, no forms, no
- * transparency, no compression. `package.json` is the shared zone
+ * TrueType font, horizontal rules, and — since round 34 — a flat red-green-blue
+ * fill and stroke for the one figure the design brief admits a hue on
+ * (`docs/DESIGN-BRIEF.md` section 5, the session ribbon). No images, no colour
+ * spaces beyond that one operator, no forms, no transparency, no compression.
+ * `package.json` is the shared zone
  * (docs/SPEC/OWNERSHIP.md), so a dependency here is a change request and a
  * standing supply-chain surface on the one path that renders a client's
  * financial record; three hundred lines of well-understood file format is the
@@ -37,6 +40,25 @@ export type Style = {
   size: number;
   /** 0 is black, 1 is white. The ledger's only two greys are ink and a hairline. */
   grey?: number;
+  /**
+   * Red, green and blue, each 0 to 1, and the whole of the colour this writer
+   * can set. **When it is absent the grey path is taken, unchanged**, so every
+   * document already filed renders to the bytes it was filed as; `pdf.test.ts`
+   * holds the greyscale content stream from before this field existed and
+   * asserts it verbatim.
+   *
+   * It exists for one figure. `docs/DESIGN-BRIEF.md` section 5 gives the
+   * session ribbon one hue per band and calls it "the one place hue enters a
+   * report"; `docs/CHANGE-REQUESTS/reports-01.md` request R3 asked for the
+   * operator that would let paper carry what the screen already does. Nothing
+   * else in any report or any invoice sets it, and the five triples it is
+   * given come from `domain/shared/bands.ts`, which is proved against
+   * `app/shell/tokens.css`.
+   *
+   * Set beside `grey` rather than instead of it: a caller that passes both
+   * gets the colour, and every caller that passes neither is where it was.
+   */
+  rgb?: readonly [number, number, number];
 };
 
 /** Where `x` sits relative to the text: its start, its end, or its middle. */
@@ -54,7 +76,16 @@ export type Op =
       /** Right to left. Arabic lines set this; it is not inferred from the text. */
       rtl?: boolean;
     }
-  | { kind: 'rule'; x: number; y: number; width: number; thickness?: number; grey?: number };
+  | {
+      kind: 'rule';
+      x: number;
+      y: number;
+      width: number;
+      thickness?: number;
+      grey?: number;
+      /** As `Style.rgb`: when absent the rule is stroked in grey, unchanged. */
+      rgb?: readonly [number, number, number];
+    };
 
 export type Page = { ops: Op[] };
 
@@ -144,6 +175,20 @@ function hex4(value: number): string {
   return value.toString(16).toUpperCase().padStart(4, '0');
 }
 
+/**
+ * A colour component as the content stream wants it: 0 to 1, and nothing else.
+ *
+ * A PDF reader meeting `1.4 0 0 rg` is entitled to clamp, to refuse the
+ * operator, or to draw something nobody chose; a document the practice hands a
+ * family should not depend on which. The clamp happens here rather than at the
+ * caller so there is one place it happens, and `num` writes the result exactly
+ * as it writes every other number in the file.
+ */
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
 /** A number as PDF writes one: no exponent, no trailing noise. */
 function num(value: number): string {
   const rounded = Math.round(value * 100) / 100;
@@ -197,20 +242,38 @@ function contentOf(
   used: Used,
 ): string {
   const out: string[] = [];
-  let grey = -1;
+  // What the writer has already told the reader the fill is, as the operator
+  // it wrote. **One piece of state for both paths**, and that is the point: a
+  // colour set with `rg` has to be undone by the grey after it and a grey by
+  // the colour after it, and two counters — one tracking a number, one a
+  // triple — would each think the other's op had left the fill where it wanted
+  // it, so a line would come out in the colour of the line before it. Empty
+  // means nothing has been set on this page yet, which no operator can spell.
+  let fill = '';
 
-  const setGrey = (value: number): void => {
-    if (grey !== value) {
-      out.push(`${num(value)} g`);
-      grey = value;
+  const setFill = (operator: string): void => {
+    if (fill !== operator) {
+      out.push(operator);
+      fill = operator;
     }
   };
 
+  /** The fill operator an op asks for: a colour if it named one, else a grey. */
+  const fillOf = (colour: readonly [number, number, number] | undefined, grey: number): string =>
+    colour
+      ? `${num(clamp01(colour[0]))} ${num(clamp01(colour[1]))} ${num(clamp01(colour[2]))} rg`
+      : `${num(grey)} g`;
+
   for (const op of page.ops) {
     if (op.kind === 'rule') {
-      const shade = op.grey ?? 0.8;
+      // The stroke stays inside its own q/Q, exactly as it always has, so
+      // whatever it sets is discarded at the Q and no later op inherits it —
+      // which is why `fill` need not know a rule happened.
+      const stroke = op.rgb
+        ? `${num(clamp01(op.rgb[0]))} ${num(clamp01(op.rgb[1]))} ${num(clamp01(op.rgb[2]))} RG`
+        : `${num(op.grey ?? 0.8)} G`;
       out.push(
-        `q ${num(op.thickness ?? 0.5)} w ${num(shade)} G ` +
+        `q ${num(op.thickness ?? 0.5)} w ${stroke} ` +
           `${num(op.x)} ${num(op.y)} m ${num(op.x + op.width)} ${num(op.y)} l S Q`,
       );
       continue;
@@ -224,7 +287,7 @@ function contentOf(
     if (align === 'end') x = op.x - total;
     else if (align === 'centre') x = op.x - total / 2;
 
-    setGrey(op.style.grey ?? 0);
+    setFill(fillOf(op.style.rgb, op.style.grey ?? 0));
     out.push('BT');
     for (const run of runs) {
       const font = fonts[run.slot];

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { BANDS as SHARED_BANDS } from '../shared/bands';
 import {
+  BAND_KEYS,
+  BandAmplitudes,
   EVENT_PAYLOAD_SCHEMAS,
   ObservationRecordedPayload,
   PhotoCapturedPayload,
@@ -152,5 +155,23 @@ describe('parseEventPayload', () => {
 
   it('parses a good payload of the kind asked for', () => {
     expect(parseEventPayload('checked_out', {})).toEqual({});
+  });
+});
+
+describe('the five bands a reading may carry', () => {
+  it('are the shared vocabulary’s, under this folder’s own name', () => {
+    // Round 34 gave the five one home (`domain/shared/bands.ts`). This module
+    // held a copy because the only other one was another module's and
+    // OWNERSHIP rule 3 forbids reaching for it; the shared zone is where rule
+    // 3 says they belong, so the copy went and the name stayed. Reading the
+    // re-export itself is what stops it rotting back into a copy.
+    expect(BAND_KEYS).toBe(SHARED_BANDS);
+  });
+
+  it('are the five keys BandAmplitudes accepts, in the same order', () => {
+    // A reading may name any of the five and need name none of them, but it
+    // may not name a sixth: the schema and the vocabulary are one list.
+    expect(BAND_KEYS).toEqual(['delta', 'theta', 'alpha', 'beta', 'gamma']);
+    expect(Object.keys(BandAmplitudes.shape)).toEqual([...BAND_KEYS]);
   });
 });
