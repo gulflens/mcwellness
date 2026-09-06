@@ -1,6 +1,6 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated early on 6 September with piece eight merged and on staging, and pieces nine and ten approved and building. This file exists so that the next Claude session,
+Written 4 September 2026, updated on the morning of 6 September (08:40) with pieces nine and ten built, reviewed and merged, trunk round 31 merged, the operator's decisions of 06:15 acted on, and two agents still in flight. This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -19,46 +19,70 @@ Paste this into a fresh Claude Code session opened in the repository:
 > approval, I will say so in this message; otherwise treat it as not yet
 > approved and build nothing on it.
 
-Then, in the same message, say which of the two checkpoints you approve, if
-either: piece nine's hosting spec (`docs/SPEC/hosting.md`) and piece ten's
-plan and two specs (`docs/PLAN/piece-ten.md`, `docs/SPEC/assessment.md`,
-`docs/SPEC/reports-v1.md`). Approving a checkpoint is what lets its build
-start; a checkpoint you have not read yet stays open and costs nothing.
+Then, in the same message, answer any of section 8's decisions you are
+ready to answer; nothing waits on a checkpoint now, and nothing is built on
+an unanswered decision. The next session's first act is section 10.
 
 ## 2. Where things stand
 
-- `main` is at `0c99ff2` plus pull request 77 (the eighth staging pass) and
-  this file's own pull request: fifty-seven migrations and seventeen policy
-  files. Every merged pull request through #76 carries its review record as
-  a comment or, for documentation, the integrator's read.
-- Pieces one to **eight** are built, reviewed, merged and on staging. Piece
-  eight (the practitioner's phone) merged as pull request 73 early on 6
-  September: the app installs and opens with no signal, the sensor
-  photograph has its door and is filed under the household's consent, the
-  day's drive estimates and picture sit behind a routing seam, and the kit
-  register blocks a session on an overdue amplifier. Its record on the pull
-  request names the review, the fix round, the re-check, and the short
-  second round the re-check made necessary (the day picture and the previous
-  placement were object URLs the content-security policy refused; `blob:` is
-  now admitted for images and pinned by a test). The eighth staging pass
-  (pull request 77) applied migrations 204 and 306, the seed's kit rows and
-  `ROUTING_PROVIDER=straight-line`, with the schema fingerprint identical to
-  a fresh local build in all nine parts and the routing fallback proved live
-  under the owner's account.
-- **Pieces nine and ten are approved and building.** The operator approved
-  both checkpoints at about 01:05 on 6 September in the session named
-  "Handover section 10 continuation"; pull requests 75 (hosting) and 76
-  (piece ten's plan and specs) merged at 01:08. That session dispatched the
-  builds at 01:12 (piece nine in `mcwellness-trunk-2`; the PDF-writer move
-  piece ten needs first in `mcwellness-trunk`; assessments in
-  `mcwellness-assessment`; reports queued until the writer move merges) and
-  is the one that reviews and merges them; its briefs, review briefs and
-  reports live in its own scratch directory, and it updates sections 2, 3
-  and 10 of this file in its own pull request after this one merges.
-- Staging (Supabase project `ajjkvjtqxktkgrvcrzkh`, Mumbai) is level with
-  `main` after the eighth pass; the record is in `docs/STAGING.md`. Staging
-  runs the straight-line routing fallback until the operator supplies the
-  Google server key (section 8).
+- `main` is at `7d06cf8` plus this file's own pull request: seventy migrations
+  and nineteen policy files. Every merged pull request through #89 carries
+  its review record as a comment or, for documentation, the integrator's
+  read; #84 was closed unmerged (a scan that had not run).
+- **Pieces one to ten are built, reviewed and merged.** On 6 September,
+  between 01:12 and 05:43, one session ran four builders in parallel and
+  merged, in order: the trunk's writer move (pull request 78: the PDF
+  writer's byte-level half and the sending seam in `domain/shared`, and the
+  copied-Arabic defect fixed); piece nine (pull request 80: a release
+  workflow on a `v*` tag behind an approval gate, the production guard in
+  `db:migrate` with a third word `scratch` for throwaway databases, weekly
+  backups and a rehearsed restore in `docs/RUNBOOK/restore.md`, the deep
+  health route, error lines with nobody's data in them, two vendor rows
+  proposed); a trunk fix (pull request 82: the audit trail was refusing one
+  random identifier in eighty as a telephone number, which rolled back a
+  photograph's filing at random; found by the assessment builder); piece
+  ten's assessment stream (pull request 81: measurements, the brain map's
+  shape and comparison, the export's own door, migration 106 for erasure);
+  and piece ten's reports stream (pull request 83: signed session and
+  progress reports over the shared writer, delivery by hand-off, the
+  household's portal screen, migration 107 for erasure). Each record names
+  its review, fix round and re-check and what they cost.
+- The ninth staging pass merged as pull request 86 (06:28): migrations 106,
+  107, 500, 501, 600 and 601, the seed's assessment rows, the fingerprint
+  matching a fresh build exactly. Staging has run the practice's real Google
+  routing since 06:27, the key placed in its settings by a command whose
+  output went straight to the file.
+- **Trunk round 31 merged as pull request 87 (08:22)**: what the streams owed
+  the trunk (the visit link on a measurement, the shared file-type check, the
+  document key and its foreign key, the portal test's race, three notes) and
+  the plan's small things (the takings figure that is the same whoever asks,
+  the VAT threshold watch, the activity feed and access report, the dead
+  invoice column), plus two of the operator's decisions of 06:15: guardians
+  only for a young person's reports (migration 955) and the production
+  project's reference in the hook. Its record names the review's one security
+  failure (the feed showed an erased household without a reason) and its fix.
+- **The operator decided at 06:15** (section 3): the API runs on Hostinger
+  Web Apps Hosting in Mumbai; the production Supabase project was created at
+  06:22 (`ipiluvnlnzdbolbqwtpl`, Mumbai, the Pro organisation, empty until
+  the first release); the old app's project is to be paused, which the API
+  refused for a paid-tier project, so it is the operator's dashboard act;
+  guardians only. The GitHub Environment `production` could not be created
+  from a session (the permission layer refuses it) and stays the operator's.
+- **The security scan ran** (pull request 88, the record): every reader on
+  Haiku at medium effort, fourteen candidates, none confirmed by the panel,
+  two cells not examined (the client portal and the client record). It is
+  evidence, not the gate: the scan the hosting spec's section 9 requires
+  still runs on the release tag.
+- **A browser walk of pieces eight and ten** (pull request 89, the record and
+  `docs/CHANGE-REQUESTS/qa-01.md`) found five product defects, the largest
+  that nothing moved a booking from proposed to confirmed; its fix round
+  (branch `qa-fixes-1`, Opus) and the tenth staging pass (Sonnet) are running
+  as this is written. Two laptop faults it found are fixed in place: the
+  keep-alive script now checks both loopback addresses, and the tenth pass
+  rebuilds the laptop's stale seed.
+- The operator's morning page is `docs/OPERATOR/2026-09-06-decisions.md`
+  (pull request 85): every decision and action that is theirs, with the
+  Hostinger question and the lawyer's note drafted.
 - The old Flutter app (`McWellness UAE`, a separate repository) is not this
   platform. Nothing in it needs revisiting for this work.
 
@@ -69,13 +93,22 @@ September 2026: pieces seven and eight are built, piece nine's domain and
 host were answered on 5 September, and the same approval authorised the
 writing of piece ten's two specifications. Piece eight's spec was approved
 for building by the integrator under that plan on 5 September, with its
-seven decisions marked as Claude's. **Approved on 6 September 2026 at about 01:05** (operator, in the session
+seven decisions marked as Claude's. **Decided on 6 September 2026 at about 06:15** (operator, the same session,
+before sleeping): the API runs on Hostinger Web Apps Hosting in Mumbai
+(hosting.md decision 1 settled); the production Supabase project is created
+now in Mumbai on the Pro organisation without waiting for the lawyer; the old
+app's project is paused; a child's own portal login does not read reports
+about themselves; the practice's existing Google key is reused; the Pro
+organisation is this platform's. **Approved on 6 September 2026 at about 01:05** (operator, in the session
 "Handover section 10 continuation"): piece nine's hosting spec
 (`docs/SPEC/hosting.md`, pull request 75) and piece ten's plan and two specs
 (`docs/PLAN/piece-ten.md`, `docs/SPEC/assessment.md`,
 `docs/SPEC/reports-v1.md`, pull request 76), with every default marked as
-Claude's standing until overruled. Their builds are running from that
-session.
+Claude's standing until overruled. Both are built and merged (pull requests
+78, 80, 81, 82 and 83, 6 September); the defaults their builders took beyond
+the specs are listed on each pull request and recorded in the change
+requests `assessment-01.md` and `reports-01.md` and trunk-notes rounds 28 to
+30.
 
 ## 4. How the work is done
 
@@ -95,8 +128,11 @@ session.
 - Every pull request: builder pushes; reviews (see section 6 for how many);
   one consolidated fix round; a re-check; the review record posted as a
   comment; then the merge. The operator has authorised Claude to merge a
-  reviewed, green pull request itself, in order, never red, never
-  force-pushed.
+  reviewed, green pull request itself, in order, never red, never over a
+  rewritten `main`. A stream branch rebased on `main` after its review is
+  pushed once with `--force-with-lease` and the record names the reviewed
+  commit and its rebased twin, so the re-check can diff the round alone; that
+  is not the force-push this rule forbids.
 - After a merge that adds a migration: `pnpm db:migrate` in the laptop
   checkout and restart `pnpm dev`; rebuild the staging bundle with
   `pnpm exec vite build --mode staging` and restart the staging server; run
@@ -126,6 +162,9 @@ session.
 - A keep-alive script restarts both demo servers if they die; it lives in
   the session's scratch directory, so a fresh session starts it again if
   the demos are wanted (`ps -ef | grep keepalive` shows whether it runs).
+  Since 08:20 on 6 September it checks both loopback addresses: the web
+  server binds the IPv6 one on this Mac, and a check on the IPv4 one alone
+  restarted the whole stack every minute for hours.
 - The old app's production project `gqvpapvdqcfjlifgwhpk` must never be
   touched; a hook blocks it.
 
@@ -199,6 +238,33 @@ million in agents, plus the integrator's own conversation. Beside it, piece
 nine's checkpoint cost about 0.19 million and piece ten's specs about 0.27
 million, both on Opus.
 
+**What the rest of the night cost (6 September, 08:40).** Trunk round 31:
+builder on Opus 0.49 million, review on Fable 0.34, fix round 0.33, re-check
+0.19; 1.35 million. The ninth staging pass on Sonnet 0.45. The operator's
+page on Opus 0.18. The browser walk on Sonnet 0.58. The security scan: a
+first attempt that could not start 0.09, a high-effort run stopped after
+fourteen minutes (unrecorded), the Haiku run at medium effort 6.2 million (a
+stop and resume in the middle repeated twenty-nine researchers), its record
+on Sonnet 0.34. The fix round for the walk's defects and the tenth staging
+pass: see their records. Two lessons kept: the scan is a stage of its own on
+the release tag and is never started beside a build again; and a workflow
+resumed after a stop replays every agent that finished, so a stop only ever
+costs the agents that were mid-flight.
+
+**What pieces nine and ten cost (6 September, 05:45).** All from one
+session, in parallel where the chains allowed. The writer move: builder on
+Opus 0.25 million, review on Fable 0.23, fix round 0.16, the re-check the
+integrator's own read; 0.64 million. Piece nine: builder 0.32, review 0.22,
+fix round 0.21, re-check 0.15; 0.9 million. The audit fix: builder 0.19,
+reviewed by the integrator's own read. The assessment stream: builder 0.56,
+review 0.43, fix round 0.37, re-check 0.17; 1.53 million. The reports
+stream: builder 0.69, review 0.52, fix round 0.48, re-check 0.24; 1.93
+million. The ninth staging pass on Sonnet: see its record. About 5.2 million
+in agents for the night, plus the integrator's conversation. One lesson kept
+in the briefs: a rebase after review must be named in the record with the
+reviewed commit's rebased twin, or the re-check cannot separate the round
+from main's own movement.
+
 ## 7. The failed-run emails
 
 GitHub emails the repository owner for every failed or cancelled workflow
@@ -228,6 +294,37 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
+- **Piece nine's live half**, in the order they unblock each other
+  (`docs/SPEC/hosting.md` section 11, pull request 80's body, and the
+  operator's page): buy Hostinger Web Apps Hosting in Mumbai (decided 06:15);
+  create the GitHub Environment named `production` with yourself as its
+  required reviewer (refused to a session by the permission layer;
+  `docs/RUNBOOK/restore.md` section 3 gives the one command); the DNS record
+  for `app.mcwellnessuae.com` once the site exists; the API's settings in the
+  host's own secret store, including the production project's URL, keys and
+  pooler string (project `ipiluvnlnzdbolbqwtpl`, created 06:22); pause or
+  delete the old app's project `gqvpapvdqcfjlifgwhpk` from the Supabase
+  dashboard (the API refuses a paid-tier pause); the hosted restore rehearsal
+  in a scratch project (it costs money; the local rehearsal is recorded); the
+  uptime service and the address its alert wakes; `TRUSTED_PROXY_HOPS`
+  measured on the first deploy; a spending cap on the Google key if wanted
+  (the key itself is done and on staging); and the deep security scan in its
+  own session against the first `v*` tag, at high effort with a stronger
+  panel, covering the two cells tonight's run missed.
+- **Piece ten's decisions** (`docs/PLAN/piece-ten.md`), still open and
+  still not blocking: which equipment and software the practice uses and
+  what its export is; which questionnaire to build first (the mechanism
+  ships with one synthetic sample and no licensed instrument); whether a
+  report is deleted on erasure (built as deleted, for the lawyer); the
+  school report (for the lawyer); the draft mark (built as on).
+- **One default a parent might ask about** (the other, a child reading their
+  own report, was reversed at 06:15): the brain-map comparison inside a
+  progress report prints nothing today, because a brain map's stored figures
+  are band powers per electrode site and no report may print one, so which
+  figure a household may be shown is the practice's call.
+- **The offline install check** from piece eight needs the built app (\`pnpm
+  build\` then \`pnpm start\`), not the dev server; the browser walk could not
+  do it against the dev server and it stays a check with a real browser.
 - **Rotate the staging project's service-role key** (Supabase dashboard,
   API settings, the `documents` bucket's key in `.env.staging` as
   `SUPABASE_STORAGE_KEY`) when convenient. During the eighth staging pass a
@@ -281,76 +378,49 @@ desktop app's own CI monitor will still tell a running session.
 - The refund policy wording and the package expiry period.
 - Optional: the flight-mode drill described in pull request #41's body.
 
-## 9. Where the briefs and reports of 5 September live
+## 9. Where the briefs and reports live
 
-The session that built piece eight kept its briefs and the agents' reports in
-its scratch directory,
-`/private/tmp/claude-501/-Volumes-Storage-Coding-McWellness-UAE-McWellness-Mobile-App/5522e7c5-b72c-486a-817a-9e01a3c3164d/scratchpad/`:
-`phone-builder-brief.md` and `phone-builder-report.md`, `phone-review-brief.md`
-and `phone-review-report.md`, `phone-recheck-brief.md` and
-`phone-recheck-report.md`, `phone-staging-brief.md` and
-`phone-staging-report.md`, `nine-spec-brief.md` and `nine-spec-report.md`,
-`ten-spec-brief.md` and `ten-spec-report.md`. A report that is missing is a
-step not yet run. The directory is temporary; anything a later session needs
-from it is copied into the pull-request record or into this file.
+The session that built piece eight kept its files in
+`/private/tmp/claude-501/-Volumes-Storage-Coding-McWellness-UAE-McWellness-Mobile-App/5522e7c5-b72c-486a-817a-9e01a3c3164d/scratchpad/`
+(`phone-*`, `nine-spec-*`, `ten-spec-*`). The session that built pieces nine
+and ten kept its in
+`/private/tmp/claude-501/-Volumes-Storage-Coding-McWellness-UAE-McWellness-Mobile-App/68f100b6-98c3-4fcc-b597-967a48b529b5/scratchpad/`:
+for each of `nine`, `writer-move`, `assessment`, `reports` and `audit-uuid`
+a `*-builder-brief.md` (or `*-brief.md`) and report, a `*-review-brief.md`
+and report, a `*-fix-brief.md` and report, and for nine, assessment and
+reports a `*-recheck-brief.md` and report; plus `ninth-staging-brief.md` and
+its report. Both directories are temporary; anything a later session needs
+from them is in the pull-request records or in this file.
 
 ## 10. The next steps, in order
 
 Each step names who runs it and what it produces. A step is done when its
-pull request is merged or its report exists.
+pull request is merged or its report exists. Steps 1 to 11 of the earlier
+list are done (piece eight, the two checkpoints, and the builds of pieces
+nine and ten; see the records on pull requests 73 to 83).
 
-**Finishing piece eight** — **done, 6 September 01:40.** Review at 8624c02,
-fix round to 458545e, re-check, second round to 014e3e4, record posted,
-merged as pull request 73 at 01:04, laptop migrated, staging pass as pull
-request 77, this file updated. Kept below for the record:
-
-1. The combined review of pull request 73 on Fable 5.1 (brief and report in
-   section 9). Done when `phone-review-report.md` exists.
-2. One fix round on Opus, in the worktree `mcwellness-session-capture` on
-   branch `session-capture-4`, from a brief that pastes the review's numbered
-   gaps and asks for one commit per gap or a one-sentence dispute; push to
-   the same pull request.
-3. The re-check on Fable 5.1 (`phone-recheck-brief.md`), naming the reviewed
-   and head commits.
-4. The record posted on pull request 73 as a comment: the review's verdict,
-   each gap's outcome from the re-check, the agents used and their token use.
-5. Merge, when both GitHub checks are green: `gh pr merge 73 --merge
-   --delete-branch`. Then in the laptop checkout `git pull`, `pnpm db:migrate`,
-   restart `pnpm dev`.
-6. The eighth staging pass on Sonnet (`phone-staging-brief.md`): migrations
-   204 and 306, the seed's kit rows, `ROUTING_PROVIDER=straight-line`, the
-   staging bundle rebuilt and the demo server on port 3100 restarted, the
-   pass recorded in `docs/STAGING.md` as its own pull request, merged.
-7. This file updated: section 2's state, section 6's cost line for piece
-   eight completed, and the piece eight entry in Claude's memory replaced by
-   a completed note.
-
-**The two checkpoints** — **done and approved**: pull requests 75 and 76,
-merged 01:08 on 6 September. Kept for the record:
-
-8. Piece nine's hosting spec (`hosting-spec`): read by the integrator, then
-   held open until the operator approves it. If the Hostinger confirmation
-   says the Premium plan cannot run a persistent Node.js process, the spec
-   lays out the alternatives and the operator chooses; nothing is deployed
-   before that answer.
-9. Piece ten's plan and specs (`piece-ten-specs`): the same; the plan page
-   lists the decisions the operator must answer.
-
-**After approval** — **dispatched at 01:12 on 6 September** from the session
-"Handover section 10 continuation", which owns their review, merge and
-staging and records them here in its own pull request:
-
-10. Piece nine's build from `docs/SPEC/hosting.md`: the deploy pipeline on a
-    `v*` tag, the production guard in `db:migrate`, backups with a rehearsed
-    restore, monitoring on `/api/health`, the deep security scan on a tagged
-    revision. The operator's parts: the DNS record for `app.mcwellnessuae.com`,
-    the deployment secrets, the Google key above.
-11. Piece ten's build from the two approved specs, in the `assessment` and
-    `reports` worktrees, sequenced as its plan page says.
-12. The small things in `docs/PLAN/pieces-seven-to-nine.md` (the takings
-    figure, the VAT threshold watch, the activity feed and access report, the
-    Arabic-copy defect in the PDF writer, the dead `invoice.document_id`
-    column) ride a shared-zone round when a stream touches their tables.
+1. The ninth staging pass (pull request 86) and trunk round 31 (pull request
+   87, the streams' debts and every small thing but none left) are done.
+2. **In flight as this is written**: the fix round for the browser walk's
+   five defects on branch `qa-fixes-1` (worktree `mcwellness-scheduling`,
+   brief `qa-fix-builder-brief.md` in section 9's second directory), which
+   takes one combined review and one re-check under section 6, the record,
+   and the merge; and the tenth staging pass (branch `staging-tenth-pass`),
+   which merges after the integrator's read. If the fix round adds a
+   migration, an eleventh pass follows it; otherwise a rebuild and restart
+   of the staging server is enough.
+3. Owed to later rounds, recorded in `qa-01.md`, `reports-01.md` and
+   trunk-notes: the household's own step in confirming a booking, if the
+   scheduling spec names one; the "one press" to the access report from the
+   client drawer (`audit-ui`); the colour operator in the shared PDF writer
+   (R3) and the read-audiences page (R4); a scoped security scan of the
+   portal and the client record if the operator wants the gap closed before
+   the release-tag scan.
+4. **Nothing else builds until the operator does section 8's first block.**
+   The first deploy is a `v1.0.0` tag pushed after the host is bought, the
+   environment, the DNS record and the secrets exist; it is released by the
+   operator's approval on the environment; the security scan runs against
+   that tag in its own session, at high effort, before the tag is pushed.
 
 ## 11. Where Claude's own memory lives
 
