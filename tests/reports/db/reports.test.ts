@@ -119,6 +119,29 @@ describe('drafting', () => {
     expect((await res.json()) as { field: string }).toMatchObject({ field: 'visitDate' });
   });
 
+  it('writes a read for the client before answering with the record', async () => {
+    // The route answers a household's goals in their own words and every
+    // completed visit's figures. docs/SPEC/audit.md section 5 asks for a read
+    // row whenever that leaves, whether or not anything changed.
+    const before = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'read' " +
+        "and entity_type = 'client' and entity_id = $1",
+      [h.clientId(1)],
+    );
+    const res = await h.call(
+      'GET',
+      `/api/reports/gather?clientId=${h.clientId(1)}&from=2026-06-01&to=2026-09-01`,
+      SEEDED.owner,
+    );
+    expect(res.status).toBe(200);
+    const after = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'read' " +
+        "and entity_type = 'client' and entity_id = $1",
+      [h.clientId(1)],
+    );
+    expect(Number(after.rows[0]?.n ?? 0)).toBe(Number(before.rows[0]?.n ?? 0) + 1);
+  });
+
   it('reads the brain maps where the table is there, and says nothing about a household never measured', async () => {
     // The assessment stream merged beside this one, so its table is on this
     // database and the guarded read takes the present path (section 6 still
@@ -357,6 +380,55 @@ describe('issuing', () => {
         "and service_type_id = (select id from service_type where code = 'brain-map')",
       [practitionerId],
     );
+  });
+
+  it('rolls the whole issue back when the row it just wrote will not render', async () => {
+    // The number is allocated and the signature written inside
+    // app.issue_report. If the render then fails, a *returned* 422 would
+    // commit that — the transaction rolls back on a raise or a 5xx and on
+    // nothing else — leaving a numbered, signed report with no document,
+    // which nothing could ever file afterwards: a second issue is refused as
+    // already signed, and the repair path has no bytes to compare.
+    //
+    // The failure is forced the only way it can happen: a stored body the
+    // shape no longer recognises. A draft may be updated, so this is written
+    // straight to the row.
+    const id = await draftFor(17);
+    await h.owner.query(
+      'update report set content = \'{"kind":"progress"}\'::jsonb where id = $1',
+      [id],
+    );
+
+    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {});
+    expect(res.status).toBe(500);
+
+    const { rows } = await h.owner.query<{
+      status: string;
+      number: number | null;
+      reference: string | null;
+      signed_at: Date | null;
+      document_id: string | null;
+    }>('select status, number, reference, signed_at, document_id from report where id = $1', [id]);
+    expect(rows[0]).toMatchObject({
+      status: 'draft',
+      number: null,
+      reference: null,
+      signed_at: null,
+      document_id: null,
+    });
+  });
+
+  it('refuses an id that is not a uuid with a 400, on every route that takes one', async () => {
+    // Unvalidated, the path reached a uuid column and Postgres raised, which
+    // the error handler answered as a 500 — on a path a stranger can call.
+    for (const path of ['/api/reports/nonsense', '/api/reports/nonsense/preview']) {
+      const res = await h.call('GET', path, SEEDED.owner);
+      expect(res.status, path).toBe(400);
+    }
+    for (const path of ['issue', 'supersede', 'deliver']) {
+      const res = await h.call('POST', `/api/reports/nonsense/${path}`, SEEDED.owner, {});
+      expect(res.status, path).toBe(400);
+    }
   });
 });
 

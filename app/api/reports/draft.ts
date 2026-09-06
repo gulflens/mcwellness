@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 import { isoDateIn } from '../../../domain/shared';
 import { validateContent } from '../../../domain/reports';
+import { logRead } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
@@ -98,6 +99,14 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const db = c.get('db');
+
+    // **A read, written before the answer** (section 8, and docs/SPEC/audit.md
+    // section 5). This route answers a household's goals in their own words
+    // and the figures of every completed visit inside the coverage. It writes
+    // nothing to the record, which is exactly why it was easy to miss: what
+    // makes a row worth a trail entry is what leaves, not what changes.
+    await logRead(db, 'client', query.data.clientId, query.data.clientId);
+
     const timeZone = await practiceTimeZone(db);
     const gathered = await gatherForClient(db, {
       clientId: query.data.clientId,
