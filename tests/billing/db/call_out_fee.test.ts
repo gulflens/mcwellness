@@ -434,16 +434,22 @@ describe('waiving the fee', () => {
     expect(res.status).toBe(409);
   });
 
-  it('refuses to waive an invoice for a visit that was delivered', async () => {
+  it('refuses to waive an ordinary invoice', async () => {
+    // The Silver sale this suite opens with, which is a bill for something the
+    // family has: unwinding one of those is a credit note and a conversation,
+    // not a switch. The package invoice rather than a session's, because the
+    // harness delivers no session and a case that asserts nothing when its row
+    // is missing asserts nothing at all (done-when review of this pull
+    // request).
     const { rows } = await h.owner.query<{ id: string }>(
-      "select id from invoice where kind = 'session' limit 1",
+      "select id from invoice where kind = 'package' order by number limit 1",
     );
-    if (rows[0]) {
-      const res = await h.call('POST', `/api/billing/invoices/${rows[0].id}/waiver`, SEEDED.owner, {
-        reason: 'A session invoice is not a fee to forgive.',
-      });
-      expect(res.status).toBe(409);
-    }
+    const ordinary = rows[0]?.id;
+    expect(ordinary).toBeTruthy();
+    const res = await h.call('POST', `/api/billing/invoices/${ordinary}/waiver`, SEEDED.owner, {
+      reason: 'A package invoice is not a fee to forgive.',
+    });
+    expect(res.status).toBe(409);
   });
 
   it('is not a practitioner’s to give', async () => {
