@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
@@ -81,7 +82,13 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function mount(options: { activityStatus?: number; reportStatus?: number } = {}) {
+/** The address as the browser would show it, so a test can read it back. */
+function Address() {
+  const location = useLocation();
+  return <output data-testid="address">{location.search}</output>;
+}
+
+function mount(options: { activityStatus?: number; reportStatus?: number; at?: string } = {}) {
   const urls: string[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -106,9 +113,12 @@ function mount(options: { activityStatus?: number; reportStatus?: number } = {})
   }) as unknown as typeof fetch;
 
   render(
-    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <AuditPage />
-    </AuthProviderBoundary>,
+    <MemoryRouter initialEntries={[options.at ?? '/admin/audit']}>
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <AuditPage />
+        <Address />
+      </AuthProviderBoundary>
+    </MemoryRouter>,
   );
   return urls;
 }
@@ -167,5 +177,56 @@ describe('the access report', () => {
     expect(
       await screen.findByText(/access report could not be read/, { exact: false }),
     ).toBeTruthy();
+  });
+});
+
+/**
+ * The one press (docs/SPEC/audit.md section 9, view 4;
+ * docs/CHANGE-REQUESTS/trunk-notes.md round 31's fix round, section 3).
+ *
+ * Round 31 reached the access report from a line of the activity feed, which
+ * falls short of the plan's "one press" for a record with no line in the pages
+ * that happen to be loaded. Somebody already looking at a household can now ask
+ * who else has been, from the record's own timeline, and land on the report
+ * itself.
+ */
+describe('opening the access report from the address', () => {
+  it('opens the report the address names, with nothing pressed', async () => {
+    mount({ at: `/admin/audit?report=${CLIENT}` });
+    const report = await screen.findByRole('region', { name: 'Access report' });
+    expect(within(report).getByText('Hazel Harbour')).toBeTruthy();
+  });
+
+  it('asks the server for that record and not for whichever line was first', async () => {
+    const urls = mount({ at: `/admin/audit?report=${CLIENT}` });
+    await screen.findByRole('region', { name: 'Access report' });
+    expect(urls.some((url) => url.includes(`/api/audit/access-report?clientId=${CLIENT}`))).toBe(
+      true,
+    );
+  });
+
+  it('clears the parameter from the address, so a reload does not reopen it', async () => {
+    mount({ at: `/admin/audit?report=${CLIENT}` });
+    await screen.findByRole('region', { name: 'Access report' });
+    await waitFor(() => {
+      expect(screen.getByTestId('address').textContent).not.toContain('report=');
+    });
+    // And the report is still open: clearing the address is not closing it.
+    expect(screen.getByRole('region', { name: 'Access report' })).toBeTruthy();
+  });
+
+  it('opens nothing when the address names no record', async () => {
+    mount();
+    await screen.findByText('Hazel Harbour opened this client record');
+    expect(screen.queryByRole('region', { name: 'Access report' })).toBeNull();
+  });
+
+  it('stays closed once closed, though the press that opened it came from the address', async () => {
+    mount({ at: `/admin/audit?report=${CLIENT}` });
+    const report = await screen.findByRole('region', { name: 'Access report' });
+    fireEvent.click(within(report).getByRole('button', { name: 'Close' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Access report' })).toBeNull();
+    });
   });
 });

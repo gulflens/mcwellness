@@ -723,6 +723,14 @@ a.rail__item:active,
   color: var(--ink-2);
 }
 
+/* The press to the access report: at the head of the tab, above the feed. */
+.timeline__access {
+  padding-block-end: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+}
+
 .timeline__day {
   margin-block: var(--s-6) var(--s-2);
   font-size: var(--t-small);

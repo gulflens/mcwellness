@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   AccessReportResponse,
   ActivityFilters,
@@ -253,7 +254,29 @@ export function AuditPage() {
     entityTypes: [],
     actions: [],
   });
-  const [reportFor, setReportFor] = useState<string | null>(null);
+  // **The one press.** A record's own timeline links here with the record in
+  // the address (`app/admin/audit/RecordTimeline.tsx`), so somebody already
+  // looking at a household can ask who else has been without first finding a
+  // line for that household in whichever pages of the feed happen to be
+  // loaded — which is what round 31's default 16 fell short of
+  // (docs/CHANGE-REQUESTS/trunk-notes.md, round 31's fix round, section 3).
+  //
+  // Read once, on the first render, and then cleared from the address: the
+  // report is a state of this screen from that moment on, so closing it closes
+  // it and a reload opens the feed rather than re-opening a report somebody
+  // had shut. A client id is an opaque uuid and not personal data, which is
+  // what `.claude/rules/ui.md` keeps out of a query string.
+  const [params, setParams] = useSearchParams();
+  const [reportFor, setReportFor] = useState<string | null>(() => params.get('report'));
+
+  useEffect(() => {
+    if (!params.has('report')) return;
+    const next = new URLSearchParams(params);
+    next.delete('report');
+    // `replace`, so the address the link came from is not left one press of
+    // Back away from re-opening what was just closed.
+    setParams(next, { replace: true });
+  }, [params, setParams]);
 
   useEffect(() => {
     let live = true;
