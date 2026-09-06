@@ -280,6 +280,22 @@ export const CancelAppointmentResponse = z.object({
 });
 export type CancelAppointmentResponse = z.infer<typeof CancelAppointmentResponse>;
 
+/**
+ * Telling the household, recorded (docs/SPEC/scheduling-manual.md section 3).
+ *
+ * There is no request schema: the act carries no choices, only the visit it
+ * is about, and the route reads no body. (A caller still declares the request
+ * JSON, because the shared `jsonOnly` middleware declines every POST that
+ * does not.) The answer is the visit's new standing and nothing else — the screen
+ * that asked reloads the day rather than patching one row from a reply, so
+ * every other thing that may have changed since is on the screen too.
+ */
+export const ConfirmAppointmentResponse = z.object({
+  id: z.uuid(),
+  status: z.literal('confirmed'),
+});
+export type ConfirmAppointmentResponse = z.infer<typeof ConfirmAppointmentResponse>;
+
 /** Why a move or a cancellation was refused before any rule was consulted. */
 export const APPOINTMENT_ACTION_CODES = [
   'invalid_request',
@@ -294,6 +310,22 @@ export const APPOINTMENT_ACTION_CODES = [
   'session_open',
 ] as const;
 export type AppointmentActionCode = (typeof APPOINTMENT_ACTION_CODES)[number];
+
+/**
+ * Why confirming a visit was refused. Its own short list rather than three
+ * more members of the one above: a move and a cancellation can be refused for
+ * six reasons each and this can be refused for three, and a `Record` over the
+ * union would make every screen carry sentences for refusals its own route
+ * cannot produce.
+ */
+export const CONFIRM_ACTION_CODES = [
+  'invalid_request',
+  'appointment_not_found',
+  // Not waiting to be confirmed: confirmed already, or moved on past the
+  // point of being announced at all.
+  'appointment_not_proposed',
+] as const;
+export type ConfirmActionCode = (typeof CONFIRM_ACTION_CODES)[number];
 
 /**
  * The practice's cancellation policy, for the screens that have to name its

@@ -38,3 +38,41 @@ export const SETTLED_STATUSES = [
 export function isSettled(status: AppointmentStatus): boolean {
   return (SETTLED_STATUSES as readonly string[]).includes(status);
 }
+
+/**
+ * Whether the household has been told about this visit.
+ *
+ * `proposed` means "placed on the calendar, client not yet informed"
+ * (docs/SPEC/scheduling-manual.md section 3), and every other live status is
+ * on the far side of somebody having said so: `confirmed` is the telling
+ * itself, and a visit cannot be checked in or completed without one. A
+ * settled visit is judged on what it was before it settled and is not asked
+ * this question — the rules that use it are about a visit still owed.
+ *
+ * Two rules read it, and both would otherwise say something untrue about a
+ * visit nobody has heard of: the notice period (a household given no promise
+ * was given no notice to break, domain/scheduling/cancellation.ts) and the
+ * reason list (a family cannot have called off a visit they were never told
+ * about).
+ */
+export function householdHasBeenTold(status: AppointmentStatus): boolean {
+  return status !== 'proposed';
+}
+
+/**
+ * Whether this visit is one to confirm — that is, to record the household as
+ * having been told about (docs/SPEC/scheduling-manual.md section 3:
+ * "`confirmed`: client informed (manual toggle in Phase 1; WhatsApp in Phase
+ * 2)").
+ *
+ * Only from `proposed`, and in that one direction. A visit already confirmed
+ * has nothing to record; a visit checked in, delivered, missed, called off or
+ * moved has happened, and what happened is not re-announced. Confirming is
+ * never a way back from any of those: the lifecycle in section 3 has no
+ * arrow pointing that way, and `app/api/appointments/confirm.ts` writes the
+ * same predicate into its own `where` clause so a visit somebody settled
+ * between the read and the write cannot be quietly reopened.
+ */
+export function canBeConfirmed(status: AppointmentStatus): boolean {
+  return status === 'proposed';
+}

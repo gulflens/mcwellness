@@ -9,7 +9,13 @@ export type {
   SchedulingCandidate,
   SchedulingContext,
 } from './conflicts';
-export { APPOINTMENT_STATUSES, SETTLED_STATUSES, isSettled } from './status';
+export {
+  APPOINTMENT_STATUSES,
+  SETTLED_STATUSES,
+  canBeConfirmed,
+  householdHasBeenTold,
+  isSettled,
+} from './status';
 export type { AppointmentStatus } from './status';
 export {
   ALWAYS_LATE_REASONS,
