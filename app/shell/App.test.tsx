@@ -53,6 +53,9 @@ const PRACTICE = {
   licenceExpiresOn: null,
   vatRegistered: false,
   vatTrn: null,
+  // The VAT threshold watch (migration 953): well below both marks.
+  vatTaxableSuppliesFils: 4_200_000,
+  vatTaxableSuppliesAsOf: '2026-09-06',
   // What the client portal's ask-for-a-visit button opens (migration 910).
   whatsappNumber: null,
   defaultEmirate: 'DXB',

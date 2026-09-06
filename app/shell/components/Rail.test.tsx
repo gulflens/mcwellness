@@ -26,7 +26,13 @@ describe('Rail', () => {
       'href',
       expect.stringContaining('/admin/billing'),
     );
-    expect(screen.getAllByText('Arriving')).toHaveLength(2);
+    expect(screen.getByRole('link', { name: 'Audit' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/audit'),
+    );
+    // Sessions alone is still to come; Audit stopped being one in the trunk's
+    // round 31.
+    expect(screen.getAllByText('Arriving')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });

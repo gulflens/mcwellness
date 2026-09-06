@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router';
 import {
+  canOpenAudit,
   canOpenBilling,
   canOpenKit,
   canOpenPortalAccess,
@@ -17,10 +18,9 @@ import { describeRoles } from './routing';
  * the same `canOpenBilling`/`canOpenSchedule`/`canOpenSettings` rules the routes enforce
  * (adminAccess.ts), so the rail never shows a link a route would bounce
  * the person straight back out of — a finance account sees Billing but not
- * Schedule, and only someone who treats sees Today. `clients`, `sessions`
- * and `audit` are unconditional: `clients`
- * has no per-role gate of its own yet, and `sessions`/`audit` still carry
- * no `to` at all, so they render as "Arriving" regardless of role.
+ * Schedule, and only someone who treats sees Today. `clients` is
+ * unconditional, having no per-role gate of its own yet, and `sessions` still
+ * carries no `to` at all, so it renders as "Arriving" regardless of role.
  */
 function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
   return ADMIN_SECTIONS.filter((section) => {
@@ -30,6 +30,7 @@ function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
     if (section.key === 'settings') return canOpenSettings(actor, now);
     if (section.key === 'portal') return canOpenPortalAccess(actor, now);
     if (section.key === 'kit') return canOpenKit(actor, now);
+    if (section.key === 'audit') return canOpenAudit(actor, now);
     return true;
   });
 }

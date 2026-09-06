@@ -1,0 +1,135 @@
+/*
+  Audit's own rules, layered on the shell's shared vocabulary
+  (app/shell/shell.css, app/shell/tokens.css). Every value is a token and every
+  property is logical, so the page mirrors for Arabic without a second
+  stylesheet.
+
+  The feed's own shape is the record timeline's, said again here rather than
+  reused: `.timeline__*` belongs to the drawer's narrow column and this is a
+  full page with a time, a sentence and the record it touched on one line.
+*/
+
+.audit__filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--s-4);
+  margin-block-end: var(--s-6);
+}
+
+.audit__group {
+  margin-block-end: var(--s-4);
+}
+
+.audit__day {
+  margin-block: var(--s-6) var(--s-2);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+  padding-block-end: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.audit__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+  Time, sentence, record. The time is a fixed column so the sentences line up
+  down the page; the record sits at the end and wraps under on a narrow screen.
+*/
+.audit__event {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) auto;
+  gap: var(--s-3);
+  align-items: baseline;
+  padding-block: var(--s-3);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.audit__time {
+  color: var(--ink-2);
+}
+
+.audit__sentence {
+  display: block;
+  min-inline-size: 0;
+}
+
+.audit__reason {
+  display: block;
+  margin-block-start: var(--s-1);
+}
+
+.audit__record {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  align-items: baseline;
+  justify-content: flex-end;
+}
+
+/*
+  A control that reads as running text: the record's number and the way to its
+  access report sit inside a sentence, and a button drawn as a button there
+  would be three buttons on every line.
+*/
+.audit__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.audit__link:hover {
+  color: var(--ink-2);
+}
+
+.audit__report {
+  margin-block: var(--s-6);
+  padding: var(--s-5);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--paper);
+}
+
+.audit__report-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-block-end: var(--s-4);
+}
+
+.audit__heading {
+  margin: 0;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+}
+
+.audit__roles {
+  display: block;
+}
+
+.audit__more {
+  padding-block: var(--s-6);
+}
+
+@media (width < 48rem) {
+  .audit__event {
+    grid-template-columns: 4rem minmax(0, 1fr);
+  }
+
+  .audit__record {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+}
