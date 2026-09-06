@@ -1,12 +1,14 @@
 # assessment-02 — the shared-zone changes the export's door needs, now that the equipment is named
 
 **Status.** Written 2026-09-06 in the round that widened the assessment
-stream's file door. Item 1 is **applied in this piece's own pull request**,
+stream's file door; item 3 was added the same day out of the review of that
+round's pull request. Item 1 is **applied in this piece's own pull request**,
 under the cost rules of `docs/HANDOVER.md` section 6 and the precedent
 `assessment-01.md` set for the same file two rounds ago; it is one constant and
-one constant beside it in a file this stream already owns a paragraph of. Item
-2 is **written and not applied**: it is a change to `domain/shared`, which is
-the trunk's, and the stream carries a local check meanwhile.
+one constant beside it in a file this stream already owns a paragraph of. Items
+2 and 3 are **written and not applied**: both are changes to `domain/shared`,
+which is the trunk's, and item 2's question is carried by a local check
+meanwhile.
 
 **Why now.** `docs/SPEC/assessment.md` decision 3 accepted `application/pdf`
 alone and a 20 MB cap "until the equipment is named". On 6 September the
@@ -77,7 +79,24 @@ against anything beginning as markup. A second sample would let a signature
 replace the extension, and it should; until then a guess would be a door that
 starts refusing the practice's own files without warning.
 
-## 3. Nothing else
+## 3. `domain/shared/audit-narrative.test.ts` — a fixture still saying `raw`
+(written, not applied)
+
+**The request.** One fixture in the trunk's narrative test files a document
+with `role: 'raw'`, a word migration 503 renamed to `raw_recording`. It should
+say the new one.
+
+**Why it is written rather than fixed here.** The file is the trunk's
+(`docs/SPEC/OWNERSHIP.md` rule 3) and this is a fixture, not a behaviour: the
+sentence the test asserts — "filed the software's own export" — never reads the
+role at all, so nothing is wrong today and nothing will be tomorrow. It is one
+word in one object, for whichever trunk round next opens the file.
+
+**Not a rename to run across the repository.** Every other reader of the value
+is in this stream and was updated with the migration; this is the last one, and
+it is outside the stream's paths.
+
+## 4. Nothing else
 
 No other shared path is touched by this round. The role vocabulary, the
 condition column and the filing function all live in this stream's own
