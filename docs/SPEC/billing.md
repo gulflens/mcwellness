@@ -172,7 +172,34 @@ They lose the volume discount on what they consumed, which is exactly what a vol
 
 **Expiry.** 12 months from purchase is reasonable and standard. Be conservative here — aggressive expiry on prepaid programmes invites both consumer-protection scrutiny and bad reviews. Warn at 60 and 30 days, and allow a documented extension for good reason.
 
-**Late cancellation and no-show.** Under 24 hours consumes the entitlement. This is standard practice and it must be automatic, because a solo operator will not enforce it manually. Give the coordinator a one-click waiver with a reason field.
+**Late cancellation and no-show.** _Amended 2026-09-06 on the founder's
+decision of 4 September._ Under 24 hours carries a **call-out fee** — AED 150,
+the practice's own `scheduling_setting.unfit_fee_fils` — and **never takes a
+session from a package**. A visit that cannot go ahead once the practitioner
+has arrived carries the same fee, and so does a no-show. One journey made and
+no session delivered is one fee, whichever of the three it was; the family
+keeps everything it paid for. The fee is posted automatically as a charge on
+the household's account (migration 408, `domain/billing`'s `callOutFeeFor`),
+because a solo operator will not enforce it manually, and the coordinator has a
+one-click waiver with a reason field on the charge itself
+(`POST /api/billing/invoices/:id/waiver`).
+
+Two things follow from the shape rather than from the rule. A waived fee stays
+on the record and stops counting in `app.billing_ledger`, so what happened is
+never rewritten; and nothing was backfilled, so credits taken under the old
+rule are still consumed and are given back one at a time through the credit
+waiver, which is a decision for a person.
+
+**A no-show carrying the fee is Claude's default of 2026-09-06, not the
+founder's decision**, and it is recorded as one in
+`docs/CHANGE-REQUESTS/billing-05.md`. The founder ruled on cancellations and on
+a visit unfit at the door; a no-show is the same event from the practice's
+side, so it was read the same way. Making a no-show cost a session instead is
+one line in `CALL_OUT_FEE_OUTCOMES`.
+
+The rule before the amendment, for anyone reading an old ledger: under 24
+hours consumed the entitlement, and the waiver was addressed to the credit
+(`POST /api/billing/entitlements/:id/waiver`, which still is, for those rows).
 
 ### 4.4 Journal entries
 
