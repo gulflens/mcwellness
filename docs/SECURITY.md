@@ -80,6 +80,72 @@ credential); every read and write of a record is logged, hash-chained.
    (lint and a test keep it so); the policy above blocks any script that is
    not the app's own.
 
+## Who may read what
+
+*Written 2026-09-06 (trunk round 34), answering `docs/CHANGE-REQUESTS/reports-01.md` R4.*
+
+Every cell below is read off `db/policies/**` and `domain/shared/actor.ts`, not
+off memory. **The database is the boundary and the API rule is the courtesy**
+(layer 6 above), so where the two disagree the row says so rather than choosing
+between them; a screen that hides a button the server would have allowed is a
+smaller fault than a screen that offers one the server refuses.
+
+Read the columns as: **O** owner, **A** admin, **L** lead practitioner,
+**P** practitioner, **F** finance, **C** client contact (a household's own
+login). And the cells as:
+
+- **all** — every row of the practice.
+- **own schedule** — only clients that practitioner is booked to see, from
+  ninety days back to thirty-one days ahead (`app.client_visible_to_practitioner`,
+  migration 201).
+- **own rows** — only rows naming that person's own practitioner row.
+- **own record** — only the client they are a contact of
+  (`app.actor_is_contact_of`), unless the row narrows it further.
+- **—** — nothing at all: the query returns no rows, which is why a household
+  and a finance account meet an empty screen rather than a refusal.
+
+**The erasure gate sits over most of this.** Where a row says so, an erased
+client's rows are readable by the owner and the lead practitioner alone,
+whatever else the cell allows (`app.client_erasure_gate`, migration 100).
+
+| What | O | A | L | P | F | C | Policy, and where the API rule differs |
+|---|---|---|---|---|---|---|---|
+| **The record**, and its contacts, consents, locations and documents | all | all | all | own schedule | client and contacts only; **—** for consents, goals, client documents | own record, and the consent wording it was shown | `db/policies/client/readers.sql` (`client_record_readers`), erasure-gated. A practice-level document — a certificate, a purpose's consent text — is the four staff roles', and a household reads only the consent wording a consent of its own actually names. **The API is wider**: `client.read` admits a practitioner unconditionally and knows nothing of the erasure gate, so a practitioner off their window passes the route and reads no row. A session's setup photograph is a `document` and is read by this row (`kind = 'setup_photo'`, migration 306), which is why finance cannot see one. |
+| **Visits** | all | all | all | own rows | — | own record | `db/policies/scheduling/appointment_access.sql` (`scheduling_read_scope`). No erasure gate; erasure empties the row instead (migration 105). **The API is narrower**: no `appointment.list` scope admits a client contact at all, and a household reaches its visits through the portal's household gate instead. The policy's practitioner arm is an identity test on the practitioner row rather than a role test, so it is the practitioner row and not the role that decides. |
+| **Sessions** and what was recorded in them | all | all | all | own rows | — | — | `db/policies/session/practitioner_scope.sql` (`practitioner_scope`, `for all`). **The API has no session-read rule to compare**: there is no session action in `canActor`, so the routes use `hasRole` directly, and `app/api/sessions/photo-link.ts` lists finance among its readers where the `document` policy does not — a finance account passes that route and the query answers nothing. |
+| **Money**: purchases, entitlements, invoices and their lines, payments, refunds, rendered invoice files | all | all | all | own schedule | all | own record, and not a minor's own login | `db/policies/billing/ledger.sql` (`ledger_readers`, `catalogue_readers`, `exception_readers`) and `db/policies/portal/money.sql` (`portal_money_adults`), erasure-gated. A billing exception is the office's: `db/policies/billing/ledger.sql` gives it to O, A, L and F only. **The API is narrower**: `billing.invoice.read` is the four office roles, and `actor.ts` says in the file that this is deliberate for now. |
+| **Measurements** and their files | all | all | all | own schedule | — | — | `db/policies/assessment/access.sql` (`assessment_read`, `assessment_document_read`). The role lists agree with `assessment.read` exactly; the policy narrows the practitioner further. No erasure gate on the policy — erasure empties the payload (migration 106). |
+| **Reports** | all | all | all | own schedule | — | issued reports about a client they are the legal guardian of, or about themselves once they are an adult | `db/policies/reports/reports.sql` (`report_readers`); a delivery record is the practice's own and no household reads it (`report_delivery_readers`). Erasure-gated. **The API is wider**: `report.list` and `report.read` admit any contact of the record and any practitioner, so a non-guardian contact passes the route and the row refuses. A draft is nobody's but the practice's. |
+| **The audit trail**, the activity feed and the access report | all | all | all | — | — | — | `db/policies/core/audit_log.sql` (`audit_log_readers`). The role lists agree with `audit.read` and `audit.activity` exactly. **Everything else about the trail lives in the routes and not in the policy**: the erasure gate, the reason a sensitive read must carry, and the 404 for a record the caller may not name are all in `app/api/audit/activity.ts` and `app/api/audit/timeline.ts`, so a query issued outside those routes has only the role test above. Writing to the trail is a different matter: every role inserts its own read rows, which is what makes the access report possible. |
+
+Two more things are true of the whole table. `app_user`, `user_role`,
+`practitioner`, `credential` and `service_type` carry tenant isolation and no
+read narrowing at all, so anybody signed in to the practice — a household
+included — can read who works there and what they are certified for; that is
+the practice's own staff list rather than a household's data, and it is written
+down here so it reads as a fact somebody checked. And every read of personal
+data is itself logged (layer 7), so this table says who may look, not who has.
+
+### The two absences, which are decisions
+
+**Finance reads no report.** `docs/SPEC/reports-v1.md` section 7.1 — "finance
+gets nothing, because a report is not money" — and
+`db/policies/reports/reports.sql`, which has no finance arm to remove. Finance
+reads every other client-scoped group above except the measurements, so this
+one is worth stating as a decision rather than leaving to be read as a policy
+somebody forgot to widen.
+
+**Finance reads no audit trail.** `domain/shared/actor.ts`, where `audit.read`
+and `audit.activity` are one case admitting the owner, an admin and the lead
+practitioner, with the reason beside them: reading who did what is oversight,
+and finance reads money and not who did what. `db/policies/core/audit_log.sql`
+says the same in SQL.
+
+**This section is rewritten in the same pull request as any policy that changes
+it.** A page describing row level security that is updated a round later is a
+page that has been wrong for a round, and the only way to know it is wrong is
+to read every policy file again — which is the work this section exists to save.
+
 ## What runs on every change
 
 `pnpm verify` runs format, lint (including the design and colour rules),
