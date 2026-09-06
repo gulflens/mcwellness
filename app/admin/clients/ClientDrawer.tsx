@@ -11,6 +11,7 @@ import { DocumentsTab } from './DocumentsTab';
 import { GoalsTab } from './GoalsTab';
 import { LocationsTab } from './LocationsTab';
 import { OverviewTab } from './OverviewTab';
+import { ReportsTab } from '../reports/ReportsTab';
 import { Tabs, TabPanel, type Tab } from './Tabs';
 import { canSeeFullRecord, canWriteGoals, canWriteRecord } from './clientAccess';
 import { clientHeadingName } from './contactName';
@@ -30,6 +31,10 @@ const ALL_TABS: readonly Tab[] = [
   // about this client, and Timeline is the record of what was done to the
   // record itself.
   { id: 'assessments', label: 'Assessments' },
+  // The reports stream's own tab, mounted here by
+  // docs/CHANGE-REQUESTS/reports-01.md item 3. It follows the measurements it
+  // quotes. Nothing else in this file moves.
+  { id: 'reports', label: 'Reports' },
   { id: 'timeline', label: 'Timeline' },
 ];
 /**
@@ -220,6 +225,9 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
             </TabPanel>
             <TabPanel id="assessments" idPrefix="client" selected={tab}>
               <AssessmentsTab clientId={client.id} />
+            </TabPanel>
+            <TabPanel id="reports" idPrefix="client" selected={tab}>
+              <ReportsTab clientId={client.id} erased={erased} />
             </TabPanel>
           </>
         ) : null}

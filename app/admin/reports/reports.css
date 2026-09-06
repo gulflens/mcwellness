@@ -1,0 +1,215 @@
+/*
+  The Reports tab, the draft editor and the ribbon
+  (docs/SPEC/reports-v1.md section 4, docs/DESIGN-BRIEF.md sections 5 and 6.2).
+
+  Almost everything here is the console's own vocabulary already: the shared
+  table, the shared drawer, the shared status chip, the shared fields. What
+  this screen adds is the one figure the design brief spends its boldness on
+  and the shape of a draft read top to bottom in one column.
+
+  Every value comes from app/shell/tokens.css and every rule is written in
+  logical properties (.claude/rules/ui.md). The five band colours are the only
+  hue on the screen and they are the tokens'; there is no literal here.
+*/
+
+/* --------------------------------------------------------------------------
+   The ribbon
+   -------------------------------------------------------------------------- */
+
+.ribbon {
+  display: block;
+  inline-size: 100%;
+  block-size: 44px;
+}
+
+/* Ink, for a slice whose visit recorded no band: it draws the height it has
+   and claims no colour it does not know. */
+.ribbon__slice {
+  fill: var(--ink-2);
+}
+.ribbon__slice--delta {
+  fill: var(--delta);
+}
+.ribbon__slice--theta {
+  fill: var(--theta);
+}
+.ribbon__slice--alpha {
+  fill: var(--alpha);
+}
+.ribbon__slice--beta {
+  fill: var(--beta);
+}
+.ribbon__slice--gamma {
+  fill: var(--gamma);
+}
+
+/* A brain map: a hairline the height of the strip, between two sessions. */
+.ribbon__map {
+  fill: var(--slate);
+}
+
+/* The sessions still to come: the same width, a hairline high. */
+.ribbon__empty {
+  fill: var(--rule);
+}
+
+.ribbon-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-block: var(--s-4);
+}
+
+.ribbon-block__legend {
+  color: var(--slate);
+}
+
+/* --------------------------------------------------------------------------
+   The tab and its rows
+   -------------------------------------------------------------------------- */
+
+/* A superseded version sits beneath the one that replaced it, indented and
+   quiet, so a reader sees the chain rather than a list of near-duplicates. */
+.reports__row--superseded td:first-child {
+  padding-inline-start: var(--s-6);
+}
+.reports__row--superseded td {
+  color: var(--slate);
+}
+
+.reports__reason {
+  display: block;
+  color: var(--slate);
+}
+
+/* --------------------------------------------------------------------------
+   The draft editor: one column, the report's own sections in order
+   -------------------------------------------------------------------------- */
+
+.report-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  max-inline-size: var(--measure);
+}
+
+.report-editor__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding-block-end: var(--s-4);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.report-editor__section:last-child {
+  border-block-end: none;
+}
+
+.report-editor__heading {
+  font-size: var(--t-body);
+  font-weight: var(--w-medium);
+  margin: 0;
+}
+
+/*
+  The gathered figures, shown as they will print and not editable: a figure a
+  practitioner could retype is a figure that can disagree with the record
+  (section 4.2). Rendered as a definition list rather than as disabled inputs,
+  because a disabled input still reads as a field somebody forgot to enable.
+*/
+.report-editor__figures {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-1) var(--s-4);
+  margin: 0;
+}
+
+.report-editor__figures dt {
+  color: var(--slate);
+}
+
+.report-editor__figures dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-editor__note {
+  inline-size: 100%;
+  min-block-size: 6lh;
+  padding: var(--s-2) var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+
+.report-editor__note:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/*
+  The confirmation before signing. Not a dialog: the one-way door is explained
+  in the flow of the page, where a person is already reading, rather than in a
+  box they learn to dismiss.
+*/
+.report-editor__sign {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+}
+
+.report-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+/* --------------------------------------------------------------------------
+   View and deliver
+   -------------------------------------------------------------------------- */
+
+.report-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  max-inline-size: var(--measure);
+}
+
+.report-view__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--s-1) var(--s-4);
+  margin: 0;
+}
+
+.report-view__facts dt {
+  color: var(--slate);
+}
+
+.report-view__facts dd {
+  margin: 0;
+}
+
+.report-view__deliveries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.report-view__delivery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding-block: var(--s-1);
+  color: var(--slate);
+}

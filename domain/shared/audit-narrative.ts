@@ -59,6 +59,17 @@ const ENTITY: Record<string, Text> = {
   // Piece ten's measurements (docs/SPEC/assessment.md section 8).
   assessment: t('measurement', 'القياس'),
   assessment_document: t("the measurement's file", 'ملف القياس'),
+  // Reports (docs/SPEC/reports-v1.md section 8). `report_delivery` takes the
+  // generic fallback: a row saying which contact was sent which report is read
+  // through the report's own sentences, and "X added a report delivery" is
+  // nobody's idea of a sentence — the `send` action below says it properly.
+  report: t('report', 'التقرير'),
+};
+
+/** The two kinds a report can be (docs/SPEC/reports-v1.md section 1). */
+const REPORT_KIND: Record<string, Text> = {
+  session: t('session report', 'تقرير الجلسة'),
+  progress: t('progress report', 'تقرير التقدّم'),
 };
 
 /** What an instrument is, for the register's own sentences (section 6.1). */
@@ -721,6 +732,82 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         t(
           `${actor} removed a measurement's file with the record`,
           `${actor} أزال ملف القياس مع السجل`,
+        ),
+        locale,
+      );
+    // Reports (docs/SPEC/reports-v1.md section 8). A draft moving is ordinary
+    // work and takes the generic sentence; the four acts below are the ones a
+    // reader of a household's timeline is actually looking for.
+    case 'report.report.issued': {
+      const kind = label(REPORT_KIND, event.newValues?.kind, locale);
+      const reference = scalar(event.newValues, 'reference');
+      const what = [kind, reference].filter((part) => part).join(' ');
+      return what
+        ? pick(t(`${actor} signed and issued a ${what}`, `${actor} وقّع وأصدر ${what}`), locale)
+        : pick(t(`${actor} signed and issued a report`, `${actor} وقّع وأصدر تقريرًا`), locale);
+    }
+    case 'report.report.superseded': {
+      // The reason travels in `reason`, which every sentence carries beside
+      // it, so it is not repeated here — and the whole value of keeping both
+      // versions is that the reason is on the trail.
+      const version = scalar(event.newValues, 'version');
+      return version
+        ? pick(
+            t(
+              `${actor} replaced this report with version ${version}`,
+              `${actor} استبدل هذا التقرير بالإصدار ${version}`,
+            ),
+            locale,
+          )
+        : pick(
+            t(
+              `${actor} replaced this report with a newer version`,
+              `${actor} استبدل هذا التقرير بإصدار أحدث`,
+            ),
+            locale,
+          );
+    }
+    case 'report.send': {
+      // The contact's id is on the row and is not said: what a reader needs is
+      // that a report went to the household and by which door. The number is
+      // nowhere near the trail (docs/SPEC/audit.md section 8).
+      const channel = event.newValues?.channel;
+      const how =
+        channel === 'whatsapp'
+          ? pick(t('on WhatsApp', 'عبر واتساب'), locale)
+          : channel === 'email'
+            ? pick(t('by email', 'بالبريد الإلكتروني'), locale)
+            : '';
+      return how
+        ? pick(
+            t(
+              `${actor} sent this report to the household ${how}`,
+              `${actor} أرسل هذا التقرير للأسرة ${how}`,
+            ),
+            locale,
+          )
+        : pick(
+            t(`${actor} sent this report to the household`, `${actor} أرسل هذا التقرير للأسرة`),
+            locale,
+          );
+    }
+    case 'report.read':
+    case 'report.list':
+      return pick(t(`${actor} read this report`, `${actor} اطّلع على هذا التقرير`), locale);
+    case 'report.report.issue_refused':
+      return pick(
+        t(
+          `${actor} tried to sign a report and was refused`,
+          `${actor} حاول توقيع تقرير فرُفض الطلب`,
+        ),
+        locale,
+      );
+    case 'report.report.supersede_refused':
+    case 'report.report.deliver_refused':
+      return pick(
+        t(
+          `${actor} was refused an action on this report`,
+          `${actor} رُفض له إجراء على هذا التقرير`,
         ),
         locale,
       );

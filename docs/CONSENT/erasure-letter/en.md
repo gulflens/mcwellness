@@ -1,7 +1,7 @@
 ---
 purpose: erasure_letter
 locale: en
-version: 0.3-draft
+version: 0.4-draft
 status: draft
 written: 2026-09-06
 ---
@@ -17,7 +17,8 @@ on your record are gone from our systems, and the account that opened the
 client portal has been closed. The record of your sessions has gone with them:
 the place we checked in and out, what the practitioner wrote afterwards, the
 files from any brain map or questionnaire we recorded, including the recordings
-the equipment's own software produced, and anything else written in words. What
+the equipment's own software produced, and anything else written in words.
+{{reports_erased}} What
 remains where a record used to be is an entry saying that a record was erased
 on that date, holding none of your personal details.
 

@@ -505,6 +505,91 @@ describe('the kit register and the day picture', () => {
     }
     expect(canActor(actor([]), { type: 'routing.day.read', scope: 'own' }, {}, NOW)).toBe(false);
   });
+  it('lets the four practice roles that are not finance see a report exists', () => {
+    // Section 7.1 of docs/SPEC/reports-v1.md. Finance gets nothing, because a
+    // report is not money — the one client-scoped read in this platform it is
+    // deliberately kept out of.
+    for (const role of ['owner', 'admin', 'lead_practitioner', 'practitioner'] as const) {
+      for (const type of ['report.list', 'report.read'] as const) {
+        expect(canActor(actor([role]), { type, clientId: CLIENT }, {}, NOW), role).toBe(true);
+      }
+    }
+    expect(canActor(actor(['finance']), { type: 'report.read', clientId: CLIENT }, {}, NOW)).toBe(
+      false,
+    );
+  });
+
+  it('lets a household read its own reports and nobody else’s', () => {
+    const household = actor(['client_contact']);
+    expect(
+      canActor(household, { type: 'report.read', clientId: CLIENT }, { clientIds: [CLIENT] }, NOW),
+    ).toBe(true);
+    expect(
+      canActor(
+        household,
+        { type: 'report.read', clientId: OTHER_CLIENT },
+        { clientIds: [CLIENT] },
+        NOW,
+      ),
+    ).toBe(false);
+    expect(canActor(household, { type: 'report.read', clientId: CLIENT }, {}, NOW)).toBe(false);
+  });
+
+  it('lets the owner, the lead practitioner and a practitioner draft one, and nobody else', () => {
+    for (const role of ['owner', 'lead_practitioner', 'practitioner'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'report.draft', clientId: CLIENT }, {}, NOW),
+        role,
+      ).toBe(true);
+    }
+    // An admin reads and delivers and never drafts; finance and a household
+    // are nowhere near it.
+    for (const role of ['admin', 'finance', 'client_contact'] as const) {
+      expect(
+        canActor(
+          actor([role]),
+          { type: 'report.draft', clientId: CLIENT },
+          { clientIds: [CLIENT] },
+          NOW,
+        ),
+        role,
+      ).toBe(false);
+    }
+  });
+
+  it('lets only the owner and the lead practitioner replace a signed report', () => {
+    // Narrower than drafting on purpose (section 7.1): superseding hides a
+    // version the household may already hold, which is not the same act as
+    // writing one. A practitioner may draft and may sign with the capability.
+    for (const role of ['owner', 'lead_practitioner'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'report.supersede', clientId: CLIENT }, {}, NOW),
+        role,
+      ).toBe(true);
+    }
+    for (const role of ['practitioner', 'admin', 'finance', 'client_contact'] as const) {
+      expect(
+        canActor(
+          actor([role]),
+          { type: 'report.supersede', clientId: CLIENT },
+          { clientIds: [CLIENT] },
+          NOW,
+        ),
+        role,
+      ).toBe(false);
+    }
+  });
+
+  it('lets the owner, an admin and the lead practitioner deliver one', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'report.deliver' }, {}, NOW), role).toBe(true);
+    }
+    // A practitioner drafts and signs; sending is the office's act.
+    for (const role of ['practitioner', 'finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'report.deliver' }, {}, NOW), role).toBe(false);
+    }
+    expect(canActor(actor([]), { type: 'report.deliver' }, {}, NOW)).toBe(false);
+  });
 });
 
 describe('measurements', () => {

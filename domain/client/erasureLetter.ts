@@ -137,6 +137,37 @@ function practiceContact(address: string | null, locale: ErasureLetterLocale): s
 }
 
 /**
+ * What the letter says about the reports the practice wrote
+ * (docs/SPEC/reports-v1.md section 6, migration `107_erase_report.sql`).
+ *
+ * The letter already tells a household that every document and file on their
+ * record has gone. A report is a document, so that sentence is true of it —
+ * but it is the document a household is most likely to be holding a copy of,
+ * and the one they would most want to know the practice no longer has. So it
+ * is said in its own words, and it says both halves: the file is gone and so
+ * are the words inside it, and the practice keeps only the fact that a report
+ * was written and by whom.
+ *
+ * A `{{reports_erased}}` placeholder in either template is filled with this.
+ * Both templates in `docs/CONSENT/erasure-letter/` carry it, in the paragraph
+ * that already covers the sessions and the brain maps, adopted in this round
+ * under the integrator's decision (`docs/CHANGE-REQUESTS/reports-01.md`, item
+ * 5). They are the practice's own wording and stay `status: draft` until the
+ * lawyer approves them, as every consent text does. A template without the
+ * placeholder still renders exactly as it did.
+ */
+export const REPORTS_ERASED_SENTENCE: Record<ErasureLetterLocale, string> = {
+  en:
+    'The reports we wrote for you are gone as well: the files themselves and the words ' +
+    'inside them, including the goals, the ratings and the practitioner’s summaries. ' +
+    'What remains is a note that a report was written and by whom, holding nothing about you.',
+  ar:
+    'وزالت أيضاً التقارير التي كتبناها لك: الملفات نفسها والكلمات التي فيها، بما في ذلك ' +
+    'الأهداف والتقييمات وخلاصات الممارس. ما يبقى قيدٌ يفيد بأن تقريراً كُتب ومن كتبه، ' +
+    'ولا يحمل شيئاً عنك.',
+};
+
+/**
  * The letter itself: the template's body with the things only the moment
  * knows put into it — the day the record was erased, and the practice's legal
  * name as the tenant row records it.
@@ -153,6 +184,7 @@ export function renderErasureLetter(
     erased_on: formatLetterDate(values.erasedOn, template.locale),
     practice_legal_name: values.practiceLegalName.trim(),
     practice_contact: practiceContact(values.practiceAddress ?? null, template.locale),
+    reports_erased: REPORTS_ERASED_SENTENCE[template.locale],
   };
   if (!filled.practice_legal_name) {
     throw new Error('An erasure letter names the practice that sent it.');

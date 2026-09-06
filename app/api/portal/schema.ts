@@ -281,6 +281,41 @@ export const AgreementsResponse = z.object({
 });
 export type AgreementsResponse = z.infer<typeof AgreementsResponse>;
 
+// ---------------------------------------------------------------------------
+// Reports (docs/SPEC/reports-v1.md section 7.3). The household's sixth screen,
+// specified by the reports piece and built here because this is where the
+// portal's screens live.
+// ---------------------------------------------------------------------------
+
+/**
+ * One report as a household reads it: its reference, what kind it is, what it
+ * covers and when it was issued.
+ *
+ * Nothing of its body travels. The figures, the goals and the practitioner's
+ * words are inside the PDF, which opens through a short-lived audited link;
+ * putting them in this answer would put a household's most personal document
+ * into every response the screen makes.
+ */
+export const PortalReport = z.object({
+  id: z.uuid(),
+  clientId: z.uuid(),
+  kind: z.enum(['session', 'progress']),
+  status: z.enum(['draft', 'issued', 'superseded']),
+  reference: z.string().nullable(),
+  issuedOn: IsoDate.nullable(),
+  coverageFrom: IsoDate.nullable(),
+  coverageTo: IsoDate.nullable(),
+  version: z.number().int().min(1),
+  documentId: z.uuid().nullable(),
+});
+export type PortalReport = z.infer<typeof PortalReport>;
+
+export const PortalReportsResponse = z.object({
+  clients: z.array(PortalClient),
+  reports: z.array(PortalReport),
+});
+export type PortalReportsResponse = z.infer<typeof PortalReportsResponse>;
+
 export const WordingResponse = z.object({
   id: z.uuid(),
   purpose: z.string(),
