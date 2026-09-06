@@ -92,16 +92,24 @@ function isPhotoUpload(method: string, path: string): boolean {
 }
 /**
  * And the third, the largest, and raw for the same reason the photograph is:
- * the equipment's own export, a vendor's PDF report with its pictures in it
- * (docs/SPEC/assessment.md section 7.1, docs/CHANGE-REQUESTS/assessment-01.md
- * item 2). The Documents tab cannot carry one — its envelope is 45 KB inside
- * the 64 KB body every other route keeps — so this path has a cap of its own
- * and a pass out of `jsonOnly`, matched by method and path together exactly as
- * `isPhotoUpload` is. The route itself accepts one media type, checks the
- * bytes against it and verifies the digest the browser declared
- * (app/api/assessments/file.ts).
+ * the equipment's own export (docs/SPEC/assessment.md section 7.1,
+ * docs/CHANGE-REQUESTS/assessment-01.md item 2 and assessment-02.md item 1).
+ * The Documents tab cannot carry one — its envelope is 45 KB inside the 64 KB
+ * body every other route keeps — so this path has a cap of its own and a pass
+ * out of `jsonOnly`, matched by method and path together exactly as
+ * `isPhotoUpload` is. The route itself accepts two declared media types,
+ * decides which of three kinds the bytes are from the bytes themselves, and
+ * verifies the digest the browser declared (app/api/assessments/file.ts).
+ *
+ * **Sixty-four megabytes from 2026-09-06**, when the founder named the
+ * equipment. Twenty was sized for a vendor's PDF report with its pictures in
+ * it; what the practice actually files is the raw recording as well, and hers
+ * run 22 to 33 MB apiece with a longer session bigger than that. A cap that
+ * refuses the recordings the door was widened for is not a cap, it is a wall.
+ * Sixty-four leaves room for a long recording and stays a number a laptop can
+ * hold in memory while the digest is taken.
  */
-export const ASSESSMENT_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
+export const ASSESSMENT_FILE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ASSESSMENT_FILE_PATH = /^\/api\/assessments\/[^/]+\/file$/;
 function isAssessmentFileUpload(method: string, path: string): boolean {
   return method === 'PUT' && ASSESSMENT_FILE_PATH.test(path);
@@ -115,22 +123,32 @@ export const REQUEST_TIMEOUT_MS = 10_000;
  * The one door with a longer budget, and the arithmetic behind the number.
  *
  * `timeout` races the **whole** handler, and the body read is inside it. Ten
- * seconds for a 20 MB export asks for better than 16 Mbit/s sustained all the
- * way through, which no ordinary link in the Emirates holds, so the door the
- * cap exists for could not be used at all: the upload died at ten seconds
- * whatever the practitioner did. Two minutes asks for about 1.4 Mbit/s, which
- * an ordinary fixed or mobile link clears with room to spare.
+ * seconds for an export of this size asks for better than 50 Mbit/s sustained
+ * all the way through, which no ordinary link in the Emirates holds, so the
+ * door the cap exists for could not be used at all: the upload died at ten
+ * seconds whatever the practitioner did.
+ *
+ * **Seven minutes from 2026-09-06**, when the cap became 64 MB
+ * (docs/CHANGE-REQUESTS/assessment-02.md item 1). Two minutes was the number
+ * for 20 MB and asked about 1.4 Mbit/s of the link; holding the same ask over
+ * three times the bytes is where seven comes from — 64 MB inside 420 seconds
+ * is a little under 1.3 Mbit/s, which an ordinary fixed or mobile link clears
+ * with room to spare. Anything shorter would refuse the practice's own
+ * recordings on a mobile connection, which is the whole point of the widening.
  *
  * It is a longer budget and not an exemption, because a request with no clock
  * on it at all is a transaction held open for as long as somebody cares to
  * dribble bytes at it. The real bound is still `ASSESSMENT_FILE_LIMIT_BYTES`:
  * the body cap refuses anything larger before the route reads a byte of it.
+ * Seven minutes is a long transaction and the trade is deliberate — an upload
+ * that fails at six is filed nowhere, and the practitioner is left doing it
+ * again on a link that was never going to be faster.
  *
  * Matched by method and path together, exactly as the caps above are, so every
  * other method on that address and every other path in the API keeps the
  * ordinary ten seconds (tests/assessment/request-timeout.test.ts).
  */
-export const ASSESSMENT_FILE_TIMEOUT_MS = 120_000;
+export const ASSESSMENT_FILE_TIMEOUT_MS = 420_000;
 /** The budget for one request, and the only place either number is chosen. */
 export function requestTimeoutMs(method: string, path: string): number {
   return isAssessmentFileUpload(method, path) ? ASSESSMENT_FILE_TIMEOUT_MS : REQUEST_TIMEOUT_MS;

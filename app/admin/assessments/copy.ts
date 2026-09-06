@@ -1,5 +1,5 @@
 import type { Band, RefusalReason, Unit } from '@domain/assessment';
-import type { AssessmentFileRole } from '../../api/assessments/schema';
+import type { AssessmentFileCondition, AssessmentFileRole } from '../../api/assessments/schema';
 
 /**
  * The words the Assessments tab says (docs/SPEC/assessment.md sections 3.2 and
@@ -108,14 +108,38 @@ export const GATE_MESSAGES: Record<string, string> = {
  * role is chosen when the file is attached and said when it is listed.
  */
 export const FILE_ROLE_LABELS: Record<AssessmentFileRole, string> = {
-  raw: 'The recording',
+  raw_recording: 'The recording',
   vendor_report: 'The software’s report',
+  session_export: 'The session export',
 };
+
+/** Which condition a recording was taken under, where it was taken under one. */
+export const FILE_CONDITION_LABELS: Record<AssessmentFileCondition, string> = {
+  'eyes-open': 'Eyes open',
+  'eyes-closed': 'Eyes closed',
+};
+
+/**
+ * The answer for a recording that was not taken under one condition, as the
+ * attach control offers it. The practice's native recordings hold eyes open and
+ * eyes closed in a single file, so this is the ordinary answer rather than a
+ * refusal to say — which is what "not one condition" read as.
+ */
+export const NO_CONDITION_LABEL = 'Both, or not recorded';
+
+/** A filed file in one phrase: what it is, and the condition where there is one. */
+export function fileLabel(
+  role: AssessmentFileRole,
+  condition: AssessmentFileCondition | null,
+): string {
+  const what = FILE_ROLE_LABELS[role];
+  return condition === null ? what : `${what}, ${FILE_CONDITION_LABELS[condition].toLowerCase()}`;
+}
 
 /** Attaching an export, and opening one. Said before anything is sent. */
 export const ATTACH_MESSAGES = {
   empty: 'That file has nothing in it.',
-  too_large: 'That file is larger than this door takes. Twenty megabytes is the limit.',
+  too_large: 'That file is larger than this door takes. Sixty-four megabytes is the limit.',
   failed: 'That export could not be filed. Try again.',
   store_unavailable: 'The document store cannot be reached, so nothing was filed.',
   link_failed: 'That file did not open.',
@@ -127,8 +151,13 @@ export const ATTACH_MESSAGES = {
  * route is reached (the body cap, the media type) carries only the latter.
  */
 export const ATTACH_REFUSALS: Record<string, string> = {
-  not_a_pdf: 'That is not a PDF. The export is the software’s own PDF report.',
-  unsupported_media_type: 'That is not a PDF. The export is the software’s own PDF report.',
+  not_a_pdf: 'That is not a PDF. A report is the software’s own PDF.',
+  not_a_recording:
+    'That is not a recording this door takes. A recording is an EDF file or the amplifier ' +
+    'software’s own.',
+  unsupported_media_type:
+    'That is not a file this door takes. It takes the software’s PDF, an EDF recording, or the ' +
+    'amplifier software’s own recording.',
   payload_too_large: ATTACH_MESSAGES.too_large,
   empty_body: ATTACH_MESSAGES.empty,
   digest_mismatch: 'The file changed on the way. Choose it again.',
@@ -137,6 +166,10 @@ export const ATTACH_REFUSALS: Record<string, string> = {
   document_exists: 'Something is already filed under that name.',
   forbidden: 'Filing an export against this measurement is not yours to do.',
   not_found: 'That measurement is no longer there.',
+  condition_without_recording: 'Only a recording is taken under a condition.',
+  kind_and_role_disagree:
+    'That file is not the thing it is being filed as. A PDF is the software’s report or a ' +
+    'session export; a recording is an EDF file or the amplifier software’s own.',
 };
 
 /** Why a comparison could not be made. */

@@ -57,7 +57,23 @@ export {
   type Shape,
 } from './shapes';
 
-export { ASSESSMENT_FILE_MIME_TYPE, bytesAreAPdf } from './fileType';
+export {
+  ASSESSMENT_FILE_KINDS,
+  ASSESSMENT_FILE_MIME_TYPE,
+  ASSESSMENT_FILE_MIME_TYPES,
+  EDF_RECORDING_EXTENSION,
+  NATIVE_RECORDING_EXTENSION,
+  RECORDING_MIME_TYPE,
+  bytesAreAPdf,
+  bytesAreAnEdf,
+  classifyAssessmentFile,
+  isAssessmentFileMimeType,
+  normaliseExtension,
+  type AssessmentFileKind,
+  type AssessmentFileMimeType,
+  type FileClassification,
+  type FileRefusalReason,
+} from './fileType';
 export { INTERPRETATION_FIELDS, validateDerived } from './validateDerived';
 export { scoreQuestionnaire } from './scoreQuestionnaire';
 export {

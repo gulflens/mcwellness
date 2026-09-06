@@ -1,15 +1,28 @@
 import { useCallback, useState } from 'react';
 import {
+  ASSESSMENT_FILE_CONDITIONS,
   ASSESSMENT_FILE_LIMIT_BYTES,
   ASSESSMENT_FILE_MIME_TYPE,
   ASSESSMENT_FILE_ROLES,
+  EDF_RECORDING_EXTENSION,
   FileLinkResponse,
+  NATIVE_RECORDING_EXTENSION,
+  RECORDING_MIME_TYPE,
+  RECORDING_ROLES,
   type AssessmentFile,
+  type AssessmentFileCondition,
   type AssessmentFileRole,
 } from '../../api/assessments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
-import { ATTACH_MESSAGES, ATTACH_REFUSALS, FILE_ROLE_LABELS } from './copy';
+import {
+  ATTACH_MESSAGES,
+  ATTACH_REFUSALS,
+  FILE_CONDITION_LABELS,
+  FILE_ROLE_LABELS,
+  NO_CONDITION_LABEL,
+  fileLabel,
+} from './copy';
 
 /**
  * The export, in the measurement's own row (docs/SPEC/assessment.md sections
@@ -23,11 +36,32 @@ import { ATTACH_MESSAGES, ATTACH_REFUSALS, FILE_ROLE_LABELS } from './copy';
  * retry after a dropped connection is recognised as the same file rather than
  * filed twice.
  *
- * **A PDF and nothing else**, which the input says and the route enforces. The
- * `accept` attribute is a convenience for the person choosing, never a check:
- * the bytes are read against their own signature on the server, because a
- * route that files whatever it is handed under whatever it is told will one
- * day hold an HTML page called a report.
+ * **Three kinds**, since the founder named the equipment: the software's PDF
+ * report, the EDF recording, and the recording in the amplifier software's own
+ * format. The `accept` attribute is a convenience for the person choosing,
+ * never a check — the bytes are read against their own signature on the server
+ * (`domain/assessment/fileType.ts`), because a route that files whatever it is
+ * handed under whatever it is told will one day hold an HTML page called a
+ * report.
+ *
+ * **The extension goes, the name stays.** The one kind that cannot be told by
+ * its bytes is recognised by the extension the file was chosen under, so that
+ * is what is sent — a few characters, never `file.name`. The practice's own
+ * files are named after the people in them.
+ *
+ * **The role follows the extension until somebody says otherwise.** The door
+ * refuses a role the bytes disagree with, so the control cannot simply open on
+ * one of the three and hope: choosing a PDF would meet a refusal the person
+ * did nothing to earn. So a `.pdf` files as the software's report and a
+ * recording as the recording, unless the person has chosen a role themselves,
+ * in which case their answer stands and the door checks it.
+ *
+ * **The condition is asked for, not guessed.** Where the file is a recording,
+ * the control offers eyes open and eyes closed beside the role, and the answer
+ * is stored as the document's own field (migration 503). It is not read out of
+ * a file name for the reason above, and it is offered rather than required:
+ * the practice's own native recordings carry both conditions in one file, so
+ * both at once is an ordinary answer and the control opens on it.
  *
  * **Opening one is a read**, and the link is asked for at the moment somebody
  * presses, never rendered into the page in advance — the route writes the
@@ -36,6 +70,48 @@ import { ATTACH_MESSAGES, ATTACH_REFUSALS, FILE_ROLE_LABELS } from './copy';
  * (docs/SEAMS.md, and the same reasoning as app/admin/clients/DocumentLink.tsx,
  * which is the client record's own and reads a different route).
  */
+
+/** The extension a chosen file carries, lower-cased and without its dot. */
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
+/**
+ * What to declare the bytes as. Taken from the extension rather than from the
+ * browser's own `file.type`, which is empty for a format no browser knows —
+ * which is both of the recordings.
+ */
+function declaredTypeFor(extension: string): string {
+  return extension === 'pdf' ? ASSESSMENT_FILE_MIME_TYPE : RECORDING_MIME_TYPE;
+}
+
+/**
+ * What a file chosen under this extension is, where the person has not said.
+ *
+ * The door refuses a role the bytes disagree with (`kind_and_role_disagree` in
+ * app/api/assessments/file.ts), and the control has to open on something. A
+ * fixed opening answer means the ordinary case — choose the report, press —
+ * meets a refusal it did nothing to earn, so the extension answers instead. It
+ * is a default and not a decision: the person may still say otherwise, and the
+ * door checks the bytes either way. Anything else keeps whatever the control
+ * already shows; guessing beyond the three extensions this practice uses would
+ * be a guess with nothing behind it.
+ */
+function defaultRoleFor(extension: string): AssessmentFileRole | null {
+  if (extension === 'pdf') return 'vendor_report';
+  if (extension === EDF_RECORDING_EXTENSION || extension === NATIVE_RECORDING_EXTENSION) {
+    return 'raw_recording';
+  }
+  return null;
+}
+
+/** What the chooser suggests: the report, and both recordings by extension. */
+const ACCEPTED = [
+  ASSESSMENT_FILE_MIME_TYPE,
+  `.${EDF_RECORDING_EXTENSION}`,
+  `.${NATIVE_RECORDING_EXTENSION}`,
+].join(',');
 
 /** The bytes' own fingerprint, as the route's `X-Sha256` header wants it. */
 async function digestOf(bytes: ArrayBuffer): Promise<string> {
@@ -48,7 +124,7 @@ function OpenExport({ file }: { file: AssessmentFile }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
-  const label = FILE_ROLE_LABELS[file.role];
+  const label = fileLabel(file.role, file.condition);
 
   const open = useCallback(async () => {
     setBusy(true);
@@ -120,7 +196,12 @@ export function ExportFiles({
   onAttached: () => void;
 }) {
   const { apiFetch } = useAuth();
-  const [role, setRole] = useState<AssessmentFileRole>('raw');
+  const [role, setRole] = useState<AssessmentFileRole>('raw_recording');
+  // Whether the person chose that role or it is only what the control opened
+  // on. Their answer is never overwritten by the extension's.
+  const [roleChosen, setRoleChosen] = useState(false);
+  const [condition, setCondition] = useState<AssessmentFileCondition | ''>('');
+  const isRecording = RECORDING_ROLES.includes(role);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Bumped after a filing so the input is a fresh element and stops naming a
@@ -142,10 +223,22 @@ export function ExportFiles({
       setBusy(true);
       try {
         const bytes = await file.arrayBuffer();
-        const res = await apiFetch(`/api/assessments/${assessmentId}/file?role=${role}`, {
+        const extension = extensionOf(file.name);
+        // The extension's answer where the person has not given one. Sent as
+        // well as shown: state settles after this runs, and the request is
+        // built now.
+        const filedAs = roleChosen ? role : (defaultRoleFor(extension) ?? role);
+        if (filedAs !== role) setRole(filedAs);
+        const query = new URLSearchParams({ role: filedAs, extension });
+        // Only where the file is a recording: a report is not taken under a
+        // condition, and the route refuses one that says it was.
+        if (RECORDING_ROLES.includes(filedAs) && condition !== '') {
+          query.set('condition', condition);
+        }
+        const res = await apiFetch(`/api/assessments/${assessmentId}/file?${query.toString()}`, {
           method: 'PUT',
           headers: {
-            'content-type': ASSESSMENT_FILE_MIME_TYPE,
+            'content-type': declaredTypeFor(extension),
             'x-sha256': await digestOf(bytes),
           },
           body: bytes,
@@ -166,7 +259,7 @@ export function ExportFiles({
         setBusy(false);
       }
     },
-    [apiFetch, assessmentId, onAttached, role],
+    [apiFetch, assessmentId, condition, onAttached, role, roleChosen],
   );
 
   return (
@@ -181,7 +274,10 @@ export function ExportFiles({
             id={`attach-role-${assessmentId}`}
             label="What the file is"
             value={role}
-            onChange={(event) => setRole(event.target.value as AssessmentFileRole)}
+            onChange={(event) => {
+              setRole(event.target.value as AssessmentFileRole);
+              setRoleChosen(true);
+            }}
           >
             {ASSESSMENT_FILE_ROLES.map((each) => (
               <option key={each} value={each}>
@@ -189,6 +285,21 @@ export function ExportFiles({
               </option>
             ))}
           </Select>
+          {isRecording ? (
+            <Select
+              id={`attach-condition-${assessmentId}`}
+              label="The condition it was taken under"
+              value={condition}
+              onChange={(event) => setCondition(event.target.value as AssessmentFileCondition | '')}
+            >
+              <option value="">{NO_CONDITION_LABEL}</option>
+              {ASSESSMENT_FILE_CONDITIONS.map((each) => (
+                <option key={each} value={each}>
+                  {FILE_CONDITION_LABELS[each]}
+                </option>
+              ))}
+            </Select>
+          ) : null}
           <div className="field">
             <label htmlFor={`attach-${assessmentId}`} className="field__label">
               Attach the export
@@ -198,12 +309,12 @@ export function ExportFiles({
               id={`attach-${assessmentId}`}
               className="field__input"
               type="file"
-              accept={ASSESSMENT_FILE_MIME_TYPE}
+              accept={ACCEPTED}
               disabled={busy}
               onChange={(event) => void attach(event.target.files?.[0] ?? null)}
             />
             <p className="small muted">
-              The software&rsquo;s own PDF, as it wrote it. Up to twenty megabytes.
+              The recording or the report, as the equipment wrote it. Up to sixty-four megabytes.
             </p>
           </div>
           {busy ? (
