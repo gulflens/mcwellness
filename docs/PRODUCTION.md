@@ -557,7 +557,14 @@ from `package.json` (pnpm, `dist/index.js`), which fails harmlessly, and the
 explicit build then runs against the same uploaded archive; and for about
 twenty minutes after two builds in a row the site answered slowly (a shallow
 health request took over two minutes, no error in the log, the process never
-restarting), then returned to under two seconds, which reads as the shared
-plan's processor limit after the builds' installs. The name now resolves to
+restarting), then returned to under two seconds, which was then traced to something
+else: **Hostinger's CDN does not answer over IPv6 from this network** (the
+name's IPv6 addresses are the CDN's, and a connection to them waits 150
+seconds and fails; the sibling `intake` site fails the same way, while Google
+answers over IPv6 in under a second, so the laptop's IPv6 is sound). Over
+IPv4 the site answers in about a second. A browser races both and settles on
+IPv4 within a fraction of a second, so people are unaffected; a tool that
+tries IPv6 first and waits sees the stall. Nothing in the zone to change (the
+CDN overrides the `app` records it serves); worth a line to Hostinger. The name now resolves to
 Hostinger's CDN edge (`server: hcdn`), so the CDN is in the path again and
 `TRUSTED_PROXY_HOPS` is still to be measured with that in mind.
