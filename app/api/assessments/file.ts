@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { bytesAreAPdf } from '@domain/assessment';
+import {
+  classifyAssessmentFile,
+  isAssessmentFileMimeType,
+  normaliseExtension,
+} from '@domain/assessment';
 import { canActor, clientDocumentKey } from '@domain/shared';
 // By its own path, as app/api/sessions/photo.ts imports it: the seam's
 // retention arithmetic is not in the shared barrel, and domain/shared is the
@@ -11,12 +15,7 @@ import { logAction } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { logRefusal } from './audit';
 import { readOne } from './rows';
-import {
-  ASSESSMENT_FILE_MIME_TYPE,
-  ASSESSMENT_FILE_ROLES,
-  FileFiledResponse,
-  type AssessmentFileRole,
-} from './schema';
+import { ASSESSMENT_FILE_ROLES, FileFiledResponse, type AssessmentFileRole } from './schema';
 
 /**
  * `PUT /api/assessments/:id/file` — the door the equipment's own export goes
@@ -29,12 +28,21 @@ import {
  * received — the exemption the setup photograph's door already set the
  * precedent for (`app/api/create-api.ts`, `PHOTO_LIMIT_BYTES`).
  *
- * **One media type.** `application/pdf` and nothing else until the operator
- * names the practice's equipment (section 10, decision 3), and the bytes are
- * checked against the type as well as the caller's word for it
- * (`domain/shared/fileSignature.ts`): a route that files whatever bytes it is
- * handed under whatever type it is told will one day hold an HTML page called
- * a report, and a signed link to it is a link a browser may render.
+ * **Three kinds of file**, because the founder named the equipment on
+ * 2026-09-06: the analysis software's PDF report, the EDF recording the
+ * amplifier's recorder writes, and the recording in the amplifier software's
+ * own format. Which one a body is, is `classifyAssessmentFile`'s question in
+ * `domain/assessment`, answered from the bytes and never from the caller's
+ * word for them: a route that files whatever it is handed under whatever it is
+ * told will one day hold an HTML page called a report, and a signed link to it
+ * is a link a browser may render. The declared type is checked first, before
+ * the body is read, so an unusable type costs nothing to refuse.
+ *
+ * **The file's own name never crosses this door.** The one kind that cannot be
+ * told by its bytes is recognised by an extension the console sends on its
+ * own — `?extension=eeg`, a few characters and no more. The practice's files
+ * are named after the people in them, and nothing here receives, logs or
+ * stores a name.
  *
  * **The order is row, then bytes, and the bytes go after the commit**
  * (spec section 7.1), through `c.get('afterCommit')` exactly as
@@ -90,9 +98,11 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
     }
 
     const mimeType = (c.req.header('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
-    if (mimeType !== ASSESSMENT_FILE_MIME_TYPE) {
+    if (!isAssessmentFileMimeType(mimeType)) {
       return c.json({ error: 'unsupported_media_type', requestId }, 415);
     }
+    // The chooser's own extension, and nothing else it knows about the file.
+    const extension = normaliseExtension(c.req.query('extension') ?? null);
     const role = Role.safeParse(c.req.query('role') ?? undefined);
     if (!role.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
@@ -120,9 +130,10 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
       await logRefusal(db, 'assessment', assessmentId, assessment.client_id, ['digest_mismatch']);
       return c.json({ error: 'bad_request', code: 'digest_mismatch', requestId }, 400);
     }
-    if (!bytesAreAPdf(body)) {
-      await logRefusal(db, 'assessment', assessmentId, assessment.client_id, ['not_a_pdf']);
-      return c.json({ error: 'unsupported_media_type', code: 'not_a_pdf', requestId }, 415);
+    const kind = classifyAssessmentFile({ declaredMimeType: mimeType, bytes: body, extension });
+    if (!kind.ok) {
+      await logRefusal(db, 'assessment', assessmentId, assessment.client_id, [kind.reason]);
+      return c.json({ error: 'unsupported_media_type', code: kind.reason, requestId }, 415);
     }
 
     const documentId = randomUUID();
@@ -141,7 +152,7 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
         assessmentId,
         documentId,
         storageKey,
-        ASSESSMENT_FILE_MIME_TYPE,
+        mimeType,
         Buffer.from(computed, 'hex'),
         retentionUntil,
         role.data,
@@ -165,7 +176,7 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
       const key = await keyOf(db, filedId);
       if (key !== null && !(await storage.exists(key))) {
         c.get('afterCommit')(async () => {
-          await storage.put(key, body, ASSESSMENT_FILE_MIME_TYPE);
+          await storage.put(key, body, mimeType);
         });
       }
       return c.json(
@@ -175,7 +186,7 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
     }
 
     c.get('afterCommit')(async () => {
-      await storage.put(storageKey, body, ASSESSMENT_FILE_MIME_TYPE);
+      await storage.put(storageKey, body, mimeType);
     });
 
     // What was filed, and nothing else: bytes never appear in a payload, a log

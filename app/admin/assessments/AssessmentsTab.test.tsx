@@ -116,6 +116,15 @@ const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37
 const PDF_DIGEST = createHash('sha256').update(PDF_BYTES).digest('hex');
 const pdfFile = (): File =>
   new File([PDF_BYTES], 'synthetic-export.pdf', { type: 'application/pdf' });
+/**
+ * A recording, as far as the browser is concerned: bytes under a name the
+ * browser knows no type for, which is what both of the practice's recording
+ * formats are. The name is synthetic and names nobody; what the console sends
+ * from it is the extension alone.
+ */
+const EDF_BYTES = new Uint8Array([0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20]);
+const recordingFile = (extension: string): File =>
+  new File([EDF_BYTES], `synthetic-recording.${extension}`, { type: '' });
 
 function mount(
   options: {
@@ -448,13 +457,13 @@ describe('the export', () => {
   it('sends the bytes with the digest it computed in the browser', async () => {
     const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
     const input = await screen.findByLabelText('Attach the export');
-    expect(input.getAttribute('accept')).toBe('application/pdf');
+    expect(input.getAttribute('accept')).toBe('application/pdf,.edf,.eeg');
 
     fireEvent.change(input, { target: { files: [pdfFile()] } });
     await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
 
     const put = sent.find((call) => call.method === 'PUT')!;
-    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw`);
+    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw&extension=pdf`);
     expect(put.headers?.get('content-type')).toBe('application/pdf');
     // The fingerprint of the bytes that were sent, taken here and recomputed
     // by the route over what actually arrived.
@@ -472,8 +481,26 @@ describe('the export', () => {
     });
     await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
     expect(sent.find((call) => call.method === 'PUT')!.url).toBe(
-      `/api/assessments/${BASELINE}/file?role=vendor_report`,
+      `/api/assessments/${BASELINE}/file?role=vendor_report&extension=pdf`,
     );
+  });
+
+  it('declares a recording as bytes and sends the extension, never the name', async () => {
+    for (const extension of ['edf', 'eeg']) {
+      const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+      fireEvent.change(await screen.findByLabelText('Attach the export'), {
+        target: { files: [recordingFile(extension)] },
+      });
+      await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+
+      const put = sent.find((call) => call.method === 'PUT')!;
+      expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw&extension=${extension}`);
+      expect(put.headers?.get('content-type')).toBe('application/octet-stream');
+      // The name the file was chosen under goes nowhere: the practice's own
+      // files are named after the people in them.
+      expect(put.url).not.toContain('synthetic-recording');
+      cleanup();
+    }
   });
 
   it('reads the row again, so the file appears where it was attached', async () => {
@@ -505,7 +532,7 @@ describe('the export', () => {
       target: { files: [pdfFile()] },
     });
     expect(
-      await screen.findByText('That is not a PDF. The export is the software’s own PDF report.'),
+      await screen.findByText('That is not a PDF. A report is the software’s own PDF.'),
     ).toBeTruthy();
   });
 

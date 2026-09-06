@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import {
   ASSESSMENT_FILE_MIME_TYPE,
+  ASSESSMENT_FILE_MIME_TYPES,
+  EDF_RECORDING_EXTENSION,
   INSTRUMENTS,
   MAX_CONDITION_NOTE_LENGTH,
   MAX_SUPERSEDE_REASON_LENGTH,
+  NATIVE_RECORDING_EXTENSION,
+  RECORDING_MIME_TYPE,
   REFERENCE_SEXES,
 } from '@domain/assessment';
 
@@ -26,14 +30,30 @@ import {
 export const FILE_LINK_TTL_SECONDS = 300;
 
 /**
- * The cap on an export's bytes, and the one media type accepted
- * (spec section 10, decision 3). Twenty megabytes is a vendor's own PDF
- * report with its pictures in it; `application/pdf` alone until the operator
- * names the practice's equipment, and a new file signature is a change request
- * to `domain/shared/fileSignature.ts` rather than a guess made here.
+ * The cap on an export's bytes, and the media types accepted (spec section 7.1
+ * and decision 3, amended on the founder's equipment answer of 2026-09-06).
+ *
+ * **Sixty-four megabytes**, because the practice's own raw recordings are 22
+ * to 33 MB apiece and a longer recording is bigger. The browser reads this to
+ * say so before it sends anything; the body cap in `app/api/create-api.ts` is
+ * the one that binds, and `tests/assessment/request-timeout.test.ts` proves the
+ * two agree. This constant cannot simply be imported from there: that module
+ * is the server's and pulls in Node, and this one is read by the console.
+ *
+ * **Two declared types**, and three kinds behind them: a PDF, an EDF recording
+ * and the amplifier software's own recording, each recognised by
+ * `classifyAssessmentFile` in `domain/assessment` rather than by the caller's
+ * word (`domain/assessment/fileType.ts` says how, and why the third is
+ * recognised by its extension).
  */
-export const ASSESSMENT_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
-export { ASSESSMENT_FILE_MIME_TYPE };
+export const ASSESSMENT_FILE_LIMIT_BYTES = 64 * 1024 * 1024;
+export {
+  ASSESSMENT_FILE_MIME_TYPE,
+  ASSESSMENT_FILE_MIME_TYPES,
+  EDF_RECORDING_EXTENSION,
+  NATIVE_RECORDING_EXTENSION,
+  RECORDING_MIME_TYPE,
+};
 
 export const ASSESSMENT_FILE_ROLES = ['raw', 'vendor_report'] as const;
 export type AssessmentFileRole = (typeof ASSESSMENT_FILE_ROLES)[number];

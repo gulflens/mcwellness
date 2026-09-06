@@ -21,6 +21,7 @@ import {
   seedTenant,
   seedUser,
 } from '../../db/helpers';
+import { minimalEdf, nativeRecording } from '../fixtures/edf';
 import {
   assessmentId,
   brainMapPayload,
@@ -61,6 +62,9 @@ const CONTACT_AUTH = assessmentId('14', 2);
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x0a, 0x25]);
 const OTHER_PDF = new Uint8Array([...PDF, 0x0a]);
 const digestOf = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+/** A recording of each kind, built from the format's own layout, never copied. */
+const EDF = minimalEdf();
+const NATIVE = nativeRecording();
 /** The key the seam builds for a client's document (domain/shared/storage.ts). */
 const keyFor = (clientId: string, documentId: string): string =>
   `tenant/${IDS.tenantA}/client/${clientId}/${documentId}`;
@@ -102,10 +106,13 @@ async function putFile(
   assessment: string,
   sub: string,
   bytes: Uint8Array,
-  options: { digest?: string; type?: string; role?: string } = {},
+  options: { digest?: string; type?: string; role?: string; extension?: string } = {},
 ): Promise<Response> {
-  const role = options.role === undefined ? '' : `?role=${options.role}`;
-  return api.request(`/api/assessments/${assessment}/file${role}`, {
+  const query = new URLSearchParams();
+  if (options.role !== undefined) query.set('role', options.role);
+  if (options.extension !== undefined) query.set('extension', options.extension);
+  const suffix = query.size === 0 ? '' : `?${query.toString()}`;
+  return api.request(`/api/assessments/${assessment}/file${suffix}`, {
     method: 'PUT',
     headers: {
       authorization: `Bearer ${await mint(sub)}`,
@@ -881,13 +888,13 @@ describe('the export’s own door', () => {
     expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(PDF);
   });
 
-  it('refuses a media type that is not a PDF', async () => {
+  it('refuses a media type the door does not take', async () => {
     const household = await seedHousehold('50');
     const created = (await (await record(household)).json()) as { assessment: { id: string } };
-    const res = await putFile(created.assessment.id, household.authSub, PDF, {
-      type: 'image/png',
-    });
-    expect(res.status).toBe(415);
+    for (const type of ['image/png', 'text/html', 'application/x-edf']) {
+      const res = await putFile(created.assessment.id, household.authSub, PDF, { type });
+      expect(res.status, type).toBe(415);
+    }
   });
 
   it('refuses bytes that are not a PDF whatever the caller calls them', async () => {
@@ -897,6 +904,78 @@ describe('the export’s own door', () => {
     const res = await putFile(created.assessment.id, household.authSub, page);
     expect(res.status).toBe(415);
     expect(await res.json()).toMatchObject({ code: 'not_a_pdf' });
+  });
+
+  it('files an EDF recording, as bytes, by its own signature', async () => {
+    // The founder's equipment writes one of these per condition
+    // (docs/SPEC/assessment.md decision 3, amended 2026-09-06). The fixture is
+    // built from the published layout in tests/assessment/fixtures/edf.ts.
+    const household = await seedHousehold('71');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, EDF, {
+      type: 'application/octet-stream',
+      extension: 'edf',
+    });
+    expect(res.status).toBe(201);
+    const filed = (await res.json()) as { documentId: string };
+
+    const document = await owner.query<{ mime_type: string; sha256: Buffer }>(
+      'select mime_type, sha256 from document where id = $1',
+      [filed.documentId],
+    );
+    // The row records what the bytes were declared as, so a signed link hands
+    // them back as bytes rather than as something a browser would open.
+    expect(document.rows[0]?.mime_type).toBe('application/octet-stream');
+    expect(document.rows[0]?.sha256.toString('hex')).toBe(digestOf(EDF));
+  });
+
+  it('files the amplifier software’s own recording on its extension', async () => {
+    // The format is a vendor's own and begins with nothing this stream can
+    // rely on, so the extension is what tells it apart (the default recorded
+    // in domain/assessment/fileType.ts).
+    const household = await seedHousehold('72');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, NATIVE, {
+      type: 'application/octet-stream',
+      extension: 'eeg',
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses the same recording when no extension came with it', async () => {
+    const household = await seedHousehold('73');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, NATIVE, {
+      type: 'application/octet-stream',
+    });
+    expect(res.status).toBe(415);
+    expect(await res.json()).toMatchObject({ code: 'not_a_recording' });
+  });
+
+  it('refuses a page of markup called a recording, and audits the refusal', async () => {
+    const household = await seedHousehold('74');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const page = new TextEncoder().encode('<html><body>anything</body></html>');
+    const res = await putFile(created.assessment.id, household.authSub, page, {
+      type: 'application/octet-stream',
+      extension: 'eeg',
+    });
+    expect(res.status).toBe(415);
+    expect(await res.json()).toMatchObject({ code: 'not_a_recording' });
+    expect(await refusals(created.assessment.id)).toContain('not_a_recording');
+  });
+
+  it('refuses a whole file name where an extension belongs', async () => {
+    // A file name is a person's name in this practice. The door takes the
+    // extension alone, and anything longer is read as nothing at all.
+    const household = await seedHousehold('75');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, NATIVE, {
+      type: 'application/octet-stream',
+      extension: 'a-household.eeg',
+    });
+    expect(res.status).toBe(415);
+    expect(await res.json()).toMatchObject({ code: 'not_a_recording' });
   });
 
   it('refuses a digest that does not match the bytes', async () => {

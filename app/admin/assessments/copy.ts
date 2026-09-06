@@ -115,7 +115,7 @@ export const FILE_ROLE_LABELS: Record<AssessmentFileRole, string> = {
 /** Attaching an export, and opening one. Said before anything is sent. */
 export const ATTACH_MESSAGES = {
   empty: 'That file has nothing in it.',
-  too_large: 'That file is larger than this door takes. Twenty megabytes is the limit.',
+  too_large: 'That file is larger than this door takes. Sixty-four megabytes is the limit.',
   failed: 'That export could not be filed. Try again.',
   store_unavailable: 'The document store cannot be reached, so nothing was filed.',
   link_failed: 'That file did not open.',
@@ -127,8 +127,13 @@ export const ATTACH_MESSAGES = {
  * route is reached (the body cap, the media type) carries only the latter.
  */
 export const ATTACH_REFUSALS: Record<string, string> = {
-  not_a_pdf: 'That is not a PDF. The export is the software’s own PDF report.',
-  unsupported_media_type: 'That is not a PDF. The export is the software’s own PDF report.',
+  not_a_pdf: 'That is not a PDF. A report is the software’s own PDF.',
+  not_a_recording:
+    'That is not a recording this door takes. A recording is an EDF file or the amplifier ' +
+    'software’s own.',
+  unsupported_media_type:
+    'That is not a file this door takes. It takes the software’s PDF, an EDF recording, or the ' +
+    'amplifier software’s own recording.',
   payload_too_large: ATTACH_MESSAGES.too_large,
   empty_body: ATTACH_MESSAGES.empty,
   digest_mismatch: 'The file changed on the way. Choose it again.',

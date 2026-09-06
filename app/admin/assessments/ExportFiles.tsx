@@ -3,7 +3,10 @@ import {
   ASSESSMENT_FILE_LIMIT_BYTES,
   ASSESSMENT_FILE_MIME_TYPE,
   ASSESSMENT_FILE_ROLES,
+  EDF_RECORDING_EXTENSION,
   FileLinkResponse,
+  NATIVE_RECORDING_EXTENSION,
+  RECORDING_MIME_TYPE,
   type AssessmentFile,
   type AssessmentFileRole,
 } from '../../api/assessments/schema';
@@ -23,11 +26,18 @@ import { ATTACH_MESSAGES, ATTACH_REFUSALS, FILE_ROLE_LABELS } from './copy';
  * retry after a dropped connection is recognised as the same file rather than
  * filed twice.
  *
- * **A PDF and nothing else**, which the input says and the route enforces. The
- * `accept` attribute is a convenience for the person choosing, never a check:
- * the bytes are read against their own signature on the server, because a
- * route that files whatever it is handed under whatever it is told will one
- * day hold an HTML page called a report.
+ * **Three kinds**, since the founder named the equipment: the software's PDF
+ * report, the EDF recording, and the recording in the amplifier software's own
+ * format. The `accept` attribute is a convenience for the person choosing,
+ * never a check — the bytes are read against their own signature on the server
+ * (`domain/assessment/fileType.ts`), because a route that files whatever it is
+ * handed under whatever it is told will one day hold an HTML page called a
+ * report.
+ *
+ * **The extension goes, the name stays.** The one kind that cannot be told by
+ * its bytes is recognised by the extension the file was chosen under, so that
+ * is what is sent — a few characters, never `file.name`. The practice's own
+ * files are named after the people in them.
  *
  * **Opening one is a read**, and the link is asked for at the moment somebody
  * presses, never rendered into the page in advance — the route writes the
@@ -36,6 +46,28 @@ import { ATTACH_MESSAGES, ATTACH_REFUSALS, FILE_ROLE_LABELS } from './copy';
  * (docs/SEAMS.md, and the same reasoning as app/admin/clients/DocumentLink.tsx,
  * which is the client record's own and reads a different route).
  */
+
+/** The extension a chosen file carries, lower-cased and without its dot. */
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
+}
+
+/**
+ * What to declare the bytes as. Taken from the extension rather than from the
+ * browser's own `file.type`, which is empty for a format no browser knows —
+ * which is both of the recordings.
+ */
+function declaredTypeFor(extension: string): string {
+  return extension === 'pdf' ? ASSESSMENT_FILE_MIME_TYPE : RECORDING_MIME_TYPE;
+}
+
+/** What the chooser suggests: the report, and both recordings by extension. */
+const ACCEPTED = [
+  ASSESSMENT_FILE_MIME_TYPE,
+  `.${EDF_RECORDING_EXTENSION}`,
+  `.${NATIVE_RECORDING_EXTENSION}`,
+].join(',');
 
 /** The bytes' own fingerprint, as the route's `X-Sha256` header wants it. */
 async function digestOf(bytes: ArrayBuffer): Promise<string> {
@@ -142,10 +174,12 @@ export function ExportFiles({
       setBusy(true);
       try {
         const bytes = await file.arrayBuffer();
-        const res = await apiFetch(`/api/assessments/${assessmentId}/file?role=${role}`, {
+        const extension = extensionOf(file.name);
+        const query = new URLSearchParams({ role, extension });
+        const res = await apiFetch(`/api/assessments/${assessmentId}/file?${query.toString()}`, {
           method: 'PUT',
           headers: {
-            'content-type': ASSESSMENT_FILE_MIME_TYPE,
+            'content-type': declaredTypeFor(extension),
             'x-sha256': await digestOf(bytes),
           },
           body: bytes,
@@ -198,12 +232,12 @@ export function ExportFiles({
               id={`attach-${assessmentId}`}
               className="field__input"
               type="file"
-              accept={ASSESSMENT_FILE_MIME_TYPE}
+              accept={ACCEPTED}
               disabled={busy}
               onChange={(event) => void attach(event.target.files?.[0] ?? null)}
             />
             <p className="small muted">
-              The software&rsquo;s own PDF, as it wrote it. Up to twenty megabytes.
+              The recording or the report, as the equipment wrote it. Up to sixty-four megabytes.
             </p>
           </div>
           {busy ? (
