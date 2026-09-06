@@ -385,13 +385,6 @@ beforeAll(async () => {
     windowStart: hoursFromNow(700),
   });
 
-  // Four for the confirmation door. Each on its own client-and-window so the
-  // exclusion constraints hold them apart, and each far enough out that the
-  // notice period is not in play.
-  // All four on the third household, whose visits no other test in this file
-  // counts: the withdrawal door's own test asserts how many of one client's
-  // future visits it cancelled, and a visit added here for a client it names
-  // would change that number without changing anything it is about.
   // Both on the household that holds credits, so "nothing was taken" is a
   // fact about the rule rather than about an empty ledger.
   await seedAppointment(APPT_UNTOLD_LATE, {
@@ -405,6 +398,13 @@ beforeAll(async () => {
     status: 'proposed',
   });
 
+  // Four for the confirmation door. Each on its own client-and-window so the
+  // exclusion constraints hold them apart, and each far enough out that the
+  // notice period is not in play.
+  // All four on the third household, whose visits no other test in this file
+  // counts: the withdrawal door's own test asserts how many of one client's
+  // future visits it cancelled, and a visit added here for a client it names
+  // would change that number without changing anything it is about.
   for (const [id, hours, status] of [
     [APPT_CONFIRM_OK, 300, 'proposed'],
     [APPT_CONFIRM_ALREADY, 320, 'confirmed'],
