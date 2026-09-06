@@ -61,10 +61,15 @@ under "Shared-zone changes".
    `reportDeliveriesDeleted`.
 
    **`domain/client/erasureLetter.ts`** gains `REPORTS_ERASED_SENTENCE` in both
-   languages and fills a `{{reports_erased}}` placeholder with it. See request
-   R2 below: neither template in `docs/CONSENT/erasure-letter/` carries the
-   placeholder yet, and those two files are the practice's own wording rather
-   than this stream's to edit.
+   languages and fills a `{{reports_erased}}` placeholder with it, and — in the
+   fix round, under the integrator's decision — **both templates in
+   `docs/CONSENT/erasure-letter/` now carry that placeholder**, in the
+   paragraph that already covers the sessions and the brain maps. Both go to
+   `0.4-draft` and keep `status: draft`, as every consent text does until the
+   lawyer approves it. Request R2 below is therefore answered rather than
+   outstanding: a sentence filled correctly into a template nobody sends says
+   nothing, and the review was right that the pull-request body claimed a
+   letter the household would not have received.
 
 6. **`db/seed/**` — not edited, and here is why.** The brief asked for one
    issued progress report for one synthetic client, *rendered through the real
@@ -127,15 +132,15 @@ lists them:
 | `delivered_to_contact_ids` and `delivered_at` dropped for `report_delivery` | A delivery happens after issue and an issued row is immutable. |
 | No foreign key to `session` or `assessment` | Both live in ranges a 600 migration must not assume are present. |
 
-**R2. `docs/CONSENT/erasure-letter/en.md` and `ar.md`** — the two templates want
-a `{{reports_erased}}` placeholder where the letter lists what has gone, so the
-sentence in `domain/client/erasureLetter.ts` reaches a household. The letter's
-existing sentence ("every document and file on your record are gone") is true of
-a report already, so nothing a household reads today is wrong; the new sentence
-says the second half — that the words inside the report went with the file —
-which the letter cannot currently say. Those two files are the practice's own
-wording and carry `status: draft` pending the lawyer's approval, so this piece
-did not edit them.
+**R2. `docs/CONSENT/erasure-letter/en.md` and `ar.md`** — **answered, not
+outstanding.** Both templates now carry `{{reports_erased}}` where the letter
+lists what has gone, so the sentence in `domain/client/erasureLetter.ts` reaches
+a household. The letter's existing sentence ("every document and file on your
+record are gone") was true of a report already, so nothing a household read was
+wrong; the new sentence says the second half — that the words inside the report
+went with the file — which the letter could not say. The files are the
+practice's own wording and stay `status: draft` pending the lawyer's approval;
+the sentence is on the lawyer's list beside the erasure decision itself.
 
 **R3. `domain/shared/document/pdf.ts`** — a colour operator, so the printed
 ribbon can carry the band's hue.

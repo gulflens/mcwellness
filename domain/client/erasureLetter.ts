@@ -149,12 +149,12 @@ function practiceContact(address: string | null, locale: ErasureLetterLocale): s
  * was written and by whom.
  *
  * A `{{reports_erased}}` placeholder in either template is filled with this.
- * The two templates in `docs/CONSENT/erasure-letter/` are the practice's own
- * wording, not this file's, and neither carries the placeholder yet; adopting
- * it is asked for in `docs/CHANGE-REQUESTS/reports-01.md`, and until then this
- * sentence is what the round that ships the first report has in code, tested,
- * ready for the lawyer's read. A template without the placeholder renders
- * exactly as it does today.
+ * Both templates in `docs/CONSENT/erasure-letter/` carry it, in the paragraph
+ * that already covers the sessions and the brain maps, adopted in this round
+ * under the integrator's decision (`docs/CHANGE-REQUESTS/reports-01.md`, item
+ * 5). They are the practice's own wording and stay `status: draft` until the
+ * lawyer approves them, as every consent text does. A template without the
+ * placeholder still renders exactly as it did.
  */
 export const REPORTS_ERASED_SENTENCE: Record<ErasureLetterLocale, string> = {
   en:

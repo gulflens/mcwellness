@@ -157,34 +157,32 @@ describe('rendering the letter', () => {
       }),
     ).toThrow(/names the practice/);
   });
-  it('fills the reports sentence, in the language the letter is written in', () => {
+  it('carries the reports sentence in the letter a household actually receives', () => {
     // The round that ships the first report owes the letter this
-    // (docs/SPEC/reports-v1.md section 6, migration 107). Neither practice
-    // template carries the placeholder yet — adopting it is asked for in
-    // docs/CHANGE-REQUESTS/reports-01.md — so the sentence is proved here on a
-    // template that does, and the two real letters render exactly as before.
-    const english = renderErasureLetter(
-      {
-        locale: 'en',
-        version: '0.1-draft',
-        status: 'draft',
-        body: 'On {{erased_on}}, {{practice_legal_name}} erased it. {{reports_erased}}',
-      },
-      { erasedOn: '2026-09-06', practiceLegalName: 'Synthetic Studio' },
+    // (docs/SPEC/reports-v1.md section 6, migration 107), and it is proved on
+    // the practice's own templates rather than on a fixture: a placeholder
+    // filled correctly in a template nobody sends says nothing at all. Both
+    // now carry {{reports_erased}} in the paragraph that already covers the
+    // sessions and the brain maps.
+    const english = flat(
+      renderErasureLetter(parseErasureLetterTemplate(read('en.md')), {
+        erasedOn: '2026-09-06',
+        practiceLegalName: 'Synthetic Studio',
+      }),
     );
-    expect(english).toContain(REPORTS_ERASED_SENTENCE.en);
+    expect(english).toContain(flat(REPORTS_ERASED_SENTENCE.en));
     expect(english).toContain('The reports we wrote for you are gone as well');
+    expect(english).not.toContain('{{');
 
-    const arabic = renderErasureLetter(
-      {
-        locale: 'ar',
-        version: '0.1-draft',
-        status: 'draft',
-        body: '{{reports_erased}}',
-      },
-      { erasedOn: '2026-09-06', practiceLegalName: 'Synthetic Studio' },
+    const arabic = flat(
+      renderErasureLetter(parseErasureLetterTemplate(read('ar.md')), {
+        erasedOn: '2026-09-06',
+        practiceLegalName: 'Synthetic Studio',
+      }),
     );
-    expect(arabic).toBe(REPORTS_ERASED_SENTENCE.ar);
+    expect(arabic).toContain(flat(REPORTS_ERASED_SENTENCE.ar));
+    expect(arabic).toContain('وزالت أيضاً التقارير التي كتبناها لك');
+    expect(arabic).not.toContain('{{');
   });
 
   it('says the same thing in both languages: the file went and so did the words', () => {
