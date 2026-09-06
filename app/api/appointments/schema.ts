@@ -308,6 +308,9 @@ export const APPOINTMENT_ACTION_CODES = [
   // A visit somebody has already started delivering. How it ends is the
   // session's to say, not the calendar's.
   'session_open',
+  // A reason that says the household did something, given about a visit the
+  // household has never been told about.
+  'household_not_told',
 ] as const;
 export type AppointmentActionCode = (typeof APPOINTMENT_ACTION_CODES)[number];
 

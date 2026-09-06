@@ -101,6 +101,11 @@ const APPT_CONFIRM_OK = '00000000-0000-4000-8000-000000006126';
 const APPT_CONFIRM_ALREADY = '00000000-0000-4000-8000-000000006127';
 const APPT_CONFIRM_SETTLED = '00000000-0000-4000-8000-000000006128';
 const APPT_CONFIRM_REFUSED = '00000000-0000-4000-8000-000000006129';
+// A visit nobody has been told about, called off well inside the notice
+// period: it costs the household nothing, and two of the reasons cannot
+// honestly be given about it at all.
+const APPT_UNTOLD_LATE = '00000000-0000-4000-8000-000000006130';
+const APPT_UNTOLD_REASON = '00000000-0000-4000-8000-000000006131';
 const CLIENT_NO_CREDIT = '00000000-0000-4000-8000-000000006120';
 const CONTACT_NO_CREDIT = '00000000-0000-4000-8000-000000006121';
 const LOCATION_NO_CREDIT = '00000000-0000-4000-8000-000000006122';
@@ -387,6 +392,19 @@ beforeAll(async () => {
   // counts: the withdrawal door's own test asserts how many of one client's
   // future visits it cancelled, and a visit added here for a client it names
   // would change that number without changing anything it is about.
+  // Both on the household that holds credits, so "nothing was taken" is a
+  // fact about the rule rather than about an empty ledger.
+  await seedAppointment(APPT_UNTOLD_LATE, {
+    clientId: IDS.clientA,
+    windowStart: hoursFromNow(9),
+    status: 'proposed',
+  });
+  await seedAppointment(APPT_UNTOLD_REASON, {
+    clientId: IDS.clientA,
+    windowStart: hoursFromNow(12),
+    status: 'proposed',
+  });
+
   for (const [id, hours, status] of [
     [APPT_CONFIRM_OK, 300, 'proposed'],
     [APPT_CONFIRM_ALREADY, 320, 'confirmed'],
@@ -832,6 +850,43 @@ describe('POST /api/appointments/:id/cancel', () => {
       [APPT_PRACTITIONER_AT_DOOR],
     );
     expect(body.waiverEntitlementId).toBe(rows[0]?.id);
+  });
+
+  it('takes nothing from a household never told about the visit, however close the window', async () => {
+    // Nine hours out, well inside the practice's twenty-four, and still not
+    // late: `proposed` is a slot the practice was holding and had mentioned to
+    // nobody, so there was no notice to break
+    // (docs/CHANGE-REQUESTS/qa-01.md item 5).
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_UNTOLD_LATE}/cancel`, {
+      reason: 'practice_request',
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as CancelAppointmentResponse;
+    expect(body.status).toBe('cancelled');
+    expect(body.creditConsumed).toBe(false);
+    expect(body.waiverEntitlementId).toBeNull();
+    expect((await statusOf(APPT_UNTOLD_LATE)).status).toBe('cancelled');
+    // The household holds credits; billing's trigger fires on cancelled_late
+    // and this is not one, so none was touched.
+    expect(await creditsTaken(APPT_UNTOLD_LATE)).toBe(0);
+  });
+
+  it('refuses to record that a family called off a visit they were never told about', async () => {
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_UNTOLD_REASON}/cancel`, {
+      reason: 'client_request',
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('household_not_told');
+    expect((await statusOf(APPT_UNTOLD_REASON)).status).toBe('proposed');
+  });
+
+  it('refuses "could not go ahead at the door" about a visit on nobody\'s day', async () => {
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_UNTOLD_REASON}/cancel`, {
+      reason: 'unfit_to_attend',
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('household_not_told');
+    expect((await statusOf(APPT_UNTOLD_REASON)).status).toBe('proposed');
   });
 
   it('refuses to call off a visit somebody has already started delivering', async () => {

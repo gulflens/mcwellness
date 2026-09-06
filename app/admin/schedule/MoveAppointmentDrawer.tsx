@@ -49,6 +49,9 @@ const ACTION_MESSAGES: Record<AppointmentActionCode, string> = {
   session_open:
     'A session has already been started for this visit. How it ends is recorded on the session ' +
     'itself, not here.',
+  household_not_told:
+    'The household has not been told about this visit yet, so it cannot be called off on ' +
+    'their behalf or recorded as unable to go ahead. Choose another reason.',
 };
 
 type Issue = { code: string; message: string };

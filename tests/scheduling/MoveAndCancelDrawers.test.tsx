@@ -66,6 +66,19 @@ const AT_THE_DOOR: AppointmentRow = {
   windowEnd: new Date(Date.now() - 3_600_000 + 45 * 60_000).toISOString(),
 };
 
+/**
+ * And one the household has never been told about, three hours out — well
+ * inside the practice's notice period, and costing them nothing all the same
+ * (docs/CHANGE-REQUESTS/qa-01.md item 5).
+ */
+const UNTOLD: AppointmentRow = {
+  ...APPOINTMENT,
+  id: '0000000a-0000-4000-8000-000000000105',
+  status: 'proposed',
+  windowStart: new Date(Date.now() + 3 * 3_600_000).toISOString(),
+  windowEnd: new Date(Date.now() + 3 * 3_600_000 + 45 * 60_000).toISOString(),
+};
+
 /** And one inside it. */
 const IMMINENT: AppointmentRow = {
   ...APPOINTMENT,
@@ -276,6 +289,62 @@ describe('CancelAppointmentDrawer', () => {
         /The household still has to be told the visit is off, and the practitioner sees it on their next Today\./,
       ),
     ).toBeTruthy();
+  });
+
+  it('takes nothing from a household that was never told, however close the window', async () => {
+    mount(
+      <CancelAppointmentDrawer
+        appointment={UNTOLD}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      settingsAnd(() => new Response('not found', { status: 404 })),
+    );
+    expect(
+      await screen.findByText(
+        /The household has not been told about this visit yet, so calling it off costs them nothing/,
+      ),
+    ).toBeTruthy();
+    // And not the sentence the same visit would have shown an hour ago: that
+    // one says a session is used, which was the defect.
+    expect(screen.queryByText(/uses one of the client's sessions/)).toBe(null);
+    expect(screen.queryByText(/hours’ notice, so the client keeps the session/)).toBe(null);
+    // Nothing to tell them afterwards either.
+    expect(
+      screen.getByText(/There is nothing to tell the household: this visit was never announced/),
+    ).toBeTruthy();
+  });
+
+  it('does not offer "the family called it off" about a visit the family has never heard of', async () => {
+    mount(
+      <CancelAppointmentDrawer
+        appointment={UNTOLD}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      settingsAnd(() => new Response('not found', { status: 404 })),
+    );
+    const reason = (await screen.findByLabelText('Reason')) as HTMLSelectElement;
+    const offered = [...reason.options].map((option) => option.textContent);
+    expect(offered).toEqual(['The practice called it off']);
+    expect(reason.value).toBe('practice_request');
+  });
+
+  it('offers both of them again once the household has been told', async () => {
+    mount(
+      <CancelAppointmentDrawer
+        appointment={IMMINENT}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      settingsAnd(() => new Response('not found', { status: 404 })),
+    );
+    const reason = (await screen.findByLabelText('Reason')) as HTMLSelectElement;
+    expect([...reason.options].map((option) => option.textContent)).toEqual([
+      'The family called it off',
+      'The practice called it off',
+      'The visit could not go ahead at the door',
+    ]);
   });
 
   it('names the consequence before the coordinator confirms', async () => {

@@ -23,6 +23,7 @@ export {
   DEFAULT_NOTICE_HOURS,
   DEFAULT_UNFIT_FEE_FILS,
   NEVER_LATE_REASONS,
+  REASONS_NEEDING_THE_HOUSEHOLD_TOLD,
   cancellationStatusFor,
   isLateCancellation,
   reasonCanBeGivenAt,
