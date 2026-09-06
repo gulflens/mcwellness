@@ -215,6 +215,12 @@ Spec section 6 says these are recorded here and not applied to the model, so
 `docs/SPEC/00-data-model.md` is untouched by this piece. Migrations 500 and 501
 implement them.
 
+*Two of them are now applied to the model, in the trunk's round 31 (the fix
+round, 2026-09-06), which is where the file is editable: the `assessment`
+sketch names `session_id` and reaches its files through `assessment_document`,
+each amendment marked where it stands. The other three rows below are still
+recorded here and not in the model.*
+
 | Change to `assessment` | Why |
 | --- | --- |
 | `supersede_reason text`, required when `version > 1` | Every other append-only entity requires a reason; section 4 omits it here by oversight, and `client_protocol` is the precedent. Without it the record says a figure changed and never says why. |
