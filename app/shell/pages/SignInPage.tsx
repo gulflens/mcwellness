@@ -1,14 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { readKeepSignedIn, writeKeepSignedIn } from '../auth/session-storage';
 import type { SeededPerson } from '../auth/types';
-import { Button, Field, Note } from '../components/Controls';
+import { Button, Field, Note, PasswordField } from '../components/Controls';
 import { describeRoles, homeFor } from '../routing';
 
 export function SignInPage() {
   const { provider, session } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // Unticked unless this browser was asked before and said otherwise.
+  const [keepSignedIn, setKeepSignedIn] = useState(readKeepSignedIn);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [people, setPeople] = useState<SeededPerson[]>([]);
@@ -32,7 +35,7 @@ export function SignInPage() {
     setBusy(true);
     setError(null);
     try {
-      await provider.signIn(email, password);
+      await provider.signIn(email, password, { keepSignedIn });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -66,15 +69,32 @@ export function SignInPage() {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <Field
+        <PasswordField
           id="password"
           label="Password"
-          type="password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
+        {/*
+          Ticked, the session is kept on this device and closing the browser
+          does not sign the person out; unticked, it ends with the browser.
+          The answer is remembered per browser and read again on the next visit
+          (app/shell/auth/session-storage.ts).
+        */}
+        <label htmlFor="keep-signed-in" className="checkbox">
+          <input
+            id="keep-signed-in"
+            type="checkbox"
+            checked={keepSignedIn}
+            onChange={(e) => {
+              setKeepSignedIn(e.target.checked);
+              writeKeepSignedIn(e.target.checked);
+            }}
+          />
+          <span>Keep me signed in</span>
+        </label>
         <Button type="submit" variant="primary" disabled={busy}>
           Sign in
         </Button>

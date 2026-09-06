@@ -155,6 +155,18 @@
   color: var(--critical);
 }
 
+/* A checkbox and its words on one 44px row. The two module copies of this rule
+   (app/admin/clients/clients.css, app/admin/billing/billing.css) predate the
+   shell's own; they are identical, and this one is where a shared control
+   belongs. */
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-block-size: var(--row);
+  cursor: pointer;
+}
+
 /* The show-or-hide button sits at the end of the password box, inside it: a
    full 44px target, no motion, and the input's own text stops short of it. */
 .password {
