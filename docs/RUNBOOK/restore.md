@@ -148,9 +148,17 @@ this procedure restores.
 **Still to be proved, by the rehearsal the operator authorises.** That a dump
 downloaded from the `backups` bucket restores into a scratch Supabase project;
 how long that takes at production's size rather than a seed's; and that the
-screens come up against the restored project. None of it can be done before
-the production project exists (`docs/SPEC/hosting.md` section 10 holds that
-until the founder's lawyer answers).
+screens come up against the restored project.
+
+*Amended in trunk round 31, 2026-09-06 (the fix round).* This paragraph used to
+end by saying none of it could be done before the production project existed,
+because `docs/SPEC/hosting.md` section 10 held its creation until the founder's
+lawyer answered. **It exists.** The operator created it at 06:22 that morning,
+reference `ipiluvnlnzdbolbqwtpl`, which is now named in
+`.claude/hooks/no-prod-in-dev.sh`. Its keys and every runtime setting stay in
+the host's secret store and never enter this repository (`hosting.md` section
+4.4), so the rehearsal is the operator's to walk and not a session's. It waits
+on nothing now but a first weekly dump worth restoring.
 
 ---
 

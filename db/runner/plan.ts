@@ -318,12 +318,15 @@ const RELEASE_TAG_SHAPE = /^v.+/;
  * that through `describeDatabase` (db/runner/apply.ts) and the URL carries the
  * password.
  *
- * The rule is written from the local end rather than from a list of production
- * projects, because no production project exists yet to list: any database that
- * is not on this machine is refused unless `MIGRATE_TARGET` says deliberately
- * which one it is, and `production` additionally wants the release's own `v*`
- * tag on the revision being migrated. So it needs no list to be complete, and it
- * fails closed for a database nobody has named.
+ * The rule is written from the local end rather than from a list of hosted
+ * projects: any database that is not on this machine is refused unless
+ * `MIGRATE_TARGET` says deliberately which one it is, and `production`
+ * additionally wants the release's own `v*` tag on the revision being migrated.
+ * So it needs no list to be complete, and it fails closed for a database nobody
+ * has named. It was written that way when there was nothing to list; the
+ * project was created on 2026-09-06 and this rule is unchanged by that, which
+ * was the point of writing it from this end (`.claude/hooks/no-prod-in-dev.sh`
+ * is the one place a reference is named).
  *
  * It stops a mistake and not a determined person: both `MIGRATE_TARGET` and
  * `RELEASE_TAG` can be set on a laptop, and a laptop can tag a commit. That is
