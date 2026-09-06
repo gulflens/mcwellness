@@ -4,7 +4,13 @@ import { DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../../domain/shared';
 import { logReads } from '../_middleware/audit';
 import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
-import { clientsFor, mayReadHousehold, readHousehold, type Household } from './household';
+import {
+  clientsFor,
+  forReports,
+  mayReadHousehold,
+  readHousehold,
+  type Household,
+} from './household';
 import { logHouseholdRefusal } from './refused';
 import { DocumentLinkResponse, PortalReportsResponse } from './schema';
 
@@ -26,12 +32,18 @@ import { DocumentLinkResponse, PortalReportsResponse } from './schema';
  * household's. This route asks for their own clients' rows and shows what
  * comes back.
  *
- * **Every client on the record, and not only the ones money is shown for.** A
- * young person's own login sees no money screen, because a balance is the
- * household's business; their own report is not the same kind of thing, and
- * the spec's section 7.3 says "issued reports for their own client" without
- * that narrowing. The consent and the `can_receive_reports` flag govern what
- * the practice *sends*; this is the household reading its own record.
+ * **A legal guardian, or the person themselves once they are an adult.** The
+ * first build showed a report to every contact on the record, including a
+ * young person's own login, and named that as a decision for the operator
+ * rather than one for the build (default 4 of pull request 83). She took it
+ * the other way on 2026-09-06: a report is a practitioner's written summary of
+ * a person, a guardian is who receives it and talks a child through it, and
+ * the portal is not where a child meets one alone. `forReports` narrows the
+ * household to the people this person may read about, and
+ * `app.actor_may_read_reports_of` (migration 955) refuses the rows underneath,
+ * which is the boundary — this is the same rule where the screen can see it.
+ * The consent and the `can_receive_reports` flag still govern what the
+ * practice *sends*, which is a different question.
  */
 
 const DocumentParams = z.object({ documentId: z.uuid() });
@@ -79,12 +91,13 @@ export function mountPortalReports(api: Hono<ApiEnv>, now: () => Date = () => ne
     const requestId = c.get('requestId');
     const db = c.get('db');
     const actor = c.get('actor');
-    const household = await readHousehold(db, actor, now());
-    if (household === null) return c.json({ error: 'forbidden', requestId }, 403);
-    if (!mayReadHousehold(actor, household, now())) {
-      await logHouseholdRefusal(db, household);
+    const whole = await readHousehold(db, actor, now());
+    if (whole === null) return c.json({ error: 'forbidden', requestId }, 403);
+    if (!mayReadHousehold(actor, whole, now())) {
+      await logHouseholdRefusal(db, whole);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
+    const household = forReports(whole);
 
     const rows = await householdReports(db, household);
     // Opening the screen is a `list`, the same act the practice's own tab
@@ -121,8 +134,9 @@ export function mountPortalReports(api: Hono<ApiEnv>, now: () => Date = () => ne
     const params = DocumentParams.safeParse(c.req.param());
     if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
 
-    const household = await readHousehold(db, c.get('actor'), now());
-    if (household === null) return c.json({ error: 'forbidden', requestId }, 403);
+    const whole = await readHousehold(db, c.get('actor'), now());
+    if (whole === null) return c.json({ error: 'forbidden', requestId }, 403);
+    const household = forReports(whole);
 
     const storage = c.get('storage');
     if (!storage) return c.json({ error: 'storage_unavailable', requestId }, 503);

@@ -14,6 +14,8 @@ export type {
   AccessUser,
   InviteKind,
 } from './invite';
+export { reportsVisibleTo } from './reports';
+export type { ReportClient, ReportContact } from './reports';
 export { packageProgress } from './packages';
 export type { PackageProgress, ProgressEntitlement, ProgressPurchase } from './packages';
 export {

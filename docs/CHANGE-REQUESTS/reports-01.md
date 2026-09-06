@@ -42,12 +42,19 @@ under "Shared-zone changes".
    The plan page gives this screen to the portal stream; the integrator gives
    it to this build because nobody else is in that worktree.
 
-   The screen deliberately shows **every client on the record**, not only the
-   ones money is shown for. A young person's own login sees no money screen
-   because a balance is the household's business; their own report is not the
-   same kind of thing, and section 7.3 says "issued reports for their own
-   client" without that narrowing. The consent and `can_receive_reports` govern
-   what the practice *sends*; this is the household reading its own record.
+   The screen deliberately showed **every client on the record**, not only the
+   ones money is shown for — default 4 of the pull request, and named there as
+   the operator's to say yes to. *Reversed by the operator on 2026-09-06 at
+   06:15, and built in the trunk's round 31 (the fix round).* A report about a
+   young person is now read by a **legal guardian**, or by the person
+   themselves once they are an adult, and by nobody else in the household: a
+   report is a practitioner's written summary of a person, a guardian is who
+   receives it and talks a child through it, and the portal is not where a
+   child meets one alone. `app.actor_may_read_reports_of` (migration 955)
+   carries the rule into the `report` read policy, so it is the row that is
+   refused and not a line a screen leaves out; `docs/SPEC/reports-v1.md`
+   section 7.3 is amended to match. The consent and `can_receive_reports` still
+   govern what the practice *sends*, which is a different question.
 
 5. **`db/migrations/107_erase_report.sql`** (client-record's range) —
    `app.erase_client` extended under a `to_regclass('public.report')` guard
@@ -257,6 +264,10 @@ have to cross-reference the round
 The race in `tests/portal/db/invite.test.ts` that this stream's pull request
 recorded but could not fix — `tests/portal/**` is the portal stream's path — is
 fixed in the same round, in the one line that comment proposed.
+
+**Default 4 is reversed**, by the operator's decision of 2026-09-06 at 06:15
+and in the same round: a minor's own portal login no longer reads reports about
+themselves. Item 4 above carries what was built and why.
 
 **R3 is still open**: the shared writer still sets type and strokes rules in
 greyscale only, so a printed ribbon carries the figure's shape and no hue.

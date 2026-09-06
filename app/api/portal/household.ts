@@ -1,5 +1,5 @@
 import { canActor, hasRole, isoDateIn, type Actor } from '../../../domain/shared';
-import { moneyVisibleTo } from '../../../domain/portal';
+import { moneyVisibleTo, reportsVisibleTo } from '../../../domain/portal';
 import type { Db } from '../_middleware/request-context';
 import type { Practice } from './schema';
 
@@ -15,12 +15,13 @@ import type { Practice } from './schema';
  * so the gate is stated in the domain as well as enforced beneath — and the
  * policies refuse the row a third time if both are wrong.
  *
- * **The caller's own contact row travels with each client**, because two of
+ * **The caller's own contact row travels with each client**, because three of
  * the portal's rules need it: whether the money may be shown at all
- * (`moneyVisibleTo`, section 5 rule 5) and which row on Family is theirs to
- * correct. A person may be a contact of several clients — a mother of two —
- * and may hold a different relationship on each, so this is per client and
- * never per person.
+ * (`moneyVisibleTo`, section 5 rule 5), whether a report about that person may
+ * be (`reportsVisibleTo`, `docs/SPEC/reports-v1.md` section 7.3 as amended on
+ * 2026-09-06), and which row on Family is theirs to correct. A person may be a
+ * contact of several clients — a mother of two — and may hold a different
+ * relationship on each, so this is per client and never per person.
  */
 
 export type HouseholdClient = {
@@ -34,6 +35,8 @@ export type HouseholdClient = {
   relationship: string;
   /** Whether this person may be shown this client's money, today. */
   moneyVisible: boolean;
+  /** Whether this person may be shown a report about this client, today. */
+  reportsVisible: boolean;
 };
 
 export type Household = {
@@ -63,7 +66,7 @@ const PRACTICE_SQL =
 const CLIENTS_SQL =
   'select c.id, c.given_name, c.family_name, c.given_name_ar, c.family_name_ar, ' +
   "to_char(c.date_of_birth, 'YYYY-MM-DD') as date_of_birth, c.preferred_locale, " +
-  'ct.id as contact_id, ct.relationship ' +
+  'ct.id as contact_id, ct.relationship, ct.is_legal_guardian ' +
   'from client c ' +
   'join contact ct on ct.client_id = c.id and ct.tenant_id = c.tenant_id ' +
   'where c.tenant_id = app.current_tenant_id() and c.id = any($1::uuid[]) ' +
@@ -80,6 +83,7 @@ type ClientRow = {
   preferred_locale: 'en' | 'ar';
   contact_id: string;
   relationship: string;
+  is_legal_guardian: boolean;
 };
 
 /** A person's name as one string, or null when the record carries none. */
@@ -146,6 +150,11 @@ export async function readHousehold(db: Db, actor: Actor, now: Date): Promise<Ho
         { dateOfBirth: row.date_of_birth },
         today,
       ),
+      reportsVisible: reportsVisibleTo(
+        { relationship: row.relationship, isLegalGuardian: row.is_legal_guardian },
+        { dateOfBirth: row.date_of_birth },
+        today,
+      ),
     })),
   };
 }
@@ -175,4 +184,16 @@ export function clientsFor(household: Household) {
 /** The clients this person may be shown money for, and no others. */
 export function moneyClientIds(household: Household): string[] {
   return household.clients.filter((client) => client.moneyVisible).map((client) => client.id);
+}
+
+/**
+ * The household as the Reports screen sees it: the people this person is a
+ * legal guardian of, and themselves once they are an adult. A minor's own
+ * login therefore reads a household with nobody in it, which is the whole of
+ * the operator's decision of 2026-09-06 said in one line. The `report` read
+ * policy refuses the rows in any case (migration 955); this is the same rule
+ * stated where the screen can see it.
+ */
+export function forReports(household: Household): Household {
+  return { ...household, clients: household.clients.filter((client) => client.reportsVisible) };
 }
