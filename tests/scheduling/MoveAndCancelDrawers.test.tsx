@@ -678,6 +678,12 @@ describe('CancelAppointmentDrawer', () => {
       fetchImpl,
     );
     expect(await screen.findByText(/The practice’s notice period could not be read/)).toBeTruthy();
+    // And what it cannot say is the fee, not a session: nothing takes a
+    // session any more (the founder's decision of 2026-09-04).
+    expect(
+      screen.getByText(/whether calling this visit off carries the call-out fee/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/uses one of the client’s sessions/)).toBeNull();
     fireEvent.change(screen.getByLabelText('What happened?'), { target: { value: 'No answer.' } });
     expect(
       (screen.getByRole('button', { name: 'Call off this visit' }) as HTMLButtonElement).disabled,

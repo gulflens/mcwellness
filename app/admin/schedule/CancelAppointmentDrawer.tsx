@@ -451,8 +451,7 @@ export function CancelAppointmentDrawer({
               {told && policy === 'unavailable' ? (
                 <Note tone="critical">
                   The practice&rsquo;s notice period could not be read, so this screen cannot say
-                  whether calling this visit off uses one of the client&rsquo;s sessions. Try again
-                  in a moment.
+                  whether calling this visit off carries the call-out fee. Try again in a moment.
                 </Note>
               ) : null}
               {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
