@@ -536,8 +536,12 @@ and the deep check passed on the first one.
 **Still to do on this pass.** `TRUSTED_PROXY_HOPS` stays at `1` and is not yet
 measured (the method: exhaust a rate-limited route from one address, then
 repeat with a spoofed `X-Forwarded-For`; a fresh budget for the spoof means
-the count is too high). The founder's sign-in account and the practice itself
-(the section "The first practice") are not created: that sends an email to a
-real person and writes the practice's real rows, and it waits for the
-operator's word. The Hostinger vendor row in `docs/COMPLIANCE/approved-vendors.md`
+the count is too high). **The first practice is created** (00:30, 7 September, on the operator's
+next message): the founder's sign-in account was made with a strong generated
+password and confirmed, so no email was sent; `app.bootstrap_practice` ran
+with the practice's legal name in English and Arabic, her account id, her
+first name and her email, and answered with the practice's and the owner's
+ids; then a sign-in as her returned an ES256 token and `GET /api/practice`
+on the live address answered 200 naming the practice. Her email and password
+are two lines in the secrets file for the password manager. The Hostinger vendor row in `docs/COMPLIANCE/approved-vendors.md`
 still waits for the operator's tick.

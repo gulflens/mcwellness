@@ -437,14 +437,12 @@ desktop app's own CI monitor will still tell a running session.
   "أُعفي بتاريخ …" is composed from the approved PDF sentence rather than
   held verbatim; and round 34 proposes Arabic names for the five brainwave
   bands. Say yes, or give the words you want.
-- **To sign in on production** (the secrets, the role password and the pooler
-  string are done, 7 September): say the word and the session creates the
-  founder's sign-in account and runs the one bootstrap statement with the
-  practice's names (`docs/PRODUCTION.md`, "The first practice"); it waits
-  because it emails a real person and writes the practice's real rows. Then
-  move `~/Documents/mcwellness-production-secrets.env` into the password
-  manager and delete it. Merge pull request 106 when the checks run again;
-  until then production is one commit ahead of `main`.
+- **Production is signed in to** (00:30, 7 September): the founder's account
+  and the practice exist (`docs/PRODUCTION.md`, the first live pass). Move
+  `~/Documents/mcwellness-production-secrets.env` into the password manager
+  and delete it; it holds her email and password too. Merge pull request 106
+  when the checks run again; until then production is one commit ahead of
+  `main`.
 - **Piece nine's live half**, in the order they unblock each other
   (`docs/SPEC/hosting.md` section 11, pull request 80's body, and the
   operator's page): buy Hostinger Web Apps Hosting in Mumbai (decided 06:15);
@@ -574,9 +572,9 @@ nine and ten; see the records on pull requests 73 to 83).
    audit fixture). And the founder's answer on the no-show fee.
 2b. **The hand deploy on Hostinger is done** (7 September, 00:20): the
    process runs and both health routes answer; the first live pass is in
-   `docs/PRODUCTION.md`. Left from it: measure `TRUSTED_PROXY_HOPS` (still
-   `1`; the method is in the pass), merge pull request 106, and the
-   founder's account and the bootstrap statement on the operator's word.
+   `docs/PRODUCTION.md`, and the founder's account and the practice exist and
+   she can sign in. Left from it: measure `TRUSTED_PROXY_HOPS` (still `1`;
+   the method is in the pass) and merge pull request 106.
 2c. **Trunk round 33 is built and reviewed** (pull request 103; the record is
    on it). It merges when GitHub's checks run again; then `pnpm db:migrate`
    in the laptop checkout, and migrations 205 and 957 go to staging and
