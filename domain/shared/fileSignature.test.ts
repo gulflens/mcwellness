@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { KNOWN_MIME_TYPES, bytesMatchMimeType, isKnownMimeType } from './fileSignature';
+import {
+  KNOWN_MIME_TYPES,
+  bytesAreAnEdf,
+  bytesMatchMimeType,
+  isKnownMimeType,
+} from './fileSignature';
 
 const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
 const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
@@ -52,5 +57,37 @@ describe('isKnownMimeType', () => {
   it('names the four and nothing else', () => {
     expect(isKnownMimeType('image/png')).toBe(true);
     expect(isKnownMimeType('image/gif')).toBe(false);
+  });
+});
+
+describe('bytesAreAnEdf', () => {
+  /** The version field, and nothing after it: what every EDF and EDF+ begins with. */
+  const version = (): Uint8Array => new TextEncoder().encode('0       ');
+
+  it('accepts the version field the published format fixes', () => {
+    // EDF and EDF+ begin the same eight bytes, so one case covers both.
+    expect(bytesAreAnEdf(version())).toBe(true);
+    const withHeader = new Uint8Array(256);
+    withHeader.set(version());
+    expect(bytesAreAnEdf(withHeader)).toBe(true);
+  });
+
+  it('refuses seven bytes, which cannot carry the field', () => {
+    expect(bytesAreAnEdf(version().slice(0, 7))).toBe(false);
+    expect(bytesAreAnEdf(new Uint8Array())).toBe(false);
+  });
+
+  it('refuses a nought followed by anything but seven spaces', () => {
+    const padded = new TextEncoder().encode('0      X');
+    expect(bytesAreAnEdf(padded)).toBe(false);
+    const zeroes = new Uint8Array([0x30, 0, 0, 0, 0, 0, 0, 0]);
+    expect(bytesAreAnEdf(zeroes)).toBe(false);
+    const wrongVersion = version();
+    wrongVersion[0] = 0x31;
+    expect(bytesAreAnEdf(wrongVersion)).toBe(false);
+  });
+
+  it('refuses a page dressed as a recording', () => {
+    expect(bytesAreAnEdf(html)).toBe(false);
   });
 });

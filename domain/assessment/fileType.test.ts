@@ -3,6 +3,7 @@ import { minimalEdf, nativeRecording } from '../../tests/assessment/fixtures/edf
 import {
   ASSESSMENT_FILE_MIME_TYPES,
   NATIVE_RECORDING_EXTENSION,
+  bytesAreAnEdf,
   classifyAssessmentFile,
   normaliseExtension,
 } from './fileType';
@@ -19,6 +20,10 @@ import {
  *
  * The EDF fixture is built from the published layout in
  * `tests/assessment/fixtures/edf.ts`, never copied from a recording.
+ *
+ * The signature itself is `domain/shared/fileSignature.ts`'s from the trunk's
+ * round 33 and is tested there; `bytesAreAnEdf` is re-exported from this module
+ * so no caller moved, and one case below reads it through that re-export.
  */
 
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
@@ -58,6 +63,12 @@ describe('the EDF recording', () => {
       ok: true,
       kind: 'edf_recording',
     });
+  });
+
+  it('asks the shared question, through the name this module still exports', () => {
+    // The re-export, not a copy: the same answer the shared module gives.
+    expect(bytesAreAnEdf(minimalEdf())).toBe(true);
+    expect(bytesAreAnEdf(MARKUP)).toBe(false);
   });
 
   it('reads the signature rather than the name the file was chosen under', () => {

@@ -12,7 +12,8 @@
  *
  * Deliberately small: four magic numbers, one question, no parsing. It says
  * whether the bytes are consistent with the declared type, never what the
- * file contains.
+ * file contains. `bytesAreAnEdf` sits beside them and asks the same sort of
+ * question of a format that has no registered media type to key it on.
  *
  * **Why it is here rather than in `domain/client`, where it was written.**
  * Three streams reached the same wall: a route that writes a `document` row
@@ -74,4 +75,25 @@ export function bytesMatchMimeType(bytes: Uint8Array, mimeType: string): boolean
     default:
       return false;
   }
+}
+
+/**
+ * The eight bytes the European Data Format fixes at the front of every file:
+ * the version field, an ASCII `0` followed by seven spaces. Its `+` variant
+ * begins with the same eight, so this accepts both.
+ *
+ * **A named export rather than a fifth case in the switch.** EDF has no
+ * registered media type to key one on, so `KNOWN_MIME_TYPES` stays at four and
+ * `bytesMatchMimeType` is untouched: a caller filing a recording declares it
+ * `application/octet-stream` and asks this question separately. The shape was
+ * the trunk's to choose (request 2 of `docs/CHANGE-REQUESTS/assessment-02.md`).
+ *
+ * **This module never reads the next field.** After the version comes an
+ * eighty-byte identification field naming the person the recording was made
+ * of. Nothing here reaches past byte eight, and nothing in this repository
+ * parses a recording at all (`docs/SPEC/assessment.md` section 7.1): a
+ * recording is filed exactly as the practice sent it.
+ */
+export function bytesAreAnEdf(bytes: Uint8Array): boolean {
+  return startsWith(bytes, [0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20]);
 }
