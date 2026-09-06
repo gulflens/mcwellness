@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { keptSessionStorage, writeKeepSignedIn } from './session-storage';
+import { keptSessionStorage, writeSessionStore } from './session-storage';
 import type { AuthProvider } from './types';
 
 /** The real sign-in: Supabase Auth, email and password, sessions refreshed by the client library. */
@@ -17,9 +17,12 @@ export function supabaseAuth(url: string, anonKey: string): AuthProvider {
   return {
     kind: 'supabase',
     async signIn(email, password, options) {
-      // Before the call, not after: the session Supabase is about to write must
-      // find the answer already there, or the first write goes to the wrong store.
-      writeKeepSignedIn(options?.keepSignedIn ?? false);
+      // The one place the store is written. Before the call, not after: the
+      // session Supabase is about to write must find the answer already there,
+      // or the first write goes to the wrong store. Every later write — and
+      // Supabase writes on each token refresh — reads this same answer, so a
+      // held session follows the sign-in that made it and nothing else.
+      writeSessionStore((options?.keepSignedIn ?? false) ? 'device' : 'tab');
       const { error } = await client.auth.signInWithPassword({ email, password });
       if (error) {
         throw new Error('That email and password did not match. Try again.');

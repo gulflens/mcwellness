@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readKeepSignedIn, writeKeepSignedIn, type SessionStore } from './session-storage';
+import {
+  readKeepSignedIn,
+  readSessionStore,
+  writeKeepSignedIn,
+  writeSessionStore,
+  type SessionStore,
+} from './session-storage';
 import { supabaseAuth } from './supabase-auth';
 
 /**
  * The seam this file guards is the order: the browser is told where to keep a
  * session before Supabase is asked for one. Written the other way round, the
- * first session of every sign-in lands in the wrong store.
+ * first session of every sign-in lands in the wrong store. The second seam is
+ * that this is the only place the store is written at all, so a token refresh
+ * follows the last sign-in and never the tick box.
  */
 const EMAIL = 'owner@example.com';
 /**
@@ -52,37 +60,38 @@ afterEach(() => {
 
 describe('supabaseAuth', () => {
   it('answers where to keep the session before it asks for one', async () => {
-    let flagWhenAsked: boolean | null = null;
+    let storeWhenAsked: string | null = null;
     supabase.auth.signInWithPassword.mockImplementation(async () => {
-      flagWhenAsked = readKeepSignedIn();
+      storeWhenAsked = readSessionStore();
       return { error: null };
     });
     const auth = supabaseAuth('https://example.supabase.co', 'anon-key');
 
     await auth.signIn(EMAIL, FAKE_CREDENTIAL, { keepSignedIn: true });
-    expect(flagWhenAsked).toBe(true);
+    expect(storeWhenAsked).toBe('device');
     expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({
       email: EMAIL,
       password: FAKE_CREDENTIAL,
     });
 
     await auth.signIn(EMAIL, FAKE_CREDENTIAL, { keepSignedIn: false });
-    expect(flagWhenAsked).toBe(false);
+    expect(storeWhenAsked).toBe('tab');
   });
 
-  it('treats a sign-in with no answer as not keeping the session', async () => {
-    writeKeepSignedIn(true);
+  it('leaves the tick box alone: signing in answers the store and nothing else', async () => {
+    writeKeepSignedIn(false);
     const auth = supabaseAuth('https://example.supabase.co', 'anon-key');
-    await auth.signIn(EMAIL, FAKE_CREDENTIAL);
+    await auth.signIn(EMAIL, FAKE_CREDENTIAL, { keepSignedIn: true });
+    expect(readSessionStore()).toBe('device');
     expect(readKeepSignedIn()).toBe(false);
   });
 
-  it('hands the client a store that follows the flag', () => {
+  it('hands the client a store that follows the last sign-in', () => {
     supabaseAuth('https://example.supabase.co', 'anon-key');
     const storage = supabase.options[0]?.auth?.storage;
     expect(storage).toBeDefined();
 
-    writeKeepSignedIn(true);
+    writeSessionStore('device');
     storage?.setItem('sb-example-auth-token', 'a-session');
     expect(localStorage.getItem('sb-example-auth-token')).toBe('a-session');
 
