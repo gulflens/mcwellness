@@ -407,15 +407,7 @@ function footer(sheet: Sheet, basis: Phrase, grey = MUTED): void {
   sheet.down(6);
   sheet.rule();
   sheet.down(LINE);
-  sheet.paragraph(
-    sheet.baseline,
-    LEFT,
-    basis.en,
-    RIGHT - LEFT,
-    SIZE.small,
-    { grey },
-    SMALL_LINE,
-  );
+  sheet.paragraph(sheet.baseline, LEFT, basis.en, RIGHT - LEFT, SIZE.small, { grey }, SMALL_LINE);
   sheet.down(english * SMALL_LINE + 1);
   sheet.paragraph(
     sheet.baseline,
