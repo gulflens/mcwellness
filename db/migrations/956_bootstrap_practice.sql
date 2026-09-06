@@ -133,8 +133,8 @@ begin
   -- database that is not a Supabase project, whose auth schema is only 000's
   -- shim — there is nothing to hold the id against and it stands as given. The
   -- local image is Supabase's own Postgres and carries the table, so the test
-  -- proves the refusal outright and proves the skip by taking the table away
-  -- inside a transaction it rolls back.
+  -- proves the refusal outright; the skip it can only prove by inspection,
+  -- auth.users belonging to supabase_auth_admin and not to the test's role.
   if to_regclass('auth.users') is not null then
     execute 'select exists (select 1 from auth.users where id = $1)'
        into v_known
