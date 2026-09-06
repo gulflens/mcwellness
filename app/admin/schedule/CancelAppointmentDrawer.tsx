@@ -85,6 +85,28 @@ const ACTION_MESSAGES: Record<CancelActionCode, string> = {
  * say so rather than let the route say it in a 400. */
 const MINIMUM_WAIVER_REASON = 8;
 
+/**
+ * What to say the fee was, once it has been charged.
+ *
+ * **The same figure as before the act.** The practice's price is net and VAT is
+ * added on top at write time (migration 406), so reading the gross back and
+ * showing it would have this drawer say AED 150.00 in one breath and AED 157.50
+ * in the next about the same visit — a practice that appears to have moved its
+ * own price while the coordinator was reading (design review of this pull
+ * request). Where VAT was added the larger figure is the true one, so it is
+ * shown and named as including VAT; where there is none — the practice today —
+ * the two figures are the same and nothing needs saying.
+ */
+function feeAsCharged(
+  outcome: CancelAppointmentResponse,
+): { fils: number; includesVat: boolean } | null {
+  if (outcome.callOutFeeNetFils === null) return null;
+  const vat = outcome.callOutFeeVatFils ?? 0;
+  return vat > 0
+    ? { fils: outcome.callOutFeeGrossFils ?? outcome.callOutFeeNetFils, includesVat: true }
+    : { fils: outcome.callOutFeeNetFils, includesVat: false };
+}
+
 type Waiver =
   | { kind: 'offered' }
   | { kind: 'saving' }
@@ -275,6 +297,10 @@ export function CancelAppointmentDrawer({
     }
   }
 
+  // What the visit actually cost, once the route has said so. Null before the
+  // act and whenever nothing was charged.
+  const charged = state.kind === 'done' ? feeAsCharged(state.outcome) : null;
+
   return (
     <aside className="drawer" role="dialog" aria-labelledby="cancel-appointment-title">
       <header className="drawer__header">
@@ -314,19 +340,19 @@ export function CancelAppointmentDrawer({
                   ? `, inside the practice's ${state.outcome.noticeHours} hours' notice.`
                   : '.'}
               </Note>
-              {state.outcome.callOutFeeFils !== null && waiver.kind !== 'given' ? (
+              {charged !== null && waiver.kind !== 'given' ? (
                 <Note tone="attention">
-                  A call-out fee of AED {formatFils(state.outcome.callOutFeeFils)} is on the
-                  client&rsquo;s account, and no session was taken. If the fee should not stand,
-                  waive it now.
+                  {`A call-out fee of AED ${formatFils(charged.fils)}${
+                    charged.includesVat ? ', including VAT,' : ''
+                  } is on the client’s account, and no session was taken. If the fee should not ` +
+                    'stand, waive it now.'}
                 </Note>
               ) : null}
               {waiver.kind === 'given' ? (
                 <Note>The call-out fee has been waived. The client owes nothing for it.</Note>
               ) : null}
               {waiver.kind === 'refused' ? <Note tone="critical">{waiver.message}</Note> : null}
-              {state.outcome.callOutFeeFils === null &&
-              state.outcome.status === 'cancelled_late' ? (
+              {charged === null && state.outcome.status === 'cancelled_late' ? (
                 <Note>Nothing was charged for it, and no session was taken.</Note>
               ) : null}
               <div className="stepper__submit">

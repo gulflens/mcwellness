@@ -728,7 +728,9 @@ describe('POST /api/appointments/:id/cancel', () => {
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled');
     expect(body.noticeHours).toBe(24);
-    expect(body.callOutFeeFils).toBeNull();
+    expect(body.callOutFeeNetFils).toBeNull();
+    expect(body.callOutFeeVatFils).toBeNull();
+    expect(body.callOutFeeGrossFils).toBeNull();
     expect(body.feeInvoiceId).toBeNull();
 
     const row = await statusOf(APPT_CANCEL_IN_TIME);
@@ -748,8 +750,13 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled_late');
-    // AED 150, the practice's own scheduling_setting.unfit_fee_fils.
-    expect(body.callOutFeeFils).toBe(15_000);
+    // AED 150, the practice's own scheduling_setting.unfit_fee_fils — net,
+    // with no VAT on top because the practice is not registered for it, so all
+    // three figures are the same one (migration 406). Apart, so a screen can
+    // name the same figure before the act and after it.
+    expect(body.callOutFeeNetFils).toBe(15_000);
+    expect(body.callOutFeeVatFils).toBe(0);
+    expect(body.callOutFeeGrossFils).toBe(15_000);
     expect(body.feeInvoiceId).not.toBeNull();
 
     expect((await statusOf(APPT_CANCEL_LATE)).status).toBe('cancelled_late');
@@ -825,7 +832,7 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled_late');
-    expect(body.callOutFeeFils).toBe(15_000);
+    expect(body.callOutFeeNetFils).toBe(15_000);
     expect(body.feeInvoiceId).not.toBeNull();
   });
 
@@ -879,7 +886,9 @@ describe('POST /api/appointments/:id/cancel', () => {
     // visit they have just called off has this moment dropped out of it. No
     // screen they use asks for these two fields, and waiving a fee is not
     // theirs in any case.
-    expect(body.callOutFeeFils).toBeNull();
+    expect(body.callOutFeeNetFils).toBeNull();
+    expect(body.callOutFeeVatFils).toBeNull();
+    expect(body.callOutFeeGrossFils).toBeNull();
     expect(body.feeInvoiceId).toBeNull();
   });
 
@@ -894,7 +903,9 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled');
-    expect(body.callOutFeeFils).toBeNull();
+    expect(body.callOutFeeNetFils).toBeNull();
+    expect(body.callOutFeeVatFils).toBeNull();
+    expect(body.callOutFeeGrossFils).toBeNull();
     expect(body.feeInvoiceId).toBeNull();
     expect((await statusOf(APPT_UNTOLD_LATE)).status).toBe('cancelled');
     // The household holds credits; billing's trigger fires on cancelled_late
@@ -986,7 +997,7 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(cancelled.status).toBe(200);
     const body = (await cancelled.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled_late');
-    expect(body.callOutFeeFils).toBe(15_000);
+    expect(body.callOutFeeNetFils).toBe(15_000);
     // The family's sessions are untouched, before the waiver and after it.
     expect(await available()).toBe(before);
 

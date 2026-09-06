@@ -128,7 +128,8 @@ const CANCEL_OWN_SQL =
 // they have this moment called off is no longer one, so this read would come
 // back empty on that path and deny a charge that had just been made.
 const FEE_INVOICE_SQL =
-  'select id, gross_fils from invoice where tenant_id = app.current_tenant_id() ' +
+  'select id, net_fils, vat_fils, gross_fils from invoice ' +
+  'where tenant_id = app.current_tenant_id() ' +
   "and appointment_id = $1 and kind = 'call_out_fee' limit 1";
 
 type AppointmentDbRow = {
@@ -283,9 +284,21 @@ export function mountAppointmentCancel(
     // does not ask for: nothing outside the office's own cancel drawer reads
     // these two fields, and waiving is not a practitioner's in any case
     // (`mayWaive`, app/api/billing/access.ts).
+    //
+    // Net, VAT and gross come back apart rather than as one figure. The
+    // practice's price is the net one and VAT is added on top at write time
+    // (migration 406), so a screen that named AED 150 before the act can name
+    // the same AED 150 afterwards and say "including VAT" only where there is
+    // any (design review of this pull request).
     const fee = isCalendarRole
-      ? ((await db.query<{ id: string; gross_fils: number }>(FEE_INVOICE_SQL, [appointmentId]))
-          .rows[0] ?? null)
+      ? ((
+          await db.query<{
+            id: string;
+            net_fils: number;
+            vat_fils: number;
+            gross_fils: number;
+          }>(FEE_INVOICE_SQL, [appointmentId])
+        ).rows[0] ?? null)
       : null;
 
     // No separate read row: the update above carries the whole story into the
@@ -298,7 +311,9 @@ export function mountAppointmentCancel(
         status,
         reason,
         noticeHours,
-        callOutFeeFils: fee?.gross_fils ?? null,
+        callOutFeeNetFils: fee?.net_fils ?? null,
+        callOutFeeVatFils: fee?.vat_fils ?? null,
+        callOutFeeGrossFils: fee?.gross_fils ?? null,
         feeInvoiceId: fee?.id ?? null,
       }),
     );

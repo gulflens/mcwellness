@@ -445,7 +445,9 @@ describe('CancelAppointmentDrawer', () => {
           status: 'cancelled_late',
           reason: 'client_request',
           noticeHours: 24,
-          callOutFeeFils: 15000,
+          callOutFeeNetFils: 15000,
+          callOutFeeVatFils: 0,
+          callOutFeeGrossFils: 15000,
           feeInvoiceId: '0000000a-0000-4000-8000-000000000301',
         }),
         { status: 200 },
@@ -471,6 +473,9 @@ describe('CancelAppointmentDrawer', () => {
         /A call-out fee of AED 150\.00 is on the client’s account, and no session was taken\./,
       ),
     ).toBeTruthy();
+    // The same figure the drawer named before the act, and no talk of VAT: the
+    // practice is not registered, so the net fee is the whole of it.
+    expect(screen.queryByText(/including VAT/)).toBeNull();
     expect(onCancelled).toHaveBeenCalled();
     const request = seen.find((entry) => entry.url.endsWith('/cancel'));
     expect(request?.url).toBe(`/api/appointments/${IMMINENT.id}/cancel`);
@@ -478,6 +483,49 @@ describe('CancelAppointmentDrawer', () => {
     expect(JSON.parse(String(request?.init?.body))).toEqual({ reason: 'client_request' });
     // The way back is offered, and never a route path on the face of a screen.
     expect(screen.getByRole('link', { name: 'Open Billing' })).toBeTruthy();
+  });
+
+  it('names the gross figure, and says so, once the practice charges VAT', async () => {
+    // Every price this practice publishes is net and VAT is added on top at
+    // write time (migration 406). So a registered practice's fee is AED 157.50
+    // where the drawer said AED 150.00 a moment earlier, and the difference is
+    // named rather than left to look like a price that moved (design review of
+    // this pull request).
+    const fetchImpl = settingsAnd(
+      () =>
+        new Response(
+          JSON.stringify({
+            id: IMMINENT.id,
+            status: 'cancelled_late',
+            reason: 'client_request',
+            noticeHours: 24,
+            callOutFeeNetFils: 15000,
+            callOutFeeVatFils: 750,
+            callOutFeeGrossFils: 15750,
+            feeInvoiceId: '0000000a-0000-4000-8000-000000000301',
+          }),
+          { status: 200 },
+        ),
+    );
+    mount(
+      <CancelAppointmentDrawer
+        appointment={IMMINENT}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      fetchImpl,
+    );
+    fireEvent.change(screen.getByLabelText('What happened?'), {
+      target: { value: 'The child is unwell.' },
+    });
+    await policyRead();
+    fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
+
+    expect(
+      await screen.findByText(
+        /A call-out fee of AED 157\.50, including VAT, is on the client’s account/,
+      ),
+    ).toBeTruthy();
   });
 
   it('waives the fee in one click, with the sentence already written', async () => {
@@ -499,7 +547,9 @@ describe('CancelAppointmentDrawer', () => {
           status: 'cancelled_late',
           reason: 'client_request',
           noticeHours: 24,
-          callOutFeeFils: 15000,
+          callOutFeeNetFils: 15000,
+          callOutFeeVatFils: 0,
+          callOutFeeGrossFils: 15000,
           feeInvoiceId: '0000000a-0000-4000-8000-000000000301',
         }),
         { status: 200 },
@@ -548,7 +598,9 @@ describe('CancelAppointmentDrawer', () => {
           status: 'cancelled_late',
           reason: 'client_request',
           noticeHours: 24,
-          callOutFeeFils: 15000,
+          callOutFeeNetFils: 15000,
+          callOutFeeVatFils: 0,
+          callOutFeeGrossFils: 15000,
           feeInvoiceId: '0000000a-0000-4000-8000-000000000301',
         }),
         { status: 200 },
@@ -584,7 +636,9 @@ describe('CancelAppointmentDrawer', () => {
             status: 'cancelled_late',
             reason: 'client_request',
             noticeHours: 24,
-            callOutFeeFils: null,
+            callOutFeeNetFils: null,
+            callOutFeeVatFils: null,
+            callOutFeeGrossFils: null,
             feeInvoiceId: null,
           }),
           { status: 200 },
