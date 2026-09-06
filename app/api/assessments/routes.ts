@@ -10,7 +10,7 @@ import {
 } from '@domain/assessment';
 import { canActor, hasRole } from '@domain/shared';
 import { DEFAULT_SIGNED_URL_TTL_SECONDS } from '../../../domain/shared/storage';
-import { logReads } from '../_middleware/audit';
+import { logRead, logReads } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { auditDocumentRead } from '../_middleware/storage/audit';
 import { logRefusal } from './audit';
@@ -20,6 +20,7 @@ import {
   readFiles,
   readForClient,
   readOne,
+  readVisits,
   toAssessment,
   toRow,
   type DbAssessment,
@@ -27,6 +28,7 @@ import {
 import {
   AssessmentListResponse,
   AssessmentResponse,
+  AssessmentVisitsResponse,
   ComparisonResponse,
   FileLinkResponse,
   RecordAssessmentRequest,
@@ -47,6 +49,8 @@ import {
  *   at the moment of writing, and writes the row.
  * - `POST /api/assessments/:id/supersede` — a new version with a reason.
  *   Refuses anything that is not the version that stands.
+ * - `GET /api/assessments/visits?clientId=` — the client's completed visits,
+ *   so the drawer can name the one a measurement was taken at (migration 951).
  * - `GET /api/assessments/compare?ids=` — paired figures and their
  *   differences, computing nothing a reader could not.
  * - `GET /api/assessments/file/:documentId/link` — `auditDocumentRead`, then a
@@ -60,6 +64,7 @@ import {
  */
 
 const ClientParams = z.object({ id: z.uuid() });
+const ClientQuery = z.object({ clientId: z.uuid() });
 const AssessmentParams = z.object({ id: z.uuid() });
 const DocumentParams = z.object({ documentId: z.uuid() });
 /** Two ids, comma-separated. Opaque ids only, never a name (.claude/rules/ui.md). */
@@ -186,12 +191,29 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
         : c.json({ error: 'forbidden', code: refusals[0], refusals, requestId }, 403);
     }
 
+    // A visit of another household is refused by `assessment_session_fk`
+    // (migration 951), which binds the visit to this measurement's own client
+    // and is the boundary. This asks first only so that a caller naming a
+    // visit that is not this client's is told so, rather than being handed the
+    // 500 a foreign-key violation would otherwise become.
+    if (input.sessionId !== null) {
+      const visit = await db.query(
+        'select 1 from session where tenant_id = app.current_tenant_id() and id = $1 ' +
+          "and client_id = $2 and status = 'completed'",
+        [input.sessionId, input.clientId],
+      );
+      if (visit.rowCount === 0) {
+        return c.json({ error: 'unprocessable', code: 'no_such_visit', requestId }, 422);
+      }
+    }
+
     const id = randomUUID();
     await db.query(
       'insert into assessment (id, tenant_id, client_id, performed_by_practitioner_id, ' +
         'performed_at, instrument, instrument_version, derived, condition_note, ' +
-        'reference_age_years, reference_sex, created_by) values ' +
-        '($1, app.current_tenant_id(), $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::sex_at_birth, $11)',
+        'reference_age_years, reference_sex, session_id, created_by) values ' +
+        '($1, app.current_tenant_id(), $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::sex_at_birth, ' +
+        '$11, $12)',
       [
         id,
         input.clientId,
@@ -203,6 +225,7 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
         input.conditionNote,
         input.referenceAgeYears,
         input.referenceSex,
+        input.sessionId,
         actor.userId,
       ],
     );
@@ -278,9 +301,10 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
     await db.query(
       'insert into assessment (id, tenant_id, client_id, performed_by_practitioner_id, ' +
         'performed_at, instrument, instrument_version, derived, condition_note, ' +
-        'reference_age_years, reference_sex, version, supersedes_id, supersede_reason, created_by) ' +
+        'reference_age_years, reference_sex, session_id, version, supersedes_id, ' +
+        'supersede_reason, created_by) ' +
         'values ($1, app.current_tenant_id(), $2, $3, $4, $5, $6, $7::jsonb, $8, $9, ' +
-        '$10::sex_at_birth, $11, $12, $13, $14)',
+        '$10::sex_at_birth, $11, $12, $13, $14, $15)',
       [
         id,
         target.client_id,
@@ -296,6 +320,11 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
         input.conditionNote,
         input.referenceAgeYears,
         input.referenceSex,
+        // The visit travels with the correction rather than being asked for
+        // again: a correction is a new reading of the same measurement, taken
+        // at the same visit, and a picker on that form would be a way to move
+        // a measurement onto a different day's visit by accident.
+        target.session_id,
         target.version + 1,
         target.id,
         input.reason,
@@ -307,6 +336,40 @@ export function mountAssessments(api: Hono<ApiEnv>, now: () => Date = () => new 
       throw new Error('The correction was written and could not be read back.');
     }
     return c.json(AssessmentResponse.parse({ assessment: toRow(row, []) }), 201);
+  });
+
+  api.get('/api/assessments/visits', async (c) => {
+    const actor = c.get('actor');
+    const requestId = c.get('requestId');
+    const db = c.get('db');
+    const query = ClientQuery.safeParse({ clientId: c.req.query('clientId') });
+    if (!query.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    // The recording audience, because this list exists to fill in one field on
+    // the recording form and nothing else reads it.
+    if (!canActor(actor, { type: 'assessment.record' }, {}, now())) {
+      await logRefusal(db, 'assessment', query.data.clientId, null, ['wrong_role']);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const context = await assessmentContext(db, query.data.clientId, 'qeeg');
+    if (!context.clientFound || !context.visible) {
+      await logRefusal(
+        db,
+        'assessment',
+        query.data.clientId,
+        context.clientFound ? query.data.clientId : null,
+        [context.clientFound ? 'not_visible' : 'client_not_found'],
+      );
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    // **A read, written before the answer** (section 8): this says which days
+    // the practice visited this household and who went, which is a fact about
+    // the record even though nothing changes.
+    await logRead(db, 'client', query.data.clientId, query.data.clientId);
+    return c.json(
+      AssessmentVisitsResponse.parse({ visits: await readVisits(db, query.data.clientId) }),
+    );
   });
 
   api.get('/api/assessments/compare', async (c) => {

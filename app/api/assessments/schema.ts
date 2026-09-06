@@ -57,6 +57,14 @@ const ReferenceSex = z.enum(REFERENCE_SEXES).nullable().default(null);
 
 export const RecordAssessmentRequest = z.object({
   clientId: z.uuid(),
+  /**
+   * The visit that produced the figures, where the person recording them
+   * names one (migration 951). Null is ordinary: a questionnaire filled in at
+   * home and an outside clinic's export name no visit of the practice's own.
+   * The database binds it to this client, so another household's visit is
+   * refused underneath this schema rather than by it.
+   */
+  sessionId: z.uuid().nullable().default(null),
   instrument: z.enum(INSTRUMENTS),
   instrumentVersion: z.string().trim().min(1).max(32),
   performedAt: z.iso.datetime({ offset: true }),
@@ -78,6 +86,22 @@ export const SupersedeAssessmentRequest = z.object({
 });
 export type SupersedeAssessmentRequest = z.infer<typeof SupersedeAssessmentRequest>;
 
+/**
+ * A visit a measurement may name, as the drawer's picker shows it. Completed
+ * ones only: a measurement is taken at a visit that happened.
+ */
+export const AssessmentVisit = z.object({
+  id: z.uuid(),
+  /** YYYY-MM-DD in the practice's own zone. */
+  on: z.string(),
+  serviceName: z.string(),
+  practitionerName: z.string().nullable(),
+});
+export type AssessmentVisit = z.infer<typeof AssessmentVisit>;
+
+export const AssessmentVisitsResponse = z.object({ visits: z.array(AssessmentVisit) });
+export type AssessmentVisitsResponse = z.infer<typeof AssessmentVisitsResponse>;
+
 /** One file filed against a measurement. Never the bytes, and never the key. */
 export const AssessmentFile = z.object({
   documentId: z.uuid(),
@@ -93,6 +117,10 @@ export const AssessmentRow = z.object({
   instrumentVersion: z.string(),
   performedAt: z.iso.datetime(),
   performedByPractitionerId: z.uuid(),
+  /** The visit it names, and the day and service that visit was, so a table reads it. */
+  sessionId: z.uuid().nullable(),
+  visitOn: z.string().nullable(),
+  visitServiceName: z.string().nullable(),
   /** The person's display name, so a table reads without a second request. */
   performedBy: z.string().nullable(),
   derived: Derived,
