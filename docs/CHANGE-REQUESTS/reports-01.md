@@ -137,6 +137,26 @@ under "Shared-zone changes".
    comparing `contact.client_id`, which the specification's own words argue
    against: it says the delivery is "refused by the composite key".
 
+10. **The reversal of default 6, and the session report's own form** — both
+   inside this stream's own paths, recorded here because the pull-request body
+   names them and a reader of this file should find them in one place.
+
+   *Default 6 reversed.* The goal's id now rides inside `content` beside the
+   assessment ids, and a practitioner's line about a goal is paired back to it
+   by that id. Position pairing misattributed a movement whenever a goal was
+   added between the gathering and the save, and did it silently.
+
+   *The session report's form.* The console had none: the practice could write
+   a progress report and not a session report, while sections 1, 4.2 and 5
+   scope both kinds. It is the same editor over the other kind's fields — the
+   kind is chosen when a draft is created and fixed for its life — drafting
+   from one completed visit picked from `GET /api/reports/visits`, its figures
+   gathered by `GET /api/reports/gather-session` and re-gathered server-side on
+   every save, with the same preview, signature and delivery. The two routes
+   are new and both are the stream's own. Nothing about the training travels:
+   there is no field in the session shape for an electrode site, a band or a
+   threshold, and `telemetry` is not read at all.
+
 ---
 
 ## Requests, not edits
@@ -157,7 +177,7 @@ lists them:
 | `reference text`, `RPT-000001`, sequential per practice, never reused | Something a household can quote, allocated atomically as the invoice number is, and generated from `number` so the two can never drift. |
 | `signed_by_name`, `signed_by_certification`, `signed_by_certifying_body`, `signed_by_certificate_number`, and five practice identity columns beside them | The snapshots of section 3. |
 | `recipient_name` and `recipient_record_number` | The block that says who the report was written for, snapshotted at issue like every other block on the row. Added in the fix round: the first build read the client row live at render, and the review was right that section 9 rules it out. Read live, the byte-identical re-render held only until somebody corrected the spelling of a child's name — after which the repair path refused that document for ever, because bytes rendered from this year's name can never match the ones that were filed. |
-| `content jsonb not null` | What the PDF was rendered from, so it can be rendered again. |
+| `content jsonb not null` | What the PDF was rendered from, so it can be rendered again. **_Amended in the fix round:_** the body also carries the ids of what it was made from — the two assessments a comparison was drawn from, the visit a session report follows (`sessionId`), and each goal's own id. The first build paired a practitioner's line about a goal to that goal by position, on the argument that an internal id has no business in a household's document; it has, for the reason the assessment ids are already there: a snapshot has to say what it was made of, and paired by position a goal added between the gathering and the save moved every line down one, silently, inside a signed document. |
 | `delivered_to_contact_ids` and `delivered_at` dropped for `report_delivery` | A delivery happens after issue and an issued row is immutable. |
 | No foreign key to `session` or `assessment` | Both live in ranges a 600 migration must not assume are present. |
 

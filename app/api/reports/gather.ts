@@ -1,10 +1,14 @@
 import {
   gatherProgress,
+  observationWords,
   type AssessmentRow,
   type EntitlementRow,
   type GoalRow,
   type ProgressNarrative,
   type ProgressReportContent,
+  type RatingPair,
+  type ReportLocale,
+  type SessionReportContent,
   type VisitRow,
 } from '../../../domain/reports';
 import type { Db } from '../_middleware/request-context';
@@ -219,4 +223,190 @@ export async function practiceTimeZone(db: Db): Promise<string> {
     'select timezone from tenant where id = app.current_tenant_id()',
   );
   return found.rows[0]?.timezone ?? 'Asia/Dubai';
+}
+
+// --------------------------------------------------------------------------
+// The session report's own source: one completed visit.
+// --------------------------------------------------------------------------
+
+/**
+ * A visit a session report may be written about, as the picker shows it. Only
+ * completed ones: a report follows a visit that happened.
+ */
+export type VisitChoice = {
+  id: string;
+  on: string;
+  serviceName: string;
+  practitionerName: string;
+  durationMinutes: number | null;
+};
+
+const VISIT_COLUMNS =
+  "s.id, to_char(s.checked_in_at at time zone $2, 'YYYY-MM-DD') as on_day, " +
+  'st.name as service_name, st.name_ar as service_name_ar, st.rating_questions, ' +
+  'u.display_name as practitioner_name, ' +
+  'case when s.checked_out_at is null then null else ' +
+  '  round(extract(epoch from (s.checked_out_at - s.checked_in_at)) / 60)::int end ' +
+  '  as duration_min, ' +
+  's.pre_rating, s.post_rating, s.observations ' +
+  'from session s ' +
+  'join service_type st on st.id = s.service_type_id and st.tenant_id = s.tenant_id ' +
+  'join practitioner p on p.id = s.practitioner_id and p.tenant_id = s.tenant_id ' +
+  'join app_user u on u.id = p.user_id and u.tenant_id = p.tenant_id ' +
+  "where s.tenant_id = app.current_tenant_id() and s.client_id = $1 and s.status = 'completed'";
+
+const VISIT_LIST_SQL = `select ${VISIT_COLUMNS} order by s.checked_in_at desc, s.id limit 50`;
+const VISIT_ONE_SQL = `select ${VISIT_COLUMNS} and s.id = $3`;
+
+/** The goal area a session report names: the client's own primary goal. */
+const PRIMARY_GOAL_SQL =
+  'select description from goal ' +
+  'where tenant_id = app.current_tenant_id() and client_id = $1 and is_primary ' +
+  "  and status = 'active' limit 1";
+
+type VisitRecord = {
+  id: string;
+  on_day: string;
+  service_name: string;
+  service_name_ar: string | null;
+  rating_questions: unknown;
+  practitioner_name: string;
+  duration_min: number | null;
+  pre_rating: unknown;
+  post_rating: unknown;
+  observations: unknown;
+};
+
+/** `[{ key, value }]`, as the visit recorded it, read into a lookup. */
+function answers(value: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!Array.isArray(value)) return out;
+  for (const answer of value as { key?: unknown; value?: unknown }[]) {
+    if (typeof answer?.key !== 'string') continue;
+    if (typeof answer.value !== 'number' || !Number.isFinite(answer.value)) continue;
+    out[answer.key] = Math.trunc(answer.value);
+  }
+  return out;
+}
+
+/**
+ * The before-and-after ratings, in the service's own words.
+ *
+ * The questions are the service type's (`rating_questions`, migration 901) and
+ * the answers are keyed to them, so a label the practice rewords does not
+ * change what an old answer meant. A question neither side answered is left
+ * out rather than printed as two blanks.
+ */
+function ratingsOf(record: VisitRecord, locale: ReportLocale): RatingPair[] {
+  const before = answers(record.pre_rating);
+  const after = answers(record.post_rating);
+  const questions = Array.isArray(record.rating_questions)
+    ? (record.rating_questions as { key?: unknown; label_en?: unknown; label_ar?: unknown }[])
+    : [];
+  const pairs: RatingPair[] = [];
+  for (const question of questions) {
+    if (typeof question?.key !== 'string') continue;
+    const label =
+      locale === 'ar' && typeof question.label_ar === 'string'
+        ? question.label_ar
+        : typeof question.label_en === 'string'
+          ? question.label_en
+          : question.key;
+    const one = before[question.key] ?? null;
+    const two = after[question.key] ?? null;
+    if (one === null && two === null) continue;
+    pairs.push({
+      key: question.key,
+      label,
+      labelAr: typeof question.label_ar === 'string' ? question.label_ar : null,
+      before: one,
+      after: two,
+    });
+  }
+  return pairs;
+}
+
+/** What a session report says a person wrote, so it can be put back. */
+export type SessionNarrative = { note: string; beforeNextVisit: string };
+
+/** The completed visits a session report may be drafted from. */
+export async function listVisits(
+  db: Db,
+  clientId: string,
+  timeZone: string,
+): Promise<VisitChoice[]> {
+  if (!(await tableExists(db, 'public.session'))) return [];
+  const found = await db.query<VisitRecord>(VISIT_LIST_SQL, [clientId, timeZone]);
+  return found.rows.map((row) => ({
+    id: row.id,
+    on: row.on_day,
+    serviceName: row.service_name,
+    practitionerName: row.practitioner_name,
+    durationMinutes: row.duration_min,
+  }));
+}
+
+/**
+ * One completed visit, as a session report quotes it (section 5).
+ *
+ * **Everything but the two written lines comes from the record**, for the
+ * reason the progress report's figures do: a figure a practitioner could
+ * retype is a figure that can disagree with the record (section 4.2).
+ *
+ * **Nothing about the protocol travels.** No electrode site, no band, no
+ * threshold: `telemetry` is not read here at all, and the session shape has no
+ * field to put one in.
+ *
+ * Answers null where the visit is not one this report can be written about —
+ * another client's, not completed, or on a database without the session
+ * range at all.
+ */
+export async function gatherSession(
+  db: Db,
+  input: {
+    clientId: string;
+    sessionId: string;
+    timeZone: string;
+    locale: ReportLocale;
+    narrative?: SessionNarrative;
+  },
+): Promise<SessionReportContent | null> {
+  if (!(await tableExists(db, 'public.session'))) return null;
+  const found = await db.query<VisitRecord>(VISIT_ONE_SQL, [
+    input.clientId,
+    input.timeZone,
+    input.sessionId,
+  ]);
+  const row = found.rows[0];
+  if (!row) return null;
+
+  const observations = (row.observations ?? {}) as {
+    chips?: unknown;
+    tolerance?: unknown;
+    engagement?: unknown;
+  };
+  const goal = await db.query<{ description: string }>(PRIMARY_GOAL_SQL, [input.clientId]);
+
+  return {
+    kind: 'session',
+    sessionId: row.id,
+    visitDate: row.on_day,
+    serviceName: row.service_name,
+    serviceNameAr: row.service_name_ar,
+    practitionerName: row.practitioner_name,
+    durationMinutes: row.duration_min,
+    // The visit record names no goal of its own, and a report may not invent
+    // one, so this is the client's own primary goal — the nearest fact the
+    // record holds — or nothing at all.
+    goalArea: goal.rows[0]?.description ?? null,
+    ratings: ratingsOf(row, input.locale),
+    observationChips: observationWords(
+      Array.isArray(observations.chips) ? observations.chips : [],
+      input.locale,
+    ),
+    tolerance: typeof observations.tolerance === 'number' ? observations.tolerance : null,
+    engagement: typeof observations.engagement === 'number' ? observations.engagement : null,
+    note: input.narrative?.note ?? '',
+    beforeNextVisit: input.narrative?.beforeNextVisit ?? '',
+  };
 }

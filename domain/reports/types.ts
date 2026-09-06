@@ -116,6 +116,8 @@ export type Ribbon = {
 
 /** One goal, and what the practitioner says has moved (section 5). */
 export type GoalLine = {
+  /** The goal's own id, so a practitioner's line can be paired back to it. */
+  id: string;
   /** The goal as the household set it. */
   description: string;
   status: string;
@@ -168,6 +170,8 @@ export type BrainMapComparison = {
 /** What a session report says (section 5). */
 export type SessionReportContent = {
   kind: 'session';
+  /** The visit this report follows, riding in the snapshot (section 6). */
+  sessionId: string;
   visitDate: IsoDate;
   serviceName: string;
   serviceNameAr: string | null;

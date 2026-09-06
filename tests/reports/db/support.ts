@@ -28,6 +28,9 @@ export const ISSUER = 'http://localhost:54321/auth/v1';
 const KEY = new TextEncoder().encode(SECRET);
 
 /** The seeded team, by the roles they hold (db/seed/generate.ts). */
+/** The owner's index, named so the helpers below can default to it. */
+const SEEDED_OWNER = 0;
+
 export const SEEDED = {
   /** Owner, admin, finance and lead practitioner, and the only signer. */
   owner: 0,
@@ -73,6 +76,13 @@ export type Harness = {
    * writes the one confirmed visit that grants it.
    */
   onSchedule: (clientIndex: number, seededUser: number) => Promise<void>;
+  /**
+   * A completed visit for a client, which is what a session report is written
+   * about. The seed writes no sessions either, so a test that needs one writes
+   * it — with the ratings and the observations a visit records, so the report
+   * has figures to quote.
+   */
+  completedVisit: (clientIndex: number, seededUser?: number) => Promise<string>;
   serviceTypeId: (code: string) => string;
   clientId: (index: number) => string;
   practitionerIdOf: (seededUser: number) => string;
@@ -166,6 +176,39 @@ export async function startHarness(now: () => Date): Promise<Harness> {
         ],
       );
     },
+    async completedVisit(clientIndex, seededUser = SEEDED_OWNER) {
+      const person = data.clients[clientIndex];
+      const user = data.users[seededUser];
+      const practitioner = data.practitioners.find((p) => p.userId === user?.id);
+      const service =
+        data.serviceTypes.find((s) => s.code === 'nf-session') ?? data.serviceTypes[0];
+      if (!person || !practitioner || !service) throw new Error('The seed is not what it was.');
+      const question = (service.ratingQuestions ?? [])[0];
+      const answers = question
+        ? { pre: [{ key: question.key, value: 4 }], post: [{ key: question.key, value: 7 }] }
+        : { pre: [], post: [] };
+      const { rows } = await owner.query<{ id: string }>(
+        'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+          'delivery_mode, location_id, checked_in_at, checked_out_at, status, closed_at, ' +
+          'pre_rating, post_rating, observations) values ' +
+          "(gen_random_uuid(), $1, $2, $3, $4, 'home', $5, now() - interval '2 days', " +
+          "now() - interval '2 days' + interval '50 minutes', 'completed', now(), " +
+          '$6::jsonb, $7::jsonb, $8::jsonb) returning id',
+        [
+          data.tenant.id,
+          person.id,
+          practitioner.id,
+          service.id,
+          person.primaryLocationId,
+          JSON.stringify(answers.pre),
+          JSON.stringify(answers.post),
+          JSON.stringify({ chips: ['none'], tolerance: 9, engagement: 8, note: null }),
+        ],
+      );
+      const id = rows[0]?.id;
+      if (!id) throw new Error('The visit was not written.');
+      return id;
+    },
     async asPerson(seededUser, fn) {
       const user = data.users[seededUser];
       if (!user) throw new Error(`No seeded user ${seededUser}.`);
@@ -237,6 +280,7 @@ export function progressBody(over: Record<string, unknown> = {}): Record<string,
 export function sessionBody(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     kind: 'session',
+    sessionId: '00000003-0000-4000-8000-000000000001',
     visitDate: '2026-09-01',
     serviceName: 'Neurofeedback session',
     serviceNameAr: null,

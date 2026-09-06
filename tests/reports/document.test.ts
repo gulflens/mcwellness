@@ -63,6 +63,7 @@ const SIGNER: SignerSnapshot = {
 
 const SESSION_CONTENT: SessionReportContent = {
   kind: 'session',
+  sessionId: '00000003-0000-4000-8000-000000000001',
   visitDate: '2026-09-01',
   serviceName: 'Neurofeedback session',
   serviceNameAr: 'جلسة تدريب',
@@ -94,6 +95,7 @@ const PROGRESS_CONTENT: ProgressReportContent = {
   sessionsEntitled: 15,
   goals: [
     {
+      id: '00000009-0000-4000-8000-000000000001',
       description: 'Sleep through the night without waking',
       status: 'active',
       movement: 'Waking once a week rather than most nights.',
@@ -329,6 +331,7 @@ describe('the Arabic edition', () => {
         suggestion: 'ثلاث جلسات أخرى، ثم إعادة خريطة الدماغ.',
         goals: [
           {
+            id: '00000009-0000-4000-8000-000000000001',
             description: 'النوم طوال الليل دون استيقاظ',
             status: 'active',
             movement: 'يستيقظ مرة في الأسبوع بدل معظم الليالي.',
@@ -379,6 +382,7 @@ describe('rendering is deterministic', () => {
 describe('a long report', () => {
   it('takes a second page and says which sheet is which', () => {
     const many = Array.from({ length: 24 }, (_, at) => ({
+      id: `00000009-0000-4000-8000-${String(at + 1).padStart(12, '0')}`,
       description: `Goal number ${at + 1}, written out at some length so the page fills`,
       status: 'active',
       movement: 'Moving along steadily, as the practitioner has recorded it after each visit.',

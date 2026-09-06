@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ProgressReportContent } from '@domain/reports';
-import { DraftResponse, GatherResponse, IssueResponse } from '../../api/reports/schema';
+import type { ProgressReportContent, SessionReportContent } from '@domain/reports';
+import {
+  DraftResponse,
+  GatherResponse,
+  IssueResponse,
+  ReportResponse,
+  VisitsResponse,
+  type VisitChoice,
+} from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { Ribbon } from './Ribbon';
 import { mayOfferSigning } from './reportsAccess';
 
 /**
- * The draft editor (docs/SPEC/reports-v1.md section 4.2).
+ * The draft editor (docs/SPEC/reports-v1.md section 4.2), over both kinds.
  *
  * **One column, the report's own sections in order.** The gathered figures are
  * shown as they will print and are not editable — a figure a practitioner
  * could retype is a figure that can disagree with the record — and beside them
- * are the fields only a person writes: what has moved, the summary, what the
- * practice suggests next.
+ * are the fields only a person writes.
  *
  * **A preview of the exact PDF before signing**, and a confirmation saying in
  * plain words what signing means: this becomes a document, it cannot be
@@ -27,10 +33,21 @@ import { mayOfferSigning } from './reportsAccess';
  * difference is the reference, which is allocated at signing and never before,
  * and the page says so where the number will be.
  *
- * This version writes a **progress report**. The session report's own form is
- * the same shape over the other kind's fields and is deliberately not built
- * yet: the practice writes one when a visit was notable, and the operator has
- * not asked for it to lead.
+ * **The draft is saved before every preview and before signing.** It used to
+ * save only when nothing had been saved yet, so anything typed after the last
+ * save was neither previewed nor signed, and the document a household received
+ * could differ from the page on screen. Saving first costs a request and
+ * removes a whole class of "but it said something else".
+ *
+ * **Two kinds, one form.** A progress report covers a stretch; a session
+ * report follows one completed visit, chosen from the visits the practice
+ * actually made. The kind is fixed when the draft is created and never changes
+ * afterwards — they are different documents, not two views of one.
+ *
+ * **An existing draft opens here.** A draft row on the tab lands in this
+ * editor loaded with what was saved, and so does the corrected draft a
+ * supersede writes. Before that a draft could be signed only through the API,
+ * which is not a screen at all.
  */
 
 type Editing = {
@@ -38,8 +55,14 @@ type Editing = {
   coverageFrom: string;
   coverageTo: string;
   locale: 'en' | 'ar';
+  sessionId: string | null;
+  /** Progress: the practitioner's own two paragraphs. */
   summary: string;
   suggestion: string;
+  /** Session: the practitioner's own two paragraphs. */
+  note: string;
+  beforeNextVisit: string;
+  /** Keyed by the goal's own id, which the body carries (reports-01.md). */
   movementByGoal: Record<string, string>;
 };
 
@@ -58,14 +81,38 @@ const REFUSALS: Record<string, string> = {
   already_issued: 'This report has already been signed.',
   invalid_content: 'Something in the report is not what the form expects.',
   coverage_required: 'A progress report needs a period to cover.',
+  visit_required: 'A session report follows one visit. Choose which.',
+  no_such_visit: 'That visit is not one a report can be written about.',
 };
+
+function empty(now: Date, kind: 'session' | 'progress'): Editing {
+  const initial = defaultCoverage(now);
+  return {
+    id: null,
+    coverageFrom: kind === 'progress' ? initial.from : '',
+    coverageTo: kind === 'progress' ? initial.to : '',
+    locale: 'en',
+    sessionId: null,
+    summary: '',
+    suggestion: '',
+    note: '',
+    beforeNextVisit: '',
+    movementByGoal: {},
+  };
+}
 
 export function ReportEditor({
   clientId,
+  kind,
+  reportId = null,
   onDone,
   onCancel,
 }: {
   clientId: string;
+  /** Chosen when the draft is created, and fixed for its life. */
+  kind: 'session' | 'progress';
+  /** An existing draft to open, or null to start a new one. */
+  reportId?: string | null;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -73,68 +120,202 @@ export function ReportEditor({
   const actor = session.status === 'signed-in' ? session.actor : null;
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
-  const initial = defaultCoverage(now);
 
-  const [editing, setEditing] = useState<Editing>({
-    id: null,
-    coverageFrom: initial.from,
-    coverageTo: initial.to,
-    locale: 'en',
-    summary: '',
-    suggestion: '',
-    movementByGoal: {},
-  });
-  const [gathered, setGathered] = useState<ProgressReportContent | null>(null);
+  const [editing, setEditing] = useState<Editing>(() => empty(now, kind));
+  const [gathered, setGathered] = useState<ProgressReportContent | SessionReportContent | null>(
+    null,
+  );
+  const [visits, setVisits] = useState<readonly VisitChoice[]>([]);
   const [brainMapsRead, setBrainMapsRead] = useState(false);
+  const [loading, setLoading] = useState(reportId !== null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  // Reading and setting are separate so the effect never calls setState in its
+  // Reading and setting are separate so an effect never calls setState in its
   // own body: it hands the answer to a callback, the way the record's own tabs
   // do, and an editor closed mid-flight sets nothing.
+
+  /** An existing draft, loaded into the form exactly as it was saved. */
+  const readDraft = useCallback(async (): Promise<ReportResponse | null> => {
+    if (reportId === null) return null;
+    try {
+      const res = await apiFetch(`/api/reports/${reportId}`);
+      if (!res.ok) return null;
+      return ReportResponse.parse(await res.json());
+    } catch {
+      return null;
+    }
+  }, [apiFetch, reportId]);
+
+  useEffect(() => {
+    if (reportId === null) return;
+    let live = true;
+    void readDraft().then((found) => {
+      if (!live) return;
+      setLoading(false);
+      if (found === null) {
+        setError('That draft could not be opened.');
+        return;
+      }
+      const row = found.report;
+      // `content` is `unknown` at the API boundary on purpose (its shape is
+      // the domain's to declare per kind), so it is read here as the two kinds
+      // between them, each field optional.
+      const body = (found.content ?? {}) as Partial<ProgressReportContent> &
+        Partial<SessionReportContent>;
+      const movement: Record<string, string> = {};
+      for (const goal of body.goals ?? []) {
+        movement[goal.id] = goal.movement;
+      }
+      setEditing({
+        id: row.id,
+        coverageFrom: row.coverageFrom ?? '',
+        coverageTo: row.coverageTo ?? '',
+        locale: row.locale,
+        sessionId: body.sessionId ?? null,
+        summary: body.summary ?? '',
+        suggestion: body.suggestion ?? '',
+        note: body.note ?? '',
+        beforeNextVisit: body.beforeNextVisit ?? '',
+        movementByGoal: movement,
+      });
+    });
+    return () => {
+      live = false;
+    };
+  }, [readDraft, reportId]);
+
+  /** The visits a session report may be written about. */
+  const readVisits = useCallback(async (): Promise<VisitChoice[] | null> => {
+    try {
+      const res = await apiFetch(`/api/reports/visits?clientId=${encodeURIComponent(clientId)}`);
+      if (!res.ok) return null;
+      return [...VisitsResponse.parse(await res.json()).visits];
+    } catch {
+      return null;
+    }
+  }, [apiFetch, clientId]);
+
+  useEffect(() => {
+    if (kind !== 'session') return;
+    let live = true;
+    void readVisits().then((found) => {
+      if (!live || found === null) return;
+      setVisits(found);
+      setEditing((was) => (was.sessionId ? was : { ...was, sessionId: found[0]?.id ?? null }));
+    });
+    return () => {
+      live = false;
+    };
+  }, [kind, readVisits]);
+
+  /** The figures, from the record, for whichever kind this is. */
   const gather = useCallback(
     async (
-      from: string,
-      to: string,
-    ): Promise<{ content: ProgressReportContent; brainMapsRead: boolean } | null> => {
+      at: Pick<Editing, 'coverageFrom' | 'coverageTo' | 'sessionId' | 'locale'>,
+    ): Promise<{ content: ProgressReportContent | SessionReportContent; maps: boolean } | null> => {
+      const query =
+        kind === 'progress'
+          ? `/api/reports/gather?clientId=${encodeURIComponent(clientId)}` +
+            `&from=${encodeURIComponent(at.coverageFrom)}&to=${encodeURIComponent(at.coverageTo)}`
+          : `/api/reports/gather-session?clientId=${encodeURIComponent(clientId)}` +
+            `&sessionId=${encodeURIComponent(at.sessionId ?? '')}` +
+            `&locale=${encodeURIComponent(at.locale)}`;
       try {
-        const res = await apiFetch(
-          `/api/reports/gather?clientId=${encodeURIComponent(clientId)}` +
-            `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-        );
+        const res = await apiFetch(query);
         if (!res.ok) return null;
         const body = GatherResponse.parse(await res.json());
         return {
-          content: body.content as ProgressReportContent,
-          brainMapsRead: body.brainMapsRead,
+          content: body.content as ProgressReportContent | SessionReportContent,
+          maps: body.brainMapsRead,
         };
       } catch {
         return null;
       }
     },
-    [apiFetch, clientId],
+    [apiFetch, clientId, kind],
   );
 
+  const { coverageFrom, coverageTo, sessionId, locale } = editing;
   useEffect(() => {
+    if (kind === 'session' && sessionId === null) return;
     let live = true;
-    void gather(editing.coverageFrom, editing.coverageTo).then((next) => {
+    void gather({ coverageFrom, coverageTo, sessionId, locale }).then((next) => {
       if (!live) return;
       if (next === null) {
         setError('The record could not be read.');
         return;
       }
       setGathered(next.content);
-      setBrainMapsRead(next.brainMapsRead);
+      setBrainMapsRead(next.maps);
     });
     return () => {
       live = false;
     };
-  }, [gather, editing.coverageFrom, editing.coverageTo]);
+    // The whole of what the figures depend on, and nothing that does not
+    // change them: retyping a summary must not re-read the record.
+  }, [gather, kind, coverageFrom, coverageTo, sessionId, locale]);
 
-  /** Opens the exact page the household will get, before anybody signs it. */
+  /** The body as it stands on screen, for the server to put its figures back into. */
+  function bodyNow(): Record<string, unknown> {
+    if (kind === 'progress') {
+      const progressNow = gathered as ProgressReportContent | null;
+      return {
+        summary: editing.summary,
+        suggestion: editing.suggestion,
+        goals: (progressNow?.goals ?? []).map((goal) => ({
+          ...goal,
+          // Paired back by the goal's own id, which the body carries. By
+          // position, a goal added between the gathering and the save put a
+          // sentence about sleep beside a goal about school.
+          movement: editing.movementByGoal[goal.id] ?? '',
+        })),
+      };
+    }
+    return { note: editing.note, beforeNextVisit: editing.beforeNextVisit };
+  }
+
+  async function save(): Promise<string | null> {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiFetch('/api/reports/draft', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...(editing.id ? { id: editing.id } : {}),
+          clientId,
+          kind,
+          locale: editing.locale,
+          coverageFrom: kind === 'progress' ? editing.coverageFrom : null,
+          coverageTo: kind === 'progress' ? editing.coverageTo : null,
+          sessionId: kind === 'session' ? editing.sessionId : null,
+          content: bodyNow(),
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { code?: string } | null;
+        setError(REFUSALS[body?.code ?? ''] ?? 'The draft could not be saved.');
+        return null;
+      }
+      const body = DraftResponse.parse(await res.json());
+      setEditing((was) => ({ ...was, id: body.report.id }));
+      return body.report.id;
+    } catch {
+      setError('The draft could not be saved.');
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Opens the exact page the household will get, before anybody signs it —
+   * and saves first, always, so it is the page as it stands on screen.
+   */
   async function preview(): Promise<void> {
-    const id = editing.id ?? (await save());
+    const id = await save();
     if (!id) return;
     setBusy(true);
     setError(null);
@@ -158,52 +339,9 @@ export function ReportEditor({
     }
   }
 
-  async function save(): Promise<string | null> {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await apiFetch('/api/reports/draft', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...(editing.id ? { id: editing.id } : {}),
-          clientId,
-          kind: 'progress',
-          locale: editing.locale,
-          coverageFrom: editing.coverageFrom,
-          coverageTo: editing.coverageTo,
-          content: {
-            ...(gathered ?? {}),
-            summary: editing.summary,
-            suggestion: editing.suggestion,
-            goals: (gathered?.goals ?? []).map((goal, at) => ({
-              ...goal,
-              // The gathered goals carry no id in the body, so the editor keys
-              // its own text by position and the server pairs it back by the
-              // record's own order. The figures are the server's either way.
-              movement: editing.movementByGoal[String(at)] ?? '',
-            })),
-          },
-        }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { code?: string } | null;
-        setError(REFUSALS[body?.code ?? ''] ?? 'The draft could not be saved.');
-        return null;
-      }
-      const body = DraftResponse.parse(await res.json());
-      setEditing((was) => ({ ...was, id: body.report.id }));
-      return body.report.id;
-    } catch {
-      setError('The draft could not be saved.');
-      return null;
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function sign(): Promise<void> {
-    const id = editing.id ?? (await save());
+    // Saved first, always: what is signed is what is on screen.
+    const id = await save();
     if (!id) return;
     setBusy(true);
     setError(null);
@@ -233,34 +371,65 @@ export function ReportEditor({
   }
 
   const canSign = mayOfferSigning(actor, today);
+  const progress = kind === 'progress' ? (gathered as ProgressReportContent | null) : null;
+  const visit = kind === 'session' ? (gathered as SessionReportContent | null) : null;
+
+  if (loading) return <Note>Loading.</Note>;
 
   return (
     <div className="report-editor">
       <section className="report-editor__section">
-        <h3 className="report-editor__heading">What the report covers</h3>
-        <Field
-          id="report-from"
-          label="From"
-          type="date"
-          value={editing.coverageFrom}
-          onChange={(event) => {
-            // The value is read before the updater runs: React nulls
-            // `currentTarget` once the handler returns, and a functional
-            // updater runs after it.
-            const value = event.currentTarget.value;
-            setEditing((was) => ({ ...was, coverageFrom: value }));
-          }}
-        />
-        <Field
-          id="report-to"
-          label="To"
-          type="date"
-          value={editing.coverageTo}
-          onChange={(event) => {
-            const value = event.currentTarget.value;
-            setEditing((was) => ({ ...was, coverageTo: value }));
-          }}
-        />
+        <h3 className="report-editor__heading">
+          {kind === 'progress' ? 'What the report covers' : 'Which visit'}
+        </h3>
+        {kind === 'progress' ? (
+          <>
+            <Field
+              id="report-from"
+              label="From"
+              type="date"
+              value={editing.coverageFrom}
+              onChange={(event) => {
+                // The value is read before the updater runs: React nulls
+                // `currentTarget` once the handler returns, and a functional
+                // updater runs after it.
+                const value = event.currentTarget.value;
+                setEditing((was) => ({ ...was, coverageFrom: value }));
+              }}
+            />
+            <Field
+              id="report-to"
+              label="To"
+              type="date"
+              value={editing.coverageTo}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setEditing((was) => ({ ...was, coverageTo: value }));
+              }}
+            />
+          </>
+        ) : visits.length === 0 ? (
+          <Note>
+            No completed visit has been recorded for this client, so there is nothing to write a
+            session report about yet.
+          </Note>
+        ) : (
+          <Select
+            id="report-visit"
+            label="The visit this report follows"
+            value={editing.sessionId ?? ''}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              setEditing((was) => ({ ...was, sessionId: value }));
+            }}
+          >
+            {visits.map((choice) => (
+              <option key={choice.id} value={choice.id}>
+                {choice.on} — {choice.serviceName} — {choice.practitionerName}
+              </option>
+            ))}
+          </Select>
+        )}
         <Select
           id="report-locale"
           label="Language of the practitioner's own words"
@@ -276,12 +445,12 @@ export function ReportEditor({
         </Select>
       </section>
 
-      {gathered ? (
+      {progress ? (
         <>
           <section className="report-editor__section">
             <h3 className="report-editor__heading">The programme so far</h3>
             <div className="ribbon-block">
-              <Ribbon ribbon={gathered.ribbon} />
+              <Ribbon ribbon={progress.ribbon} />
               <span className="ribbon-block__legend small">
                 One mark per session delivered. Taller is a cleaner recording; a hairline marks a
                 brain map.
@@ -289,19 +458,19 @@ export function ReportEditor({
             </div>
             <dl className="report-editor__figures">
               <dt>Sessions delivered</dt>
-              <dd>{gathered.sessionsDelivered}</dd>
+              <dd>{progress.sessionsDelivered}</dd>
               <dt>Sessions on the programme</dt>
-              <dd>{gathered.sessionsEntitled}</dd>
+              <dd>{progress.sessionsEntitled}</dd>
             </dl>
           </section>
 
           <section className="report-editor__section">
             <h3 className="report-editor__heading">Goals</h3>
-            {gathered.goals.length === 0 ? (
+            {progress.goals.length === 0 ? (
               <Note>No goals have been set for this client.</Note>
             ) : (
-              gathered.goals.map((goal, at) => (
-                <div key={`${goal.description}-${at}`}>
+              progress.goals.map((goal, at) => (
+                <div key={goal.id}>
                   <p>
                     <strong>{goal.description}</strong>
                   </p>
@@ -311,12 +480,12 @@ export function ReportEditor({
                   <textarea
                     id={`movement-${at}`}
                     className="report-editor__note"
-                    value={editing.movementByGoal[String(at)] ?? ''}
+                    value={editing.movementByGoal[goal.id] ?? ''}
                     onChange={(event) => {
                       const value = event.currentTarget.value;
                       setEditing((was) => ({
                         ...was,
-                        movementByGoal: { ...was.movementByGoal, [String(at)]: value },
+                        movementByGoal: { ...was.movementByGoal, [goal.id]: value },
                       }));
                     }}
                   />
@@ -327,9 +496,9 @@ export function ReportEditor({
 
           <section className="report-editor__section">
             <h3 className="report-editor__heading">Brain maps</h3>
-            {gathered.comparison ? (
+            {progress.comparison ? (
               <dl className="report-editor__figures">
-                {gathered.comparison.lines.map((line) => (
+                {progress.comparison.lines.map((line) => (
                   <div key={line.label} style={{ display: 'contents' }}>
                     <dt>
                       {line.label} ({line.unit})
@@ -377,9 +546,106 @@ export function ReportEditor({
             />
           </section>
         </>
-      ) : (
-        <Note>Reading the record.</Note>
-      )}
+      ) : null}
+
+      {visit ? (
+        <>
+          <section className="report-editor__section">
+            <h3 className="report-editor__heading">The visit</h3>
+            <dl className="report-editor__figures">
+              <dt>Date</dt>
+              <dd>{visit.visitDate}</dd>
+              <dt>Service</dt>
+              <dd>{visit.serviceName}</dd>
+              <dt>Practitioner</dt>
+              <dd>{visit.practitionerName}</dd>
+              {visit.durationMinutes === null ? null : (
+                <>
+                  <dt>Length</dt>
+                  <dd>{visit.durationMinutes} minutes</dd>
+                </>
+              )}
+              {visit.goalArea === null ? null : (
+                <>
+                  <dt>Goal area</dt>
+                  <dd>{visit.goalArea}</dd>
+                </>
+              )}
+            </dl>
+          </section>
+
+          <section className="report-editor__section">
+            <h3 className="report-editor__heading">Before and after</h3>
+            {visit.ratings.length === 0 ? (
+              <Note>Nothing was rated at this visit.</Note>
+            ) : (
+              <dl className="report-editor__figures">
+                {visit.ratings.map((rating) => (
+                  <div key={rating.key} style={{ display: 'contents' }}>
+                    <dt>{rating.label}</dt>
+                    <dd>
+                      {rating.before ?? '–'} to {rating.after ?? '–'}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </section>
+
+          <section className="report-editor__section">
+            <h3 className="report-editor__heading">What was observed</h3>
+            {visit.observationChips.length === 0 ? (
+              <Note>Nothing was recorded beside the ratings.</Note>
+            ) : (
+              <p>{visit.observationChips.join(', ')}</p>
+            )}
+            <dl className="report-editor__figures">
+              {visit.tolerance === null ? null : (
+                <>
+                  <dt>Tolerated</dt>
+                  <dd>{visit.tolerance}</dd>
+                </>
+              )}
+              {visit.engagement === null ? null : (
+                <>
+                  <dt>Engaged</dt>
+                  <dd>{visit.engagement}</dd>
+                </>
+              )}
+            </dl>
+          </section>
+
+          <section className="report-editor__section">
+            <h3 className="report-editor__heading">Your note</h3>
+            <textarea
+              id="report-note"
+              className="report-editor__note"
+              aria-label="Your note"
+              value={editing.note}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setEditing((was) => ({ ...was, note: value }));
+              }}
+            />
+          </section>
+
+          <section className="report-editor__section">
+            <h3 className="report-editor__heading">What to expect before the next visit</h3>
+            <textarea
+              id="report-before-next"
+              className="report-editor__note"
+              aria-label="What to expect before the next visit"
+              value={editing.beforeNextVisit}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setEditing((was) => ({ ...was, beforeNextVisit: value }));
+              }}
+            />
+          </section>
+        </>
+      ) : null}
+
+      {gathered === null ? <Note>Reading the record.</Note> : null}
 
       {error ? <Note tone="critical">{error}</Note> : null}
 

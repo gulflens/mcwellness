@@ -312,9 +312,17 @@ describe('gatherProgress', () => {
     });
     expect(content.summary).toBe('Sleeping longer.');
     expect(content.suggestion).toBe('Three more sessions.');
+    // Paired by id, and the id travels with the line: a goal added between the
+    // gathering and the save must not push a sentence about sleep onto a goal
+    // about homework (reports-01.md, the reversal of default 6).
     expect(content.goals).toEqual([
-      { description: 'Sleep through the night', status: 'active', movement: 'Two hours longer.' },
-      { description: 'Settle at homework', status: 'active', movement: '' },
+      {
+        id: 'g1',
+        description: 'Sleep through the night',
+        status: 'active',
+        movement: 'Two hours longer.',
+      },
+      { id: 'g2', description: 'Settle at homework', status: 'active', movement: '' },
     ]);
   });
 

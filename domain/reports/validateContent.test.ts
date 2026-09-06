@@ -4,12 +4,14 @@ import type { ProgressReportContent, SessionReportContent } from './types';
 
 /** Rule 2 (docs/SPEC/reports-v1.md section 8): refused with the field named. */
 
+const SESSION = '00000003-0000-4000-8000-000000000001';
 const ASSESSMENT_A = '00000000-0000-4000-8000-0000000005a1';
 const ASSESSMENT_B = '00000000-0000-4000-8000-0000000005a2';
 
 function session(over: Partial<SessionReportContent> = {}): SessionReportContent {
   return {
     kind: 'session',
+    sessionId: SESSION,
     visitDate: '2026-09-01',
     serviceName: 'Neurofeedback session',
     serviceNameAr: 'جلسة نيوروفيدباك',
@@ -34,7 +36,12 @@ function progress(over: Partial<ProgressReportContent> = {}): ProgressReportCont
     sessionsDelivered: 12,
     sessionsEntitled: 15,
     goals: [
-      { description: 'Sleep through the night', status: 'active', movement: 'Two hours longer.' },
+      {
+        id: '00000009-0000-4000-8000-000000000001',
+        description: 'Sleep through the night',
+        status: 'active',
+        movement: 'Two hours longer.',
+      },
     ],
     ribbon: {
       slices: [{ index: 1, quality: 0.82, band: 'alpha', mapMark: true }],

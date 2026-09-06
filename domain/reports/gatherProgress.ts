@@ -252,6 +252,7 @@ export function gatherProgress(input: {
 
   const narrative = input.narrative;
   const goals: GoalLine[] = input.goals.map((goal) => ({
+    id: goal.id,
     description: goal.description,
     status: goal.status,
     movement: narrative?.movementByGoal[goal.id] ?? '',

@@ -12,6 +12,7 @@ import type {
   ReportListResponse,
   ReportResponse,
   SupersedeResponse,
+  VisitsResponse,
 } from '../../../app/api/reports/schema';
 import { progressBody, sessionBody, SEEDED, startHarness, type Harness } from './support';
 
@@ -109,14 +110,20 @@ describe('drafting', () => {
     expect(content.suggestion).toBe('Three more.');
   });
 
-  it('refuses a body the shape does not know, and names the field', async () => {
+  it('refuses a body the shape does not accept, and names the field', async () => {
+    // Rule 2 (section 8), reaching a person as a field name rather than as
+    // "invalid". A coverage that ends before it begins is the one thing a
+    // caller can still put into a progress body: everything else in it is
+    // gathered from the record and never trusted from the request.
     const res = await h.call('POST', '/api/reports/draft', SEEDED.owner, {
       clientId: h.clientId(0),
-      kind: 'session',
-      content: sessionBody({ visitDate: 'the first' }),
+      kind: 'progress',
+      coverageFrom: '2026-09-01',
+      coverageTo: '2026-06-01',
+      content: progressBody(),
     });
     expect(res.status).toBe(400);
-    expect((await res.json()) as { field: string }).toMatchObject({ field: 'visitDate' });
+    expect((await res.json()) as { field: string }).toMatchObject({ field: 'coverageTo' });
   });
 
   it('writes a read for the client before answering with the record', async () => {
@@ -179,6 +186,106 @@ describe('drafting', () => {
     const body = (await res.json()) as GatherResponse;
     expect(body.brainMapsRead).toBe(true);
     expect((body.content as { comparison: unknown }).comparison).toBeNull();
+  });
+});
+
+describe('the session report', () => {
+  it('lists the completed visits a report may be written about', async () => {
+    const visit = await h.completedVisit(4);
+    const res = await h.call('GET', `/api/reports/visits?clientId=${h.clientId(4)}`, SEEDED.owner);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as VisitsResponse;
+    expect(body.visits.map((row) => row.id)).toContain(visit);
+    expect(body.visits[0]?.serviceName).toBeTruthy();
+    expect(body.visits[0]?.practitionerName).toBeTruthy();
+  });
+
+  it('gathers one visit’s own figures, and never a protocol', async () => {
+    const visit = await h.completedVisit(4);
+    const res = await h.call(
+      'GET',
+      `/api/reports/gather-session?clientId=${h.clientId(4)}&sessionId=${visit}&locale=en`,
+      SEEDED.owner,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as GatherResponse;
+    const content = body.content as {
+      sessionId: string;
+      ratings: { before: number | null; after: number | null }[];
+      observationChips: string[];
+      tolerance: number | null;
+    };
+    expect(content.sessionId).toBe(visit);
+    expect(content.ratings[0]).toMatchObject({ before: 4, after: 7 });
+    expect(content.observationChips).toEqual(['Nothing to note']);
+    expect(content.tolerance).toBe(9);
+    // Nothing about the training's own settings travels: there is no field to
+    // put one in, and the raw telemetry is not read at all.
+    expect(JSON.stringify(content)).not.toContain('threshold');
+    expect(JSON.stringify(content)).not.toContain('Cz');
+  });
+
+  it('drafts, signs and files one, and the page carries the visit', async () => {
+    const visit = await h.completedVisit(4);
+    const drafted = await h.call('POST', '/api/reports/draft', SEEDED.owner, {
+      clientId: h.clientId(4),
+      kind: 'session',
+      locale: 'en',
+      sessionId: visit,
+      content: { note: 'A steady visit.', beforeNextVisit: 'Keep to the same bedtime.' },
+    });
+    expect(drafted.status).toBe(201);
+    const draft = (await drafted.json()) as DraftResponse;
+    const body = draft.content as { sessionId: string; note: string; serviceName: string };
+    expect(body.sessionId).toBe(visit);
+    expect(body.note).toBe('A steady visit.');
+    expect(body.serviceName).toBeTruthy();
+
+    const issued = await h.call('POST', `/api/reports/${draft.report.id}/issue`, SEEDED.owner, {});
+    expect(issued.status).toBe(201);
+    const answer = (await issued.json()) as IssueResponse;
+    expect(answer.report.kind).toBe('session');
+    expect(answer.report.reference).toMatch(/^RPT-\d{6}$/);
+    expect(answer.report.documentId).toBeTruthy();
+  });
+
+  it('refuses a session draft that names no visit, and one that names another client’s', async () => {
+    const none = await h.call('POST', '/api/reports/draft', SEEDED.owner, {
+      clientId: h.clientId(4),
+      kind: 'session',
+      content: { note: '', beforeNextVisit: '' },
+    });
+    expect(none.status).toBe(400);
+    expect((await none.json()) as { code: string }).toMatchObject({ code: 'visit_required' });
+
+    const elsewhere = await h.completedVisit(2);
+    const wrong = await h.call('POST', '/api/reports/draft', SEEDED.owner, {
+      clientId: h.clientId(4),
+      kind: 'session',
+      sessionId: elsewhere,
+      content: { note: '', beforeNextVisit: '' },
+    });
+    expect(wrong.status).toBe(404);
+    expect((await wrong.json()) as { code: string }).toMatchObject({ code: 'no_such_visit' });
+  });
+
+  it('ignores the figures a caller sends and takes the visit’s own', async () => {
+    const visit = await h.completedVisit(4);
+    const res = await h.call('POST', '/api/reports/draft', SEEDED.owner, {
+      clientId: h.clientId(4),
+      kind: 'session',
+      sessionId: visit,
+      content: sessionBody({
+        note: 'Mine.',
+        practitionerName: 'Somebody Else',
+        durationMinutes: 600,
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as DraftResponse;
+    const content = body.content as { practitionerName: string; durationMinutes: number };
+    expect(content.practitionerName).not.toBe('Somebody Else');
+    expect(content.durationMinutes).toBe(50);
   });
 });
 

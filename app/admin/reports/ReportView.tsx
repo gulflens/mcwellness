@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ProgressReportContent } from '@domain/reports';
-import { DeliverResponse, ReportResponse } from '../../api/reports/schema';
+import { DeliverResponse, ReportResponse, SupersedeResponse } from '../../api/reports/schema';
 import type { ReportResponse as Report } from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
@@ -40,11 +40,18 @@ export function ReportView({
   maySupersede,
   maySend,
   onBack,
+  onSuperseded,
 }: {
   reportId: string;
   maySupersede: boolean;
   maySend: boolean;
   onBack: () => void;
+  /**
+   * Where the corrected draft went. The tab opens the editor on it, because a
+   * correction the practitioner cannot then read over and sign is a correction
+   * only the API can finish (section 4.3).
+   */
+  onSuperseded?: (draftId: string, kind: 'session' | 'progress') => void;
 }) {
   const { apiFetch } = useAuth();
   const [report, setReport] = useState<Report | null>(null);
@@ -169,9 +176,14 @@ export function ReportView({
         setError(REFUSALS[body?.code ?? ''] ?? 'A new version could not be started.');
         return;
       }
-      setNote('A new version has been started as a draft. Read it over, then sign it.');
+      const body = SupersedeResponse.parse(await res.json());
       setSuperseding(false);
       setReason('');
+      if (onSuperseded) {
+        onSuperseded(body.report.id, body.report.kind);
+        return;
+      }
+      setNote('A new version has been started as a draft. Read it over, then sign it.');
       await reread();
     } catch {
       setError('A new version could not be started.');

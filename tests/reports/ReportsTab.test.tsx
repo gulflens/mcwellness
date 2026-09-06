@@ -139,19 +139,158 @@ describe('the Reports tab', () => {
     expect(screen.getByText('Draft')).toBeTruthy();
   });
 
+  it('opens a draft in the editor, loaded with it, rather than in the viewer', async () => {
+    // Every row used to open in ReportView, which offers a draft no edit, no
+    // preview and no signature — so a saved draft could be finished only
+    // through the API.
+    const draft = row({ id: DRAFT, status: 'draft', reference: null, signedByName: null });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(SIGNER);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports: [draft] });
+      if (url === `/api/reports/${DRAFT}`) {
+        return json({
+          report: draft,
+          content: {
+            kind: 'progress',
+            coverageFrom: '2026-06-01',
+            coverageTo: '2026-09-01',
+            sessionsDelivered: 4,
+            sessionsEntitled: 10,
+            goals: [],
+            ribbon: { slices: [], remaining: 0 },
+            comparison: null,
+            summary: 'Half written and saved.',
+            suggestion: '',
+          },
+          deliveries: [],
+          url: null,
+          expiresInSeconds: null,
+        });
+      }
+      if (url.startsWith('/api/reports/gather')) {
+        return json({
+          content: {
+            kind: 'progress',
+            coverageFrom: '2026-06-01',
+            coverageTo: '2026-09-01',
+            sessionsDelivered: 4,
+            sessionsEntitled: 10,
+            goals: [],
+            ribbon: { slices: [], remaining: 0 },
+            comparison: null,
+            summary: '',
+            suggestion: '',
+          },
+          brainMapsRead: false,
+        });
+      }
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Not yet signed' }));
+    const summary = (await screen.findByLabelText('Summary')) as HTMLTextAreaElement;
+    expect(summary.value).toBe('Half written and saved.');
+    expect(screen.getByRole('button', { name: 'Sign this report' })).toBeTruthy();
+  });
+
+  it('lands in the editor on the corrected draft a supersede started', async () => {
+    const issued = row();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(SIGNER);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports: [issued] });
+      if (url === `/api/reports/${FIRST}`) {
+        return json({
+          report: issued,
+          content: { kind: 'progress' },
+          deliveries: [],
+          url: null,
+          expiresInSeconds: null,
+        });
+      }
+      if (url === `/api/reports/${FIRST}/supersede`) {
+        return json(
+          { report: { ...issued, id: DRAFT, status: 'draft', reference: null, version: 2 } },
+          201,
+        );
+      }
+      if (url === `/api/reports/${DRAFT}`) {
+        return json({
+          report: { ...issued, id: DRAFT, status: 'draft', reference: null, version: 2 },
+          content: {
+            kind: 'progress',
+            coverageFrom: '2026-06-01',
+            coverageTo: '2026-09-01',
+            sessionsDelivered: 4,
+            sessionsEntitled: 10,
+            goals: [],
+            ribbon: { slices: [], remaining: 0 },
+            comparison: null,
+            summary: 'The corrected wording.',
+            suggestion: '',
+          },
+          deliveries: [],
+          url: null,
+          expiresInSeconds: null,
+        });
+      }
+      if (url === `/api/clients/${CLIENT}`) return json({ contacts: [] });
+      if (url.startsWith('/api/reports/gather')) {
+        return json({
+          content: {
+            kind: 'progress',
+            coverageFrom: '2026-06-01',
+            coverageTo: '2026-09-01',
+            sessionsDelivered: 4,
+            sessionsEntitled: 10,
+            goals: [],
+            ribbon: { slices: [], remaining: 0 },
+            comparison: null,
+            summary: '',
+            suggestion: '',
+          },
+          brainMapsRead: false,
+        });
+      }
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Correct this report' }));
+    fireEvent.change(screen.getByLabelText('Why a new version is needed'), {
+      target: { value: 'The coverage ended a week later.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new version' }));
+
+    const summary = (await screen.findByLabelText('Summary')) as HTMLTextAreaElement;
+    expect(summary.value).toBe('The corrected wording.');
+    expect(screen.getByRole('button', { name: 'Sign this report' })).toBeTruthy();
+  });
+
   it('offers writing a report to a lead practitioner and not to finance', async () => {
     mount([], LEAD_PRACTITIONER);
-    expect(await screen.findByRole('button', { name: 'Write a report' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Write a progress report' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Write a session report' })).toBeTruthy();
     cleanup();
     mount([], FINANCE);
     await waitFor(() => expect(screen.queryByText('Loading.')).toBeNull());
-    expect(screen.queryByRole('button', { name: 'Write a report' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Write a progress report' })).toBeNull();
   });
 
   it('does not offer an admin the writing door, because an admin never drafts', async () => {
     mount([], ADMIN);
     await waitFor(() => expect(screen.queryByText('Loading.')).toBeNull());
-    expect(screen.queryByRole('button', { name: 'Write a report' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Write a progress report' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Write a session report' })).toBeNull();
   });
 
   it('offers a practitioner the writing door and not the correcting one', async () => {
@@ -179,7 +318,7 @@ describe('the Reports tab', () => {
         <ReportsTab clientId={CLIENT} />
       </AuthProviderBoundary>,
     );
-    expect(await screen.findByRole('button', { name: 'Write a report' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Write a progress report' })).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: 'RPT-000001' }));
     await screen.findByText('Progress report');
     expect(screen.queryByRole('button', { name: 'Correct this report' })).toBeNull();
@@ -207,7 +346,7 @@ describe('the Reports tab', () => {
     expect(
       await screen.findByText('This record has been erased. Nothing is held about it any more.'),
     ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Write a report' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Write a progress report' })).toBeNull();
   });
 
   it('opens one from its reference', async () => {

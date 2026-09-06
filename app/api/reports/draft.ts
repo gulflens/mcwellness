@@ -1,13 +1,19 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { isoDateIn } from '../../../domain/shared';
-import { validateContent } from '../../../domain/reports';
+import { validateContent, type ProgressNarrative } from '../../../domain/reports';
 import { logRead } from '../_middleware/audit';
 import { cleanText } from '../_middleware/text';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
-import { gatherForClient, practiceTimeZone } from './gather';
-import { DraftInput, DraftResponse, GatherResponse } from './schema';
+import {
+  gatherForClient,
+  gatherSession,
+  listVisits,
+  practiceTimeZone,
+  type SessionNarrative,
+} from './gather';
+import { DraftInput, DraftResponse, GatherResponse, VisitsResponse } from './schema';
 import { asRow, readReport } from './source';
 
 /**
@@ -39,6 +45,16 @@ const GatherQuery = z.object({
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+/** The visits a session report may be drafted from, for the picker. */
+const VisitsQuery = z.object({ clientId: z.uuid() });
+
+/** One visit's own figures, for the session editor. */
+const SessionGatherQuery = z.object({
+  clientId: z.uuid(),
+  sessionId: z.uuid(),
+  locale: z.enum(['en', 'ar']).default('en'),
+});
+
 const INSERT_SQL =
   'insert into report (tenant_id, client_id, kind, locale, service_type_id, ' +
   'coverage_from, coverage_to, content, created_by) values (' +
@@ -55,31 +71,39 @@ const UPDATE_SQL =
  * can be put back into a freshly gathered one. Free text is boundary-cleaned
  * the way every other note in this platform is (`cleanText`).
  *
- * **The goals are paired by position, not by id**, because a goal's id is not
- * in the report's body: `content` is what a household's document is rendered
- * from years later, and an internal row id has no business being in it. Both
- * sides read the record's own order — the gathering query orders by primary
- * first, then by when the goal was set, then by id — so the movement a
- * practitioner typed against the third goal lands on the third goal. A goal
- * added between the gathering and the save shifts the order, and the answer
- * comes back with every movement beside the goal it now belongs to, which the
- * editor shows before anything is signed.
+ * **The goals are paired by id.** The first build paired them by position, on
+ * the argument that an internal row id has no business inside a household's
+ * document. It has: `content` already carries the ids of the two assessments a
+ * comparison was made from, for the same reason — a snapshot has to say what
+ * it was made of. Paired by position, a goal added between the gathering and
+ * the save shifted every line down one and put a sentence about sleep beside a
+ * goal about school, silently and inside a signed document. The id is on each
+ * goal line now, and a line whose goal is no longer there is dropped rather
+ * than landing on a stranger.
  */
-function narrativeOf(content: unknown): {
-  summary: string;
-  suggestion: string;
-  movements: string[];
-} {
+function narrativeOf(content: unknown): ProgressNarrative {
   const body = (content ?? {}) as { summary?: unknown; suggestion?: unknown; goals?: unknown };
-  const movements: string[] = Array.isArray(body.goals)
-    ? (body.goals as { movement?: unknown }[]).map((goal) =>
-        typeof goal?.movement === 'string' ? cleanText(goal.movement, 1000) : '',
-      )
-    : [];
+  const movementByGoal: Record<string, string> = {};
+  if (Array.isArray(body.goals)) {
+    for (const goal of body.goals as { id?: unknown; movement?: unknown }[]) {
+      if (typeof goal?.id !== 'string' || typeof goal.movement !== 'string') continue;
+      movementByGoal[goal.id] = cleanText(goal.movement, 1000);
+    }
+  }
   return {
     summary: typeof body.summary === 'string' ? cleanText(body.summary, 4000) : '',
     suggestion: typeof body.suggestion === 'string' ? cleanText(body.suggestion, 2000) : '',
-    movements,
+    movementByGoal,
+  };
+}
+
+/** The two lines a person writes on a session report (section 5). */
+function sessionNarrativeOf(content: unknown): SessionNarrative {
+  const body = (content ?? {}) as { note?: unknown; beforeNextVisit?: unknown };
+  return {
+    note: typeof body.note === 'string' ? cleanText(body.note, 2000) : '',
+    beforeNextVisit:
+      typeof body.beforeNextVisit === 'string' ? cleanText(body.beforeNextVisit, 2000) : '',
   };
 }
 
@@ -121,6 +145,55 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     );
   });
 
+  api.get('/api/reports/visits', async (c) => {
+    const requestId = c.get('requestId');
+    const query = VisitsQuery.safeParse({ clientId: c.req.query('clientId') });
+    if (!query.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const actor = c.get('actor');
+    if (!mayDraftReport(actor, query.data.clientId, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const db = c.get('db');
+    // A read, before the answer: this says which days the practice visited
+    // this household and who went (section 8).
+    await logRead(db, 'client', query.data.clientId, query.data.clientId);
+    const timeZone = await practiceTimeZone(db);
+    return c.json(
+      VisitsResponse.parse({ visits: await listVisits(db, query.data.clientId, timeZone) }),
+    );
+  });
+
+  api.get('/api/reports/gather-session', async (c) => {
+    const requestId = c.get('requestId');
+    const query = SessionGatherQuery.safeParse({
+      clientId: c.req.query('clientId'),
+      sessionId: c.req.query('sessionId'),
+      locale: c.req.query('locale') ?? 'en',
+    });
+    if (!query.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const actor = c.get('actor');
+    if (!mayDraftReport(actor, query.data.clientId, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const db = c.get('db');
+    await logRead(db, 'client', query.data.clientId, query.data.clientId);
+    const timeZone = await practiceTimeZone(db);
+    const content = await gatherSession(db, {
+      clientId: query.data.clientId,
+      sessionId: query.data.sessionId,
+      timeZone,
+      locale: query.data.locale,
+    });
+    if (!content) {
+      return c.json({ error: 'not_found', code: 'no_such_visit', requestId }, 404);
+    }
+    return c.json(GatherResponse.parse({ content, brainMapsRead: false }));
+  });
+
   api.post('/api/reports/draft', async (c) => {
     const requestId = c.get('requestId');
     const parsed = DraftInput.safeParse(await c.req.json().catch(() => null));
@@ -147,8 +220,9 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
     }
 
     // The figures come from the record, always. What the request carried of
-    // them is thrown away; what it carried of the narrative is kept.
-    let content = input.content;
+    // them is thrown away; what it carried of the narrative is kept. Both
+    // kinds are gathered, so nothing a caller sent survives as a figure.
+    let content: unknown;
     if (input.kind === 'progress') {
       if (!input.coverageFrom || !input.coverageTo) {
         return c.json({ error: 'bad_request', code: 'coverage_required', requestId }, 400);
@@ -158,17 +232,33 @@ export function mountReportDraft(api: Hono<ApiEnv>, now: () => Date = () => new 
         clientId: input.clientId,
         coverage: { from: input.coverageFrom, to: input.coverageTo },
         timeZone,
+        // The pairing is `gatherProgress`'s, by goal id, and always has been:
+        // this route used to gather without it and pair by position
+        // afterwards, which was the fault.
+        narrative: narrativeOf(input.content),
       });
-      const typed = narrativeOf(input.content);
-      content = {
-        ...gathered.content,
-        summary: typed.summary,
-        suggestion: typed.suggestion,
-        goals: gathered.content.goals.map((goal, at) => ({
-          ...goal,
-          movement: typed.movements[at] ?? '',
-        })),
-      };
+      content = gathered.content;
+    } else {
+      // A session report follows one completed visit, and its figures come
+      // from that visit for the reason the progress report's come from the
+      // record: a figure a practitioner could retype is a figure that can
+      // disagree with it (section 4.2). Only the note and what to expect
+      // before the next visit are the person's.
+      if (!input.sessionId) {
+        return c.json({ error: 'bad_request', code: 'visit_required', requestId }, 400);
+      }
+      const timeZone = await practiceTimeZone(db);
+      const gathered = await gatherSession(db, {
+        clientId: input.clientId,
+        sessionId: input.sessionId,
+        timeZone,
+        locale: input.locale,
+        narrative: sessionNarrativeOf(input.content),
+      });
+      if (!gathered) {
+        return c.json({ error: 'not_found', code: 'no_such_visit', requestId }, 404);
+      }
+      content = gathered;
     }
 
     const checked = validateContent(input.kind, content);

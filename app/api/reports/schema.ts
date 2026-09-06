@@ -81,6 +81,12 @@ export const DraftInput = z.object({
   kind: ReportKindInput,
   locale: ReportLocaleInput.default('en'),
   serviceTypeId: z.uuid().nullable().default(null),
+  /**
+   * The completed visit a **session** report follows. Required for that kind
+   * and refused for a progress report, which covers a stretch rather than a
+   * day. The figures are then read from that visit and never from the request.
+   */
+  sessionId: z.uuid().nullable().default(null),
   coverageFrom: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -112,6 +118,19 @@ export const GatherResponse = z.object({
   brainMapsRead: z.boolean(),
 });
 export type GatherResponse = z.infer<typeof GatherResponse>;
+
+/** One completed visit a session report may be written about (section 4.2). */
+export const VisitChoice = z.object({
+  id: z.uuid(),
+  on: z.string(),
+  serviceName: z.string(),
+  practitionerName: z.string(),
+  durationMinutes: z.number().int().nullable(),
+});
+export type VisitChoice = z.infer<typeof VisitChoice>;
+
+export const VisitsResponse = z.object({ visits: z.array(VisitChoice) });
+export type VisitsResponse = z.infer<typeof VisitsResponse>;
 
 /**
  * Issuing takes **nothing**. Who signs is the person signed in: the route

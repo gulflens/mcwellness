@@ -40,6 +40,7 @@ export type {
   VisitRow,
 } from './gatherProgress';
 export { draftReportMessage } from './message';
+export { observationWords } from './observationWords';
 export type { DraftedReportMessage, SendableReport } from './message';
 export { REFERENCE_PREFIX, referenceFor, sequenceOf } from './referenceFor';
 export { validateContent } from './validateContent';

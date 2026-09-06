@@ -45,6 +45,14 @@ export const RibbonShape = z
 
 export const GoalLineShape = z
   .object({
+    /**
+     * The goal's own id, carried in the body beside the assessment ids the
+     * comparison already carries. It is what the practitioner's line about
+     * this goal is paired back to when a draft is saved: paired by position, a
+     * goal added between the gathering and the save moved every line down one
+     * and put a sentence about sleep beside a goal about school, silently.
+     */
+    id: z.uuid(),
     description: narrative(500),
     status: label(40),
     movement: narrative(1000),

@@ -39,6 +39,13 @@ export const RatingPairShape = z
 export const SessionReportShape = z
   .object({
     kind: z.literal('session'),
+    /**
+     * The visit this report follows. Section 6 declares no foreign key to
+     * `session` — that table is another stream's range — and says the id
+     * "rides in the snapshot" instead. This is where it rides, beside the
+     * assessment ids a comparison carries for the same reason.
+     */
+    sessionId: z.uuid(),
     visitDate: z.string().regex(ISO_DATE),
     serviceName: label(120),
     serviceNameAr: label(120).nullable(),
