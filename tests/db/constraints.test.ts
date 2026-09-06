@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -286,6 +287,88 @@ describe('the client-scoped key on document (911_document_client_key.sql)', () =
         ") = array['client_id', 'id', 'tenant_id']",
     );
     expect(rows.map((row) => row.conname)).toEqual(['document_tenant_id_client_key']);
+  });
+
+  /**
+   * The guarded block one migration file carries, aimed at a throwaway table.
+   *
+   * Read from the file rather than copied into this test, so a change to
+   * either migration is a change to what this proves. Each file holds exactly
+   * one `do $$ ... $$;` block and it is the one that creates the key.
+   *
+   * The throwaway table lives in a schema of its own, because a unique
+   * constraint is backed by an index and an index name is unique within its
+   * schema: `document_tenant_id_client_key` is already taken in `public` by
+   * the real one.
+   */
+  function keyBlock(migration: string): string {
+    const sql = readFileSync(new URL(`../../db/migrations/${migration}`, import.meta.url), 'utf8');
+    const block = /do \$\$[\s\S]*?\$\$;/.exec(sql);
+    if (!block) throw new Error(`${migration} has no guarded block.`);
+    return block[0].replaceAll('public.document', 'scratch.document');
+  }
+
+  it('is created once whichever of 911 and 502 the runner reaches first', async () => {
+    // Only the 502-before-911 order has ever actually run: `db:migrate`
+    // applies pending files in numeric order, so every reset and every suite
+    // took it, and the other branch — a database that took 911 while its
+    // checkout had no 502 — was true by inspection alone. Both blocks are run
+    // here, 911 first, against a throwaway table shaped like `document`, so
+    // the order the runner never takes is proved rather than reasoned about.
+    await rolledBack(client, async () => {
+      await client.query('create schema scratch');
+      await client.query(
+        'create table scratch.document (' +
+          'id uuid primary key default gen_random_uuid(), ' +
+          'tenant_id uuid not null, ' +
+          'client_id uuid' +
+          ')',
+      );
+
+      const names = async (): Promise<string[]> => {
+        const { rows } = await client.query<{ conname: string }>(
+          'select conname from pg_constraint ' +
+            "where conrelid = 'scratch.document'::regclass and contype = 'u'",
+        );
+        return rows.map((row) => row.conname).sort();
+      };
+
+      // 911 arrives first and creates the key.
+      await client.query(keyBlock('911_document_client_key.sql'));
+      expect(await names()).toEqual(['document_tenant_id_client_key']);
+
+      // 502 arrives second, finds it, and adds nothing.
+      await client.query(keyBlock('502_assessment_document_key.sql'));
+      expect(await names()).toEqual(['document_tenant_id_client_key']);
+
+      // And the foreign key 502 goes on to declare stands against it, which is
+      // the whole reason either file creates it.
+      await client.query(
+        'create table scratch.document_ref (' +
+          'id uuid primary key default gen_random_uuid(), ' +
+          'tenant_id uuid not null, ' +
+          'client_id uuid not null, ' +
+          'document_id uuid not null, ' +
+          'foreign key (tenant_id, document_id, client_id) ' +
+          '  references scratch.document (tenant_id, id, client_id)' +
+          ')',
+      );
+      const ours = '00000000-0000-4000-8000-0000000000fa';
+      await client.query(
+        'insert into scratch.document (id, tenant_id, client_id) values ($1, $2, $3)',
+        [ours, IDS.tenantA, IDS.clientA],
+      );
+      await client.query(
+        'insert into scratch.document_ref (tenant_id, client_id, document_id) values ($1, $2, $3)',
+        [IDS.tenantA, IDS.clientA, ours],
+      );
+      await rejectsWith(
+        client,
+        FOREIGN_KEY_VIOLATION,
+        'insert into scratch.document_ref (tenant_id, client_id, document_id) values ($1, $2, $3)',
+        [IDS.tenantA, IDS.clientB, ours],
+      );
+    });
   });
 
   it('refuses a row naming another client’s document, and accepts the client’s own', async () => {
