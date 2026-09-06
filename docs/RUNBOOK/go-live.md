@@ -355,3 +355,31 @@ above and this file does not stand in for it.
 It is not the restore procedure — that is `docs/RUNBOOK/restore.md`, and it is
 worth reading once before it is needed rather than for the first time during
 an incident.
+
+---
+
+## 7. What the first deploy taught (7 September 2026)
+
+Facts about Hostinger that this file could not know until the process ran,
+each of which cost an hour to find. `docs/PRODUCTION.md`, "the first live
+pass", has the evidence.
+
+- **The site must be its own website.** A Node.js web app is added under
+  Websites, Add Website, Deploy Web App — as a new website, never as a
+  subdomain folder of an existing site. The folder kind builds and never runs.
+- **Output directory: `.`** — the app root, because the API serves the built
+  screens itself. Naming `dist` deploys nothing and the address answers the
+  web server's own 404.
+- **Entry file: `app/api/start.mjs`**, which also restores the execute bit the
+  host strips from the TypeScript loader's helper program (pull request 106).
+- **`PORT` is not needed.** The host intercepts the listen call; the log
+  prints the port as `undefined`, and that is normal here.
+- **`SUPABASE_JWT_SECRET` is not needed** while the project signs with its
+  ES256 key; the JWKS address covers sign-ins.
+- **The process sleeps when idle** and starts on the next request, in about a
+  second. Section 5 describes the symptom and the product that keeps a process
+  running, if the practice ever wants it.
+- **The seven values can be placed by a script** with the two API tokens the
+  laptop already holds: `Documents/tools/go-live.py` (outside the repository),
+  `--check` first, then the real run; `--env-only` re-sends the saved file.
+  Nothing it does prints a value.

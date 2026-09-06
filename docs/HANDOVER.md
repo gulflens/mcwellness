@@ -1,6 +1,12 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 6 September at 17:00: pieces nine and ten, trunk rounds 31 and 32, and the founder's two changes of 4 September built and merged; the production database migrated and able to take its first practice; the address on Hostinger built from today's main and waiting on the operator's secrets. This file exists so that the next Claude session,
+Written 4 September 2026, updated on 7 September at 00:30: the site is live
+at app.mcwellnessuae.com (the first live pass, pull request 106); trunk
+rounds 33 and 34 (pull requests 103 and 105) built, reviewed and re-checked,
+waiting only on a GitHub billing block to merge, 105 stacked on 103; every check
+on the repository refused by GitHub since 13:03 UTC for the account's
+billing; the address on Hostinger built and still never started, for want of
+the operator's secrets. This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -135,6 +141,64 @@ an unanswered decision. The next session's first act is section 10.
   `billing-06.md` (the portal's "Waived" word, the VAT threshold sum
   excluding waived fees, "plus VAT where applicable" on the signed page) and
   `assessment-02.md`.
+- **The evening of 6 September (20:40 to 22:00), a fresh session from this
+  file.** Its check of the build against the plan: `main` at `b8c0c22`,
+  nothing in flight, `pnpm verify` (169 files, 1,890 tests) and
+  `pnpm test:db` (76 files, 1,108 tests) green on the laptop. **Trunk round
+  33** (pull request 103, branch `trunk-round-33`, head `261575a`) answers
+  every request owed after the fee round and the assessment door:
+  `billing-06.md` 1 to 5 and `assessment-02.md` 2 and 3 — a waived call-out
+  fee says "Waived" with the day on the household's money screen and is left
+  out of the taxable-supplies figure (migration 957), the fee column's and
+  the settings route's notes stop teaching the old rule (migration 205, a
+  comment only), the EDF signature sits in `domain/shared/fileSignature.ts`
+  and the assessment stream's copy is gone, one fixture says `raw_recording`,
+  and the bookings page states the AED 150 fee net of VAT. Combined review on
+  Fable (four areas PASS, five gaps, none failing), fix round on Opus, re-check
+  clean; the record is on the pull request. **It is not merged**: see the
+  next bullet.
+- **GitHub refuses every check.** Since 13:03 UTC on 6 September (the push of
+  pull request 102's merge) every job of the `verify` workflow fails within
+  seconds with no step run; the check-run annotation reads "The job was not
+  started because recent account payments have failed or your spending limit
+  needs to be increased. Please check the 'Billing & plans' section in your
+  settings". A rerun at 16:50 UTC and pull request 103's own runs failed the
+  same way. The code is not at fault (the same gates pass on the laptop), the
+  `backup` and `release` workflows are refused too, and the merge rule
+  (section 4) forbids merging on a red check, so nothing merges until the
+  operator lifts it (section 8, first item).
+- **Trunk round 34** (pull request 105, branch `trunk-round-34`, worktree
+  `mcwellness-trunk-2`, stacked on `trunk-round-33` because both edit the
+  record files; its pull request's base is `trunk-round-33` until 103 merges)
+  takes section 10's step 3: the five bands named in both languages from one file in
+  `domain/shared` (the Arabic names proposed for the operator's approval),
+  a colour operator in the shared PDF writer so a printed ribbon carries the
+  band's hue, one press from a record's timeline to its access report, and a
+  "Who may read what" table in `docs/SECURITY.md`. Built by 22:24 (six
+  commits, head `eae602d`, 1,931 and 1,113 tests green, fifteen defaults in
+  `trunk-notes.md` round 34, the five Arabic band names among them for the
+  operator's approval). Combined review on Fable (Security FAIL on one point,
+  the `report` address parameter reaching state unvalidated, contained by the
+  API's own check; eight smaller gaps, three of them cells of the new table),
+  fix round on Opus (nine commits to `442f25c`), re-check clean at 23:00; the
+  record is on the pull request. **Not merged**, for the same billing block.
+- **The site is live (00:20, 7 September).** On the operator's instruction
+  ("do the hostinger integration as i can not do it") the session placed the
+  seven secrets by a script that printed none of them, and then found and
+  fixed three things in the way: the site had to be its own website rather
+  than a folder subdomain; the output directory had to be the app root; and
+  the TypeScript loader's helper program arrived without its execute bit
+  (pull request 106, `hosted-start-2`, which production runs one commit
+  ahead of `main`). `/api/health` and `/api/health/deep` answer and `/`
+  serves the app. The full account is `docs/PRODUCTION.md`, "the first live
+  pass", and `docs/RUNBOOK/go-live.md` section 7. The secrets are in
+  `~/Documents/mcwellness-production-secrets.env` for the password manager.
+- **The founder can sign in (00:30)** and her password is the one the operator
+  chose (00:41). **The sign-in page gained a show-or-hide button and a "Keep
+  me signed in on this browser" box** (pull request 107, `signin-2`, stacked on
+  106; built, reviewed, fixed and re-checked; deployed at 02:00, so production
+  runs `dd90787`, `main` plus 106 plus 107). Merge order when the checks run
+  again: 106, 107, then 103, 104, 105 (105 re-based on `main` first).
 - The operator's morning page is `docs/OPERATOR/2026-09-06-decisions.md`
   (pull request 85): every decision and action that is theirs, with the
   Hostinger question and the lawyer's note drafted.
@@ -222,6 +286,13 @@ requests `assessment-01.md` and `reports-01.md` and trunk-notes rounds 28 to
   restarted the whole stack every minute for hours.
 - The old app's production project `gqvpapvdqcfjlifgwhpk` must never be
   touched; a hook blocks it.
+
+- This Mac has neither `timeout` nor `gtimeout`. A brief that says "run the
+  gates with an explicit timeout" is met by the Bash tool's own timeout
+  parameter (600000 ms or more); a shell `timeout` prefix exits 127 and the
+  gate silently never runs.
+- The evening session's briefs and reports (`round33-*`, `round34-*`) are in
+  `/private/tmp/claude-501/-Volumes-Storage-McWellness/669757d8-b5cc-44cc-8fcb-fe3365b6579b/scratchpad/`.
 
 ## 6. Cost rules (operator's instruction of 4 September 2026)
 
@@ -320,6 +391,16 @@ in the briefs: a rebase after review must be named in the record with the
 reviewed commit's rebased twin, or the re-check cannot separate the round
 from main's own movement.
 
+**What trunk round 33 cost (6 September, 22:00).** Builder on Opus about 0.28
+million; combined review on Fable 0.22; fix round on Opus 0.13; re-check on
+Fable 0.10. About 0.73 million in agents, plus the integrator's conversation.
+
+**What trunk round 34 cost (6 September, 23:00).** Builder on Opus about 0.29
+million (a background inventory of the policy files inside it); combined
+review on Fable 0.22; fix round on Opus 0.15; re-check on Fable 0.14. About
+0.8 million in agents. The evening's two rounds together: about 1.5 million
+in agents, plus the integrator's conversation.
+
 ## 7. The failed-run emails
 
 GitHub emails the repository owner for every failed or cancelled workflow
@@ -349,13 +430,25 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
-- **To sign in on production**, in this order: paste the seven secrets into
-  the app site's environment in hPanel (`docs/RUNBOOK/go-live.md`, steps 1 to
-  8); set the API role's password and the pooler string as `docs/PRODUCTION.md`
-  says; create your own Auth user in the Supabase dashboard; then, once trunk
-  round 32 has merged and been applied to production, run its one bootstrap
-  statement with your practice's names and that user's id. The runtime log in
-  hPanel is the first thing to read if the address stays silent.
+- **First, before anything merges: GitHub's billing.** In GitHub, Settings,
+  Billing and plans, raise the Actions spending limit or fix the failed
+  payment, then rerun the last run on `main`
+  (`gh run rerun 34034899740 -R gulflens/mcwellness`) and pull request 103's.
+  Until then every pull request is red through no fault of its own and the
+  merge rule holds everything.
+- **Three wordings to see** from round 33 and 34 (named in their pull-request
+  bodies): the bookings page now says the AED 150 fee is "plus VAT once the
+  practice is registered for it", in both mentions; the household's money
+  screen shows a waived fee as "Waived" with the day, and its Arabic
+  "أُعفي بتاريخ …" is composed from the approved PDF sentence rather than
+  held verbatim; and round 34 proposes Arabic names for the five brainwave
+  bands. Say yes, or give the words you want.
+- **Production is signed in to** (00:30, 7 September): the founder's account
+  and the practice exist (`docs/PRODUCTION.md`, the first live pass). Move
+  `~/Documents/mcwellness-production-secrets.env` into the password manager
+  and delete it; it holds her email and password too. Merge pull request 106
+  when the checks run again; until then production is one commit ahead of
+  `main`.
 - **Piece nine's live half**, in the order they unblock each other
   (`docs/SPEC/hosting.md` section 11, pull request 80's body, and the
   operator's page): buy Hostinger Web Apps Hosting in Mumbai (decided 06:15);
@@ -483,11 +576,20 @@ nine and ten; see the records on pull requests 73 to 83).
    page; scheduling's column comment and settings comment) and
    `assessment-02.md` (the EDF signature in the shared check; the trunk's
    audit fixture). And the founder's answer on the no-show fee.
-2b. **The hand deploy on Hostinger** waits on the operator's secrets; when
-   the process starts, measure `TRUSTED_PROXY_HOPS` and record the first
-   live pass in `docs/PRODUCTION.md`. If the process never starts, buy the
-   Web Apps Hosting product (decision 1) and repeat the deploy there with the
-   same archive and settings (the facts are in `docs/RUNBOOK/go-live.md`).
+2b. **The hand deploy on Hostinger is done** (7 September, 00:20): the
+   process runs and both health routes answer; the first live pass is in
+   `docs/PRODUCTION.md`, and the founder's account and the practice exist and
+   she can sign in. Left from it: measure `TRUSTED_PROXY_HOPS` (still `1`;
+   the method is in the pass) and merge pull request 106.
+2c. **Trunk round 33 is built and reviewed** (pull request 103; the record is
+   on it). It merges when GitHub's checks run again; then `pnpm db:migrate`
+   in the laptop checkout, and migrations 205 and 957 go to staging and
+   production in one pass (the fourth production pass, the thirteenth staging
+   pass) with their records in `docs/PRODUCTION.md` and `docs/STAGING.md`.
+2d. **Trunk round 34 is built and reviewed** (pull request 105, stacked on
+   round 33, section 2; the record is on it). after 103 merges, `gh pr edit <n> --base main` and a
+   rebase; then its own merge and passes. It takes step 3's items except the
+   scoped security scan.
 3. Owed to later rounds, recorded in `qa-01.md`, `reports-01.md` and
    trunk-notes: the household's own step in confirming a booking, if the
    scheduling spec names one; the "one press" to the access report from the
@@ -509,3 +611,10 @@ the seeded passwords, the approved plans and the operator's instructions.
 Those notes are loaded automatically in a fresh session on this machine.
 This file is the copy that lives with the code, for any session on any
 machine.
+
+From 6 September 2026 the sessions open in `/Volumes/Storage/McWellness`, so
+new notes land in that project's memory directory
+(`-Volumes-Storage-McWellness/memory/`); the thirty-seven earlier notes are
+still under `-Volumes-Storage-Coding-McWellness-UAE-McWellness-Mobile-App/memory/`
+and are not loaded automatically any more. A note in the new directory says
+where the old ones are.

@@ -470,3 +470,101 @@ empty, so neither owed a re-apply.
 
 Still out of scope, still on purpose: no seed, no demo visit, no password
 set, no user created, and `app.bootstrap_practice` still uncalled.
+
+## What was done on 2026-09-07: the first live pass — the site answers
+
+Between 23:00 on 6 September and 00:20 on 7 September (Dubai), on the
+operator's instruction ("do the hostinger integration as i can not do it"),
+the session placed the secrets and got the process running. No secret value
+passed through the conversation: a script, `Documents/tools/go-live.py`
+outside the repository, read the two API tokens already on the laptop, fetched
+or generated every value, wrote them to one file readable by the operator alone
+(`~/Documents/mcwellness-production-secrets.env`, to be moved into the password
+manager and deleted), and sent them to the host.
+
+**What was set.** The eleven public settings of the runbook, and:
+`SUPABASE_STORAGE_KEY` and `SUPABASE_AUTH_ADMIN_KEY` (the service key, read
+through the signed-in Supabase command-line tool), `API_DATABASE_URL` (a new
+forty-character password set on `mcwellness_api` through the tool's own query
+door, in the transaction-pooler form on port 6543), `IDENTITY_KEY` (freshly
+generated, this system's own, never to change), and `GOOGLE_MAPS_API_KEY` with
+`ROUTING_PROVIDER=google` (the practice's key, the operator's decision of 6
+September). **`SUPABASE_JWT_SECRET` is deliberately not set**: the project
+signs sign-ins with an ES256 key published at its JWKS address, which the API
+already verifies against; the legacy shared secret signs only the old-style API
+keys. If the runtime log ever says "HS256 is not configured", the secret is
+added from the dashboard by hand.
+
+**Three things stood between the secrets and a running process**, found in
+order and each recorded so nobody rediscovers them:
+
+1. **The site had to be its own website.** `app.mcwellnessuae.com` had been
+   made as a folder-style subdomain of `mcwellnessuae.com`. Hostinger's
+   documentation says a Node.js web app "must be deployed as a new website";
+   a subdomain of that kind gets the build pipeline and never a runtime. The
+   subdomain was removed (its document root was empty) and the name created
+   as an addon website on the same order (`vhost_type: addon`, root
+   `~/domains/app.mcwellnessuae.com/public_html`). Hostinger dropped the
+   subdomain's CDN alias record with it; the `A` and `AAAA` records for `app`
+   remain and point at the server directly, and the certificate was issued.
+2. **The output directory must be the app root.** With `dist` as the output
+   directory the host deployed nothing and wrote no routing file, and every
+   address answered the web server's own 404. With `.` it deploys the whole
+   root to `~/domains/app.mcwellnessuae.com/hbuilds/versions/<build>/nodejs`,
+   writes the routing, and starts the entry file on the first request. The
+   stored build settings now say `.`; `docs/RUNBOOK/go-live.md` is amended.
+3. **The loader's helper program arrived without its execute bit.** The
+   process then started and failed at once: `spawn
+   node_modules/@esbuild/linux-x64/bin/esbuild EACCES`, nineteen times. The
+   entry file `app/api/start.mjs` now restores the bit before registering the
+   loader, and falls back to a copy in the temporary directory if the tree
+   refuses execution (pull request 106, branch `hosted-start-2`, proved on the
+   laptop with the bit removed). **Production runs commit `5ed7702`, one
+   ahead of `main`**, until 106 merges.
+
+**The checks.** `GET /api/health` answers `{"ok":true,"service":"mcwellness-api"}`;
+`GET /api/health/deep` answers `{"ok":true}` — the API reaches the database as
+`mcwellness_api` through the pooler; `GET /` serves the built app. The runtime
+log shows the four start-up lines and nobody's data. Two things the log also
+shows: the port prints as `undefined`, because the host intercepts the listen
+call and hands the process its own socket, so `PORT` is neither set nor
+needed; and the process is started on demand and stopped after a short idle
+period (the start-up lines repeat every fifty seconds under a probe every ten),
+which is the runbook's section 5 exactly — each cold start took about a second
+and the deep check passed on the first one.
+
+**Still to do on this pass.** `TRUSTED_PROXY_HOPS` stays at `1` and is not yet
+measured (the method: exhaust a rate-limited route from one address, then
+repeat with a spoofed `X-Forwarded-For`; a fresh budget for the spoof means
+the count is too high). **The first practice is created** (00:30, 7 September, on the operator's
+next message): the founder's sign-in account was made with a strong generated
+password and confirmed, so no email was sent; `app.bootstrap_practice` ran
+with the practice's legal name in English and Arabic, her account id, her
+first name and her email, and answered with the practice's and the owner's
+ids; then a sign-in as her returned an ES256 token and `GET /api/practice`
+on the live address answered 200 naming the practice. Her email and password
+are two lines in the secrets file for the password manager. The Hostinger vendor row in `docs/COMPLIANCE/approved-vendors.md`
+still waits for the operator's tick.
+
+**The sign-in round, deployed (02:00, 7 September).** On the operator's request
+at 00:43 the sign-in page gained a show-or-hide button on the password and a
+"Keep me signed in on this browser" box (pull request 107, branch `signin-2`,
+stacked on 106; reviewed, fixed and re-checked under the usual rules, the
+record on the pull request). Production now runs `dd90787`: `main` plus 106
+plus 107, until both merge. Two things learned on this deploy: Hostinger's
+deploy tool uploads an archive and starts a build with settings it guesses
+from `package.json` (pnpm, `dist/index.js`), which fails harmlessly, and the
+explicit build then runs against the same uploaded archive; and for about
+twenty minutes after two builds in a row the site answered slowly (a shallow
+health request took over two minutes, no error in the log, the process never
+restarting), then returned to under two seconds, which was then traced to something
+else: **Hostinger's CDN does not answer over IPv6 from this network** (the
+name's IPv6 addresses are the CDN's, and a connection to them waits 150
+seconds and fails; the sibling `intake` site fails the same way, while Google
+answers over IPv6 in under a second, so the laptop's IPv6 is sound). Over
+IPv4 the site answers in about a second. A browser races both and settles on
+IPv4 within a fraction of a second, so people are unaffected; a tool that
+tries IPv6 first and waits sees the stall. Nothing in the zone to change (the
+CDN overrides the `app` records it serves); worth a line to Hostinger. The name now resolves to
+Hostinger's CDN edge (`server: hcdn`), so the CDN is in the path again and
+`TRUSTED_PROXY_HOPS` is still to be measured with that in mind.
