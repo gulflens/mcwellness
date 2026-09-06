@@ -109,6 +109,34 @@ under "Shared-zone changes".
    the same question at the row, which is the boundary; the route asking is
    the courtesy.
 
+9. **`db/migrations/601_report_delivery.sql`, the `contact` unique key** —
+   `alter table public.contact add constraint contact_tenant_id_client_key
+   unique (tenant_id, id, client_id)`. `contact` is a core table, so this is
+   recorded here as an edit rather than as a footnote, **and the integrator's
+   decision is that it stays in 601**.
+
+   Why it exists: the specification's section 6 asks for a composite key
+   "binding the contact to the report's own client", and section 11 requires a
+   deny test proving a delivery to another client's contact is refused by that
+   key. A foreign key needs its target combination declared unique, and
+   migration 099 gave every core table `(tenant_id, id)` for exactly this
+   purpose; the client-scoped form was not needed until now. `invoice` declares
+   the same key for the same reason (`invoice_tenant_id_client_key`, migration
+   402). The constraint is additive and cannot fail: `id` is already the
+   primary key, so `(tenant_id, id, client_id)` is a superset of a key that
+   already holds.
+
+   Why it does **not** move to a `9xx` trunk migration, which was the obvious
+   tidier home for it. `checkNeeds` refuses a `Needs` naming a number at or
+   above the file's own, and the runner applies pending files in numeric order.
+   On a fresh database a `9xx` key would therefore be created *after* 601 had
+   already run, and 601's foreign key — which references that combination —
+   would fail. The only number 601 could name is one below it, a client-record
+   `108`, which is still a stream file altering a core table and buys nothing.
+   The alternative that touches no core table is a before-insert trigger
+   comparing `contact.client_id`, which the specification's own words argue
+   against: it says the delivery is "refused by the composite key".
+
 ---
 
 ## Requests, not edits
@@ -152,9 +180,13 @@ rule's own `grey`, both a single number — and it has no operator for an RGB
 fill. `domain/shared/document` is the shared zone this worktree may not edit, so
 the printed strip carries the whole of the figure's *shape* — a slice per
 session at the height of its recording's quality, a hairline at each brain map,
-empty slices for the sessions ahead — in ink, and names the bands trained
-underneath it in words. The console's own ribbon carries the hue from the
-tokens, so nothing is lost on screen.
+empty slices for the sessions ahead — in ink, and **names no band at all**. The
+first build printed "Bands trained: Theta, Alpha" underneath the strip; the fix
+round dropped it, because the design brief admits a band only as the slice's own
+hue and the specification keeps band names off a report, so the line put a fact
+on the page the specification keeps off it and read as a legend for a colour
+nothing had drawn. The console's own ribbon carries the hue from the tokens, so
+nothing is lost on screen.
 
 What the trunk would need to add: an optional `rgb` on `Style` and on the rule
 op, written as `r g b RG` / `r g b rg` in the content stream beside the existing
@@ -167,27 +199,3 @@ reads every other client-scoped table in this platform and reads **no** report
 money"). That is implemented in `db/policies/reports/reports.sql` and is worth
 a line beside the other audiences, so the absence reads as a decision rather
 than as a policy somebody forgot to widen.
-
----
-
-## One core-table change made inside this stream's own migration
-
-`db/migrations/601_report_delivery.sql` adds
-`alter table public.contact add constraint contact_tenant_id_client_key unique
-(tenant_id, id, client_id)`.
-
-The specification's section 6 asks for a composite key "binding the contact to
-the report's own client", and section 11 requires a deny test proving a delivery
-to another client's contact is refused by that key. A foreign key needs its
-target combination declared unique, and migration 099 gave every core table
-`(tenant_id, id)` for exactly this purpose — the client-scoped form was not
-needed until now. `invoice` declares the same key for the same reason
-(`invoice_tenant_id_client_key`, migration 402).
-
-The constraint is additive and cannot fail: `id` is already the primary key, so
-`(tenant_id, id, client_id)` is a superset of a key that already holds. It is
-inside a migration this stream owns, so it is not an edit outside its paths —
-but `contact` is a core table, so it is recorded here. **If the integrator would
-rather it sat in the trunk's own range**, it moves to a `9xx` migration with no
-change to anything else: `601` would then name that number in its `Needs` and
-the foreign key would be unchanged.
