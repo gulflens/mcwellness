@@ -155,6 +155,45 @@
   color: var(--critical);
 }
 
+/* The show-or-hide button sits at the end of the password box, inside it: a
+   full 44px target, no motion, and the input's own text stops short of it. */
+.password {
+  position: relative;
+  display: block;
+}
+
+.password .field__input {
+  inline-size: 100%;
+  padding-inline-end: calc(var(--s-2) + var(--row));
+}
+
+.password__toggle {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--row);
+  min-block-size: var(--row);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.password__toggle:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.password__toggle:disabled {
+  color: var(--slate);
+  cursor: default;
+}
+
 .button {
   display: inline-flex;
   align-items: center;

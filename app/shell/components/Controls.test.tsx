@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { Field, Note, PageHeader, Select } from './Controls';
+import { Field, Note, PageHeader, PasswordField, Select } from './Controls';
 
 afterEach(cleanup);
 
@@ -54,6 +54,61 @@ describe('Field', () => {
     const input = screen.getByLabelText('Name');
     expect(screen.getByText('As it appears on the record')).toBeTruthy();
     expect(input.getAttribute('aria-invalid')).toBeNull();
+  });
+});
+
+describe('PasswordField', () => {
+  it('shows the password on request and hides it again, saying which it will do', () => {
+    render(<PasswordField id="password" label="Password" />);
+    const input = screen.getByLabelText('Password');
+    expect(input.getAttribute('type')).toBe('password');
+
+    const show = screen.getByRole('button', { name: 'Show password' });
+    expect(show.getAttribute('type')).toBe('button');
+    expect(show.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(show);
+    expect(input.getAttribute('type')).toBe('text');
+    const hide = screen.getByRole('button', { name: 'Hide password' });
+    expect(hide.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(hide);
+    expect(input.getAttribute('type')).toBe('password');
+    expect(screen.getByRole('button', { name: 'Show password' })).toBeTruthy();
+  });
+
+  it('marks the control invalid and swaps the hint for the error, then back', () => {
+    const { rerender } = render(
+      <PasswordField id="password" label="Password" hint="At least twelve characters" />,
+    );
+    const input = screen.getByLabelText('Password');
+    expect(screen.getByText('At least twelve characters')).toBeTruthy();
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+
+    rerender(
+      <PasswordField
+        id="password"
+        label="Password"
+        hint="At least twelve characters"
+        error="Enter your password"
+      />,
+    );
+    expect(screen.queryByText('At least twelve characters')).toBeNull();
+    const message = screen.getByText('Enter your password');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe(message.id);
+
+    rerender(<PasswordField id="password" label="Password" hint="At least twelve characters" />);
+    expect(screen.getByText('At least twelve characters')).toBeTruthy();
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('keeps the password hidden when the field is disabled, and the toggle with it', () => {
+    render(<PasswordField id="password" label="Password" disabled />);
+    const toggle = screen.getByRole('button', { name: 'Show password' });
+    expect(toggle.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText('Password').getAttribute('type')).toBe('password');
   });
 });
 
