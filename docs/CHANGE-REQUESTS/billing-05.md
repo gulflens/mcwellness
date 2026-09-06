@@ -164,7 +164,11 @@ should have made.
 for a visit unfit at the door. What it pays for widened; the words widened with
 it, on the settings screen and everywhere a person reads. Renaming a column
 across a migration, an API schema and a settings route to match a label is churn
-this round did not need, and the comment on the column now says both.
+this round did not need. Its comment still says "nothing charges it yet", which
+is no longer true and is not this round's to correct: the column is migration
+202's and belongs to the scheduling stream, so the comment is asked for in
+`docs/CHANGE-REQUESTS/billing-06.md` request 4 (compliance review of this pull
+request, which caught this paragraph claiming the comment had been amended).
 
 **The two dead enum values stay.** `entitlement_consumption`'s
 `late_cancellation` and `no_show`, and `billing_exception_kind`'s
