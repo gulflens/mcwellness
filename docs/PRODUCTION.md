@@ -298,3 +298,94 @@ the step is one statement rather than a hand-written sequence of inserts.
 Building the door is the trunk's work; walking through it stays the
 operator's, and this document still describes no key, no password and no
 account that anyone but she creates.
+
+## What was done on 2026-09-06: the second pass — the door itself, `app.bootstrap_practice`
+
+Main had not moved since the first pass: still `f06e666` (pull request 95,
+trunk round 32), the same commit the first pass already brought this project
+level with. The one thing that had changed underneath it was the file this
+pass exists to apply: `db/migrations/956_bootstrap_practice.sql`, the
+function "The first practice" above describes and asks for.
+
+- **The seventy rows already there were checked before anything was
+  touched.** Every file's sha256, computed straight off the files on disk
+  (`shasum -a 256`), matched the checksum production had recorded for it
+  exactly — nothing merged since the first pass had edited a file already
+  applied.
+- **`956_bootstrap_practice.sql` was applied through Supabase's migration
+  tool**, under the runner's own audit context (`app.reason` naming the
+  file, a fresh `app.request_id`, both transaction-local, `db/runner/
+  apply.ts`'s own shape), immediately followed by its own bookkeeping row
+  carrying the sha256 of the file's own text
+  (`db144edc006f6884463ec4cee42101250dcfa5e0bba9fa6000190dea2d0c745b`).
+  `schema_migration` now holds **seventy-one rows**, one per file in
+  `db/migrations`, the new one's checksum confirmed against the row
+  afterwards.
+- **`db/policies` has not changed since the first pass's own commit**
+  (`git log 9cecbb2..HEAD -- db/policies` is empty), so nothing was
+  re-applied. One hundred and thirty-nine policies still stand on `public`,
+  unmoved.
+- **No seed, no row, nothing called.** `tenant`, `app_user` and `client`
+  still read zero rows, confirmed by query, not assumed. `app.
+  bootstrap_practice` was not invoked by this pass or by anything it ran —
+  the brief's own instruction, and the function's own advisory lock and
+  one-practice check stand untested by this pass on purpose. The function
+  exists now and nothing else about the project's data does.
+- **The grants were checked, on both projects this migration reached.**
+  `app.bootstrap_practice(text, text, uuid, text, text, text)` shows
+  `execute` revoked from `public` and from `app_role` on both production
+  and staging, `service_role` holding it on both (plus the function's own
+  owner, `postgres`, which every function answers to regardless of an
+  explicit grant), and neither `anon` nor `authenticated` appears for it on
+  either project. Unreachable through the API, exactly as migration 956's
+  own comment claims.
+- **The audit chain still verifies**, `app.verify_audit_chain()` returning
+  null before and after. `audit_log` stood at zero rows before this pass and
+  stands at zero after it: creating a function is DDL, not a data step
+  against a tenant that does not exist, so nothing here was ever going to be
+  audited.
+- **The schema fingerprint was taken again**, the same way the first pass
+  took it: a fresh `pnpm db:reset && pnpm db:migrate` on the worktree
+  `mcwellness-trunk-2` (its own database, port 5442), after `git fetch
+  origin && git checkout -q -B fingerprint-check origin/main` there (the
+  worktree was clean this time — no edit to set aside). Seventy-one
+  migrations and twenty policy files applied cleanly to an empty database.
+  Nine parts were compared, canonicalised and hashed inside the query
+  itself, the first pass's own method: columns (1,221), constraints (530),
+  indexes (471), triggers (290), policies (139), row-level security flags
+  (72 tables), functions (83 — the one new one being `app.
+  bootstrap_practice` itself), the table grants `app_role`, `anon`,
+  `authenticated` and `PUBLIC` hold (106), and the same for function grants,
+  keyed by function identity rather than `specific_name` as the first pass's
+  own correction requires (47). Production matched the fresh local build
+  exactly on every one of the nine, including physical column order.
+- **Production and staging were also compared against each other on the
+  same nine parts, and eight matched exactly.** The ninth — columns —
+  matched in substance (every column identical in name, type, nullability
+  and default; a comparison ordered by column name rather than physical
+  position hashes the same on both, `2c82cd6d…`, 1,221 rows each) but
+  differed when ordered by physical position, on exactly two tables:
+  `schema_migration` (`checksum` sits second on production, third on
+  staging) and `invoice` (`supplied_on` sits mid-table on production, last
+  on staging). Both are measurement artifacts of how each project acquired
+  its columns, not a schema difference: production's seventy pre-956
+  migrations ran as one continuous bootstrap (the first pass), so a
+  column's physical slot follows the file that added it in one unbroken
+  sequence, while staging accumulated the same files across ten separate
+  passes, where a column added by `alter table ... add column` after a
+  same-named column had already been dropped and never reused its old slot.
+  Nothing here is a difference this pass made or one migration 956 touches.
+- **Advisors were checked after the migration.** Every `rls_enabled_no_policy`
+  finding is the same list the first pass already carried and none of it
+  is new: `schema_migration`, `invoice_number_series`, the twenty-five
+  monthly `audit_log_*` partitions plus `audit_log_default`, and the three
+  `app`-schema tables reached only through security-definer functions —
+  thirty-one `INFO` rows, counted directly against `pg_class` rather than
+  assumed. Nothing at `WARN` or above on production; staging carries the
+  same thirty-one plus its own already-known leaked-password-protection
+  `WARN`, unrelated to this pass.
+
+Still out of scope, still on purpose: no seed, no demo visit, no password
+set, no user created, and `app.bootstrap_practice` still uncalled. The door
+this pass built is open; walking through it is still "The first practice"
+above, and still the operator's own act.
