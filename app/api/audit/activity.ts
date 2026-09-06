@@ -262,6 +262,14 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         ...(clientId ? { clientId } : {}),
       },
     );
+    // **A feed narrowed to one record is a read of that record**, and is
+    // written as one. The access report next door counts `read` and `list`
+    // rows (section 9.4, "everyone who has viewed this record"); without this
+    // line the one screen in the building whose whole subject is who has
+    // looked would be the one screen whose own looking it never counted.
+    if (clientId !== undefined) {
+      await logRead(db, 'client', clientId, clientId);
+    }
     const last = page[page.length - 1];
     return c.json(
       ActivityResponse.parse({ events, nextBefore: hasMore && last ? last.id : null, hasMore }),

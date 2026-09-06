@@ -188,6 +188,34 @@ describe('GET /api/audit/activity', () => {
     expect((await get('/api/audit/filters', PRACTITIONER_AUTH)).status).toBe(403);
   });
 
+  it('records a read of the record when it is narrowed to one', async () => {
+    // The access report next door counts `read` and `list` rows, so a screen
+    // narrowed to one household has to leave one behind or the report omits
+    // exactly the looking it is there to describe.
+    const before = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where client_id = $1 and action = 'read'",
+      [STANDING],
+    );
+    await feed(`/api/audit/activity?clientId=${STANDING}&limit=50`, AUTH.ownerA);
+    const after = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where client_id = $1 and action = 'read'",
+      [STANDING],
+    );
+    expect(Number(after.rows[0]?.n)).toBe(Number(before.rows[0]?.n) + 1);
+
+    // And the unfiltered feed names no record, so it writes none.
+    const wide = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where client_id = $1 and action = 'read'",
+      [STANDING],
+    );
+    await feed('/api/audit/activity?limit=100', AUTH.ownerA);
+    const after2 = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where client_id = $1 and action = 'read'",
+      [STANDING],
+    );
+    expect(Number(after2.rows[0]?.n)).toBe(Number(wide.rows[0]?.n));
+  });
+
   it('records that somebody read the trail, once for the request', async () => {
     const before = await owner.query<{ n: string }>(
       "select count(*)::text as n from audit_log where action = 'audit.activity'",
