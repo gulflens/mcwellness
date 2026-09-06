@@ -1260,7 +1260,7 @@ widening and the stream's from here.
 
 The combined review of pull request 87 failed the round on security with one
 gap and found eight more; the integrator decided each, and added three items
-taken after the round had started. Twelve commits, one per item.
+taken after the round had started. Thirteen commits, one per item and one for the reports suite's fixtures.
 
 ### 1. The security gap, and why it was one
 
@@ -1368,7 +1368,7 @@ that sentence, and the operator's pack carries the command.
 ### 5. Every file this fix round touched outside the trunk's own paths
 
 **reports** (item 10)
-`db/policies/reports/reports.sql`; `tests/reports/db/portal.test.ts`.
+`db/policies/reports/reports.sql`; `tests/reports/db/portal.test.ts`, `tests/reports/db/rls.test.ts`.
 
 **client-portal** (item 10)
 `app/api/portal/reports.ts`, `app/api/portal/household.ts`;
