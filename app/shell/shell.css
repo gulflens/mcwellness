@@ -167,6 +167,12 @@
   cursor: pointer;
 }
 
+/* The tick takes the page's own ink rather than the browser's blue, as the
+   session rating's slider already does (app/therapist/session/SessionRunner.css). */
+.checkbox input {
+  accent-color: var(--ink);
+}
+
 /* The show-or-hide button sits at the end of the password box, inside it: a
    full 44px target, no motion, and the input's own text stops short of it. */
 .password {
