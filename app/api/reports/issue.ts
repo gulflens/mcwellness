@@ -4,6 +4,7 @@ import { canIssue } from '../../../domain/reports';
 import { renderReport } from '../../../domain/reports/document';
 import { isoDateIn } from '../../../domain/shared';
 import { clientDocumentKey, documentRetentionUntil } from '../../../domain/shared/storage';
+import { isUuid } from '../billing/ids';
 import { documentFonts } from '../billing/fonts';
 import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
@@ -59,6 +60,12 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
   api.post('/api/reports/:id/issue', async (c) => {
     const requestId = c.get('requestId');
     const reportId = c.req.param('id');
+    if (!isUuid(reportId)) {
+      // Checked before it reaches a uuid column, the way billing's own routes
+      // check theirs: an id that is not one is a 400, not a raise dressed up
+      // as a 500 on a path a stranger can call.
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
     const body = IssueInput.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
@@ -127,15 +134,21 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
 
     const record = await readReport(db, reportId);
     const recipient = await readRecipient(db, draft.client_id);
-    if (!record || !recipient) {
-      return c.json({ error: 'not_found', requestId }, 404);
-    }
-    const document_ = documentFrom(record, recipient);
-    if (!document_) {
-      // The row was just written by the function above, so this is a body the
-      // shape no longer recognises rather than a missing snapshot: refused
-      // rather than rendered half.
-      return c.json({ error: 'unprocessable', code: 'invalid_content', requestId }, 422);
+    const document_ = record && recipient ? documentFrom(record, recipient) : null;
+    if (!record || !document_) {
+      // **Raised, not returned, and that is the whole of it.** The number has
+      // already been allocated and the signature already written by the
+      // function above; the transaction rolls back on a raise or a 5xx and on
+      // nothing else (app/api/_middleware/request-context.ts). A 422 returned
+      // here committed a numbered, signed report with no document behind it —
+      // a row nothing could ever file, because a second issue is refused as
+      // already signed and the repair path has no bytes to compare.
+      //
+      // Reaching here at all means the row the function just wrote does not
+      // render: a body the shape no longer recognises, or a client row row
+      // security stopped showing mid-request. Both are faults, and a fault
+      // that rolls the signature back is the only safe answer.
+      throw new Error('An issued report did not render; the issue was rolled back.');
     }
 
     const bytes = renderReport(document_, documentFonts());
