@@ -1200,7 +1200,7 @@ describe('the identity inside a recording', () => {
   it('files the bytes as they came and reads no part of the header into anything', async () => {
     const household = await seedHousehold('81');
     const created = (await (await record(household)).json()) as { assessment: { id: string } };
-    const withIdentity = minimalEdf({ patient: SENTINEL, recording: RECORDED_BY });
+    const withIdentity = minimalEdf({ identification: SENTINEL, recording: RECORDED_BY });
 
     const answers: string[] = [];
     const keep = async (res: Response): Promise<string> => {

@@ -7,17 +7,17 @@
  * this fixture leaves empty, and one of the things the tests below prove is
  * that the platform never reads that field. So the fixture is written from the
  * published layout instead of taken from a file: the eight-byte version — an
- * ASCII zero followed by seven spaces — then the patient and the recording
- * identification of eighty bytes each, the start date and time, the header's
+ * ASCII zero followed by seven spaces — then the identification field and the
+ * recording field of eighty bytes each, the start date and time, the header's
  * own length, the reserved field, the number of data records and how long one
  * lasts, and the count of signals; then one block of the same size describing
  * that one signal. Every field is left-justified and padded with spaces, which
  * is the format's own rule.
  *
- * The patient field takes whatever a caller puts in it, and every caller here
- * puts in either nothing at all or a sentinel that is plainly not a person's
- * name: `.claude/rules/testing.md` forbids a hand-written one, and a realistic
- * one would be exactly the thing this stream is trying not to hold.
+ * The identification field takes whatever a caller puts in it, and every caller
+ * here puts in either nothing at all or a sentinel that is plainly not a
+ * person's name: `.claude/rules/testing.md` forbids a hand-written one, and a
+ * realistic one would be exactly the thing this stream is trying not to hold.
  */
 
 const ASCII = new TextEncoder();
@@ -47,12 +47,12 @@ function joined(parts: readonly Uint8Array[]): Uint8Array {
  * cap's business, not this fixture's.
  */
 export function minimalEdf(
-  options: { patient?: string; recording?: string; sample?: number } = {},
+  options: { identification?: string; recording?: string; sample?: number } = {},
 ): Uint8Array {
   const signals = 1;
   const header = joined([
     field('0', 8),
-    field(options.patient ?? '', 80),
+    field(options.identification ?? '', 80),
     field(options.recording ?? '', 80),
     field('01.01.00', 8),
     field('00.00.00', 8),
