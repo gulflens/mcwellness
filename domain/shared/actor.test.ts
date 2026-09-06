@@ -557,6 +557,29 @@ describe('the kit register and the day picture', () => {
     }
   });
 
+  it('lets only the owner and the lead practitioner replace a signed report', () => {
+    // Narrower than drafting on purpose (section 7.1): superseding hides a
+    // version the household may already hold, which is not the same act as
+    // writing one. A practitioner may draft and may sign with the capability.
+    for (const role of ['owner', 'lead_practitioner'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'report.supersede', clientId: CLIENT }, {}, NOW),
+        role,
+      ).toBe(true);
+    }
+    for (const role of ['practitioner', 'admin', 'finance', 'client_contact'] as const) {
+      expect(
+        canActor(
+          actor([role]),
+          { type: 'report.supersede', clientId: CLIENT },
+          { clientIds: [CLIENT] },
+          NOW,
+        ),
+        role,
+      ).toBe(false);
+    }
+  });
+
   it('lets the owner, an admin and the lead practitioner deliver one', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
       expect(canActor(actor([role]), { type: 'report.deliver' }, {}, NOW), role).toBe(true);

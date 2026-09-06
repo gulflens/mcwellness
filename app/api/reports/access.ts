@@ -31,9 +31,18 @@ export function mayReadReport(
   return canActor(actor, { type: 'report.read', clientId }, ctx, now);
 }
 
-/** Writing a draft, and superseding an issued one with a corrected draft. */
+/** Writing a draft. */
 export function mayDraftReport(actor: Actor, clientId: string, now: Date): boolean {
   return canActor(actor, { type: 'report.draft', clientId }, {}, now);
+}
+
+/**
+ * Replacing a signed version with a corrected one. Narrower than drafting:
+ * the owner and the lead practitioner alone (section 7.1), because
+ * superseding hides a version the household may already hold.
+ */
+export function maySupersedeReport(actor: Actor, clientId: string, now: Date): boolean {
+  return canActor(actor, { type: 'report.supersede', clientId }, {}, now);
 }
 
 /** Putting a signed report in front of a household. */

@@ -7,6 +7,7 @@ import {
   ADMIN,
   FINANCE,
   LEAD_PRACTITIONER,
+  PRACTITIONER,
   signedInProvider,
 } from '../../app/admin/clients/testActors';
 
@@ -151,6 +152,37 @@ describe('the Reports tab', () => {
     mount([], ADMIN);
     await waitFor(() => expect(screen.queryByText('Loading.')).toBeNull());
     expect(screen.queryByRole('button', { name: 'Write a report' })).toBeNull();
+  });
+
+  it('offers a practitioner the writing door and not the correcting one', async () => {
+    // Section 7.1 gives superseding to the owner and the lead practitioner
+    // alone. The route and the row both refuse it (migration 600); the screen
+    // agrees, so nobody is offered an act the server would turn away.
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(PRACTITIONER);
+      if (url.startsWith('/api/reports?clientId=')) return json({ reports: [row()] });
+      if (url === `/api/reports/${FIRST}`) {
+        return json({
+          report: row(),
+          content: { kind: 'progress' },
+          deliveries: [],
+          url: null,
+          expiresInSeconds: null,
+        });
+      }
+      if (url === `/api/clients/${CLIENT}`) return json({ contacts: [] });
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={signedInProvider} fetchImpl={fetchImpl}>
+        <ReportsTab clientId={CLIENT} />
+      </AuthProviderBoundary>,
+    );
+    expect(await screen.findByRole('button', { name: 'Write a report' })).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'RPT-000001' }));
+    await screen.findByText('Progress report');
+    expect(screen.queryByRole('button', { name: 'Correct this report' })).toBeNull();
   });
 
   it('says nothing has been written yet, rather than showing an empty table', async () => {

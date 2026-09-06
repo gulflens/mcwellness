@@ -49,6 +49,7 @@ export type Action =
   | { type: 'report.list'; clientId: string }
   | { type: 'report.read'; clientId: string }
   | { type: 'report.draft'; clientId: string }
+  | { type: 'report.supersede'; clientId: string }
   | { type: 'report.deliver' }
   | { type: 'audit.read'; clientId: string }
   | { type: 'appointment.list'; scope: 'practice' | 'own' }
@@ -179,6 +180,17 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // not this file's. An admin reads and delivers and never drafts; the row
       // policy says the same underneath.
       return hasRole(actor, 'owner', 'lead_practitioner', 'practitioner');
+    case 'report.supersede':
+      // Replacing a signed version with a corrected one. The owner and the
+      // lead practitioner, and nobody else (docs/SPEC/reports-v1.md section
+      // 7.1) — narrower than `report.draft` on purpose, because superseding
+      // is not writing: it hides a version from the household, which may
+      // already be holding a copy of it. A practitioner may draft a report and
+      // may sign one with the capability; deciding that a signed document is
+      // no longer the practice's answer is a different act. The guard trigger
+      // on the row says the same underneath (migration 600), which is the
+      // boundary; this is the courtesy.
+      return hasRole(actor, 'owner', 'lead_practitioner');
     case 'report.deliver':
       // Putting a signed report in front of a household. The owner, an admin
       // and the lead practitioner. Whether this particular household may be

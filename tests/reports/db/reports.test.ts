@@ -510,6 +510,34 @@ describe('superseding', () => {
     expect(rows[0]?.status).toBe('superseded');
   });
 
+  it('refuses a practitioner, who may draft one and may not replace one', async () => {
+    // Section 7.1 gives superseding to the owner and the lead practitioner
+    // alone. This practitioner is on the client's schedule, so drafting is
+    // open to them and nothing about visibility is in the way — the refusal is
+    // the act's own.
+    await h.onSchedule(18, SEEDED.practitioner);
+    const first = await issued(18);
+    const res = await h.call('POST', `/api/reports/${first}/supersede`, SEEDED.practitioner, {
+      reason: 'A correction this person may not make.',
+      content: progressBody(),
+    });
+    expect(res.status).toBe(403);
+
+    const { rows } = await h.owner.query<{ status: string }>(
+      'select status from report where id = $1',
+      [first],
+    );
+    expect(rows[0]?.status).toBe('issued');
+
+    // Written before the answer, as every refusal is (section 8).
+    const trail = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'report.supersede_refused' " +
+        'and entity_id = $1',
+      [first],
+    );
+    expect(Number(trail.rows[0]?.n ?? 0)).toBe(1);
+  });
+
   it('refuses a supersede with no reason, and one of an already superseded version', async () => {
     const first = await issued(13);
     const none = await h.call('POST', `/api/reports/${first}/supersede`, SEEDED.owner, {

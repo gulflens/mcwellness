@@ -18,6 +18,15 @@ export function canDraftReports(actor: Actor | null, now: Date, clientId: string
   return actor !== null && canActor(actor, { type: 'report.draft', clientId }, {}, now);
 }
 
+/**
+ * Whether to offer "Correct this report". Narrower than drafting: the owner
+ * and the lead practitioner alone (section 7.1), because superseding hides a
+ * version the household may already hold.
+ */
+export function canSupersedeReports(actor: Actor | null, now: Date, clientId: string): boolean {
+  return actor !== null && canActor(actor, { type: 'report.supersede', clientId }, {}, now);
+}
+
 export function canDeliverReports(actor: Actor | null, now: Date): boolean {
   return actor !== null && canActor(actor, { type: 'report.deliver' }, {}, now);
 }

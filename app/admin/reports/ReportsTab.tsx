@@ -5,7 +5,7 @@ import { StatusChip, type StatusTone } from '../../shell/components/StatusChip';
 import type { ReportRow } from '../../api/reports/schema';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
-import { canDeliverReports, canDraftReports } from './reportsAccess';
+import { canDeliverReports, canDraftReports, canSupersedeReports } from './reportsAccess';
 import { inChains, useReports } from './useReports';
 import './reports.css';
 
@@ -108,6 +108,7 @@ export function ReportsTab({
   const [openId, setOpenId] = useState<string | null>(null);
 
   const mayWrite = canDraftReports(actor, now, clientId) && !erased;
+  const maySupersede = canSupersedeReports(actor, now, clientId) && !erased;
   const maySend = canDeliverReports(actor, now) && !erased;
 
   if (state.kind === 'loading') return <Note>Loading.</Note>;
@@ -130,7 +131,7 @@ export function ReportsTab({
     return (
       <ReportView
         reportId={openId}
-        maySupersede={mayWrite}
+        maySupersede={maySupersede}
         maySend={maySend}
         onBack={() => {
           setOpenId(null);

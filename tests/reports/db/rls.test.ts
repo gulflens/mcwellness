@@ -321,6 +321,34 @@ describe('what may be written', () => {
 });
 
 describe('the chain', () => {
+  it('lets only the owner and the lead practitioner mark a version superseded', async () => {
+    // The guard's branch (b) (migration 600). Superseding hides a version the
+    // household may already hold, which section 7.1 gives to those two alone;
+    // asked at the row, because the route asking is a courtesy and this is the
+    // boundary. Run as the table owner with a role stamped, so it is the
+    // guard's answer being read and not a policy's.
+    await rolledBack(client, async () => {
+      for (const role of ['practitioner', 'admin', 'finance', 'client_contact']) {
+        await client.query("select set_config('app.actor_roles', $1, true)", [role]);
+        await rejectsWith(
+          client,
+          '42501',
+          "update report set status = 'superseded' where id = $1",
+          [REPORT],
+        );
+      }
+      for (const role of ['owner', 'lead_practitioner']) {
+        await client.query("select set_config('app.actor_roles', $1, true)", [role]);
+        await client.query('savepoint allowed');
+        const done = await client.query("update report set status = 'superseded' where id = $1", [
+          REPORT,
+        ]);
+        expect(done.rowCount, role).toBe(1);
+        await client.query('rollback to savepoint allowed');
+      }
+    });
+  });
+
   it('refuses a second successor to one version, so a chain cannot fork', async () => {
     await rolledBack(client, async () => {
       // One successor is ordinary; a second would give two answers to "which

@@ -4,7 +4,7 @@ import { cleanText } from '../_middleware/text';
 import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isUuid } from '../billing/ids';
-import { mayDraftReport } from './access';
+import { maySupersedeReport } from './access';
 import { SupersedeInput, SupersedeResponse } from './schema';
 import { asRow, readReport } from './source';
 
@@ -61,7 +61,15 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
     if (!standing) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
-    if (!mayDraftReport(actor, standing.client_id, now())) {
+    if (!maySupersedeReport(actor, standing.client_id, now())) {
+      // Narrower than drafting: the owner and the lead practitioner (section
+      // 7.1). Written before the answer, as every refusal is.
+      await logAction(
+        db,
+        'report.supersede_refused',
+        { type: 'report', id: reportId, clientId: standing.client_id },
+        { reason: 'not_permitted' },
+      );
       return c.json({ error: 'forbidden', requestId }, 403);
     }
 

@@ -45,7 +45,8 @@
 --
 -- Needs: 010 (tenant), 020 (app_user, and the `locale` enum this table's own
 -- locale column is), 040 (service_type), 050 (practitioner, credential), 060
--- (client, document), 080 (app.audit_row), 098 (app.erasure_active), 099 (the
+-- (client, document), 080 (app.audit_row), 095 (app.actor_has_role, which the
+-- guard's supersede branch asks), 098 (app.erasure_active), 099 (the
 -- tenant-scoped keys this table's composite foreign keys reference on client,
 -- document, practitioner and service_type), 100 (app.current_actor_id).
 
@@ -256,7 +257,13 @@ alter table public.report enable always trigger audit_row;
 --      a) filing the rendered PDF — `document_id` moving from null, once,
 --         inside the issuing transaction;
 --      b) marking it superseded — `status` moving from 'issued' to
---         'superseded' when a later version replaces it.
+--         'superseded' when a later version replaces it, **and only by the
+--         owner or the lead practitioner** (section 7.1). Superseding hides a
+--         version from the household that may already hold it, which is a
+--         different act from writing one; a practitioner may draft and may
+--         sign with the capability, and this is not theirs. Asked here as well
+--         as in the route, because the route is a courtesy and the row is the
+--         boundary.
 --
 --    Structural rather than an enumerated list of what may not change, so a
 --    column added to this table later is guarded by this trigger rather than
@@ -313,13 +320,26 @@ begin
     return new;
   end if;
 
-  -- (b) The standing version being replaced by a later one.
+  -- (b) The standing version being replaced by a later one, by the owner or
+  --     the lead practitioner and nobody else. Where no role has been assumed
+  --     at all this stands aside: that is the owner's own maintenance — a
+  --     migration, the seed — never a request through the API, which always
+  --     stamps a role (app.guard_erasure_request_write sets the precedent).
   if old.status = 'issued' and new.status = 'superseded'
      and (to_jsonb(new) - array['status', 'reference', 'updated_at'])
          is not distinct from
          (to_jsonb(old) - array['status', 'reference', 'updated_at'])
   then
-    return new;
+    if nullif(current_setting('app.actor_roles', true), '') is null
+       or app.actor_has_role('owner')
+       or app.actor_has_role('lead_practitioner')
+    then
+      return new;
+    end if;
+    raise exception 'a signed report is replaced by the owner or the lead practitioner'
+      using errcode = 'insufficient_privilege',
+            hint    = 'A practitioner may draft one and may sign it; hiding a version a '
+                      'household already holds is not theirs.';
   end if;
 
   raise exception 'report % is signed and cannot be changed; correct it with a new version',

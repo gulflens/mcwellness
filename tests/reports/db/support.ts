@@ -149,12 +149,21 @@ export async function startHarness(now: () => Date): Promise<Harness> {
       const practitioner = data.practitioners.find((p) => p.userId === user?.id);
       const service = data.serviceTypes[0];
       if (!person || !practitioner || !service) throw new Error('The seed is not what it was.');
+      // One visit per client, each on its own day, because a practitioner may
+      // not hold two overlapping appointments (appointment_no_overlap_practitioner).
       await owner.query(
         'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
           'location_id, delivery_mode, window_start, window_end, status) values ' +
-          "(gen_random_uuid(), $1, $2, $3, $4, $5, 'home', now() - interval '7 days', " +
-          "now() - interval '7 days' + interval '45 minutes', 'completed')",
-        [data.tenant.id, person.id, practitioner.id, service.id, person.primaryLocationId],
+          "(gen_random_uuid(), $1, $2, $3, $4, $5, 'home', now() - ($6 || ' days')::interval, " +
+          "now() - ($6 || ' days')::interval + interval '45 minutes', 'completed')",
+        [
+          data.tenant.id,
+          person.id,
+          practitioner.id,
+          service.id,
+          person.primaryLocationId,
+          String(1 + clientIndex),
+        ],
       );
     },
     async asPerson(seededUser, fn) {

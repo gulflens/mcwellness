@@ -87,13 +87,22 @@ under "Shared-zone changes".
    The delivery's sentence names the channel and never the contact, the number
    or the address.
 
-8. **`domain/shared/actor.ts`** and its test — four actions the routes name:
+8. **`domain/shared/actor.ts`** and its test — five actions the routes name:
    `report.list` and `report.read` (the four practice roles that are not
    finance, and a contact for their own client), `report.draft` (owner, lead
-   practitioner, practitioner) and `report.deliver` (owner, admin, lead
-   practitioner). **`report.sign` is not touched and not used**: signing is
-   decided by `canIssue` in `domain/reports`, which reads a credential rather
-   than a role, because nothing else grants it (section 10, decision 6).
+   practitioner, practitioner), `report.supersede` (owner and lead
+   practitioner alone) and `report.deliver` (owner, admin, lead practitioner).
+   **`report.sign` is not touched and not used**: signing is decided by
+   `canIssue` in `domain/reports`, which reads a credential rather than a
+   role, because nothing else grants it (section 10, decision 6).
+
+   `report.supersede` is narrower than `report.draft` on purpose, and was
+   added in the fix round after the review found a practitioner could replace
+   a signed report. Superseding is not writing: it hides a version the
+   household may already be holding, which section 7.1 gives to the owner and
+   the lead practitioner. The guard trigger's branch (b) in migration 600 asks
+   the same question at the row, which is the boundary; the route asking is
+   the courtesy.
 
 ---
 
