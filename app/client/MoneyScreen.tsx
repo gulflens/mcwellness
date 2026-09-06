@@ -82,7 +82,17 @@ function InvoiceRow({ invoice }: { invoice: PortalInvoice }) {
     <div className="portal__row">
       <span className="numeric">{invoice.reference}</span>
       <span className="numeric">{words.date(invoice.issuedOn)}</span>
+      {/*
+        A forgiven charge keeps its figure: the practice let this one go and the
+        row says so, rather than the number quietly leaving the balance with
+        nothing to explain it (docs/SPEC/billing.md section 4.3).
+      */}
       <span className="numeric">{words.money(invoice.grossFils)}</span>
+      {invoice.waivedOn ? (
+        <span className="numeric small muted">
+          {words.phrase(PHRASES.waivedOn(words.date(invoice.waivedOn)))}
+        </span>
+      ) : null}
       {invoice.documentId ? <DocumentButton documentId={invoice.documentId} /> : null}
     </div>
   );

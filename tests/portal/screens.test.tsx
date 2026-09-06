@@ -168,6 +168,19 @@ describe('Money', () => {
     expect(screen.getByText('RCT-000001')).toBeTruthy();
   });
 
+  it('says a forgiven charge was forgiven, with the day, and leaves the figure on the row', () => {
+    mountPortal(<MoneyScreen />, { answers: { '/api/portal/money': () => json(MONEY) } });
+    // The waived fee: the word, the day the practice let it go, and the amount
+    // still standing beside it (billing-06.md request 1).
+    return waitFor(() => {
+      expect(screen.getByText('Waived 21 August 2026')).toBeTruthy();
+      expect(screen.getByText('150.00')).toBeTruthy();
+      // And the ordinary invoice above it says nothing of the kind: one row
+      // carries the word, not the list.
+      expect(screen.getAllByText(/^Waived/)).toHaveLength(1);
+    });
+  });
+
   it('opens a document through a link fetched when the button is pressed', async () => {
     const { calls } = mountPortal(<MoneyScreen />, {
       answers: {
@@ -201,6 +214,10 @@ describe('Money', () => {
     expect(await screen.findByText('المبالغ بالدرهم')).toBeTruthy();
     expect(screen.getByText('الفواتير')).toBeTruthy();
     expect(screen.getByText('حوالة بنكية')).toBeTruthy();
+    // The forgiven fee: the word, the day the practice let it go read in this
+    // language, and — as in English above — one row carrying it, not the list.
+    expect(screen.getByText('أُعفي بتاريخ 21 أغسطس 2026')).toBeTruthy();
+    expect(screen.getAllByText(/^أُعفي/)).toHaveLength(1);
   });
 
   it('is not offered at all where nobody on the record is shown money', async () => {

@@ -6,9 +6,10 @@ round's pull request. Item 1 is **applied in this piece's own pull request**,
 under the cost rules of `docs/HANDOVER.md` section 6 and the precedent
 `assessment-01.md` set for the same file two rounds ago; it is one constant and
 one constant beside it in a file this stream already owns a paragraph of. Items
-2 and 3 are **written and not applied**: both are changes to `domain/shared`,
-which is the trunk's, and item 2's question is carried by a local check
-meanwhile.
+2 and 3 were **written and not applied**: both are changes to `domain/shared`,
+which is the trunk's, and item 2's question was carried by a local check
+meanwhile. **Both were answered in the trunk's round 33**, 2026-09-06; each
+carries its own note below.
 
 **Why now.** `docs/SPEC/assessment.md` decision 3 accepted `application/pdf`
 alone and a 20 MB cap "until the equipment is named". On 6 September the
@@ -49,6 +50,13 @@ the route reads a byte.
 
 ## 2. `domain/shared/fileSignature.ts` — the EDF signature (written, not applied)
 
+*(**Answered in trunk round 33**: `bytesAreAnEdf` is now a named export in
+`domain/shared/fileSignature.ts` beside `bytesMatchMimeType` — the shape the
+trunk chose of the two this request offered, because EDF has no registered
+media type to key a case on, so `KNOWN_MIME_TYPES` stays at four.
+`domain/assessment/fileType.ts` re-exports it under the same name and no
+caller moved. `docs/CHANGE-REQUESTS/trunk-notes.md`, round 33, item 2.)*
+
 **The request.** `KNOWN_MIME_TYPES` and `bytesMatchMimeType` know four media
 types. The European Data Format is a fifth thing the platform now holds as
 evidence, and its header is fixed by the published format: the first eight
@@ -81,6 +89,9 @@ starts refusing the practice's own files without warning.
 
 ## 3. `domain/shared/audit-narrative.test.ts` — a fixture still saying `raw`
 (written, not applied)
+
+*(**Answered in trunk round 33**: the fixture says `raw_recording`. Nothing
+else in the file. Round 33, item 3.)*
 
 **The request.** One fixture in the trunk's narrative test files a document
 with `role: 'raw'`, a word migration 503 renamed to `raw_recording`. It should

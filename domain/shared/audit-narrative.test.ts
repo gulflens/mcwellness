@@ -438,7 +438,7 @@ describe('measurements', () => {
       event({
         entityType: 'assessment',
         action: 'assessment.file_filed',
-        newValues: { documentId: '00000000-0000-4000-8000-0000000000f9', role: 'raw' },
+        newValues: { documentId: '00000000-0000-4000-8000-0000000000f9', role: 'raw_recording' },
       }),
       'en',
     )?.sentence;

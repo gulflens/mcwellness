@@ -1597,3 +1597,290 @@ day is now taken in the practice's own zone, the same slip is put right in
 `tests/portal/db/support.ts` and `tests/session/db/photo_and_routing.test.ts`,
 and all three are scheduling's, the client portal's and session-capture's test
 files edited under this round's widening and nothing of the trunk's beyond it.
+
+---
+
+## Round 33, 2026-09-06 (what a forgiven fee still said, and the recording's own signature)
+
+Seven items in one round: the five things the fee round left at the trunk's
+door (`docs/CHANGE-REQUESTS/billing-06.md`) and the two the assessment stream's
+file door left (`docs/CHANGE-REQUESTS/assessment-02.md`, requests 2 and 3).
+Three of the seven are outside the trunk's own paths, so — as rounds 31 and 32
+did, and by the integrator's widening for one round — one branch answers all
+seven rather than three branches answering pieces of it. Every file outside the
+trunk's own paths is listed below by name, and a widening note stands beside it
+in `docs/SPEC/OWNERSHIP.md`.
+
+### 1. A waived fee is not a taxable supply
+
+`billing-06.md` request 2. **Closed.**
+
+Migration `957_vat_taxable_supplies_excludes_waived.sql` replaces
+`app.vat_taxable_supplies_fils(date)` whole with 953's body and one clause
+more, `and i.waived_at is null`. 953 is merged and `create or replace` has no
+patch form, so the rollback carries 953's body verbatim — the way 408 carries
+404's. A future migration that changes this function starts from **957's**
+body.
+
+Why the clause. The function sums `invoice.net_fils` over twelve months to say
+how close the practice is to the AED 375,000 registration threshold. A
+call-out fee the practice forgave is money nobody owes and nobody will pay:
+`app.billing_ledger` has already stopped counting it and the invoice book shows
+it as waived. Counting it here would push the practice into registering earlier
+than the law asks, on the strength of charges it decided not to make. Round
+31's default 9 — that over-counting is the safe way round for a warning — holds
+for a charge that stands unpaid and not for one the practice has forgiven,
+because forgiving it is the practice saying no supply was charged for.
+
+It moves nothing else: `waived_at` can only ever be set on a `call_out_fee`
+invoice (`invoice_only_a_fee_is_waived`, 408), so the clause is false for every
+session, package and statement invoice there has ever been. And it is not the
+mechanism once the practice registers: a taxable supply is then undone by a
+credit note with its own number, never by a flag (`docs/SPEC/billing.md`
+section 4.3).
+
+`tests/db/vat-threshold.test.ts` proves it both ways round — the same fee left
+out while it is waived and counted with the waiver lifted, inside one
+transaction that is rolled back, so the only difference between the two figures
+is the three waiver columns. Nothing about the window or the erasure gate
+moved.
+
+### 2. The EDF signature belongs beside the other four
+
+`assessment-02.md` request 2. **Closed.**
+
+`domain/shared/fileSignature.ts` gains a named export `bytesAreAnEdf(bytes)`
+beside `bytesMatchMimeType`. The European Data Format has no registered media
+type to key a case on, so `KNOWN_MIME_TYPES` stays at four and the switch is
+untouched: a caller declares a recording `application/octet-stream` and asks
+this question separately. The eight-byte version field — an ASCII `0` then
+seven spaces — is the whole check, and the doc comment says what comes next
+(an eighty-byte field naming the person the recording was made of) and that
+this module never reaches it.
+
+`domain/assessment/fileType.ts` drops its own `EDF_VERSION`, its local
+`startsWith` and its local `bytesAreAnEdf`, and re-exports the shared one under
+the same name, so **no caller moved** — exactly what round 31 did for the PDF's
+own five bytes. Its doc comment's paragraph about checking the signature
+locally is now one sentence saying the trunk answered it in round 33, and its
+test still asserts the behaviour through `classifyAssessmentFile`, with one
+case reading the re-export itself so the re-export cannot silently rot.
+`docs/SPEC/assessment.md` decision 3's last sentence is amended in place.
+
+### 3. The fixture that still said `raw`
+
+`assessment-02.md` request 3. **Closed.** One object in
+`domain/shared/audit-narrative.test.ts` filed a document with `role: 'raw'`, a
+word migration 503 renamed to `raw_recording`. It says the new one. Nothing
+else in the file: the sentence the test asserts never read the role at all,
+which is why this was a word and not a fault.
+
+### 4. The column comment on the fee
+
+`billing-06.md` request 4. **Closed.**
+
+Migration `205_unfit_fee_is_the_call_out_fee.sql`, in the scheduling range,
+replaces 202's comment on `scheduling_setting.unfit_fee_fils`. 202 said
+"Recorded here; nothing charges it yet", which was true when it was written and
+stopped being true when 408 began posting the fee. The comment now says what
+the column pays for: the practice's call-out fee, net of VAT, snapshotted by
+`app.billing_on_appointment_charged` (migration 408) onto a `call_out_fee`
+invoice on a late cancellation, on a visit unfit at the door and on a no-show —
+the no-show being Claude's default of 2026-09-06 for the founder to overrule
+(`billing-05.md`). 202 is merged and is not edited; the rollback restores its
+words exactly.
+
+**`Needs: 202` only, though the comment names 408.** `checkNeeds` refuses a
+`Needs` at or above the file's own number, and rightly: apply order across the
+ranges is not fixed and a later number is no proof a later file is on this
+database. Nothing here depends on 408 — a comment describes, it does not
+reference — so the file needs the column to exist and nothing else, and the
+header says so.
+
+### 5. The route comment that taught the old rule
+
+`billing-06.md` request 5. **Closed.** The doc comment above
+`app/api/appointments/settings.ts` quoted the consequence a cancel confirmation
+must name as "this is inside the practice's twenty-four hours and uses one of
+the client's sessions". Nothing takes a session any more. It now reads
+"…carries the practice's call-out fee". Comment only; the route's behaviour is
+untouched.
+
+### 6. A waived fee in the household's own screen
+
+`billing-06.md` request 1. **Closed.**
+
+`PortalInvoice` gains `waivedOn`, a nullable day; `INVOICES_SQL` selects
+`to_char(i.waived_at at time zone $2, 'YYYY-MM-DD')`; and the money screen's
+invoice row shows "Waived" with the day, in both languages, on a row that
+carries one. The figure stays on the row, because a waiver forgives a charge
+and does not rewrite what happened.
+
+Why it mattered. 408 posts the fee as an ordinary invoice and a waiver marks
+the row rather than deleting it, so the balance stops counting it while the
+list goes on showing it. The practice's own invoice book already says "Waived"
+with the date and the rendered PDF carries `waivedNotice` in both languages;
+the household's screen was the one place left presenting the charge as live.
+
+`tests/portal/db/routes.test.ts` waives a real `call_out_fee` invoice through
+`app.waive_call_out_fee` — the practice's own door — and asserts the day the
+route answers is the day the database wrote, in the practice's own zone;
+`tests/portal/screens.test.tsx` reads the word and the day in English and in
+Arabic and proves an ordinary row says nothing of the kind.
+`docs/SPEC/client-portal.md`'s money screen gains one sentence.
+
+### 7. The fee is stated net of VAT on the page a household signs
+
+`billing-06.md` request 3. **Closed.**
+
+`docs/CONSENT/simple/bookings-and-packages.md` says AED 150 twice, and both now
+carry the same short clause: "plus VAT once the practice is registered for it".
+Every price this platform publishes is net — 408 snapshots
+`scheduling_setting.unfit_fee_fils` as the net figure and 406 adds VAT on top
+at write time once the practice is registered — so the day the practice
+registers, a page a household signed saying AED 150 becomes a charge of
+AED 157.50, which is exactly the sort of thing a family reads as the practice
+moving the price. The page is accurate today and this was cheap to fix now.
+`docs/CONSENT/simple/README.md` records the amendment under the founder's
+review.
+
+**The founder should see this.** Her review copy outside the repository was
+refreshed to match and its PDF rebuilt, and the pull-request body says under
+its own heading that this is a wording change to a page she approved on
+4 September.
+
+---
+
+### Every file this round touched outside the trunk's own paths
+
+Listed by name, as a widening requires. Each is a change the item above it
+could not be made without.
+
+**client-portal** (item 6)
+`app/api/portal/schema.ts`, `app/api/portal/money.ts`;
+`app/client/MoneyScreen.tsx`, `app/client/i18n/dictionary.ts`;
+`tests/portal/fixtures.ts`, `tests/portal/screens.test.tsx`,
+`tests/portal/dictionary.test.ts`, `tests/portal/db/routes.test.ts`.
+
+**assessment** (item 2)
+`domain/assessment/fileType.ts` and its test.
+
+**scheduling** (items 4 and 5)
+`db/migrations/205_unfit_fee_is_the_call_out_fee.sql` (new, in the stream's own
+range); `app/api/appointments/settings.ts`.
+
+Everything else is the shared zone or the trunk's own:
+`domain/shared/fileSignature.ts` with its test, `domain/shared/index.ts` and
+`domain/shared/audit-narrative.test.ts`; `db/migrations/957`; `tests/db/`;
+`docs/SPEC/`, `docs/CONSENT/` and `docs/CHANGE-REQUESTS/`. Nothing in the
+stream paths above is the trunk's beyond this round.
+
+### Every default taken
+
+Ten, all the builder's. Each is here because a reader of this round should not
+have to find it in a diff.
+
+1. **The portal field is `waivedOn`, not `waivedAt`.** The request wrote
+   `waivedAt`. What is on the wire is a day, `YYYY-MM-DD`, and it sits beside
+   `issuedOn` on the same object and `receivedOn` on the payment next to it;
+   `app/api/billing/document-source.ts` already calls the same thing `waivedOn`
+   on the invoice model the PDF renders. A name ending `At` that carries no
+   time is a small lie a reader has to check.
+2. **The day is taken in the practice's zone through the `$2` parameter
+   `PAYMENTS_SQL` already uses**, not the literal `Asia/Dubai` the request
+   wrote. The file's own pattern is the parameter, the zone comes off the
+   tenant row, and a second literal is a second place to change it.
+3. **The word is a phrase function, `PHRASES.waivedOn(day)`, not a bare word
+   beside a date.** The dictionary's own rule is that anything carrying a value
+   is a function, because Arabic puts the pieces in a different order; the
+   Arabic verb and its connective are `waivedNotice`'s from
+   `domain/billing/document/strings.ts`, so the household's screen and the
+   rendered invoice say the same word.
+
+   **The shortened Arabic form wants the operator's eye.** The row says
+   `أُعفي بتاريخ …`; the document's own line says `أُعفي هذا المبلغ بتاريخ …`
+   and then that nothing is owed. A table row is not a document's line — the
+   row already carries the invoice's number and its figure, which that
+   sentence would only repeat — so the phrase was shortened to the verb, the
+   connective and the day. Every word of it is `waivedNotice`'s, and the
+   passive verb with its connective is grammatical, but the short form is not
+   a string this repository holds verbatim. It therefore goes to the operator
+   for approval, as every Arabic string does.
+4. **`bytesAreAnEdf` is a named export beside the switch**, which is the shape
+   the request left to the trunk. The alternative it offered — an agreed
+   internal type string keyed into `bytesMatchMimeType` — would put a thing
+   that is not a media type into a table of media types, and every caller of
+   that function would then have to know which of its keys were real.
+5. **It joins `domain/shared/index.ts`** beside its three neighbours. The
+   barrel is what the module offers; a named export reachable only by its file
+   path would be the odd one out.
+6. **The test for migration 205's comment lives in `tests/db/`**, the trunk's
+   own path, not `tests/scheduling/db/`. The migration is in the scheduling
+   range but the trunk wrote it under this round's widening, and round 31's
+   default 18 already settled the shape: a trunk test dropped into a stream's
+   suite becomes that stream's the moment it lands.
+7. **Both call-out-fee fixtures write the invoice rather than provoking it.**
+   `app.billing_on_appointment_charged` posts a fee when a visit's status
+   changes, so a fixture that called a visit off would also add a row to the
+   Visits screen and burn an invoice number the suite's own fixtures had
+   written by hand. Each fixture leaves the visit proposed — shown nowhere —
+   and writes the row it wants to ask about.
+
+   **The two part company over the waiver itself.**
+   `tests/portal/db/routes.test.ts` goes through the practice's own door,
+   `app.waive_call_out_fee`, with the practice, the actor and the reason in
+   context, because that route's test is about what a household is shown after
+   a real waiver. `tests/db/vat-threshold.test.ts` writes `waived_at`,
+   `waived_by` and `waiver_reason` by hand as the database owner, and lifts
+   them by hand again, because that test has to read the figure with the same
+   invoice waived and then unwaived inside one rolled-back transaction, and
+   nothing in the schema un-waives a fee: the door is one way, by design.
+8. **957 does not restate 953's `revoke` and `grant`.** `create or replace`
+   keeps the privileges a function already has, and 954 set that precedent: it
+   restated neither when it replaced `app.erase_client`. It is no precedent for
+   the other half, though — 954's rollback names `107_erase_report.sql` rather
+   than writing 107's body out, and 408, which carries 404's version in full,
+   is the one this rollback follows. The header says both, so a reader does not
+   have to reason about either.
+9. **The consent page repeats one clause twice** rather than carrying a
+   sentence at the foot of the page, which the request offered as the
+   alternative. A household reads the paragraph that applies to it and not the
+   whole page, and a foot-of-page qualifier is the beginning of small print,
+   which is the one thing the simple wording exists to avoid.
+10. **The README's amendment line is a new paragraph under the founder's
+    review**, not a change to the review's own paragraph. What she approved on
+    4 September stands as written; what came after it is dated separately.
+
+### What the streams should know
+
+**billing.** `app.vat_taxable_supplies_fils(date)` now leaves a waived fee out.
+Nothing else about the function moved, and a future migration that changes it
+starts from 957's body. All five of `billing-06.md` are closed.
+
+**And one line for billing's next round.** The portal's waived-fee day is now
+in a `numeric` span, for the tabular figures `docs/DESIGN-BRIEF.md` section 4.4
+asks of every date. `app/admin/billing/InvoicesSection.tsx` renders the same
+"Waived" and day in a `small muted` span without it, so the admin's figures do
+not align down the column. It is billing's file and this round did not touch
+it.
+
+**client-portal.** `PortalInvoice` carries `waivedOn`, a nullable day, and the
+money screen renders it; `INVOICES_SQL` now takes the practice's time zone as
+`$2`, as `PAYMENTS_SQL` already did. `PHRASES.waivedOn` is in the dictionary.
+The stream owns all of it from here.
+
+**assessment.** `bytesAreAnEdf` is `domain/shared`'s, re-exported by
+`domain/assessment/fileType.ts` under the same name, so nothing that imports it
+moved. Both requests of `assessment-02.md` that were written and not applied
+are closed. `domain/assessment/fileType.ts` now holds only the practice's own
+decisions: which media type an export may be, and how the amplifier software's
+own recording is recognised.
+
+**scheduling.** `scheduling_setting.unfit_fee_fils` has a new comment, in
+migration 205 in your own range. 202 is untouched. `tests/db/`, not
+`tests/scheduling/db/`, holds the test that reads it back, for the reason
+default 6 gives; move it if you would rather own it.
+
+**Everyone.** A migration that only comments another stream's column is a
+migration in **that stream's** range with a `Needs` naming only what it needs
+to exist. A comment describes; it does not depend.

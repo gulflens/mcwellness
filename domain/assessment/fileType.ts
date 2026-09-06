@@ -1,4 +1,4 @@
-import { KNOWN_MIME_TYPES, bytesMatchMimeType } from '../shared/fileSignature';
+import { KNOWN_MIME_TYPES, bytesAreAnEdf, bytesMatchMimeType } from '../shared/fileSignature';
 
 /**
  * What an export's first bytes say it is, checked against what the caller says
@@ -51,17 +51,20 @@ import { KNOWN_MIME_TYPES, bytesMatchMimeType } from '../shared/fileSignature';
  * refuses anything with a dot or a separator left in it for that reason, so a
  * caller sending a whole file name is told nothing was sent at all.
  *
- * **The EDF signature is checked here rather than in `domain/shared`.** The
- * shared check is the trunk's (`docs/SPEC/OWNERSHIP.md` rule 3) and knows four
- * media types; adding a fifth is request 2 of
- * `docs/CHANGE-REQUESTS/assessment-02.md`. This is the local check meanwhile —
- * the same shape request 1 of `assessment-01.md` took for the PDF, which the
- * trunk's round 31 then answered.
+ * **The EDF signature is `domain/shared`'s question**: the trunk answered it in
+ * round 33, and it is re-exported below so no caller moved.
  *
  * **Nothing here parses a recording.** It reads at most the first eight bytes
  * and asks one question of them. The header's next field is the person's own
  * identity, and this module never reaches it (spec section 7.1).
  */
+
+/**
+ * The eight bytes the European Data Format fixes at the front of every file,
+ * asked of `domain/shared/fileSignature.ts` and re-exported under the name this
+ * stream's callers already use — the shape round 31 gave the PDF's five.
+ */
+export { bytesAreAnEdf } from '../shared/fileSignature';
 
 /** The media types an export may be declared as, and no others. */
 export const ASSESSMENT_FILE_MIME_TYPES = ['application/pdf', 'application/octet-stream'] as const;
@@ -95,23 +98,6 @@ export type FileRefusalReason = 'unsupported_media_type' | 'not_a_pdf' | 'not_a_
 
 export type FileClassification =
   { ok: true; kind: AssessmentFileKind } | { ok: false; reason: FileRefusalReason };
-
-/**
- * The eight bytes the European Data Format fixes at the front of every file:
- * the version, an ASCII `0`, then seven spaces. Its `+` variant carries the
- * same eight, and both of the practice's recorders write them.
- */
-const EDF_VERSION = [0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20] as const;
-
-function startsWith(bytes: Uint8Array, signature: readonly number[]): boolean {
-  if (bytes.length < signature.length) return false;
-  return signature.every((byte, index) => bytes[index] === byte);
-}
-
-/** Whether these bytes begin as the European Data Format says a file must. */
-export function bytesAreAnEdf(bytes: Uint8Array): boolean {
-  return startsWith(bytes, EDF_VERSION);
-}
 
 /** Whether these bytes begin as a PDF does. The shared check's own answer. */
 export function bytesAreAPdf(bytes: Uint8Array): boolean {

@@ -3,12 +3,14 @@
 McWellness, September 2026. How the practical side works.
 
 **Moving or cancelling a visit.** More than 24 hours before the visit it is
-free. Within 24 hours, a fee of AED 150 applies. Sessions in your package
-are never taken for a cancellation.
+free. Within 24 hours, a fee of AED 150 applies, plus VAT once the practice
+is registered for it. Sessions in your package are never taken for a
+cancellation.
 
 **If a visit cannot go ahead on the day.** If the practitioner has travelled
 to you and the session cannot proceed because of how the client is on the
-day, the same AED 150 fee applies.
+day, the same AED 150 fee applies, plus VAT once the practice is registered
+for it.
 
 **Arrival.** We give you an arrival window rather than a fixed minute,
 because visits are in people's homes across the city. If we are running

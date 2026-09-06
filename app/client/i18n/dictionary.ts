@@ -240,6 +240,12 @@ export const PHRASES = {
   windowFromTo: (from: string, to: string): Phrase => t(`${from} to ${to}`, `من ${from} إلى ${to}`),
   coversFromTo: (from: string, to: string): Phrase => t(`${from} to ${to}`, `من ${from} إلى ${to}`),
   greeting: (name: string): Phrase => t(`Hello, ${name}`, `مرحبًا، ${name}`),
+  /**
+   * A charge the practice forgave, with the day it did. The Arabic verb and its
+   * connective are `waivedNotice`'s in `domain/billing/document/strings.ts`, so
+   * the household's screen and the rendered invoice say the same word.
+   */
+  waivedOn: (day: string): Phrase => t(`Waived ${day}`, `أُعفي بتاريخ ${day}`),
   practiceIs: (name: string): Phrase => t(name, name),
 };
 

@@ -14,7 +14,7 @@ import { SchedulingSettingsResponse, UpdateSchedulingSettingsRequest } from './s
  *
  * **Why a screen needs them before it acts.** The cancel confirmation has to
  * name the consequence — "this is inside the practice's twenty-four hours and
- * uses one of the client's sessions" — while the person can still change
+ * carries the practice's call-out fee" — while the person can still change
  * their mind. Reading the figure back off the answer would name it only after
  * the visit had already been called off.
  *

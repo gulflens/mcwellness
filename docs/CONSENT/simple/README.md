@@ -39,3 +39,5 @@ and an unfit visit as using a session, and only records the fee. The next
 scheduling and billing round keeps the session and posts the AED 150 fee as a
 charge on the household's account (the figure already sits in
 `scheduling_setting.unfit_fee_fils`).
+
+Amended 6 September 2026 (billing-06 request 3): the fee is stated net of VAT.
