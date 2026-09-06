@@ -87,15 +87,15 @@ async function seedWaivedFee(): Promise<void> {
   await seedLocation(owner, IDS.tenantA, LOCATION, STANDING, IDS.ownerA);
   await owner.query(
     'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
-      "location_id, delivery_mode, window_start, window_end) values ($1, $2, $3, $4, $5, $6, " +
+      'location_id, delivery_mode, window_start, window_end) values ($1, $2, $3, $4, $5, $6, ' +
       "'home', $7::timestamptz, $7::timestamptz + interval '45 minutes')",
     [CALLED_OFF, IDS.tenantA, STANDING, PRACTITIONER, SERVICE, LOCATION, '2026-08-15T06:00:00Z'],
   );
   await owner.query(
     'insert into invoice (id, tenant_id, client_id, number, kind, issued_on, net_fils, ' +
-      "vat_fils, gross_fils, appointment_id, waived_at, waived_by, waiver_reason) values " +
+      'vat_fils, gross_fils, appointment_id, waived_at, waived_by, waiver_reason) values ' +
       "($1, $2, $3, app.next_invoice_number(), 'call_out_fee', $4::date, $5, 0, $5, $6, " +
-      "$4::date, $7, $8)",
+      '$4::date, $7, $8)',
     [
       FEE_INVOICE,
       IDS.tenantA,

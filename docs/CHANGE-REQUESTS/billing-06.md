@@ -12,6 +12,13 @@ registers for VAT; the other three are words.
 
 ## 1. To `client-portal`: a waived fee, in the household's own screen
 
+*(**Answered in trunk round 33**: `PortalInvoice` carries `waivedOn` — a day,
+named to match `issuedOn` and `receivedOn` beside it — the day is read in the
+practice's own zone through the parameter `PAYMENTS_SQL` already takes rather
+than a literal, and the money screen's row says "Waived" with the day in both
+languages, the Arabic word `waivedNotice`'s own.
+`docs/CHANGE-REQUESTS/trunk-notes.md`, round 33, item 6.)*
+
 **What.** `PortalInvoice` (`app/api/portal/schema.ts`) gains `waivedAt`, a
 nullable `YYYY-MM-DD`; `INVOICES_SQL` in `app/api/portal/money.ts` selects
 `to_char(i.waived_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as waived_on`
@@ -39,6 +46,11 @@ omission.
 ---
 
 ## 2. To the trunk: a waived fee is not a taxable supply
+
+*(**Answered in trunk round 33**: migration
+`957_vat_taxable_supplies_excludes_waived.sql` replaces the function whole
+with 953's body and the clause, and carries 953's verbatim in its rollback.
+Round 33, item 1.)*
 
 **What.** `app.vat_taxable_supplies_fils(date)`, added by migration
 `953_vat_taxable_supplies.sql`, excludes waived rows:
@@ -72,6 +84,11 @@ is a request rather than a commit.
 
 ## 3. To the consent set: AED 150, and VAT
 
+*(**Answered in trunk round 33**: both mentions now read "plus VAT once the
+practice is registered for it" — the clause twice rather than a sentence at
+the foot of the page, for the reason default 9 gives — and the founder's
+review copy outside the repository was refreshed to match. Round 33, item 7.)*
+
 **What.** `docs/CONSENT/simple/bookings-and-packages.md` says "a fee of AED 150
 applies" twice. Before the practice registers for VAT, both want "plus VAT
 where applicable" — or a sentence at the foot of the page saying that every
@@ -93,6 +110,11 @@ is the founder's own wording and not this round's to amend.
 ---
 
 ## 4. To `scheduling`: the column comment on the fee
+
+*(**Answered in trunk round 33**: migration
+`205_unfit_fee_is_the_call_out_fee.sql`, in the scheduling range, replaces
+202's comment. `Needs: 202` only, because a comment describes rather than
+depends. Round 33, item 4.)*
 
 **What.** `scheduling_setting.unfit_fee_fils` (migration 202) is commented
 "Recorded here; nothing charges it yet
@@ -116,6 +138,9 @@ this round to say the fee is charged.
 ---
 
 ## 5. To `scheduling`: one sentence that still describes the old rule
+
+*(**Answered in trunk round 33**: the doc comment now reads "…and carries the
+practice's call-out fee". Round 33, item 5.)*
 
 **What.** `app/api/appointments/settings.ts`, the doc comment above the route,
 says the cancel confirmation has to name the consequence — "this is inside the

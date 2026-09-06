@@ -35,7 +35,7 @@ afterAll(async () => {
 async function commentOn(table: string, column: string): Promise<string | null> {
   const { rows } = await owner.query<{ comment: string | null }>(
     'select col_description(a.attrelid, a.attnum) as comment from pg_attribute a ' +
-      "where a.attrelid = to_regclass($1) and a.attname = $2",
+      'where a.attrelid = to_regclass($1) and a.attname = $2',
     [`public.${table}`, column],
   );
   return rows[0]?.comment ?? null;

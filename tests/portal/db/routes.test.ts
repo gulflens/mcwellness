@@ -224,7 +224,7 @@ async function seedWaivedFee(): Promise<void> {
   await h.owner.query(
     'insert into invoice (id, tenant_id, client_id, number, kind, issued_on, net_fils, ' +
       "vat_fils, gross_fils, appointment_id) values ($1, $2, $3, 2, 'call_out_fee', " +
-      "current_date, $4, 0, $4, $5)",
+      'current_date, $4, 0, $4, $5)',
     [WAIVED_FEE, IDS.tenantA, PORTAL.childA, FEE_FILS, WAIVED_VISIT],
   );
   await h.owner.query('begin');
