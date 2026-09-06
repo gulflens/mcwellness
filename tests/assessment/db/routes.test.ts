@@ -1103,6 +1103,98 @@ describe('the export’s own door', () => {
   });
 });
 
+describe('the identity inside a recording', () => {
+  /**
+   * A recording's header carries the person's own identity in a field eighty
+   * bytes wide, and the practice's real files have a name in it. The platform
+   * keeps the file exactly as the practice sent it and reads that field into
+   * nothing at all: not a column, not a log line, not a response
+   * (docs/SPEC/assessment.md section 7.1).
+   *
+   * The sentinel below is plainly not a person's name, because
+   * .claude/rules/testing.md forbids a hand-written one and a realistic one
+   * would be the very thing this test exists to keep out.
+   */
+  const SENTINEL = 'EDFHEADERIDENTITYSENTINEL';
+  const RECORDED_BY = 'EDFRECORDINGFIELDSENTINEL';
+
+  it('files the bytes as they came and reads no part of the header into anything', async () => {
+    const household = await seedHousehold('81');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const withIdentity = minimalEdf({ patient: SENTINEL, recording: RECORDED_BY });
+
+    const answers: string[] = [];
+    const keep = async (res: Response): Promise<string> => {
+      const text = await res.text();
+      answers.push(text);
+      return text;
+    };
+
+    const filedText = await keep(
+      await putFile(created.assessment.id, household.authSub, withIdentity, {
+        type: 'application/octet-stream',
+        extension: 'edf',
+        condition: 'eyes-open',
+      }),
+    );
+    const filed = JSON.parse(filedText) as { documentId: string };
+
+    // Every route this measurement can be read through, in turn.
+    await keep(await get(`/api/clients/${household.clientId}/assessments`, household.authSub));
+    await keep(
+      await get(`/api/assessments/visits?clientId=${household.clientId}`, household.authSub),
+    );
+    await keep(
+      await post(`/api/assessments/${created.assessment.id}/supersede`, household.authSub, {
+        instrumentVersion: '1',
+        performedAt: `${today}T09:00:00+04:00`,
+        derived: brainMapPayload(11),
+        conditionNote: 'Eyes closed, quiet room.',
+        referenceAgeYears: 9,
+        referenceSex: 'female',
+        reason: 'The alpha figure at Fz was typed from the wrong column.',
+      }),
+    );
+    const linkText = await keep(
+      await get(`/api/assessments/file/${filed.documentId}/link`, household.authSub),
+    );
+    // Five answers, each of them something rather than an empty refusal: a
+    // sweep over nothing would pass for the wrong reason.
+    expect(answers).toHaveLength(5);
+    for (const answer of answers) {
+      expect(answer.length).toBeGreaterThan(2);
+      expect(answer).not.toContain(SENTINEL);
+      expect(answer).not.toContain(RECORDED_BY);
+    }
+    expect(answers.some((answer) => answer.includes(created.assessment.id))).toBe(true);
+
+    // Nor anywhere on the trail: every row of it, columns and json alike.
+    const trail = await owner.query<{ row: string }>(
+      'select to_jsonb(audit_log.*)::text as row from audit_log',
+    );
+    expect(trail.rows.length).toBeGreaterThan(0);
+    for (const row of trail.rows) {
+      expect(row.row).not.toContain(SENTINEL);
+      expect(row.row).not.toContain(RECORDED_BY);
+    }
+
+    // Nor on the document's own row, whose key is ids and nothing else.
+    const document = await owner.query<{ row: string }>(
+      'select to_jsonb(document.*)::text as row from document where id = $1',
+      [filed.documentId],
+    );
+    expect(document.rows[0]?.row).not.toContain(SENTINEL);
+    expect(document.rows[0]?.row).not.toContain(RECORDED_BY);
+
+    // And the file itself is untouched: the practice's evidence is kept as the
+    // practice sent it, header and all. Reading none of it is the platform's
+    // discipline, not an edit to somebody's recording.
+    const { url } = JSON.parse(linkText) as { url: string };
+    const bytes = new Uint8Array(await (await api.request(url)).arrayBuffer());
+    expect(bytes).toEqual(withIdentity);
+  });
+});
+
 describe('a link to an export', () => {
   it('records the read before it signs, and the bytes come back', async () => {
     const household = await seedHousehold('57');
