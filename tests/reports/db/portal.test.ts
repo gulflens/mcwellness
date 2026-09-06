@@ -168,15 +168,10 @@ describe('a report about a minor is the guardian’s to read', () => {
   beforeAll(async () => {
     // A seeded minor: the generator gives every one of them a parent recorded
     // as a legal guardian, and gives an adult client a `self` contact instead.
-    const guardian = h.data.contacts.find((contact) => {
-      const client = h.data.clients.find((each) => each.id === contact.clientId);
-      return (
-        contact.isLegalGuardian &&
-        contact.id !== household.contactId &&
-        client !== undefined &&
-        client.status !== 'erased'
-      );
-    });
+    // The seed erases nobody, so every seeded client stands.
+    const guardian = h.data.contacts.find(
+      (contact) => contact.isLegalGuardian && contact.id !== household.contactId,
+    );
     if (!guardian) throw new Error('The seed has no guarded child.');
     minorClientId = guardian.clientId;
 
