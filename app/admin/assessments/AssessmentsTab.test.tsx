@@ -144,7 +144,14 @@ function mount(
         version: 2,
         supersedesId: BASELINE,
         supersedeReason: 'The alpha figure at Fz was typed from the wrong column.',
-        files: [{ documentId: CLIENT, role: 'raw', filedAt: '2026-03-01T09:00:00.000Z' }],
+        files: [
+          {
+            documentId: CLIENT,
+            role: 'raw_recording',
+            condition: 'eyes-open',
+            filedAt: '2026-03-01T09:00:00.000Z',
+          },
+        ],
       }),
       superseded: [
         row(BASELINE, {
@@ -172,7 +179,7 @@ function mount(
       sent.push({ url, method, body: init?.body ?? null, headers: new Headers(init?.headers) });
       const answer = options.attachAnswer ?? {
         status: 201,
-        body: { documentId: DOCUMENT, role: 'raw' },
+        body: { documentId: DOCUMENT, role: 'raw_recording', condition: null },
       };
       return json(answer.body, answer.status);
     }
@@ -217,7 +224,9 @@ describe('the measurements table', () => {
     expect(screen.getAllByText('Brain map').length).toBe(3);
     expect(screen.getAllByText('Rowan Meadow').length).toBeGreaterThan(0);
     // A filed file is named by what it is, and it opens; the rest say so.
-    expect(screen.getByRole('button', { name: 'The recording, opens in a new tab' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'The recording, eyes open, opens in a new tab' }),
+    ).toBeTruthy();
     expect(screen.getAllByText('None attached').length).toBe(2);
   });
 
@@ -463,7 +472,7 @@ describe('the export', () => {
     await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
 
     const put = sent.find((call) => call.method === 'PUT')!;
-    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw&extension=pdf`);
+    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw_recording&extension=pdf`);
     expect(put.headers?.get('content-type')).toBe('application/pdf');
     // The fingerprint of the bytes that were sent, taken here and recomputed
     // by the route over what actually arrived.
@@ -494,7 +503,9 @@ describe('the export', () => {
       await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
 
       const put = sent.find((call) => call.method === 'PUT')!;
-      expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw&extension=${extension}`);
+      expect(put.url).toBe(
+        `/api/assessments/${BASELINE}/file?role=raw_recording&extension=${extension}`,
+      );
       expect(put.headers?.get('content-type')).toBe('application/octet-stream');
       // The name the file was chosen under goes nowhere: the practice's own
       // files are named after the people in them.
@@ -503,13 +514,56 @@ describe('the export', () => {
     }
   });
 
+  it('offers the condition where the file is a recording, and not otherwise', async () => {
+    mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    // A recording is taken under a condition; the software's report is not.
+    expect(await screen.findByLabelText('The condition it was taken under')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('What the file is'), {
+      target: { value: 'vendor_report' },
+    });
+    expect(screen.queryByLabelText('The condition it was taken under')).toBeNull();
+  });
+
+  it('sends the condition a recording was taken under, as its own field', async () => {
+    const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    fireEvent.change(await screen.findByLabelText('The condition it was taken under'), {
+      target: { value: 'eyes-closed' },
+    });
+    fireEvent.change(screen.getByLabelText('Attach the export'), {
+      target: { files: [recordingFile('edf')] },
+    });
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+    expect(sent.find((call) => call.method === 'PUT')!.url).toBe(
+      `/api/assessments/${BASELINE}/file?role=raw_recording&extension=edf&condition=eyes-closed`,
+    );
+  });
+
+  it('sends no condition where the recording covers both, which is ordinary', async () => {
+    // The practice's own native recordings carry eyes open and eyes closed in
+    // one file, so the control opens on neither and that answer is sent as an
+    // absence rather than as a word.
+    const sent = mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    fireEvent.change(await screen.findByLabelText('Attach the export'), {
+      target: { files: [recordingFile('eeg')] },
+    });
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+    expect(sent.find((call) => call.method === 'PUT')!.url).not.toContain('condition');
+  });
+
   it('reads the row again, so the file appears where it was attached', async () => {
     mount({
       chains: [{ current: row(BASELINE), superseded: [] }],
       chainsAfter: [
         {
           current: row(BASELINE, {
-            files: [{ documentId: DOCUMENT, role: 'raw', filedAt: '2026-03-01T09:00:00.000Z' }],
+            files: [
+              {
+                documentId: DOCUMENT,
+                role: 'raw_recording',
+                condition: null,
+                filedAt: '2026-03-01T09:00:00.000Z',
+              },
+            ],
           }),
           superseded: [],
         },
@@ -541,7 +595,7 @@ describe('the export', () => {
     vi.stubGlobal('open', open);
     const sent = mount();
     const button = await screen.findByRole('button', {
-      name: 'The recording, opens in a new tab',
+      name: 'The recording, eyes open, opens in a new tab',
     });
     // The link is a read and is audited as one, so it is asked for at the
     // moment somebody presses and never rendered into the page in advance.
@@ -559,7 +613,7 @@ describe('the export', () => {
     );
     mount();
     fireEvent.click(
-      await screen.findByRole('button', { name: 'The recording, opens in a new tab' }),
+      await screen.findByRole('button', { name: 'The recording, eyes open, opens in a new tab' }),
     );
     const link = await screen.findByRole('link', { name: 'Open it in a new tab' });
     expect(link.getAttribute('href')).toBe(SIGNED);

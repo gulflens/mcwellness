@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import {
+  ASSESSMENT_FILE_CONDITIONS,
   ASSESSMENT_FILE_LIMIT_BYTES,
   ASSESSMENT_FILE_MIME_TYPE,
   ASSESSMENT_FILE_ROLES,
@@ -7,12 +8,21 @@ import {
   FileLinkResponse,
   NATIVE_RECORDING_EXTENSION,
   RECORDING_MIME_TYPE,
+  RECORDING_ROLES,
   type AssessmentFile,
+  type AssessmentFileCondition,
   type AssessmentFileRole,
 } from '../../api/assessments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
-import { ATTACH_MESSAGES, ATTACH_REFUSALS, FILE_ROLE_LABELS } from './copy';
+import {
+  ATTACH_MESSAGES,
+  ATTACH_REFUSALS,
+  FILE_CONDITION_LABELS,
+  FILE_ROLE_LABELS,
+  NO_CONDITION_LABEL,
+  fileLabel,
+} from './copy';
 
 /**
  * The export, in the measurement's own row (docs/SPEC/assessment.md sections
@@ -38,6 +48,13 @@ import { ATTACH_MESSAGES, ATTACH_REFUSALS, FILE_ROLE_LABELS } from './copy';
  * its bytes is recognised by the extension the file was chosen under, so that
  * is what is sent — a few characters, never `file.name`. The practice's own
  * files are named after the people in them.
+ *
+ * **The condition is asked for, not guessed.** Where the file is a recording,
+ * the control offers eyes open and eyes closed beside the role, and the answer
+ * is stored as the document's own field (migration 503). It is not read out of
+ * a file name for the reason above, and it is offered rather than required:
+ * the practice's own native recordings carry both conditions in one file, so
+ * "not one condition" is an ordinary answer and the control opens on it.
  *
  * **Opening one is a read**, and the link is asked for at the moment somebody
  * presses, never rendered into the page in advance — the route writes the
@@ -80,7 +97,7 @@ function OpenExport({ file }: { file: AssessmentFile }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blockedUrl, setBlockedUrl] = useState<string | null>(null);
-  const label = FILE_ROLE_LABELS[file.role];
+  const label = fileLabel(file.role, file.condition);
 
   const open = useCallback(async () => {
     setBusy(true);
@@ -152,7 +169,9 @@ export function ExportFiles({
   onAttached: () => void;
 }) {
   const { apiFetch } = useAuth();
-  const [role, setRole] = useState<AssessmentFileRole>('raw');
+  const [role, setRole] = useState<AssessmentFileRole>('raw_recording');
+  const [condition, setCondition] = useState<AssessmentFileCondition | ''>('');
+  const isRecording = RECORDING_ROLES.includes(role);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Bumped after a filing so the input is a fresh element and stops naming a
@@ -176,6 +195,9 @@ export function ExportFiles({
         const bytes = await file.arrayBuffer();
         const extension = extensionOf(file.name);
         const query = new URLSearchParams({ role, extension });
+        // Only where the file is a recording: a report is not taken under a
+        // condition, and the route refuses one that says it was.
+        if (isRecording && condition !== '') query.set('condition', condition);
         const res = await apiFetch(`/api/assessments/${assessmentId}/file?${query.toString()}`, {
           method: 'PUT',
           headers: {
@@ -200,7 +222,7 @@ export function ExportFiles({
         setBusy(false);
       }
     },
-    [apiFetch, assessmentId, onAttached, role],
+    [apiFetch, assessmentId, condition, isRecording, onAttached, role],
   );
 
   return (
@@ -223,6 +245,21 @@ export function ExportFiles({
               </option>
             ))}
           </Select>
+          {isRecording ? (
+            <Select
+              id={`attach-condition-${assessmentId}`}
+              label="The condition it was taken under"
+              value={condition}
+              onChange={(event) => setCondition(event.target.value as AssessmentFileCondition | '')}
+            >
+              <option value="">{NO_CONDITION_LABEL}</option>
+              {ASSESSMENT_FILE_CONDITIONS.map((each) => (
+                <option key={each} value={each}>
+                  {FILE_CONDITION_LABELS[each]}
+                </option>
+              ))}
+            </Select>
+          ) : null}
           <div className="field">
             <label htmlFor={`attach-${assessmentId}`} className="field__label">
               Attach the export

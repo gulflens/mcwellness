@@ -1,6 +1,12 @@
 import type { Assessment, DerivedPayload, Instrument, ReferenceSex } from '@domain/assessment';
 import type { Db } from '../_middleware/request-context';
-import type { AssessmentFile, AssessmentFileRole, AssessmentRow, AssessmentVisit } from './schema';
+import type {
+  AssessmentFile,
+  AssessmentFileCondition,
+  AssessmentFileRole,
+  AssessmentRow,
+  AssessmentVisit,
+} from './schema';
 
 /**
  * Reading measurements back out of the database, in one shape, for every route
@@ -78,6 +84,7 @@ type FileRow = {
   assessment_id: string;
   document_id: string;
   role: AssessmentFileRole;
+  condition: AssessmentFileCondition | null;
   created_at: Date;
 };
 
@@ -88,7 +95,8 @@ export async function readFiles(
   const files = new Map<string, AssessmentFile[]>();
   if (assessmentIds.length === 0) return files;
   const { rows } = await db.query<FileRow>(
-    'select assessment_id, document_id, role::text as role, created_at from assessment_document ' +
+    'select assessment_id, document_id, role::text as role, condition::text as condition, ' +
+      'created_at from assessment_document ' +
       'where tenant_id = app.current_tenant_id() and assessment_id = any($1::uuid[]) ' +
       'order by created_at',
     [assessmentIds],
@@ -98,6 +106,7 @@ export async function readFiles(
     filed.push({
       documentId: row.document_id,
       role: row.role,
+      condition: row.condition,
       filedAt: row.created_at.toISOString(),
     });
     files.set(row.assessment_id, filed);

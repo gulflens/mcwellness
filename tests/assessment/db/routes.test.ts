@@ -106,11 +106,18 @@ async function putFile(
   assessment: string,
   sub: string,
   bytes: Uint8Array,
-  options: { digest?: string; type?: string; role?: string; extension?: string } = {},
+  options: {
+    digest?: string;
+    type?: string;
+    role?: string;
+    extension?: string;
+    condition?: string;
+  } = {},
 ): Promise<Response> {
   const query = new URLSearchParams();
   if (options.role !== undefined) query.set('role', options.role);
   if (options.extension !== undefined) query.set('extension', options.extension);
+  if (options.condition !== undefined) query.set('condition', options.condition);
   const suffix = query.size === 0 ? '' : `?${query.toString()}`;
   return api.request(`/api/assessments/${assessment}/file${suffix}`, {
     method: 'PUT',
@@ -774,8 +781,13 @@ describe('the export’s own door', () => {
     const created = (await (await record(household)).json()) as { assessment: { id: string } };
     const res = await putFile(created.assessment.id, household.authSub, PDF);
     expect(res.status).toBe(201);
-    const filed = (await res.json()) as { documentId: string; role: string };
-    expect(filed.role).toBe('raw');
+    const filed = (await res.json()) as {
+      documentId: string;
+      role: string;
+      condition: string | null;
+    };
+    expect(filed.role).toBe('raw_recording');
+    expect(filed.condition).toBeNull();
 
     const document = await owner.query<{
       kind: string;
@@ -806,7 +818,7 @@ describe('the export’s own door', () => {
       [created.assessment.id],
     );
     expect(trail.rows).toHaveLength(1);
-    expect(trail.rows[0]?.new_values).toEqual({ role: 'raw' });
+    expect(trail.rows[0]?.new_values).toEqual({ role: 'raw_recording' });
 
     // And the document is named where it belongs: on the link row's own entry,
     // written by the audit trigger.
@@ -963,6 +975,85 @@ describe('the export’s own door', () => {
     expect(res.status).toBe(415);
     expect(await res.json()).toMatchObject({ code: 'not_a_recording' });
     expect(await refusals(created.assessment.id)).toContain('not_a_recording');
+  });
+
+  it('files a recording under the condition it was taken in, as its own field', async () => {
+    const household = await seedHousehold('76');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, EDF, {
+      type: 'application/octet-stream',
+      extension: 'edf',
+      role: 'raw_recording',
+      condition: 'eyes-closed',
+    });
+    expect(res.status).toBe(201);
+    const filed = (await res.json()) as { documentId: string; condition: string | null };
+    expect(filed.condition).toBe('eyes-closed');
+
+    // On the row, and never taken from a file name: this door was sent an
+    // extension and nothing else about what the file was called.
+    const link = await owner.query<{ role: string; condition: string | null }>(
+      'select role::text as role, condition::text as condition from assessment_document ' +
+        'where document_id = $1',
+      [filed.documentId],
+    );
+    expect(link.rows[0]).toEqual({ role: 'raw_recording', condition: 'eyes-closed' });
+
+    // And it comes back on the measurement's own row, so the tab can say it.
+    const listed = (await (
+      await get(`/api/clients/${household.clientId}/assessments`, household.authSub)
+    ).json()) as { assessments: { current: { files: { condition: string | null }[] } }[] };
+    expect(listed.assessments[0]?.current.files[0]?.condition).toBe('eyes-closed');
+  });
+
+  it('takes the session export as its own kind of file', async () => {
+    // What the neurofeedback software writes at the end of a session
+    // (migration 503). A PDF today, a numeric export when the founder sends
+    // one (spec decision 2).
+    const household = await seedHousehold('77');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, PDF, {
+      role: 'session_export',
+      extension: 'pdf',
+    });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { role: string }).role).toBe('session_export');
+  });
+
+  it('refuses a condition on anything that is not a recording', async () => {
+    // A report is not taken under a condition, and a column that held one
+    // would invite a screen to show a fact nobody recorded. The route says so
+    // and migration 503's check constraint says it again underneath.
+    const household = await seedHousehold('78');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, PDF, {
+      role: 'vendor_report',
+      extension: 'pdf',
+      condition: 'eyes-open',
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'condition_without_recording' });
+  });
+
+  it('refuses a condition that is not one of the two the practice records', async () => {
+    const household = await seedHousehold('79');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, EDF, {
+      type: 'application/octet-stream',
+      extension: 'edf',
+      condition: 'eyes-half-open',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuses a role that is not one of the three', async () => {
+    const household = await seedHousehold('80');
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, PDF, {
+      role: 'whatever',
+      extension: 'pdf',
+    });
+    expect(res.status).toBe(400);
   });
 
   it('refuses a whole file name where an extension belongs', async () => {

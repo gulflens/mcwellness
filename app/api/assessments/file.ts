@@ -15,7 +15,14 @@ import { logAction } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { logRefusal } from './audit';
 import { readOne } from './rows';
-import { ASSESSMENT_FILE_ROLES, FileFiledResponse, type AssessmentFileRole } from './schema';
+import {
+  ASSESSMENT_FILE_CONDITIONS,
+  ASSESSMENT_FILE_ROLES,
+  FileFiledResponse,
+  RECORDING_ROLES,
+  type AssessmentFileCondition,
+  type AssessmentFileRole,
+} from './schema';
 
 /**
  * `PUT /api/assessments/:id/file` — the door the equipment's own export goes
@@ -67,11 +74,20 @@ import { ASSESSMENT_FILE_ROLES, FileFiledResponse, type AssessmentFileRole } fro
  *
  * **Idempotent on the digest.** A different file against the same measurement
  * is an ordinary second file, because one brain map produces several.
+ *
+ * **The role and the condition are the caller's to say, and are the document's
+ * own fields.** Which of the three things a file is, and which condition a
+ * recording was taken under, are facts the person filing knows and the bytes
+ * do not carry. Neither is ever read out of a file name: the practice's own
+ * exports are named after the people in them (spec section 7.1). A condition
+ * on anything that is not a recording is refused here and again by migration
+ * 503's check constraint underneath.
  */
 
 const Params = z.object({ id: z.uuid() });
 const Digest = z.string().regex(/^[0-9a-f]{64}$/, 'Not a sha256 digest');
-const Role = z.enum(ASSESSMENT_FILE_ROLES).default('raw');
+const Role = z.enum(ASSESSMENT_FILE_ROLES).default('raw_recording');
+const Condition = z.enum(ASSESSMENT_FILE_CONDITIONS).nullable().default(null);
 
 export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.put('/api/assessments/:id/file', async (c) => {
@@ -106,6 +122,15 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
     const role = Role.safeParse(c.req.query('role') ?? undefined);
     if (!role.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const condition = Condition.safeParse(c.req.query('condition') ?? null);
+    if (!condition.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    // A report is not taken under a condition, and a column that held one
+    // would invite a screen to show a fact nobody recorded.
+    if (condition.data !== null && !RECORDING_ROLES.includes(role.data)) {
+      return c.json({ error: 'bad_request', code: 'condition_without_recording', requestId }, 400);
     }
     const declared = Digest.safeParse(c.req.header('x-sha256') ?? '');
     if (!declared.success) {
@@ -146,8 +171,8 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
     // function reads the client off the assessment itself and refuses a caller
     // who may not reach that record (migration 501).
     const filed = await db.query<{ document_id: string }>(
-      'select app.file_assessment_document($1, $2, $3, $4, $5, $6, $7::assessment_document_role) ' +
-        'as document_id',
+      'select app.file_assessment_document($1, $2, $3, $4, $5, $6, $7::assessment_document_role, ' +
+        '$8::assessment_recording_condition) as document_id',
       [
         assessmentId,
         documentId,
@@ -156,6 +181,7 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
         Buffer.from(computed, 'hex'),
         retentionUntil,
         role.data,
+        condition.data,
       ],
     );
     const filedId = filed.rows[0]?.document_id;
@@ -180,7 +206,11 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
         });
       }
       return c.json(
-        FileFiledResponse.parse({ documentId: filedId, role: role.data as AssessmentFileRole }),
+        FileFiledResponse.parse({
+          documentId: filedId,
+          role: role.data as AssessmentFileRole,
+          condition: condition.data as AssessmentFileCondition | null,
+        }),
         200,
       );
     }
@@ -204,10 +234,18 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
       db,
       'assessment.file_filed',
       { type: 'assessment', id: assessmentId, clientId: assessment.client_id },
-      { role: role.data },
+      // The condition only where there is one: `logAction` takes words, and a
+      // key whose value is "null" is a fact nobody recorded written down.
+      condition.data === null
+        ? { role: role.data }
+        : { role: role.data, condition: condition.data },
     );
     return c.json(
-      FileFiledResponse.parse({ documentId, role: role.data as AssessmentFileRole }),
+      FileFiledResponse.parse({
+        documentId,
+        role: role.data as AssessmentFileRole,
+        condition: condition.data as AssessmentFileCondition | null,
+      }),
       201,
     );
   });

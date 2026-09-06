@@ -196,7 +196,7 @@ beforeAll(async () => {
   });
   await client.query(
     'insert into assessment_document (id, tenant_id, client_id, assessment_id, document_id, role) ' +
-      "values ($1, $2, $3, $4, $5, 'raw')",
+      "values ($1, $2, $3, $4, $5, 'raw_recording')",
     [LINK, IDS.tenantA, IDS.clientA, ON_SCHEDULE, DOCUMENT_A],
   );
 
@@ -428,7 +428,7 @@ describe('the link between a measurement and its files', () => {
       client,
       FK_VIOLATION,
       'insert into assessment_document (id, tenant_id, client_id, assessment_id, document_id, role) ' +
-        "values ($1, $2, $3, $4, $5, 'raw')",
+        "values ($1, $2, $3, $4, $5, 'raw_recording')",
       [assessmentId('e1', 1), IDS.tenantA, IDS.clientA, ON_SCHEDULE, OTHER_CLIENT_DOCUMENT],
     );
   });
@@ -438,7 +438,7 @@ describe('the link between a measurement and its files', () => {
       client,
       FK_VIOLATION,
       'insert into assessment_document (id, tenant_id, client_id, assessment_id, document_id, role) ' +
-        "values ($1, $2, $3, $4, $5, 'raw')",
+        "values ($1, $2, $3, $4, $5, 'raw_recording')",
       [assessmentId('e2', 1), IDS.tenantA, OFF_SCHEDULE_CLIENT, ON_SCHEDULE, OTHER_CLIENT_DOCUMENT],
     );
   });
@@ -459,7 +459,7 @@ describe('the link between a measurement and its files', () => {
         client,
         RLS_VIOLATION,
         'insert into assessment_document (id, tenant_id, client_id, assessment_id, document_id, role) ' +
-          "values ($1, $2, $3, $4, $5, 'raw')",
+          "values ($1, $2, $3, $4, $5, 'raw_recording')",
         [assessmentId('e4', 1), IDS.tenantA, IDS.clientA, ON_SCHEDULE, DOCUMENT_A],
       );
       await rejectsWith(client, RLS_VIOLATION, 'delete from assessment_document where id = $1', [

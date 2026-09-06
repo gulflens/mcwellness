@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   ASSESSMENT_FILE_MIME_TYPE,
   ASSESSMENT_FILE_MIME_TYPES,
+  BRAIN_MAP_CONDITIONS,
   EDF_RECORDING_EXTENSION,
   INSTRUMENTS,
   MAX_CONDITION_NOTE_LENGTH,
@@ -55,8 +56,31 @@ export {
   RECORDING_MIME_TYPE,
 };
 
-export const ASSESSMENT_FILE_ROLES = ['raw', 'vendor_report'] as const;
+/**
+ * What a filed file is, in the practice's own words (migration 503): the
+ * recording as the equipment wrote it, the analysis software's own report, or
+ * what the neurofeedback software exports at the end of a session.
+ */
+export const ASSESSMENT_FILE_ROLES = ['raw_recording', 'vendor_report', 'session_export'] as const;
 export type AssessmentFileRole = (typeof ASSESSMENT_FILE_ROLES)[number];
+
+/** The roles that are a recording, and so may carry a condition. */
+export const RECORDING_ROLES: readonly AssessmentFileRole[] = ['raw_recording'];
+
+/**
+ * Which condition a recording was taken under, where it was taken under one.
+ *
+ * The same two words the brain map's own figures use, so a recording and the
+ * figures read from it never describe the same thing differently. Null is
+ * ordinary rather than a gap: the practice's native recordings carry both
+ * conditions in one file.
+ *
+ * **Said by the person filing, never read out of a file name.** The practice's
+ * exports are named after the people in them and this platform holds no part
+ * of that (docs/SPEC/assessment.md section 7.1).
+ */
+export const ASSESSMENT_FILE_CONDITIONS = BRAIN_MAP_CONDITIONS;
+export type AssessmentFileCondition = (typeof ASSESSMENT_FILE_CONDITIONS)[number];
 
 /**
  * **There is no delivery mode on this request, and that is deliberate.** An
@@ -126,6 +150,7 @@ export type AssessmentVisitsResponse = z.infer<typeof AssessmentVisitsResponse>;
 export const AssessmentFile = z.object({
   documentId: z.uuid(),
   role: z.enum(ASSESSMENT_FILE_ROLES),
+  condition: z.enum(ASSESSMENT_FILE_CONDITIONS).nullable(),
   filedAt: z.iso.datetime(),
 });
 export type AssessmentFile = z.infer<typeof AssessmentFile>;
@@ -170,6 +195,7 @@ export type AssessmentResponse = z.infer<typeof AssessmentResponse>;
 export const FileFiledResponse = z.object({
   documentId: z.uuid(),
   role: z.enum(ASSESSMENT_FILE_ROLES),
+  condition: z.enum(ASSESSMENT_FILE_CONDITIONS).nullable(),
 });
 export type FileFiledResponse = z.infer<typeof FileFiledResponse>;
 

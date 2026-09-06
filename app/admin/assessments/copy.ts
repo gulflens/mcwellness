@@ -1,5 +1,5 @@
 import type { Band, RefusalReason, Unit } from '@domain/assessment';
-import type { AssessmentFileRole } from '../../api/assessments/schema';
+import type { AssessmentFileCondition, AssessmentFileRole } from '../../api/assessments/schema';
 
 /**
  * The words the Assessments tab says (docs/SPEC/assessment.md sections 3.2 and
@@ -108,9 +108,28 @@ export const GATE_MESSAGES: Record<string, string> = {
  * role is chosen when the file is attached and said when it is listed.
  */
 export const FILE_ROLE_LABELS: Record<AssessmentFileRole, string> = {
-  raw: 'The recording',
+  raw_recording: 'The recording',
   vendor_report: 'The software’s report',
+  session_export: 'The session export',
 };
+
+/** Which condition a recording was taken under, where it was taken under one. */
+export const FILE_CONDITION_LABELS: Record<AssessmentFileCondition, string> = {
+  'eyes-open': 'Eyes open',
+  'eyes-closed': 'Eyes closed',
+};
+
+/** Both conditions, and the choice of neither, as the attach control offers them. */
+export const NO_CONDITION_LABEL = 'Not one condition';
+
+/** A filed file in one phrase: what it is, and the condition where there is one. */
+export function fileLabel(
+  role: AssessmentFileRole,
+  condition: AssessmentFileCondition | null,
+): string {
+  const what = FILE_ROLE_LABELS[role];
+  return condition === null ? what : `${what}, ${FILE_CONDITION_LABELS[condition].toLowerCase()}`;
+}
 
 /** Attaching an export, and opening one. Said before anything is sent. */
 export const ATTACH_MESSAGES = {
@@ -142,6 +161,7 @@ export const ATTACH_REFUSALS: Record<string, string> = {
   document_exists: 'Something is already filed under that name.',
   forbidden: 'Filing an export against this measurement is not yours to do.',
   not_found: 'That measurement is no longer there.',
+  condition_without_recording: 'Only a recording is taken under a condition.',
 };
 
 /** Why a comparison could not be made. */
