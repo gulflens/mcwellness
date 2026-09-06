@@ -389,3 +389,84 @@ Still out of scope, still on purpose: no seed, no demo visit, no password
 set, no user created, and `app.bootstrap_practice` still uncalled. The door
 this pass built is open; walking through it is still "The first practice"
 above, and still the operator's own act.
+
+## What was done on 2026-09-06: the third pass — the fee and the assessment door
+
+Main had reached `6c99fac` (pull request 100, merged after 99 and 98) since
+the second pass's own `f06e666` — thirty-eight commits, two migrations this
+project did not yet have: `408_billing_call_out_fee.sql` (one call-out fee,
+never a session, replacing 404's credit-consuming trigger whole) and
+`503_assessment_document_roles.sql` (the assessment door's vocabulary:
+`raw` renamed to `raw_recording`, `session_export` added, and a recording's
+condition). `git log f06e666..HEAD -- db/policies` and `-- db/seed` are both
+empty, so neither owed a re-apply.
+
+- **The seventy-one rows already there were checked before anything was
+  touched.** Every file's sha256, computed with Node's `crypto.createHash`
+  and cross-checked with `shasum -a 256` against the files on disk, matched
+  the checksum production had recorded for it exactly.
+- **408 was applied first, then 503**, each through Supabase's migration
+  tool, under the runner's own audit context (`app.reason` naming the file, a
+  fresh `app.request_id`, both transaction-local), each followed immediately
+  by its own bookkeeping row carrying the sha256 of the file's own text
+  (`d2830c24…98916` for 408, `07a4a8c9…e1979` for 503). `schema_migration`
+  now holds **seventy-three rows**.
+- **Both functions' grants were checked afterwards.**
+  `app.waive_call_out_fee(uuid, text)` and
+  `app.file_assessment_document(..., assessment_recording_condition)` are
+  granted to `app_role` and revoked from `public`, as their own files say.
+  `app.next_invoice_number(uuid)` — the named-practice form the billing
+  trigger calls — is granted to nobody but the function's own owner, exactly
+  as 408's own comment demands; the no-argument form keeps 402's original
+  `app_role` grant. `app.billing_on_appointment_charged()`, a trigger
+  function, is granted to nobody.
+- **The three new enum values are in place**: `invoice_kind` carries
+  `call_out_fee`, `billing_exception_kind` carries `uncharged_call_out_fee`,
+  and `assessment_document_role` reads `{raw_recording, vendor_report,
+  session_export}` — the rename landed and the addition followed it.
+- **No row was written.** `tenant`, `app_user` and `client` still read zero
+  rows, confirmed by query. `app.verify_audit_chain()` returns null;
+  `audit_log` stands at zero rows before and after, since two DDL files wrote
+  no data against a tenant that does not exist.
+- **The schema fingerprint was taken against a fresh `pnpm db:reset && pnpm
+  db:migrate`** on `mcwellness-trunk-2` (its own database, port 5442), after
+  `git fetch origin && git checkout -q -B fingerprint-check origin/main`
+  there (the worktree was already clean). Seventy-three migrations and
+  twenty policy files applied cleanly to an empty database. Nine parts were
+  compared, canonicalised and hashed inside the query itself, the same
+  method the first two passes used: columns (1,226 — five more than the
+  second pass's 1,221, from `invoice`'s four new columns and
+  `assessment_document`'s one), constraints (536), indexes (474), triggers
+  (222), policies (139), row-level security flags (73 tables), functions
+  (85, the two new ones being `app.waive_call_out_fee` and the two-argument
+  `app.next_invoice_number`), the grants `app_role`, `anon`, `authenticated`
+  and `PUBLIC` hold (106 table grants, 44 function grants keyed by function
+  identity rather than `specific_name`). **Eight of the nine matched the
+  fresh build exactly.** The ninth — columns, ordered by physical position —
+  differed from the fresh build for the same reason the first and second
+  passes already found and explained: production's migrations ran as one
+  unbroken bootstrap, so a column's physical slot follows the file that
+  added it in sequence, while a rebuilt-from-migrations database orders
+  columns by when each `alter table` ran across the whole history. Ordered
+  by column name instead, production's 1,226 columns hash identically to the
+  fresh local build (`2aac01e9…7de`); nothing here is a schema difference.
+- **No consent wording step.** No wording has been loaded onto production —
+  the second pass's own account stands — so pull request 98's two wordings
+  moving to `0.2-draft` had nothing to touch here. That step is staging's
+  alone (docs/STAGING.md, this same date, twelfth pass).
+- **Advisors were checked after the migration.** Thirty-two `INFO`
+  `rls_enabled_no_policy` findings, the same list the first two passes
+  carried (`schema_migration`, `invoice_number_series`, twenty-five monthly
+  `audit_log_*` partitions plus `audit_log_default`, and the three
+  `app`-schema tables reached only through security-definer functions),
+  counted directly against `pg_class` rather than assumed. Performance
+  carried 356 findings, all `INFO` but the same six pre-existing `WARN`
+  `auth_rls_initplan` rows the first pass already named and unrelated to
+  this pass's own files; the `unused_index` count rose from 295 to 297,
+  which is the new indexes 408 adds (`invoice_appointment_idx`,
+  `invoice_one_per_appointment`, `invoice_waived_by_idx`) reporting unused on
+  a database with zero rows and zero query traffic — not a finding about the
+  schema. Nothing new at `WARN` or above.
+
+Still out of scope, still on purpose: no seed, no demo visit, no password
+set, no user created, and `app.bootstrap_practice` still uncalled.
