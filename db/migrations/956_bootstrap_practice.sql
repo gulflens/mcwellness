@@ -78,12 +78,13 @@
 -- in this schema uses, with the search path pinned, so it writes as the table
 -- owner however it was reached.
 --
--- **The audit context is the runner's.** `app.reason` names this file and
--- `app.request_id` is a fresh uuid, both transaction-local, with no actor —
+-- **The audit context is the runner's.** `app.reason` names this file,
+-- `app.request_id` is a fresh uuid, and the actor and its roles are cleared
+-- rather than left as the connection had them — all four transaction-local —
 -- so every row it makes is logged as a system action against one reason, the
 -- way a data migration's rows are (docs/SPEC/audit.md section 5, and
 -- `db/runner/apply.ts`'s own setAuditContext). Nobody signed in to create the
--- practice, and the trail says so.
+-- practice, and the trail says so however the caller reached it.
 --
 -- Needs: 010 (tenant), 020 (app_user, user_role). The six migrations named
 -- above are read through to_regclass at call time and are deliberately not
@@ -189,9 +190,18 @@ begin
   ---------------------------------------------------------------------------
   -- 2. The audit context, in the runner's own shape: a reason naming this
   --    file, a fresh request id, and no actor.
+  --
+  --    The actor is cleared rather than left alone. A connection that had
+  --    already stamped one — a session that ran something else first — would
+  --    otherwise have that person recorded as having created the practice, and
+  --    nobody created it: there was no practice to be signed in to. All four
+  --    settings are transaction-local, so the caller's own context comes back
+  --    the moment this transaction ends.
   ---------------------------------------------------------------------------
   perform set_config('app.reason', '956_bootstrap_practice.sql: the first practice', true),
-          set_config('app.request_id', gen_random_uuid()::text, true);
+          set_config('app.request_id', gen_random_uuid()::text, true),
+          set_config('app.actor_id', '', true),
+          set_config('app.actor_roles', '', true);
 
   ---------------------------------------------------------------------------
   -- 3. The practice. Every after-insert trigger on tenant fires here, which is

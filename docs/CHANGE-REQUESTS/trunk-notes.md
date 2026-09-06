@@ -1544,10 +1544,13 @@ function does about them.
    however it was reached.
 
 10. **The audit context is the runner's own shape**: `app.reason` naming the
-    file, a fresh `app.request_id`, both transaction-local, and no actor. Every
-    row the function makes is therefore logged as a system action under one
-    reason, the way a data migration's rows are. Nobody was signed in when the
-    practice was created and the trail says so.
+    file, a fresh `app.request_id`, and — from the fix round — the actor and
+    its roles cleared rather than left as the connection had them, all four
+    transaction-local. Every row the function makes is therefore logged as a
+    system action under one reason, the way a data migration's rows are. Nobody
+    was signed in when the practice was created; the SQL editor stamps no
+    actor, but a connection that had run something else first would, and that
+    person did not create the practice.
 
 11. **The test compares against a seeded practice over every tenant-scoped
     table in the schema, not a list written by hand.** It builds a seeded

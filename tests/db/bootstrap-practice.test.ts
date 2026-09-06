@@ -9,7 +9,15 @@ import { applySeed } from '../../db/seed/apply';
 import { generateSeed, SEED_TENANT_ID } from '../../db/seed/generate';
 import { FAMILY_NAMES, GIVEN_NAMES } from '../../db/seed/names';
 import { deriveIdentityKeys } from '../../domain/shared/identity';
-import { asApiRole, AUTH, freshDatabase, rejectsWith, rolledBack } from './helpers';
+import {
+  asApiRole,
+  AUTH,
+  freshDatabase,
+  IDS,
+  rejectsWith,
+  rolledBack,
+  setAuditContext,
+} from './helpers';
 
 /**
  * `app.bootstrap_practice` (migration 956): the way a database that has only
@@ -276,6 +284,7 @@ let bootstrapped: Snapshot;
 let practiceId: string;
 let ownerUserId: string;
 let withoutArabicName: number;
+let stampedTrail: unknown[];
 
 beforeAll(async () => {
   // A seeded practice first, snapshotted and then discarded: the two cannot
@@ -304,6 +313,19 @@ beforeAll(async () => {
   await owner.query('begin');
   const trial = await owner.query(BOOTSTRAP_WITH_ZONE, withOneChanged(1, null));
   withoutArabicName = trial.rows.length;
+  await owner.query('rollback');
+
+  // What the trail says when the connection had already stamped an actor: the
+  // SQL editor stamps none, but a session that ran something else first does,
+  // and that person did not create the practice. Rolled back for the same
+  // reason as the trial above.
+  await owner.query('begin');
+  await setAuditContext(owner, IDS.ownerA, 'whatever this connection did before');
+  await owner.query("select set_config('app.actor_roles', 'owner', true)");
+  await owner.query(BOOTSTRAP_WITH_ZONE, GOOD_ARGUMENTS);
+  stampedTrail = (
+    await owner.query('select distinct actor_type, actor_id, actor_role from audit_log')
+  ).rows;
   await owner.query('rollback');
 
   const { rows } = await owner.query<{ practice_id: string; owner_user_id: string }>(
@@ -416,6 +438,14 @@ describe('the first practice', () => {
       'select app.verify_audit_chain() as broken',
     );
     expect(chain.rows[0]?.broken).toBeNull();
+  });
+
+  it('says the system even when the connection had stamped an actor', () => {
+    // Nobody created the practice — there was no practice for anyone to be
+    // signed in to — so the function clears the actor and the roles alongside
+    // the reason it sets, and a person the connection had stamped for some
+    // earlier work is not recorded as having made it.
+    expect(stampedTrail).toEqual([{ actor_type: 'system', actor_id: null, actor_role: null }]);
   });
 });
 
