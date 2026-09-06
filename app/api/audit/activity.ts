@@ -222,14 +222,21 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       senior && reason.length > 0,
       limit + 1,
     ]);
-    const page = rows.slice(0, limit);
-    const hasMore = rows.length > limit;
-    const events: ActivityEvent[] = [];
-    for (const row of page) {
+    // **The page is cut after the catalogue has spoken, not before.** Cutting
+    // first and then dropping the rows the catalogue has no sentence for gave
+    // a page shorter than the one that was asked for — and, when a batch was
+    // all housekeeping, an empty one while `hasMore` still said there was
+    // more, which the screen reads as "nothing matches". The rows that can
+    // still be dropped are `update` rows whose only changed column was
+    // `updated_at`; a whole batch of nothing but those now ends the scroll
+    // rather than contradicting itself, which is the smaller of the two
+    // wrongs.
+    const narrated: ActivityEvent[] = [];
+    for (const row of rows) {
       const event = toEvent(row);
       const narration = narrate(event, locale);
       if (narration === null) continue;
-      events.push({
+      narrated.push({
         id: event.id,
         occurredAt: event.occurredAt,
         sentence: narration.sentence,
@@ -244,6 +251,8 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         clientMrn: row.client_mrn,
       });
     }
+    const events = narrated.slice(0, limit);
+    const hasMore = narrated.length > limit;
     // **Reading the trail is itself recorded**, once for the request rather
     // than once for every line: the feed names no single record, and a row per
     // line would double the trail every time somebody scrolled it. The details
@@ -270,7 +279,7 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (clientId !== undefined) {
       await logRead(db, 'client', clientId, clientId);
     }
-    const last = page[page.length - 1];
+    const last = events[events.length - 1];
     return c.json(
       ActivityResponse.parse({ events, nextBefore: hasMore && last ? last.id : null, hasMore }),
     );

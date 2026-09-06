@@ -540,6 +540,14 @@ describe('reports (docs/SPEC/reports-v1.md section 8)', () => {
     }
   });
 
+  it('says somebody read the practice’s trail, in both languages', () => {
+    const read = event({ entityType: 'audit_log', action: 'audit.activity' });
+    expect(narrate(read, 'en')?.sentence).toBe("Hazel Harbour read the practice's trail");
+    expect(/[\u0600-\u06FF]/.test(narrate(read, 'ar')?.sentence ?? '')).toBe(true);
+    // Reading is a read, so the line is coloured as one.
+    expect(narrate(read, 'en')?.kind).toBe('read');
+  });
+
   it('says a refused signature was refused', () => {
     expect(
       narrate(

@@ -188,6 +188,30 @@ describe('GET /api/audit/activity', () => {
     expect((await get('/api/audit/filters', PRACTITIONER_AUTH)).status).toBe(403);
   });
 
+  it('shows the trail its own reading, and never promises more from a short page', async () => {
+    // The feed writes one `audit.activity` row per request, and the catalogue
+    // has a sentence for it, so the second reading shows the first.
+    await feed('/api/audit/activity?limit=100', AUTH.ownerA);
+    const body = await feed('/api/audit/activity?limit=100', AUTH.ownerA);
+    const own = body.events.filter((event) => event.entityType === 'audit_log');
+    expect(own.length).toBeGreaterThan(0);
+    expect(own[0]?.sentence).toContain('trail');
+    expect(own[0]?.kind).toBe('read');
+
+    // And the page is cut after the catalogue has spoken: a page that says
+    // there is more is a full page, never a short one the screen would then
+    // read as "nothing matches".
+    let cursor: string | null = null;
+    for (let page = 0; page < 20; page += 1) {
+      const path = `/api/audit/activity?limit=3${cursor === null ? '' : `&before=${cursor}`}`;
+      const answer: ActivityResponse = await feed(path, AUTH.ownerA);
+      if (!answer.hasMore) break;
+      expect(answer.events.length).toBe(3);
+      expect(answer.nextBefore).not.toBeNull();
+      cursor = answer.nextBefore;
+    }
+  });
+
   it('records a read of the record when it is narrowed to one', async () => {
     // The access report next door counts `read` and `list` rows, so a screen
     // narrowed to one household has to leave one behind or the report omits
