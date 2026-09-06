@@ -62,6 +62,20 @@ let api: ReturnType<typeof createApi>;
 let today: string;
 let dir: string;
 
+/**
+ * `days` on from a practice day, counted in practice days. `today` is a
+ * calendar day in Asia/Dubai — the database names it — so stepping it by whole
+ * UTC days counts in the wrong calendar: `${today}T00:00:00+04:00` is already
+ * the previous day in UTC, and the day that comes back is one short. Counting
+ * on the date parts themselves is exact, and reads no clock at all.
+ */
+function daysOn(day: string, days: number): string {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(date) + days))
+    .toISOString()
+    .slice(0, 10);
+}
+
 function id(scenario: string, slot: number): string {
   return `00000000-0000-4000-8000-000000${scenario}${String(slot).padStart(4, '0')}`;
 }
@@ -519,12 +533,7 @@ describe("the day's drives, under the fallback", () => {
 
   it('answers an empty day without reaching for an estimate', async () => {
     const visit = await seedVisit('13', { hour: '07' });
-    const tomorrow = new Date(`${today}T00:00:00+04:00`);
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 8);
-    const res = await get(
-      `/api/routing/day?date=${tomorrow.toISOString().slice(0, 10)}`,
-      visit.authSub,
-    );
+    const res = await get(`/api/routing/day?date=${daysOn(today, 8)}`, visit.authSub);
     expect(res.status).toBe(200);
     expect((await res.json()) as RoutingDayResponse).toMatchObject({
       legs: [],
@@ -597,9 +606,7 @@ describe("the day's drives, asked for by the hour", () => {
     const visit = await seedVisit('20', { hour: '19' });
     // A day a week out, so every departure is still to come and the request
     // carries one rather than being asked about a drive already made.
-    const marker = new Date(`${today}T12:00:00Z`);
-    marker.setUTCDate(marker.getUTCDate() + 7);
-    const date = marker.toISOString().slice(0, 10);
+    const date = daysOn(today, 7);
 
     // Three stops, four hours apart: two legs, leaving in two different hours.
     for (const [index, hour] of ['08', '12', '16'].entries()) {

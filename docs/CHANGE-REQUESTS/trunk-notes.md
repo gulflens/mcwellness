@@ -1587,3 +1587,13 @@ nothing that repoints an existing owner at a new Auth user id, which is the
 other thing an operator locked out might want; it is one `update`, it is
 described in `docs/PRODUCTION.md`'s first refusal, and inventing a function
 for it would be inventing a door before anyone has asked to walk through it.
+
+### A test that read the clock in the wrong calendar
+
+`tests/scheduling/db/move_and_cancel.test.ts` named the day 300 hours out in
+UTC while `GET /api/appointments` reads its `date` as a day in Asia/Dubai, so
+the confirm test failed on every run started between 08:00 and 12:00 UTC; the
+day is now taken in the practice's own zone, the same slip is put right in
+`tests/portal/db/support.ts` and `tests/session/db/photo_and_routing.test.ts`,
+and all three are scheduling's, the client portal's and session-capture's test
+files edited under this round's widening and nothing of the trunk's beyond it.
