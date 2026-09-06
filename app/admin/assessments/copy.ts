@@ -119,8 +119,13 @@ export const FILE_CONDITION_LABELS: Record<AssessmentFileCondition, string> = {
   'eyes-closed': 'Eyes closed',
 };
 
-/** Both conditions, and the choice of neither, as the attach control offers them. */
-export const NO_CONDITION_LABEL = 'Not one condition';
+/**
+ * The answer for a recording that was not taken under one condition, as the
+ * attach control offers it. The practice's native recordings hold eyes open and
+ * eyes closed in a single file, so this is the ordinary answer rather than a
+ * refusal to say — which is what "not one condition" read as.
+ */
+export const NO_CONDITION_LABEL = 'Both, or not recorded';
 
 /** A filed file in one phrase: what it is, and the condition where there is one. */
 export function fileLabel(
