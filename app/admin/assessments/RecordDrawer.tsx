@@ -38,7 +38,7 @@ import { BAND_LABELS, GATE_MESSAGES, REFUSAL_MESSAGES, UNIT_LABELS } from './cop
  * **The visit is named, not guessed.** Where the practice booked the day, the
  * drawer offers that household's completed visits and the measurement names
  * the one it was taken at (migration 951). It stays optional: a questionnaire
- * filled in at the household's own pace and an outside clinic's export name no
+ * filled in at the household's own pace and an outside provider's export name no
  * visit of the practice's own, and a picker that insisted would make somebody
  * invent one.
  *

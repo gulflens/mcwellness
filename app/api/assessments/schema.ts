@@ -60,7 +60,7 @@ export const RecordAssessmentRequest = z.object({
   /**
    * The visit that produced the figures, where the person recording them
    * names one (migration 951). Null is ordinary: a questionnaire filled in at
-   * home and an outside clinic's export name no visit of the practice's own.
+   * home and an outside provider's export name no visit of the practice's own.
    * The database binds it to this client, so another household's visit is
    * refused underneath this schema rather than by it.
    */

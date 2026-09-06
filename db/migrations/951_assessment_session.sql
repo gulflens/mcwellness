@@ -16,7 +16,7 @@
 -- **Nullable, and it stays nullable.** A measurement is a fact about a day,
 -- and the day it was taken is not always a day the practice booked: a
 -- questionnaire is filled in at the household's own pace, a re-map may be
--- typed up from an outside clinic's export, and every measurement recorded
+-- typed up from an outside provider's export, and every measurement recorded
 -- before this migration names no visit and never will. The column says which
 -- visit produced the figures **when the person recording them says so**, and
 -- is silent otherwise. Nothing reads it as proof of anything.

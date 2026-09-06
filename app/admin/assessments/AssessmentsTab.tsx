@@ -184,7 +184,7 @@ export function AssessmentsTab({ clientId }: { clientId: string }) {
     {
       // The visit it was taken at, where one was named (migration 951). Empty
       // is ordinary rather than missing: a questionnaire filled in at home and
-      // an outside clinic's export name no visit of the practice's own.
+      // an outside provider's export name no visit of the practice's own.
       key: 'visit',
       header: 'Visit',
       render: (line) =>
