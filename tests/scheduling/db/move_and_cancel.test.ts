@@ -149,6 +149,21 @@ function hoursFromNow(hours: number): Date {
   return new Date(Date.now() + hours * 3_600_000);
 }
 
+/**
+ * The calendar day an instant falls on in the practice's own zone, as
+ * YYYY-MM-DD. `GET /api/appointments` reads its `date` as a day in Asia/Dubai
+ * (app/api/appointments/list.ts opens the day at `+04:00`), so naming that day
+ * in UTC asks for the wrong one whenever the instant lands after 20:00 UTC —
+ * which, for a window a fixed number of hours out, is decided by the hour the
+ * suite happens to start. `en-CA` is the locale whose numeric date is already
+ * YYYY-MM-DD, and the zone is read straight from Intl rather than from the
+ * route's own constant, so the fixture does not lean on the code it checks.
+ */
+const PRACTICE_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' });
+function practiceDay(at: Date): string {
+  return PRACTICE_DAY.format(at);
+}
+
 async function seedAppointment(
   id: string,
   args: {
@@ -596,7 +611,7 @@ describe('POST /api/appointments/:id/confirm', () => {
     // should drive to a house that is not expecting them — and until this
     // route existed there was no way out of it (docs/CHANGE-REQUESTS/qa-01.md
     // item 1).
-    const day = new Date(hoursFromNow(300)).toISOString().slice(0, 10);
+    const day = practiceDay(hoursFromNow(300));
     const before = await call(AUTH.practitionerA, 'GET', `/api/appointments?date=${day}&scope=own`);
     expect(before.status).toBe(200);
     expect(

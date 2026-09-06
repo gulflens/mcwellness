@@ -393,11 +393,17 @@ export async function seedConsent(
   );
 }
 
-/** A moment in the practice's own day, written as an absolute instant. */
+const PRACTICE_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' });
+
+/**
+ * A moment in the practice's own day, written as an absolute instant. The day
+ * is named in Asia/Dubai, which is the zone the `+04:00` on the end of it
+ * means: read in UTC, `inDays: 0` names yesterday's practice day for the four
+ * hours after midnight there, and every other offset slides with it.
+ */
 function windowStart(inDays: number, hour: number): string {
-  const day = new Date(Date.now() + inDays * 24 * 60 * 60 * 1000);
-  const iso = day.toISOString().slice(0, 10);
-  return `${iso}T${String(hour).padStart(2, '0')}:00:00+04:00`;
+  const day = PRACTICE_DAY.format(new Date(Date.now() + inDays * 24 * 60 * 60 * 1000));
+  return `${day}T${String(hour).padStart(2, '0')}:00:00+04:00`;
 }
 
 /** Reads something back as one of the household, with their stamp and roles. */
