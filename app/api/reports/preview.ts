@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import { canIssue, validateContent, type ReportContent } from '../../../domain/reports';
 import { renderReport } from '../../../domain/reports/document';
 import { isoDateIn } from '../../../domain/shared';
+import { isUuid } from '../billing/ids';
 import { documentFonts } from '../billing/fonts';
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -57,6 +58,12 @@ export function mountReportPreview(api: Hono<ApiEnv>, now: () => Date = () => ne
   api.get('/api/reports/:id/preview', async (c) => {
     const requestId = c.get('requestId');
     const reportId = c.req.param('id');
+    if (!isUuid(reportId)) {
+      // Checked before it reaches a uuid column, the way billing's own routes
+      // check theirs: an id that is not one is a 400, not a raise dressed up
+      // as a 500 on a path a stranger can call.
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
     const db = c.get('db');
     const actor = c.get('actor');
 

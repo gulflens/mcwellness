@@ -477,7 +477,6 @@ describe('measurements', () => {
   });
 });
 
-
 describe('reports (docs/SPEC/reports-v1.md section 8)', () => {
   it('says a report was signed and issued, naming its kind and reference', () => {
     const sentence = narrate(

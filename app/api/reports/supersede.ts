@@ -3,6 +3,7 @@ import { canSupersede, validateContent } from '../../../domain/reports';
 import { cleanText } from '../_middleware/text';
 import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
+import { isUuid } from '../billing/ids';
 import { mayDraftReport } from './access';
 import { SupersedeInput, SupersedeResponse } from './schema';
 import { asRow, readReport } from './source';
@@ -43,6 +44,12 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
   api.post('/api/reports/:id/supersede', async (c) => {
     const requestId = c.get('requestId');
     const reportId = c.req.param('id');
+    if (!isUuid(reportId)) {
+      // Checked before it reaches a uuid column, the way billing's own routes
+      // check theirs: an id that is not one is a 400, not a raise dressed up
+      // as a 500 on a path a stranger can call.
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
     const body = SupersedeInput.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);

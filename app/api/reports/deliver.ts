@@ -11,6 +11,7 @@ import { documentSender } from '../_middleware/sending';
 import { logAction } from '../_middleware/audit';
 import { auditDocumentRead } from '../_middleware/storage/audit';
 import type { ApiEnv } from '../_middleware/request-context';
+import { isUuid } from '../billing/ids';
 import { mayDeliverReport } from './access';
 import { practiceTimeZone } from './gather';
 import { DeliverInput, DeliverResponse } from './schema';
@@ -75,6 +76,12 @@ export function mountReportDeliver(
   api.post('/api/reports/:id/deliver', async (c) => {
     const requestId = c.get('requestId');
     const reportId = c.req.param('id');
+    if (!isUuid(reportId)) {
+      // Checked before it reaches a uuid column, the way billing's own routes
+      // check theirs: an id that is not one is a 400, not a raise dressed up
+      // as a 500 on a path a stranger can call.
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
     const body = DeliverInput.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
