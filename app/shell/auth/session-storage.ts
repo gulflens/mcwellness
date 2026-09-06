@@ -14,9 +14,10 @@
  * place they never asked for.
  *
  * The second is the **tick box's own memory**, so the box on the sign-in page
- * opens where this browser left it. The sign-in page writes it on change and
- * reads it on first render; nothing else touches it, so a toggle can never
- * move a session that is already held.
+ * opens where this browser left it, and ticked on a browser that has never
+ * answered. The sign-in page writes it on change and reads it on first
+ * render; nothing else touches it, so a toggle can never move a session that
+ * is already held.
  *
  * An absent store reads `device`, which is where every session was kept
  * before this round: a session held today is neither moved nor lost.
@@ -65,9 +66,13 @@ export function writeSessionStore(store: SessionStoreName): void {
   attempt(() => window.localStorage.setItem(STORE_KEY, store), undefined);
 }
 
-/** The last answer this browser gave. No answer, and no storage at all, both read false. */
+/**
+ * The last answer this browser gave. No answer, and no storage at all, both
+ * read ticked: staying signed in is what every sign-in did before the box
+ * existed, and it is what the operator asked for.
+ */
 export function readKeepSignedIn(): boolean {
-  return attempt(() => window.localStorage.getItem(KEEP_KEY) === 'yes', false);
+  return attempt(() => window.localStorage.getItem(KEEP_KEY) !== 'no', true);
 }
 
 /** Remembered per browser, so the box is where the person left it next time. */

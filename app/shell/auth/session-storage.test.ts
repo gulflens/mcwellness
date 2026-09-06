@@ -23,8 +23,8 @@ afterEach(() => {
 });
 
 describe('the keep-me-signed-in flag', () => {
-  it('is off on a browser that has never been asked', () => {
-    expect(readKeepSignedIn()).toBe(false);
+  it('is ticked on a browser that has never been asked', () => {
+    expect(readKeepSignedIn()).toBe(true);
   });
 
   it('remembers the last answer for this browser', () => {
@@ -34,15 +34,15 @@ describe('the keep-me-signed-in flag', () => {
     expect(readKeepSignedIn()).toBe(false);
   });
 
-  it('reads off on a browser whose storage is shut, and does not throw writing to it', () => {
+  it('reads ticked on a browser whose storage is shut, and does not throw writing to it', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('storage is not available');
     });
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('storage is not available');
     });
-    expect(readKeepSignedIn()).toBe(false);
-    expect(() => writeKeepSignedIn(true)).not.toThrow();
+    expect(readKeepSignedIn()).toBe(true);
+    expect(() => writeKeepSignedIn(false)).not.toThrow();
   });
 });
 

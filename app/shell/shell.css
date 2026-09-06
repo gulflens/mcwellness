@@ -359,6 +359,15 @@
   gap: var(--s-4);
 }
 
+/* The tick box and the line that explains it when it is unticked: closer to
+   each other than either is to the fields above, because the line is about
+   the box and nothing else. */
+.signin__keep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
 .signin__door {
   display: flex;
   flex-direction: column;

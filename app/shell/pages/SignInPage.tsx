@@ -10,7 +10,7 @@ export function SignInPage() {
   const { provider, session } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  // Unticked unless this browser was asked before and said otherwise.
+  // Ticked unless this browser was asked before and said otherwise.
   const [keepSignedIn, setKeepSignedIn] = useState(readKeepSignedIn);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,23 +78,34 @@ export function SignInPage() {
           required
         />
         {/*
-          Ticked, the session is kept on this device and closing the browser
-          does not sign the person out; unticked, it ends with the browser.
-          The answer is remembered per browser and read again on the next visit
+          Ticked is the default, and it is what every sign-in did until this
+          round: the session is kept on this device, so closing the browser
+          does not sign the person out. Unticked is the new behaviour, not the
+          old one — the session is held for this tab alone, so a record opened
+          in a new tab asks for sign-in again and closing the browser ends it.
+          The answer is remembered per browser and read again on the next
+          visit; where the session is actually kept is written at sign-in
           (app/shell/auth/session-storage.ts).
         */}
-        <label htmlFor="keep-signed-in" className="checkbox">
-          <input
-            id="keep-signed-in"
-            type="checkbox"
-            checked={keepSignedIn}
-            onChange={(e) => {
-              setKeepSignedIn(e.target.checked);
-              writeKeepSignedIn(e.target.checked);
-            }}
-          />
-          <span>Keep me signed in</span>
-        </label>
+        <div className="signin__keep">
+          <label htmlFor="keep-signed-in" className="checkbox">
+            <input
+              id="keep-signed-in"
+              type="checkbox"
+              checked={keepSignedIn}
+              onChange={(e) => {
+                setKeepSignedIn(e.target.checked);
+                writeKeepSignedIn(e.target.checked);
+              }}
+            />
+            <span>Keep me signed in on this browser</span>
+          </label>
+          {keepSignedIn ? null : (
+            <p className="small muted">
+              Unticked, you sign in again in each new tab and when the browser closes.
+            </p>
+          )}
+        </div>
         <Button type="submit" variant="primary" disabled={busy}>
           Sign in
         </Button>
