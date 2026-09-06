@@ -33,6 +33,12 @@ import {
  * the rows underneath in any case, so the 403 is the honest translation of
  * what the database would do rather than a courtesy in front of it.
  *
+ * **A forgiven fee says so.** `app.billing_ledger` stops counting a waived
+ * call-out fee, so without `waivedOn` a household saw the charge on the list
+ * and not in the balance, with nothing anywhere saying why (billing-06.md
+ * request 1). The row keeps its number, its day and its figure — a waiver
+ * forgives a charge, it does not rewrite what happened.
+ *
  * **Every figure is derived, none stored** (docs/SPEC/billing.md section 1).
  * What is owed is the sum of `app.billing_ledger`, where a payment already
  * carries the opposite sign; "Session n of N" is `packageProgress` counting
@@ -68,7 +74,12 @@ const ENTITLEMENTS_SQL =
  */
 const INVOICES_SQL =
   'select i.id, i.client_id, i.reference, ' +
-  "to_char(i.issued_on, 'YYYY-MM-DD') as issued_on, i.gross_fils, bd.document_id " +
+  "to_char(i.issued_on, 'YYYY-MM-DD') as issued_on, i.gross_fils, " +
+  // A waiver is stamped at an instant and read as a day, in the practice's own
+  // zone and through the same parameter the payments below already take: a
+  // household's screen says which day the practice let a charge go, never
+  // which second, and never a day taken in the browser's calendar.
+  "to_char(i.waived_at at time zone $2, 'YYYY-MM-DD') as waived_on, bd.document_id " +
   'from invoice i ' +
   "left join billing_document bd on bd.invoice_id = i.id and bd.kind = 'invoice' " +
   'where i.tenant_id = app.current_tenant_id() and i.client_id = any($1::uuid[]) ' +
@@ -120,8 +131,9 @@ export async function householdMoney(db: Db, household: Household): Promise<Hous
       reference: string;
       issued_on: string;
       gross_fils: number;
+      waived_on: string | null;
       document_id: string | null;
-    }>(INVOICES_SQL, [clientIds]),
+    }>(INVOICES_SQL, [clientIds, household.practice.timezone]),
     db.query<{
       id: string;
       client_id: string;
@@ -162,6 +174,7 @@ export async function householdMoney(db: Db, household: Household): Promise<Hous
       reference: row.reference,
       issuedOn: row.issued_on,
       grossFils: row.gross_fils,
+      waivedOn: row.waived_on,
       documentId: row.document_id,
     })),
     payments: payments.rows.map((row) => ({

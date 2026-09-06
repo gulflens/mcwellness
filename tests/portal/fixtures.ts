@@ -150,7 +150,19 @@ export const MONEY: MoneyResponse = {
       reference: 'INV-000001',
       issuedOn: '2026-08-01',
       grossFils: 140_000,
+      waivedOn: null,
       documentId: INVOICE_DOCUMENT,
+    },
+    // A call-out fee the practice forgave: the number, the day and the figure
+    // stay, and the row says what happened (billing-06.md request 1).
+    {
+      id: '00000001-0000-4000-8000-000000000069',
+      clientId: CHILD_A,
+      reference: 'INV-000002',
+      issuedOn: '2026-08-20',
+      grossFils: 15_000,
+      waivedOn: '2026-08-21',
+      documentId: null,
     },
   ],
   payments: [

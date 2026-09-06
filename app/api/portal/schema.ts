@@ -170,6 +170,13 @@ export const PortalInvoice = z.object({
   reference: z.string(),
   issuedOn: IsoDate,
   grossFils: z.number().int(),
+  /**
+   * The day the practice forgave this charge, and null while it stands
+   * (migration 408; `docs/CHANGE-REQUESTS/billing-06.md` request 1). A day
+   * rather than an instant, like `issuedOn` beside it and `receivedOn` on a
+   * payment: the household is told which day, never which second.
+   */
+  waivedOn: IsoDate.nullable(),
   /** The rendered PDF, when one has been filed. Opened through a signed link. */
   documentId: z.uuid().nullable(),
 });

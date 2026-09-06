@@ -53,6 +53,11 @@ const CONSENT_A = '00000001-0000-4000-8000-0000000000b4';
 const CONSENT_ADULT = '00000001-0000-4000-8000-0000000000b5';
 const INVOICE_DOCUMENT = '00000001-0000-4000-8000-0000000000b6';
 const BILLING_DOCUMENT = '00000001-0000-4000-8000-0000000000b7';
+/** A visit called off, and the call-out fee the practice then forgave. */
+const WAIVED_VISIT = '00000001-0000-4000-8000-0000000000b8';
+const WAIVED_FEE = '00000001-0000-4000-8000-0000000000b9';
+/** The practice's own call-out fee, net of VAT (scheduling_setting). */
+const FEE_FILS = 15_000;
 /** A contact row whose account is the practice's own admin: the founder's case. */
 const OFFICE_CONTACT = '00000001-0000-4000-8000-0000000000c1';
 
@@ -192,7 +197,52 @@ beforeAll(async () => {
     new TextEncoder().encode('%PDF-1.4 synthetic'),
     'application/pdf',
   );
+
+  await seedWaivedFee();
 });
+
+/**
+ * A call-out fee against a visit, forgiven through `app.waive_call_out_fee` —
+ * the practice's own door, as `tests/billing/db/call_out_fee.test.ts` uses it —
+ * rather than by writing the three waiver columns by hand. The function is the
+ * only thing that may set them, and going through it is what proves the day the
+ * portal shows is the day the practice's own act wrote.
+ *
+ * The visit is left as proposed and the fee is written here rather than left to
+ * `app.billing_on_appointment_charged`: a visit called off would be a row on
+ * the Visits screen, and this fixture is about the money screen. A proposed
+ * visit is shown nowhere (section 3.2), so no other case moves.
+ */
+async function seedWaivedFee(): Promise<void> {
+  await seedAppointment(h.owner, {
+    id: WAIVED_VISIT,
+    clientId: PORTAL.childA,
+    inDays: -5,
+    hour: 11,
+    status: 'proposed',
+  });
+  await h.owner.query(
+    'insert into invoice (id, tenant_id, client_id, number, kind, issued_on, net_fils, ' +
+      "vat_fils, gross_fils, appointment_id) values ($1, $2, $3, 2, 'call_out_fee', " +
+      "current_date, $4, 0, $4, $5)",
+    [WAIVED_FEE, IDS.tenantA, PORTAL.childA, FEE_FILS, WAIVED_VISIT],
+  );
+  await h.owner.query('begin');
+  // The practice in context, and somebody in it to be the one who forgave the
+  // charge: the function stamps `waived_by` from the actor and the audit
+  // trigger reads the same three settings.
+  await h.owner.query(
+    "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+      "set_config('app.actor_roles', 'owner', true), set_config('app.reason', $3, true)",
+    [IDS.tenantA, IDS.ownerA, 'The family had an emergency; the practice let it go.'],
+  );
+  const { rows } = await h.owner.query<{ waived: boolean }>(
+    'select waived from app.waive_call_out_fee($1, $2)',
+    [WAIVED_FEE, 'The family had an emergency; the practice let it go.'],
+  );
+  await h.owner.query('commit');
+  if (rows[0]?.waived !== true) throw new Error('The fee fixture was not waived.');
+}
 
 afterAll(async () => {
   await h.close();
@@ -308,10 +358,31 @@ describe('GET /api/portal/money', () => {
     );
     expect(body.packages).toHaveLength(1);
     expect(body.packages[0]).toMatchObject({ used: 1, total: 2, name: 'Silver' });
-    expect(body.invoices).toHaveLength(1);
-    expect(body.invoices[0]?.documentId).toBe(INVOICE_DOCUMENT);
+    expect(body.invoices).toHaveLength(2);
+    const ordinary = body.invoices.find((invoice) => invoice.id === PORTAL_MONEY.invoice);
+    expect(ordinary?.documentId).toBe(INVOICE_DOCUMENT);
     expect(body.payments).toHaveLength(1);
     expect(body.payments[0]?.amountFils).toBe(PORTAL_FIGURES.paymentFils);
+  });
+
+  it('says which day a forgiven fee was forgiven, and nothing on a charge that stands', async () => {
+    const res = await h.callAs('GET', '/api/portal/money', PORTAL.motherAuth);
+    const body = (await res.json()) as MoneyResponse;
+
+    // An ordinary invoice carries no waiver at all.
+    const ordinary = body.invoices.find((invoice) => invoice.id === PORTAL_MONEY.invoice);
+    expect(ordinary?.waivedOn).toBeNull();
+
+    // The forgiven fee carries the day, read in the practice's own zone, and
+    // keeps its figure: a waiver forgives a charge, it does not delete it.
+    const fee = body.invoices.find((invoice) => invoice.id === WAIVED_FEE);
+    const { rows } = await h.owner.query<{ waived_on: string }>(
+      "select to_char(i.waived_at at time zone t.timezone, 'YYYY-MM-DD') as waived_on " +
+        'from invoice i join tenant t on t.id = i.tenant_id where i.id = $1',
+      [WAIVED_FEE],
+    );
+    expect(fee?.waivedOn).toBe(rows[0]?.waived_on);
+    expect(fee?.grossFils).toBe(FEE_FILS);
   });
 
   it("refuses a young person's own login the screen entirely", async () => {

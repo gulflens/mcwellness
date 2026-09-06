@@ -70,6 +70,7 @@ describe('the dictionary', () => {
       PHRASES.sessionOf(1, 15),
       PHRASES.windowFromTo('10:00', '10:45'),
       PHRASES.greeting('Hazel'),
+      PHRASES.waivedOn('6 September 2026'),
     ];
     for (const phrase of sample) {
       expect(phrase.en.trim().length).toBeGreaterThan(0);
