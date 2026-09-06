@@ -7,6 +7,11 @@ import type { AuthProvider } from '../auth/types';
 import { SignInPage } from './SignInPage';
 
 afterEach(cleanup);
+afterEach(() => localStorage.clear());
+
+/** The tick box's label, and the hint that stands under it while it is unticked. */
+const KEEP = 'Keep me signed in on this browser';
+const UNTICKED = 'Unticked, you sign in again in each new tab and when the browser closes.';
 
 function provider(overrides: Partial<AuthProvider> = {}): AuthProvider {
   return {
@@ -39,7 +44,76 @@ describe('SignInPage', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     await waitFor(() =>
-      expect(p.signIn).toHaveBeenCalledWith('owner@example.com', 'not-a-real-password'),
+      expect(p.signIn).toHaveBeenCalledWith('owner@example.com', 'not-a-real-password', {
+        keepSignedIn: true,
+      }),
+    );
+  });
+
+  it('shows the password on request and hides it again', () => {
+    mount(provider());
+    const password = screen.getByLabelText('Password');
+    expect(password.getAttribute('type')).toBe('password');
+
+    const show = screen.getByRole('button', { name: 'Show password' });
+    expect(show.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(show);
+
+    expect(password.getAttribute('type')).toBe('text');
+    const hide = screen.getByRole('button', { name: 'Hide password' });
+    expect(hide.getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(hide);
+    expect(password.getAttribute('type')).toBe('password');
+    expect(screen.getByRole('button', { name: 'Show password' }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+
+  it('leaves keep me signed in ticked on a browser that has never been asked', () => {
+    mount(provider());
+    expect(screen.getByLabelText(KEEP)).toHaveProperty('checked', true);
+  });
+
+  it('remembers the keep me signed in answer for this browser', () => {
+    mount(provider());
+    fireEvent.click(screen.getByLabelText(KEEP));
+    expect(screen.getByLabelText(KEEP)).toHaveProperty('checked', false);
+
+    cleanup();
+    mount(provider());
+    expect(screen.getByLabelText(KEEP)).toHaveProperty('checked', false);
+
+    fireEvent.click(screen.getByLabelText(KEEP));
+    cleanup();
+    mount(provider());
+    expect(screen.getByLabelText(KEEP)).toHaveProperty('checked', true);
+  });
+
+  it('says what unticked means, and only while it is unticked', () => {
+    mount(provider());
+    expect(screen.queryByText(UNTICKED)).toBeNull();
+
+    fireEvent.click(screen.getByLabelText(KEEP));
+    expect(screen.getByText(UNTICKED)).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText(KEEP));
+    expect(screen.queryByText(UNTICKED)).toBeNull();
+  });
+
+  it('sends the keep me signed in answer with the email and password', async () => {
+    const p = provider();
+    mount(p);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'not-a-real-password' },
+    });
+    fireEvent.click(screen.getByLabelText(KEEP));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(p.signIn).toHaveBeenCalledWith('owner@example.com', 'not-a-real-password', {
+        keepSignedIn: false,
+      }),
     );
   });
 

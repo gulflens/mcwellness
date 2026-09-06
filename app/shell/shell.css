@@ -155,6 +155,63 @@
   color: var(--critical);
 }
 
+/* A checkbox and its words on one 44px row. The two module copies of this rule
+   (app/admin/clients/clients.css, app/admin/billing/billing.css) predate the
+   shell's own; they are identical, and this one is where a shared control
+   belongs. */
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-block-size: var(--row);
+  cursor: pointer;
+}
+
+/* The tick takes the page's own ink rather than the browser's blue, as the
+   session rating's slider already does (app/therapist/session/SessionRunner.css). */
+.checkbox input {
+  accent-color: var(--ink);
+}
+
+/* The show-or-hide button sits at the end of the password box, inside it: a
+   full 44px target, no motion, and the input's own text stops short of it. */
+.password {
+  position: relative;
+  display: block;
+}
+
+.password .field__input {
+  inline-size: 100%;
+  padding-inline-end: calc(var(--s-2) + var(--row));
+}
+
+.password__toggle {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--row);
+  min-block-size: var(--row);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.password__toggle:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.password__toggle:disabled {
+  color: var(--slate);
+  cursor: default;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -306,6 +363,15 @@
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
+}
+
+/* The tick box and the line that explains it when it is unticked: closer to
+   each other than either is to the fields above, because the line is about
+   the box and nothing else. */
+.signin__keep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
 }
 
 .signin__door {

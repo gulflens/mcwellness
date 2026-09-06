@@ -28,6 +28,11 @@ export function devAuth(fetchImpl: typeof fetch = fetch): AuthProvider {
   const notify = () => listeners.forEach((l) => l());
   return {
     kind: 'development',
+    /**
+     * Takes the same three arguments as the real provider and ignores all of
+     * them, keep-me-signed-in included: this door holds its token in
+     * sessionStorage for this tab and nowhere else, by design.
+     */
     async signIn() {
       throw new Error('Email sign-in is not configured on this laptop. Use a seeded person below.');
     },

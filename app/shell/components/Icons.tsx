@@ -110,3 +110,21 @@ export const CloseIcon = (p: IconProps) => (
     <path d="M5 5l10 10M15 5L5 15" />
   </Icon>
 );
+
+/** An open eye: the password is hidden, and this shows it. */
+export const EyeIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M1.75 10S4.75 4.75 10 4.75 18.25 10 18.25 10 15.25 15.25 10 15.25 1.75 10 1.75 10Z" />
+    <circle cx="10" cy="10" r="2.25" />
+  </Icon>
+);
+
+/** The same eye, crossed: the password is showing, and this hides it again. */
+export const EyeOffIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M8.1 5.05A7.7 7.7 0 0 1 10 4.75c5.25 0 8.25 5.25 8.25 5.25a14.5 14.5 0 0 1-2.6 3.2" />
+    <path d="M13.35 13.75A7.8 7.8 0 0 1 10 15.25C4.75 15.25 1.75 10 1.75 10a14.4 14.4 0 0 1 3.9-4.3" />
+    <path d="M8.4 8.4a2.25 2.25 0 0 0 3.2 3.2" />
+    <path d="M3.5 3.5l13 13" />
+  </Icon>
+);

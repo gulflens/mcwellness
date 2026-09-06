@@ -1,14 +1,17 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { readKeepSignedIn, writeKeepSignedIn } from '../auth/session-storage';
 import type { SeededPerson } from '../auth/types';
-import { Button, Field, Note } from '../components/Controls';
+import { Button, Field, Note, PasswordField } from '../components/Controls';
 import { describeRoles, homeFor } from '../routing';
 
 export function SignInPage() {
   const { provider, session } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // Ticked unless this browser was asked before and said otherwise.
+  const [keepSignedIn, setKeepSignedIn] = useState(readKeepSignedIn);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [people, setPeople] = useState<SeededPerson[]>([]);
@@ -32,7 +35,7 @@ export function SignInPage() {
     setBusy(true);
     setError(null);
     try {
-      await provider.signIn(email, password);
+      await provider.signIn(email, password, { keepSignedIn });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -66,15 +69,43 @@ export function SignInPage() {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <Field
+        <PasswordField
           id="password"
           label="Password"
-          type="password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
+        {/*
+          Ticked is the default, and it is what every sign-in did until this
+          round: the session is kept on this device, so closing the browser
+          does not sign the person out. Unticked is the new behaviour, not the
+          old one — the session is held for this tab alone, so a record opened
+          in a new tab asks for sign-in again and closing the browser ends it.
+          The answer is remembered per browser and read again on the next
+          visit; where the session is actually kept is written at sign-in
+          (app/shell/auth/session-storage.ts).
+        */}
+        <div className="signin__keep">
+          <label htmlFor="keep-signed-in" className="checkbox">
+            <input
+              id="keep-signed-in"
+              type="checkbox"
+              checked={keepSignedIn}
+              onChange={(e) => {
+                setKeepSignedIn(e.target.checked);
+                writeKeepSignedIn(e.target.checked);
+              }}
+            />
+            <span>Keep me signed in on this browser</span>
+          </label>
+          {keepSignedIn ? null : (
+            <p className="small muted">
+              Unticked, you sign in again in each new tab and when the browser closes.
+            </p>
+          )}
+        </div>
         <Button type="submit" variant="primary" disabled={busy}>
           Sign in
         </Button>
