@@ -397,7 +397,11 @@ describe('the session report’s own form', () => {
       'The visit this report follows',
     )) as HTMLSelectElement;
     expect(picker.value).toBe(VISIT);
-    expect(screen.getByText('Neurofeedback session')).toBeTruthy();
+    // The choice reads as a day, a service and who went, which is how a
+    // practitioner recognises the visit they mean.
+    expect(picker.options[0]?.textContent).toContain('2026-09-01');
+    expect(picker.options[0]?.textContent).toContain('Neurofeedback session');
+    expect(picker.options[0]?.textContent).toContain('Hazel Harbour');
   });
 
   it('shows the visit’s own figures as text, never as a field somebody could retype', async () => {
