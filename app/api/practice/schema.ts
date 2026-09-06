@@ -132,6 +132,16 @@ export const Practice = z.object({
   licenceExpiresOn: z.string().nullable(),
   vatRegistered: z.boolean(),
   vatTrn: z.string().nullable(),
+  /**
+   * What the practice has supplied, net of VAT, over the twelve months ending
+   * on `vatTaxableSuppliesAsOf` (migration 953). Read-only: it is counted from
+   * the invoice book, never typed, and `UpdatePracticeInput` has no such
+   * field. The screen shows it beside the VAT switch with the authority's two
+   * marks; the switch itself stays a hand's act.
+   */
+  vatTaxableSuppliesFils: z.number().int().nonnegative(),
+  /** The day that twelve-month window ends, in the practice's own zone. */
+  vatTaxableSuppliesAsOf: z.string(),
   defaultEmirate: z.enum(EMIRATES),
   timezone: z.string(),
   /** The registered address, or null while the practice has recorded none. */
