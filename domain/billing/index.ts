@@ -32,9 +32,12 @@ export type { CollectedPayment, LedgerCredit, MonthlyMoney } from './recognition
 export { refundOnTermination } from './refund';
 export type { DeliveredCount, RefundLine, RefundQuote, SingleRate } from './refund';
 export {
+  CALL_OUT_FEE_OUTCOMES,
   CHARGING_OUTCOMES,
+  FEE_EXEMPT_REASONS,
   LATE_CANCELLATION_NOTICE_HOURS,
+  callOutFeeFor,
   consumesEntitlement,
   isLateCancellation,
 } from './lateCancellation';
-export type { ChargingOutcome } from './lateCancellation';
+export type { CallOutFeeSetting, ChargingOutcome } from './lateCancellation';

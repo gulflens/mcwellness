@@ -19,6 +19,12 @@ import { InvoicesResponse } from './ledger-schema';
  *
  * `documentId` is the rendered PDF where one exists, so the screen can tell
  * "open it" from "make it" without a request per row.
+ *
+ * `waivedAt` is the day a call-out fee was forgiven, and null on every row
+ * that stands. A waived charge keeps its number and its figures — the invoice
+ * is append-only — and only stops counting in `app.billing_ledger`, so a book
+ * that did not carry this would show a family's balance and a list of charges
+ * that do not add up to it (migration 408).
  */
 
 const PAGE_SIZE = 50;
@@ -26,6 +32,11 @@ const PAGE_SIZE = 50;
 const SQL =
   'select i.id, i.reference, i.number, i.kind, i.issued_on, i.client_id, i.net_fils, ' +
   'i.vat_fils, i.gross_fils, bd.document_id, c.mrn as client_mrn, ' +
+  // The day a call-out fee was forgiven, in the practice's own time zone. The
+  // row keeps its number and its figures, and `app.billing_ledger` stops
+  // counting it (migration 408), so the book has to say which of its rows a
+  // family still owes.
+  "to_char(i.waived_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as waived_on, " +
   "c.given_name || ' ' || c.family_name as client_name " +
   'from invoice i join client c on c.id = i.client_id ' +
   // The rendered PDF, when one has been filed. It hangs off billing_document
@@ -42,7 +53,7 @@ type InvoiceDbRow = {
   id: string;
   reference: string;
   number: number;
-  kind: 'session' | 'package' | 'statement';
+  kind: 'session' | 'package' | 'statement' | 'call_out_fee';
   issued_on: string;
   client_id: string;
   client_mrn: string;
@@ -50,6 +61,7 @@ type InvoiceDbRow = {
   net_fils: number;
   vat_fils: number;
   gross_fils: number;
+  waived_on: string | null;
   document_id: string | null;
 };
 
@@ -100,6 +112,7 @@ export function mountInvoices(api: Hono<ApiEnv>, now: () => Date = () => new Dat
           netFils: row.net_fils,
           vatFils: row.vat_fils,
           grossFils: row.gross_fils,
+          waivedAt: row.waived_on,
           documentId: row.document_id,
         })),
         ...(rows.length > PAGE_SIZE ? { truncated: true } : {}),

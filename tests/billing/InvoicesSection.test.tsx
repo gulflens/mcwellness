@@ -46,6 +46,7 @@ const INVOICES = [
     netFils: 70_000,
     vatFils: 3_500,
     grossFils: 73_500,
+    waivedAt: null,
     documentId: null,
   },
   {
@@ -60,6 +61,7 @@ const INVOICES = [
     netFils: 1_032_500,
     vatFils: 51_625,
     grossFils: 1_084_125,
+    waivedAt: null,
     documentId: null,
   },
 ];
@@ -82,6 +84,29 @@ describe('InvoicesSection', () => {
     // A calendar date read at the practice's midnight, never the raw ISO string.
     expect(screen.getByText('2 Sept 2026')).toBeTruthy();
     expect(screen.queryByText('2026-09-02')).toBeNull();
+  });
+
+  it('marks a call-out fee the practice forgave, with the day it did', async () => {
+    // A waived fee keeps its number and its figures and stops counting in the
+    // balance (migration 408), so the book has to say which of its rows a
+    // family still owes — otherwise the total above the table and the charges
+    // beneath it do not add up and nobody can see why.
+    const waived = {
+      ...INVOICES[0],
+      id: '00000004-0000-4000-8000-000000000503',
+      reference: 'INV-000003',
+      number: 3,
+      kind: 'call_out_fee' as const,
+      netFils: 15_000,
+      vatFils: 0,
+      grossFils: 15_000,
+      waivedAt: '2026-09-06',
+    };
+    mountWith(OWNER, <InvoicesSection />, routes({ invoices: [waived, ...INVOICES] }));
+    expect(await screen.findByText('Call-out fee')).toBeTruthy();
+    expect(screen.getByText('Waived 6 Sept 2026')).toBeTruthy();
+    // And a row that stands says nothing of the sort.
+    expect(screen.queryByText(/^Waived 3 Sept/)).toBeNull();
   });
 
   it('says so when a page has been cut short', async () => {

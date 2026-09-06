@@ -141,6 +141,51 @@ export function receiptBasis(input: {
   };
 }
 
+/**
+ * What the call-out fee reads as on an invoice line, in both languages
+ * (the founder's decision of 2026-09-04, migration 408).
+ *
+ * **Written here and in SQL, and tied together by a test.** The line is
+ * inserted by `app.billing_on_appointment_charged`, a trigger with no
+ * application above it — the practice's own database is the only writer, so
+ * the words have to exist as SQL literals. They exist here too because this is
+ * where every word on a money document lives, and
+ * `tests/billing/db/call_out_fee.test.ts` asserts the row the trigger wrote is
+ * exactly what this returns. Change one without the other and that test says so.
+ *
+ * **The date is the visit's, in ISO, and not the long form the rest of the page
+ * uses.** A trigger has no month names, and inventing a second month table in
+ * plpgsql to match `formatDocumentDate` would be a second implementation of a
+ * rule that already has one. An ISO date on a line beside a figure is
+ * unambiguous in either language, which is the property that matters on a
+ * document a family may take to somebody else.
+ */
+export function callOutFeeDescription(visitDate: string): Phrase {
+  return {
+    en: `Call-out fee — visit on ${visitDate}`,
+    ar: `رسوم الاستدعاء — زيارة بتاريخ ${visitDate}`,
+  };
+}
+
+/**
+ * What a forgiven call-out fee says on its own document (migration 408).
+ *
+ * The invoice is append-only: a waived fee keeps its number, its line and its
+ * figures, and `app.billing_ledger` simply stops counting it. So the page has
+ * to say what the ledger knows, or it goes on presenting a live charge for
+ * money the family does not owe (compliance review of this pull request).
+ *
+ * Two short sentences, in both languages: when it was forgiven, and that
+ * nothing is owed. The date is written out the way every other date on these
+ * documents is, with the Arabic month name on the Arabic side.
+ */
+export function waivedNotice(waivedOn: string): Phrase {
+  return {
+    en: `Waived on ${formatDocumentDate(waivedOn)}. Nothing is owed.`,
+    ar: `أُعفي هذا المبلغ بتاريخ ${arabicDocumentDate(waivedOn)}. لا يوجد مبلغ مستحق.`,
+  };
+}
+
 /** The wordmark at the top of the page. */
 export const WORDMARK = 'McWellness';
 

@@ -12,11 +12,15 @@ import { householdHasBeenTold, type AppointmentStatus } from './status';
  * (db/migrations/202_scheduling_setting.sql) and is read by the route that
  * calls this, never by this file.
  *
- * **What "late" costs.** A late cancellation consumes one of the client's
- * credits: `app.billing_on_appointment_charged` (404_billing_consumption.sql)
- * fires the moment an appointment's status becomes `cancelled_late`, and the
- * coordinator's way back is billing's own waiver,
- * `POST /api/billing/entitlements/:id/waiver`, with a reason. So the boundary
+ * **What "late" costs.** A call-out fee on the household's account, and never
+ * one of their sessions — the founder's decision of 2026-09-04, one fee and
+ * never a session. `app.billing_on_appointment_charged`
+ * (408_billing_call_out_fee.sql) fires the moment an appointment's status
+ * becomes `cancelled_late`, posts the practice's own
+ * `scheduling_setting.unfit_fee_fils` as a charge, and leaves every prepaid
+ * credit alone; the coordinator's way back is billing's own waiver,
+ * `POST /api/billing/invoices/:id/waiver`, with a reason. Which outcomes carry
+ * the fee is billing's rule (`callOutFeeFor`), not this file's. So the boundary
  * below is the difference between a family paying for a visit that did not
  * happen and not paying for it, which is why it is a tested rule and not an
  * inline comparison in a route.
@@ -42,14 +46,15 @@ export const DEFAULT_UNFIT_FEE_FILS = 15_000;
 /**
  * Why a visit was called off. A closed set, because the ledger and the
  * practice's own policy both read it: which reason a cancellation carries
- * decides whether a credit goes with it.
+ * decides whether a call-out fee goes with it (billing's `callOutFeeFor`).
  *
  * - `client_request` — the family called it off.
  * - `practice_request` — the practice called it off. Ordinary notice applies:
  *   a practice cancelling its own visit inside the notice period still writes
- *   `cancelled_late`, and the coordinator waives it, deliberately. Making the
- *   status depend on who was at fault would put the judgement in a status
- *   rather than in the waiver, where somebody has to give a reason for it.
+ *   `cancelled_late`, deliberately, because making the status depend on who was
+ *   at fault would put the judgement in a status rather than where somebody has
+ *   to give a reason for it. It costs the family nothing: billing's
+ *   `FEE_EXEMPT_REASONS` names it, so no call-out fee follows.
  * - `unfit_to_attend` — the practitioner arrived and the visit could not go
  *   ahead. Always late (see below).
  * - `consent_withdrawn` — a consent the visit depended on was withdrawn, and
@@ -69,9 +74,10 @@ export type CancellationReason = (typeof CANCELLATION_REASONS)[number];
  * `unfit_to_attend` is the whole of this list. The practitioner has already
  * driven to the door: there was no notice at all, whatever the window says,
  * and the visit cost the practice the journey. The operator set a fee for it
- * on 2026-09-03 (AED 150, `scheduling_setting.unfit_fee_fils`); charging that
- * fee is billing's, and until it does, this status is what accounts for the
- * visit at all.
+ * on 2026-09-03 (AED 150, `scheduling_setting.unfit_fee_fils`), and since
+ * 2026-09-06 billing charges it — the same fee any other late cancellation
+ * carries, on the founder's decision of 2026-09-04 that one journey with no
+ * session delivered is one fee.
  */
 export const ALWAYS_LATE_REASONS: readonly CancellationReason[] = ['unfit_to_attend'];
 
@@ -80,7 +86,8 @@ export const ALWAYS_LATE_REASONS: readonly CancellationReason[] = ['unfit_to_att
  *
  * `consent_withdrawn` is the whole of this list. A person withdrawing a
  * consent is exercising a right, and charging them for the visits that right
- * cancels would be a penalty on exercising it. `app.cancel_future_appointments`
+ * cancels would be a penalty on exercising it. Billing names it in
+ * `FEE_EXEMPT_REASONS` as well, so the answer holds even if this list changes. `app.cancel_future_appointments`
  * (db/migrations/203_appointment_move_and_cancel.sql) writes plain `cancelled`
  * for exactly this reason, and this list is the same rule stated where the
  * rest of the rules are.
@@ -119,7 +126,8 @@ export const REASONS_NEEDING_THE_HOUSEHOLD_TOLD: readonly CancellationReason[] =
  * client not yet informed"). It was absent, so a proposed visit and a
  * confirmed one were judged identically and a coordinator releasing a held
  * slot the same afternoon was charged a household a full session for it
- * (docs/CHANGE-REQUESTS/qa-01.md item 5).
+ * (docs/CHANGE-REQUESTS/qa-01.md item 5). It would be a call-out fee today,
+ * and the objection is the same one.
  */
 export type CancellableAppointment = { windowStart: Date; status: AppointmentStatus };
 
@@ -140,10 +148,11 @@ export type CancellableAppointment = { windowStart: Date; status: AppointmentSta
  * **The door has not been reached.** `unfit_to_attend` means the practitioner
  * arrived and the visit could not go ahead, and nobody has arrived anywhere
  * before the arrival window has opened. Without this it is a way to charge a
- * household a full session for a visit weeks away, by choosing the reason that
- * skips the notice rule — which is exactly what it was doing (compliance
- * review of the pull request that added it: a visit two hundred hours out,
- * called off as unfit, consumed a credit).
+ * household for a visit weeks away, by choosing the reason that skips the
+ * notice rule — which is exactly what it was doing (compliance review of the
+ * pull request that added it: a visit two hundred hours out, called off as
+ * unfit, consumed a credit; today it posts a call-out fee instead, and the
+ * objection is the same one).
  *
  * Judged against `window_start` rather than against the end of the window,
  * because a practitioner may reasonably be at the door the minute it opens.
@@ -185,7 +194,8 @@ export function isLateCancellation(
 
 /**
  * The status a cancelled appointment takes: `cancelled`, or `cancelled_late`
- * when the notice rule or the reason says the client's credit goes with it.
+ * when the notice rule or the reason says the visit was called off too late to
+ * be free.
  *
  * The three tests below win over the clock, in the order they are written,
  * because each says something the clock cannot.
@@ -195,7 +205,7 @@ export function isLateCancellation(
  * 2. **A household that was never told was given no notice to break.**
  *    `proposed` means the visit is a slot the practice is holding and has
  *    mentioned to nobody (section 3). Releasing that slot takes nothing from
- *    anybody, so nothing is taken: the notice period measures notice *to a
+ *    anybody, so nothing is charged: the notice period measures notice *to a
  *    household*, and there is none to measure. This sits above the always-late
  *    list deliberately, though the two can barely meet — `reasonCanBeGivenAt`
  *    refuses `unfit_to_attend` on an untold visit outright, since nobody

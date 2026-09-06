@@ -281,7 +281,7 @@ export const InvoiceRow = z.object({
   id: z.uuid(),
   reference: z.string(),
   number: z.number().int().positive(),
-  kind: z.enum(['session', 'package', 'statement']),
+  kind: z.enum(['session', 'package', 'statement', 'call_out_fee']),
   issuedOn: z.string(),
   clientId: z.uuid(),
   clientMrn: z.string(),
@@ -289,6 +289,14 @@ export const InvoiceRow = z.object({
   netFils: z.number().int().nonnegative(),
   vatFils: z.number().int().nonnegative(),
   grossFils: z.number().int().nonnegative(),
+  /**
+   * The day the practice forgave this call-out fee (YYYY-MM-DD, in the
+   * practice's own time zone), and null on every row that stands. A waived
+   * charge keeps its number, its line and its figures and simply stops
+   * counting in `app.billing_ledger` (migration 408), so the book says which
+   * is which rather than leaving a balance that does not add up.
+   */
+  waivedAt: z.string().nullable(),
   /**
    * The rendered PDF, when one has been filed. Null means it has not been
    * rendered yet, not that it cannot be: the screen offers to make it.
@@ -363,3 +371,19 @@ export const WaiveEntitlementResponse = z.object({
   replacementEntitlementId: z.uuid(),
 });
 export type WaiveEntitlementResponse = z.infer<typeof WaiveEntitlementResponse>;
+
+/**
+ * Forgiving a call-out fee (migration 408). The same input as the credit
+ * waiver above, because it is the same act with the same reason field
+ * (docs/SPEC/billing.md section 4.3) on the row the ledger's shape allows it
+ * to reach: a fee is an invoice, and an invoice has no credit to hand back.
+ */
+export const WaiveCallOutFeeInput = z.object({ reason: Reason });
+export type WaiveCallOutFeeInput = z.infer<typeof WaiveCallOutFeeInput>;
+
+export const WaiveCallOutFeeResponse = z.object({
+  waivedInvoiceId: z.uuid(),
+  /** What the family no longer owes, in fils. */
+  waivedGrossFils: z.number().int().nonnegative(),
+});
+export type WaiveCallOutFeeResponse = z.infer<typeof WaiveCallOutFeeResponse>;

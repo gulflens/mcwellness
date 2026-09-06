@@ -29,7 +29,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 - `proposed`: placed on the calendar, client not yet informed. Holds the slot.
 - `confirmed`: client informed (manual toggle in Phase 1; WhatsApp in Phase 2).
 - `checked_in`/`completed`/`no_show`: set by the session-capture flow; scheduling only reads them.
-- `cancelled_late`: cancelled inside 24 hours → consumes an entitlement unless waived (FINANCE §4.3). Waiver requires reason.
+- `cancelled_late`: cancelled inside 24 hours → a call-out fee on the household's account unless waived, and **never a session from the package** (FINANCE §4.3, amended 2026-09-06 on the founder's decision of 4 September). Waiver requires reason. A `practice_request` cancellation is recorded here too and carries no fee.
 - Rescheduling creates a new appointment with `rescheduled_from_id`; the old one becomes `rescheduled`. Never edit times on a confirmed appointment in place.
 
 ## 4. Screens (admin)
@@ -56,6 +56,18 @@ confirmed ──► rescheduled (new appointment, old linked)
 2. `travelBufferMinutes(fromLocation, toLocation, departAt, estimates)` — estimate + 10, min 15, max 90. Estimates come from a cached matrix; the function never calls the network.
 3. `windowFor(start)` → `{ start, end: start + 45min }`.
 4. `isLateCancellation(appointment, cancelledAt)` — < 24h before `window_start`.
+   _Amended 2026-09-06 on the founder's decision of 4 September._ What "late"
+   costs is a **call-out fee** on the household's account — AED 150,
+   `scheduling_setting.unfit_fee_fils` — and **never a session from a package**.
+   The same fee, and no session, for a visit that cannot go ahead once the
+   practitioner has arrived and for a `no_show`; nothing at all for a
+   cancellation with notice, for a withdrawn consent, or for a visit the
+   practice itself called off (which still records `cancelled_late`, because
+   fault belongs in the reason rather than in the status). The money rule is
+   billing's `callOutFeeFor` and the ledger applies it in migration 408; this
+   function decides only which side of the notice period a visit falls on.
+   Charging a no-show the fee is Claude's default of 2026-09-06 rather than the
+   founder's decision (`docs/CHANGE-REQUESTS/billing-05.md`).
 5. `nextAvailableSlots(practitioner, day, durationMin, constraints)` — for the "find a slot" helper.
 6. `workingHours(practitioner, date)` — from `practitioner.working_hours` jsonb; Ramadan override table (data, not code).
 

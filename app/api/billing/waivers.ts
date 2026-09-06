@@ -3,7 +3,12 @@ import { scrubReason } from '../_middleware/request-context';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isUuid } from './ids';
 import { mayWaive } from './access';
-import { WaiveEntitlementInput, WaiveEntitlementResponse } from './ledger-schema';
+import {
+  WaiveCallOutFeeInput,
+  WaiveCallOutFeeResponse,
+  WaiveEntitlementInput,
+  WaiveEntitlementResponse,
+} from './ledger-schema';
 
 /**
  * `POST /api/billing/entitlements/:id/waiver` — the one-click waiver
@@ -60,7 +65,103 @@ type EntitlementDbRow = {
   expires_on: string | null;
 };
 
+const WAIVE_FEE_SQL = 'select waived, gross_fils from app.waive_call_out_fee($1, $2)';
+
+const FEE_INVOICE_SQL =
+  'select id, kind::text as kind, waived_at from invoice ' +
+  'where tenant_id = app.current_tenant_id() and id = $1';
+
+/**
+ * `POST /api/billing/invoices/:id/waiver` — forgiving a call-out fee
+ * (migration 408, the founder's decision of 2026-09-04).
+ *
+ * The same door as the credit waiver above, for the row the ledger's shape
+ * gives this act to reach. A visit called off inside the notice period no
+ * longer takes one of the family's sessions; it posts the practice's call-out
+ * fee as a charge. Sometimes it should not have — the family had a genuine
+ * emergency — and section 4.3's "one-click waiver with a reason field" is the
+ * way back, whatever the charge is made of.
+ *
+ * **It forgives without rewriting what happened.** The invoice stays, with its
+ * number, its line and the visit it names; `waived_at`, `waived_by` and
+ * `waiver_reason` say the practice let it go, and `app.billing_ledger` stops
+ * counting it towards what the family owes. `invoice` grants no update to any
+ * caller, so the one transition it has goes through
+ * `app.waive_call_out_fee`, a security definer door that can set exactly these
+ * three columns on exactly one kind of invoice.
+ *
+ * Only a call-out fee is waivable. A session or a package invoice is a bill
+ * for something the family had, and unwinding one of those is a credit note
+ * and a conversation, not a switch.
+ */
+function mountCallOutFeeWaiver(api: Hono<ApiEnv>, now: () => Date): void {
+  api.post('/api/billing/invoices/:id/waiver', async (c) => {
+    const actor = c.get('actor');
+    const requestId = c.get('requestId');
+    if (!mayWaive(actor, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const invoiceId = c.req.param('id');
+    if (!isUuid(invoiceId)) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const body = WaiveCallOutFeeInput.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const db = c.get('db');
+
+    // Read first, so a caller is told which of the three things went wrong
+    // rather than being handed one refusal for all of them. The definer door
+    // below asks the same questions again for itself, because it runs with row
+    // security switched off.
+    const found = await db.query<{ id: string; kind: string; waived_at: Date | null }>(
+      FEE_INVOICE_SQL,
+      [invoiceId],
+    );
+    const invoice = found.rows[0];
+    if (!invoice) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (invoice.kind !== 'call_out_fee') {
+      return c.json({ error: 'conflict', code: 'not_a_fee', requestId }, 409);
+    }
+    if (invoice.waived_at !== null) {
+      return c.json({ error: 'conflict', code: 'already_waived', requestId }, 409);
+    }
+
+    // Why the charge was forgiven belongs in the audit trail, not only in the
+    // column: the update this makes is stamped by the row trigger with
+    // `app.reason`, and the route is the authority on that reason
+    // (docs/SPEC/audit.md section 5), not a header the browser may or may not
+    // have sent.
+    await db.query("select set_config('app.reason', $1, true)", [scrubReason(body.data.reason)]);
+
+    const waived = await db.query<{ waived: boolean; gross_fils: number }>(WAIVE_FEE_SQL, [
+      invoiceId,
+      body.data.reason,
+    ]);
+    const row = waived.rows[0];
+    // Nothing was written: somebody waived it between the read above and this
+    // write. That is not an error to raise — the fee is forgiven either way —
+    // but it is not this caller's waiver to report either.
+    if (!row?.waived) {
+      return c.json({ error: 'conflict', code: 'already_waived', requestId }, 409);
+    }
+
+    return c.json(
+      WaiveCallOutFeeResponse.parse({
+        waivedInvoiceId: invoiceId,
+        waivedGrossFils: row.gross_fils,
+      }),
+      201,
+    );
+  });
+}
+
 export function mountWaivers(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  mountCallOutFeeWaiver(api, now);
+
   api.post('/api/billing/entitlements/:id/waiver', async (c) => {
     const actor = c.get('actor');
     const requestId = c.get('requestId');

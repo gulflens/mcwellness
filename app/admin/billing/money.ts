@@ -1,4 +1,10 @@
-import { formatFils, resolveVat, type VatSetting } from '@domain/billing';
+import {
+  callOutFeeFor,
+  formatFils,
+  resolveVat,
+  type CallOutFeeSetting,
+  type VatSetting,
+} from '@domain/billing';
 import { fils } from '@domain/shared';
 
 /**
@@ -15,6 +21,21 @@ import { fils } from '@domain/shared';
  * person typed.
  */
 export { formatFils };
+
+/**
+ * And the rule for what a visit that did not happen costs a household
+ * (the founder's decision of 2026-09-04: one fee, never a session). It lives
+ * in `domain/billing/lateCancellation.ts`, beside the notice period, because
+ * it is a money rule; it is re-exported here for the same reason `formatFils`
+ * is — so a screen outside billing's own folder reaches it through billing's
+ * `app/` layer rather than through billing's `domain/`, which
+ * docs/SPEC/OWNERSHIP.md rule 3 forbids. The cancel drawer
+ * (`app/admin/schedule/CancelAppointmentDrawer.tsx`) is the screen that needs
+ * it: it says what calling a visit off will cost while the coordinator can
+ * still change their mind.
+ */
+export { callOutFeeFor };
+export type { CallOutFeeSetting };
 
 /**
  * Money is displayed and parsed in exactly one place (CLAUDE.md's "Money"

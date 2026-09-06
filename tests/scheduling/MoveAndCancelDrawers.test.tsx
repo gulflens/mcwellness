@@ -16,7 +16,7 @@ afterEach(cleanup);
  *
  * What is proved here: the move sends the window a coordinator typed and the
  * reason they gave, and names a clash in this screen's own words rather than
- * the server's; and the cancel names the consequence — a session used —
+ * the server's; and the cancel names the consequence — a call-out fee —
  * before the person confirms, and reports what actually happened afterwards.
  */
 
@@ -270,7 +270,7 @@ describe('MoveAppointmentDrawer', () => {
 });
 
 describe('CancelAppointmentDrawer', () => {
-  it('says the client keeps the session when the notice period is not in play', async () => {
+  it('says there is no fee when the notice period is not in play', async () => {
     mount(
       <CancelAppointmentDrawer
         appointment={WELL_AHEAD}
@@ -280,7 +280,7 @@ describe('CancelAppointmentDrawer', () => {
       settingsAnd(() => new Response('not found', { status: 404 })),
     );
     expect(
-      await screen.findByText(/outside the practice’s 24 hours’ notice, so the client keeps/),
+      await screen.findByText(/outside the practice’s 24 hours’ notice, so there is no fee/),
     ).toBeTruthy();
     // Calling a visit off tells nobody either, and this drawer says so just as
     // the Move drawer does.
@@ -307,8 +307,8 @@ describe('CancelAppointmentDrawer', () => {
     ).toBeTruthy();
     // And not the sentence the same visit would have shown an hour ago: that
     // one says a session is used, which was the defect.
-    expect(screen.queryByText(/uses one of the client's sessions/)).toBe(null);
-    expect(screen.queryByText(/hours’ notice, so the client keeps the session/)).toBe(null);
+    expect(screen.queryByText(/A call-out fee of AED/)).toBe(null);
+    expect(screen.queryByText(/hours’ notice, so there is no fee/)).toBe(null);
     // Nothing to tell them afterwards either.
     expect(
       screen.getByText(/There is nothing to tell the household: this visit was never announced/),
@@ -356,14 +356,36 @@ describe('CancelAppointmentDrawer', () => {
       />,
       settingsAnd(() => new Response('not found', { status: 404 })),
     );
+    // The founder's rule of 2026-09-04, in the sentence a coordinator reads
+    // before they act: a fee, and never a session.
     expect(
-      await screen.findByText(
-        "This is inside the practice's 24 hours' notice, so it uses one of the client's sessions. It can be waived afterwards.",
-      ),
+      await screen.findByText(/This is inside the practice's 24 hours' notice\./),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText(/A call-out fee of AED 150\.00 applies; no session is taken\./),
     ).toBeTruthy();
   });
 
-  it('warns about a visit that could not go ahead at the door however much notice there was, and names the fee', async () => {
+  it('says a visit the practice calls off itself costs the family nothing', async () => {
+    mount(
+      <CancelAppointmentDrawer
+        appointment={IMMINENT}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      settingsAnd(() => new Response('not found', { status: 404 })),
+    );
+    await screen.findByText(/A call-out fee of AED 150\.00 applies/);
+    fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'practice_request' } });
+    expect(
+      await screen.findByText(
+        /it costs the family nothing: the practice is calling it off\. No session is taken and no fee is charged\./,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/A call-out fee of AED/)).toBeNull();
+  });
+
+  it('charges the same fee for a visit that could not go ahead at the door, however much notice there was', async () => {
     mount(
       <CancelAppointmentDrawer
         appointment={AT_THE_DOOR}
@@ -376,12 +398,14 @@ describe('CancelAppointmentDrawer', () => {
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'unfit_to_attend' } });
     expect(
       await screen.findByText(
-        "A visit that cannot go ahead once the practitioner has arrived counts as late whatever notice was given: it uses one of the client's sessions.",
+        /A visit that cannot go ahead once the practitioner has arrived counts as late whatever notice was given\./,
       ),
     ).toBeTruthy();
     // The practice's own figure, formatted by the one money formatter, and
-    // honest about the fact that nothing charges it on its own.
-    expect(screen.getByText(/The practice’s fee for this is AED 150\.00\./)).toBeTruthy();
+    // the same one an ordinary late cancellation carries.
+    expect(
+      screen.getByText(/A call-out fee of AED 150\.00 applies; no session is taken\./),
+    ).toBeTruthy();
   });
 
   it('refuses "could not go ahead at the door" for a visit nobody has driven to yet', async () => {
@@ -408,10 +432,10 @@ describe('CancelAppointmentDrawer', () => {
       (screen.getByRole('button', { name: 'Call off this visit' }) as HTMLButtonElement).disabled,
     ).toBe(true);
     // And the fee is not named for a thing that cannot be recorded.
-    expect(screen.queryByText(/The practice’s fee for this is/)).toBeNull();
+    expect(screen.queryByText(/A call-out fee of AED/)).toBeNull();
   });
 
-  it('sends the chosen reason and reports that a session was used', async () => {
+  it('sends the chosen reason and reports the fee that was charged', async () => {
     const seen: { url: string; init?: RequestInit }[] = [];
     const fetchImpl = settingsAnd((url, init) => {
       seen.push({ url, init });
@@ -421,8 +445,10 @@ describe('CancelAppointmentDrawer', () => {
           status: 'cancelled_late',
           reason: 'client_request',
           noticeHours: 24,
-          creditConsumed: true,
-          waiverEntitlementId: '0000000a-0000-4000-8000-000000000301',
+          callOutFeeNetFils: 15000,
+          callOutFeeVatFils: 0,
+          callOutFeeGrossFils: 15000,
+          feeInvoiceId: '0000000a-0000-4000-8000-000000000301',
         }),
         { status: 200 },
       );
@@ -442,7 +468,14 @@ describe('CancelAppointmentDrawer', () => {
     await policyRead();
     fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
 
-    expect(await screen.findByText(/It used one of the client’s sessions\./)).toBeTruthy();
+    expect(
+      await screen.findByText(
+        /A call-out fee of AED 150\.00 is on the client’s account, and no session was taken\./,
+      ),
+    ).toBeTruthy();
+    // The same figure the drawer named before the act, and no talk of VAT: the
+    // practice is not registered, so the net fee is the whole of it.
+    expect(screen.queryByText(/including VAT/)).toBeNull();
     expect(onCancelled).toHaveBeenCalled();
     const request = seen.find((entry) => entry.url.endsWith('/cancel'));
     expect(request?.url).toBe(`/api/appointments/${IMMINENT.id}/cancel`);
@@ -452,17 +485,60 @@ describe('CancelAppointmentDrawer', () => {
     expect(screen.getByRole('link', { name: 'Open Billing' })).toBeTruthy();
   });
 
-  it('gives the session back in one click, with the sentence already written', async () => {
+  it('names the gross figure, and says so, once the practice charges VAT', async () => {
+    // Every price this practice publishes is net and VAT is added on top at
+    // write time (migration 406). So a registered practice's fee is AED 157.50
+    // where the drawer said AED 150.00 a moment earlier, and the difference is
+    // named rather than left to look like a price that moved (design review of
+    // this pull request).
+    const fetchImpl = settingsAnd(
+      () =>
+        new Response(
+          JSON.stringify({
+            id: IMMINENT.id,
+            status: 'cancelled_late',
+            reason: 'client_request',
+            noticeHours: 24,
+            callOutFeeNetFils: 15000,
+            callOutFeeVatFils: 750,
+            callOutFeeGrossFils: 15750,
+            feeInvoiceId: '0000000a-0000-4000-8000-000000000301',
+          }),
+          { status: 200 },
+        ),
+    );
+    mount(
+      <CancelAppointmentDrawer
+        appointment={IMMINENT}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      fetchImpl,
+    );
+    fireEvent.change(screen.getByLabelText('What happened?'), {
+      target: { value: 'The child is unwell.' },
+    });
+    await policyRead();
+    fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
+
+    expect(
+      await screen.findByText(
+        /A call-out fee of AED 157\.50, including VAT, is on the client’s account/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it('waives the fee in one click, with the sentence already written', async () => {
     const seen: { url: string; init?: RequestInit }[] = [];
     const fetchImpl = settingsAnd((url, init) => {
       seen.push({ url, init });
       if (url.includes('/waiver')) {
         return new Response(
           JSON.stringify({
-            waivedEntitlementId: '0000000a-0000-4000-8000-000000000301',
-            replacementEntitlementId: '0000000a-0000-4000-8000-000000000302',
+            waivedInvoiceId: '0000000a-0000-4000-8000-000000000301',
+            waivedGrossFils: 15000,
           }),
-          { status: 200 },
+          { status: 201 },
         );
       }
       return new Response(
@@ -471,8 +547,10 @@ describe('CancelAppointmentDrawer', () => {
           status: 'cancelled_late',
           reason: 'client_request',
           noticeHours: 24,
-          creditConsumed: true,
-          waiverEntitlementId: '0000000a-0000-4000-8000-000000000301',
+          callOutFeeNetFils: 15000,
+          callOutFeeVatFils: 0,
+          callOutFeeGrossFils: 15000,
+          feeInvoiceId: '0000000a-0000-4000-8000-000000000301',
         }),
         { status: 200 },
       );
@@ -491,22 +569,22 @@ describe('CancelAppointmentDrawer', () => {
     await policyRead();
     fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Give the session back' }));
-    expect(await screen.findByText('The session has been given back to the client.')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Waive the fee' }));
+    expect(
+      await screen.findByText('The call-out fee has been waived. The client owes nothing for it.'),
+    ).toBeTruthy();
 
-    // Addressed to the credit that was actually taken, and carrying the reason
+    // Addressed to the charge that was actually made, and carrying the reason
     // the coordinator had already written — the one moment they both know a
     // waiver is wanted and have said why.
     const waiver = seen.find((entry) => entry.url.includes('/waiver'));
-    expect(waiver?.url).toBe(
-      '/api/billing/entitlements/0000000a-0000-4000-8000-000000000301/waiver',
-    );
+    expect(waiver?.url).toBe('/api/billing/invoices/0000000a-0000-4000-8000-000000000301/waiver');
     expect(JSON.parse(String(waiver?.init?.body))).toEqual({
       reason: 'The practice moved it at the last minute.',
     });
     expect(headerOf(waiver?.init, 'x-reason')).toBe('The practice moved it at the last minute.');
     // And the offer is gone once it is done.
-    expect(screen.queryByRole('button', { name: 'Give the session back' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Waive the fee' })).toBeNull();
   });
 
   it('says plainly when waiving is not this person’s to do', async () => {
@@ -520,8 +598,10 @@ describe('CancelAppointmentDrawer', () => {
           status: 'cancelled_late',
           reason: 'client_request',
           noticeHours: 24,
-          creditConsumed: true,
-          waiverEntitlementId: '0000000a-0000-4000-8000-000000000301',
+          callOutFeeNetFils: 15000,
+          callOutFeeVatFils: 0,
+          callOutFeeGrossFils: 15000,
+          feeInvoiceId: '0000000a-0000-4000-8000-000000000301',
         }),
         { status: 200 },
       );
@@ -539,7 +619,7 @@ describe('CancelAppointmentDrawer', () => {
     });
     await policyRead();
     fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Give the session back' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Waive the fee' }));
     // A lead practitioner may call a visit off and may not forgive the charge.
     expect(
       await screen.findByText(/Waiving a charge is the owner’s, an admin’s or finance’s\./),
@@ -547,7 +627,7 @@ describe('CancelAppointmentDrawer', () => {
     expect(screen.getByRole('link', { name: 'Open Billing' })).toBeTruthy();
   });
 
-  it('does not claim a charge when the client had no session to use', async () => {
+  it('does not claim a charge when nothing was charged', async () => {
     const fetchImpl = settingsAnd(
       () =>
         new Response(
@@ -556,8 +636,10 @@ describe('CancelAppointmentDrawer', () => {
             status: 'cancelled_late',
             reason: 'client_request',
             noticeHours: 24,
-            creditConsumed: false,
-            waiverEntitlementId: null,
+            callOutFeeNetFils: null,
+            callOutFeeVatFils: null,
+            callOutFeeGrossFils: null,
+            feeInvoiceId: null,
           }),
           { status: 200 },
         ),
@@ -575,14 +657,14 @@ describe('CancelAppointmentDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
 
     expect(
-      await screen.findByText(/The client had no session left to use for it, so nothing was taken/),
+      await screen.findByText(/Nothing was charged for it, and no session was taken\./),
     ).toBeTruthy();
-    expect(screen.queryByText(/It used one of the client’s sessions/)).toBeNull();
+    expect(screen.queryByText(/A call-out fee of AED/)).toBeNull();
   });
 
   it('will not let a visit be called off while the consequence is unknown', async () => {
     // The practice's notice period cannot be read, so the drawer cannot say
-    // whether this costs the household a session. Saying nothing and letting
+    // whether this costs the household a fee. Saying nothing and letting
     // it happen anyway is the one outcome that is not acceptable.
     const fetchImpl = vi.fn(
       async () => new Response('nope', { status: 500 }),
@@ -596,6 +678,12 @@ describe('CancelAppointmentDrawer', () => {
       fetchImpl,
     );
     expect(await screen.findByText(/The practice’s notice period could not be read/)).toBeTruthy();
+    // And what it cannot say is the fee, not a session: nothing takes a
+    // session any more (the founder's decision of 2026-09-04).
+    expect(
+      screen.getByText(/whether calling this visit off carries the call-out fee/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/uses one of the client’s sessions/)).toBeNull();
     fireEvent.change(screen.getByLabelText('What happened?'), { target: { value: 'No answer.' } });
     expect(
       (screen.getByRole('button', { name: 'Call off this visit' }) as HTMLButtonElement).disabled,

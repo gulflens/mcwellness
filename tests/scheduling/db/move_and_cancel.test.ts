@@ -215,6 +215,19 @@ async function creditsTaken(appointmentId: string): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
+/**
+ * The call-out fee billing charged for a visit that did not happen, in fils,
+ * and null when it charged nothing (migration 408, the founder's decision of
+ * 2026-09-04: one fee, never a session).
+ */
+async function feeCharged(appointmentId: string): Promise<number | null> {
+  const { rows } = await owner.query<{ gross_fils: number }>(
+    "select gross_fils from invoice where appointment_id = $1 and kind = 'call_out_fee'",
+    [appointmentId],
+  );
+  return rows[0]?.gross_fils ?? null;
+}
+
 async function statusOf(appointmentId: string): Promise<{
   status: string;
   cancellation_reason: string | null;
@@ -707,7 +720,7 @@ describe('POST /api/appointments/:id/confirm', () => {
 });
 
 describe('POST /api/appointments/:id/cancel', () => {
-  it('calls a visit off outside the notice period without taking a credit', async () => {
+  it('calls a visit off outside the notice period, free and with the session kept', async () => {
     const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_CANCEL_IN_TIME}/cancel`, {
       reason: 'client_request',
     });
@@ -715,19 +728,21 @@ describe('POST /api/appointments/:id/cancel', () => {
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled');
     expect(body.noticeHours).toBe(24);
-    expect(body.creditConsumed).toBe(false);
-    expect(body.waiverEntitlementId).toBeNull();
+    expect(body.callOutFeeNetFils).toBeNull();
+    expect(body.callOutFeeVatFils).toBeNull();
+    expect(body.callOutFeeGrossFils).toBeNull();
+    expect(body.feeInvoiceId).toBeNull();
 
     const row = await statusOf(APPT_CANCEL_IN_TIME);
     expect(row.status).toBe('cancelled');
     expect(row.cancellation_reason).toBe('client_request');
     expect(row.cancelled_at).not.toBeNull();
     expect(await creditsTaken(APPT_CANCEL_IN_TIME)).toBe(0);
+    expect(await feeCharged(APPT_CANCEL_IN_TIME)).toBeNull();
   });
 
-  it('calls a visit off inside the notice period, takes exactly one credit, and names it for the waiver', async () => {
-    const before = await creditsTaken(APPT_CANCEL_LATE);
-    expect(before).toBe(0);
+  it('calls a visit off inside the notice period, charges one fee, and names it for the waiver', async () => {
+    expect(await creditsTaken(APPT_CANCEL_LATE)).toBe(0);
 
     const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_CANCEL_LATE}/cancel`, {
       reason: 'client_request',
@@ -735,23 +750,28 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled_late');
-    expect(body.creditConsumed).toBe(true);
-    expect(body.waiverEntitlementId).not.toBeNull();
+    // AED 150, the practice's own scheduling_setting.unfit_fee_fils — net,
+    // with no VAT on top because the practice is not registered for it, so all
+    // three figures are the same one (migration 406). Apart, so a screen can
+    // name the same figure before the act and after it.
+    expect(body.callOutFeeNetFils).toBe(15_000);
+    expect(body.callOutFeeVatFils).toBe(0);
+    expect(body.callOutFeeGrossFils).toBe(15_000);
+    expect(body.feeInvoiceId).not.toBeNull();
 
     expect((await statusOf(APPT_CANCEL_LATE)).status).toBe('cancelled_late');
-    // Exactly one, not none and not two: billing's trigger is idempotent and
-    // this is the whole of what a late cancellation costs.
-    expect(await creditsTaken(APPT_CANCEL_LATE)).toBe(1);
+    // The founder's rule of 2026-09-04, at the seam the office actually
+    // touches: the family pays a fee and keeps every session it bought.
+    expect(await creditsTaken(APPT_CANCEL_LATE)).toBe(0);
+    expect(await feeCharged(APPT_CANCEL_LATE)).toBe(15_000);
 
-    // And the id handed back is that credit, which is what billing's waiver
+    // And the id handed back is that charge, which is what billing's waiver
     // route is addressed by.
-    const { rows } = await owner.query<{ id: string; consumption_kind: string }>(
-      'select id, consumption_kind::text as consumption_kind from entitlement ' +
-        'where consumed_by_appointment_id = $1',
+    const { rows } = await owner.query<{ id: string }>(
+      "select id from invoice where appointment_id = $1 and kind = 'call_out_fee'",
       [APPT_CANCEL_LATE],
     );
-    expect(rows[0]?.id).toBe(body.waiverEntitlementId);
-    expect(rows[0]?.consumption_kind).toBe('late_cancellation');
+    expect(rows[0]?.id).toBe(body.feeInvoiceId);
   });
 
   it('refuses "could not go ahead at the door" for a visit nobody has driven to yet', async () => {
@@ -797,20 +817,23 @@ describe('POST /api/appointments/:id/cancel', () => {
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled_late');
     expect((await statusOf(APPT_UNFIT_AT_DOOR)).cancellation_reason).toBe('unfit_to_attend');
-    expect(await creditsTaken(APPT_UNFIT_AT_DOOR)).toBe(1);
+    expect(await creditsTaken(APPT_UNFIT_AT_DOOR)).toBe(0);
+    expect(await feeCharged(APPT_UNFIT_AT_DOOR)).toBe(15_000);
   });
 
-  it('says plainly when a late cancellation found no credit to take', async () => {
-    // Client B holds none: billing queues an exception instead, and the
-    // response must not claim a charge that never happened.
+  it('charges the fee to a household holding no credits at all', async () => {
+    // This case used to be the awkward one: the client held nothing to take,
+    // so billing queued an exception and nobody was charged for a journey the
+    // practice had made. A fee does not depend on a package, so it is now the
+    // ordinary case.
     const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_NO_CREDIT}/cancel`, {
       reason: 'client_request',
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled_late');
-    expect(body.creditConsumed).toBe(false);
-    expect(body.waiverEntitlementId).toBeNull();
+    expect(body.callOutFeeNetFils).toBe(15_000);
+    expect(body.feeInvoiceId).not.toBeNull();
   });
 
   it("reads the practice's own notice period rather than a constant", async () => {
@@ -840,7 +863,7 @@ describe('POST /api/appointments/:id/cancel', () => {
     }
   });
 
-  it('lets a practitioner call off their own stop, and tells them what it cost', async () => {
+  it('lets a practitioner call off their own stop, and charges the fee for it', async () => {
     const res = await call(
       AUTH.practitionerA,
       'POST',
@@ -853,18 +876,20 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(body.status).toBe('cancelled_late');
     expect((await statusOf(APPT_PRACTITIONER_AT_DOOR)).status).toBe('cancelled_late');
 
-    // The credit really was taken, and the answer says so. This is the case
-    // that used to come back false: a practitioner reads a client's ledger only
-    // through app.client_visible_to_practitioner, and the visit they have just
-    // called off has this moment dropped out of it, so their own read found
-    // nothing and the waiver link went with it.
-    expect(await creditsTaken(APPT_PRACTITIONER_AT_DOOR)).toBe(1);
-    expect(body.creditConsumed).toBe(true);
-    const { rows } = await owner.query<{ id: string }>(
-      'select id from entitlement where consumed_by_appointment_id = $1',
-      [APPT_PRACTITIONER_AT_DOOR],
-    );
-    expect(body.waiverEntitlementId).toBe(rows[0]?.id);
+    // The fee really was charged, and no session was taken.
+    expect(await creditsTaken(APPT_PRACTITIONER_AT_DOOR)).toBe(0);
+    expect(await feeCharged(APPT_PRACTITIONER_AT_DOOR)).toBe(15_000);
+
+    // And the answer says nothing about it, which is a limit rather than a
+    // denial. A practitioner reads a client's ledger only through
+    // app.client_visible_to_practitioner — confirmed visits only — and the
+    // visit they have just called off has this moment dropped out of it. No
+    // screen they use asks for these two fields, and waiving a fee is not
+    // theirs in any case.
+    expect(body.callOutFeeNetFils).toBeNull();
+    expect(body.callOutFeeVatFils).toBeNull();
+    expect(body.callOutFeeGrossFils).toBeNull();
+    expect(body.feeInvoiceId).toBeNull();
   });
 
   it('takes nothing from a household never told about the visit, however close the window', async () => {
@@ -878,12 +903,15 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled');
-    expect(body.creditConsumed).toBe(false);
-    expect(body.waiverEntitlementId).toBeNull();
+    expect(body.callOutFeeNetFils).toBeNull();
+    expect(body.callOutFeeVatFils).toBeNull();
+    expect(body.callOutFeeGrossFils).toBeNull();
+    expect(body.feeInvoiceId).toBeNull();
     expect((await statusOf(APPT_UNTOLD_LATE)).status).toBe('cancelled');
     // The household holds credits; billing's trigger fires on cancelled_late
-    // and this is not one, so none was touched.
+    // and this is not one, so nothing was charged and nothing was touched.
     expect(await creditsTaken(APPT_UNTOLD_LATE)).toBe(0);
+    expect(await feeCharged(APPT_UNTOLD_LATE)).toBeNull();
   });
 
   it('refuses to record that a family called off a visit they were never told about', async () => {
@@ -910,10 +938,11 @@ describe('POST /api/appointments/:id/cancel', () => {
     });
     expect(res.status).toBe(400);
     expect((await res.json()).code).toBe('session_open');
-    // Untouched, and no credit taken: a late cancellation here would take one
-    // and the session's own close would take a second.
+    // Untouched, and nothing charged: a family should not pay a call-out fee
+    // for a visit a practitioner is at that moment delivering.
     expect((await statusOf(APPT_SESSION_OPEN)).status).toBe('confirmed');
     expect(await creditsTaken(APPT_SESSION_OPEN)).toBe(0);
+    expect(await feeCharged(APPT_SESSION_OPEN)).toBeNull();
   });
 
   it("refuses a practitioner somebody else's stop, without telling them it exists", async () => {
@@ -950,7 +979,7 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect((await res.json()).code).toBe('invalid_request');
   });
 
-  it('hands back an id billing will actually act on: the waiver gives the session back', async () => {
+  it('hands back an id billing will actually act on: the waiver forgives the fee', async () => {
     const available = async () =>
       Number(
         (
@@ -968,31 +997,32 @@ describe('POST /api/appointments/:id/cancel', () => {
     expect(cancelled.status).toBe(200);
     const body = (await cancelled.json()) as CancelAppointmentResponse;
     expect(body.status).toBe('cancelled_late');
-    expect(body.creditConsumed).toBe(true);
-    expect(await available()).toBe(before - 1);
+    expect(body.callOutFeeNetFils).toBe(15_000);
+    // The family's sessions are untouched, before the waiver and after it.
+    expect(await available()).toBe(before);
 
-    // The whole point of answering with the id: one call, and the family is
-    // whole again (docs/SPEC/billing.md section 4.3).
+    // The whole point of answering with the id: one call, and the fee is
+    // forgiven (docs/SPEC/billing.md section 4.3).
     const waived = await call(
       AUTH.ownerA,
       'POST',
-      `/api/billing/entitlements/${body.waiverEntitlementId}/waiver`,
+      `/api/billing/invoices/${body.feeInvoiceId}/waiver`,
       { reason: 'The practice moved it at the last minute.' },
       'The practice moved it at the last minute.',
     );
-    // 201: a waiver writes a replacement credit beside the waived one rather
-    // than editing the row (app/api/billing/waivers.ts), so it creates.
     expect(waived.status).toBe(201);
     expect(await available()).toBe(before);
 
     // And what happened is still on the record: the visit stays late-cancelled
-    // and the credit stays waived rather than being rewritten as available.
+    // and the charge stays on the ledger, marked as forgiven rather than
+    // deleted.
     expect((await statusOf(APPT_WAIVED)).status).toBe('cancelled_late');
-    const { rows } = await owner.query<{ status: string }>(
-      'select status::text as status from entitlement where id = $1',
-      [body.waiverEntitlementId],
+    const { rows } = await owner.query<{ gross_fils: number; waived_at: Date | null }>(
+      'select gross_fils, waived_at from invoice where id = $1',
+      [body.feeInvoiceId],
     );
-    expect(rows[0]?.status).toBe('waived');
+    expect(rows[0]?.gross_fils).toBe(15_000);
+    expect(rows[0]?.waived_at).not.toBeNull();
   });
 
   it('refuses finance here too', async () => {

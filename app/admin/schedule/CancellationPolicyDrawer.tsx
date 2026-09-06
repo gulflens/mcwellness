@@ -11,9 +11,16 @@ import { CloseIcon } from '../../shell/components/Icons';
 
 /**
  * The practice's own cancellation policy: how much notice a household must
- * give, and what a visit costs when the practitioner arrives and it cannot go
- * ahead (db/migrations/202_scheduling_setting.sql, the operator's decisions of
+ * give, and what a visit that does not happen costs
+ * (db/migrations/202_scheduling_setting.sql, the operator's decisions of
  * 2026-09-03).
+ *
+ * The fee was the unfit-at-the-door fee when it was added, and its column
+ * keeps that name. What it pays for widened on the founder's decision of
+ * 2026-09-04 — one fee, never a session — so it is the **call-out fee** now:
+ * one figure for every visit the practitioner's day was spent on and no
+ * session was delivered, whether the family called it off inside the notice
+ * period or the visit could not go ahead at the door.
  *
  * Both figures were called the owner's to change from the day they were added,
  * and until this screen they were editable in the way a column is editable —
@@ -168,7 +175,7 @@ export function CancellationPolicyDrawer({
                   }
                   hint={
                     hoursValid
-                      ? 'A visit called off with less notice than this uses one of the client’s sessions.'
+                      ? 'A visit called off with less notice than this carries the call-out fee below. It never uses one of the client’s sessions.'
                       : undefined
                   }
                 />
@@ -177,7 +184,7 @@ export function CancellationPolicyDrawer({
               <div className="stepper__step">
                 <Field
                   id="policy-unfit-fee"
-                  label="Fee when a visit cannot go ahead at the door (AED)"
+                  label="Call-out fee (AED)"
                   type="text"
                   inputMode="decimal"
                   value={fee}
@@ -191,7 +198,7 @@ export function CancellationPolicyDrawer({
                   }
                   hint={
                     feeValid
-                      ? 'Shown to the coordinator when they record one. Nothing charges it automatically.'
+                      ? 'Charged on the client’s account when a visit is called off late, or cannot go ahead once the practitioner has arrived. Set it to nothing and no fee is charged.'
                       : undefined
                   }
                 />

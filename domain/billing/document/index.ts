@@ -49,10 +49,12 @@ export type {
 export { clampForDocument, GEOMETRY, layout, titleOf } from './render';
 export {
   arabicDocumentDate,
+  callOutFeeDescription,
   formatDocumentDate,
   formatRate,
   NOT_REGISTERED_BASIS,
   SIMPLIFIED_BASIS,
+  waivedNotice,
   WORDMARK,
   WORDS,
 } from './strings';

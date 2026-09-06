@@ -28,6 +28,7 @@ const KIND_LABELS: Record<InvoiceRow['kind'], string> = {
   session: 'Visit',
   package: 'Package',
   statement: 'Statement',
+  call_out_fee: 'Call-out fee',
 };
 
 type State =
@@ -104,7 +105,23 @@ export function InvoicesSection() {
           </span>
         ),
       },
-      { key: 'kind', header: 'For', render: (row) => KIND_LABELS[row.kind] },
+      {
+        key: 'kind',
+        header: 'For',
+        // A forgiven call-out fee stays in the book, with its number and its
+        // figures, and stops counting in the balance (migration 408). So the
+        // row says so: without it the total owed and the charges listed above
+        // it do not add up, and nobody can see why.
+        render: (row) =>
+          row.waivedAt ? (
+            <span className="name">
+              <span>{KIND_LABELS[row.kind]}</span>
+              <span className="small muted">Waived {formatDate(row.waivedAt)}</span>
+            </span>
+          ) : (
+            KIND_LABELS[row.kind]
+          ),
+      },
       {
         key: 'issued',
         header: 'Issued',

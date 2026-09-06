@@ -24,13 +24,16 @@ import {
  *
  * **What it costs, and who decided.** Inside the practice's notice period the
  * appointment is written `cancelled_late` rather than `cancelled`, and
- * billing's own trigger (404_billing_consumption.sql) takes one of the
- * client's credits for it. The rule is `cancellationStatusFor`
- * (domain/scheduling/cancellation.ts) and the figure it is given is the
- * practice's own `scheduling_setting.notice_hours` — nothing in this file
- * decides either. The way back is billing's waiver, and this route hands the
- * screen the id it needs for it rather than leaving somebody to go and find
- * the credit that was taken.
+ * billing's own trigger (408_billing_call_out_fee.sql) posts the practice's
+ * call-out fee as a charge on the household's account. It takes no session:
+ * the founder's decision of 2026-09-04 is one fee and never a session, and a
+ * package's credits are untouched by a cancellation. The rule for the status
+ * is `cancellationStatusFor` (domain/scheduling/cancellation.ts) and the rule
+ * for the fee is `callOutFeeFor` (domain/billing) — nothing in this file
+ * decides either, and both are given the practice's own
+ * `scheduling_setting`. The way back is billing's waiver, and this route hands
+ * the screen the id it needs for it rather than leaving somebody to go and
+ * find the charge that was made.
  *
  * **Who may call a visit off.** The three calendar roles, for any visit. And
  * a practitioner, for their own stop and no one else's: they are the person
@@ -55,10 +58,15 @@ import {
  *
  * **`unfit_to_attend` is late whatever the calendar says.** The practitioner
  * has already driven there; the notice was nil however early the visit was
- * booked. The practice also holds a fee for it
+ * booked. It carries the same call-out fee as any other late cancellation
  * (`scheduling_setting.unfit_fee_fils`, AED 150 by the operator's decision of
- * 2026-09-03) — recorded, and charged by nothing yet
- * (docs/CHANGE-REQUESTS/scheduling-04.md).
+ * 2026-09-03), which since migration 408 is charged rather than merely
+ * recorded (docs/CHANGE-REQUESTS/billing-05.md).
+ *
+ * **And a visit the practice itself called off is free.** `practice_request`
+ * still writes `cancelled_late` for the record — who was at fault belongs in
+ * the reason, not in the status — and carries no fee, because a practice does
+ * not bill a family for its own change of plan.
  */
 
 /** The length app/api/_middleware/request-context.ts trims a reason to before
@@ -105,21 +113,24 @@ const CANCEL_SQL =
   'update appointment set status = $2, cancellation_reason = $3, cancelled_at = now() ' +
   "where id = $1 and tenant_id = app.current_tenant_id() and status in ('proposed', 'confirmed')";
 
-// Answers both halves at once: whether the visit was called off, and which
-// credit billing's trigger took for it. The second cannot be read by the
-// caller on this path — see the note in the function itself.
+// Whether the visit was called off. The second column is the credit
+// app.cancel_own_appointment (203) used to report, from the days when a
+// cancellation took one; nothing takes one now, and it is read and discarded
+// rather than left out, because the function is the scheduling stream's and
+// its shape is not this round's to change.
 const CANCEL_OWN_SQL =
   'select cancelled, entitlement_id from app.cancel_own_appointment($1, $2, $3)';
 
-// What billing's trigger did about it, read back rather than assumed. A
-// practitioner may read this row for a client on their own schedule
-// (db/policies/billing/ledger.sql); the office may read it for anyone. When
-// the client held no credit, the trigger queued an exception instead and
-// nothing comes back here, which is the honest answer to "was anything
-// charged" rather than a claim that something was.
-const CONSUMED_CREDIT_SQL =
-  'select id from entitlement where tenant_id = app.current_tenant_id() ' +
-  "and consumed_by_appointment_id = $1 and status = 'consumed' limit 1";
+// The charge billing's trigger made, read back rather than assumed, so the
+// screen can offer to waive exactly the row that exists. Only the office asks:
+// a practitioner's reach into a client's ledger goes through
+// app.client_visible_to_practitioner — confirmed visits only — and the visit
+// they have this moment called off is no longer one, so this read would come
+// back empty on that path and deny a charge that had just been made.
+const FEE_INVOICE_SQL =
+  'select id, net_fils, vat_fils, gross_fils from invoice ' +
+  'where tenant_id = app.current_tenant_id() ' +
+  "and appointment_id = $1 and kind = 'call_out_fee' limit 1";
 
 type AppointmentDbRow = {
   id: string;
@@ -141,6 +152,11 @@ function badRequest(c: Context<ApiEnv>, requestId: string | null, code: CancelAc
  * refusing is deliberate: a practice with a missing settings row should still
  * be able to call a visit off, and twenty-four hours is what it would have
  * had.
+ *
+ * The fee is deliberately not read here. What a cancellation costs is
+ * billing's rule (`callOutFeeFor`) applied by billing's trigger, and this
+ * route reports what was actually charged rather than what it thinks should
+ * have been — the same discipline it kept when the charge was a credit.
  */
 async function noticeHoursFor(db: Db): Promise<number> {
   const { rows } = await db.query<{ notice_hours: number }>(NOTICE_SQL);
@@ -232,20 +248,16 @@ export function mountAppointmentCancel(
     const status = cancellationStatusFor(visit, reason, now(), noticeHours);
 
     let cancelled: boolean;
-    // Set on the practitioner path by the door itself, because that is the only
-    // place it can be read from there; left null on the office path, which
-    // reads it back below under its own row security.
-    let creditFromDoor: string | null = null;
     if (isCalendarRole) {
       const result = await db.query(CANCEL_SQL, [appointmentId, status, reason]);
       cancelled = result.rowCount === 1;
     } else {
-      const result = await db.query<{ cancelled: boolean; entitlement_id: string | null }>(
-        CANCEL_OWN_SQL,
-        [appointmentId, status, reason],
-      );
+      const result = await db.query<{ cancelled: boolean }>(CANCEL_OWN_SQL, [
+        appointmentId,
+        status,
+        reason,
+      ]);
       cancelled = result.rows[0]?.cancelled === true;
-      creditFromDoor = result.rows[0]?.entitlement_id ?? null;
     }
     // Nothing was written: either somebody settled this visit between the read
     // above and the write, or — for a practitioner — it is not their stop
@@ -255,19 +267,39 @@ export function mountAppointmentCancel(
       return badRequest(c, requestId, 'appointment_settled');
     }
 
-    // Billing's trigger has already run, in this same transaction.
+    // Billing's trigger has already run, in this same transaction. What it
+    // charged is read back rather than restated: which outcomes carry the fee,
+    // and what the practice's figure is, are billing's
+    // (domain/billing/lateCancellation.ts's callOutFeeFor, in SQL in migration
+    // 408), and a second copy of that rule here would be a second answer to
+    // disagree with the first. docs/SPEC/OWNERSHIP.md rule 3 says the same
+    // thing from the other direction: a module never imports another module's
+    // domain/.
     //
-    // The office reads the credit back for itself; a practitioner cannot, and
-    // must not be told a story about it either. Their reach into a client's
-    // ledger goes through app.client_visible_to_practitioner — confirmed visits
-    // only — and the visit they have this moment called off is no longer one.
-    // So this read would come back empty on that path and the answer would deny
-    // a charge that had just been made, taking the waiver link with it
-    // (security review of this pull request). The definer door hands it over
-    // instead.
-    const waiverEntitlementId = isCalendarRole
-      ? ((await db.query<{ id: string }>(CONSUMED_CREDIT_SQL, [appointmentId])).rows[0]?.id ?? null)
-      : creditFromDoor;
+    // Only the office asks. A practitioner's reach into a client's ledger goes
+    // through app.client_visible_to_practitioner — confirmed visits only — and
+    // the visit they have this moment called off is no longer one, so the read
+    // would come back empty on that path and deny a charge that had just been
+    // made. They are answered null for both, which the screen that serves them
+    // does not ask for: nothing outside the office's own cancel drawer reads
+    // these two fields, and waiving is not a practitioner's in any case
+    // (`mayWaive`, app/api/billing/access.ts).
+    //
+    // Net, VAT and gross come back apart rather than as one figure. The
+    // practice's price is the net one and VAT is added on top at write time
+    // (migration 406), so a screen that named AED 150 before the act can name
+    // the same AED 150 afterwards and say "including VAT" only where there is
+    // any (design review of this pull request).
+    const fee = isCalendarRole
+      ? ((
+          await db.query<{
+            id: string;
+            net_fils: number;
+            vat_fils: number;
+            gross_fils: number;
+          }>(FEE_INVOICE_SQL, [appointmentId])
+        ).rows[0] ?? null)
+      : null;
 
     // No separate read row: the update above carries the whole story into the
     // audit trail through appointment's own row trigger — before and after,
@@ -279,8 +311,10 @@ export function mountAppointmentCancel(
         status,
         reason,
         noticeHours,
-        creditConsumed: waiverEntitlementId !== null,
-        waiverEntitlementId,
+        callOutFeeNetFils: fee?.net_fils ?? null,
+        callOutFeeVatFils: fee?.vat_fils ?? null,
+        callOutFeeGrossFils: fee?.gross_fils ?? null,
+        feeInvoiceId: fee?.id ?? null,
       }),
     );
   });

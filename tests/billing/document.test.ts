@@ -4,8 +4,10 @@ import { documentFonts } from '../../app/api/billing/fonts';
 import {
   extractAll,
   extractText,
+  NOT_REGISTERED_BASIS,
   renderDocument,
   toVisualOrder,
+  waivedNotice,
   WORDS,
   type InvoiceDocument,
   type ReceiptDocument,
@@ -71,6 +73,7 @@ function invoiceFor(supplier: SupplierSnapshot): InvoiceDocument {
     reference: 'INV-000001',
     issuedOn: '2026-09-02',
     suppliedOn: null,
+    waivedOn: null,
     lines: [
       {
         description: 'Neurofeedback session',
@@ -215,6 +218,38 @@ describe('the date of supply', () => {
     );
     expect(differs).toContain('Date of supply');
     expect(differs).toContain('28 August 2026');
+  });
+});
+
+describe('a call-out fee the practice forgave', () => {
+  it('says so on the page, in both languages, and says nothing is owed', () => {
+    // The invoice is append-only: a waived fee keeps its number, its line and
+    // its figures, and `app.billing_ledger` simply stops counting it
+    // (migration 408). So the document has to say what the ledger knows, or a
+    // family reading it is being billed for money it does not owe (compliance
+    // review of this pull request).
+    const waived = extractAll(
+      renderDocument({ ...invoiceFor(UNREGISTERED), waivedOn: '2026-09-06' }, fonts),
+    );
+    const words = waivedNotice('2026-09-06');
+    expect(words.en).toBe('Waived on 6 September 2026. Nothing is owed.');
+    expect(waived).toContain(words.en);
+    // The Arabic in two fragments rather than one sentence, the way the
+    // registration basis is asserted above: the shaper sets a space either
+    // side of a Western-digit run, so the whole sentence is not a substring of
+    // the page even when every word of it is on it.
+    expect(waived).toContain(asCopied('أُعفي هذا المبلغ بتاريخ'));
+    expect(waived).toContain(asCopied('لا يوجد مبلغ مستحق'));
+    expect(words.ar).toContain('6 سبتمبر 2026');
+    // And the basis the page already carried is still on it: forgiving a
+    // charge says nothing about the practice's registration.
+    expect(waived).toContain(NOT_REGISTERED_BASIS.en);
+  });
+
+  it('is silent on an invoice that stands', () => {
+    const standing = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
+    expect(standing).not.toContain('Waived');
+    expect(standing).not.toContain('Nothing is owed');
   });
 });
 

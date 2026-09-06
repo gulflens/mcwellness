@@ -259,24 +259,51 @@ export type CancelAppointmentRequest = z.infer<typeof CancelAppointmentRequest>;
  * `cancellationStatusFor`), and `noticeHours` is the figure it was given, so
  * a screen can say "inside the practice's 24 hours" rather than "late".
  *
- * `creditConsumed` is observed, not inferred. Billing's own trigger
- * (404_billing_consumption.sql) fires on `cancelled_late` and takes a credit
- * if the client has one; this route reads back whether it found one, so a
- * late cancellation against a client with no credits left says so honestly
- * instead of claiming a charge that never happened.
+ * **The three fee figures are what the household is charged, and never a
+ * session.** The founder's decision of 2026-09-04: a package's sessions are
+ * never taken for a cancellation, and a visit called off inside the notice
+ * period — or one that could not go ahead at the door — carries the practice's
+ * call-out fee instead (`domain/billing`'s `callOutFeeFor`, posted by the
+ * trigger in migration 408). All three are null when nothing is charged, so a
+ * screen never warns about a fee that is not coming.
  *
- * `waiverEntitlementId` is the credit that was taken, and the id billing's
- * own waiver route needs: `POST /api/billing/entitlements/:id/waiver`. Null
- * whenever nothing was taken, so a screen never offers to give back what was
- * never charged.
+ * **Net, VAT and gross, separately, because the net figure is the one a screen
+ * has already named.** Every price this practice publishes is net and VAT is
+ * added on top at write time when it is registered (migration 406), so a
+ * drawer that says "AED 150.00" before the act and reads the gross back
+ * afterwards would say "AED 157.50" about the same visit and look like a
+ * practice that had moved its own price mid-sentence (design review of this
+ * pull request). With the figures apart, a screen can show the same one and
+ * say "including VAT" when there is VAT to include.
+ *
+ * They are **observed, not inferred**: the route reads back the charge
+ * billing's trigger made in this same transaction, so a screen offers to waive
+ * exactly the row that exists rather than one it assumed would be written.
+ *
+ * `feeInvoiceId` is that charge, and the id billing's waiver route needs:
+ * `POST /api/billing/invoices/:id/waiver`.
+ *
+ * All four are null for a practitioner, and that is a limit rather than an
+ * answer.
+ * Their reach into a client's ledger goes through
+ * `app.client_visible_to_practitioner` — confirmed visits only — and the visit
+ * they have this moment called off is no longer one, so the read comes back
+ * empty on that path. Nothing outside the office's own cancel drawer asks for
+ * these two fields, and waiving a fee is not a practitioner's in any case
+ * (`mayWaive`).
  */
 export const CancelAppointmentResponse = z.object({
   id: z.uuid(),
   status: z.enum(['cancelled', 'cancelled_late']),
   reason: z.enum(CANCELLATION_REASONS),
   noticeHours: z.number().int().nonnegative(),
-  creditConsumed: z.boolean(),
-  waiverEntitlementId: z.uuid().nullable(),
+  /** The practice's own figure, before any VAT: what the drawer named before the act. */
+  callOutFeeNetFils: z.number().int().positive().nullable(),
+  /** The VAT added on top, which is zero unless the practice is registered. */
+  callOutFeeVatFils: z.number().int().nonnegative().nullable(),
+  /** The two together: what the household owes for this visit. */
+  callOutFeeGrossFils: z.number().int().positive().nullable(),
+  feeInvoiceId: z.uuid().nullable(),
 });
 export type CancelAppointmentResponse = z.infer<typeof CancelAppointmentResponse>;
 
