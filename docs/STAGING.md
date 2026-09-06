@@ -1158,6 +1158,100 @@ not it.
   is leaked-password protection, unrelated to this pass and already known
   (`docs/SECURITY.md`). Nothing new.
 
+## What was done on 2026-09-06, eleventh pass: the door itself, `app.bootstrap_practice`
+
+Main had reached `f06e666` (pull request 95, trunk round 32) since the
+tenth pass's own `2ef44f7` — thirty-four commits, one migration this
+project did not yet have: `db/migrations/956_bootstrap_practice.sql`, the
+function that gives a fresh database its first practice. This pass owed
+staging exactly that one file and nothing else; `git log 2ef44f7..HEAD --
+db/policies` and `-- db/seed` are both empty, so neither the policies nor
+the seed owed anything.
+
+- **The seventy rows already there were checked before anything was
+  touched.** Every file's sha256, computed straight off the files on disk,
+  matched the checksum staging had recorded for it exactly.
+- **956 was applied through Supabase's migration tool**, under the
+  runner's own audit context (`app.reason` naming the file, a fresh
+  `app.request_id`), with the bookkeeping row written immediately after,
+  carrying the same sha256 the runner would compute
+  (`db144edc006f6884463ec4cee42101250dcfa5e0bba9fa6000190dea2d0c745b`).
+  `schema_migration` now holds **seventy-one rows**.
+- **No policy re-apply owed**, confirmed above; one hundred and thirty-nine
+  policies stand on `public`, unchanged from the tenth pass.
+- **Nothing was owed to the seed, and round 32 adds none** — said here as
+  every pass since the seed existed has said it, and true again. The
+  synthetic practice made by the second pass stands unchanged: `tenant`
+  holds its one row, and nothing this pass did touched it.
+- **`app.bootstrap_practice` was not called.** This pass's job was the door,
+  not walking through it — staging already has its practice, made by an
+  earlier pass, and the function's own advisory lock and one-practice
+  check would refuse a second one regardless.
+- **Grants checked**: `execute` on `app.bootstrap_practice(text, text,
+  uuid, text, text, text)` is revoked from `public` and from `app_role`,
+  held by `service_role` (and by `postgres`, the function's owner, which
+  needs no explicit grant), and absent for `anon` and `authenticated` — the
+  same shape as production's own copy of the same migration.
+- **The audit chain still verifies**, `app.verify_audit_chain()` returning
+  null. `audit_log` stood at 956 rows before this pass — exactly where the
+  tenth pass's own report left it — and stands at 956 after: creating a
+  function wrote no row against any tenant-scoped table, so the count did
+  not move.
+- **The demo needed no fresh visit row, for the third time running.** The
+  confirmed home visit for MW-000005 still stands on **2026-09-06 at
+  10:00–10:45 Dubai time**, one of the same four confirmed visits the
+  tenth pass counted.
+- **The schema fingerprint was taken against a fresh `pnpm db:reset &&
+  pnpm db:migrate`** on `mcwellness-trunk-2` (its own database, port 5442),
+  fetched and checked out to `f06e666` for the comparison (the worktree was
+  clean; nothing needed setting aside this time) and left there afterwards.
+  Seventy-one migrations and twenty policy files applied cleanly to an
+  empty database. Nine parts were compared, canonicalised and hashed
+  inside the query itself: columns (1,221), constraints (530), indexes
+  (471), triggers (290), policies (139), row-level security flags (72
+  tables), functions (83, the one new one being `app.bootstrap_practice`),
+  the grants `app_role`, `anon`, `authenticated` and `PUBLIC` hold on
+  `public` and `app` together (106 table grants, 47 function grants keyed
+  by function identity rather than `specific_name`). Eight of the nine
+  matched the fresh build exactly.
+- **The ninth — columns — matched in substance, not in physical position,
+  and the difference was chased down rather than waved past.** Ordered by
+  column name instead of ordinal position, staging's 1,221 columns hash
+  identically to production's and to the fresh local build (`2c82cd6d…`).
+  Ordered by physical position, two tables disagree with production:
+  `schema_migration` (`checksum` is staging's third column, production's
+  second) and `invoice` (`supplied_on` sits last on staging, mid-table on
+  production). Every column in both tables is identical in name, type,
+  nullability and default on both projects — this is column-slot history,
+  not schema drift: production's seventy pre-956 migrations ran as one
+  unbroken bootstrap, so a column's physical slot follows the file that
+  added it in a single pass, while staging acquired the same files across
+  eleven passes spread from 2026-09-02 to today, where `alter table ...
+  add column` claims the next free slot rather than a slot a same-named,
+  later-dropped column once held. Nothing here is this pass's own doing,
+  and nothing reads a column by position anywhere in this codebase.
+- **The laptop's own database took the one pending migration**, `pnpm
+  db:migrate` applying `956_bootstrap_practice.sql` alone (seventy already
+  stood, twenty policy files re-applied as every run does).
+- **The staging bundle was rebuilt** with `pnpm exec vite build --mode
+  staging` (938 kB main chunk, service worker precache rewritten to 23
+  entries covering 1,276 KiB — both within a hair of the tenth pass's own
+  figures).
+- **Both demo servers were stopped and left to the keep-alive script.** The
+  staging server on port 3100 and the laptop's API on port 3000 (with its
+  paired Vite server on 5173) were killed; the keep-alive script — still
+  the tenth pass's own instance, polling every sixty seconds from its own
+  scratch directory — picked up both within thirty seconds and relaunched
+  them with the same commands section 6 names. Afterwards `/api/health`
+  and `/api/health/deep` answered `{"ok":true,...}` on both port 3100 and
+  port 3000.
+- **Advisors were checked after the DDL.** The same thirty-one
+  `rls_enabled_no_policy` `INFO` findings the tenth pass carried, none of
+  them a table this pass's own migration touches, counted directly against
+  `pg_class` rather than assumed. The one `WARN` is the same
+  leaked-password-protection finding, unrelated to this pass and already
+  known. Nothing new.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
