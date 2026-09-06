@@ -1,6 +1,6 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 6 September at 13:00 with pieces nine and ten built, reviewed and merged, trunk rounds 31 and 32 merged, the production database migrated and able to take its first practice, and the hand deploy waiting on the operator's secrets. This file exists so that the next Claude session,
+Written 4 September 2026, updated on 6 September at 17:00: pieces nine and ten, trunk rounds 31 and 32, and the founder's two changes of 4 September built and merged; the production database migrated and able to take its first practice; the address on Hostinger built from today's main and waiting on the operator's secrets. This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -116,6 +116,25 @@ an unanswered decision. The next session's first act is section 10.
   request 96, the second production pass and the eleventh staging pass; both
   fingerprints match a fresh build). Three time-of-day fixtures that made CI
   red between 08:00 and 12:00 UTC were fixed in the same round.
+- **The afternoon of 6 September, on the founder's reply of 4 September**
+  (relayed again with her equipment's sample files): the four long
+  agreements ask about a head injury at any time, versions 0.2-draft (pull
+  request 98); the assessment door takes the practice's real recordings
+  (EDF and the native file) and NeuroGuide reports up to 64 MB, with roles
+  and conditions, migration 503 (pull request 99); and **one fee, never a
+  session** (pull request 100, migration 408): no outcome takes a credit, a
+  late, unfit or no-show visit writes one AED 150 call-out invoice by the
+  ledger's own trigger, waived with a reason through a door the database
+  guards itself. The no-show is Claude's default for the founder to
+  overrule. The third production pass and the twelfth staging pass (pull
+  request 101) carry both migrations; the fee rule was proved live on
+  staging. Her equipment is named (BEE Medic NeuroAmp II 5S with Cygnet;
+  NeuroLab EEG-21 with x23, ERPrec, WinEEG, NeuroGuide), so piece ten's
+  decision 1 is answered; the parser waits on NeuroGuide's numeric export,
+  asked for in a Gmail draft. Requests left for later rounds sit in
+  `billing-06.md` (the portal's "Waived" word, the VAT threshold sum
+  excluding waived fees, "plus VAT where applicable" on the signed page) and
+  `assessment-02.md`.
 - The operator's morning page is `docs/OPERATOR/2026-09-06-decisions.md`
   (pull request 85): every decision and action that is theirs, with the
   Hostinger question and the lawyer's note drafted.
@@ -448,11 +467,22 @@ nine and ten; see the records on pull requests 73 to 83).
    (pull request 92) are done; staging carries both. The start file for a
    Node.js host (pull request 93) and the production database's first pass
    (pull request 94) are done.
-2a. Trunk round 32, the first practice (pull request 95), and its application
-   to production and staging (pull request 96) are done. **Nothing is in
-   flight.** The operator's next act is `docs/PRODUCTION.md`, "The first
-   practice": the Auth user, then the one statement, after the secrets of
-   `docs/RUNBOOK/go-live.md` are in the host's environment.
+2a. Trunk round 32, the first practice (pull request 95), its application to
+   production and staging (pull request 96), and the afternoon's three rounds
+   (pull requests 98, 99, 100) with their passes (pull request 101) are done.
+   **Nothing is in flight.** The operator's next act is `docs/PRODUCTION.md`,
+   "The first practice": the Auth user, then the one statement, after the
+   secrets of `docs/RUNBOOK/go-live.md` are in the host's environment. The
+   code on Hostinger is main at `6c99fac`, built on the Business plan the
+   operator bought at 13:59 (the Premium plan cannot run a Node.js process,
+   which is why the earlier builds never started); the process still waits
+   on the secrets.
+2b. **Owed to the next rounds**, each a change request already written:
+   `billing-06.md` (the portal shows "Waived"; migration 953's threshold sum
+   excludes waived fees; "plus VAT where applicable" on the signed booking
+   page; scheduling's column comment and settings comment) and
+   `assessment-02.md` (the EDF signature in the shared check; the trunk's
+   audit fixture). And the founder's answer on the no-show fee.
 2b. **The hand deploy on Hostinger** waits on the operator's secrets; when
    the process starts, measure `TRUSTED_PROXY_HOPS` and record the first
    live pass in `docs/PRODUCTION.md`. If the process never starts, buy the
