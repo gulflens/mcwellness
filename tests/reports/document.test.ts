@@ -397,7 +397,8 @@ describe('a long report', () => {
 describe('the people in this file', () => {
   it('names every one of them from the fixed fictional lists', () => {
     // db/seed/generate.test.ts asks the same of the seed. A fixture is held to
-    // it too: "Nadia Meadows" read as a synthetic name and was not one.
+    // it too: the name this test was written for read as synthetic and was on
+    // neither list.
     for (const full of [SIGNER_NAME, RECIPIENT_NAME]) {
       const [given, family] = full.split(' ');
       expect(isListedGivenName(given ?? ''), full).toBe(true);
