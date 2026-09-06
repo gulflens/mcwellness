@@ -221,6 +221,19 @@ describe('opening the access report from the address', () => {
     expect(screen.queryByRole('region', { name: 'Access report' })).toBeNull();
   });
 
+  it('opens nothing when the address names something that is not a record id', async () => {
+    // Anything can be typed into an address bar. `?report=abc` is not a record
+    // id, so no panel opens and nothing is asked of the server; the parameter
+    // is still cleared, so a reload does not carry it forward either.
+    const urls = mount({ at: '/admin/audit?report=abc' });
+    await screen.findByText('Hazel Harbour opened this client record');
+    expect(screen.queryByRole('region', { name: 'Access report' })).toBeNull();
+    expect(urls.some((url) => url.startsWith('/api/audit/access-report'))).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId('address').textContent).not.toContain('report=');
+    });
+  });
+
   it('stays closed once closed, though the press that opened it came from the address', async () => {
     mount({ at: `/admin/audit?report=${CLIENT}` });
     const report = await screen.findByRole('region', { name: 'Access report' });

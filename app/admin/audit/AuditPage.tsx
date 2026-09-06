@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { z } from 'zod';
 import {
   AccessReportResponse,
   ActivityFilters,
@@ -267,7 +268,16 @@ export function AuditPage() {
   // had shut. A client id is an opaque uuid and not personal data, which is
   // what `.claude/rules/ui.md` keeps out of a query string.
   const [params, setParams] = useSearchParams();
-  const [reportFor, setReportFor] = useState<string | null>(() => params.get('report'));
+  const [reportFor, setReportFor] = useState<string | null>(() => {
+    // Anything may be typed into an address bar, so the value is held only
+    // when it is a record id — the same rule the route itself holds
+    // (`app/api/audit/activity.ts`'s `ClientQuery`, `z.uuid()`), read from the
+    // same library rather than written out a second time as a pattern. A
+    // malformed parameter opens nothing, rather than a panel whose note about
+    // an erased record is untrue of a request the API refuses with 400.
+    const asked = z.uuid().safeParse(params.get('report'));
+    return asked.success ? asked.data : null;
+  });
 
   useEffect(() => {
     if (!params.has('report')) return;
