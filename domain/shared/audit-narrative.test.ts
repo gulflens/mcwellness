@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { narrate, type AuditEvent } from './audit-narrative';
+import { indefiniteArticleFor, narrate, withArticle, type AuditEvent } from './audit-narrative';
 
 // Synthetic throughout: a seeded owner and word-name clients.
 const OWNER = {
@@ -582,5 +582,77 @@ describe('reports (docs/SPEC/reports-v1.md section 8)', () => {
       const sentence = narrate(event(overrides), 'ar')?.sentence ?? '';
       expect(/[\u0600-\u06FF]/.test(sentence), JSON.stringify(overrides)).toBe(true);
     }
+  });
+});
+
+describe('the article before an entity', () => {
+  it('says "an appointment", not "a appointment"', () => {
+    // The sentence the client Timeline actually showed
+    // (docs/CHANGE-REQUESTS/qa-01.md item 6).
+    expect(narrate(event({ entityType: 'appointment', action: 'insert' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added an appointment',
+    );
+    expect(narrate(event({ entityType: 'appointment', action: 'delete' }), 'en')?.sentence).toBe(
+      'Hazel Harbour removed an appointment',
+    );
+  });
+
+  it('leaves every word that already read correctly alone', () => {
+    expect(narrate(event({ entityType: 'user_role', action: 'insert' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added a role',
+    );
+    // "a user", never "an user": the vowel is written and not sounded.
+    expect(narrate(event({ entityType: 'app_user', action: 'insert' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added a user',
+    );
+    expect(narrate(event({ entityType: 'session', action: 'insert' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added a visit',
+    );
+  });
+
+  it('gives no article to a word that already carries one', () => {
+    // No word in the catalogue reaches the generic branch carrying its own
+    // determiner today — "the measurement's file" has sentences of its own —
+    // so this holds the guard rather than a sentence anybody reads yet.
+    expect(withArticle('the measurement’s file')).toBe('the measurement’s file');
+    expect(withArticle('this file')).toBe('this file');
+  });
+
+  it('reads an unnamed entity type correctly too, without waiting for a word to be written for it', () => {
+    expect(narrate(event({ entityType: 'entitlement', action: 'insert' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added an entitlement',
+    );
+    expect(
+      narrate(event({ entityType: 'report_delivery', action: 'insert' }), 'en')?.sentence,
+    ).toBe('Hazel Harbour added a report delivery');
+  });
+
+  it("names an appointment in Arabic rather than leaving the table's own English name", () => {
+    expect(narrate(event({ entityType: 'appointment', action: 'insert' }), 'ar')?.sentence).toBe(
+      'Hazel Harbour أضاف الموعد',
+    );
+  });
+
+  it('changes nothing in Arabic, which has no indefinite article to choose', () => {
+    for (const entityType of ['appointment', 'kit', 'app_user', 'entitlement']) {
+      const added = narrate(event({ entityType, action: 'insert' }), 'ar')?.sentence ?? '';
+      const removed = narrate(event({ entityType, action: 'delete' }), 'ar')?.sentence ?? '';
+      expect(added, entityType).toContain('أضاف');
+      expect(removed, entityType).toContain('أزال');
+      // No stray Latin article has crept into either.
+      expect(/\b(a|an)\b/.test(added), entityType).toBe(false);
+      expect(/\b(a|an)\b/.test(removed), entityType).toBe(false);
+    }
+  });
+
+  it('chooses by the sound a word starts with, exceptions and all', () => {
+    expect(indefiniteArticleFor('appointment')).toBe('an');
+    expect(indefiniteArticleFor('invoice')).toBe('an');
+    expect(indefiniteArticleFor('hour')).toBe('an');
+    expect(indefiniteArticleFor('user')).toBe('a');
+    expect(indefiniteArticleFor('unit of work')).toBe('a');
+    expect(indefiniteArticleFor('record')).toBe('a');
+    expect(withArticle('the measurement’s file')).toBe('the measurement’s file');
+    expect(withArticle('appointment')).toBe('an appointment');
   });
 });

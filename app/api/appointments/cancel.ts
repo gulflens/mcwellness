@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { hasRole } from '@domain/shared';
 import {
   DEFAULT_NOTICE_HOURS,
+  REASONS_NEEDING_THE_HOUSEHOLD_TOLD,
   cancellationStatusFor,
+  householdHasBeenTold,
   reasonCanBeGivenAt,
 } from '@domain/scheduling';
 import { cleanText } from '../_middleware/text';
@@ -11,8 +13,8 @@ import type { ApiEnv, Db } from '../_middleware/request-context';
 import {
   CancelAppointmentRequest,
   CancelAppointmentResponse,
-  type AppointmentActionCode,
   type AppointmentRow,
+  type CancelActionCode,
   type CancellationReason,
 } from './schema';
 
@@ -42,6 +44,14 @@ import {
  * these two statuses on exactly their own unsettled stop — the shape
  * `app.complete_appointment_for_session` (302_session_close.sql) already
  * established for the one transition a practitioner legitimately owns.
+ *
+ * **And a visit nobody has been told about costs nobody anything.** The
+ * notice period measures notice given to a household; a `proposed` visit is a
+ * slot the practice is holding and has mentioned to no one (section 3), so
+ * there is no notice to break and no credit to take. Two of the reasons —
+ * "the family called it off" and "could not go ahead at the door" — cannot be
+ * true of such a visit at all, and are refused rather than recorded
+ * (docs/CHANGE-REQUESTS/qa-01.md item 5).
  *
  * **`unfit_to_attend` is late whatever the calendar says.** The practitioner
  * has already driven there; the notice was nil however early the visit was
@@ -118,7 +128,7 @@ type AppointmentDbRow = {
   window_start: Date;
 };
 
-function badRequest(c: Context<ApiEnv>, requestId: string | null, code: AppointmentActionCode) {
+function badRequest(c: Context<ApiEnv>, requestId: string | null, code: CancelActionCode) {
   return c.json({ error: 'bad_request', code, requestId }, 400);
 }
 
@@ -191,24 +201,35 @@ export function mountAppointmentCancel(
       return badRequest(c, requestId, 'session_open');
     }
 
+    // As much of the visit as the two rules below need: when it opens, and
+    // whether the household has been told about it at all.
+    const visit = { windowStart: appointment.window_start, status: appointment.status };
+
+    // Two reasons say the household did something, and neither can be true of
+    // a visit still `proposed` — a slot the practice is holding and has
+    // mentioned to nobody (docs/CHANGE-REQUESTS/qa-01.md item 5). The screen
+    // leaves them off the list rather than offering them; this is the same
+    // rule beneath, for a caller that is not the screen.
+    if (
+      !householdHasBeenTold(appointment.status) &&
+      REASONS_NEEDING_THE_HOUSEHOLD_TOLD.includes(reason)
+    ) {
+      return badRequest(c, requestId, 'household_not_told');
+    }
+
     // "The visit could not go ahead at the door" is a thing that happened at a
     // door, and nobody has been to one before the arrival window opens. Without
     // this it is a way to take a household's whole session for a visit weeks
     // away, by choosing the reason that skips the notice rule
-    // (domain/scheduling/cancellation.ts, and the compliance review of this
-    // pull request). app.cancel_own_appointment refuses the same thing again
-    // beneath, because it runs with row security switched off.
-    if (!reasonCanBeGivenAt(reason, { windowStart: appointment.window_start }, now())) {
+    // (domain/scheduling/cancellation.ts, and the compliance review of the
+    // pull request that added it). app.cancel_own_appointment refuses the same
+    // thing again beneath, because it runs with row security switched off.
+    if (!reasonCanBeGivenAt(reason, visit, now())) {
       return badRequest(c, requestId, 'reason_too_early');
     }
 
     const noticeHours = await noticeHoursFor(db);
-    const status = cancellationStatusFor(
-      { windowStart: appointment.window_start },
-      reason,
-      now(),
-      noticeHours,
-    );
+    const status = cancellationStatusFor(visit, reason, now(), noticeHours);
 
     let cancelled: boolean;
     // Set on the practitioner path by the door itself, because that is the only

@@ -1,4 +1,4 @@
-import type { AppointmentStatus } from './status';
+import { householdHasBeenTold, type AppointmentStatus } from './status';
 
 /**
  * Calling a visit off: whether it was called off in time, and what the
@@ -87,19 +87,63 @@ export const ALWAYS_LATE_REASONS: readonly CancellationReason[] = ['unfit_to_att
  */
 export const NEVER_LATE_REASONS: readonly CancellationReason[] = ['consent_withdrawn'];
 
-/** As much of an appointment as the notice rule needs. */
-export type CancellableAppointment = { windowStart: Date };
+/**
+ * Reasons that say the household did something, and so cannot be given about
+ * a visit the household has never been told about.
+ *
+ * - `client_request` says the family called it off. A family cannot call off
+ *   a visit nobody has mentioned to them, and offering the words to a
+ *   coordinator invites a record that says something false
+ *   (docs/CHANGE-REQUESTS/qa-01.md item 5).
+ * - `unfit_to_attend` says a practitioner arrived at the door. Nobody drives
+ *   to a `proposed` visit: it is on no practitioner's day
+ *   (`OWN_STATUS_FILTER`, app/api/appointments/list.ts) precisely so that
+ *   nobody does.
+ *
+ * `practice_request` is what a coordinator releasing a slot they were holding
+ * actually did, and it is left available for exactly that. `consent_withdrawn`
+ * is too: `app.cancel_future_appointments` cancels a client's proposed visits
+ * along with their confirmed ones, and a right exercised reaches both.
+ */
+export const REASONS_NEEDING_THE_HOUSEHOLD_TOLD: readonly CancellationReason[] = [
+  'client_request',
+  'unfit_to_attend',
+];
+
+/**
+ * As much of an appointment as the notice rule needs.
+ *
+ * The status is here because the rule is about notice given to a household,
+ * and whether a household has been told is the difference between a promise
+ * broken and a slot released (section 3: "`proposed`: placed on the calendar,
+ * client not yet informed"). It was absent, so a proposed visit and a
+ * confirmed one were judged identically and a coordinator releasing a held
+ * slot the same afternoon was charged a household a full session for it
+ * (docs/CHANGE-REQUESTS/qa-01.md item 5).
+ */
+export type CancellableAppointment = { windowStart: Date; status: AppointmentStatus };
 
 /**
  * Whether a reason can honestly be given about this visit at this moment.
  *
- * Only one reason has a moment: `unfit_to_attend` means the practitioner
+ * Two things make a reason dishonest, and both are about something that
+ * cannot have happened.
+ *
+ * **The household has not been told.** A visit still `proposed` is one the
+ * practice is holding and has mentioned to nobody, so neither "the family
+ * called it off" nor "the practitioner arrived and could not go ahead" can be
+ * true of it. `REASONS_NEEDING_THE_HOUSEHOLD_TOLD` is that list, and it is a
+ * property of the visit rather than of the clock: it does not change while a
+ * coordinator has the drawer open, which is why the screen can leave those
+ * reasons off the list rather than offer them and refuse them.
+ *
+ * **The door has not been reached.** `unfit_to_attend` means the practitioner
  * arrived and the visit could not go ahead, and nobody has arrived anywhere
  * before the arrival window has opened. Without this it is a way to charge a
  * household a full session for a visit weeks away, by choosing the reason that
  * skips the notice rule — which is exactly what it was doing (compliance
- * review of this pull request: a visit two hundred hours out, called off as
- * unfit, consumed a credit).
+ * review of the pull request that added it: a visit two hundred hours out,
+ * called off as unfit, consumed a credit).
  *
  * Judged against `window_start` rather than against the end of the window,
  * because a practitioner may reasonably be at the door the minute it opens.
@@ -109,6 +153,12 @@ export function reasonCanBeGivenAt(
   appointment: CancellableAppointment,
   at: Date,
 ): boolean {
+  if (
+    !householdHasBeenTold(appointment.status) &&
+    REASONS_NEEDING_THE_HOUSEHOLD_TOLD.includes(reason)
+  ) {
+    return false;
+  }
   if (reason !== 'unfit_to_attend') {
     return true;
   }
@@ -137,10 +187,22 @@ export function isLateCancellation(
  * The status a cancelled appointment takes: `cancelled`, or `cancelled_late`
  * when the notice rule or the reason says the client's credit goes with it.
  *
- * The two lists above win over the clock, in that order, because each says
- * something the clock cannot: a practitioner standing at a door had no notice
- * however early the visit was booked, and a withdrawn consent is not a late
- * cancellation however close to the window it lands.
+ * The three tests below win over the clock, in the order they are written,
+ * because each says something the clock cannot.
+ *
+ * 1. A withdrawn consent is not a late cancellation however close to the
+ *    window it lands.
+ * 2. **A household that was never told was given no notice to break.**
+ *    `proposed` means the visit is a slot the practice is holding and has
+ *    mentioned to nobody (section 3). Releasing that slot takes nothing from
+ *    anybody, so nothing is taken: the notice period measures notice *to a
+ *    household*, and there is none to measure. This sits above the always-late
+ *    list deliberately, though the two can barely meet — `reasonCanBeGivenAt`
+ *    refuses `unfit_to_attend` on an untold visit outright, since nobody
+ *    drives to one — and where they do meet the honest answer is still that a
+ *    household promised nothing loses nothing.
+ * 3. A practitioner standing at a door had no notice however early the visit
+ *    was booked.
  */
 export function cancellationStatusFor(
   appointment: CancellableAppointment,
@@ -149,6 +211,9 @@ export function cancellationStatusFor(
   noticeHours: number = DEFAULT_NOTICE_HOURS,
 ): Extract<AppointmentStatus, 'cancelled' | 'cancelled_late'> {
   if (NEVER_LATE_REASONS.includes(reason)) {
+    return 'cancelled';
+  }
+  if (!householdHasBeenTold(appointment.status)) {
     return 'cancelled';
   }
   if (ALWAYS_LATE_REASONS.includes(reason)) {

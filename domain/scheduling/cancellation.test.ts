@@ -4,6 +4,7 @@ import {
   CANCELLATION_REASONS,
   DEFAULT_NOTICE_HOURS,
   NEVER_LATE_REASONS,
+  REASONS_NEEDING_THE_HOUSEHOLD_TOLD,
   cancellationStatusFor,
   isLateCancellation,
   reasonCanBeGivenAt,
@@ -17,7 +18,11 @@ import {
  */
 
 const WINDOW_START = new Date('2026-09-10T06:00:00Z'); // 10:00 in Dubai
-const visit = { windowStart: WINDOW_START };
+/** A visit the household has been told about: the ordinary case. */
+const visit = { windowStart: WINDOW_START, status: 'confirmed' } as const;
+/** The same visit, still a slot the practice is holding and has mentioned to
+ * nobody (docs/SPEC/scheduling-manual.md section 3). */
+const untold = { windowStart: WINDOW_START, status: 'proposed' } as const;
 
 /** `hours` before the window opens. */
 function noticeOf(hours: number): Date {
@@ -139,5 +144,49 @@ describe('reasonCanBeGivenAt', () => {
       expect(reasonCanBeGivenAt(reason, visit, noticeOf(200)), reason).toBe(true);
       expect(reasonCanBeGivenAt(reason, visit, WINDOW_START), reason).toBe(true);
     }
+  });
+});
+
+describe('a visit the household has never been told about', () => {
+  it('costs the household nothing, however little notice the clock says there was', () => {
+    // The defect: releasing a slot the practice was holding, an hour before it
+    // opened, took one of the family's sessions and told the coordinator it
+    // was "inside the practice's 24 hours' notice"
+    // (docs/CHANGE-REQUESTS/qa-01.md item 5).
+    expect(cancellationStatusFor(untold, 'practice_request', noticeOf(1), 24)).toBe('cancelled');
+    expect(cancellationStatusFor(untold, 'consent_withdrawn', noticeOf(1), 24)).toBe('cancelled');
+    // And the same visit, once the household has been told, is judged by the
+    // clock exactly as it was before.
+    expect(cancellationStatusFor(visit, 'practice_request', noticeOf(1), 24)).toBe(
+      'cancelled_late',
+    );
+  });
+
+  it('is never late even for a reason that is late whatever the calendar says', () => {
+    // The two can barely meet: reasonCanBeGivenAt refuses this pairing outright
+    // below. Where they do, a household promised nothing loses nothing.
+    expect(cancellationStatusFor(untold, 'unfit_to_attend', WINDOW_START, 24)).toBe('cancelled');
+  });
+
+  it('does not let a coordinator say the family called it off', () => {
+    expect(reasonCanBeGivenAt('client_request', untold, noticeOf(1))).toBe(false);
+    expect(reasonCanBeGivenAt('client_request', visit, noticeOf(1))).toBe(true);
+  });
+
+  it('does not let anyone say a practitioner arrived at a door nobody was sent to', () => {
+    expect(reasonCanBeGivenAt('unfit_to_attend', untold, WINDOW_START)).toBe(false);
+  });
+
+  it('leaves the practice its own two reasons: releasing a slot, and a withdrawn consent', () => {
+    for (const reason of CANCELLATION_REASONS.filter(
+      (r) => !REASONS_NEEDING_THE_HOUSEHOLD_TOLD.includes(r),
+    )) {
+      expect(reasonCanBeGivenAt(reason, untold, noticeOf(200)), reason).toBe(true);
+      expect(reasonCanBeGivenAt(reason, untold, WINDOW_START), reason).toBe(true);
+    }
+  });
+
+  it('names the two reasons that claim the household did something, and no others', () => {
+    expect([...REASONS_NEEDING_THE_HOUSEHOLD_TOLD]).toEqual(['client_request', 'unfit_to_attend']);
   });
 });

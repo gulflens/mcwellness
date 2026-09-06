@@ -280,20 +280,68 @@ export const CancelAppointmentResponse = z.object({
 });
 export type CancelAppointmentResponse = z.infer<typeof CancelAppointmentResponse>;
 
-/** Why a move or a cancellation was refused before any rule was consulted. */
-export const APPOINTMENT_ACTION_CODES = [
+/**
+ * Telling the household, recorded (docs/SPEC/scheduling-manual.md section 3).
+ *
+ * There is no request schema: the act carries no choices, only the visit it
+ * is about, and the route reads no body. (A caller still declares the request
+ * JSON, because the shared `jsonOnly` middleware declines every POST that
+ * does not.) The answer is the visit's new standing and nothing else — the screen
+ * that asked reloads the day rather than patching one row from a reply, so
+ * every other thing that may have changed since is on the screen too.
+ */
+export const ConfirmAppointmentResponse = z.object({
+  id: z.uuid(),
+  status: z.literal('confirmed'),
+});
+export type ConfirmAppointmentResponse = z.infer<typeof ConfirmAppointmentResponse>;
+
+/** Why a move was refused before any rule was consulted. */
+export const MOVE_ACTION_CODES = [
   'invalid_request',
   'appointment_not_found',
   'appointment_settled',
   'reason_required',
-  // "Could not go ahead at the door", given before the door could have been
-  // reached. The one reason with a moment of its own.
-  'reason_too_early',
   // A visit somebody has already started delivering. How it ends is the
   // session's to say, not the calendar's.
   'session_open',
 ] as const;
-export type AppointmentActionCode = (typeof APPOINTMENT_ACTION_CODES)[number];
+export type MoveActionCode = (typeof MOVE_ACTION_CODES)[number];
+
+/**
+ * Why a cancellation was refused. The move's five and two of its own, for the
+ * reason `CONFIRM_ACTION_CODES` below is its own list: both refusals here are
+ * about *which reason was given* for calling a visit off, a move asks for a
+ * reason but judges none of them, and a `Record` over one shared union made
+ * the move drawer carry two sentences ending "Choose another reason" for
+ * refusals its own route cannot produce.
+ */
+export const CANCEL_ACTION_CODES = [
+  ...MOVE_ACTION_CODES,
+  // "Could not go ahead at the door", given before the door could have been
+  // reached. The one reason with a moment of its own.
+  'reason_too_early',
+  // A reason that says the household did something, given about a visit the
+  // household has never been told about.
+  'household_not_told',
+] as const;
+export type CancelActionCode = (typeof CANCEL_ACTION_CODES)[number];
+
+/**
+ * Why confirming a visit was refused. Its own short list rather than three
+ * more members of the ones above: a cancellation can be refused for seven
+ * reasons and this can be refused for three, and a `Record` over one union
+ * would make every screen carry sentences for refusals its own route cannot
+ * produce.
+ */
+export const CONFIRM_ACTION_CODES = [
+  'invalid_request',
+  'appointment_not_found',
+  // Not waiting to be confirmed: confirmed already, or moved on past the
+  // point of being announced at all.
+  'appointment_not_proposed',
+] as const;
+export type ConfirmActionCode = (typeof CONFIRM_ACTION_CODES)[number];
 
 /**
  * The practice's cancellation policy, for the screens that have to name its

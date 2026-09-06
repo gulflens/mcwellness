@@ -62,12 +62,25 @@ const GOALS_SQL =
  * The brain maps, taking exactly the columns `docs/SPEC/assessment.md` section
  * 6 names. `derived` is the shape that stream declares; a figure without a
  * unit is skipped rather than paired with a guess.
+ *
+ * **Brain maps and nothing else.** A questionnaire is an assessment too, and
+ * one landing in this list was the second half of a real defect: the
+ * comparison takes the earliest and the latest of what it is given
+ * (`compareBrainMaps`, domain/reports/gatherProgress.ts), and a questionnaire
+ * at either end makes it a comparison between two different instruments,
+ * which is refused — so a household with two brain maps and one questionnaire
+ * read "fewer than two brain maps". The ribbon has the same trouble: its
+ * hairline marks a brain map (docs/DESIGN-BRIEF.md section 5) and a
+ * questionnaire is not one. `derived->>'kind'` is the assessment stream's own
+ * declared discriminator (its `BrainMapPayload`), quoted rather than imported
+ * like every other fact about that table in this file.
  */
 const ASSESSMENTS_SQL =
   "select a.id, to_char(a.performed_at at time zone $2, 'YYYY-MM-DD') as on_day, " +
   'a.instrument, a.derived, a.reference_age_years, a.reference_sex ' +
   'from assessment a ' +
   'where a.tenant_id = app.current_tenant_id() and a.client_id = $1 ' +
+  "  and a.derived->>'kind' = 'brain-map' " +
   '  and not exists (select 1 from assessment later where later.supersedes_id = a.id) ' +
   'order by a.performed_at, a.id';
 
@@ -93,8 +106,49 @@ function bandsOf(telemetry: unknown): Record<string, number> {
   return totals;
 }
 
-/** One figure the equipment's software reported, as the report quotes it. */
-type DerivedFigure = { label?: unknown; labelAr?: unknown; unit?: unknown; value?: unknown };
+/**
+ * One figure the equipment's software reported, in the shape the assessment
+ * stream declares for a brain map (`BandFigure`, docs/SPEC/assessment.md
+ * section 5): the scalp site, the frequency band, the value and its unit.
+ *
+ * It was read here as `{ label, unit, value }` — a shape nothing writes — so
+ * every figure of every brain map was skipped, every comparison came back
+ * with no lines, and `compareBrainMaps` answered null, which the draft
+ * editor says as "fewer than two brain maps of one kind". That was the whole
+ * of docs/CHANGE-REQUESTS/qa-01.md item 3: a household with two maps on file
+ * and a report that could not see either.
+ */
+type DerivedFigure = { site?: unknown; band?: unknown; unit?: unknown; value?: unknown };
+
+/**
+ * The words a figure is named and measured in, exactly as the comparison
+ * screen names them (`BAND_LABELS` and `UNIT_SHORT`,
+ * app/admin/assessments/copy.ts). `docs/SPEC/reports-v1.md` section 5 asks
+ * for "the same figures ... the comparison view shows", so the two say one
+ * thing; quoted rather than imported, because that file is another stream's
+ * and a screen's copy is not a route's to depend on (OWNERSHIP.md rule 3 is
+ * about `domain/`, and the same reasoning holds a route out of a component
+ * folder).
+ *
+ * An unlisted band or unit is not renamed and not dropped: it is quoted as
+ * the database holds it, which is honest and is what a figure the practice
+ * starts recording tomorrow deserves.
+ */
+const BAND_WORDS: Record<string, string> = {
+  delta: 'Delta',
+  theta: 'Theta',
+  alpha: 'Alpha',
+  beta: 'Beta',
+  gamma: 'Gamma',
+};
+
+const UNIT_WORDS: Record<string, string> = {
+  uV2: 'µV²',
+  percent: '%',
+  ratio: 'ratio',
+  sd: 'SD',
+  points: 'points',
+};
 
 function figuresOf(derived: unknown): AssessmentRow['figures'] {
   if (derived === null || typeof derived !== 'object') return [];
@@ -103,19 +157,28 @@ function figuresOf(derived: unknown): AssessmentRow['figures'] {
   const out: { label: string; labelAr: string | null; unit: string; value: number }[] = [];
   for (const figure of source as DerivedFigure[]) {
     if (
-      typeof figure?.label !== 'string' ||
+      typeof figure?.site !== 'string' ||
+      typeof figure.band !== 'string' ||
       typeof figure.unit !== 'string' ||
       typeof figure.value !== 'number' ||
       !Number.isFinite(figure.value)
     ) {
-      // A figure without its unit is not something to compare; the assessment
-      // stream refuses one at its own edge and this refuses to quote one.
+      // A figure without its site, its band or its unit is not something to
+      // compare; the assessment stream refuses one at its own edge and this
+      // refuses to quote one.
       continue;
     }
     out.push({
-      label: figure.label,
-      labelAr: typeof figure.labelAr === 'string' ? figure.labelAr : null,
-      unit: figure.unit,
+      // The pair is what a comparison lines two maps up by (`figureKey`,
+      // domain/assessment/shapes/brain-map.ts) and it is also what a reader
+      // sees, so one string is both. `labelAr` is null on purpose: the site
+      // is written in the international 10-20 system in every language, and
+      // this repository holds no Arabic word for a band — inventing one in a
+      // route is not the place, and the renderer falls back to the label it
+      // has.
+      label: `${figure.site} ${BAND_WORDS[figure.band] ?? figure.band}`,
+      labelAr: null,
+      unit: UNIT_WORDS[figure.unit] ?? figure.unit,
       value: figure.value,
     });
   }

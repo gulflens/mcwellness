@@ -20,6 +20,7 @@
 export { layout, titleOf } from './render';
 export {
   arabicReportDate,
+  COMPARISON_NOT_A_DIAGNOSIS,
   DRAFT_WORDING,
   formatDifference,
   formatFigure,

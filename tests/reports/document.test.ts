@@ -1,8 +1,14 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
+import { NOT_A_DIAGNOSIS as SCREEN_SENTENCE } from '../../app/admin/assessments/copy';
 import { extractAll, extractText, toVisualOrder } from '../../domain/shared/document';
-import { layout, renderReport, WORDS } from '../../domain/reports/document';
+import {
+  COMPARISON_NOT_A_DIAGNOSIS,
+  layout,
+  renderReport,
+  WORDS,
+} from '../../domain/reports/document';
 import { isListedFamilyName, isListedGivenName } from '../../db/seed/names';
 import type {
   PracticeSnapshot,
@@ -260,6 +266,23 @@ describe('a rendered progress report', () => {
 
   it('carries the not-a-diagnosis sentence beside the comparison as well as in the footer', () => {
     expect(text.match(/It is not a diagnosis\./g)?.length).toBe(2);
+  });
+
+  it('prints the comparison’s own sentence beneath the figures, in both languages', () => {
+    // The Compare screen's fixed sentence, word for word
+    // (`app/admin/assessments/copy.ts`), which docs/SPEC/assessment.md section
+    // 3.3 puts on anything printed from the comparison. The footer's line
+    // about what a brain map is says something else and stays where it is, so
+    // both are asserted here rather than one standing in for the other.
+    expect(text).toContain(COMPARISON_NOT_A_DIAGNOSIS.en);
+    // Set as an RTL run, so it is read back a clause at a time: the writer
+    // starts a fresh run at each full stop.
+    expect(text).toContain(asCopied('هذه مقارنة بين قياسات أُخذت في أيام مختلفة'));
+    expect(text).toContain(asCopied('وهي ليست تشخيصاً'));
+    // And it is the screen's sentence, not merely one like it.
+    expect(COMPARISON_NOT_A_DIAGNOSIS.en).toBe(SCREEN_SENTENCE.en);
+    expect(COMPARISON_NOT_A_DIAGNOSIS.ar).toBe(SCREEN_SENTENCE.ar);
+    expect(text).toContain('A brain map (qEEG) is a measurement recorded the same way.');
   });
 
   it('draws the ribbon as one mark per session and empty marks for those remaining', () => {

@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import {
   arabicReportDate,
+  COMPARISON_NOT_A_DIAGNOSIS,
   DRAFT_WORDING,
   formatDifference,
   formatFigure,
@@ -573,8 +574,10 @@ function progressPage(
     sheet.setContinuation(null);
     sheet.down(4);
     // The comparison's own sentence, the same one the screen carries, so the
-    // two can never drift apart (docs/SPEC/assessment.md section 3.3).
-    standingSentence(sheet, NOT_A_DIAGNOSIS);
+    // two can never drift apart (docs/SPEC/assessment.md section 3.3). Not the
+    // frame's line about what a brain map is: that one stands in the footer,
+    // and this one is about what a difference between two days is.
+    standingSentence(sheet, COMPARISON_NOT_A_DIAGNOSIS);
   }
 
   if (content.summary.trim().length > 0) {

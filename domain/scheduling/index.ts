@@ -9,7 +9,13 @@ export type {
   SchedulingCandidate,
   SchedulingContext,
 } from './conflicts';
-export { APPOINTMENT_STATUSES, SETTLED_STATUSES, isSettled } from './status';
+export {
+  APPOINTMENT_STATUSES,
+  SETTLED_STATUSES,
+  canBeConfirmed,
+  householdHasBeenTold,
+  isSettled,
+} from './status';
 export type { AppointmentStatus } from './status';
 export {
   ALWAYS_LATE_REASONS,
@@ -17,6 +23,7 @@ export {
   DEFAULT_NOTICE_HOURS,
   DEFAULT_UNFIT_FEE_FILS,
   NEVER_LATE_REASONS,
+  REASONS_NEEDING_THE_HOUSEHOLD_TOLD,
   cancellationStatusFor,
   isLateCancellation,
   reasonCanBeGivenAt,

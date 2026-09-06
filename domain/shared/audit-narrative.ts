@@ -32,6 +32,64 @@ type Text = { en: string; ar: string };
 const t = (en: string, ar: string): Text => ({ en, ar });
 const pick = (text: Text, locale: Locale): string => text[locale];
 
+// ---------------------------------------------------------------------------
+// The article before an entity's own word
+//
+// The generic branch at the foot of this file read `a ${entity}`, which gave
+// "added a appointment" on the client timeline (docs/CHANGE-REQUESTS/qa-01.md
+// item 6) and would have given "a entitlement" and "a invoice" the day either
+// reached it. The Arabic half of every sentence here is untouched by all of
+// this: Arabic has no indefinite article to choose.
+// ---------------------------------------------------------------------------
+
+/**
+ * Words beginning with a vowel letter and a consonant sound: "a user", "a
+ * unit". `app_user` renders as "user" today and is the one that matters; the
+ * rest are here because the next entity to be named is as likely to be one of
+ * these as not.
+ */
+const CONSONANT_SOUNDED = ['user', 'unit', 'uniform', 'one', 'European'];
+
+/**
+ * And the other way: a written consonant with a vowel sound, "an hour". No
+ * word this catalogue uses today is one; the list exists so that adding such a
+ * word is a line here rather than a defect on somebody's timeline.
+ */
+const VOWEL_SOUNDED = ['hour', 'honest', 'honour'];
+
+/** Whether the noun's first word is one of a listed set. */
+function firstWordIsOneOf(noun: string, words: readonly string[]): boolean {
+  const first =
+    noun
+      .trim()
+      .split(/[\s'\u2019]/, 1)[0]
+      ?.toLowerCase() ?? '';
+  return words.some((word) => first === word.toLowerCase());
+}
+
+/**
+ * "a" or "an".
+ *
+ * English chooses by the *sound* a word starts with and not by its spelling,
+ * so there is no rule to write — only a short rule with its exceptions
+ * listed, which is at least honest about being a list.
+ */
+export function indefiniteArticleFor(noun: string): 'a' | 'an' {
+  if (firstWordIsOneOf(noun, CONSONANT_SOUNDED)) return 'a';
+  if (firstWordIsOneOf(noun, VOWEL_SOUNDED)) return 'an';
+  return /^[aeiou]/i.test(noun.trim()) ? 'an' : 'a';
+}
+
+/**
+ * The noun with whatever article it needs, and none where it already carries
+ * a determiner of its own: `ENTITY` names one such thing ("the measurement's
+ * file"), and "a the measurement's file" is not a sentence either.
+ */
+export function withArticle(noun: string): string {
+  if (/^(the|this|its|their)\b/i.test(noun.trim())) return noun;
+  return `${indefiniteArticleFor(noun)} ${noun}`;
+}
+
 /** Housekeeping columns a person never needs to read about. */
 const NOISE = new Set(['updated_at']);
 
@@ -56,6 +114,12 @@ const ENTITY: Record<string, Text> = {
   // fallback below and nobody writes words for it.
   kit: t('instrument', 'الجهاز'),
   session: t('visit', 'الزيارة'),
+  // The calendar (docs/SPEC/scheduling-manual.md section 9). Named here
+  // because without a word of its own the generic branch fell back to the
+  // table's name, which is an English word in the middle of an Arabic
+  // sentence — and an appointment is a row a client's own timeline shows
+  // (docs/CHANGE-REQUESTS/qa-01.md item 6).
+  appointment: t('appointment', 'الموعد'),
   // Piece ten's measurements (docs/SPEC/assessment.md section 8).
   assessment: t('measurement', 'القياس'),
   assessment_document: t("the measurement's file", 'ملف القياس'),
@@ -837,7 +901,10 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
       const entity = label(ENTITY, event.entityType, locale) ?? event.entityType.replace(/_/g, ' ');
       switch (event.action) {
         case 'insert':
-          return pick(t(`${actor} added a ${entity}`, `${actor} أضاف ${entity}`), locale);
+          return pick(
+            t(`${actor} added ${withArticle(entity)}`, `${actor} أضاف ${entity}`),
+            locale,
+          );
         case 'update': {
           const what = fields.map((f) => fieldLabel(f, locale)).join(locale === 'ar' ? '، ' : ', ');
           return pick(
@@ -846,7 +913,10 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
           );
         }
         case 'delete':
-          return pick(t(`${actor} removed a ${entity}`, `${actor} أزال ${entity}`), locale);
+          return pick(
+            t(`${actor} removed ${withArticle(entity)}`, `${actor} أزال ${entity}`),
+            locale,
+          );
         case 'read':
           return pick(t(`${actor} viewed the ${entity}`, `${actor} اطّلع على ${entity}`), locale);
         default:

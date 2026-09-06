@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ConflictResponse,
   MoveAppointmentResponse,
-  type AppointmentActionCode,
   type AppointmentRow,
+  type MoveActionCode,
 } from '../../api/appointments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
@@ -36,16 +36,22 @@ import {
 const NOT_FOUND =
   'This appointment is no longer there. Close this and reload the day to see what changed.';
 
-const ACTION_MESSAGES: Record<AppointmentActionCode, string> = {
+/**
+ * The five refusals a move can meet, and no others. `MoveActionCode` is the
+ * move route's own list rather than the cancellation's, because two of that
+ * one's refusals are about *which reason was given* for calling a visit off:
+ * this drawer offers no reason to choose between, and its route can answer
+ * neither, so a sentence here saying "Choose another reason" would be advice
+ * about a control that does not exist (the `CONFIRM_ACTION_CODES` precedent,
+ * app/api/appointments/schema.ts).
+ */
+const ACTION_MESSAGES: Record<MoveActionCode, string> = {
   invalid_request: 'Check the date and the time, then try again.',
   appointment_not_found: NOT_FOUND,
   appointment_settled:
     'This visit has already been checked in, delivered, called off or moved, so it cannot be ' +
     'moved now. Reload the day to see where it stands.',
   reason_required: 'Say why this visit is moving before moving it.',
-  reason_too_early:
-    'A visit can only be recorded as unable to go ahead once its arrival window has opened. ' +
-    'Choose another reason.',
   session_open:
     'A session has already been started for this visit. How it ends is recorded on the session ' +
     'itself, not here.',
@@ -148,7 +154,7 @@ export function MoveAppointmentDrawer({
       }
       if (res.status === 400 || res.status === 404) {
         const body = (await res.json().catch(() => null)) as { code?: string } | null;
-        const code = body?.code as AppointmentActionCode | undefined;
+        const code = body?.code as MoveActionCode | undefined;
         setSubmitError({
           kind: 'issues',
           issues: [

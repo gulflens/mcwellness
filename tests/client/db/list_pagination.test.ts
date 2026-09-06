@@ -13,6 +13,10 @@ import { IDS, AUTH, freshDatabase, seedClient, seedTenant } from '../../db/helpe
  * `q` shorter than two characters is dropped rather than searched, so a
  * single keystroke can never sweep the whole practice or write an audit row
  * per matching client. app/api/clients/list.ts, app/api/clients/schema.ts.
+ *
+ * And what the box promises it will find: the caption reads "Name, record
+ * number or Emirates ID", and a name is the thing on the screen, both halves
+ * of it (docs/CHANGE-REQUESTS/qa-01.md item 4).
  */
 
 const SECRET = 'test-secret-that-unlocks-nothing-0123456789';
@@ -40,6 +44,13 @@ async function list(query = ''): Promise<Response> {
   return api.request(`/api/clients${query}`, { headers });
 }
 
+/**
+ * One client with a full name in both languages, for the search that types a
+ * name as it is written on the screen. Names from db/seed/names.ts, the one
+ * list every invented person here is named from.
+ */
+const NAMED_CLIENT = '00000000-0000-4000-8000-000000670001';
+
 /** A UUID shaped like the rest of this file's fixtures, distinct from every reserved id in IDS/AUTH. */
 function clientId(i: number): string {
   return `00000000-0000-4000-8000-${String(600_000_000_000 + i).padStart(12, '0')}`;
@@ -56,6 +67,12 @@ beforeAll(async () => {
     const familyName = i === 6 ? 'Yew' : `Zed${i}`;
     await seedClient(owner, IDS.tenantA, clientId(i), IDS.ownerA, familyName);
   }
+  await seedClient(owner, IDS.tenantA, NAMED_CLIENT, IDS.ownerA, 'Harbour');
+  await owner.query(
+    "update client set given_name = 'Juniper', given_name_ar = $2, family_name_ar = $3 " +
+      'where id = $1',
+    [NAMED_CLIENT, 'عرعر', 'مرفأ'],
+  );
 
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
@@ -105,5 +122,39 @@ describe('GET /api/clients — short search terms', () => {
     const body = (await res.json()) as ClientListResponse;
     expect(body.clients).toHaveLength(50);
     expect(body.truncated).toBe(true);
+  });
+});
+
+describe('GET /api/clients — a name as it is written on the screen', () => {
+  it('finds a client by their full display name, space and all', async () => {
+    const res = await list(`?q=${encodeURIComponent('Juniper Harbour')}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ClientListResponse;
+    expect(body.clients.map((c) => c.id)).toEqual([NAMED_CLIENT]);
+  });
+
+  it('still finds them by either half on its own, and by their record number', async () => {
+    const given = (await (await list('?q=Juniper')).json()) as ClientListResponse;
+    expect(given.clients.map((c) => c.id)).toEqual([NAMED_CLIENT]);
+    const family = (await (await list('?q=Harbour')).json()) as ClientListResponse;
+    expect(family.clients.map((c) => c.id)).toEqual([NAMED_CLIENT]);
+    const byMrn = (await (
+      await list(`?q=${encodeURIComponent(`MW-${NAMED_CLIENT.slice(-6)}`)}`)
+    ).json()) as ClientListResponse;
+    expect(byMrn.clients.map((c) => c.id)).toEqual([NAMED_CLIENT]);
+  });
+
+  it('finds an Arabic full name the same way', async () => {
+    const res = await list(`?q=${encodeURIComponent('عرعر مرفأ')}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ClientListResponse;
+    expect(body.clients.map((c) => c.id)).toEqual([NAMED_CLIENT]);
+  });
+
+  it('finds nobody for two names that belong to two different people', async () => {
+    const res = await list(`?q=${encodeURIComponent('Juniper Yew')}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ClientListResponse;
+    expect(body.clients).toHaveLength(0);
   });
 });

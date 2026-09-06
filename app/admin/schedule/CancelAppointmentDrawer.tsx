@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { cancellationStatusFor, reasonCanBeGivenAt } from '@domain/scheduling';
+import {
+  REASONS_NEEDING_THE_HOUSEHOLD_TOLD,
+  cancellationStatusFor,
+  householdHasBeenTold,
+  reasonCanBeGivenAt,
+} from '@domain/scheduling';
 import { WaiveEntitlementResponse } from '../../api/billing/ledger-schema';
 import {
   CancelAppointmentResponse,
   CANCELLATION_REASONS,
   SchedulingSettingsResponse,
-  type AppointmentActionCode,
   type AppointmentRow,
+  type CancelActionCode,
   type CancellationReason,
 } from '../../api/appointments/schema';
 import { formatFils } from '../billing/money';
@@ -32,6 +37,15 @@ import { dayOf, formatDay, formatWindow } from './windows';
  * cancellation only uses a session if the client had one; when they had
  * none, the practice has a decision to make instead, and the panel after the
  * event says which of the two occurred rather than repeating the warning.
+ *
+ * **A visit the household has never been told about is a different act.**
+ * `proposed` is a slot the practice is holding and has mentioned to nobody
+ * (docs/SPEC/scheduling-manual.md section 3), so releasing it takes nothing
+ * from anybody: there is no notice to break, no session to use and nothing to
+ * tell them afterwards. The two reasons that claim the household did
+ * something are not offered at all, rather than offered and refused, because
+ * whether a household has been told is a fact about the visit and does not
+ * change while this drawer is open (docs/CHANGE-REQUESTS/qa-01.md item 5).
  */
 
 const REASON_LABELS: Record<CancellationReason, string> = {
@@ -43,7 +57,7 @@ const REASON_LABELS: Record<CancellationReason, string> = {
 const NOT_FOUND =
   'This appointment is no longer there. Close this and reload the day to see what changed.';
 
-const ACTION_MESSAGES: Record<AppointmentActionCode, string> = {
+const ACTION_MESSAGES: Record<CancelActionCode, string> = {
   invalid_request: 'Choose a reason, then try again.',
   appointment_not_found: NOT_FOUND,
   appointment_settled:
@@ -56,6 +70,9 @@ const ACTION_MESSAGES: Record<AppointmentActionCode, string> = {
   session_open:
     'A session has already been started for this visit. How it ends is recorded on the session ' +
     'itself, not here.',
+  household_not_told:
+    'The household has not been told about this visit yet, so it cannot be called off on ' +
+    'their behalf or recorded as unable to go ahead. Choose another reason.',
 };
 
 /** The eight characters `WaiveEntitlementInput` insists on, so the drawer can
@@ -86,7 +103,14 @@ export function CancelAppointmentDrawer({
   const { apiFetch } = useAuth();
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  const [reason, setReason] = useState<CancellationReason>('client_request');
+  // Whether anybody has told this household about this visit at all. Read
+  // once: the drawer is open for a moment and the row behind it does not
+  // change underneath it.
+  const told = householdHasBeenTold(appointment.status);
+  const reasons = CANCELLATION_REASONS.filter(
+    (value) => told || !REASONS_NEEDING_THE_HOUSEHOLD_TOLD.includes(value),
+  );
+  const [reason, setReason] = useState<CancellationReason>(() => reasons[0] ?? 'practice_request');
   const [note, setNote] = useState('');
   const [settings, setSettings] = useState<SchedulingSettingsResponse | null>(null);
   // Whether the practice's own policy could be read at all. Its own state, not
@@ -141,7 +165,7 @@ export function CancelAppointmentDrawer({
   // is the only one of the three that is any use to them.
   const tooEarly = !reasonCanBeGivenAt(
     reason,
-    { windowStart: new Date(appointment.windowStart) },
+    { windowStart: new Date(appointment.windowStart), status: appointment.status },
     new Date(),
   );
 
@@ -152,7 +176,7 @@ export function CancelAppointmentDrawer({
     settings === null
       ? null
       : cancellationStatusFor(
-          { windowStart: new Date(appointment.windowStart) },
+          { windowStart: new Date(appointment.windowStart), status: appointment.status },
           reason,
           new Date(),
           settings.noticeHours,
@@ -182,7 +206,7 @@ export function CancelAppointmentDrawer({
       }
       if (res.status === 400 || res.status === 404) {
         const body = (await res.json().catch(() => null)) as { code?: string } | null;
-        const code = body?.code as AppointmentActionCode | undefined;
+        const code = body?.code as CancelActionCode | undefined;
         setState({ kind: 'error', message: (code && ACTION_MESSAGES[code]) ?? NOT_FOUND });
         return;
       }
@@ -321,7 +345,7 @@ export function CancelAppointmentDrawer({
                   value={reason}
                   onChange={(e) => setReason(e.target.value as CancellationReason)}
                 >
-                  {CANCELLATION_REASONS.map((value) => (
+                  {reasons.map((value) => (
                     <option key={value} value={value}>
                       {REASON_LABELS[value]}
                     </option>
@@ -330,7 +354,13 @@ export function CancelAppointmentDrawer({
               </div>
 
               {tooEarly ? <Note tone="critical">{ACTION_MESSAGES.reason_too_early}</Note> : null}
-              {!tooEarly && willBeLate === true ? (
+              {!told ? (
+                <Note>
+                  The household has not been told about this visit yet, so calling it off costs them
+                  nothing: it is a slot the practice was holding, and the practice is releasing it.
+                </Note>
+              ) : null}
+              {told && !tooEarly && willBeLate === true ? (
                 <Note tone="attention">
                   {reason === 'unfit_to_attend'
                     ? 'A visit that cannot go ahead once the practitioner has arrived counts as ' +
@@ -339,13 +369,14 @@ export function CancelAppointmentDrawer({
                       "uses one of the client's sessions. It can be waived afterwards."}
                 </Note>
               ) : null}
-              {!tooEarly && willBeLate === false ? (
+              {told && !tooEarly && willBeLate === false ? (
                 <Note>
                   This is outside the practice&rsquo;s {settings?.noticeHours} hours&rsquo; notice,
                   so the client keeps the session.
                 </Note>
               ) : null}
-              {!tooEarly &&
+              {told &&
+              !tooEarly &&
               reason === 'unfit_to_attend' &&
               settings !== null &&
               settings.unfitFeeFils > 0 ? (
@@ -367,14 +398,17 @@ export function CancelAppointmentDrawer({
               </div>
 
               <Note>
-                The household still has to be told the visit is off, and the practitioner sees it on
-                their next Today.
+                {told
+                  ? 'The household still has to be told the visit is off, and the practitioner ' +
+                    'sees it on their next Today.'
+                  : 'There is nothing to tell the household: this visit was never announced to ' +
+                    'them, and it was on no practitioner’s Today.'}
               </Note>
 
-              {policy === 'loading' ? (
+              {told && policy === 'loading' ? (
                 <Note>Reading the practice&rsquo;s notice period.</Note>
               ) : null}
-              {policy === 'unavailable' ? (
+              {told && policy === 'unavailable' ? (
                 <Note tone="critical">
                   The practice&rsquo;s notice period could not be read, so this screen cannot say
                   whether calling this visit off uses one of the client&rsquo;s sessions. Try again
@@ -389,8 +423,11 @@ export function CancelAppointmentDrawer({
                   // Never while the consequence is unknown. A cancellation
                   // that might silently cost a household a session is not a
                   // thing to let somebody do without telling them which it is
-                  // (design review of this pull request).
-                  disabled={!note.trim() || tooEarly || policy !== 'ready' || submitting}
+                  // (design review of the pull request that added this). A
+                  // visit the household was never told about has no such
+                  // consequence to be unknown, so it does not wait on the
+                  // practice's notice period being readable.
+                  disabled={!note.trim() || tooEarly || (told && policy !== 'ready') || submitting}
                   onClick={() => void handleSubmit()}
                 >
                   {submitting ? 'Calling off…' : 'Call off this visit'}

@@ -84,7 +84,17 @@ const SQL =
   "and ($3::boolean or c.status <> 'erased') " +
   "and ($2::text is null or c.mrn ilike $2 escape '\\' or c.given_name ilike $2 escape '\\' " +
   "or c.family_name ilike $2 escape '\\' or coalesce(c.given_name_ar, '') ilike $2 escape '\\' " +
-  "or coalesce(c.family_name_ar, '') ilike $2 escape '\\') " +
+  "or coalesce(c.family_name_ar, '') ilike $2 escape '\\' " +
+  // The name as it is written on the screen. Without this line a search for
+  // "Dahlia Bay" — the client's own displayed name, typed exactly, with the
+  // space a real person types — matched nothing at all, because every column
+  // above holds one half of it and neither holds both
+  // (docs/CHANGE-REQUESTS/qa-01.md item 4). The concatenation is the
+  // *fourth* thing searched, not a replacement for the three: a given name
+  // alone and a family name alone still match on their own columns.
+  "or (c.given_name || ' ' || c.family_name) ilike $2 escape '\\' " +
+  "or (coalesce(c.given_name_ar, '') || ' ' || coalesce(c.family_name_ar, '')) " +
+  "ilike $2 escape '\\') " +
   // One row past the page size, so the route can tell whether more matched
   // without a second, count-only query.
   'order by c.mrn limit $4';

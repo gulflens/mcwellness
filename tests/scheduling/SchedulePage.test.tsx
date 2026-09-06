@@ -35,6 +35,23 @@ const appointment = {
   location: { id: '00000008-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
 };
 
+/**
+ * A visit still waiting for somebody to tell the household about it
+ * (docs/SPEC/scheduling-manual.md section 3). Names from db/seed/names.ts.
+ */
+const proposed = {
+  ...appointment,
+  id: '00000008-0000-4000-8000-000000000102',
+  status: 'proposed' as const,
+  client: {
+    id: '00000008-0000-4000-8000-000000000005',
+    givenName: 'Juniper',
+    familyName: 'Valley',
+    givenNameAr: null,
+    familyNameAr: null,
+  },
+};
+
 /** The day the screen opens on lives in the address, so the week view can
  * hand a day back; a router is what supplies that, and the two links out of
  * the toolbar need one anyway. */
@@ -114,6 +131,101 @@ describe('SchedulePage', () => {
 
     await waitFor(() =>
       expect(screen.getByText('No appointments are booked for this day.')).toBeTruthy(),
+    );
+  });
+
+  it('offers Confirm on a visit the household has not been told about, and not on one it has', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: [proposed, appointment] }), {
+          status: 200,
+        });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: "Confirm Juniper Valley's appointment" }),
+      ).toBeTruthy(),
+    );
+    // The confirmed visit keeps Move and Call off and gains nothing: there is
+    // nothing left to tell anybody.
+    expect(screen.queryByRole('button', { name: "Confirm Iris Cliff's appointment" })).toBe(null);
+    expect(screen.getByRole('button', { name: "Move Iris Cliff's appointment" })).toBeTruthy();
+  });
+
+  it('records the household as told and reloads the day', async () => {
+    const calls: string[] = [];
+    let confirmed = false;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(`${init?.method ?? 'GET'} ${url}`);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(
+          JSON.stringify({
+            appointments: [confirmed ? { ...proposed, status: 'confirmed' } : proposed],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url === `/api/appointments/${proposed.id}/confirm`) {
+        confirmed = true;
+        return new Response(JSON.stringify({ id: proposed.id, status: 'confirmed' }), {
+          status: 200,
+        });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    const button = await screen.findByRole('button', {
+      name: "Confirm Juniper Valley's appointment",
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(screen.getByText('Confirmed')).toBeTruthy());
+    expect(calls).toContain(`POST /api/appointments/${proposed.id}/confirm`);
+    // Confirming asks nothing and takes nothing, so no reason travels with it.
+    expect(screen.queryByRole('button', { name: "Confirm Juniper Valley's appointment" })).toBe(
+      null,
+    );
+  });
+
+  it('says plainly when a visit somebody else has already moved on cannot be confirmed', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: [proposed] }), { status: 200 });
+      }
+      if (url === `/api/appointments/${proposed.id}/confirm`) {
+        return new Response(
+          JSON.stringify({ error: 'bad_request', code: 'appointment_not_proposed' }),
+          {
+            status: 400,
+          },
+        );
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: "Confirm Juniper Valley's appointment" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          'This visit is no longer waiting to be confirmed — it has been confirmed, moved or ' +
+            'called off already. Reload the day to see where it stands.',
+        ),
+      ).toBeTruthy(),
     );
   });
 
