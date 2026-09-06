@@ -29,6 +29,14 @@
  * The five bands, slow to fast, as `docs/DESIGN-BRIEF.md` section 3.1 orders
  * them. The order is the hue ramp's order — cool to warm — and every screen
  * and every figure reads them in it.
+ *
+ * **This is the only list of the five in the repository.** The keys stood in
+ * four places before this file: `domain/assessment/types.ts`,
+ * `domain/reports/types.ts` and `domain/session/events.ts` all re-export this
+ * one under the names they already exported, so no caller of any of them
+ * moved, and `db/seed/generate.ts` imports it. A search of the repository for
+ * the five keys finds this file and nothing else, which is what makes the
+ * sentence checkable rather than a hope.
  */
 export const BANDS = ['delta', 'theta', 'alpha', 'beta', 'gamma'] as const;
 export type Band = (typeof BANDS)[number];
