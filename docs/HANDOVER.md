@@ -1,8 +1,9 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 6 September at 23:00: trunk rounds 33
-and 34 (pull requests 103 and 105) built, reviewed and re-checked, waiting
-only on a GitHub billing block to merge, 105 stacked on 103; every check
+Written 4 September 2026, updated on 7 September at 00:30: the site is live
+at app.mcwellnessuae.com (the first live pass, pull request 106); trunk
+rounds 33 and 34 (pull requests 103 and 105) built, reviewed and re-checked,
+waiting only on a GitHub billing block to merge, 105 stacked on 103; every check
 on the repository refused by GitHub since 13:03 UTC for the account's
 billing; the address on Hostinger built and still never started, for want of
 the operator's secrets. This file exists so that the next Claude session,
@@ -181,9 +182,17 @@ an unanswered decision. The next session's first act is section 10.
   API's own check; eight smaller gaps, three of them cells of the new table),
   fix round on Opus (nine commits to `442f25c`), re-check clean at 23:00; the
   record is on the pull request. **Not merged**, for the same billing block.
-- The Hostinger site's runtime log was read at 20:55: empty, no start time,
-  last deployed 16:17 Dubai. The process has never run; the seven secrets are
-  still the operator's step.
+- **The site is live (00:20, 7 September).** On the operator's instruction
+  ("do the hostinger integration as i can not do it") the session placed the
+  seven secrets by a script that printed none of them, and then found and
+  fixed three things in the way: the site had to be its own website rather
+  than a folder subdomain; the output directory had to be the app root; and
+  the TypeScript loader's helper program arrived without its execute bit
+  (pull request 106, `hosted-start-2`, which production runs one commit
+  ahead of `main`). `/api/health` and `/api/health/deep` answer and `/`
+  serves the app. The full account is `docs/PRODUCTION.md`, "the first live
+  pass", and `docs/RUNBOOK/go-live.md` section 7. The secrets are in
+  `~/Documents/mcwellness-production-secrets.env` for the password manager.
 - The operator's morning page is `docs/OPERATOR/2026-09-06-decisions.md`
   (pull request 85): every decision and action that is theirs, with the
   Hostinger question and the lawyer's note drafted.
@@ -428,13 +437,14 @@ desktop app's own CI monitor will still tell a running session.
   "أُعفي بتاريخ …" is composed from the approved PDF sentence rather than
   held verbatim; and round 34 proposes Arabic names for the five brainwave
   bands. Say yes, or give the words you want.
-- **To sign in on production**, in this order: paste the seven secrets into
-  the app site's environment in hPanel (`docs/RUNBOOK/go-live.md`, steps 1 to
-  8); set the API role's password and the pooler string as `docs/PRODUCTION.md`
-  says; create your own Auth user in the Supabase dashboard; then, once trunk
-  round 32 has merged and been applied to production, run its one bootstrap
-  statement with your practice's names and that user's id. The runtime log in
-  hPanel is the first thing to read if the address stays silent.
+- **To sign in on production** (the secrets, the role password and the pooler
+  string are done, 7 September): say the word and the session creates the
+  founder's sign-in account and runs the one bootstrap statement with the
+  practice's names (`docs/PRODUCTION.md`, "The first practice"); it waits
+  because it emails a real person and writes the practice's real rows. Then
+  move `~/Documents/mcwellness-production-secrets.env` into the password
+  manager and delete it. Merge pull request 106 when the checks run again;
+  until then production is one commit ahead of `main`.
 - **Piece nine's live half**, in the order they unblock each other
   (`docs/SPEC/hosting.md` section 11, pull request 80's body, and the
   operator's page): buy Hostinger Web Apps Hosting in Mumbai (decided 06:15);
@@ -562,11 +572,11 @@ nine and ten; see the records on pull requests 73 to 83).
    page; scheduling's column comment and settings comment) and
    `assessment-02.md` (the EDF signature in the shared check; the trunk's
    audit fixture). And the founder's answer on the no-show fee.
-2b. **The hand deploy on Hostinger** waits on the operator's secrets; when
-   the process starts, measure `TRUSTED_PROXY_HOPS` and record the first
-   live pass in `docs/PRODUCTION.md`. If the process never starts, buy the
-   Web Apps Hosting product (decision 1) and repeat the deploy there with the
-   same archive and settings (the facts are in `docs/RUNBOOK/go-live.md`).
+2b. **The hand deploy on Hostinger is done** (7 September, 00:20): the
+   process runs and both health routes answer; the first live pass is in
+   `docs/PRODUCTION.md`. Left from it: measure `TRUSTED_PROXY_HOPS` (still
+   `1`; the method is in the pass), merge pull request 106, and the
+   founder's account and the bootstrap statement on the operator's word.
 2c. **Trunk round 33 is built and reviewed** (pull request 103; the record is
    on it). It merges when GitHub's checks run again; then `pnpm db:migrate`
    in the laptop checkout, and migrations 205 and 957 go to staging and
