@@ -56,7 +56,10 @@
 -- the same guard, for the same reason, that `app.erase_client` uses when it
 -- reaches into a stream's tables (104, and docs/PRODUCTION.md's note on it).
 -- Only 010 and 020 are hard requirements, and only those are in the Needs
--- line below.
+-- line below. Supabase's own `auth.users` is read through the same guard and
+-- for a different reason: on a Supabase project it is there and the owner's id
+-- is held against it, and on a database that is not one there is no such table
+-- and nothing to hold it against.
 --
 -- **What it deliberately does not write.** The practice's corporate-tax
 -- registration, its trade licence, its VAT registration and its registered
@@ -103,6 +106,7 @@ declare
   v_table    text;
   v_source   text;
   v_rows     bigint;
+  v_known    boolean;
 begin
   ---------------------------------------------------------------------------
   -- 1. What it refuses. The arguments first and the state second, so a typo
@@ -119,6 +123,29 @@ begin
       using errcode = 'invalid_parameter_value',
             hint    = 'Create the account under Authentication, Add user, then '
                       'copy its user id (docs/PRODUCTION.md, "The first practice").';
+  end if;
+  -- And, where the database carries Supabase's own auth.users, an id that names
+  -- an account really there. A mistyped User UID, or one copied from another
+  -- project, is otherwise taken as given: the practice is made with an owner
+  -- nobody can sign in as, and every attempt to put it right by calling again
+  -- is then refused as a second practice. Where there is no such table — a
+  -- database that is not a Supabase project, whose auth schema is only 000's
+  -- shim — there is nothing to hold the id against and it stands as given. The
+  -- local image is Supabase's own Postgres and carries the table, so the test
+  -- proves the refusal outright and proves the skip by taking the table away
+  -- inside a transaction it rolls back.
+  if to_regclass('auth.users') is not null then
+    execute 'select exists (select 1 from auth.users where id = $1)'
+       into v_known
+      using p_owner_auth_user_id;
+    if not v_known then
+      raise exception 'no Supabase Auth user has the id %', p_owner_auth_user_id
+        using errcode = 'invalid_parameter_value',
+              hint    = 'Nothing was written. Copy the User UID again from '
+                        'Authentication, Users, beside the account made in step 1 — '
+                        'it is not the account''s email and not the project reference '
+                        '(docs/PRODUCTION.md, "The first practice").';
+    end if;
   end if;
   if nullif(btrim(coalesce(p_owner_display_name, '')), '') is null then
     raise exception 'the owner needs a name'

@@ -209,10 +209,23 @@ nothing is written by halves.
 - **A practice already exists.** It makes the first one and only the first
   one. If the owner cannot sign in and a practice is already there, the
   answer is to point the existing owner record at the new sign-in account,
-  never to make a second practice.
+  never to make a second practice. That is one statement, run in the same SQL
+  editor, with the two bracketed values replaced:
+
+  ```sql
+  update app_user set auth_id = '[the new User UID]' where email = '[the owner''s email]';
+  ```
+
+  It should answer `UPDATE 1`. Anything else means the email does not match
+  the record, and the row wants finding by name first.
+
 - **The legal name is blank.** It is printed on every invoice.
 - **No sign-in account id.** Step 1 has not been done, or the User UID was
   not pasted in.
+- **No sign-in account has that id.** The User UID was mistyped, or copied
+  from a different project. Copy it again from **Authentication** →
+  **Users**, beside the account made in step 1 — it is the User UID, not the
+  email address and not the project reference.
 - **The owner's name is blank**, or **the owner's email is blank.**
 - **The time zone is not one Postgres knows** — a typo such as `Asia/Duabi`
   is refused rather than quietly deciding dates wrong.

@@ -236,15 +236,20 @@ function dataStepTables(): Map<string, string> {
   return found;
 }
 
-/** The table and source file of every default migration 956 checks for. */
-async function checkedTables(client: pg.Client): Promise<Map<string, string>> {
+/** The function as the database holds it, rather than as this file remembers it. */
+async function functionDefinition(client: pg.Client): Promise<string> {
   const { rows } = await client.query<{ definition: string }>(
     `select pg_get_functiondef(p.oid) as definition
        from pg_catalog.pg_proc p
        join pg_catalog.pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'app' and p.proname = 'bootstrap_practice'`,
   );
-  const definition = rows[0]?.definition ?? '';
+  return rows[0]?.definition ?? '';
+}
+
+/** The table and source file of every default migration 956 checks for. */
+async function checkedTables(client: pg.Client): Promise<Map<string, string>> {
+  const definition = await functionDefinition(client);
   const block = /\(values([\s\S]*?)\)\s*as\s+d\(table_name,\s*source_file\)/i.exec(definition);
   if (!block?.[1]) throw new Error('migration 956 no longer carries a list this test can read.');
   const listed = new Map<string, string>();
@@ -282,6 +287,17 @@ beforeAll(async () => {
   await withSeed.end();
 
   owner = await freshDatabase();
+  // Step 1 of docs/PRODUCTION.md, "The first practice": the sign-in accounts
+  // exist before the practice does. The local image is Supabase's own Postgres
+  // and carries `auth.users` (as CI's does, and as the project does), so the
+  // function holds the owner's id against it for real here. `resetDatabase`
+  // drops `public` and `app` and never touches `auth`, so these two are made
+  // idempotently and taken away again in afterAll.
+  await owner.query('insert into auth.users (id) values ($1), ($2) on conflict (id) do nothing', [
+    AUTH.ownerA,
+    AUTH.practitionerA,
+  ]);
+
   // The Arabic legal name is the one argument that may be absent. Proved on
   // the empty database and rolled back, because after the real call below
   // there is a practice and every call is refused for that reason instead.
@@ -306,6 +322,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool?.end();
+  await owner?.query('delete from auth.users where id = any($1)', [
+    [AUTH.ownerA, AUTH.practitionerA],
+  ]);
   await owner?.end();
 });
 
@@ -413,6 +432,32 @@ describe('what it refuses', () => {
       await rejectsWith(owner, '22023', BOOTSTRAP_WITH_ZONE, withOneChanged(4, null));
       await rejectsWith(owner, '22023', BOOTSTRAP_WITH_ZONE, withOneChanged(5, 'Asia/Nowhere'));
     });
+  });
+
+  it('refuses a User UID no Auth user has', async () => {
+    // The mistake this catches is a User UID mistyped, or copied from another
+    // project: without it the practice is made with an owner nobody can sign in
+    // as, and every attempt to do it again is refused as a second practice.
+    const there = await owner.query<{ present: string | null }>(
+      "select to_regclass('auth.users')::text as present",
+    );
+    expect(there.rows[0]?.present).toBe('auth.users');
+    await rolledBack(owner, async () => {
+      await rejectsWith(owner, '22023', BOOTSTRAP_WITH_ZONE, withOneChanged(2, AUTH.unknown));
+    });
+  });
+
+  it('reads auth.users through to_regclass, so a database without one still works', async () => {
+    // The other half of that check cannot be exercised here: every database
+    // this suite can reach is Supabase's own Postgres image and carries
+    // auth.users, and the table belongs to supabase_auth_admin, so the test's
+    // role may neither drop nor rename it for the length of a transaction. What
+    // is proved instead is that the read is guarded at all — the same
+    // to_regclass guard, for the same reason, that the defaults above are read
+    // through — so a database that is not a Supabase project is not refused
+    // outright at a table it was never going to have.
+    const definition = await functionDefinition(owner);
+    expect(definition).toContain("to_regclass('auth.users') is not null");
   });
 
   it('refuses a second practice', async () => {

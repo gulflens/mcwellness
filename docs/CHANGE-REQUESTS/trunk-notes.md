@@ -1516,7 +1516,15 @@ function does about them.
 7. **The arguments are checked before the state.** A blank name is then
    reported as a blank name whether or not a practice already stands, which is
    the more useful message of the two, and it lets every refusal be proved on
-   one database in the test rather than on a rebuilt one per case.
+   one database in the test rather than on a rebuilt one per case. The owner's
+   Auth id is checked twice in that spirit, the second added in the fix round:
+   null first, and then — where the database carries Supabase's own
+   `auth.users`, read through the same `to_regclass` guard as the defaults —
+   that the id names an account really there. A mistyped or wrong-project User
+   UID would otherwise make a practice nobody can sign in to, and every attempt
+   to put that right is refused as a second practice; the way back from it is
+   the one `update` in `docs/PRODUCTION.md`'s first refusal, which is written
+   out there in full.
 
 8. **The SQLSTATEs**: `22023` (`invalid_parameter_value`) for anything the
    caller typed, `23505` (`unique_violation`) for a second practice — the
