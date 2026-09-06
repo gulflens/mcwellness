@@ -43,6 +43,25 @@ in the texts):
 7. The retention period (five years after the last activity, invoices as tax
    law requires) and the erasure exception for invoices and the audit trail.
 
+## Amendments
+
+**6 September 2026 — a head injury at any time.** The founder's review of
+4 September approved the wordings with one change to the health question: ask
+whether a person has ever had a head injury, not only in the last year. The
+short set in `simple/` was written that way on the day; the four long files it
+also belongs in — `participation` and `minor_participation`, English and Arabic
+— carry it from version 0.2-draft. They were amended in place rather than
+copied to new files, because no consent had been recorded against 0.1-draft
+anywhere but a laptop and staging, and the loader expects one file per purpose
+per language. Once a household has signed a version, the rule above stands: the
+old file stays.
+
+A store that already holds the old bytes needs them cleared first. A wording's
+storage key is its document id, which is fixed by purpose and language and not
+by version, and neither `pnpm seed` nor `pnpm seed:wording` will write over a
+key that is already filled — by design, since the bytes behind a filed consent
+are the evidence of what a person was shown.
+
 ## How the app uses these files
 
 - The seed loads each file as a practice `document` of kind `consent_text`
