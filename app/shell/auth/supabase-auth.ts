@@ -22,7 +22,11 @@ export function supabaseAuth(url: string, anonKey: string): AuthProvider {
       // or the first write goes to the wrong store. Every later write — and
       // Supabase writes on each token refresh — reads this same answer, so a
       // held session follows the sign-in that made it and nothing else.
-      writeSessionStore((options?.keepSignedIn ?? false) ? 'device' : 'tab');
+      // No answer means the device: the portal's invitation sign-in
+      // (app/client/InvitePage.tsx) asks nobody the question, and a person who
+      // has just set a password should be kept signed in as they were before
+      // this round. Only an explicit no puts the session in the tab alone.
+      writeSessionStore(options?.keepSignedIn === false ? 'tab' : 'device');
       const { error } = await client.auth.signInWithPassword({ email, password });
       if (error) {
         throw new Error('That email and password did not match. Try again.');

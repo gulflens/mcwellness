@@ -7,8 +7,9 @@ export type SeededPerson = { authId: string; displayName: string; roles: string[
 
 /**
  * What the sign-in page knows that the provider cannot: whether this person
- * asked to be kept signed in on this browser. Absent means no, which is the
- * sign-in page's own default (app/shell/auth/session-storage.ts).
+ * asked to be kept signed in on this browser. Absent means the caller never
+ * asked, and the session is kept on the device as every sign-in did before
+ * the box existed (app/shell/auth/session-storage.ts).
  */
 export type SignInOptions = { keepSignedIn: boolean };
 

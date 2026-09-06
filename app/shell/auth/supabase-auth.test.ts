@@ -78,6 +78,19 @@ describe('supabaseAuth', () => {
     expect(storeWhenAsked).toBe('tab');
   });
 
+  /**
+   * The portal's invitation sign-in (app/client/InvitePage.tsx) calls signIn
+   * with two arguments and no answer to a question it never asked. It keeps a
+   * person signed in on the device, as every sign-in did before this round.
+   */
+  it('keeps the session on the device when no answer is given', async () => {
+    writeKeepSignedIn(false);
+    const auth = supabaseAuth('https://example.supabase.co', 'anon-key');
+    await auth.signIn(EMAIL, FAKE_CREDENTIAL);
+    expect(readSessionStore()).toBe('device');
+    expect(readKeepSignedIn()).toBe(false);
+  });
+
   it('leaves the tick box alone: signing in answers the store and nothing else', async () => {
     writeKeepSignedIn(false);
     const auth = supabaseAuth('https://example.supabase.co', 'anon-key');
