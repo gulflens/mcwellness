@@ -267,6 +267,15 @@ export function AuditPage() {
   // it and a reload opens the feed rather than re-opening a report somebody
   // had shut. A client id is an opaque uuid and not personal data, which is
   // what `.claude/rules/ui.md` keeps out of a query string.
+  //
+  // Read once means read on mount, in the initialiser below: a `?report=`
+  // that arrives while this screen is already mounted is cleared by the effect
+  // beneath without opening anything. Nothing reaches that today, because the
+  // only link carrying the parameter lives on the record's own timeline —
+  // `/admin/clients` and `/admin/schedule`, never this page — so following it
+  // always mounts this screen afresh. Were a link to the parameter ever added
+  // to this page itself, the read would have to move into that effect with a
+  // `setReportFor` beside the clearing.
   const [params, setParams] = useSearchParams();
   const [reportFor, setReportFor] = useState<string | null>(() => {
     // Anything may be typed into an address bar, so the value is held only
