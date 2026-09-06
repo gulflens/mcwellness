@@ -214,8 +214,10 @@ describe('Money', () => {
     expect(await screen.findByText('المبالغ بالدرهم')).toBeTruthy();
     expect(screen.getByText('الفواتير')).toBeTruthy();
     expect(screen.getByText('حوالة بنكية')).toBeTruthy();
-    // The forgiven fee, in the word the rendered invoice uses for it.
-    expect(screen.getByText(/أُعفي بتاريخ/)).toBeTruthy();
+    // The forgiven fee: the word, the day the practice let it go read in this
+    // language, and — as in English above — one row carrying it, not the list.
+    expect(screen.getByText('أُعفي بتاريخ 21 أغسطس 2026')).toBeTruthy();
+    expect(screen.getAllByText(/^أُعفي/)).toHaveLength(1);
   });
 
   it('is not offered at all where nobody on the record is shown money', async () => {
