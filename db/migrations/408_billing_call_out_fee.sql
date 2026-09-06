@@ -301,11 +301,25 @@ declare
   v_vat_fils   integer;
   v_invoice_id uuid;
 begin
-  -- Already charged. An ordinary replay stops here; two at once are stopped by
-  -- invoice_one_per_appointment, and so is a second fee outcome on the same
-  -- visit. The read is the courtesy; the index is the guarantee.
+  -- Already dealt with, one way or the other. An ordinary replay stops here;
+  -- two at once are stopped by invoice_one_per_appointment, and so is a second
+  -- fee outcome on the same visit. The read is the courtesy; the index is the
+  -- guarantee.
+  --
+  -- **The exception queue counts as dealt with**, which is 404's own guard
+  -- kept rather than a new idea. A practice with no `scheduling_setting` row
+  -- and no `vat_setting` row queues an exception instead of a charge below,
+  -- and `billing_exception_one_per_appointment` allows exactly one of those:
+  -- without this clause a genuine second transition — `cancelled_late` on to
+  -- `no_show` — would insert a second exception, hit that constraint and fail
+  -- the appointment's own status update, so a settings row nobody had filled
+  -- in would stop a visit being called off at all (schema review of this pull
+  -- request).
   if exists (
     select 1 from public.invoice
+     where tenant_id = v_tenant_id and appointment_id = new.id
+  ) or exists (
+    select 1 from public.billing_exception
      where tenant_id = v_tenant_id and appointment_id = new.id
   ) then
     return null;

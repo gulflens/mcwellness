@@ -526,3 +526,44 @@ describe('a practice that charges no fee at all', () => {
     ]);
   });
 });
+
+describe('a practice whose cancellation policy cannot be read', () => {
+  it('queues one exception, and lets the visit move on to a second outcome', async () => {
+    // No `scheduling_setting` row at all — a database mid-migration, or a
+    // practice created before 202's trigger existed. The fee cannot be known,
+    // so the trigger queues the question for the office instead of guessing at
+    // a figure.
+    //
+    // The case is the *second* transition. `billing_exception_one_per_appointment`
+    // allows one exception per visit, so without the trigger's own guard
+    // looking for one, moving `cancelled_late` on to `no_show` would insert a
+    // second, hit that constraint, and fail the appointment's status update —
+    // a settings row nobody had filled in would stop a visit being called off
+    // at all (schema review of this pull request).
+    await h.owner.query('delete from scheduling_setting where tenant_id = $1', [h.data.tenant.id]);
+    try {
+      const appointmentId = await bookAppointment(h.clientId(0));
+      await callOff(appointmentId, 'cancelled_late', 'client_request');
+      await callOff(appointmentId, 'no_show');
+
+      const { rows: status } = await h.owner.query<{ status: string }>(
+        'select status::text as status from appointment where id = $1',
+        [appointmentId],
+      );
+      expect(status[0]?.status).toBe('no_show');
+
+      const { rows: exceptions } = await h.owner.query<{ kind: string; n: string }>(
+        'select kind::text as kind, count(*)::text as n from billing_exception ' +
+          'where appointment_id = $1 group by 1',
+        [appointmentId],
+      );
+      expect(exceptions).toEqual([{ kind: 'uncharged_call_out_fee', n: '1' }]);
+      expect(await feeInvoicesFor(appointmentId)).toEqual([]);
+    } finally {
+      await h.owner.query(
+        'insert into scheduling_setting (tenant_id, unfit_fee_fils) values ($1, $2)',
+        [h.data.tenant.id, FEE_FILS],
+      );
+    }
+  });
+});
