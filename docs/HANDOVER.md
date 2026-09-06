@@ -1,8 +1,8 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 6 September at 22:00: trunk round 33
-(pull request 103) built, reviewed and re-checked, waiting only on a GitHub
-billing block to merge; trunk round 34 in flight on top of it; every check
+Written 4 September 2026, updated on 6 September at 23:00: trunk rounds 33
+and 34 (pull requests 103 and 105) built, reviewed and re-checked, waiting
+only on a GitHub billing block to merge, 105 stacked on 103; every check
 on the repository refused by GitHub since 13:03 UTC for the account's
 billing; the address on Hostinger built and still never started, for want of
 the operator's secrets. This file exists so that the next Claude session,
@@ -176,7 +176,11 @@ an unanswered decision. The next session's first act is section 10.
   "Who may read what" table in `docs/SECURITY.md`. Built by 22:24 (six
   commits, head `eae602d`, 1,931 and 1,113 tests green, fifteen defaults in
   `trunk-notes.md` round 34, the five Arabic band names among them for the
-  operator's approval); its combined review was running as this was written.
+  operator's approval). Combined review on Fable (Security FAIL on one point,
+  the `report` address parameter reaching state unvalidated, contained by the
+  API's own check; eight smaller gaps, three of them cells of the new table),
+  fix round on Opus (nine commits to `442f25c`), re-check clean at 23:00; the
+  record is on the pull request. **Not merged**, for the same billing block.
 - The Hostinger site's runtime log was read at 20:55: empty, no start time,
   last deployed 16:17 Dubai. The process has never run; the seven secrets are
   still the operator's step.
@@ -376,6 +380,12 @@ from main's own movement.
 million; combined review on Fable 0.22; fix round on Opus 0.13; re-check on
 Fable 0.10. About 0.73 million in agents, plus the integrator's conversation.
 
+**What trunk round 34 cost (6 September, 23:00).** Builder on Opus about 0.29
+million (a background inventory of the policy files inside it); combined
+review on Fable 0.22; fix round on Opus 0.15; re-check on Fable 0.14. About
+0.8 million in agents. The evening's two rounds together: about 1.5 million
+in agents, plus the integrator's conversation.
+
 ## 7. The failed-run emails
 
 GitHub emails the repository owner for every failed or cancelled workflow
@@ -562,8 +572,8 @@ nine and ten; see the records on pull requests 73 to 83).
    in the laptop checkout, and migrations 205 and 957 go to staging and
    production in one pass (the fourth production pass, the thirteenth staging
    pass) with their records in `docs/PRODUCTION.md` and `docs/STAGING.md`.
-2d. **Trunk round 34 is built** (pull request 105, stacked on round 33,
-   section 2). Its combined review, fix round and re-check under section 6; after 103 merges, `gh pr edit <n> --base main` and a
+2d. **Trunk round 34 is built and reviewed** (pull request 105, stacked on
+   round 33, section 2; the record is on it). after 103 merges, `gh pr edit <n> --base main` and a
    rebase; then its own merge and passes. It takes step 3's items except the
    scoped security scan.
 3. Owed to later rounds, recorded in `qa-01.md`, `reports-01.md` and
