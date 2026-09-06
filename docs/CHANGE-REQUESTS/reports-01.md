@@ -157,6 +157,15 @@ under "Shared-zone changes".
    there is no field in the session shape for an electrode site, a band or a
    threshold, and `telemetry` is not read at all.
 
+### Two files this stream imports and does not edit
+
+`app/api/billing/fonts.ts`, for the font loader (the brief's own instruction:
+import it, never copy a font), and `app/api/billing/ids.ts`, for `isUuid`,
+which is how billing's own routes check a path parameter before it reaches a
+uuid column. Both are reads across `app/api`, not edits, and neither is a
+`domain/` import, which is the boundary rule 3 draws. Recorded here because a
+reader of this file should not have to discover them from an import line.
+
 ---
 
 ## Requests, not edits
