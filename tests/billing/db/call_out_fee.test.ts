@@ -494,6 +494,24 @@ describe('waiving the fee', () => {
   });
 });
 
+describe('the invoice counter, for a practice named by its caller', () => {
+  it('is not the API role’s to call', async () => {
+    // `app.next_invoice_number(uuid)` exists for the trigger, which fires on a
+    // row that knows its own practice. Its two callers are security definer
+    // and run as the owner, so neither needs a grant — and granting one would
+    // let any session name another practice and burn that practice's gapless
+    // sequence, which is the one property a tax invoice's number has
+    // (security review of this pull request).
+    expect(
+      await refusalAsApiRole(
+        'select app.next_invoice_number($1)',
+        [h.data.tenant.id],
+        'owner,admin,finance',
+      ),
+    ).toBe(INSUFFICIENT_PRIVILEGE);
+  });
+});
+
 describe('a practice that charges no fee at all', () => {
   it('writes no charge rather than a charge of nothing', async () => {
     await h.owner.query('update scheduling_setting set unfit_fee_fils = 0 where tenant_id = $1', [

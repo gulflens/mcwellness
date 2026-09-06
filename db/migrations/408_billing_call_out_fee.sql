@@ -229,6 +229,14 @@ comment on function app.waive_call_out_fee(uuid, text) is
 --    One counter, one implementation: the no-argument form is replaced by a
 --    wrapper that resolves the practice and hands over, so gapless numbering
 --    (402 section 1) still has exactly one place it happens.
+--
+--    **Nobody is granted this form.** Its two callers — the trigger below and
+--    the wrapper beneath it — are security definer and run as the owner, so
+--    neither needs a grant; granting it to `app_role` would have let any
+--    session name another practice and burn that practice's gapless sequence,
+--    which is the one property the counter exists for (security review of this
+--    pull request). Execute is revoked from public, as it is on every function
+--    this file adds, and the no-argument form keeps 402's own grant.
 ------------------------------------------------------------------------------
 create function app.next_invoice_number(p_tenant_id uuid) returns integer
 language plpgsql security definer
@@ -253,7 +261,6 @@ begin
 end
 $$;
 revoke execute on function app.next_invoice_number(uuid) from public;
-grant execute on function app.next_invoice_number(uuid) to app_role;
 
 create or replace function app.next_invoice_number() returns integer
 language plpgsql security definer
@@ -462,7 +469,6 @@ comment on view app.billing_ledger is
 --     return v_number;
 --   end
 --   $fn$;
---   revoke execute on function app.next_invoice_number(uuid) from app_role;
 --   drop function if exists app.next_invoice_number(uuid);
 --   -- 404's ledger, written out: `create or replace view` has no undo either.
 --   create or replace view app.billing_ledger with (security_invoker = true) as
