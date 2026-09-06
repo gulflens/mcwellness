@@ -166,17 +166,21 @@ describe('drafting', () => {
     expect((body.content as { comparison: unknown }).comparison).toBeNull();
   });
 
-  it('quotes no brain-map figure the report is not allowed to print', async () => {
-    // Client 5 carries two brain maps of one instrument, and the comparison is
-    // still empty. That is not a fault here: what a brain map's `derived`
-    // holds is a band power per electrode site, and **no report may print an
-    // electrode site or a band** (CLAUDE.md, and the specification's section
-    // 5). `figuresOf` quotes a figure only where the measurement carries a
-    // plain label and a unit, and nothing the assessment stream writes today
-    // does. Which figure a household may be shown is a decision for the
-    // practice, not something this route should guess; until it is taken the
-    // comparison is honestly empty. Named in the pull-request body so the
-    // staging walk is not surprised by it.
+  it('compares the two brain maps a household actually has, in the words the comparison screen uses', async () => {
+    // Client 5 carries two brain maps of one instrument and one questionnaire
+    // between them. It read "fewer than two brain maps" for both reasons at
+    // once (docs/CHANGE-REQUESTS/qa-01.md item 3): every figure was skipped,
+    // because they were looked for under a `label` nothing writes rather than
+    // under the site and band a brain map declares; and the questionnaire
+    // could stand at either end of the pair and make it a comparison across
+    // two instruments, which is refused.
+    //
+    // `docs/SPEC/reports-v1.md` section 5 is what settles which figures may be
+    // printed: the progress report carries "the same figures ... the
+    // comparison view shows". The sentence about electrode sites in the same
+    // section is about the *protocol's* — the practice's own way of training,
+    // which is its intellectual property — and not about a measurement the
+    // household paid to have taken.
     const res = await h.call(
       'GET',
       `/api/reports/gather?clientId=${h.clientId(5)}&from=2026-01-01&to=2026-09-01`,
@@ -185,7 +189,45 @@ describe('drafting', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as GatherResponse;
     expect(body.brainMapsRead).toBe(true);
-    expect((body.content as { comparison: unknown }).comparison).toBeNull();
+    const comparison = (
+      body.content as {
+        comparison: {
+          instrument: string;
+          earlierOn: string;
+          laterOn: string;
+          lines: { label: string; unit: string; earlier: number; later: number }[];
+        } | null;
+      }
+    ).comparison;
+    expect(comparison).not.toBeNull();
+    expect(comparison?.instrument).toBe('qeeg');
+    // The earliest and the latest brain map, and never the questionnaire that
+    // sits between them.
+    expect(comparison?.earlierOn).toBe('2026-03-06');
+    expect(comparison?.laterOn).toBe('2026-06-04');
+    // Five sites by five bands, each named as the Compare screen names it.
+    expect(comparison?.lines.length).toBe(25);
+    const first = comparison?.lines[0];
+    expect(first?.label).toBe('Fz Delta');
+    expect(first?.unit).toBe('µV²');
+    expect(typeof first?.earlier).toBe('number');
+    expect(typeof first?.later).toBe('number');
+  });
+
+  it('carries that comparison into a saved draft, which is what the practitioner reads', async () => {
+    const res = await h.call('POST', '/api/reports/draft', SEEDED.owner, {
+      clientId: h.clientId(5),
+      kind: 'progress',
+      locale: 'en',
+      coverageFrom: '2026-01-01',
+      coverageTo: '2026-09-01',
+      content: progressBody(),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as DraftResponse;
+    const content = body.content as { comparison: { lines: { label: string }[] } | null };
+    expect(content.comparison).not.toBeNull();
+    expect(content.comparison?.lines.length).toBe(25);
   });
 });
 
