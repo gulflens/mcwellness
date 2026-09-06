@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import { extractAll, extractText, toVisualOrder } from '../../domain/shared/document';
 import { layout, renderReport, WORDS } from '../../domain/reports/document';
+import { isListedFamilyName, isListedGivenName } from '../../db/seed/names';
 import type {
   PracticeSnapshot,
   ProgressReportContent,
@@ -26,10 +27,16 @@ import type {
  * that happens not to look for it.
  *
  * Every figure is synthetic and every person is from `db/seed/names.ts`
- * (.claude/rules/testing.md).
+ * (.claude/rules/testing.md) — proved by the last test in this file rather
+ * than remembered, because a hand-written name is exactly the kind of thing
+ * that reads as fine and is not.
  */
 
 const fonts = documentFonts();
+
+/** The signer, and the household the report is addressed to. Both from the lists. */
+const SIGNER_NAME = 'Hazel Harbour';
+const RECIPIENT_NAME = 'Dahlia Meadow';
 
 /**
  * The same string as a person copying it off the page gets it: the letters
@@ -48,7 +55,7 @@ const PRACTICE: PracticeSnapshot = {
 };
 
 const SIGNER: SignerSnapshot = {
-  name: 'Hazel Harbour',
+  name: SIGNER_NAME,
   certification: 'bcia_bcn',
   certifyingBody: 'BCIA',
   certificateNumber: 'SYN-0001',
@@ -59,7 +66,7 @@ const SESSION_CONTENT: SessionReportContent = {
   visitDate: '2026-09-01',
   serviceName: 'Neurofeedback session',
   serviceNameAr: 'جلسة تدريب',
-  practitionerName: 'Hazel Harbour',
+  practitionerName: SIGNER_NAME,
   durationMinutes: 60,
   goalArea: 'Sleep',
   ratings: [
@@ -138,7 +145,7 @@ function report(over: Partial<ReportDocument> = {}): ReportDocument {
     locale: 'en',
     practice: PRACTICE,
     signer: SIGNER,
-    recipient: { name: 'Nadia Meadows', recordNumber: 'MW-000004' },
+    recipient: { name: RECIPIENT_NAME, recordNumber: 'MW-000004' },
     reference: 'RPT-000001',
     issuedOn: '2026-09-06',
     version: 1,
@@ -159,7 +166,7 @@ describe('a rendered session report', () => {
   it('carries the practice, the reference, the client and the record number', () => {
     expect(text).toContain('Synthetic Wellness Studio');
     expect(text).toContain('RPT-000001');
-    expect(text).toContain('Nadia Meadows');
+    expect(text).toContain(RECIPIENT_NAME);
     expect(text).toContain('MW-000004');
     expect(text).toContain('6 September 2026');
   });
@@ -167,7 +174,7 @@ describe('a rendered session report', () => {
   it('carries the visit, the service, the practitioner and the ratings', () => {
     expect(text).toContain('1 September 2026');
     expect(text).toContain('Neurofeedback session');
-    expect(text).toContain('Hazel Harbour');
+    expect(text).toContain(SIGNER_NAME);
     expect(text).toContain('60 minutes');
     expect(text).toContain('How settled do you feel?');
   });
@@ -265,8 +272,13 @@ describe('a rendered progress report', () => {
     expect(marks).toHaveLength(4 + 3 + 2);
   });
 
-  it('names the bands trained in words, because the paper has no hue', () => {
-    expect(text).toContain('Bands trained: Theta, Alpha');
+  it('names no band on the paper: the ink strip stands on its own', () => {
+    // The design brief admits a band only as the slice's hue, and the writer
+    // has none yet (docs/CHANGE-REQUESTS/reports-01.md, request R3). A line of
+    // words naming the bands put a fact on the page the specification keeps
+    // off it, and read as a legend for a colour nothing had drawn.
+    expect(text).not.toContain('Bands trained');
+    expect(text).not.toContain('Theta');
   });
 
   it('carries the ribbon’s legend in both languages', () => {
@@ -337,8 +349,8 @@ describe('the Arabic edition', () => {
     expect(text).toContain(asCopied(WORDS.progressReport.ar));
   });
 
-  it('names the bands in Arabic', () => {
-    expect(text).toContain(asCopied('نطاقات التدريب'));
+  it('names no band in Arabic either', () => {
+    expect(text).not.toContain(asCopied('نطاقات التدريب'));
   });
 });
 
@@ -375,5 +387,17 @@ describe('a long report', () => {
       renderReport(report({ content: { ...PROGRESS_CONTENT, goals: many.slice(0, 20) } }), fonts),
     ).join('\n');
     expect(text).toContain('Page 1 of');
+  });
+});
+
+describe('the people in this file', () => {
+  it('names every one of them from the fixed fictional lists', () => {
+    // db/seed/generate.test.ts asks the same of the seed. A fixture is held to
+    // it too: "Nadia Meadows" read as a synthetic name and was not one.
+    for (const full of [SIGNER_NAME, RECIPIENT_NAME]) {
+      const [given, family] = full.split(' ');
+      expect(isListedGivenName(given ?? ''), full).toBe(true);
+      expect(isListedFamilyName(family ?? ''), full).toBe(true);
+    }
   });
 });

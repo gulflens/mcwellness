@@ -17,7 +17,7 @@
  * same bytes years later — and what section 11's byte-identical test proves.
  */
 
-export { bandsIn, layout, titleOf } from './render';
+export { layout, titleOf } from './render';
 export {
   arabicReportDate,
   DRAFT_WORDING,

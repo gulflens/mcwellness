@@ -1,6 +1,5 @@
 import type { Page, FontSet } from '../../shared/document';
 import type {
-  BandKey,
   PracticeSnapshot,
   ProgressReportContent,
   ReportDocument,
@@ -230,23 +229,6 @@ const RIBBON = {
   markGrey: 0.3,
 } as const;
 
-/** The bands present in a ribbon, slowest first, for the legend beneath it. */
-export function bandsIn(ribbon: Ribbon): BandKey[] {
-  const order: BandKey[] = ['delta', 'theta', 'alpha', 'beta', 'gamma'];
-  const seen = new Set(
-    ribbon.slices.map((slice) => slice.band).filter((band): band is BandKey => band !== null),
-  );
-  return order.filter((band) => seen.has(band));
-}
-
-const BAND_WORDS: Record<BandKey, Phrase> = {
-  delta: { en: 'Delta', ar: 'دلتا' },
-  theta: { en: 'Theta', ar: 'ثيتا' },
-  alpha: { en: 'Alpha', ar: 'ألفا' },
-  beta: { en: 'Beta', ar: 'بيتا' },
-  gamma: { en: 'Gamma', ar: 'غاما' },
-};
-
 /**
  * The cover figure (docs/DESIGN-BRIEF.md section 5): one slice per completed
  * session, height the visit's signal quality, a hairline at each brain map,
@@ -259,7 +241,7 @@ const BAND_WORDS: Record<BandKey, Phrase> = {
  * floor plus half of h. That is the whole trick, and it is why this figure
  * needs nothing added to the writer.
  */
-function ribbonFigure(sheet: Sheet, ribbon: Ribbon, locale: 'en' | 'ar'): void {
+function ribbonFigure(sheet: Sheet, ribbon: Ribbon): void {
   const total = ribbon.slices.length + ribbon.remaining;
   if (total === 0) return;
 
@@ -321,24 +303,15 @@ function ribbonFigure(sheet: Sheet, ribbon: Ribbon, locale: 'en' | 'ar'): void {
   );
   sheet.down(sheet.wrap(legend.ar, RIGHT - LEFT, SIZE.small, { rtl: true }).length * SMALL_LINE);
 
-  const bands = bandsIn(ribbon);
-  if (bands.length > 0) {
-    // Named in words rather than shown as hue: the writer has no colour, and a
-    // grey ramp standing in for five hues would be an encoding nobody was
-    // taught. The screen's ribbon carries the tokens' colours.
-    const words = bands.map((band) => BAND_WORDS[band][locale]).join(locale === 'ar' ? '، ' : ', ');
-    const label = locale === 'ar' ? `نطاقات التدريب: ${words}` : `Bands trained: ${words}`;
-    sheet.paragraph(
-      sheet.baseline,
-      locale === 'ar' ? RIGHT : LEFT,
-      label,
-      RIGHT - LEFT,
-      SIZE.small,
-      locale === 'ar' ? { grey: MUTED, align: 'end', rtl: true } : { grey: MUTED },
-      SMALL_LINE,
-    );
-    sheet.down(SMALL_LINE + 2);
-  }
+  // **The bands are not named.** The strip carries the whole of the figure's
+  // shape in ink — a slice per session at the height of its recording's
+  // quality, a hairline at each brain map, empty slices for the sessions ahead
+  // — and the design brief admits a band only as that slice's hue. Printing
+  // "Bands trained: Theta, Alpha" put on the page a fact the specification
+  // keeps off it, and it read as a legend for a colour nothing had drawn. The
+  // ink strip stands on its own until the writer has a colour operator
+  // (docs/CHANGE-REQUESTS/reports-01.md, request R3); the console's own ribbon
+  // carries the hue from the tokens meanwhile.
 }
 
 // --------------------------------------------------------------------------
@@ -510,7 +483,7 @@ function progressPage(
   labelled(sheet, WORDS.sessionsDelivered, String(content.sessionsDelivered));
   labelled(sheet, WORDS.sessionsEntitled, String(content.sessionsEntitled));
 
-  ribbonFigure(sheet, content.ribbon, document_.locale);
+  ribbonFigure(sheet, content.ribbon);
 
   if (content.goals.length > 0) {
     section(sheet, WORDS.goals);
