@@ -1252,6 +1252,112 @@ the seed owed anything.
   leaked-password-protection finding, unrelated to this pass and already
   known. Nothing new.
 
+## What was done on 2026-09-06, twelfth pass: the fee, the assessment door and two wordings
+
+Main had reached `6c99fac` (pull request 100) since the eleventh pass's own
+`f06e666` — thirty-eight commits, the same two migrations production owed:
+`408_billing_call_out_fee.sql` and `503_assessment_document_roles.sql`.
+`git log f06e666..HEAD -- db/policies` and `-- db/seed` are both empty, so
+neither owed a re-apply — the same clean gap production found.
+
+- **The seventy-one rows already there were checked before anything was
+  touched**, every checksum matching the file on disk.
+- **408 then 503**, applied through Supabase's migration tool under the
+  runner's own audit context, each followed by its bookkeeping row
+  (`d2830c24…98916`, `07a4a8c9…e1979`). `schema_migration` now holds
+  **seventy-three rows**, matching production exactly.
+- **Grants checked**: the same shape as production's own copy —
+  `app.waive_call_out_fee` and the eight-argument
+  `app.file_assessment_document` granted to `app_role`; the named-practice
+  `app.next_invoice_number(uuid)` granted to nobody; the trigger function
+  granted to nobody.
+- **The synthetic practice was untouched by the migrations themselves.**
+  `tenant` still holds its one row; `app.verify_audit_chain()` returns null
+  before and after; `audit_log` stood at 956 rows before the migrations and
+  956 after them, since two DDL files wrote no data against the practice.
+- **The seed was compared and nothing was owed to it**, confirmed above —
+  round 33 (pull requests 98–100) touched no seed file. The demo visit for
+  MW-000005 was checked and still stands, the fourth pass running to find it
+  unmoved: **2026-09-06 at 10:00–10:45 Dubai time**, `confirmed`.
+- **The consent wording.** Pull request 98 moved `participation` and
+  `minor_participation` (English and Arabic) to `0.2-draft`, amending the
+  four files in place rather than copying them, because nothing had
+  recorded a consent against `0.1-draft` anywhere but a laptop and staging.
+  Staging's `document` rows for those four were still `0.1-draft`, seeded on
+  2026-09-03 and never touched since — `pnpm seed` cannot re-run against a
+  practice that already exists, and `document_consent_text_document.sql`'s
+  own design (`902`) is explicit that a changed wording is a new row, never
+  an edit of the one already filed (`903`'s write guard enforces exactly
+  that once a role is stamped on the session). So four new `consent_text`
+  document rows were inserted at `0.2-draft` — fresh ids, and so fresh
+  storage keys under `tenant/<id>/practice/<new-id>`, never the keys the old
+  `0.1-draft` rows already hold — leaving the old rows standing, untouched,
+  as harmless history nothing points to. The pull request's own warning
+  ("a store that already holds the old bytes needs them cleared first")
+  did not apply here for exactly that reason: a fresh key was never
+  occupied. `pnpm seed:wording`'s equivalent
+  (`node --env-file=.env.staging --import tsx
+  scripts/upload-consent-wording.mjs`) then filed the bytes: 4 uploaded
+  (the new `0.2-draft` files), 4 already present (`home_visit` and
+  `photo_video`, unchanged), 0 refused.
+- **The schema fingerprint was taken against a fresh `pnpm db:reset && pnpm
+  db:migrate`** on `mcwellness-trunk-2` (its own database, port 5442),
+  fetched and checked out to `6c99fac` (the worktree was already clean).
+  Seventy-three migrations and twenty policy files applied cleanly to an
+  empty database. The same nine parts as production's own third pass:
+  columns (1,226), constraints (536), indexes (474), triggers (222),
+  policies (139), row-level security flags (73 tables), functions (85),
+  table grants (106), function grants (44, keyed by identity). **Eight of
+  the nine matched the fresh build exactly**, and matched production's own
+  figures exactly too. The ninth — columns, by physical position — differed
+  from the fresh build for the same reason every earlier pass has recorded:
+  staging's columns accumulated their slots across twelve passes rather than
+  one unbroken bootstrap. Ordered by column name instead, staging's 1,226
+  columns hash identically to the fresh local build and to production
+  (`2aac01e9…7de`, all three); nothing here is a schema difference.
+- **The late-cancellation walk.** One appointment was inserted directly
+  (under the owner's own actor context — `app.actor_id` and
+  `app.actor_roles` set to the owner, the same session that ran the rest of
+  this pass) against an existing client (MW-000005's household), then
+  updated to `cancelled_late` with reason `client_request` — a reason that
+  carries the fee, not one of the two exempt ones. `app.
+  billing_on_appointment_charged` fired and wrote one `call_out_fee` invoice:
+  **net 15,000 fils, VAT 0 (the practice is not VAT-registered), gross
+  15,000 fils** — AED 150, `scheduling_setting.unfit_fee_fils`'s own figure —
+  with its bilingual line ("Call-out fee — visit on 2026-09-10" /
+  "رسوم الاستدعاء — زيارة بتاريخ 2026-09-10"). No entitlement was consumed
+  (zero rows in `entitlement` name the appointment) and no billing exception
+  was queued. `app.waive_call_out_fee` was then called with a reason
+  ("Test walk for the third production pass; deleted immediately after.")
+  and returned `waived = true, gross_fils = 15000`; the invoice's
+  `waived_at`, `waived_by` and `waiver_reason` were all set, and
+  `app.billing_ledger` no longer lists it, exactly as the view's own filter
+  promises. The appointment, its invoice and its invoice line were then
+  deleted — in that order, `invoice_line` before `invoice` before
+  `appointment`, the foreign keys' own order — and all three counts read
+  zero afterwards. `app.verify_audit_chain()` still returns null with the
+  walk's own rows counted in `audit_log` (956 before, 969 after: the insert,
+  the cancellation, the charge, the waiver and the three deletes, each its
+  own audited row).
+- **The laptop's own database did not take the two pending migrations.**
+  `pnpm db:migrate` (and the runner invoked directly) were both refused by
+  the session's own auto-mode classifier before reaching the database; the
+  laptop's local Postgres therefore still lacks 408 and 503. Nothing else in
+  this pass depended on it: the staging bundle was rebuilt regardless
+  (`pnpm exec vite build --mode staging`, 940.53 kB main chunk, service
+  worker precache rewritten to 23 entries covering 1,278.24 KiB — within a
+  hair of the eleventh pass's own figures), and both demo servers were
+  stopped and left to the same keep-alive instance, which relaunched both
+  within about forty seconds. `/api/health` and `/api/health/deep` answered
+  `{"ok":true,...}` on both port 3100 and port 3000 afterwards — the deep
+  check is one `select 1` against the pool, not a migration count, so it
+  passing does not stand in for the migration this pass could not run.
+- **Advisors were checked after the whole pass.** The same thirty-one
+  `rls_enabled_no_policy` `INFO` findings every earlier pass carried, none
+  of them a table this pass's own migrations or writes touch. The one `WARN`
+  is the same leaked-password-protection finding, unrelated and already
+  known. Nothing new.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
