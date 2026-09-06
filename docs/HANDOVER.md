@@ -166,15 +166,17 @@ an unanswered decision. The next session's first act is section 10.
   `backup` and `release` workflows are refused too, and the merge rule
   (section 4) forbids merging on a red check, so nothing merges until the
   operator lifts it (section 8, first item).
-- **Trunk round 34** (branch `trunk-round-34`, worktree `mcwellness-trunk-2`,
-  stacked on `trunk-round-33` because both edit the record files; its pull
-  request's base is `trunk-round-33` until 103 merges) takes section 10's
-  step 3: the five bands named in both languages from one file in
+- **Trunk round 34** (pull request 105, branch `trunk-round-34`, worktree
+  `mcwellness-trunk-2`, stacked on `trunk-round-33` because both edit the
+  record files; its pull request's base is `trunk-round-33` until 103 merges)
+  takes section 10's step 3: the five bands named in both languages from one file in
   `domain/shared` (the Arabic names proposed for the operator's approval),
   a colour operator in the shared PDF writer so a printed ribbon carries the
   band's hue, one press from a record's timeline to its access report, and a
-  "Who may read what" table in `docs/SECURITY.md`. Building as this was
-  written; its state is on the pull request and in `trunk-notes.md` round 34.
+  "Who may read what" table in `docs/SECURITY.md`. Built by 22:24 (six
+  commits, head `eae602d`, 1,931 and 1,113 tests green, fifteen defaults in
+  `trunk-notes.md` round 34, the five Arabic band names among them for the
+  operator's approval); its combined review was running as this was written.
 - The Hostinger site's runtime log was read at 20:55: empty, no start time,
   last deployed 16:17 Dubai. The process has never run; the seven secrets are
   still the operator's step.
@@ -560,9 +562,8 @@ nine and ten; see the records on pull requests 73 to 83).
    in the laptop checkout, and migrations 205 and 957 go to staging and
    production in one pass (the fourth production pass, the thirteenth staging
    pass) with their records in `docs/PRODUCTION.md` and `docs/STAGING.md`.
-2d. **Trunk round 34 is in flight** on `trunk-round-34`, stacked on round 33
-   (section 2). When its builder reports: the combined review and re-check
-   under section 6; after 103 merges, `gh pr edit <n> --base main` and a
+2d. **Trunk round 34 is built** (pull request 105, stacked on round 33,
+   section 2). Its combined review, fix round and re-check under section 6; after 103 merges, `gh pr edit <n> --base main` and a
    rebase; then its own merge and passes. It takes step 3's items except the
    scoped security scan.
 3. Owed to later rounds, recorded in `qa-01.md`, `reports-01.md` and
