@@ -1619,8 +1619,8 @@ Migration `957_vat_taxable_supplies_excludes_waived.sql` replaces
 `app.vat_taxable_supplies_fils(date)` whole with 953's body and one clause
 more, `and i.waived_at is null`. 953 is merged and `create or replace` has no
 patch form, so the rollback carries 953's body verbatim — the way 408 carries
-404's and 954 carries 107's. A future migration that changes this function
-starts from **957's** body.
+404's. A future migration that changes this function starts from **957's**
+body.
 
 Why the clause. The function sums `invoice.net_fils` over twelve months to say
 how close the practice is to the AED 375,000 registration threshold. A
@@ -1828,8 +1828,12 @@ have to find it in a diff.
    written by hand: it goes through `app.waive_call_out_fee`, because that
    function is the only thing that may set those three columns.
 8. **957 does not restate 953's `revoke` and `grant`.** `create or replace`
-   keeps the privileges a function already has, and 954 set the precedent. The
-   header says so, so a reader does not have to reason about it.
+   keeps the privileges a function already has, and 954 set that precedent: it
+   restated neither when it replaced `app.erase_client`. It is no precedent for
+   the other half, though — 954's rollback names `107_erase_report.sql` rather
+   than writing 107's body out, and 408, which carries 404's version in full,
+   is the one this rollback follows. The header says both, so a reader does not
+   have to reason about either.
 9. **The consent page repeats one clause twice** rather than carrying a
    sentence at the foot of the page, which the request offered as the
    alternative. A household reads the paragraph that applies to it and not the

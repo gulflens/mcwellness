@@ -34,10 +34,11 @@
 -- **Replacing the function whole, not editing 953.** 953 is merged, and
 -- `create or replace function` has no patch form, so the body below is 953's
 -- with one clause added and the rollback carries 953's verbatim -- the way 408
--- carries 404's and 954 carries 107's. A future migration that changes this
--- function starts from **this** body. `create or replace` keeps the privileges
--- the function already has, so 953's revoke from `public` and grant to
--- `app_role` are not restated here and are not lost.
+-- carries 404's. A future migration that changes this function starts from
+-- **this** body. `create or replace` keeps the privileges the function already
+-- has, so 953's revoke from `public` and grant to `app_role` are not restated
+-- here and are not lost: that is 954's precedent, which restated neither when
+-- it replaced `app.erase_client`.
 --
 -- **Why the second half of the trunk's range.** It reads `invoice`, which is
 -- billing's own table (docs/SPEC/OWNERSHIP.md), so it must sort after it, as
