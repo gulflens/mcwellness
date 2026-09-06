@@ -1796,6 +1796,16 @@ have to find it in a diff.
    Arabic verb and its connective are `waivedNotice`'s from
    `domain/billing/document/strings.ts`, so the household's screen and the
    rendered invoice say the same word.
+
+   **The shortened Arabic form wants the operator's eye.** The row says
+   `أُعفي بتاريخ …`; the document's own line says `أُعفي هذا المبلغ بتاريخ …`
+   and then that nothing is owed. A table row is not a document's line — the
+   row already carries the invoice's number and its figure, which that
+   sentence would only repeat — so the phrase was shortened to the verb, the
+   connective and the day. Every word of it is `waivedNotice`'s, and the
+   passive verb with its connective is grammatical, but the short form is not
+   a string this repository holds verbatim. It therefore goes to the operator
+   for approval, as every Arabic string does.
 4. **`bytesAreAnEdf` is a named export beside the switch**, which is the shape
    the request left to the trunk. The alternative it offered — an agreed
    internal type string keyed into `bytesMatchMimeType` — would put a thing
