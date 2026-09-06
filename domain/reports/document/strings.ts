@@ -133,6 +133,23 @@ export const NOT_A_DIAGNOSIS: Phrase = {
 };
 
 /**
+ * The comparison's own, printed beneath the figures rather than the frame's.
+ * Word for word the sentence the Compare screen carries
+ * (`app/admin/assessments/copy.ts`, `NOT_A_DIAGNOSIS`), because
+ * `docs/SPEC/assessment.md` section 3.3 names that one as the sentence sitting
+ * "on the comparison and on anything printed from it": a report that prints
+ * the screen's figures owes the reader the screen's sentence, and the frame's
+ * standing line about what a brain map is stays where it is, in the footer.
+ * Quoted rather than imported: `domain/` may not read a screen's file, and a
+ * sentence that must never drift is one a test compares, which
+ * `tests/reports/document.test.ts` does in both languages.
+ */
+export const COMPARISON_NOT_A_DIAGNOSIS: Phrase = {
+  en: 'This is a comparison of measurements taken on different days. It is not a diagnosis.',
+  ar: 'هذه مقارنة بين قياسات أُخذت في أيام مختلفة. وهي ليست تشخيصاً.',
+};
+
+/**
  * The third line, on every copy until the wording is approved (section 10,
  * decision 5). Worded exactly as `docs/CONSENT` words it on every text a
  * person signs today, so a household meets the same sentence in the same
