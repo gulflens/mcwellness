@@ -15,14 +15,18 @@ import {
 } from './support';
 
 /**
- * The two status changes that cost a family something: a visit delivered, and
- * a visit called off inside the notice period.
+ * The one status change that takes a family's credit: a visit delivered.
  *
- * Both are written here as the session-capture and scheduling streams write
- * them — a plain status update on their own table, with no billing statement
- * anywhere near it. That is the contract
- * (404_billing_consumption.sql): closing a visit is one transaction that
- * touches no billing row, and the ledger keeps up by itself.
+ * It is written here as the session-capture stream writes it — a plain status
+ * update on its own table, with no billing statement anywhere near it. That is
+ * the contract (404_billing_consumption.sql): closing a visit is one
+ * transaction that touches no billing row, and the ledger keeps up by itself.
+ *
+ * A visit called off used to be the second such change. It is not any more:
+ * the founder's decision of 2026-09-04 is one fee and never a session, and
+ * what a cancellation costs now is specified in
+ * `tests/billing/db/call_out_fee.test.ts`. What is left here is the credit a
+ * cancellation took before that, and the waiver that still reaches it.
  */
 
 const NOW = () => new Date('2026-09-02T08:00:00.000Z');
@@ -326,44 +330,58 @@ describe('a delivered visit with no credit and no price', () => {
   });
 });
 
-describe('a visit called off inside the notice period', () => {
+describe('a credit a cancellation took before the founder changed the rule', () => {
   let appointmentId: string;
   let waivedId: string;
 
-  it('takes a credit, and says a cancellation took it', async () => {
+  /**
+   * Nothing writes one of these any more. The founder's decision of
+   * 2026-09-04 is that a package's sessions are never taken for a
+   * cancellation, and migration 408 replaced the consumption with a call-out
+   * fee — `tests/billing/db/call_out_fee.test.ts` is where what a cancellation
+   * costs now is specified.
+   *
+   * The rows 404 wrote are still on real ledgers, though, and nothing
+   * backfills them: giving a credit back is a decision for a person. So the
+   * door that forgives one stays open, and this is one of those rows, written
+   * here by hand because the trigger will not write another.
+   *
+   * The visit is called off as `practice_request`, which carries no fee, so
+   * these figures are about the credit and nothing else.
+   */
+  it('is a row nothing writes any more, and the waiver still reaches it', async () => {
     appointmentId = await bookAppointment(h.clientId(0), 'nf-session');
-    await h.owner.query("update appointment set status = 'cancelled_late' where id = $1", [
-      appointmentId,
-    ]);
-
-    const { rows } = await h.owner.query<{ id: string; status: string; consumption_kind: string }>(
-      'select id, status, consumption_kind from entitlement where consumed_by_appointment_id = $1',
+    await h.owner.query(
+      "update appointment set status = 'cancelled_late', " +
+        "cancellation_reason = 'practice_request', cancelled_at = now() where id = $1",
       [appointmentId],
     );
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.status).toBe('consumed');
-    expect(rows[0]?.consumption_kind).toBe('late_cancellation');
+
+    // No credit was taken by the trigger, and no fee charged either.
+    const { rows: untouched } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from entitlement where consumed_by_appointment_id = $1',
+      [appointmentId],
+    );
+    expect(Number(untouched[0]?.n)).toBe(0);
+
+    const { rows } = await h.owner.query<{ id: string }>(
+      "update entitlement set status = 'consumed', consumption_kind = 'late_cancellation', " +
+        'consumed_by_appointment_id = $1, consumed_at = now() where id = (' +
+        '  select id from entitlement where client_id = $2 and service_type_id = $3 ' +
+        "  and status = 'available' order by expires_on, id limit 1) returning id",
+      [appointmentId, h.clientId(0), h.serviceTypeId('nf-session')],
+    );
     waivedId = String(rows[0]?.id);
+    expect(waivedId).toBeTruthy();
   });
 
-  it('counts it as forfeited, never as a session the family had', async () => {
+  it('counts as forfeited, never as a session the family had', async () => {
     const res = await h.call('GET', `/api/billing/clients/${h.clientId(0)}/balance`, SEEDED.owner);
     const body = (await res.json()) as BalanceResponse;
     const sessions = body.services.find((s) => s.serviceTypeCode === 'nf-session');
     expect(sessions?.delivered).toBe(2);
     expect(sessions?.forfeited).toBe(1);
     expect(sessions?.remaining).toBe(12);
-  });
-
-  it('takes nothing more when the same cancellation is written again', async () => {
-    await h.owner.query("update appointment set status = 'cancelled_late' where id = $1", [
-      appointmentId,
-    ]);
-    const { rows } = await h.owner.query<{ n: string }>(
-      'select count(*)::text as n from entitlement where consumed_by_appointment_id = $1',
-      [appointmentId],
-    );
-    expect(Number(rows[0]?.n)).toBe(1);
   });
 
   it('gives the credit back when the coordinator waives it, without rewriting what happened', async () => {
@@ -440,23 +458,5 @@ describe('a visit called off inside the notice period', () => {
       { reason: 'Not mine to give.' },
     );
     expect(res.status).toBe(403);
-  });
-
-  it('queues a no-show by a family holding no credit rather than inventing a charge', async () => {
-    const clientId = h.clientId(4);
-    const appointment = await bookAppointment(clientId, 'nf-session');
-    await h.owner.query("update appointment set status = 'no_show' where id = $1", [appointment]);
-
-    const { rows } = await h.owner.query<{ kind: string }>(
-      'select kind from billing_exception where appointment_id = $1',
-      [appointment],
-    );
-    expect(rows).toEqual([{ kind: 'uncovered_late_cancellation' }]);
-
-    const { rows: invoices } = await h.owner.query<{ n: string }>(
-      "select count(*)::text as n from invoice where client_id = $1 and kind = 'session'",
-      [clientId],
-    );
-    expect(Number(invoices[0]?.n)).toBe(0);
   });
 });

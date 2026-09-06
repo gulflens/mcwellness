@@ -259,24 +259,36 @@ export type CancelAppointmentRequest = z.infer<typeof CancelAppointmentRequest>;
  * `cancellationStatusFor`), and `noticeHours` is the figure it was given, so
  * a screen can say "inside the practice's 24 hours" rather than "late".
  *
- * `creditConsumed` is observed, not inferred. Billing's own trigger
- * (404_billing_consumption.sql) fires on `cancelled_late` and takes a credit
- * if the client has one; this route reads back whether it found one, so a
- * late cancellation against a client with no credits left says so honestly
- * instead of claiming a charge that never happened.
+ * **`callOutFeeFils` is what the household is charged, and never a session.**
+ * The founder's decision of 2026-09-04: a package's sessions are never taken
+ * for a cancellation, and a visit called off inside the notice period — or one
+ * that could not go ahead at the door — carries the practice's call-out fee
+ * instead (`domain/billing`'s `callOutFeeFor`, posted by the trigger in
+ * migration 408). Null when nothing is charged, so a screen never warns about
+ * a fee that is not coming.
  *
- * `waiverEntitlementId` is the credit that was taken, and the id billing's
- * own waiver route needs: `POST /api/billing/entitlements/:id/waiver`. Null
- * whenever nothing was taken, so a screen never offers to give back what was
- * never charged.
+ * Both are **observed, not inferred**: the route reads back the charge
+ * billing's trigger made in this same transaction, so a screen offers to waive
+ * exactly the row that exists rather than one it assumed would be written.
+ *
+ * `feeInvoiceId` is that charge, and the id billing's waiver route needs:
+ * `POST /api/billing/invoices/:id/waiver`.
+ *
+ * Both are null for a practitioner, and that is a limit rather than an answer.
+ * Their reach into a client's ledger goes through
+ * `app.client_visible_to_practitioner` — confirmed visits only — and the visit
+ * they have this moment called off is no longer one, so the read comes back
+ * empty on that path. Nothing outside the office's own cancel drawer asks for
+ * these two fields, and waiving a fee is not a practitioner's in any case
+ * (`mayWaive`).
  */
 export const CancelAppointmentResponse = z.object({
   id: z.uuid(),
   status: z.enum(['cancelled', 'cancelled_late']),
   reason: z.enum(CANCELLATION_REASONS),
   noticeHours: z.number().int().nonnegative(),
-  creditConsumed: z.boolean(),
-  waiverEntitlementId: z.uuid().nullable(),
+  callOutFeeFils: z.number().int().positive().nullable(),
+  feeInvoiceId: z.uuid().nullable(),
 });
 export type CancelAppointmentResponse = z.infer<typeof CancelAppointmentResponse>;
 

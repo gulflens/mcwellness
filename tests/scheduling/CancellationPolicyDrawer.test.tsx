@@ -55,10 +55,9 @@ describe('CancellationPolicyDrawer', () => {
     ).toBe('24');
     // Through the one money formatter, so 15000 fils reads as a price and not
     // as a number of anything else.
-    expect(
-      (screen.getByLabelText(/Fee when a visit cannot go ahead at the door/) as HTMLInputElement)
-        .value,
-    ).toBe('150.00');
+    expect((screen.getByLabelText(/Call-out fee \(AED\)/) as HTMLInputElement).value).toBe(
+      '150.00',
+    );
   });
 
   it('will not save an unchanged policy, or a change with no reason', async () => {
@@ -108,7 +107,7 @@ describe('CancellationPolicyDrawer', () => {
     fireEvent.change(screen.getByLabelText(/Notice a household must give/), {
       target: { value: '48' },
     });
-    fireEvent.change(screen.getByLabelText(/Fee when a visit cannot go ahead at the door/), {
+    fireEvent.change(screen.getByLabelText(/Call-out fee \(AED\)/), {
       target: { value: '200.00' },
     });
     fireEvent.change(screen.getByLabelText('Why is it changing?'), {

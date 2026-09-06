@@ -281,7 +281,7 @@ export const InvoiceRow = z.object({
   id: z.uuid(),
   reference: z.string(),
   number: z.number().int().positive(),
-  kind: z.enum(['session', 'package', 'statement']),
+  kind: z.enum(['session', 'package', 'statement', 'call_out_fee']),
   issuedOn: z.string(),
   clientId: z.uuid(),
   clientMrn: z.string(),
@@ -363,3 +363,19 @@ export const WaiveEntitlementResponse = z.object({
   replacementEntitlementId: z.uuid(),
 });
 export type WaiveEntitlementResponse = z.infer<typeof WaiveEntitlementResponse>;
+
+/**
+ * Forgiving a call-out fee (migration 408). The same input as the credit
+ * waiver above, because it is the same act with the same reason field
+ * (docs/SPEC/billing.md section 4.3) on the row the ledger's shape allows it
+ * to reach: a fee is an invoice, and an invoice has no credit to hand back.
+ */
+export const WaiveCallOutFeeInput = z.object({ reason: Reason });
+export type WaiveCallOutFeeInput = z.infer<typeof WaiveCallOutFeeInput>;
+
+export const WaiveCallOutFeeResponse = z.object({
+  waivedInvoiceId: z.uuid(),
+  /** What the family no longer owes, in fils. */
+  waivedGrossFils: z.number().int().nonnegative(),
+});
+export type WaiveCallOutFeeResponse = z.infer<typeof WaiveCallOutFeeResponse>;

@@ -6,7 +6,7 @@ import {
   householdHasBeenTold,
   reasonCanBeGivenAt,
 } from '@domain/scheduling';
-import { WaiveEntitlementResponse } from '../../api/billing/ledger-schema';
+import { WaiveCallOutFeeResponse } from '../../api/billing/ledger-schema';
 import {
   CancelAppointmentResponse,
   CANCELLATION_REASONS,
@@ -15,7 +15,8 @@ import {
   type CancelActionCode,
   type CancellationReason,
 } from '../../api/appointments/schema';
-import { formatFils } from '../billing/money';
+import { fils } from '@domain/shared';
+import { callOutFeeFor, formatFils } from '../billing/money';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
@@ -27,16 +28,21 @@ import { dayOf, formatDay, formatWindow } from './windows';
  * section 4.3).
  *
  * **The consequence is named while the coordinator can still change their
- * mind.** Inside the practice's own notice period a cancellation uses one of
- * the client's sessions, and finding that out afterwards is finding it out
- * too late. So the drawer asks the practice for its notice period, runs the
- * same rule the route will run (`cancellationStatusFor`, the one place that
- * rule lives), and says plainly which side of it this visit falls on.
+ * mind.** Inside the practice's own notice period a cancellation carries the
+ * practice's call-out fee, and finding that out afterwards is finding it out
+ * too late. So the drawer asks the practice for its policy, runs the same two
+ * rules the route and the ledger will run — `cancellationStatusFor` for the
+ * status and `callOutFeeFor` for the money, each the one place its rule lives
+ * — and says plainly what this visit will cost.
  *
- * **And what actually happened is reported, not assumed.** A late
- * cancellation only uses a session if the client had one; when they had
- * none, the practice has a decision to make instead, and the panel after the
- * event says which of the two occurred rather than repeating the warning.
+ * **One fee, never a session** (the founder's decision of 2026-09-04). A
+ * package's sessions are never taken for a cancellation, whatever the notice
+ * was, and the drawer says so out loud: a coordinator who remembers the old
+ * rule should be told the new one rather than left to infer it from a silence.
+ *
+ * **And what actually happened is reported, not assumed.** The route reads the
+ * charge back out of the ledger and hands over its id, so the panel after the
+ * event offers to forgive exactly the row that exists.
  *
  * **A visit the household has never been told about is a different act.**
  * `proposed` is a slot the practice is holding and has mentioned to nobody
@@ -169,10 +175,10 @@ export function CancelAppointmentDrawer({
     new Date(),
   );
 
-  // The same rule the route runs, given the same figure. Null only while the
-  // practice's own notice period is still being fetched: guessing at it and
-  // being wrong is worse than saying nothing for a moment.
-  const willBeLate =
+  // The same two rules the route and the ledger run, given the same figures.
+  // Null only while the practice's own policy is still being fetched: guessing
+  // at it and being wrong is worse than saying nothing for a moment.
+  const outcome =
     settings === null
       ? null
       : cancellationStatusFor(
@@ -180,7 +186,15 @@ export function CancelAppointmentDrawer({
           reason,
           new Date(),
           settings.noticeHours,
-        ) === 'cancelled_late';
+        );
+  const willBeLate = outcome === null ? null : outcome === 'cancelled_late';
+  // What it will cost, from billing's own rule rather than from this screen's
+  // reading of it. Null when nothing is charged — a visit called off in time,
+  // or one the practice itself is calling off.
+  const feeFils =
+    outcome === null || settings === null
+      ? null
+      : callOutFeeFor(outcome, reason, { callOutFeeFils: fils(settings.unfitFeeFils) });
 
   async function handleSubmit() {
     if (!note.trim()) return;
@@ -219,30 +233,30 @@ export function CancelAppointmentDrawer({
   }
 
   /**
-   * Give the session back, from here.
+   * Forgive the fee, from here.
    *
    * `docs/SPEC/billing.md` section 4.3 asks for "a one-click waiver with a
    * reason field", and this is the one moment a coordinator both knows it is
    * wanted and has already written the reason down — the sentence they typed
    * about what happened is exactly the reason a waiver needs. Sending them to
-   * another screen to find the credit again would be the click that never
-   * happens, and the family would keep paying for it.
+   * another screen to find the charge again would be the click that never
+   * happens, and the family would keep owing it.
    *
    * The route is billing's and so is the permission: a lead practitioner may
    * call a visit off and may not forgive the charge, which is a real
    * distinction and not one this screen argues with. A refusal is said plainly
    * and the way through to Billing stays.
    */
-  async function waive(entitlementId: string) {
+  async function waive(invoiceId: string) {
     setWaiver({ kind: 'saving' });
     try {
-      const res = await apiFetch(`/api/billing/entitlements/${entitlementId}/waiver`, {
+      const res = await apiFetch(`/api/billing/invoices/${invoiceId}/waiver`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-reason': note.trim() },
         body: JSON.stringify({ reason: note.trim() }),
       });
       if (res.ok) {
-        WaiveEntitlementResponse.parse(await res.json());
+        WaiveCallOutFeeResponse.parse(await res.json());
         setWaiver({ kind: 'given' });
         return;
       }
@@ -251,12 +265,12 @@ export function CancelAppointmentDrawer({
         message:
           res.status === 403
             ? 'Waiving a charge is the owner’s, an admin’s or finance’s. Ask one of them, or open Billing.'
-            : 'The session could not be given back from here. Open Billing and waive it there.',
+            : 'The fee could not be waived from here. Open Billing and waive it there.',
       });
     } catch {
       setWaiver({
         kind: 'refused',
-        message: 'The session could not be given back from here. Open Billing and waive it there.',
+        message: 'The fee could not be waived from here. Open Billing and waive it there.',
       });
     }
   }
@@ -300,32 +314,31 @@ export function CancelAppointmentDrawer({
                   ? `, inside the practice's ${state.outcome.noticeHours} hours' notice.`
                   : '.'}
               </Note>
-              {state.outcome.creditConsumed && waiver.kind !== 'given' ? (
+              {state.outcome.callOutFeeFils !== null && waiver.kind !== 'given' ? (
                 <Note tone="attention">
-                  It used one of the client&rsquo;s sessions. If it should not have, give it back
-                  now.
+                  A call-out fee of AED {formatFils(state.outcome.callOutFeeFils)} is on the
+                  client&rsquo;s account, and no session was taken. If the fee should not stand,
+                  waive it now.
                 </Note>
               ) : null}
               {waiver.kind === 'given' ? (
-                <Note>The session has been given back to the client.</Note>
+                <Note>The call-out fee has been waived. The client owes nothing for it.</Note>
               ) : null}
               {waiver.kind === 'refused' ? <Note tone="critical">{waiver.message}</Note> : null}
-              {!state.outcome.creditConsumed && state.outcome.status === 'cancelled_late' ? (
-                <Note tone="attention">
-                  The client had no session left to use for it, so nothing was taken. The practice
-                  decides whether to charge for this one.
-                </Note>
+              {state.outcome.callOutFeeFils === null &&
+              state.outcome.status === 'cancelled_late' ? (
+                <Note>Nothing was charged for it, and no session was taken.</Note>
               ) : null}
               <div className="stepper__submit">
-                {state.outcome.waiverEntitlementId !== null && waiver.kind !== 'given' ? (
+                {state.outcome.feeInvoiceId !== null && waiver.kind !== 'given' ? (
                   <Button
                     variant="primary"
                     disabled={
                       waiver.kind === 'saving' || note.trim().length < MINIMUM_WAIVER_REASON
                     }
-                    onClick={() => void waive(state.outcome.waiverEntitlementId as string)}
+                    onClick={() => void waive(state.outcome.feeInvoiceId as string)}
                   >
-                    {waiver.kind === 'saving' ? 'Giving it back…' : 'Give the session back'}
+                    {waiver.kind === 'saving' ? 'Waiving it…' : 'Waive the fee'}
                   </Button>
                 ) : null}
                 <Link className="button button--secondary" to="/admin/billing">
@@ -360,29 +373,30 @@ export function CancelAppointmentDrawer({
                   nothing: it is a slot the practice was holding, and the practice is releasing it.
                 </Note>
               ) : null}
-              {told && !tooEarly && willBeLate === true ? (
+              {told && !tooEarly && willBeLate === true && feeFils !== null ? (
                 <Note tone="attention">
                   {reason === 'unfit_to_attend'
                     ? 'A visit that cannot go ahead once the practitioner has arrived counts as ' +
-                      "late whatever notice was given: it uses one of the client's sessions."
-                    : `This is inside the practice's ${settings?.noticeHours} hours' notice, so it ` +
-                      "uses one of the client's sessions. It can be waived afterwards."}
+                      'late whatever notice was given. '
+                    : `This is inside the practice's ${settings?.noticeHours} hours' notice. `}
+                  A call-out fee of AED {formatFils(feeFils)} applies; no session is taken. It can
+                  be waived afterwards.
+                </Note>
+              ) : null}
+              {told && !tooEarly && willBeLate === true && feeFils === null ? (
+                <Note>
+                  {reason === 'practice_request'
+                    ? 'This is recorded as late, because that is what the calendar says, and it ' +
+                      'costs the family nothing: the practice is calling it off. No session is ' +
+                      'taken and no fee is charged.'
+                    : 'This is recorded as late, and it costs the family nothing. No session is ' +
+                      'taken and no fee is charged.'}
                 </Note>
               ) : null}
               {told && !tooEarly && willBeLate === false ? (
                 <Note>
                   This is outside the practice&rsquo;s {settings?.noticeHours} hours&rsquo; notice,
-                  so the client keeps the session.
-                </Note>
-              ) : null}
-              {told &&
-              !tooEarly &&
-              reason === 'unfit_to_attend' &&
-              settings !== null &&
-              settings.unfitFeeFils > 0 ? (
-                <Note>
-                  The practice&rsquo;s fee for this is AED {formatFils(settings.unfitFeeFils)}. It
-                  is not charged automatically; add it on the client&rsquo;s account in Billing.
+                  so there is no fee. The client keeps the session either way.
                 </Note>
               ) : null}
 

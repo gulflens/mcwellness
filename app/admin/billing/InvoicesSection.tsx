@@ -28,6 +28,7 @@ const KIND_LABELS: Record<InvoiceRow['kind'], string> = {
   session: 'Visit',
   package: 'Package',
   statement: 'Statement',
+  call_out_fee: 'Call-out fee',
 };
 
 type State =
