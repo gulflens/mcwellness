@@ -9,6 +9,7 @@ import {
   renderReport,
   WORDS,
 } from '../../domain/reports/document';
+import { BAND_RGB } from '../../domain/shared';
 import { isListedFamilyName, isListedGivenName } from '../../db/seed/names';
 import type {
   PracticeSnapshot,
@@ -297,13 +298,59 @@ describe('a rendered progress report', () => {
     expect(marks).toHaveLength(4 + 3 + 2);
   });
 
-  it('names no band on the paper: the ink strip stands on its own', () => {
-    // The design brief admits a band only as the slice's hue, and the writer
-    // has none yet (docs/CHANGE-REQUESTS/reports-01.md, request R3). A line of
-    // words naming the bands put a fact on the page the specification keeps
-    // off it, and read as a legend for a colour nothing had drawn.
+  it('names no band on the paper: the hue is the whole of what says which', () => {
+    // The design brief admits a band only as the slice's own hue, which the
+    // strip now carries (docs/CHANGE-REQUESTS/reports-01.md, request R3). A
+    // line of words naming the bands put on the page a fact the specification
+    // keeps off it, and it stays off.
     expect(text).not.toContain('Bands trained');
     expect(text).not.toContain('Theta');
+  });
+
+  it('draws each slice in its band’s own colour, and a slice with no band in ink', () => {
+    const pages = layout(report(), fonts);
+    const rules = pages.flatMap((page) => page.ops).filter((op) => op.kind === 'rule');
+    // The slices, in the order the sessions were delivered: the marks narrower
+    // than a quarter of the measure, minus the hairlines (half a point wide)
+    // and the empty ones ahead (a hairline high).
+    const slices = rules.filter(
+      (op) => op.width < 120 && op.width > 1 && (op.thickness ?? 0) > 1.2,
+    );
+    expect(slices).toHaveLength(4);
+    expect(slices.map((op) => op.rgb)).toEqual([
+      BAND_RGB.theta,
+      BAND_RGB.alpha,
+      // The third slice recorded no band, so it is drawn in ink: a colour
+      // invented for it would say a band was trained that was not.
+      undefined,
+      BAND_RGB.alpha,
+    ]);
+    // The slice with no band still carries the ink grey it always did.
+    expect(slices[2]?.grey).toBe(0);
+  });
+
+  it('leaves the hairlines and the sessions ahead exactly as they were', () => {
+    const pages = layout(report(), fonts);
+    const rules = pages.flatMap((page) => page.ops).filter((op) => op.kind === 'rule');
+    const marks = rules.filter((op) => op.width < 120);
+    // A brain map is a day, not a band, and a session not yet delivered has
+    // trained nothing: neither may borrow a hue.
+    const uncoloured = marks.filter((op) => op.rgb === undefined);
+    expect(uncoloured).toHaveLength(2 + 3 + 1);
+    for (const op of uncoloured) expect(op.grey).not.toBeUndefined();
+  });
+
+  it('puts hue nowhere on the page but the ribbon', () => {
+    // docs/DESIGN-BRIEF.md section 5: the ribbon is "the one place hue enters
+    // a report". Every other op on every page — the type, the section rules,
+    // the frame — is ink or grey.
+    const pages = layout(report(), fonts);
+    const coloured = pages
+      .flatMap((page) => page.ops)
+      .filter((op) => (op.kind === 'rule' ? op.rgb : op.style.rgb) !== undefined);
+    expect(coloured.every((op) => op.kind === 'rule')).toBe(true);
+    // Three of the four slices carry a band; nothing else on the report does.
+    expect(coloured).toHaveLength(3);
   });
 
   it('carries the ribbon’s legend in both languages', () => {

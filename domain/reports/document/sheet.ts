@@ -262,9 +262,22 @@ export class Sheet {
   /**
    * A rule on a baseline of the caller's choosing, which is what the ribbon
    * needs: its slices sit at heights the strip decides, not at the cursor.
+   *
+   * **The one place a colour may be asked for.** `rgb` is the band's own hue
+   * (`BAND_RGB`, domain/shared/bands.ts); the writer takes the grey path when
+   * it is absent, which is every other rule on every page. Nothing else on
+   * this sheet offers a colour, so the design brief's "the one place hue
+   * enters a report" is held by the shape of the class and not by a comment.
    */
-  ruleAt(y: number, x: number, width: number, thickness: number, grey: number): void {
-    this.ops.push({ kind: 'rule', x, y, width, thickness, grey });
+  ruleAt(
+    y: number,
+    x: number,
+    width: number,
+    thickness: number,
+    grey: number,
+    rgb?: readonly [number, number, number],
+  ): void {
+    this.ops.push({ kind: 'rule', x, y, width, thickness, grey, ...(rgb ? { rgb } : {}) });
   }
 
   /**

@@ -1,3 +1,4 @@
+import { BAND_RGB } from '../../shared/bands';
 import type { Page, FontSet } from '../../shared/document';
 import type {
   PracticeSnapshot,
@@ -55,16 +56,21 @@ import {
  * issue, because a paragraph a person wrote is not something a renderer may
  * translate.
  *
- * **The ribbon is drawn in ink, and its bands are named in words.** The design
- * brief gives each band a hue and calls the ribbon the one place hue enters a
- * report; the shared PDF writer sets type and rules in greyscale and has no
- * colour operator, and `domain/shared/document` is the shared zone this
- * worktree may not edit. So the printed strip carries the shape — a slice per
- * session, its height the recording's quality, a hairline at each brain map,
- * empty slices ahead — and says which bands were trained underneath it in
- * words. The screen's own ribbon carries the hue from the tokens.
- * `docs/CHANGE-REQUESTS/reports-01.md` asks the trunk for the colour operator
- * that would let the paper carry it too.
+ * **The ribbon carries the band's hue, and it is the only thing on the page
+ * that carries any.** The design brief gives each band a colour and calls the
+ * ribbon "the one place hue enters a report" (section 5). The printed strip
+ * draws the shape — a slice per session, its height the recording's quality, a
+ * hairline at each brain map, empty slices ahead — and each slice in the
+ * colour of the band that visit trained, taken from `BAND_RGB`, which is
+ * `app/shell/tokens.css`'s own five values. So the strip on paper and the
+ * strip on the screen are the same figure.
+ *
+ * Nothing else here asks for a colour. `Sheet.line` offers none at all, and
+ * `Sheet.ruleAt` is the only primitive that takes one; every other rule and
+ * every word on both pages is ink or grey. The bands are still never named in
+ * words: the hue is the whole of what says which
+ * (docs/CHANGE-REQUESTS/reports-01.md, request R3, closed in the trunk's
+ * round 34).
  *
  * **Nothing here names an electrode site, a band threshold or a protocol.**
  * There is no field on any type in this folder that could hold one.
@@ -263,7 +269,18 @@ function ribbonFigure(sheet: Sheet, ribbon: Ribbon): void {
     const quality = slice.quality === null ? RIBBON.floor : Math.max(RIBBON.floor, slice.quality);
     const height = Math.max(0.6, quality * RIBBON.height);
     const x = LEFT + at * step;
-    sheet.ruleAt(floor + height / 2, x, sliceWidth, height, INK);
+    // The slice's own hue, where the visit recorded which band was trained,
+    // and ink where it did not. `BAND_RGB` is `app/shell/tokens.css`'s five
+    // `--<band>-base` values (domain/shared/bands.ts), proved against that
+    // file, so the strip on paper is the strip on the screen.
+    sheet.ruleAt(
+      floor + height / 2,
+      x,
+      sliceWidth,
+      height,
+      INK,
+      slice.band === null ? undefined : BAND_RGB[slice.band],
+    );
     if (slice.mapMark) {
       // A hairline the full height of the strip, in front of the slice it
       // marks: a brain map is a day, not a session, and it sits between them.
@@ -304,15 +321,19 @@ function ribbonFigure(sheet: Sheet, ribbon: Ribbon): void {
   );
   sheet.down(sheet.wrap(legend.ar, RIGHT - LEFT, SIZE.small, { rtl: true }).length * SMALL_LINE);
 
-  // **The bands are not named.** The strip carries the whole of the figure's
-  // shape in ink — a slice per session at the height of its recording's
-  // quality, a hairline at each brain map, empty slices for the sessions ahead
-  // — and the design brief admits a band only as that slice's hue. Printing
-  // "Bands trained: Theta, Alpha" put on the page a fact the specification
-  // keeps off it, and it read as a legend for a colour nothing had drawn. The
-  // ink strip stands on its own until the writer has a colour operator
-  // (docs/CHANGE-REQUESTS/reports-01.md, request R3); the console's own ribbon
-  // carries the hue from the tokens meanwhile.
+  // **The bands are still not named, and now they do not need to be.** The
+  // design brief admits a band as the slice's own hue and nothing else, and
+  // since the trunk's round 34 the writer can set one
+  // (docs/CHANGE-REQUESTS/reports-01.md, request R3). Printing "Bands trained:
+  // Theta, Alpha" put on the page a fact the specification keeps off it, and
+  // it read as a legend for a colour nothing had drawn; the colour is drawn
+  // now, and the words stay off.
+  //
+  // Three things on the strip deliberately carry no hue. A hairline marks a
+  // brain map, which is a day rather than a band. An empty slice is a session
+  // not yet delivered, which has trained nothing. And a slice whose visit
+  // recorded no band is ink: a colour chosen for it would say a band was
+  // trained that was not.
 }
 
 // --------------------------------------------------------------------------
