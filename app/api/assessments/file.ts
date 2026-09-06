@@ -32,7 +32,7 @@ import {
  * **One media type.** `application/pdf` and nothing else until the operator
  * names the practice's equipment (section 10, decision 3), and the bytes are
  * checked against the type as well as the caller's word for it
- * (`domain/client/fileSignature.ts`): a route that files whatever bytes it is
+ * (`domain/shared/fileSignature.ts`): a route that files whatever bytes it is
  * handed under whatever type it is told will one day hold an HTML page called
  * a report, and a signed link to it is a link a browser may render.
  *

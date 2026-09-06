@@ -13,6 +13,18 @@
  * Deliberately small: four magic numbers, one question, no parsing. It says
  * whether the bytes are consistent with the declared type, never what the
  * file contains.
+ *
+ * **Why it is here rather than in `domain/client`, where it was written.**
+ * Three streams reached the same wall: a route that writes a `document` row
+ * has to ask this question, and `docs/SPEC/OWNERSHIP.md` rule 3 forbids one
+ * module importing another module's `domain/`. The session capture and
+ * scheduling streams wrote the note; the assessment stream wrote its own
+ * five-byte copy for one media type and asked for the move (request 1 of
+ * docs/CHANGE-REQUESTS/assessment-01.md). This is the answer: the question
+ * belongs to nobody in particular, so it lives where everybody may read it —
+ * the same move `formatFils` made, for the same reason.
+ *
+ * `domain/client` re-exports it, so no caller had to move with it.
  */
 
 /** The media types this platform will hold as evidence or as a filed document. */

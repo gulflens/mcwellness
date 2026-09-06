@@ -8,6 +8,8 @@ export { addFils, fils, formatFils } from './fils';
 export type { Fils } from './fils';
 export { ROLES, canActor, hasRole, isCredentialValidOn, isoDateIn } from './actor';
 export type { Action, ActionContext, Actor, Capability, IsoDate, Role } from './actor';
+export { KNOWN_MIME_TYPES, bytesMatchMimeType, isKnownMimeType } from './fileSignature';
+export type { KnownMimeType } from './fileSignature';
 export {
   EMIRATES_ID_DIGITS,
   formatEmiratesId,

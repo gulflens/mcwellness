@@ -67,7 +67,7 @@ const SELECT_LOGO =
  * The two file signatures this route accepts, checked against the bytes
  * themselves rather than against what the caller said they are.
  *
- * `domain/client/fileSignature.ts` holds the general version, over four media
+ * `domain/shared/fileSignature.ts` holds the general version, over four media
  * types; it is the client-record stream's and `docs/SPEC/OWNERSHIP.md` rule 3
  * says a module never imports another module's `domain/`. Two magic numbers
  * are not worth a change request, and the rule they enforce is the same one:

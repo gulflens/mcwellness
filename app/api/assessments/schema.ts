@@ -30,7 +30,7 @@ export const FILE_LINK_TTL_SECONDS = 300;
  * (spec section 10, decision 3). Twenty megabytes is a vendor's own PDF
  * report with its pictures in it; `application/pdf` alone until the operator
  * names the practice's equipment, and a new file signature is a change request
- * to `domain/client/fileSignature.ts` rather than a guess made here.
+ * to `domain/shared/fileSignature.ts` rather than a guess made here.
  */
 export const ASSESSMENT_FILE_LIMIT_BYTES = 20 * 1024 * 1024;
 export { ASSESSMENT_FILE_MIME_TYPE };

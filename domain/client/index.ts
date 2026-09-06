@@ -27,8 +27,16 @@ export {
   isIdentityDocumentKind,
 } from './documentKinds';
 export type { ClientUploadKind, DocumentUploadRefusal } from './documentKinds';
-export { KNOWN_MIME_TYPES, bytesMatchMimeType, isKnownMimeType } from './fileSignature';
-export type { KnownMimeType } from './fileSignature';
+// Moved to domain/shared in the trunk's round 31, because three streams need
+// the same question and only one of them could import it (OWNERSHIP.md rule
+// 3). Re-exported here so no caller moved with it, exactly as
+// domain/billing/money.ts re-exports formatFils.
+export {
+  KNOWN_MIME_TYPES,
+  bytesMatchMimeType,
+  isKnownMimeType,
+  type KnownMimeType,
+} from '../shared/fileSignature';
 export { formatMrn } from './formatMrn';
 export { isMinor } from './isMinor';
 export { nextMrn } from './nextMrn';
