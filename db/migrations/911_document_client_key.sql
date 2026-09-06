@@ -33,10 +33,20 @@
 -- creates the constraint and the other finds it. On a database carrying the
 -- trunk's range and not the assessment stream's, this file is the only one
 -- that ever creates it, which is why it exists at all rather than living in
--- 502 alone.
+-- 502 alone. Both orders are proved rather than reasoned about: the case in
+-- `tests/db/constraints.test.ts` runs each file's block, read from the file
+-- itself, against a throwaway table.
 --
--- Needs: 060 (document), 099 (document_tenant_id_id_key, the key this one
--- widens rather than replaces)
+-- **099 is the precedent and not a dependency.** Migration 099 gave every core
+-- table `(tenant_id, id)` so a composite foreign key had something to point
+-- at, and `invoice_tenant_id_client_key` (402) and
+-- `contact_tenant_id_client_key` (601) are the client-scoped form of the same
+-- move. Nothing below depends on `document_tenant_id_id_key`, though: this key
+-- stands on its own columns and would be created identically if 099 had never
+-- been written, so naming it in the `Needs:` line claimed a dependency that
+-- does not exist.
+--
+-- Needs: 060 (document)
 
 do $$
 begin
