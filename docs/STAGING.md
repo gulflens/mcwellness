@@ -789,6 +789,187 @@ synthetic data only — but it is still a credential that briefly left the
 place it belongs, and rotating it from the project's API settings is the
 operator's call to make, not this pass's to skip past.
 
+## What was done on 2026-09-06, ninth pass: brain maps and reports
+
+Main was fast-forwarded from `ad4428d` to `5e008fb`: pull requests 78
+(the trunk's writer move, and a copied-Arabic fix, application code only),
+79 (a documentation-only hand-over update), 80 (piece nine's hosting build),
+81 (the assessment stream), 82 (the trunk's audit fix — an identifier read
+as a telephone number and was wrongly redacted) and 83 (the reports
+stream). Of the five the brief named, only 81 and 83 touch `db/`; 78, 80 and
+82 are application code, tests and documentation, and owed staging nothing
+of their own.
+
+- **The fifty-seven rows already there were checked before anything was
+  applied.** Every file's own sha256, computed straight off the files on
+  disk, matched the checksum staging had recorded for it exactly (a small
+  script, not the runner itself, since the runner needs a database password
+  the laptop does not hold) — no merged migration had been edited behind the
+  runner's back.
+- **Six migrations were applied** one at a time through Supabase's migration
+  tool, in filename order: `106_erase_assessment.sql`,
+  `107_erase_report.sql`, `500_assessment.sql`, `501_assessment_document.sql`,
+  `600_report.sql` and `601_report_delivery.sql`. Each was applied under the
+  audit context the runner sets — `app.reason` naming the file, and a fresh
+  request id — with the bookkeeping row written immediately after, carrying
+  the same sha256 the runner would compute. `schema_migration` now holds
+  **sixty-three rows**, one per file in `db/migrations`.
+- **106 and 107 were read before being trusted to run out of the order they
+  look like they need.** Both replace `app.erase_client` and both reach into
+  `assessment`, `assessment_document`, `report` and `report_delivery` —
+  tables that do not exist until 500, 501, 600 and 601 run after them in the
+  runner's own numeric order. Reading the bodies shows why that is fine: every
+  reach is guarded with `to_regclass('public.<table>')`, evaluated inside the
+  function each time `app.erase_client` is *called*, not when it is
+  *created*. `create or replace function` never touches the tables its body
+  mentions, so 106 and 107 applied cleanly against a database that did not
+  yet have the 500s or the 600s, exactly as 105 and 104 already do for the
+  ranges ahead of them.
+- **601's new key on `contact` was checked, not assumed.** It adds
+  `contact_tenant_id_client_key unique (tenant_id, id, client_id)`, which the
+  reports change request itself argues can never fail — `id` is already the
+  primary key, so the triple is a superset of a key that already holds.
+  Checked anyway: `select count(*), count(distinct (tenant_id, id,
+  client_id))` on the table's 23 rows before applying, 23 and 23, so nothing
+  stood to be refused.
+- **Grants were checked after 500 and after 600**, as the eighth pass checked
+  them after 306. `assessment` and `report_delivery` grant `app_role` select
+  and insert; `assessment_document` grants select alone; `report` grants
+  select, insert and update; `report_number_series` grants app_role nothing
+  at all, not even select, matching the counter's own comment — the only door
+  onto it is `app.next_report_number()`. On the callable functions
+  (`assessment_context`, `file_assessment_document`, `issue_report`,
+  `file_report_document`, `next_report_number`, `report_was_delivered`),
+  `app_role` holds execute and nothing else does; the five trigger and guard
+  functions behind them (`assessment_refuse_rewrite`,
+  `assessment_document_is_the_clients`, `guard_report_write`,
+  `guard_report_delivery_write`, `default_report_number_series`) hold no
+  grant to `app_role` at all, correct for functions that are only ever fired,
+  never called.
+- **Twenty policy files were re-applied**, in path order, split across three
+  calls for the tool's own size limit (the same reason the seventh and
+  eighth passes split theirs): `db/policies/assessment/access.sql` and
+  `tenant_isolation.sql`, and `db/policies/reports/reports.sql`, are the
+  three new arrivals. One hundred and thirty-nine policies stand on `public`
+  afterwards — one hundred and twenty-six before this pass, plus five on the
+  assessment tables and eight on the report tables — matching what a fresh
+  local database carries for the same sixty-three migrations.
+- **The seed owed nine rows, and only that.** `git log ad4428d..5e008fb --
+  db/seed` shows one commit, adding a baseline brain map, a re-map ninety
+  days later, and one questionnaire total for each of three synthetic
+  households — six qEEG rows and three questionnaire rows, nine in all — and
+  nothing for the reports stream, which seeds no report (`docs/SPEC/reports-v1.md`
+  section 11 asks for a synthetic report drafted, signed and delivered on
+  staging itself, not seeded rows, and that is a walk for the operator's own
+  session, not this pass's to shortcut). `pnpm seed:sql`'s renderer was run
+  with `.env.staging` as the environment file
+  (`node --env-file=.env.staging --import tsx db/seed/render-cli.ts`), read
+  once into a scratch file, never printed, and deleted once the nine
+  `insert into assessment` statements were taken from it. `assessment` held
+  zero rows before this pass, so there was nothing to reconcile against —
+  the nine statements were applied verbatim, in one transaction, under the
+  seed's own reason (`synthetic seed`) with the real owner account stamped as
+  actor and holding her own roles (`owner, lead_practitioner`; the seed's
+  synthetic `created_by` on each row is the render's own fixed placeholder
+  id, exactly as the render writes it, and is a separate thing from who
+  performed the write).
+
+  **One row was mistyped by hand and caught before this record was written,
+  not after.** Copying the ninth statement's four-thousand-character `derived`
+  payload by eye dropped one figure (`O1` `gamma`) and duplicated two others
+  in its place. A full programmatic comparison — every one of the nine rows
+  parsed back out of the rendered file and diffed field by field, and every
+  brain-map row's twenty-five figures compared as a set rather than eyeballed
+  — caught the one mismatch afterwards. `assessment` refuses every update and
+  delete outside an erasure, by design (migration 500's own guard), so the
+  fix was not a quiet `update`: `app.begin_erasure()`, a `delete` of the one
+  row, the correct `insert`, then `app.end_erasure()`, under a reason naming
+  the mistake plainly. The three functions are owned by the migration role
+  and granted to nobody else, and the connection this pass used holds that
+  role's own privileges, so the call needed no special door. Re-run of the
+  same full comparison afterwards found all nine rows byte-identical to the
+  render. The lesson taken, plainly: a payload this size is copied by a
+  script's own diff, not by an eye reading four thousand characters twice.
+- **Fingerprinted against a fresh `pnpm db:reset && pnpm db:migrate`** on
+  `mcwellness-trunk-2` (its own database, port 5442), already fetched to the
+  same `5e008fb` this pass's own checkout sits on. Sixty-three migrations and
+  twenty policy files applied cleanly to an empty database. Eight parts
+  compared by content rather than by count alone, with ordinal position left
+  out of every one of them (the standing note from the fifth, sixth and
+  eighth passes about `schema_migration.checksum` and `invoice.supplied_on`
+  sitting in a different column position is therefore not a difference this
+  method could ever surface, by construction, not by luck): columns (1,221,
+  by schema, table, name, type, nullability and default), constraints
+  (1,144, with PostgreSQL 17's synthetic not-null constraint names folded to
+  one label as the eighth pass's own note describes), indexes (469),
+  triggers (292), policies (139), row-level security flags (72 tables),
+  functions (80, by schema, name, argument list, return type, volatility,
+  security and language), and the grants `app_role` holds on `public` and
+  `app` together (146: 106 table grants and 40 function grants) against what
+  `PUBLIC`, `anon` and `authenticated` hold on either schema (nothing, on
+  both sides). All eight matched exactly — for the first time across every
+  pass this file records, with no difference left standing aside as expected
+  and benign.
+- **The audit chain verifies** end to end, `app.verify_audit_chain()`
+  returning null throughout, over 947 rows. Twelve carry this pass's own
+  request ids: one insert into `report_number_series` (migration 600's own
+  data step, backfilling the counter for the practice that already exists,
+  the same thing 402 once did for the invoice number), nine assessment
+  inserts, and the delete-then-insert pair that corrected the mistyped row
+  above.
+- **The demo needed no fresh visit row, for the first time.** The confirmed
+  home visit for MW-000005 already stood on **2026-09-06 at 10:00–10:45
+  Dubai time** (06:00–06:45 UTC, `busy_end` 07:15 UTC) — today, when this
+  pass ran — left over from work earlier the same day that this pass's brief
+  did not touch. `app.checkin_context` answers `found: true`, two active
+  consents (`home_visit`, `participation`), `kit_calibration_overdue: false`,
+  `kit_id: null`, exactly as the eighth pass left it. MW-000005 is also one
+  of the three households the assessment seed just gave a brain map to, so
+  the same client now carries both a bookable visit and a measurement
+  history.
+- **The two authenticated routes named in the brief were called, not just
+  reasoned about.** A magic link was minted server-side for the real owner's
+  account (`generateLink`, which returns a link without sending mail) and
+  exchanged for a session with the anon key, exactly as the eighth pass did
+  to prove the routing fallback. `GET /api/routing/day?date=2026-09-06`
+  answered `200` with `{"legs":[],"pictureUrl":null,"mapAvailable":false}` —
+  an empty leg list is correct with one confirmed visit and nothing to draw a
+  line between, and `mapAvailable: false` is the same standing wait on the
+  practice's Google Maps key the eighth pass recorded, unrelated to this
+  pass. `GET /api/clients/00000008-0000-4000-8000-000000000005/assessments`
+  answered `200` with MW-000005's own two qEEG readings and their figures,
+  proving the new route, the new table and the new seed rows all agree end
+  to end under the owner's own account.
+- **Advisors were checked after the DDL.** Every `rls_enabled_no_policy`
+  finding is a table this pass did not touch and every earlier pass already
+  carries by design (`schema_migration`, `invoice_number_series`, the
+  audit-log partitions and their default, and `app`'s own bookkeeping
+  tables); `assessment`, `assessment_document`, `report`, `report_delivery`
+  and `report_number_series` all carry policies and none is flagged. The one
+  `WARN` is leaked-password protection, unrelated to this pass and already
+  known (`docs/SECURITY.md`). Nothing new.
+
+### What the reports stream defaults for a minor's own login, named for the operator
+
+`docs/CHANGE-REQUESTS/reports-01.md` item 4 records a default this build took
+without asking: **a young person's own portal login can read an issued report
+about themselves.** The client app already hides the money screen from a
+minor's own sign-in, because a household's balance is the household's
+business and not a child's to see; a report is treated differently on
+purpose. Specification section 7.3 gives the household "issued reports for
+their own client, and nothing else" without carving the client's own age out
+of that sentence, and the build read that literally: the report itself is
+about the person, not the household's finances, so their own login is not
+narrowed the way the money screen is. Nothing about consent or
+`can_receive_reports` changes — those still govern what the *practice sends
+out*; this is only about a household member reading their own record on the
+device they are already signed into. Worth the operator's own view, since it
+was Claude's default and not an instruction: if a minor should not read their
+own clinical report unaccompanied, the fix is a narrowing on
+`db/policies/reports/reports.sql`'s `report_readers` policy, in the same
+shape `portal/money.sql` already narrows the money tables, not a rewrite of
+the table or the route.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
