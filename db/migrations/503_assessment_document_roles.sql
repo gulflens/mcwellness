@@ -41,7 +41,7 @@
 -- (.claude/rules/data-model.md). Everything here is forward-only.
 --
 -- Needs: 500 (assessment), 501 (assessment_document, the role type and
--- app.file_assessment_document), 502 (the composite key on the link row)
+-- app.file_assessment_document)
 
 ------------------------------------------------------------------------------
 -- 1. The words. The rename first, because the constraint below names the new
