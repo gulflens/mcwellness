@@ -1946,6 +1946,21 @@ branch worth proving.
 triples are the five `--<band>-base` declarations, so the paper and the screen
 cannot drift apart. That test is the reason no component needed a hex literal.
 
+**One home means one, so the other two copies went as well.** The request named
+two, but a search for the five keys found four: `domain/session/events.ts`'s
+`BAND_KEYS`, which is what a telemetry chunk's per-band amplitudes are checked
+against, and `MAP_BANDS` in `db/seed/generate.ts`, which is what every brain-map
+fixture in the seed is built from. `events.ts` now re-exports the shared list
+under the two names it already exported, the way `domain/reports/types.ts`
+does, and its test reads the re-export and checks that `BandAmplitudes` accepts
+exactly those five keys in that order. `generate.ts` imports `BANDS` — it
+already imported `domain/shared/dates` and `domain/shared/storage`, so it was
+one import — and the local list went; a fixture whose bands could drift from
+the software's would prove nothing about the screens and reports it exists to
+fill. `grep "'delta'"` over the repository now finds `domain/shared/bands.ts`
+and nothing else. `events.ts` is `session-capture`'s path and is named in the
+file list below and in the widening note.
+
 ### 2. Colour reaches paper
 
 `reports-01.md` R3. **Closed.**
@@ -2091,10 +2106,16 @@ could not be made without.
 `app/admin/clients/ClientDrawer.test.tsx` — a `MemoryRouter` around its three
 renders and nothing else. `ClientDrawer.tsx` itself is untouched.
 
+**session-capture** (item 1)
+`domain/session/events.ts` and `domain/session/events.test.ts` — the fourth
+copy of the five band keys, replaced by a re-export of the shared list under
+the two names this folder already exported. No caller in that stream moved.
+
 Everything else is the shared zone or the trunk's own: `domain/shared/bands.ts`
 with its test, `domain/shared/index.ts`, `domain/shared/document/pdf.ts` with
-its test; `app/shell/shell.css`; `tests/security/xss.test.tsx`; `docs/SPEC/`,
-`docs/SECURITY.md` and `docs/CHANGE-REQUESTS/`. No migration and no policy
+its test; `db/seed/generate.ts`, whose `MAP_BANDS` was a fifth copy of the five
+and now imports `BANDS`; `app/shell/shell.css`; `tests/security/xss.test.tsx`;
+`docs/SPEC/`, `docs/SECURITY.md` and `docs/CHANGE-REQUESTS/`. No migration and no policy
 file: nothing this round decided is a database's to enforce, and the one page
 that describes what the database enforces is documentation of policies that did
 not change. `docs/SPEC/00-data-model.md` is deliberately **not** edited: it
@@ -2155,10 +2176,18 @@ not have to find it in a diff.
     wrapping three early returns rather than adding it to the ready case. A
     record nothing has touched is exactly a record somebody might want the
     access report for.
-11. **`domain/session/events.ts` keeps its own `BAND_KEYS`.** It is a fourth
-    copy of the same five and it is `session-capture`'s path, which this round
-    is not widened into. It is one line to close and it is written up under
-    "What the streams should know" rather than fixed here (OWNERSHIP rule 1).
+11. **~~`domain/session/events.ts` keeps its own `BAND_KEYS`.~~ Reversed in the
+    fix round.** It was left standing as `session-capture`'s path, written up
+    for that stream rather than closed here. The review's reading is the right
+    one: while a fourth copy stood — and a fifth, `MAP_BANDS` in
+    `db/seed/generate.ts`, which is the trunk's own path and was named nowhere
+    — "the five bands have one home" was a claim this round could not make, in
+    `bands.ts`, in `qa-01.md` or in item 1 above. Both are closed: `events.ts`
+    re-exports the shared list under `BAND_KEYS` and `BandKey`, `generate.ts`
+    imports `BANDS`, and the widening was extended to name `events.ts` and its
+    test. The alternative — leaving them and rewriting the claim to say which
+    copies stand and why — would have left the request half answered for the
+    sake of a boundary that a one-line re-export does not strain.
 12. **`rgb` sits beside `grey` rather than replacing it.** A caller that passes
     both gets the colour; every caller that passes neither is exactly where it
     was, which is the whole promise of the item.
@@ -2204,12 +2233,15 @@ the amendment.
 test that mounts the drawer, or the record timeline on its own, needs the same
 wrapper.
 
-**session-capture.** `domain/session/events.ts` still declares its own
-`BAND_KEYS` and `BandKey` — the fourth copy of the design brief's five. It is
-one line to close, the way `domain/reports/types.ts` did:
-`export { BANDS as BAND_KEYS } from '../shared/bands';` with the matching type
-re-export, plus a local `import type` because a type re-export does not bring
-the name into scope. Not done here, because that is your path.
+**session-capture.** `domain/session/events.ts`'s `BAND_KEYS` and `BandKey` are
+`domain/shared/bands.ts`'s now, re-exported under the two names this folder
+already exported, the way `domain/reports/types.ts` does. **Nothing that
+imports them moved** — `domain/session/index.ts` re-exports the same two names,
+and `BandAmplitudes` still declares the same five optional keys, which
+`events.test.ts` now checks against the shared list rather than against a
+second copy written beside it. The file was left alone in the round itself and
+closed in the fix round, so it is named in the widening note; that is the whole
+of the trunk's reach into this path.
 
 **Everyone.** A colour on a document is `Style.rgb` and the rule op's `rgb`,
 each a triple from `domain/shared/bands.ts` and nowhere else — no hex literal,
