@@ -70,11 +70,11 @@
 -- what `entitlement`'s own waiver does with a credit, in the shape this table
 -- allows.
 --
--- Needs: 010 (tenant), 020 (app_user), 080 (app.audit_row), 100
--- (app.current_actor_id), 200 (appointment), 400 (vat_setting), 402 (invoice,
--- invoice_line, app.next_invoice_number), 404 (billing_exception,
--- app.billing_on_appointment_charged, app.billing_ledger), 406
--- (app.tenant_charges_vat, invoice.supplied_on). `scheduling_setting` (202) is
+-- Needs: 000 (app.current_tenant_id), 020 (app_user), 095
+-- (app.actor_has_role), 100 (app.current_actor_id), 200 (appointment), 400
+-- (vat_setting), 402 (invoice, invoice_line, app.next_invoice_number), 404
+-- (billing_exception, app.billing_on_appointment_charged, app.billing_ledger),
+-- 406 (app.tenant_charges_vat, invoice.supplied_on). `scheduling_setting` (202) is
 -- deliberately absent: it is another stream's table and apply order across
 -- ranges is not fixed (docs/SPEC/OWNERSHIP.md), so it is named only inside a
 -- plpgsql body, which resolves its columns when it is called rather than when
