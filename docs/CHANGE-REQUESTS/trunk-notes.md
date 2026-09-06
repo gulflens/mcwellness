@@ -2195,7 +2195,9 @@ not have to find it in a diff.
     the path that files a household's most personal document, and a rendered
     black rule is a smaller fault than a refusal to render at all; the values
     come from a table proved against `tokens.css`, so nothing reachable can
-    send one.
+    send one. The default stands; the branch is no longer untested — the fix
+    round added a triple with `NaN` in it and asserts the component reaches the
+    stream as `0` and that the word never does.
 14. **The rule's stroke is not tracked in the fill state.** It has always sat
     inside its own `q`/`Q`, so what it sets is discarded at the `Q` and the fill
     state genuinely does not need to know a rule happened. Tracking it would

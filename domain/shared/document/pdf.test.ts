@@ -309,6 +309,30 @@ describe('a document that carries the ribbon’s hue', () => {
     expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toContain('0 0.50 1 rg');
   });
 
+  it('writes 0 for a component that is not a finite number at all', () => {
+    // The clamp answers a non-finite component with 0 rather than with the
+    // operator `NaN 0.50 0 rg`, which a reader is entitled to refuse, to clamp
+    // itself, or to draw something nobody chose. Nothing reachable sends one —
+    // every triple in the repository comes from `domain/shared/bands.ts` and
+    // is proved against `tokens.css` — but this is the path that files a
+    // household's most personal document, and a black component is a smaller
+    // fault than a page that will not open (the round's default 13).
+    const page: Page = {
+      ops: [
+        {
+          kind: 'text',
+          x: 56,
+          y: 700,
+          text: 'Hue',
+          style: { font: 'regular', size: 10, rgb: [Number.NaN, 0.5, 0.25] },
+        },
+      ],
+    };
+    const stream = streamOf(renderPdf([page], fonts, 'Synthetic'));
+    expect(stream).toContain('0 0.50 0.25 rg');
+    expect(stream).not.toContain('NaN');
+  });
+
   it('goes back to grey when the next op has no colour, and to colour again after', () => {
     const page: Page = {
       ops: [
