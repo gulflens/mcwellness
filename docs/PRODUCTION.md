@@ -145,12 +145,99 @@ migration's and never this session's.
    Supabase dashboard, under Authentication → Users → "Add user": her real
    email, a real password of her own choosing, "Auto Confirm User" ticked.
    This pass created no accounts of any kind and no user of any kind — the
-   brief's own instruction — so there is nothing on production yet for that
-   account to link to; linking it to an `app_user` row (`update app_user set
-   auth_id = '<the id the dashboard assigns>' where ...`) is a later pass's
-   work, once a practice identity exists to link it against. The assistant
-   must never create sign-in accounts, on production any more than on
-   staging.
+   brief's own instruction. The assistant must never create sign-in accounts,
+   on production any more than on staging. What that account is then linked
+   to, and how the practice it belongs to comes into being, is the next
+   section: **The first practice**, which does that linking in one statement
+   rather than by hand.
+
+## The first practice
+
+The project has a schema and nothing in it, so nobody can sign in: there is
+no practice for an account to belong to. This section is how the practice and
+its owner come into being. It is done once, it takes a few minutes, and every
+step of it is the operator's own work — the assistant never creates a sign-in
+account and never holds a production connection.
+
+**Before anything, migration `956_bootstrap_practice.sql` must be on the
+project.** It is applied the way every other migration on this project was:
+one file through the Supabase migration tool, under its own audit context,
+followed by its bookkeeping row in `schema_migration`. Until it is there, the
+statement below answers that the function does not exist.
+
+### Step 1 — the owner's sign-in account
+
+Supabase dashboard → **Authentication** → **Users** → **Add user** → **Create
+new user**. Her real email address, a password she chooses herself, and tick
+**Auto Confirm User** so there is no confirmation email to wait for. The
+dashboard then shows the account in the list with a **User UID** beside it: a
+long string of letters, digits and dashes. Copy it — the next step needs it,
+and it is the one thing that ties the sign-in to the practice.
+
+### Step 2 — the practice, in one statement
+
+Open the **SQL editor**, with the project reference `ipiluvnlnzdbolbqwtpl`
+confirmed in the address bar first, and run this, replacing each bracketed
+line with the real value:
+
+```sql
+select * from app.bootstrap_practice(
+  '[the practice''s legal name, exactly as on the trade licence]',
+  '[the same name in Arabic, or null if there is not one yet]',
+  '[the User UID copied in step 1]',
+  '[the owner''s name, as the app should greet her]',
+  '[the owner''s email, the same address as the account in step 1]'
+);
+```
+
+An apostrophe inside a name is typed twice, as in the brackets above. There
+is a sixth argument, the practice's time zone; leaving it off means
+`Asia/Dubai`, which is what a practice in the UAE wants.
+
+The statement answers with two ids — the practice's and the owner's — and
+that is the whole of it. It creates the practice under those two names, the
+owner's record bound to the sign-in account from step 1, and her owner role.
+It also gives the practice every setting a practice cannot open without: the
+six starting goal categories, the twenty-four-hour cancellation notice period
+and the call-out fee, the VAT rate every price is stamped with, and the three
+counters that number invoices, receipts and reports. It checks that each of
+those arrived before it finishes, so a half-made practice is not possible.
+
+**What it refuses.** Every refusal leaves the database exactly as it was;
+nothing is written by halves.
+
+- **A practice already exists.** It makes the first one and only the first
+  one. If the owner cannot sign in and a practice is already there, the
+  answer is to point the existing owner record at the new sign-in account,
+  never to make a second practice.
+- **The legal name is blank.** It is printed on every invoice.
+- **No sign-in account id.** Step 1 has not been done, or the User UID was
+  not pasted in.
+- **The owner's name is blank**, or **the owner's email is blank.**
+- **The time zone is not one Postgres knows** — a typo such as `Asia/Duabi`
+  is refused rather than quietly deciding dates wrong.
+- **A setting the practice must have did not arrive.** This one is not about
+  anything the operator typed: it means the migrations on this project are
+  incomplete or a trigger is switched off, and the message says which setting
+  is missing. Nothing is written, and it wants a developer.
+
+**What it deliberately leaves blank**, because only the owner holds these and
+a placeholder that later reads as a fact is worse than a gap: the corporate
+tax registration number, the trade licence number with who issued it and when
+it lapses, the VAT registration, and the practice's own address. All of them
+are typed once inside the app, under **Settings**, by the owner herself.
+Until the address is entered there an invoice prints without a supplier
+address, which is true rather than wrong.
+
+### Step 3 — the secrets, then sign in
+
+Nothing else touches the database. What remains is the wiring above: the
+`mcwellness_api` password (step 1 of "What the operator must set by hand"),
+the pooler connection string built from it (step 2), and the project's URL
+and publishable key baked into the app's build, exactly as docs/STAGING.md
+sections 5 and 6 describe for staging. Then open the app and sign in with the
+email and password from step 1 of this section. The practice's name is on the
+settings screen; the day is empty, because nothing has happened yet.
 
 ## Advisors, after the pass
 
@@ -191,3 +278,10 @@ No seed, no demo visit, no synthetic row of any kind, no password set, no
 user created. The next pass that gives this project a practice to run
 against inherits an empty, schema-complete, checksum-verified database and
 nothing else.
+
+That next pass is written above, as "The first practice": the trunk's round
+32 (docs/CHANGE-REQUESTS/trunk-notes.md) built `app.bootstrap_practice` so
+the step is one statement rather than a hand-written sequence of inserts.
+Building the door is the trunk's work; walking through it stays the
+operator's, and this document still describes no key, no password and no
+account that anyone but she creates.
