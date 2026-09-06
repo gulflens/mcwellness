@@ -30,11 +30,21 @@ import {
  * anything the trail does not already hold. A row the catalogue has no
  * sentence for is left out rather than shown as JSON.
  *
- * **An erased household stays with the owner and the lead practitioner.**
- * `app.client_erasure_gate` is what says so everywhere else
- * (db/policies/client/readers.sql), and it is asked here too: `audit_log`'s
- * own policies are tenant-wide, so without this an administrator would reach
- * an erased record through the feed that the record's own screens refuse them.
+ * **An erased household stays with the owner and the lead practitioner, and
+ * only with a typed reason.** `app.client_erasure_gate` is what says so
+ * everywhere else (db/policies/client/readers.sql), and it is asked here too:
+ * `audit_log`'s own policies are tenant-wide, so without this an administrator
+ * would reach an erased record through the feed that the record's own screens
+ * refuse them. The reason is the other half, and it is the half the first
+ * build of this route left out: `docs/SPEC/client-record.md` section 8 step 3
+ * makes opening an erased record a sensitive action, the record timeline
+ * (app/api/audit/timeline.ts) and the access report below both insist on it,
+ * and a feed that did not would be the one door in the building that opened
+ * without one. A feed narrowed to an erased record answers 400
+ * `reason_required` without it, exactly as the timeline does; the unfiltered
+ * feed withholds erased households' rows until a reason is typed, so
+ * scrolling the practice's whole trail is never a way to read them by
+ * accident.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -104,9 +114,15 @@ const ACTIVITY_SQL =
   '  and ($6::text is null or a.occurred_at < ($6::date + 1)::timestamp at time zone $8::text) ' +
   '  and ($7::uuid is null or a.client_id = $7::uuid) ' +
   // An erased household's history stays with the owner and the lead
-  // practitioner, exactly as the record's own screens hold it.
+  // practitioner, and only while a reason is on the request. $9 is
+  // "owner-or-lead **and** a reason was typed"; without it a row belonging to
+  // an erased record is withheld from everybody, because `client_erasure_gate`
+  // on its own admits the owner and the lead practitioner with nothing said,
+  // and scrolling the practice's whole trail would then be a way to read an
+  // erased record without the reason its own screens insist on.
   '  and (a.client_id is null or $9::boolean ' +
-  '       or app.client_erasure_gate(app.client_status_for(a.client_id))) ' +
+  "       or (app.client_status_for(a.client_id) is distinct from 'erased'::public.client_status " +
+  '           and app.client_erasure_gate(app.client_status_for(a.client_id)))) ' +
   'order by a.id desc limit $10';
 
 function toEvent(row: Row): AuditEvent {
@@ -175,6 +191,25 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const { before, limit, locale, actorId, entityType, action, from, to, clientId } = query.data;
+    const senior = hasRole(actor, 'owner', 'lead_practitioner');
+    const reason = (c.req.header('x-reason') ?? '').trim();
+    // A feed narrowed to one record is that record's history, so it holds the
+    // door the record's own timeline holds (app/api/audit/timeline.ts): under
+    // row security a client of another practice does not exist, an erased
+    // record is the owner's and the lead practitioner's, and opening one needs
+    // a typed reason the trail then carries with the read.
+    if (clientId !== undefined) {
+      const found = await db.query<{ status: string }>(
+        "select status from client where id = $1 and ($2::boolean or status <> 'erased')",
+        [clientId, senior],
+      );
+      if (found.rowCount === 0) {
+        return c.json({ error: 'not_found', requestId }, 404);
+      }
+      if (found.rows[0]?.status === 'erased' && reason.length === 0) {
+        return c.json({ error: 'reason_required', requestId }, 400);
+      }
+    }
     const { rows } = await db.query<Row>(ACTIVITY_SQL, [
       before === undefined ? null : before.toString(),
       actorId ?? null,
@@ -184,7 +219,7 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       to ?? null,
       clientId ?? null,
       PRACTICE_TIME_ZONE,
-      hasRole(actor, 'owner', 'lead_practitioner'),
+      senior && reason.length > 0,
       limit + 1,
     ]);
     const page = rows.slice(0, limit);

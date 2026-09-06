@@ -50,12 +50,17 @@ async function mint(sub: string): Promise<string> {
     .sign(KEY);
 }
 
-async function get(path: string, sub: string): Promise<Response> {
-  return api.request(path, { headers: { authorization: `Bearer ${await mint(sub)}` } });
+async function get(path: string, sub: string, reason?: string): Promise<Response> {
+  return api.request(path, {
+    headers: {
+      authorization: `Bearer ${await mint(sub)}`,
+      ...(reason === undefined ? {} : { 'x-reason': reason }),
+    },
+  });
 }
 
-async function feed(path: string, sub: string): Promise<ActivityResponse> {
-  const res = await get(path, sub);
+async function feed(path: string, sub: string, reason?: string): Promise<ActivityResponse> {
+  const res = await get(path, sub, reason);
   expect(res.status).toBe(200);
   return (await res.json()) as ActivityResponse;
 }
@@ -138,13 +143,44 @@ describe('GET /api/audit/activity', () => {
   });
 
   it('keeps an erased household with the owner and the lead practitioner', async () => {
-    const asOwner = await feed(`/api/audit/activity?clientId=${ERASED}&limit=50`, AUTH.ownerA);
-    expect(asOwner.events.length).toBeGreaterThan(0);
-    const asAdmin = await feed(`/api/audit/activity?clientId=${ERASED}&limit=50`, ADMIN_AUTH);
-    expect(asAdmin.events).toEqual([]);
+    // An admin does not reach it at all, and a 404 is what says so: a 403
+    // would confirm that a record with that id exists.
+    const asAdmin = await get(`/api/audit/activity?clientId=${ERASED}&limit=50`, ADMIN_AUTH);
+    expect(asAdmin.status).toBe(404);
     // And the record that stands is there for both.
     const standing = await feed(`/api/audit/activity?clientId=${STANDING}&limit=50`, ADMIN_AUTH);
     expect(standing.events.length).toBeGreaterThan(0);
+  });
+
+  it('asks the owner for a reason before it narrows to an erased record', async () => {
+    // The same door the record timeline holds (docs/SPEC/client-record.md
+    // section 8 step 3): the history of an erased record opens for the owner
+    // and the lead practitioner, and only with a reason typed.
+    const withoutReason = await get(`/api/audit/activity?clientId=${ERASED}&limit=50`, AUTH.ownerA);
+    expect(withoutReason.status).toBe(400);
+    expect(await withoutReason.json()).toMatchObject({ error: 'reason_required' });
+
+    const withReason = await feed(
+      `/api/audit/activity?clientId=${ERASED}&limit=50`,
+      AUTH.ownerA,
+      'The household asked what the record still held.',
+    );
+    expect(withReason.events.length).toBeGreaterThan(0);
+  });
+
+  it('keeps an erased household out of the unfiltered feed until a reason is typed', async () => {
+    const withoutReason = await feed('/api/audit/activity?limit=100', AUTH.ownerA);
+    expect(withoutReason.events.some((event) => event.clientId === ERASED)).toBe(false);
+    // The record that stands is in the same page, so this is the erasure gate
+    // narrowing the feed and not an empty answer.
+    expect(withoutReason.events.some((event) => event.clientId === STANDING)).toBe(true);
+
+    const withReason = await feed(
+      '/api/audit/activity?limit=100',
+      AUTH.ownerA,
+      'Reviewing what the practice erased last month.',
+    );
+    expect(withReason.events.some((event) => event.clientId === ERASED)).toBe(true);
   });
 
   it('refuses a practitioner, whose oversight it is not', async () => {
