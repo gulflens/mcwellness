@@ -30,6 +30,8 @@ const NOW = () => new Date('2026-09-02T08:00:00.000Z');
 const REQUEST_ID = '00000000-0000-4000-8000-0000000000fe';
 /** AED 150, `scheduling_setting.unfit_fee_fils` (202, the operator's figure). */
 const FEE_FILS = 15_000;
+/** What Postgres raises for a refusal, whether by a grant or by a role check. */
+const INSUFFICIENT_PRIVILEGE = '42501';
 
 let h: Harness;
 
@@ -46,6 +48,41 @@ async function asCoordinator(): Promise<void> {
       "set_config('app.request_id', $3, false), set_config('app.reason', '', false)",
     [h.data.tenant.id, user?.id ?? null, REQUEST_ID],
   );
+}
+
+/**
+ * Runs one statement as the API role — `app_role`, the role every request
+ * connects as — with the roles the middleware would have stamped, and returns
+ * the SQLSTATE it failed with, or null when it succeeded.
+ *
+ * This is how a definer door's own refusal is proved rather than the route's.
+ * The route asks `mayWaive` and answers 403; the function underneath runs with
+ * row security switched off, so what it asks for itself is the boundary, and
+ * only a caller that is not the route can show it (tests/db/helpers.ts's
+ * `asApiRole` is the same manoeuvre; this suite is not inside a transaction of
+ * its own, so it opens one).
+ */
+async function refusalAsApiRole(
+  sql: string,
+  params: unknown[],
+  roles: string,
+): Promise<string | null> {
+  const user = h.data.users[SEEDED.practitioner];
+  await h.owner.query('begin');
+  try {
+    await h.owner.query('set local role app_role');
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.actor_roles', $3, true), set_config('app.reason', '', true)",
+      [h.data.tenant.id, user?.id ?? null, roles],
+    );
+    await h.owner.query(sql, params);
+    return null;
+  } catch (error) {
+    return (error as { code?: string }).code ?? 'unknown';
+  } finally {
+    await h.owner.query('rollback');
+  }
 }
 
 let appointmentSeq = 0;
@@ -423,6 +460,37 @@ describe('waiving the fee', () => {
       { reason: 'Not mine to forgive, and the route says so.' },
     );
     expect(res.status).toBe(403);
+
+    // And the door says so too, with the route out of the way. A security
+    // definer function runs with row security switched off, so `mayWaive` is
+    // the courtesy and this is the boundary: the same three roles a credit's
+    // waiver is held to by `ledger_amenders` (security review of this pull
+    // request).
+    expect(
+      await refusalAsApiRole(
+        'select waived from app.waive_call_out_fee($1, $2)',
+        [rows[0]?.id, 'Reaching past the route, which is the point of the case.'],
+        'practitioner',
+      ),
+    ).toBe(INSUFFICIENT_PRIVILEGE);
+
+    // And the same call from a context that may forgive is not refused, so the
+    // case above is about the role and not about the manoeuvre. Rolled back
+    // with the transaction it ran in.
+    expect(
+      await refusalAsApiRole(
+        'select waived from app.waive_call_out_fee($1, $2)',
+        [rows[0]?.id, 'Finance may forgive a fee, and this proves the door lets them.'],
+        'finance',
+      ),
+    ).toBeNull();
+
+    // Nothing was forgiven by the attempt.
+    const after = await h.owner.query<{ waived_at: Date | null }>(
+      'select waived_at from invoice where id = $1',
+      [rows[0]?.id],
+    );
+    expect(after.rows[0]?.waived_at).toBeNull();
   });
 });
 

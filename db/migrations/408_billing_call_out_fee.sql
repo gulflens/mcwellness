@@ -161,11 +161,18 @@ create index invoice_waived_by_idx on invoice (waived_by);
 --
 --    security definer because `invoice` grants no update to anybody: the
 --    practice writes the row, not the person, and this is the one transition
---    the table has. The caller's role is checked in the route
---    (`mayWaive`, app/api/billing/waivers.ts, the same permission the
---    entitlement waiver asks for) and the row is scoped to the caller's own
---    practice here, so a definer function cannot become a way to reach
---    another tenant's ledger.
+--    the table has. The row is scoped to the caller's own practice here, so a
+--    definer function cannot become a way to reach another tenant's ledger.
+--
+--    **And the caller's role is asked for here, not only in the route.** A
+--    definer function runs with row security switched off, so the route's
+--    `mayWaive` (app/api/billing/waivers.ts) is the courtesy and this is the
+--    boundary — the same three roles `ledger_amenders`
+--    (db/policies/billing/ledger.sql) holds a credit's waiver to, asked the
+--    way the erasure doors ask it (104_erasure_the_act.sql) through 095's
+--    `app.actor_has_role`. Who may forgive a charge is a question about money,
+--    and a route is never the only thing standing between a practitioner and a
+--    family's ledger (security review of this pull request).
 ------------------------------------------------------------------------------
 create function app.waive_call_out_fee(p_invoice_id uuid, p_reason text)
 returns table (waived boolean, gross_fils integer)
@@ -178,6 +185,12 @@ begin
   if v_tenant_id is null then
     raise exception 'No practice in context; a fee cannot be waived.'
       using errcode = 'invalid_parameter_value';
+  end if;
+  if not (app.actor_has_role('owner')
+       or app.actor_has_role('admin')
+       or app.actor_has_role('finance')) then
+    raise exception 'forgiving a charge is the owner''s, an admin''s or finance''s'
+      using errcode = 'insufficient_privilege';
   end if;
   return query
     update public.invoice i
@@ -196,8 +209,9 @@ grant execute on function app.waive_call_out_fee(uuid, text) to app_role;
 
 comment on function app.waive_call_out_fee(uuid, text) is
   'Forgives one call-out fee, leaving the charge on the record and taking it out of the '
-  'balance (migration 408). Returns no row when there was nothing to waive: the invoice is '
-  'not this practice''s, is not a fee, or has been waived already.';
+  'balance (migration 408). Refuses a caller who is not the owner, an admin or finance, the '
+  'three roles a credit''s waiver is held to. Returns no row when there was nothing to waive: '
+  'the invoice is not this practice''s, is not a fee, or has been waived already.';
 
 ------------------------------------------------------------------------------
 -- 5. An invoice number for a named practice, rather than for the one in
