@@ -1,7 +1,7 @@
 ---
 purpose: minor_participation
 locale: en
-version: 0.1-draft
+version: 0.2-draft
 status: draft
 written: 2026-09-03
 ---
@@ -58,7 +58,7 @@ child's information, with these additions:
 
 Please tell us, before the first session and whenever anything changes, if
 the child has epilepsy or has ever had a seizure, has any implanted
-electrical device, has had a head injury in the last year, takes medication
+electrical device, has had a head injury at any time, takes medication
 that affects mood, sleep, attention or the nervous system, or has a skin
 condition or sensitivity on the scalp. This is for the practitioner's
 planning, not a medical assessment.
@@ -94,4 +94,6 @@ Signature: ______________________________ Date: ______________
 
 Practitioner present: ______________________________
 
-Version 0.1-draft, 3 September 2026. Supersedes nothing.
+Version 0.2-draft, 6 September 2026. Supersedes 0.1-draft: the health
+question now asks about a head injury at any time, not only in the last
+year.
