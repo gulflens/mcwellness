@@ -25,6 +25,43 @@ is estimated.
 Two columns of tests because the suite runs in two parts: the ordinary tests,
 then the ones that need a real database.
 
+**What happened after this page was written (06:15 to 08:30).** Read this
+before the numbered sections, because several of them are now settled.
+
+- **You answered four questions at 06:15.** The API runs on Hostinger Web
+  Apps Hosting in Mumbai, so section 1.1 is decided and only the purchase is
+  yours. The production database was created at 06:22, named
+  `mcwellness-production`, in Mumbai on the Pro organisation, at 10 US
+  dollars a month; it stays empty until the first release fills it, so
+  section 1.5 is done and the lawyer may still be asked. The old app's
+  project could not be paused from a session, because it is on the paid
+  tier: pause or delete it from the Supabase dashboard yourself (a new item).
+  A child's own portal login no longer reads reports about themselves; that
+  is built and merged, so the first item of section 3 is settled.
+- **Google (section 1.8) is done bar a spending cap.** Billing is linked, the
+  Static Maps API is enabled, your existing browser key now also covers
+  Static Maps beside Routes, and its value was written into the staging
+  settings by a command whose output went straight to the file and never
+  through a conversation. Staging has run the real routing since 06:27. A
+  spending cap, if you want one, is set in the Google console.
+- **The GitHub environment named `production` (section 1.2) is still yours.**
+  The permission layer refuses it from a session; the command in that
+  section works from your own terminal.
+- **Trunk round 31 merged at 08:22** (pull request 87): the takings figure
+  that is the same whoever asks, the VAT threshold watch beside the switch,
+  the activity feed and the access report, the link between a measurement
+  and its visit, and four housekeeping items.
+- **A browser walk of the whole platform** (pull request 89) found five
+  product defects, the largest being that nothing moved a booking from
+  proposed to confirmed, so a new booking never reached the practitioner's
+  day. A fix round is running; its outcome is in the hand-over.
+- **The security scan ran** on the cheapest model at medium effort: fourteen
+  candidates, none confirmed by the panel, and two areas not examined, the
+  portal and the client record. The record is pull request 88. Section 1.9
+  stands: the scan that counts runs on the release tag.
+- **The staging demo** is level with the platform after the tenth pass,
+  running as this was written.
+
 ---
 
 ## 1. The decisions that unblock the first deploy
