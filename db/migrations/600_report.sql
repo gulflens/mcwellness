@@ -337,11 +337,21 @@ alter table public.report enable always trigger guard_report_write;
 --    one statement, with the credential re-checked here and not only in the
 --    route.
 --
+--    **The signer is the person issuing** (section 10, decision 3), and that
+--    is enforced here rather than observed by the screen: the practitioner
+--    named must be the caller's own, `p.user_id = app.current_actor_id()`,
+--    exactly as app.complete_appointment_for_session checks it (302). Without
+--    it a caller could name a colleague and put that colleague's name and
+--    certificate number on a document — the trail would name the actor and the
+--    document would not.
+--
 --    security definer for the reason app.file_billing_document is: the
 --    credential and the tenant row are read as the practice, whichever role is
 --    signing, and the caller cannot name a signer whose credential does not
---    say `can_sign_report`. The route asks domain/reports/canIssue first so a
---    person gets a sentence rather than a raise; this is the answer that binds.
+--    say `can_sign_report`. security definer is also why the caller's own
+--    identity is checked in this body: row security is not going to check it
+--    for us. The route asks domain/reports/canIssue first so a person gets a
+--    sentence rather than a raise; this is the answer that binds.
 ------------------------------------------------------------------------------
 create function app.issue_report(
   p_report_id       uuid,
@@ -375,6 +385,22 @@ begin
       using errcode = 'restrict_violation';
   end if;
 
+  -- The signer is the person issuing. Asked before the credential, because
+  -- naming somebody else is a different refusal from holding no certificate,
+  -- and a caller who tried it should read that sentence rather than one about
+  -- a colleague's certificate.
+  select u.display_name into v_signer
+    from public.practitioner p
+    join public.app_user u on u.id = p.user_id and u.tenant_id = p.tenant_id
+   where p.tenant_id = v_tenant_id
+     and p.id = p_practitioner_id
+     and p.user_id = app.current_actor_id();
+  if v_signer is null then
+    raise exception 'a report is signed by the person issuing it'
+      using errcode = 'insufficient_privilege',
+            hint    = 'The practitioner named must be the person signed in.';
+  end if;
+
   -- The credential, at this moment, for this signer, and for the report's own
   -- service where it names one. Nothing about a role is asked: a role does not
   -- grant this (section 10, decision 6).
@@ -398,10 +424,6 @@ begin
       using errcode = 'insufficient_privilege',
             hint    = 'A report is signed on a credential that says can_sign_report and is valid today.';
   end if;
-
-  select u.display_name into v_signer
-    from public.practitioner p join public.app_user u on u.id = p.user_id
-   where p.tenant_id = v_tenant_id and p.id = p_practitioner_id;
 
   select t.legal_name, t.legal_name_ar, t.licence_number, t.licensing_authority,
          l.display_address

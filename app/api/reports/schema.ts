@@ -113,16 +113,14 @@ export const GatherResponse = z.object({
 });
 export type GatherResponse = z.infer<typeof GatherResponse>;
 
-export const IssueInput = z.object({
-  /**
-   * Who is signing. **Optional, and ordinarily absent**: a person signs their
-   * own report, so the route takes the practitioner row of whoever is calling.
-   * It may be named for the case the practice will meet as it grows — a lead
-   * practitioner preparing a report for a colleague to sign — and the route
-   * re-checks that person's credential at this moment either way.
-   */
-  practitionerId: z.uuid().optional(),
-});
+/**
+ * Issuing takes **nothing**. Who signs is the person signed in: the route
+ * reads their own practitioner row and `app.issue_report` refuses any other
+ * (section 10, decision 3). A field naming a signer would be a field through
+ * which one person could put a colleague's name and certificate number on a
+ * document, and the trail would name the actor while the document did not.
+ */
+export const IssueInput = z.object({});
 export type IssueInput = z.infer<typeof IssueInput>;
 
 export const IssueResponse = z.object({

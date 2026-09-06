@@ -31,6 +31,11 @@ import { signerFor, signingCredentials } from './signer';
  * in either place: a role does not grant this (section 10, decision 6), and
  * the founder signs because she holds the certificate.
  *
+ * **The signer is the person issuing** (section 10, decision 3). The request
+ * body names nobody: the practitioner is read from the caller's own row here,
+ * and `app.issue_report` refuses any other, so a lead practitioner cannot put
+ * a colleague's name and certificate number on a document.
+ *
  * **Why `report.document_id` is not `invoice.document_id` repeated.** 402 left
  * that column on a table nobody may update, so nothing could ever fill it in
  * and 407 had to invent a link table. Here the column is written inside this
@@ -79,10 +84,10 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
     const timeZone = await practiceTimeZone(db);
     const today = isoDateIn(now(), timeZone);
 
-    // Ordinarily the person doing it. A caller may name somebody else, and
-    // that person's own credential is what is then checked.
+    // The person doing it, and nobody else: the request carries no signer and
+    // `app.issue_report` refuses a practitioner who is not the caller's own.
     const own = await signerFor(db, actor.userId);
-    const practitionerId = body.data.practitionerId ?? own?.practitionerId;
+    const practitionerId = own?.practitionerId;
     if (!practitionerId) {
       // Not a practitioner at all, so there is no certificate to sign on. A
       // sentence rather than a raise: nothing about their role is wrong, they

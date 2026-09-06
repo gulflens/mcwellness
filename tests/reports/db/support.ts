@@ -59,6 +59,20 @@ export type Harness = {
     extra?: Record<string, string>,
   ) => Promise<Response>;
   authIdOf: (index: number) => string;
+  /**
+   * A statement run with a seeded person's own audit context — their tenant,
+   * their actor id and their roles — inside a transaction that is always
+   * rolled back. For asking a database door a question the routes no longer
+   * let a caller ask.
+   */
+  asPerson: <T>(seededUser: number, fn: (db: pg.Client) => Promise<T>) => Promise<T>;
+  /**
+   * Puts a client on a practitioner's schedule, which is the whole of what
+   * `app.client_visible_to_practitioner` (201) reads. The seed writes no
+   * appointments at all, so a test that needs a practitioner to reach a client
+   * writes the one confirmed visit that grants it.
+   */
+  onSchedule: (clientIndex: number, seededUser: number) => Promise<void>;
   serviceTypeId: (code: string) => string;
   clientId: (index: number) => string;
   practitionerIdOf: (seededUser: number) => string;
@@ -129,6 +143,40 @@ export async function startHarness(now: () => Date): Promise<Harness> {
     data,
     authIdOf,
     callAs,
+    async onSchedule(clientIndex, seededUser) {
+      const person = data.clients[clientIndex];
+      const user = data.users[seededUser];
+      const practitioner = data.practitioners.find((p) => p.userId === user?.id);
+      const service = data.serviceTypes[0];
+      if (!person || !practitioner || !service) throw new Error('The seed is not what it was.');
+      await owner.query(
+        'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+          'location_id, delivery_mode, window_start, window_end, status) values ' +
+          "(gen_random_uuid(), $1, $2, $3, $4, $5, 'home', now() - interval '7 days', " +
+          "now() - interval '7 days' + interval '45 minutes', 'completed')",
+        [data.tenant.id, person.id, practitioner.id, service.id, person.primaryLocationId],
+      );
+    },
+    async asPerson(seededUser, fn) {
+      const user = data.users[seededUser];
+      if (!user) throw new Error(`No seeded user ${seededUser}.`);
+      const roles = data.roles
+        .filter((role) => role.userId === user.id)
+        .map((role) => role.role)
+        .join(',');
+      await owner.query('begin');
+      try {
+        await owner.query(
+          "select set_config('app.tenant_id', $1, true), " +
+            "set_config('app.actor_id', $2, true), " +
+            "set_config('app.actor_roles', $3, true)",
+          [data.tenant.id, user.id, roles],
+        );
+        return await fn(owner);
+      } finally {
+        await owner.query('rollback');
+      }
+    },
     serviceTypeId(code: string): string {
       const service = data.serviceTypes.find((s) => s.code === code);
       if (!service) throw new Error(`No seeded service type "${code}".`);

@@ -56,9 +56,7 @@ async function draftFor(clientIndex: number, over: Record<string, unknown> = {})
 /** The same, signed by the founder, who is the practice's only signer. */
 async function issued(clientIndex: number): Promise<string> {
   const id = await draftFor(clientIndex);
-  const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {
-    practitionerId: h.practitionerIdOf(SEEDED.owner),
-  });
+  const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {});
   if (res.status !== 201) throw new Error(`Issue was refused: ${res.status} ${await res.text()}`);
   return id;
 }
@@ -139,9 +137,7 @@ describe('drafting', () => {
 describe('issuing', () => {
   it('allocates a reference, snapshots the signer and the practice, and files a PDF', async () => {
     const id = await draftFor(3);
-    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {
-      practitionerId: h.practitionerIdOf(SEEDED.owner),
-    });
+    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {});
     expect(res.status).toBe(201);
     const body = (await res.json()) as IssueResponse;
     expect(body.report.reference).toMatch(/^RPT-\d{6}$/);
@@ -266,22 +262,45 @@ describe('issuing', () => {
 
   it('refuses a second issue of the same report', async () => {
     const id = await issued(6);
-    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {
-      practitionerId: h.practitionerIdOf(SEEDED.owner),
-    });
+    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {});
     expect(res.status).toBe(422);
     expect((await res.json()) as { code: string }).toMatchObject({ code: 'already_issued' });
   });
 
-  it('refuses a practitioner whose credential does not say can_sign_report', async () => {
+  it('refuses a practitioner signing their own draft without the capability', async () => {
+    // The deny case section 11 actually names, met the way the practice meets
+    // it: the person signing is the person calling, and their own certificate
+    // does not carry the right.
+    await h.onSchedule(7, SEEDED.practitioner);
     const id = await draftFor(7);
-    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {
-      practitionerId: h.practitionerIdOf(SEEDED.practitioner),
-    });
+    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.practitioner, {});
     expect(res.status).toBe(403);
     expect((await res.json()) as { code: string }).toMatchObject({
       code: 'credential_cannot_sign',
     });
+  });
+
+  it('refuses a caller who names a practitioner who is not them', async () => {
+    // The route names nobody, so this is asked of the door itself: even the
+    // owner, calling app.issue_report directly, cannot put the practitioner's
+    // name on a report (section 10, decision 3). Without this the trail would
+    // name the actor and the document would name somebody else.
+    const id = await draftFor(16);
+    await expect(
+      h.asPerson(SEEDED.owner, (db) =>
+        db.query('select id from app.issue_report($1::uuid, $2::uuid, $3::date)', [
+          id,
+          h.practitionerIdOf(SEEDED.practitioner),
+          '2026-09-06',
+        ]),
+      ),
+    ).rejects.toThrow(/signed by the person issuing it/);
+
+    const { rows } = await h.owner.query<{ status: string }>(
+      'select status from report where id = $1',
+      [id],
+    );
+    expect(rows[0]?.status).toBe('draft');
   });
 
   it('refuses a credential that lapsed the day before signing, and says so', async () => {
@@ -293,7 +312,7 @@ describe('issuing', () => {
       [practitionerId],
     );
     const id = await draftFor(8);
-    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, { practitionerId });
+    const res = await h.call('POST', `/api/reports/${id}/issue`, SEEDED.owner, {});
     expect(res.status).toBe(403);
     expect((await res.json()) as { code: string }).toMatchObject({ code: 'credential_lapsed' });
 
@@ -435,9 +454,7 @@ describe('superseding', () => {
         })
       ).json()) as SupersedeResponse
     ).report.id;
-    await h.call('POST', `/api/reports/${second}/issue`, SEEDED.owner, {
-      practitionerId: h.practitionerIdOf(SEEDED.owner),
-    });
+    await h.call('POST', `/api/reports/${second}/issue`, SEEDED.owner, {});
     const third = (
       (await (
         await h.call('POST', `/api/reports/${second}/supersede`, SEEDED.owner, {
@@ -446,9 +463,7 @@ describe('superseding', () => {
         })
       ).json()) as SupersedeResponse
     ).report.id;
-    await h.call('POST', `/api/reports/${third}/issue`, SEEDED.owner, {
-      practitionerId: h.practitionerIdOf(SEEDED.owner),
-    });
+    await h.call('POST', `/api/reports/${third}/issue`, SEEDED.owner, {});
 
     const { rows } = await h.owner.query<{ id: string; version: number; status: string }>(
       'select id, version, status from report where client_id = $1 order by version',
