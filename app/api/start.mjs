@@ -14,7 +14,10 @@
 
 // Imported rather than taken from the global scope, so this file needs no
 // lint configuration of its own: it is the only .mjs outside scripts/.
-import { existsSync } from 'node:fs';
+import { accessSync, chmodSync, constants, copyFileSync, existsSync, mkdtempSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 import { URL, fileURLToPath } from 'node:url';
 
@@ -27,6 +30,53 @@ import { URL, fileURLToPath } from 'node:url';
 const envFile = fileURLToPath(new URL('../../.env', import.meta.url));
 if (existsSync(envFile)) {
   process.loadEnvFile(envFile);
+}
+
+// What a managed host takes away, and this file gives back. tsx transforms
+// TypeScript through esbuild, and esbuild runs as a child process started from
+// a binary inside node_modules. Hostinger's deploy step copies the built tree
+// into the runtime's own directory without the execute bit, so that spawn
+// fails with EACCES and the API never gets as far as server.ts (the first
+// hosted start, 6 September 2026; docs/PRODUCTION.md, the first live pass).
+// So, before tsx is registered: find the binary the way esbuild itself does,
+// and if it cannot be run, restore the bit; if the file system refuses to run
+// anything in that tree at all, place a copy where running is allowed and tell
+// esbuild where it is, through the variable esbuild documents for the purpose.
+// On a laptop the binary is executable already and none of this runs.
+function canExecute(path) {
+  try {
+    accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Resolved along the same chain the loader walks — this file to tsx, tsx to
+// esbuild, esbuild to its platform package — so it is found wherever the
+// package manager put it: hoisted by npm on the host, nested by pnpm on a
+// laptop. Anything missing on that chain means esbuild is left to itself.
+let esbuildBinary;
+try {
+  const fromHere = createRequire(import.meta.url);
+  const fromTsx = createRequire(fromHere.resolve('tsx'));
+  const fromEsbuild = createRequire(fromTsx.resolve('esbuild'));
+  esbuildBinary = fromEsbuild.resolve(`@esbuild/${process.platform}-${process.arch}/bin/esbuild`);
+} catch {
+  esbuildBinary = undefined;
+}
+if (esbuildBinary !== undefined && !canExecute(esbuildBinary)) {
+  try {
+    chmodSync(esbuildBinary, 0o755);
+  } catch {
+    // The copy below is the answer when the bit cannot be set either.
+  }
+  if (!canExecute(esbuildBinary)) {
+    const copy = join(mkdtempSync(join(tmpdir(), 'mcwellness-esbuild-')), 'esbuild');
+    copyFileSync(esbuildBinary, copy);
+    chmodSync(copy, 0o755);
+    process.env.ESBUILD_BINARY_PATH = copy;
+  }
 }
 
 // What `--import tsx` does. The API is TypeScript and stays TypeScript
