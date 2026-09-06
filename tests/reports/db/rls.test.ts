@@ -66,7 +66,7 @@ async function seedReport(
     'insert into report (id, tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
       'signed_by_practitioner_id, signed_by_name, signed_by_certification, practice_legal_name, ' +
       'content, version, supersedes_id, amendment_reason) values ' +
-      "($1, $2, $3, 'progress', $4::report_status, $5, current_date, now(), $6, 'Signer', " +
+      "($1, $2, $3, 'progress', $4::report_status, $5, current_date, now(), $6, 'Rowan Ridge', " +
       "'bcia_bcn', 'Synthetic Studio', '{}'::jsonb, $7, $8, $9)",
     [
       id,
@@ -396,7 +396,7 @@ describe('the chain', () => {
         'insert into report (tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
           'signed_by_practitioner_id, signed_by_name, signed_by_certification, ' +
           "practice_legal_name, content) values ($1, $2, 'progress', 'issued', 1, " +
-          "current_date, now(), $3, 'Signer', 'bcia_bcn', 'Synthetic Studio', '{}'::jsonb)",
+          "current_date, now(), $3, 'Rowan Ridge', 'bcia_bcn', 'Synthetic Studio', '{}'::jsonb)",
         [IDS.tenantA, IDS.clientA, MORE_IDS.practitionerA],
       );
     });
