@@ -472,12 +472,54 @@ describe('the export', () => {
     await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
 
     const put = sent.find((call) => call.method === 'PUT')!;
-    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=raw_recording&extension=pdf`);
+    // The role is the extension's answer, because nobody gave another one: a
+    // PDF is the software's report, and the door refuses one filed as the
+    // recording.
+    expect(put.url).toBe(`/api/assessments/${BASELINE}/file?role=vendor_report&extension=pdf`);
     expect(put.headers?.get('content-type')).toBe('application/pdf');
     // The fingerprint of the bytes that were sent, taken here and recomputed
     // by the route over what actually arrived.
     expect(put.headers?.get('x-sha256')).toBe(PDF_DIGEST);
     expect(new Uint8Array(put.body as ArrayBuffer)).toEqual(PDF_BYTES);
+  });
+
+  it('shows the role the extension chose, so nothing is filed behind the person', async () => {
+    // The control opens on the recording and the file chosen is a report, so
+    // the default moves the control as well as the request. A screen that sent
+    // one word and displayed another would be filing behind somebody's back.
+    mount({ chains: [{ current: row(BASELINE), superseded: [] }] });
+    const what = (await screen.findByLabelText('What the file is')) as HTMLSelectElement;
+    expect(what.value).toBe('raw_recording');
+    fireEvent.change(screen.getByLabelText('Attach the export'), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(what.value).toBe('vendor_report'));
+  });
+
+  it('says so when the file is not the thing it is being filed as', async () => {
+    // The person overrode the default and called a PDF the recording. The
+    // door refuses it on the bytes, and the screen says why in words.
+    const sent = mount({
+      chains: [{ current: row(BASELINE), superseded: [] }],
+      attachAnswer: { status: 400, body: { error: 'bad_request', code: 'kind_and_role_disagree' } },
+    });
+    fireEvent.change(await screen.findByLabelText('What the file is'), {
+      target: { value: 'raw_recording' },
+    });
+    fireEvent.change(screen.getByLabelText('Attach the export'), {
+      target: { files: [pdfFile()] },
+    });
+    await waitFor(() => expect(sent.some((call) => call.method === 'PUT')).toBe(true));
+    // The person's own answer is sent, not the extension's: they said it.
+    expect(sent.find((call) => call.method === 'PUT')!.url).toBe(
+      `/api/assessments/${BASELINE}/file?role=raw_recording&extension=pdf`,
+    );
+    expect(
+      await screen.findByText(
+        'That file is not the thing it is being filed as. A PDF is the software’s report or a ' +
+          'session export; a recording is an EDF file or the amplifier software’s own.',
+      ),
+    ).toBeTruthy();
   });
 
   it('files it as the software’s report when that is what it is', async () => {

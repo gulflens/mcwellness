@@ -162,6 +162,9 @@ export const ATTACH_REFUSALS: Record<string, string> = {
   forbidden: 'Filing an export against this measurement is not yours to do.',
   not_found: 'That measurement is no longer there.',
   condition_without_recording: 'Only a recording is taken under a condition.',
+  kind_and_role_disagree:
+    'That file is not the thing it is being filed as. A PDF is the software’s report or a ' +
+    'session export; a recording is an EDF file or the amplifier software’s own.',
 };
 
 /** Why a comparison could not be made. */

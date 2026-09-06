@@ -115,15 +115,23 @@ async function putFile(
   } = {},
 ): Promise<Response> {
   const query = new URLSearchParams();
-  if (options.role !== undefined) query.set('role', options.role);
+  // What the console would send where the test does not say (the extension's
+  // own answer, app/admin/assessments/ExportFiles.tsx): a PDF is the software's
+  // report and bytes are a recording. The door refuses a role its bytes
+  // disagree with, so something has to be said, and repeating the word in
+  // every call would say nothing a reader did not already know.
+  const type = options.type ?? 'application/pdf';
+  query.set(
+    'role',
+    options.role ?? (type === 'application/pdf' ? 'vendor_report' : 'raw_recording'),
+  );
   if (options.extension !== undefined) query.set('extension', options.extension);
   if (options.condition !== undefined) query.set('condition', options.condition);
-  const suffix = query.size === 0 ? '' : `?${query.toString()}`;
-  return api.request(`/api/assessments/${assessment}/file${suffix}`, {
+  return api.request(`/api/assessments/${assessment}/file?${query.toString()}`, {
     method: 'PUT',
     headers: {
       authorization: `Bearer ${await mint(sub)}`,
-      'content-type': options.type ?? 'application/pdf',
+      'content-type': type,
       'x-sha256': options.digest ?? digestOf(bytes),
     },
     // `BodyInit` is typed from the DOM lib, which does not know a Uint8Array
@@ -786,7 +794,9 @@ describe('the export’s own door', () => {
       role: string;
       condition: string | null;
     };
-    expect(filed.role).toBe('raw_recording');
+    // The report, because that is what a PDF is; a PDF filed as the recording
+    // is refused on its bytes.
+    expect(filed.role).toBe('vendor_report');
     expect(filed.condition).toBeNull();
 
     const document = await owner.query<{
@@ -818,7 +828,7 @@ describe('the export’s own door', () => {
       [created.assessment.id],
     );
     expect(trail.rows).toHaveLength(1);
-    expect(trail.rows[0]?.new_values).toEqual({ role: 'raw_recording' });
+    expect(trail.rows[0]?.new_values).toEqual({ role: 'vendor_report' });
 
     // And the document is named where it belongs: on the link row's own entry,
     // written by the audit trigger.
@@ -1033,6 +1043,75 @@ describe('the export’s own door', () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'condition_without_recording' });
+  });
+
+  /**
+   * The role is the caller's word for a file and the kind is what the bytes
+   * themselves say; where the two disagree the door refuses, because an
+   * `assessment_document` row is never amended. A report standing as somebody's
+   * brain activity, or a recording hidden from every screen that looks for one,
+   * would be a mistake nothing could take back.
+   */
+  const DISAGREEMENTS = [
+    {
+      what: 'the software’s report filed as the recording',
+      bytes: PDF,
+      type: 'application/pdf',
+      extension: 'pdf',
+      role: 'raw_recording',
+      scenario: '82',
+    },
+    {
+      what: 'an EDF recording filed as the report',
+      bytes: EDF,
+      type: 'application/octet-stream',
+      extension: 'edf',
+      role: 'vendor_report',
+      scenario: '83',
+    },
+    {
+      what: 'an EDF recording filed as a session export',
+      bytes: EDF,
+      type: 'application/octet-stream',
+      extension: 'edf',
+      role: 'session_export',
+      scenario: '84',
+    },
+    {
+      what: 'the amplifier software’s own recording filed as the report',
+      bytes: NATIVE,
+      type: 'application/octet-stream',
+      extension: 'eeg',
+      role: 'vendor_report',
+      scenario: '85',
+    },
+    {
+      what: 'the amplifier software’s own recording filed as a session export',
+      bytes: NATIVE,
+      type: 'application/octet-stream',
+      extension: 'eeg',
+      role: 'session_export',
+      scenario: '86',
+    },
+  ];
+
+  it.each(DISAGREEMENTS)('refuses $what, and audits the refusal', async (pairing) => {
+    const household = await seedHousehold(pairing.scenario);
+    const created = (await (await record(household)).json()) as { assessment: { id: string } };
+    const res = await putFile(created.assessment.id, household.authSub, pairing.bytes, {
+      type: pairing.type,
+      extension: pairing.extension,
+      role: pairing.role,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'kind_and_role_disagree' });
+    expect(await refusals(created.assessment.id)).toContain('kind_and_role_disagree');
+    // And nothing was filed: the refusal is before the row, not after it.
+    const filed = await owner.query<{ count: string }>(
+      'select count(*) as count from assessment_document where assessment_id = $1',
+      [created.assessment.id],
+    );
+    expect(filed.rows[0]?.count).toBe('0');
   });
 
   it('refuses a condition that is not one of the two the practice records', async () => {

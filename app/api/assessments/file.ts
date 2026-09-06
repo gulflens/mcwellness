@@ -20,6 +20,7 @@ import {
   ASSESSMENT_FILE_ROLES,
   FileFiledResponse,
   RECORDING_ROLES,
+  ROLES_FOR_KIND,
   type AssessmentFileCondition,
   type AssessmentFileRole,
 } from './schema';
@@ -82,6 +83,14 @@ import {
  * exports are named after the people in them (spec section 7.1). A condition
  * on anything that is not a recording is refused here and again by migration
  * 503's check constraint underneath.
+ *
+ * **The role and the bytes must agree.** The caller says which of the three
+ * things a file is; the bytes say which of the three kinds they are. Where the
+ * two disagree the filing is refused (`kind_and_role_disagree`), because a
+ * report filed as the recording would stand on an immutable row as a person's
+ * own brain activity, under a condition nobody recorded it in, and these rows
+ * are never amended. The console defaults the role from the extension the file
+ * was chosen under, so the ordinary path never meets this refusal.
  */
 
 const Params = z.object({ id: z.uuid() });
@@ -159,6 +168,16 @@ export function mountAssessmentFile(api: Hono<ApiEnv>, now: () => Date = () => n
     if (!kind.ok) {
       await logRefusal(db, 'assessment', assessmentId, assessment.client_id, [kind.reason]);
       return c.json({ error: 'unsupported_media_type', code: kind.reason, requestId }, 415);
+    }
+    // The bytes are usable and the word for them is not: a PDF called the
+    // recording, or a recording called the report. The file itself is fine, so
+    // this is the request being wrong rather than the media type being
+    // unsupported, and it is refused as such.
+    if (!ROLES_FOR_KIND[kind.kind].includes(role.data)) {
+      await logRefusal(db, 'assessment', assessmentId, assessment.client_id, [
+        'kind_and_role_disagree',
+      ]);
+      return c.json({ error: 'bad_request', code: 'kind_and_role_disagree', requestId }, 400);
     }
 
     const documentId = randomUUID();

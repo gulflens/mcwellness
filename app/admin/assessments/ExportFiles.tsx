@@ -49,12 +49,19 @@ import {
  * is what is sent — a few characters, never `file.name`. The practice's own
  * files are named after the people in them.
  *
+ * **The role follows the extension until somebody says otherwise.** The door
+ * refuses a role the bytes disagree with, so the control cannot simply open on
+ * one of the three and hope: choosing a PDF would meet a refusal the person
+ * did nothing to earn. So a `.pdf` files as the software's report and a
+ * recording as the recording, unless the person has chosen a role themselves,
+ * in which case their answer stands and the door checks it.
+ *
  * **The condition is asked for, not guessed.** Where the file is a recording,
  * the control offers eyes open and eyes closed beside the role, and the answer
  * is stored as the document's own field (migration 503). It is not read out of
  * a file name for the reason above, and it is offered rather than required:
  * the practice's own native recordings carry both conditions in one file, so
- * "not one condition" is an ordinary answer and the control opens on it.
+ * both at once is an ordinary answer and the control opens on it.
  *
  * **Opening one is a read**, and the link is asked for at the moment somebody
  * presses, never rendered into the page in advance — the route writes the
@@ -77,6 +84,26 @@ function extensionOf(name: string): string {
  */
 function declaredTypeFor(extension: string): string {
   return extension === 'pdf' ? ASSESSMENT_FILE_MIME_TYPE : RECORDING_MIME_TYPE;
+}
+
+/**
+ * What a file chosen under this extension is, where the person has not said.
+ *
+ * The door refuses a role the bytes disagree with (`kind_and_role_disagree` in
+ * app/api/assessments/file.ts), and the control has to open on something. A
+ * fixed opening answer means the ordinary case — choose the report, press —
+ * meets a refusal it did nothing to earn, so the extension answers instead. It
+ * is a default and not a decision: the person may still say otherwise, and the
+ * door checks the bytes either way. Anything else keeps whatever the control
+ * already shows; guessing beyond the three extensions this practice uses would
+ * be a guess with nothing behind it.
+ */
+function defaultRoleFor(extension: string): AssessmentFileRole | null {
+  if (extension === 'pdf') return 'vendor_report';
+  if (extension === EDF_RECORDING_EXTENSION || extension === NATIVE_RECORDING_EXTENSION) {
+    return 'raw_recording';
+  }
+  return null;
 }
 
 /** What the chooser suggests: the report, and both recordings by extension. */
@@ -170,6 +197,9 @@ export function ExportFiles({
 }) {
   const { apiFetch } = useAuth();
   const [role, setRole] = useState<AssessmentFileRole>('raw_recording');
+  // Whether the person chose that role or it is only what the control opened
+  // on. Their answer is never overwritten by the extension's.
+  const [roleChosen, setRoleChosen] = useState(false);
   const [condition, setCondition] = useState<AssessmentFileCondition | ''>('');
   const isRecording = RECORDING_ROLES.includes(role);
   const [busy, setBusy] = useState(false);
@@ -194,10 +224,17 @@ export function ExportFiles({
       try {
         const bytes = await file.arrayBuffer();
         const extension = extensionOf(file.name);
-        const query = new URLSearchParams({ role, extension });
+        // The extension's answer where the person has not given one. Sent as
+        // well as shown: state settles after this runs, and the request is
+        // built now.
+        const filedAs = roleChosen ? role : (defaultRoleFor(extension) ?? role);
+        if (filedAs !== role) setRole(filedAs);
+        const query = new URLSearchParams({ role: filedAs, extension });
         // Only where the file is a recording: a report is not taken under a
         // condition, and the route refuses one that says it was.
-        if (isRecording && condition !== '') query.set('condition', condition);
+        if (RECORDING_ROLES.includes(filedAs) && condition !== '') {
+          query.set('condition', condition);
+        }
         const res = await apiFetch(`/api/assessments/${assessmentId}/file?${query.toString()}`, {
           method: 'PUT',
           headers: {
@@ -222,7 +259,7 @@ export function ExportFiles({
         setBusy(false);
       }
     },
-    [apiFetch, assessmentId, condition, isRecording, onAttached, role],
+    [apiFetch, assessmentId, condition, onAttached, role, roleChosen],
   );
 
   return (
@@ -237,7 +274,10 @@ export function ExportFiles({
             id={`attach-role-${assessmentId}`}
             label="What the file is"
             value={role}
-            onChange={(event) => setRole(event.target.value as AssessmentFileRole)}
+            onChange={(event) => {
+              setRole(event.target.value as AssessmentFileRole);
+              setRoleChosen(true);
+            }}
           >
             {ASSESSMENT_FILE_ROLES.map((each) => (
               <option key={each} value={each}>

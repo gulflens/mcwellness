@@ -10,6 +10,7 @@ import {
   NATIVE_RECORDING_EXTENSION,
   RECORDING_MIME_TYPE,
   REFERENCE_SEXES,
+  type AssessmentFileKind,
 } from '@domain/assessment';
 
 /**
@@ -66,6 +67,27 @@ export type AssessmentFileRole = (typeof ASSESSMENT_FILE_ROLES)[number];
 
 /** The roles that are a recording, and so may carry a condition. */
 export const RECORDING_ROLES: readonly AssessmentFileRole[] = ['raw_recording'];
+
+/**
+ * Which role each kind of file may be filed under.
+ *
+ * The role is the caller's word and the kind is the bytes' own answer
+ * (`classifyAssessmentFile` in `domain/assessment`), and the two must agree.
+ * A PDF filed as the recording would put the software's report on an immutable
+ * document row as the person's brain activity, condition and all, and a
+ * recording filed as a report would hide the recording from every screen that
+ * looks for one. Neither is recoverable by editing: these rows are never
+ * amended, only added to.
+ *
+ * Read as a map from the kind rather than as a rule about roles, so that a
+ * fourth kind cannot be filed under anything at all until this table says
+ * where it belongs.
+ */
+export const ROLES_FOR_KIND: Record<AssessmentFileKind, readonly AssessmentFileRole[]> = {
+  vendor_pdf: ['vendor_report', 'session_export'],
+  edf_recording: ['raw_recording'],
+  native_recording: ['raw_recording'],
+};
 
 /**
  * Which condition a recording was taken under, where it was taken under one.
