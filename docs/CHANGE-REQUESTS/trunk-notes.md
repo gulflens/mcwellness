@@ -1857,6 +1857,13 @@ have to find it in a diff.
 Nothing else about the function moved, and a future migration that changes it
 starts from 957's body. All five of `billing-06.md` are closed.
 
+**And one line for billing's next round.** The portal's waived-fee day is now
+in a `numeric` span, for the tabular figures `docs/DESIGN-BRIEF.md` section 4.4
+asks of every date. `app/admin/billing/InvoicesSection.tsx` renders the same
+"Waived" and day in a `small muted` span without it, so the admin's figures do
+not align down the column. It is billing's file and this round did not touch
+it.
+
 **client-portal.** `PortalInvoice` carries `waivedOn`, a nullable day, and the
 money screen renders it; `INVOICES_SQL` now takes the practice's time zone as
 `$2`, as `PAYMENTS_SQL` already did. `PHRASES.waivedOn` is in the dictionary.

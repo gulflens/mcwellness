@@ -89,7 +89,7 @@ function InvoiceRow({ invoice }: { invoice: PortalInvoice }) {
       */}
       <span className="numeric">{words.money(invoice.grossFils)}</span>
       {invoice.waivedOn ? (
-        <span className="small muted">
+        <span className="numeric small muted">
           {words.phrase(PHRASES.waivedOn(words.date(invoice.waivedOn)))}
         </span>
       ) : null}
