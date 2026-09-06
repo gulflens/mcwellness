@@ -115,10 +115,14 @@ export function mountReportSupersede(api: Hono<ApiEnv>, now: () => Date = () => 
     const marked = await db.query<{ id: string }>(MARK_SQL, [reportId]);
     if (!marked.rows[0]) {
       // The standing version moved under this request — somebody else
-      // superseded it first. The insert above is rolled back with this answer
-      // rather than leaving a second successor the unique index would have
-      // refused anyway.
-      return c.json({ error: 'conflict', code: 'already_superseded', requestId }, 409);
+      // superseded it first, or the guard refused this caller the transition.
+      // **Raised, not returned.** The comment here used to claim the insert
+      // above was rolled back "with this answer"; it was not. A returned 409
+      // commits, and would leave a successor draft whose predecessor is still
+      // the standing version — two answers to "which version is current",
+      // which is the one thing decision 5 keeps a single table to avoid. The
+      // same fault the issuing route had one door along.
+      throw new Error('The standing version could not be marked superseded; the draft rolls back.');
     }
 
     // Sensitive, and carrying the reason: that is the whole value of keeping
