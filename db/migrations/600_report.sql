@@ -160,6 +160,17 @@ create table report (
   signed_by_certifying_body     text,
   signed_by_certificate_number  text,
 
+  -- Who it was written for, as it was true at signing. **A snapshot, for the
+  -- reason every other block on this row is one** (section 9: nothing reads a
+  -- live table at render time). Reading the client row at render made the
+  -- byte-identical re-render hold only until somebody corrected the spelling
+  -- of a child's name, after which the repair path refused the document for
+  -- ever — the fingerprint of a page rendered from this year's name can never
+  -- match the page that was filed. The filed document is what the household
+  -- holds, and it says what it said.
+  recipient_name                text,
+  recipient_record_number       text,
+
   -- The practice as it was on the day, stamped in the same breath, exactly as
   -- app.stamp_invoice_supplier stamps an invoice. No tax number, ever.
   practice_legal_name           text,
@@ -190,7 +201,8 @@ create table report (
     status <> 'draft' or (
       number is null and issued_on is null and signed_at is null
       and signed_by_practitioner_id is null and signed_by_name is null
-      and practice_legal_name is null and document_id is null
+      and practice_legal_name is null and recipient_name is null
+      and recipient_record_number is null and document_id is null
     )
   ),
   -- And an issued one carries all of it. Checked at the column rather than
@@ -200,6 +212,7 @@ create table report (
       number is not null and issued_on is not null and signed_at is not null
       and signed_by_practitioner_id is not null and signed_by_name is not null
       and signed_by_certification is not null and practice_legal_name is not null
+      and recipient_name is not null and recipient_record_number is not null
     )
   ),
   constraint report_coverage_in_order
@@ -389,6 +402,8 @@ declare
   v_signer     text;
   v_number     integer;
   v_tenant     record;
+  v_recipient_name text;
+  v_recipient_mrn  text;
 begin
   if v_tenant_id is null then
     raise exception 'No practice in context; a report cannot be issued.'
@@ -453,6 +468,19 @@ begin
     left join public.location l on l.id = t.location_id
    where t.id = v_tenant_id;
 
+  -- The recipient block, snapshotted in the same breath as the practice's own.
+  -- Read here rather than at render, so a name corrected next year does not
+  -- change what a household was sent — and so the re-render that proves the
+  -- snapshot rule keeps proving it.
+  select btrim(coalesce(c.given_name, '') || ' ' || coalesce(c.family_name, '')), c.mrn
+    into v_recipient_name, v_recipient_mrn
+    from public.client c
+   where c.tenant_id = v_tenant_id and c.id = v_report.client_id;
+  if v_recipient_name is null or v_recipient_name = '' then
+    raise exception 'the client this report names could not be read'
+      using errcode = 'no_data_found';
+  end if;
+
   v_number := app.next_report_number();
 
   update public.report
@@ -465,6 +493,8 @@ begin
          signed_by_certification      = v_credential.certification,
          signed_by_certifying_body    = v_credential.certifying_body,
          signed_by_certificate_number = v_credential.certificate_number,
+         recipient_name               = v_recipient_name,
+         recipient_record_number      = v_recipient_mrn,
          practice_legal_name          = v_tenant.legal_name,
          practice_legal_name_ar       = v_tenant.legal_name_ar,
          practice_address             = v_tenant.display_address,

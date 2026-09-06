@@ -156,6 +156,7 @@ lists them:
 | `status` (`draft`, `issued`, `superseded`) | The one-way door needs a name. Immutability is enforced against `issued`, not against the row's mere existence. |
 | `reference text`, `RPT-000001`, sequential per practice, never reused | Something a household can quote, allocated atomically as the invoice number is, and generated from `number` so the two can never drift. |
 | `signed_by_name`, `signed_by_certification`, `signed_by_certifying_body`, `signed_by_certificate_number`, and five practice identity columns beside them | The snapshots of section 3. |
+| `recipient_name` and `recipient_record_number` | The block that says who the report was written for, snapshotted at issue like every other block on the row. Added in the fix round: the first build read the client row live at render, and the review was right that section 9 rules it out. Read live, the byte-identical re-render held only until somebody corrected the spelling of a child's name — after which the repair path refused that document for ever, because bytes rendered from this year's name can never match the ones that were filed. |
 | `content jsonb not null` | What the PDF was rendered from, so it can be rendered again. |
 | `delivered_to_contact_ids` and `delivered_at` dropped for `report_delivery` | A delivery happens after issue and an issued row is immutable. |
 | No foreign key to `session` or `assessment` | Both live in ranges a 600 migration must not assume are present. |

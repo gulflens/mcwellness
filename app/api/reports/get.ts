@@ -10,7 +10,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { mayReadReport } from './access';
 import { contactClientIds } from './household';
 import { ReportResponse } from './schema';
-import { asRow, documentFrom, readRecipient, readReport } from './source';
+import { asRow, documentFrom, readReport } from './source';
 
 /**
  * `GET /api/reports/:id` — one report, its delivery history, and a short-lived
@@ -100,8 +100,10 @@ export function mountReportGet(api: Hono<ApiEnv>, now: () => Date = () => new Da
       const row = found.rows[0];
       if (row) {
         if (!(await storage.exists(row.storage_key))) {
-          const recipient = await readRecipient(db, record.client_id);
-          const remade = recipient ? documentFrom(record, recipient) : null;
+          // From the row and nothing else, which is what makes the repair
+          // path sound: the bytes it re-renders are the bytes that were filed,
+          // whatever has been corrected on the client record since.
+          const remade = documentFrom(record);
           if (remade) {
             const bytes = renderReport(remade, documentFonts());
             if (createHash('sha256').update(bytes).digest('hex') !== row.sha256.toString('hex')) {

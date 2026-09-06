@@ -11,7 +11,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { mayDraftReport } from './access';
 import { practiceTimeZone } from './gather';
 import { IssueInput, IssueResponse } from './schema';
-import { asRow, documentFrom, readRecipient, readReport } from './source';
+import { asRow, documentFrom, readReport } from './source';
 import { signerFor, signingCredentials } from './signer';
 
 /**
@@ -133,8 +133,7 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
     }
 
     const record = await readReport(db, reportId);
-    const recipient = await readRecipient(db, draft.client_id);
-    const document_ = record && recipient ? documentFrom(record, recipient) : null;
+    const document_ = record ? documentFrom(record) : null;
     if (!record || !document_) {
       // **Raised, not returned, and that is the whole of it.** The number has
       // already been allocated and the signature already written by the
@@ -145,9 +144,9 @@ export function mountReportIssue(api: Hono<ApiEnv>, now: () => Date = () => new 
       // already signed and the repair path has no bytes to compare.
       //
       // Reaching here at all means the row the function just wrote does not
-      // render: a body the shape no longer recognises, or a client row row
-      // security stopped showing mid-request. Both are faults, and a fault
-      // that rolls the signature back is the only safe answer.
+      // render: a body the shape no longer recognises, or a snapshot the
+      // function did not fill in. Both are faults, and a fault that rolls the
+      // signature back is the only safe answer.
       throw new Error('An issued report did not render; the issue was rolled back.');
     }
 

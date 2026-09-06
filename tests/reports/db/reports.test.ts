@@ -284,28 +284,58 @@ describe('issuing', () => {
     const stored = await h.storage.read?.(filed.storage_key);
     if (!stored) throw new Error('The store holds nothing at that key.');
 
-    // Read the row back exactly as the repair path does, and render it again.
+    // Read the row back exactly as the repair path does, and render it again —
+    // **from the row alone**, with no join to `client` and nothing read live.
     // The owner connection carries no tenant stamp of its own, and every query
     // in `source.ts` is written against `app.current_tenant_id()`, so it is set
     // here — which is also the point: the read is the practice's, scoped.
     await h.owner.query("select set_config('app.tenant_id', $1, false)", [h.data.tenant.id]);
     const record = await readReport(h.owner, id);
     if (!record) throw new Error('The report is not readable.');
-    const client = await h.owner.query<{ given_name: string; family_name: string; mrn: string }>(
-      'select given_name, family_name, mrn from client where id = $1',
-      [record.client_id],
-    );
-    const person = client.rows[0];
-    if (!person) throw new Error('The client is not readable.');
-    const document_ = documentFrom(record, {
-      name: `${person.given_name} ${person.family_name}`.trim(),
-      recordNumber: person.mrn,
-    });
+    const document_ = documentFrom(record);
     if (!document_) throw new Error('The row does not render.');
     const again = renderReport(document_, documentFonts());
 
     expect(createHash('sha256').update(again).digest('hex')).toBe(filed.sha256.toString('hex'));
     expect(Buffer.from(again).equals(stored)).toBe(true);
+  });
+
+  it('re-renders the same bytes after the client’s name is corrected', async () => {
+    // The recipient block is a snapshot, so a household correcting the
+    // spelling of a child's name does not change the document they were sent.
+    // Read live, this was the test that failed: the repair path refused the
+    // report for ever afterwards, because bytes rendered from this year's name
+    // can never match the ones that were filed.
+    const id = await issued(19);
+    const { rows } = await h.owner.query<{
+      sha256: Buffer;
+      client_id: string;
+      recipient_name: string;
+    }>(
+      'select d.sha256, r.client_id, r.recipient_name from report r ' +
+        'join document d on d.id = r.document_id where r.id = $1',
+      [id],
+    );
+    const filed = rows[0];
+    if (!filed) throw new Error('The report was not filed.');
+
+    // A different given name from the one on the snapshot, whichever that is.
+    // Both are on the fixed fictional list (db/seed/names.ts).
+    const corrected = filed.recipient_name.startsWith('Willow') ? 'Juniper' : 'Willow';
+    await h.owner.query('update client set given_name = $2 where id = $1', [
+      filed.client_id,
+      corrected,
+    ]);
+
+    await h.owner.query("select set_config('app.tenant_id', $1, false)", [h.data.tenant.id]);
+    const record = await readReport(h.owner, id);
+    const document_ = record ? documentFrom(record) : null;
+    if (!document_) throw new Error('The row does not render.');
+    expect(document_.recipient.name).toBe(filed.recipient_name);
+    expect(document_.recipient.name).not.toContain(corrected);
+
+    const again = renderReport(document_, documentFonts());
+    expect(createHash('sha256').update(again).digest('hex')).toBe(filed.sha256.toString('hex'));
   });
 
   it('refuses a second issue of the same report', async () => {
@@ -465,20 +495,26 @@ describe('reading one', () => {
   });
 
   it('refuses to repair with bytes that differ from what was filed', async () => {
-    // Something the report was rendered from has moved; writing the new bytes
-    // under the old key would replace a household's filed document with a
-    // different one.
+    // Writing bytes that are not the filed ones under the filed key would
+    // replace a household's document with a different one, so the repair path
+    // compares the fingerprint first and refuses when it does not match.
+    //
+    // Forced by moving the fingerprint rather than by renaming the client: now
+    // that the recipient block is a snapshot, nothing outside the report's own
+    // row can change what it renders to — which is the point of the fix, and
+    // means this refusal can only be provoked at the document row itself.
     const id = await issued(11);
-    const { rows } = await h.owner.query<{ storage_key: string; client_id: string }>(
-      'select d.storage_key, r.client_id from report r join document d on d.id = r.document_id ' +
-        'where r.id = $1',
+    const { rows } = await h.owner.query<{ storage_key: string; document_id: string }>(
+      'select d.storage_key, d.id as document_id from report r ' +
+        'join document d on d.id = r.document_id where r.id = $1',
       [id],
     );
     const key = rows[0]?.storage_key ?? '';
     await h.storage.delete(key);
-    await h.owner.query("update client set given_name = 'Renamed' where id = $1", [
-      rows[0]?.client_id,
-    ]);
+    await h.owner.query(
+      "update document set sha256 = decode(repeat('ab', 32), 'hex') where id = $1",
+      [rows[0]?.document_id],
+    );
 
     const res = await h.call('GET', `/api/reports/${id}`, SEEDED.owner);
     expect(res.status).toBe(409);

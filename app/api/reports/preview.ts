@@ -82,7 +82,14 @@ export function mountReportPreview(api: Hono<ApiEnv>, now: () => Date = () => ne
         422,
       );
     }
-    const recipient = await readRecipient(db, record.client_id);
+    // A draft has no recipient block yet, so a preview of one reads the client
+    // as they are today — which is exactly what would be snapshotted if it
+    // were signed now. An issued report's block is on its own row and that is
+    // what is shown, so the preview of a signed report is the filed page.
+    const recipient =
+      record.recipient_name !== null && record.recipient_record_number !== null
+        ? { name: record.recipient_name, recordNumber: record.recipient_record_number }
+        : await readRecipient(db, record.client_id);
     const practice = await practiceSnapshot(db);
     if (!recipient || !practice) {
       return c.json({ error: 'not_found', requestId }, 404);

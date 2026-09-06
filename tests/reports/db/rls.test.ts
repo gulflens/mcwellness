@@ -64,10 +64,11 @@ async function seedReport(
   }
   await client.query(
     'insert into report (id, tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
-      'signed_by_practitioner_id, signed_by_name, signed_by_certification, practice_legal_name, ' +
+      'signed_by_practitioner_id, signed_by_name, signed_by_certification, ' +
+      'recipient_name, recipient_record_number, practice_legal_name, ' +
       'content, version, supersedes_id, amendment_reason) values ' +
       "($1, $2, $3, 'progress', $4::report_status, $5, current_date, now(), $6, 'Rowan Ridge', " +
-      "'bcia_bcn', 'Synthetic Studio', '{}'::jsonb, $7, $8, $9)",
+      "'bcia_bcn', 'Cedar Meadow', 'MW-000001', 'Synthetic Studio', '{}'::jsonb, $7, $8, $9)",
     [
       id,
       tenantId,
@@ -423,8 +424,10 @@ describe('the chain', () => {
         '23505',
         'insert into report (tenant_id, client_id, kind, status, number, issued_on, signed_at, ' +
           'signed_by_practitioner_id, signed_by_name, signed_by_certification, ' +
-          "practice_legal_name, content) values ($1, $2, 'progress', 'issued', 1, " +
-          "current_date, now(), $3, 'Rowan Ridge', 'bcia_bcn', 'Synthetic Studio', '{}'::jsonb)",
+          'recipient_name, recipient_record_number, practice_legal_name, content) values ' +
+          "($1, $2, 'progress', 'issued', 1, " +
+          "current_date, now(), $3, 'Rowan Ridge', 'bcia_bcn', 'Cedar Meadow', 'MW-000001', " +
+          "'Synthetic Studio', '{}'::jsonb)",
         [IDS.tenantA, IDS.clientA, MORE_IDS.practitionerA],
       );
     });

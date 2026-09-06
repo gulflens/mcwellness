@@ -13,12 +13,14 @@ import type { ReportRow } from './schema';
  * as it was filed and a live join would quietly give it this year's answers.
  * That is what makes the byte-identical re-render possible at all.
  *
- * The client's own name and record number *are* read live, and deliberately:
- * they are the recipient block, and a household that corrects the spelling of
- * a child's name has corrected it. A re-render after such a correction would
- * differ from the filed bytes and the repair path refuses it, which is the
- * right answer — the filed document stays, the store is not overwritten with a
- * different one, and the mismatch is logged.
+ * **The recipient block is on the row too, and that was the fix.** It used to
+ * be read live from `client`, on the argument that a household correcting the
+ * spelling of a child's name has corrected it. That argument is wrong here:
+ * the filed PDF still says what it said, and a re-render from this year's name
+ * can never match the bytes that were filed — so the repair path refused the
+ * document for ever, and the byte-identical re-render of section 11 held only
+ * until the first correction. Snapshotted at issue like everything else
+ * (section 9: nothing reads a live table at render time).
  */
 
 export const REPORT_COLUMNS =
@@ -31,6 +33,7 @@ export const REPORT_COLUMNS =
   'r.content, r.document_id, r.version, r.supersedes_id, r.amendment_reason, ' +
   'r.signed_by_practitioner_id, r.signed_by_name, r.signed_by_certification, ' +
   'r.signed_by_certifying_body, r.signed_by_certificate_number, ' +
+  'r.recipient_name, r.recipient_record_number, ' +
   'r.practice_legal_name, r.practice_legal_name_ar, r.practice_address, ' +
   'r.practice_licence_number, r.practice_licensing_authority, ' +
   'to_char(r.created_at, \'YYYY-MM-DD"T"HH24:MI:SSOF\') as created_at';
@@ -57,6 +60,8 @@ export type ReportRecord = {
   signed_by_certification: string | null;
   signed_by_certifying_body: string | null;
   signed_by_certificate_number: string | null;
+  recipient_name: string | null;
+  recipient_record_number: string | null;
   practice_legal_name: string | null;
   practice_legal_name_ar: string | null;
   practice_address: string | null;
@@ -120,6 +125,11 @@ const CLIENT_SQL =
 
 export type Recipient = { name: string; recordNumber: string };
 
+/**
+ * The client as they are **today**. For a draft's preview only, which has no
+ * snapshot yet and is showing a page nobody has signed. An issued report never
+ * comes through here: its recipient block is on its own row.
+ */
 export async function readRecipient(db: Db, clientId: string): Promise<Recipient | null> {
   const found = await db.query<{ given_name: string; family_name: string; mrn: string }>(
     CLIENT_SQL,
@@ -134,19 +144,24 @@ export async function readRecipient(db: Db, clientId: string): Promise<Recipient
 }
 
 /**
- * The row and its recipient, assembled into what the renderer takes.
+ * The row, assembled into what the renderer takes. **Nothing but the row**:
+ * no join, no live read, no argument beyond it. That is what makes the
+ * byte-identical re-render of section 11 a property of the row rather than of
+ * the day it is asked on.
  *
  * Answers null when the report is not one that can be rendered: a draft has no
  * reference and no signature, and a row whose content the shape no longer
  * recognises is a row nothing should quietly render half of.
  */
-export function documentFrom(record: ReportRecord, recipient: Recipient): ReportDocument | null {
+export function documentFrom(record: ReportRecord): ReportDocument | null {
   if (
     record.status === 'draft' ||
     record.reference === null ||
     record.issued_on === null ||
     record.signed_by_name === null ||
     record.signed_by_certification === null ||
+    record.recipient_name === null ||
+    record.recipient_record_number === null ||
     record.practice_legal_name === null
   ) {
     return null;
@@ -170,7 +185,7 @@ export function documentFrom(record: ReportRecord, recipient: Recipient): Report
       certifyingBody: record.signed_by_certifying_body,
       certificateNumber: record.signed_by_certificate_number,
     },
-    recipient,
+    recipient: { name: record.recipient_name, recordNumber: record.recipient_record_number },
     reference: record.reference,
     issuedOn: record.issued_on,
     version: record.version,
