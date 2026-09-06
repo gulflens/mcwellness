@@ -56,6 +56,7 @@ const FOREIGN = assessmentId('b3', 1);
 const DOCUMENT_A = assessmentId('c1', 1);
 const OTHER_CLIENT_DOCUMENT = assessmentId('c2', 1);
 const LINK = assessmentId('c3', 1);
+const DOCUMENT_C = assessmentId('c4', 1);
 const FOREIGN_PRACTITIONER_USER = assessmentId('a7', 1);
 const FOREIGN_PRACTITIONER = assessmentId('a7', 2);
 const WORDING = assessmentId('a8', 1);
@@ -451,6 +452,27 @@ describe('the link between a measurement and its files', () => {
         "values ($1, $2, $3, $4, $5, 'vendor_report')",
       [assessmentId('e3', 1), IDS.tenantA, IDS.clientA, ON_SCHEDULE, DOCUMENT_A],
     );
+  });
+
+  it('refuses a condition on a file that is not a recording', async () => {
+    // Migration 503: only a recording is taken under a condition. The route
+    // refuses one too, and says so in words; this is the constraint underneath
+    // it, which holds whatever reaches the table.
+    await client.query('savepoint condition_on_a_report');
+    await seedClientDocument(client, {
+      id: DOCUMENT_C,
+      tenantId: IDS.tenantA,
+      clientId: IDS.clientA,
+      digest: 'synthetic-export-c',
+    });
+    await rejectsWith(
+      client,
+      '23514',
+      'insert into assessment_document (id, tenant_id, client_id, assessment_id, document_id, ' +
+        "role, condition) values ($1, $2, $3, $4, $5, 'vendor_report', 'eyes-open')",
+      [assessmentId('e5', 1), IDS.tenantA, IDS.clientA, ON_SCHEDULE, DOCUMENT_C],
+    );
+    await client.query('rollback to savepoint condition_on_a_report');
   });
 
   it('gives the API role no way to write a link at all', async () => {
