@@ -2033,9 +2033,25 @@ one click now is and who is offered it, marked "Amended 2026-09-06".
 `docs/SECURITY.md` gains "Who may read what" after "The layers": a row per
 client-scoped group of tables — the record with its contacts, consents,
 locations and documents; visits; sessions; money; measurements and their files;
-reports; the audit trail with the activity feed and the access report — a
-column per role in `ROLES`, and every cell read off `db/policies/**` and
-`domain/shared/actor.ts` with its policy file named beside it.
+reports; portal invitations and requests; the audit trail with the activity
+feed and the access report — a column per role in `ROLES`, and every cell read
+off `db/policies/**` and `domain/shared/actor.ts` with its policy file named
+beside it.
+
+Three cells were widened or corrected in the fix round, and none of them
+changed a policy. The **portal row** is new: `portal_invite` and
+`portal_request` are client-scoped and personal and were outside the request's
+own list of groups, so a page claiming to say who reads what had a hole in it —
+invitations are the owner's and an admin's alone, requests add the lead
+practitioner and the household's own, both erasure-gated, and a practitioner
+and a finance account read neither. The **reports** row's household cell now
+names the superseded version the household was actually sent
+(`app.report_was_delivered`), which `report_readers` grants and the cell's
+"issued reports" alone did not. And the **money** row's `catalogue_readers`
+citation now says what it is: the catalogue itself — `package`,
+`package_component`, `package_price` — is the four office roles' alone and is
+neither a practitioner's nor a household's, which a row whose cells read "own
+schedule" and "own record" would otherwise have been read as granting.
 
 **Where a policy and the actor rule disagree the row says so.** There are six
 worth a reader knowing about, and they all run the same way — the database is
