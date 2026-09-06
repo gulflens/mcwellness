@@ -42,12 +42,19 @@ under "Shared-zone changes".
    The plan page gives this screen to the portal stream; the integrator gives
    it to this build because nobody else is in that worktree.
 
-   The screen deliberately shows **every client on the record**, not only the
-   ones money is shown for. A young person's own login sees no money screen
-   because a balance is the household's business; their own report is not the
-   same kind of thing, and section 7.3 says "issued reports for their own
-   client" without that narrowing. The consent and `can_receive_reports` govern
-   what the practice *sends*; this is the household reading its own record.
+   The screen deliberately showed **every client on the record**, not only the
+   ones money is shown for — default 4 of the pull request, and named there as
+   the operator's to say yes to. *Reversed by the operator on 2026-09-06 at
+   06:15, and built in the trunk's round 31 (the fix round).* A report about a
+   young person is now read by a **legal guardian**, or by the person
+   themselves once they are an adult, and by nobody else in the household: a
+   report is a practitioner's written summary of a person, a guardian is who
+   receives it and talks a child through it, and the portal is not where a
+   child meets one alone. `app.actor_may_read_reports_of` (migration 955)
+   carries the rule into the `report` read policy, so it is the row that is
+   refused and not a line a screen leaves out; `docs/SPEC/reports-v1.md`
+   section 7.3 is amended to match. The consent and `can_receive_reports` still
+   govern what the practice *sends*, which is a different question.
 
 5. **`db/migrations/107_erase_report.sql`** (client-record's range) —
    `app.erase_client` extended under a `to_regclass('public.report')` guard
@@ -229,3 +236,38 @@ reads every other client-scoped table in this platform and reads **no** report
 money"). That is implemented in `db/policies/reports/reports.sql` and is worth
 a line beside the other audiences, so the absence reads as a decision rather
 than as a policy somebody forgot to widen.
+
+**Still open.** The trunk's round 31 did not write that summary — there is no
+one place in the specifications where the platform's read audiences are listed,
+and inventing one is a documentation decision rather than a note. Beside it,
+round 31 added a second absence of the same kind and for the same reason:
+finance reads no audit trail either (`audit.activity` in
+`domain/shared/actor.ts`), because finance reads money and not who did what.
+Both belong in whatever page eventually answers this request.
+
+---
+
+## What the trunk's round 31 closed
+
+Three of this file's own items, recorded here so a reader of the file does not
+have to cross-reference the round
+(`docs/CHANGE-REQUESTS/trunk-notes.md`, round 31, 2026-09-06):
+
+- **The widening note's count** — item 8 names five report actions in
+  `domain/shared/actor.ts` and `docs/SPEC/OWNERSHIP.md` said four. Corrected.
+- **The retired name** in a comment in `tests/reports/document.test.ts`. The
+  comment says what happened without naming anybody.
+- **The whitespace-only edit** in `domain/shared/audit-narrative.test.ts` that
+  the re-check flagged. It needed nothing: it was a stray second blank line and
+  commit `e2fda42`, in this stream's own pull request, had already removed it.
+
+The race in `tests/portal/db/invite.test.ts` that this stream's pull request
+recorded but could not fix — `tests/portal/**` is the portal stream's path — is
+fixed in the same round, in the one line that comment proposed.
+
+**Default 4 is reversed**, by the operator's decision of 2026-09-06 at 06:15
+and in the same round: a minor's own portal login no longer reads reports about
+themselves. Item 4 above carries what was built and why.
+
+**R3 is still open**: the shared writer still sets type and strokes rules in
+greyscale only, so a printed ribbon carries the figure's shape and no hue.

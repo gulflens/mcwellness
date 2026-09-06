@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
-import { canActor } from '../../../domain/shared';
+import { canActor, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mountPracticeLogo } from './logo';
 import { Practice, PracticeResponse, UpdatePracticeInput } from './schema';
@@ -69,7 +69,26 @@ async function readPractice(db: Db): Promise<PracticeRow | null> {
   return rows[0] ?? null;
 }
 
-function view(row: PracticeRow): Practice {
+/**
+ * The practice's taxable supplies over the trailing twelve months
+ * (migration 953), for the threshold watch beside the VAT switch.
+ *
+ * Through the function rather than over `invoice` directly, and for the reason
+ * migration 952 exists: read as the caller, `invoice` passes through the
+ * erasure gate, so an erased household's supplies would drop out of an admin's
+ * figure and the practice's own tax position would move with who was looking.
+ *
+ * The day is this side's, so no clock is read inside the database.
+ */
+async function taxableSupplies(db: Db, asOf: string): Promise<number> {
+  const { rows } = await db.query<{ total: string }>(
+    'select app.vat_taxable_supplies_fils($1::date)::text as total',
+    [asOf],
+  );
+  return Number(rows[0]?.total ?? 0);
+}
+
+function view(row: PracticeRow, supplies: { fils: number; asOf: string }): Practice {
   return Practice.parse({
     legalName: row.legal_name,
     legalNameAr: row.legal_name_ar,
@@ -79,6 +98,8 @@ function view(row: PracticeRow): Practice {
     licenceExpiresOn: row.licence_expires_on,
     vatRegistered: row.vat_registered,
     vatTrn: row.vat_trn,
+    vatTaxableSuppliesFils: supplies.fils,
+    vatTaxableSuppliesAsOf: supplies.asOf,
     whatsappNumber: row.whatsapp_number,
     defaultEmirate: row.default_emirate,
     timezone: row.timezone,
@@ -105,11 +126,17 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!canActor(c.get('actor'), { type: 'practice.settings.write' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const row = await readPractice(c.get('db'));
+    const db = c.get('db');
+    const row = await readPractice(db);
     if (row === null) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
-    return c.json(PracticeResponse.parse({ practice: view(row) }));
+    const asOf = isoDateIn(now(), row.timezone);
+    return c.json(
+      PracticeResponse.parse({
+        practice: view(row, { fils: await taxableSupplies(db, asOf), asOf }),
+      }),
+    );
   });
 
   api.patch('/api/practice', async (c) => {
@@ -201,6 +228,11 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (saved === null) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
-    return c.json(PracticeResponse.parse({ practice: view(saved) }));
+    const asOf = isoDateIn(now(), saved.timezone);
+    return c.json(
+      PracticeResponse.parse({
+        practice: view(saved, { fils: await taxableSupplies(db, asOf), asOf }),
+      }),
+    );
   });
 }

@@ -924,3 +924,501 @@ other uuid without ceremony, in a value of its own or inside a sentence. What
 it still refuses is a telephone number, an Emirates ID and an email address.
 The details a sensitive action records are the contact's **id** and the
 channel.
+
+---
+
+## Round 31, 2026-09-06 (what the streams owed the trunk, and the plan's small things)
+
+Nine items in one round: the five things pieces nine and ten left at the
+trunk's door, and four of the small things
+`docs/PLAN/pieces-seven-to-nine.md` folded into "the shared rounds". The
+round is wider than a trunk round usually is — it edits five streams' paths —
+so every one of those files is listed here by name and a widening note beside
+it in `docs/SPEC/OWNERSHIP.md`.
+
+### 1. A measurement can name the visit it was taken at
+
+Request 2 of `docs/CHANGE-REQUESTS/assessment-01.md`, and section 6 of
+`docs/SPEC/assessment.md`. **Closed.**
+
+Migration `951_assessment_session.sql` gives `assessment` a nullable
+`session_id`. The 500 range could not write it: `session` is in the 300s,
+apply order across ranges is not fixed, and `checkNeeds` rightly refuses a
+`-- Needs:` naming a higher number. The trunk's `950-999` half exists for
+exactly this.
+
+It binds to the client as well as to the visit. `session` carried
+`unique (id, tenant_id, client_id, practitioner_id)` — four columns, in that
+order — which no three-column foreign key can point at, so 951 adds
+`session_tenant_id_client_key` in the shape every other table uses and binds
+`(tenant_id, session_id, client_id)` to it. A measurement can therefore never
+name another household's visit. Null is ordinary and stays ordinary: a
+questionnaire filled in at home, an outside provider's export, and everything
+recorded before this migration name no visit.
+
+The drawer offers the household's completed visits from a route of the
+stream's own, `GET /api/assessments/visits`, and the tab names the visit
+beside each measurement. A correction carries the visit forward rather than
+asking again.
+
+### 2. `bytesMatchMimeType` moves to `domain/shared`
+
+Request 1 of `docs/CHANGE-REQUESTS/assessment-01.md`. **Closed.**
+
+`domain/client/fileSignature.ts` becomes `domain/shared/fileSignature.ts`,
+with its test. Three streams needed the same question and rule 3 let only one
+of them import it: `app/api/sessions/photo.ts` and
+`app/api/appointments/create.ts` wrote the note, and the assessment stream
+wrote its own five-byte copy of the PDF signature. That copy is gone —
+`bytesAreAPdf` asks the shared question — and what is left in
+`domain/assessment/fileType.ts` is the practice's own decision about which
+media type an export may be.
+
+`domain/client` re-exports it, so **no caller moved**: the same shape
+`domain/billing/money.ts` uses for `formatFils`.
+
+### 3. A document names its own client, said as a key
+
+The note on the composite key in `docs/CHANGE-REQUESTS/assessment-01.md`
+(default 5). **Closed.**
+
+Migration `911_document_client_key.sql` gives `document` the client-scoped
+unique key every other core table already has, and
+`502_assessment_document_key.sql` replaces migration 501's guard trigger with
+a foreign key onto it. 501 is not edited. The deny case is unchanged, SQLSTATE
+and all, so `tests/assessment/db/rls.test.ts` reads the answer it always did.
+
+**The key is created in both files, under the same guard, and here is why.**
+The runner applies pending files in numeric order, so on a fresh database 502
+is reached before any `9xx`: without the guard the foreign key would fail
+outright. This is the wall migration 601 hit with
+`contact_tenant_id_client_key` (`reports-01.md` item 9), answered the other
+way about — there the key stayed in the stream's file, here it has a home in
+the trunk's and 502 only makes sure it exists in time. A database carrying the
+trunk's range and not the assessment stream's still gets the key, from 911,
+which is why 911 exists at all.
+
+### 4. The race in `tests/portal/db/invite.test.ts`
+
+The note posted on pull request 83. **Fixed**, in one line, exactly as that
+note proposed: the losing redemption's rejection is parked as a value before
+the `commit` that releases the lock, rather than left for an expectation two
+lines later. Node reported an unhandled rejection for that gap and vitest
+failed the whole run for it, with all 902 tests passing. The file was run ten
+times after the change, all green.
+
+### 5. The three cosmetic notes from pull request 83's re-check
+
+- The widening note counted **four** report actions where `actor.ts` carries
+  five. Corrected.
+- A retired name survived in a comment in `tests/reports/document.test.ts`.
+  The comment now says what happened without naming anybody.
+- The whitespace-only edit in `domain/shared/audit-narrative.test.ts` needed
+  **nothing**: it was a stray second blank line, and commit `e2fda42` in the
+  same pull request had already removed it. Nothing whitespace-only survives
+  anywhere between `ad4428d` and main, checked by comparing the plain and
+  `-w` diffs over the whole range.
+
+### 6. The month's takings are the same figure whoever asks
+
+The first of the plan's small things. **Done.**
+
+Read as the caller, `payment` and `entitlement` pass through
+`app.client_erasure_gate` (`db/policies/billing/ledger.sql`), so in any month
+holding an erased household finance was shown a smaller total than the owner,
+with nothing on the screen to say why. That is right for a household's own
+money and wrong for the practice's month: the rows are kept five years because
+tax law asks it of the business.
+
+Migration `952_practice_money_ledger.sql` adds `app.practice_money_ledger()`,
+which reads the ledger whole and **names nobody** — an amount and a day, no
+client, no invoice — and `GET /api/billing/summary` reads it instead of the
+two tables. What an erasure protects is whose money it was, not what the
+practice took.
+
+The arithmetic does not move. `monthlyMoney` still does the recognition and
+the deferral, because restating those rules in SQL would be a second
+implementation that disagrees with the first the day either changes
+(CLAUDE.md rule 4). The function is `security definer` and checks its
+caller's role itself.
+
+### 7. The VAT threshold watch
+
+The second of the plan's small things. **Done.**
+
+Migration `953_vat_taxable_supplies.sql` adds
+`app.vat_taxable_supplies_fils(as_of)`: what the practice supplied, net of
+VAT, over the twelve months ending on the day given, counted from the invoice
+book. `security definer` for the reason 952 is — `invoice` passes through the
+erasure gate too, and a practice's own tax position must not move with who is
+looking at it. The day is an argument, so no clock is read inside the
+database.
+
+`domain/shared/vat-threshold.ts` holds the Federal Tax Authority's two marks —
+AED 187,500, where registering becomes a choice, and AED 375,000, where it
+becomes a duty within thirty days — and says which side of them a figure
+falls. Settings › Practice shows the figure beside both marks, says
+registering has become a choice past the first, and says on **every** visit
+past the second that it is a duty, until the switch is on.
+
+**The switch stays a hand's act.** Nothing here registers anything: an invoice
+may not carry VAT until the authority has issued the number the row requires
+(migration 905), and the thirty-day forward test cannot be computed from a
+ledger.
+
+### 8. The activity feed and the per-client access report
+
+The third of the plan's small things, and `docs/SPEC/audit.md` section 9,
+views 2 and 4 — which the data has supported since pull request 6 and nothing
+has shown. **Done.**
+
+- `GET /api/audit/activity` — the practice's whole trail as sentences, newest
+  first, narrowable by who acted, kind of row, action, days and household.
+- `GET /api/audit/filters` — the practice's own people, and the words the
+  trail actually uses over the last ninety days.
+- `GET /api/audit/access-report?clientId=` — everyone who has opened one
+  record, ever, with how often and when.
+
+`app/admin/audit/AuditPage.tsx` is the screen, and the Audit rail item stops
+saying "Arriving".
+
+What the rules keep. The sentences come from the same catalogue the record
+timeline uses, so **no line carries anything the trail does not already hold**
+and no JSON reaches a browser. A record is named by its number, never by a
+name. An erased household stays with the owner and the lead practitioner:
+`audit_log`'s own policies are tenant-wide, so without asking
+`app.client_erasure_gate` the feed would be a way round the record's own
+screens, and the access report holds the timeline's own door — a 404 for an
+admin, and a typed reason for the owner. Reading the trail is itself
+recorded, once per request.
+
+`domain/shared/actor.ts` gains one action, `audit.activity`: the three
+oversight roles, and finance none of it, because finance reads money and not
+the trail.
+
+### 9. The dead `invoice.document_id` column
+
+The last of the plan's small things, `billing-04.md` request 5, and round 24
+of this file. **Done.**
+
+402 declared the column as "the rendered PDF, written by nothing in this pull
+request". Nothing has written it since and nothing can: `invoice` grants no
+update, so it could only be filled at insert time and the PDF does not exist
+then. Billing answered the real need with `billing_document` (407).
+
+Round 24 recorded what had to happen first — something still read it. Three
+things did, and all three moved in the same commit:
+
+1. `app.erase_client`, arm (b) of its kept-documents question. It caught
+   nothing by construction, and arm (c) over `billing_document` catches what
+   it was there to catch. `954_drop_invoice_document_id.sql` replaces the
+   function whole — 107's body with that arm removed and its comment rewritten
+   to say where it went, everything else untouched. **A future stream
+   extending `app.erase_client` copies 954's body, not 107's.**
+2. `tests/billing/db/packages.test.ts` asserted the column stayed null, which
+   is a test that a dead column is dead. It now asserts what actually holds.
+3. `tests/client/db/erasure_act.test.ts` wrote the column in a fixture and
+   read it back in one assertion. Both go; that file's own "a rendered tax
+   document" case already proves the link-table path.
+
+---
+
+### Every file this round touched outside the trunk's own paths
+
+Listed by name, as a widening requires. Each is a change the item above it
+could not be made without.
+
+**assessment** (items 1, 2 and 3)
+`app/api/assessments/routes.ts`, `rows.ts`, `schema.ts`, `file.ts`;
+`app/admin/assessments/RecordDrawer.tsx`, `AssessmentsTab.tsx`,
+`AssessmentsTab.test.tsx`; `domain/assessment/fileType.ts` and its test;
+`db/migrations/502_assessment_document_key.sql`.
+
+**client-record** (item 2)
+`domain/client/index.ts` (the re-export), and `domain/client/fileSignature.ts`
+with its test, which moved to `domain/shared`.
+
+**client-portal** (item 4)
+`tests/portal/db/invite.test.ts`.
+
+**reports** (item 5)
+`tests/reports/document.test.ts`.
+
+**billing** (items 6 and 9)
+`app/api/billing/summary.ts`; `tests/billing/db/packages.test.ts`.
+
+**client-record** (item 9)
+`tests/client/db/erasure_act.test.ts`.
+
+**audit-ui** (item 8)
+`app/api/audit/activity.ts`, `app/api/audit/schema.ts`;
+`app/admin/audit/AuditPage.tsx`, `AuditPage.test.tsx`, `audit.css`.
+
+Everything else is the shared zone or the trunk's own: `domain/shared/**`,
+`app/shell/**`, `app/admin/settings/**`, `app/api/practice/**`,
+`app/api/create-api.ts`, `db/migrations` 9xx, `tests/db/**` and
+`docs/SPEC/OWNERSHIP.md`.
+
+### Every default taken
+
+Nineteen, all the builder's. Each is here because a reader of this round
+should not have to find it in a diff.
+
+1. **The key on `document` is created twice**, in 911 and in 502, each under
+   the same guard, because on a fresh database the runner reaches 502 first.
+   Item 3 says why at length.
+2. **`domain/client` re-exports the file signature** rather than every caller
+   moving to `domain/shared`. The `formatFils` precedent, and it keeps the
+   client-record stream out of a round that has no other business there.
+3. **A three-column key on `session`.** Without it the visit link could bind
+   only to a visit id, and a measurement could have named any visit in the
+   practice.
+4. **The visits picker got its own route** in the assessment group rather than
+   reading the reports stream's `GET /api/reports/visits`: a route in another
+   stream's group is a dependency across a boundary rule 3 draws, and the
+   query is eight lines.
+5. **A correction carries the visit forward** rather than asking for it again:
+   a correction is a new reading of the same measurement, taken at the same
+   visit, and a picker on that form would be a way to move a measurement onto
+   another day's visit by accident.
+6. **The recording route asks whether the visit is this client's** before
+   inserting. The key is still the boundary; the question is so that a caller
+   naming another household's visit is told so rather than handed the 500 a
+   foreign-key violation would otherwise become.
+7. **`app.practice_money_ledger` returns rows, not totals.** The plan says
+   "one database function adds up the ledger whole"; adding up recognition and
+   deferral in SQL would restate `monthlyMoney`, so the function reads the
+   ledger whole and the arithmetic stays in `domain/billing`.
+8. **The takings are proved at the database and at the route**, with a
+   finance-only account created inside the test rather than added to the seed:
+   the seed's own owner holds finance alongside three other roles, and adding
+   a fifth seeded person would move counts several other tests assert.
+9. **Every kind of invoice counts towards the VAT threshold.** Nothing writes
+   a `statement` today; over-counting brings a warning early and
+   under-counting brings it late, and late is the one that costs a penalty.
+10. **`domain/shared/vat-threshold.ts`, not `domain/billing`.** It is not
+    invoice arithmetic — that is `resolveVat`'s, and CLAUDE.md rule 6 keeps it
+    there. This says where the practice's own registration duty stands, and
+    `domain/billing/**` is another stream's path besides.
+11. **The threshold function takes the day as an argument**, so the figure is
+    testable and the practice's time zone is decided in one place.
+12. **The threshold figure's audience is the owner, an admin and finance** in
+    the function, and the owner and an admin on the screen, which is the
+    settings audience. Finance is admitted because the figure is a
+    bookkeeper's question even though the screen is not theirs.
+13. **A new `audit.activity` action** rather than reusing `audit.read` with an
+    invented client id: the whole practice's trail names no one record.
+14. **The activity feed asks `app.client_erasure_gate`.** `audit_log`'s own
+    policies are tenant-wide, so without it an administrator would reach an
+    erased household through the feed that the record's own screens refuse
+    them.
+15. **Reading the feed is audited once per request**, not once per line: a row
+    per line would double the trail every time somebody scrolled it, and the
+    filters are recorded with it.
+16. **The access report is reached from a line of the feed**, not from a
+    picker of every household: a line already names the record it touched, and
+    a page about oversight should not open with a list of families.
+17. **The whitespace note needed no edit**, and saying so is the answer rather
+    than making one.
+18. **New tests live in `tests/db/`**, the trunk's own path, except where a
+    stream's own fixture had to change (items 4, 5 and 9). The alternative was
+    editing three streams' suites to hold tests about the trunk's migrations.
+19. **`app.erase_client` is replaced whole** rather than patched, because
+    `create or replace` has no patch form. The body is 107's verbatim minus
+    one arm.
+
+### What the streams should know
+
+**assessment.** `session_id` is on the row and on the wire, and the file
+signature question is `domain/shared`'s now — `domain/assessment/fileType.ts`
+keeps only the media-type decision. The guard trigger on
+`assessment_document` is gone; the foreign key says the same thing.
+`app/api/assessments/file.ts` still works around round 30's audit fault by not
+passing the document id; nothing obliges it to any more.
+
+**billing.** `invoice.document_id` is gone, with `invoice_document_idx`.
+`GET /api/billing/summary` reads `app.practice_money_ledger()`. Two functions
+are available to any route that needs them: `app.practice_money_ledger()` and
+`app.vat_taxable_supplies_fils(date)`.
+
+**client-record.** `domain/client` still exports `bytesMatchMimeType` and its
+neighbours; the file behind them moved. One stale path is left for that stream
+to correct when it is next in the file: `app/api/clients/document-store.ts`
+line 68 names `domain/client/fileSignature.ts` in a comment. It is a comment
+and this round did not edit that file for it.
+
+**audit-ui.** The stream's paths now hold `app/api/audit/activity.ts` and
+`app/admin/audit/AuditPage.tsx`, built by the trunk under this round's
+widening and the stream's from here.
+
+**Everyone.** A future migration that extends `app.erase_client` starts from
+`954_drop_invoice_document_id.sql`'s body, which is the current one.
+
+---
+
+## Round 31, the fix round, 2026-09-06
+
+The combined review of pull request 87 failed the round on security with one
+gap and found eight more; the integrator decided each, and added three items
+taken after the round had started. Thirteen commits, one per item and one for the reports suite's fixtures.
+
+### 1. The security gap, and why it was one
+
+**The activity feed opened an erased household's history with nothing typed.**
+`docs/SPEC/client-record.md` section 8 step 3 makes opening an erased record a
+sensitive action, and everything else in the building holds that door: the
+record's own timeline refuses without `X-Reason`, and so does the access report
+in the very file the feed was written into. The feed did not, and its own test
+proved it — a request naming an erased record was answered 200 with no header
+at all. Round 31's default 14 said the feed asks `app.client_erasure_gate`,
+which is true and was only half the rule: the gate admits the owner and the
+lead practitioner **whatever their reason**, so the two people the erased
+record belongs to could read its whole history by scrolling.
+
+Fixed in three places. Narrowed to one record the feed now holds the
+timeline's door exactly — 404 for a record the caller may not see, 400
+`reason_required` for an erased one with nothing typed, 200 with a reason. The
+unfiltered feed withholds an erased household's rows until a reason is on the
+request, which needed more than the `$9` short-circuit the review proposed:
+`client_erasure_gate` on its own would still have let them through, so the
+clause now asks the status directly as well. Both cases are tested, deny and
+allow.
+
+The lesson worth keeping is not about this route. **A gate that answers "who"
+is not a gate that answers "why"**, and a screen that reaches records sideways
+— a feed, an export, a report about reports — has to be checked against the
+record's own door rather than against the table's policies, which are
+tenant-wide by design.
+
+### 2. The other eight, in one line each
+
+2. **A feed narrowed to one record writes a `read` row for it.** The access
+   report counts `read` and `list`, so without it the one screen whose subject
+   is who has looked never counted its own looking.
+3. **`(audit_log, audit.activity)` has a sentence**, in both languages and
+   counted as a read, and the page is cut *after* narration rather than
+   before — a batch of housekeeping rows used to come back shorter than the
+   limit asked for, or empty with `hasMore` still true, which the screen reads
+   as "nothing matches".
+4. **The VAT watch says the duty and nothing after it.** The voluntary-mark
+   notice is gone (the mark stays in the list) and the duty notice is the
+   plan's sentence. A notice at a mark that changes nothing the practice must
+   do is a notice that repeats itself for no consequence.
+5. **`docs/SPEC/00-data-model.md`'s `assessment` sketch** names `session_id`
+   and reaches its files through `assessment_document`, each amendment marked.
+   `assessment-01.md` says so too rather than still calling them unapplied.
+6. **Both apply orders of the document key are proved.** The new case in
+   `tests/db/constraints.test.ts` runs each migration's own guarded block,
+   read from the file so a change to either changes what is proved, 911 first,
+   against a throwaway table in a schema of its own — a unique constraint is
+   backed by an index and an index name is unique per schema, which is why the
+   scratch table cannot live in `public`.
+7. **911's `Needs:` line names 060 alone.** 099 is the precedent, beside 402
+   and 601, and nothing in the file depends on it.
+8. **`app/api/practice/logo.ts` imports `bytesMatchMimeType`** and its two
+   local signatures are gone, with the paragraph that justified them under
+   OWNERSHIP rule 3 — both of whose claims this round's own move made false.
+9. **"An outside provider's export"**, in the four places that said clinic.
+   The word left the platform's vocabulary in the re-baseline of 2 September.
+
+### 3. Default 16 stands, and what it still owes
+
+The review let default 16 stand — the access report is reached from a line of
+the feed rather than from a picker of every household — and noted that it falls
+short of the plan's "one press" for a record with no line in the loaded pages.
+It does. **The press belongs on the client drawer, beside the record
+timeline**, where somebody already looking at a household can ask who else has
+been. That is `app/admin/clients/**` and `audit-ui`'s to add, not this round's:
+the trunk's widening covered the audit screens, and a tab on the client drawer
+is a different stream's surface. Recorded here so that stream finds it.
+
+### 4. Two operator decisions of 06:15, carried by this round
+
+**A report about a young person is the guardian's to read.** Default 4 of pull
+request 83 showed the portal's Reports screen to every contact on the record,
+including a minor's own login, and named the reading as the operator's to say
+yes to. She said no. Migration 955 adds `app.actor_may_read_reports_of` — a
+legal guardian, or the person themselves once they are an adult, with the age
+decided in the practice's own time zone as migration 702 decides it — and the
+`report` read policy asks it in place of `app.actor_is_contact_of`. So the row
+is refused and not a line a screen leaves out. `reportsVisibleTo` states the
+same rule in `domain/portal` and the portal's Reports route narrows the
+household by it. It is deliberately narrower than the money rule beside it,
+which admits every contact who is not a minor's own login: the household pays,
+so whoever settles an invoice has business with a balance, and a report is not
+the same kind of thing. `docs/SPEC/reports-v1.md` section 7.3 is amended and
+`reports-01.md` records the reversal.
+
+**The platform's own hosted project exists.** The operator created it at 06:22
+that morning, and `PLATFORM_PRODUCTION_PROJECT_REF` in
+`.claude/hooks/no-prod-in-dev.sh` is filled in. Every sentence in
+`docs/SPEC/hosting.md` and `docs/RUNBOOK/restore.md` that spoke of the day it
+would be created now says the day has come, each marked, and the restore
+rehearsal waits on nothing but a first dump worth restoring. The reference is
+the twenty characters of a URL and not a credential: the keys and every
+runtime setting stay in the host's secret store and never enter this
+repository. The migration guard in `db/runner/plan.ts` is unchanged, which was
+the point of writing it from the local end.
+
+The GitHub `production` Environment is a separate thing and **still does not
+exist**: creating it changes the repository's settings, which the permission
+layer refuses a session unattended. `docs/RUNBOOK/restore.md` section 3 keeps
+that sentence, and the operator's pack carries the command.
+
+### 5. Every file this fix round touched outside the trunk's own paths
+
+**reports** (item 10)
+`db/policies/reports/reports.sql`; `tests/reports/db/portal.test.ts`, `tests/reports/db/rls.test.ts`.
+
+**client-portal** (item 10)
+`app/api/portal/reports.ts`, `app/api/portal/household.ts`;
+`domain/portal/index.ts`, `domain/portal/reports.ts` and its test.
+
+**assessment** (item 9)
+`app/admin/assessments/RecordDrawer.tsx`, `AssessmentsTab.tsx`,
+`app/api/assessments/schema.ts` — one word in a comment in each.
+
+**audit-ui** (items 1, 2 and 3)
+`app/api/audit/activity.ts`, already listed in the round's own widening.
+
+Everything else is the shared zone or the trunk's own: `domain/shared/**`,
+`app/admin/settings/**`, `app/api/practice/**`, `db/migrations` 9xx,
+`db/runner/**`, `tests/db/**`, `.claude/hooks/**` and `docs/**`.
+
+### 6. The defaults this fix round took
+
+1. **The erasure clause asks the status as well as the gate.** The review
+   proposed short-circuiting `$9` to "owner-or-lead and reason-present", which
+   on its own changes nothing: `client_erasure_gate` admits the owner and the
+   lead practitioner regardless. The clause therefore asks
+   `app.client_status_for(...) is distinct from 'erased'` beside it. `is
+   distinct from` and not `<>`, so a row whose client cannot be read at all
+   behaves exactly as it did before.
+2. **A feed narrowed to an erased record is a 404 for an admin**, where it used
+   to be a 200 with an empty list. That is the timeline's answer to the same
+   question, and "exactly as the timeline does" is what the fix asked for.
+3. **The page is cut after narration and `hasMore` follows the narrated
+   count.** A batch that narrates to nothing therefore ends the scroll rather
+   than promising more it cannot show. That is the smaller of the two wrongs
+   and it is the shape the fix names; the rows that can still be dropped are
+   `update` rows whose only changed column was `updated_at`.
+4. **`app.actor_may_read_reports_of` is a trunk migration (955)**, not a `6xx`
+   in the reports stream's range. The policy file it serves is that stream's,
+   but this is an operator decision taken during the trunk's round and applied
+   in the trunk's pull request, and a stream's range is not the trunk's to
+   write in.
+5. **A client with no date of birth reads as an adult**, in the new rule as in
+   migration 702's: the column is optional, and inventing a birthday to
+   withhold a document from an adult is the worse mistake.
+6. **A minor's own login sees an empty Reports screen** rather than a refusal.
+   `forReports` narrows the household to nobody, so the screen's own empty
+   state answers; a 403 would say that a document exists and is being withheld,
+   which is the thing a 404 exists to avoid everywhere else in this repository.
+7. **`reportsVisible` sits on `HouseholdClient` beside `moneyVisible`.** The
+   portal already carries one per-client visibility answer resolved once, in
+   the database, from the actor stamp; a second rule answered anywhere else
+   would be the beginning of two places to look.
+8. **The tests for item 10 live in `tests/reports/db/portal.test.ts`**, against
+   round 31's own default 18, because the harness that issues a report and
+   signs a portal request is there and rebuilding it under `tests/db/` would
+   prove less.

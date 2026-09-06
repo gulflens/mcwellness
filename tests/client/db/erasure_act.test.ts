@@ -226,13 +226,20 @@ async function seedHousehold(h: Household): Promise<void> {
   // setting, which a fixture has to stamp for itself.
   await owner.query('begin');
   await owner.query("select set_config('app.tenant_id', $1, true)", [IDS.tenantA]);
+  // No column on the invoice names the PDF, and none ever could: an invoice
+  // grants no update, so it would have to be written at insert time and the
+  // rendering happens afterwards. `invoice.document_id` was the column that
+  // tried; nothing wrote it and the trunk dropped it in migration 954. What
+  // keeps this file through an erasure is its own kind, and the link table
+  // `billing_document` keeps the ones filed under an ordinary kind — proved
+  // by "a rendered tax document" further down this file.
   await owner.query(
     'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, ' +
-      "gross_fils, document_id) values ($1, $2, app.next_invoice_number(), 'statement', " +
+      "gross_fils) values ($1, $2, app.next_invoice_number(), 'statement', " +
       // Net, with no VAT: the fixture's practice is not registered for it, and
       // migration 406 refuses an invoice that carries VAT for one that is not.
-      'current_date, 70000, 0, 70000, $3)',
-    [IDS.tenantA, h.client, h.invoicePdf],
+      'current_date, 70000, 0, 70000)',
+    [IDS.tenantA, h.client],
   );
   await owner.query('commit');
 }
@@ -623,11 +630,12 @@ describe('performing it', () => {
       await storage.exists(`tenant/${IDS.tenantA}/client/${MAIN.client}/${MAIN.invoicePdf}`),
     ).toBe(true);
 
-    // The invoice itself: not one column of it moved.
+    // The invoice itself: not one column of it moved, the supplier snapshot
+    // included.
     const invoice = await owner.query<{ n: string }>(
-      'select count(*)::text as n from invoice where client_id = $1 and document_id = $2 ' +
-        'and supplier_legal_name is not null',
-      [MAIN.client, MAIN.invoicePdf],
+      'select count(*)::text as n from invoice ' +
+        'where client_id = $1 and supplier_legal_name is not null and net_fils = 70000',
+      [MAIN.client],
     );
     expect(invoice.rows[0]?.n).toBe('1');
 

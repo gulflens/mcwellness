@@ -50,6 +50,9 @@ function row(id: string, overrides: Record<string, unknown> = {}) {
     performedAt: '2026-03-01T08:00:00.000Z',
     performedByPractitionerId: '00000005-0000-4000-8000-000000000001',
     performedBy: 'Rowan Meadow',
+    sessionId: null,
+    visitOn: null,
+    visitServiceName: null,
     derived: {
       kind: 'brain-map',
       provenance: PROVENANCE,
@@ -234,6 +237,27 @@ describe('the measurements table', () => {
 
     const standing = rows.find((each) => each.textContent?.includes('Stands'))!;
     expect(within(standing).getAllByRole('cell')[0]?.querySelector('span.small.muted')).toBeNull();
+  });
+
+  it('names the visit a measurement was taken at, and says so when there was none', async () => {
+    // Migration 951. Empty is ordinary rather than missing: a questionnaire
+    // filled in at home names no visit of the practice's own.
+    mount({
+      chains: [
+        {
+          current: row(BASELINE, {
+            sessionId: '00000005-0000-4000-8000-000000000009',
+            visitOn: '2026-03-01',
+            visitServiceName: 'Brain map',
+          }),
+          superseded: [],
+        },
+        { current: row(REMAP, { performedAt: '2026-05-30T08:00:00.000Z' }), superseded: [] },
+      ],
+    });
+    await screen.findAllByText('1 Mar 2026');
+    expect(screen.getAllByText('Brain map').length).toBeGreaterThan(2);
+    expect(screen.getByText('Not at a visit')).toBeTruthy();
   });
 
   it('says so plainly when nothing has been measured yet', async () => {

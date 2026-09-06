@@ -8,6 +8,8 @@ export { addFils, fils, formatFils } from './fils';
 export type { Fils } from './fils';
 export { ROLES, canActor, hasRole, isCredentialValidOn, isoDateIn } from './actor';
 export type { Action, ActionContext, Actor, Capability, IsoDate, Role } from './actor';
+export { KNOWN_MIME_TYPES, bytesMatchMimeType, isKnownMimeType } from './fileSignature';
+export type { KnownMimeType } from './fileSignature';
 export {
   EMIRATES_ID_DIGITS,
   formatEmiratesId,
@@ -25,3 +27,9 @@ export {
 } from './storage';
 export type { StorageProvider, StoredObject } from './storage';
 export * from './dates';
+export {
+  VAT_MANDATORY_THRESHOLD_FILS,
+  VAT_VOLUNTARY_THRESHOLD_FILS,
+  vatThresholdStand,
+} from './vat-threshold';
+export type { VatThresholdStand } from './vat-threshold';

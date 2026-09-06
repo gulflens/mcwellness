@@ -60,6 +60,17 @@ export function canOpenKit(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `audit.activity` (app/api/audit/activity.ts) — who may open Audit.
+ * The owner, an admin and the lead practitioner: reading who did what is
+ * oversight, and finance reads money rather than the trail.
+ * `db/policies/core/audit_log.sql` refuses the rows beneath both this screen
+ * and the routes (docs/SPEC/audit.md section 9).
+ */
+export function canOpenAudit(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'audit.activity' }, {}, now);
+}
+
+/**
  * Matches the `/today/check-in` gate in App.tsx: who may cross to the
  * practitioner's side. An owner who also treats holds `lead_practitioner`
  * alongside owner, so the console offers them "Today"; an admin-only or

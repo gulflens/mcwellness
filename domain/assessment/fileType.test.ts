@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { ASSESSMENT_FILE_MIME_TYPE, bytesAreAPdf } from './fileType';
 
-/** The one file type an export may be (docs/SPEC/assessment.md decision 3). */
+/**
+ * The one file type an export may be (docs/SPEC/assessment.md decision 3).
+ *
+ * The bytes are `domain/shared/fileSignature.ts`'s question and are tested
+ * there, over all four media types the platform holds. What is asserted here
+ * is that this stream still asks it, and still about one type only.
+ */
 
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37]);
 

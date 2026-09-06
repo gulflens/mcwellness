@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import {
+  VAT_MANDATORY_THRESHOLD_FILS,
+  VAT_VOLUNTARY_THRESHOLD_FILS,
+  formatFils,
+  vatThresholdStand,
+} from '@domain/shared';
 import { PracticeResponse, type Practice } from '../../api/practice/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, PageHeader } from '../../shell/components/Controls';
@@ -53,6 +59,60 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 
 function text(value: string | null): ReactNode {
   return value === null || value.length === 0 ? null : value;
+}
+
+/**
+ * Where the practice stands against the two VAT registration marks, in words
+ * (migration 953, domain/shared/vat-threshold.ts).
+ *
+ * The figure is counted from the invoice book and the marks are the Federal
+ * Tax Authority's. **Nothing here turns the switch**: an invoice may not carry
+ * VAT until the authority has issued the number the row requires (migration
+ * 905), and the thirty-day forward test cannot be worked out from a ledger at
+ * all. Past the second mark the page says so on every visit until the switch
+ * is on, which is the one place in this application something repeats itself
+ * — and it repeats because the consequence of missing it is a penalty from
+ * the tax authority rather than an inconvenience.
+ *
+ * **One notice, and only past the second mark** (the fix round of trunk round
+ * 31). The first build added a second notice at the voluntary mark and told
+ * the reader at the mandatory one to go and apply. The plan asks for the two
+ * marks on the page and the duty sentence past the second, and no more:
+ * passing the voluntary mark changes nothing the practice must do, so a
+ * notice about it repeats itself to no consequence, which is the pattern the
+ * anti-engagement rule exists to refuse — and the paragraph above already
+ * says whose act registering is. The mark itself stays in the list, where a
+ * reader can see where the practice stands against both.
+ */
+function VatWatch({ practice }: { practice: Practice }) {
+  const stand = vatThresholdStand(practice.vatTaxableSuppliesFils);
+  return (
+    <>
+      <dl className="practice__facts">
+        <Fact label="Taxable supplies, last twelve months (AED)">
+          <span className="numeric">{formatFils(practice.vatTaxableSuppliesFils)}</span>
+        </Fact>
+        <Fact label="Registering becomes a choice at (AED)">
+          <span className="numeric">{formatFils(VAT_VOLUNTARY_THRESHOLD_FILS)}</span>
+        </Fact>
+        <Fact label="Registering becomes a duty at (AED)">
+          <span className="numeric">{formatFils(VAT_MANDATORY_THRESHOLD_FILS)}</span>
+        </Fact>
+      </dl>
+      <p className="small muted">
+        Counted from every invoice issued in the twelve months to{' '}
+        <span className="numeric">{formatDate(practice.vatTaxableSuppliesAsOf)}</span>, net of VAT.
+        Registering is the practice&rsquo;s own act: turning the switch on here does not register
+        it, and the Federal Tax Authority issues the number an invoice has to print.
+      </p>
+      {stand === 'mandatory' && !practice.vatRegistered ? (
+        <Note tone="critical">
+          Taxable supplies have passed AED {formatFils(VAT_MANDATORY_THRESHOLD_FILS)}. Registering
+          for VAT is a duty within thirty days of passing it.
+        </Note>
+      ) : null}
+    </>
+  );
 }
 
 export function PracticePage() {
@@ -200,6 +260,7 @@ export function PracticePage() {
               registration does not change what an invoice charges: VAT is worked out from the
               practice&rsquo;s standard rate today, whichever way the switch is set.
             </p>
+            <VatWatch practice={practice} />
           </section>
 
           <PracticeLogo />

@@ -14,9 +14,10 @@
 --                              signs only with the capability — which is a
 --                              credential and not a row policy
 --                              (domain/reports/canIssue.ts, app.issue_report)
---   client contact             issued reports for their own client, and a
---                              superseded version only where one was actually
---                              sent to the household
+--   client contact             issued reports for the client they are a legal
+--                              guardian of — or their own, once they are an
+--                              adult — and a superseded version only where one
+--                              was actually sent to the household
 --   finance                    nothing at all, because a report is not money
 --
 -- **Finance is the one absence worth stating.** Every other client-scoped
@@ -27,8 +28,8 @@
 --
 -- A practitioner's reach goes through app.client_visible_to_practitioner
 -- (201): ninety days back, thirty forward, confirmed visits only. A client
--- contact's goes through app.actor_is_contact_of (100). Neither is restated
--- here; both are asked.
+-- contact's goes through app.actor_may_read_reports_of (955). Neither is
+-- restated here; both are asked.
 --
 -- Erasure. Both tables pass their client's status through
 -- app.client_erasure_gate, exactly as db/policies/client/readers.sql does, so
@@ -57,12 +58,20 @@ $$;
 --
 --    The household's own line is the narrow one and it is the reason this
 --    policy is not the same shape as billing's. A contact sees an issued
---    report for their own client, and a superseded one only where the practice
---    actually sent the household a copy — because "never a superseded version
---    they were not sent" is section 7.3's own sentence, and a version that was
---    delivered is one they may already be holding. `app.report_was_delivered`
---    (601) answers that as security definer, which is what keeps this out of a
---    policy loop through `report_delivery`'s own rules.
+--    report for a client they are a legal guardian of, or their own once they
+--    are an adult, and a superseded one only where the practice actually sent
+--    the household a copy — because "never a superseded version they were not
+--    sent" is section 7.3's own sentence, and a version that was delivered is
+--    one they may already be holding. `app.report_was_delivered` (601) answers
+--    that as security definer, which is what keeps this out of a policy loop
+--    through `report_delivery`'s own rules.
+--
+--    **A minor's own login reads no report about themselves** (operator
+--    decision 2026-09-06, reversing default 4 of pull request 83). It is
+--    `app.actor_may_read_reports_of` (955) that says so, and not a screen that
+--    leaves a row out: a report is a document a guardian receives and talks a
+--    child through, and hiding it in a browser while the row is still readable
+--    is the pattern this repository refuses everywhere else.
 --
 --    A draft is nobody's but the practice's, ever.
 ------------------------------------------------------------------------------
@@ -73,7 +82,7 @@ create policy report_readers on public.report as restrictive for select to app_r
     or app.actor_has_role('lead_practitioner')
     or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
     or (
-      app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id)
+      app.actor_has_role('client_contact') and app.actor_may_read_reports_of(client_id)
       and (status = 'issued' or (status = 'superseded' and app.report_was_delivered(id)))
     )
   )

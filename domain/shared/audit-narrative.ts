@@ -201,7 +201,9 @@ function actorPhrase(event: AuditEvent, locale: Locale): string {
 }
 
 function kindOf(event: AuditEvent): NarrationKind {
-  if (event.action === 'read' || event.action === 'list') return 'read';
+  if (event.action === 'read' || event.action === 'list' || event.action === 'audit.activity') {
+    return 'read';
+  }
   if (event.action === 'insert') return event.actor ? 'create' : 'system';
   if (event.action === 'update') return 'change';
   return 'other';
@@ -811,6 +813,16 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         ),
         locale,
       );
+    case 'audit_log.audit.activity':
+      // **Reading the trail shows on the trail.** The activity feed writes one
+      // of these per request (app/api/audit/activity.ts), and without a
+      // sentence for it the catalogue dropped every one — so the screen whose
+      // subject is who has looked was the screen that never showed its own
+      // looking, and a page came back shorter than it was asked for. The
+      // filters that were typed are on the row and are deliberately not said:
+      // they are opaque ids and the trail's own words, and a reader wants to
+      // know that somebody read the trail, not which select box they used.
+      return pick(t(`${actor} read the practice's trail`, `${actor} اطّلع على سجل المركز`), locale);
     case 'client.erase':
       // The act itself, written by app/api/clients/erasure.ts after
       // app.erase_client returns: everything the erasure touched is already

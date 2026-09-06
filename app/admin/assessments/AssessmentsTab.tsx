@@ -182,6 +182,27 @@ export function AssessmentsTab({ clientId }: { clientId: string }) {
       render: (line) => quiet(line, INSTRUMENT_LABELS[line.row.instrument] ?? line.row.instrument),
     },
     {
+      // The visit it was taken at, where one was named (migration 951). Empty
+      // is ordinary rather than missing: a questionnaire filled in at home and
+      // an outside provider's export name no visit of the practice's own.
+      key: 'visit',
+      header: 'Visit',
+      render: (line) =>
+        line.row.visitOn === null ? (
+          <span className="small muted">Not at a visit</span>
+        ) : (
+          quiet(
+            line,
+            <>
+              {on(`${line.row.visitOn}T12:00:00+04:00`)}
+              {line.row.visitServiceName ? (
+                <span className="assessments__reason">{line.row.visitServiceName}</span>
+              ) : null}
+            </>,
+          )
+        ),
+    },
+    {
       key: 'by',
       header: 'Recorded by',
       render: (line) =>

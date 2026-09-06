@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BANDS,
   BRAIN_MAP_CONDITIONS,
@@ -13,6 +13,7 @@ import {
   type Site,
   type Unit,
 } from '@domain/assessment';
+import { AssessmentVisitsResponse, type AssessmentVisit } from '../../api/assessments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
@@ -33,6 +34,13 @@ import { BAND_LABELS, GATE_MESSAGES, REFUSAL_MESSAGES, UNIT_LABELS } from './cop
  * from `domain/assessment/shapes`, which is the same declaration the server
  * validates against, so this screen cannot ask for a field the validator does
  * not know and cannot omit one it requires.
+ *
+ * **The visit is named, not guessed.** Where the practice booked the day, the
+ * drawer offers that household's completed visits and the measurement names
+ * the one it was taken at (migration 951). It stays optional: a questionnaire
+ * filled in at the household's own pace and an outside provider's export name no
+ * visit of the practice's own, and a picker that insisted would make somebody
+ * invent one.
  *
  * **It refuses with the field named.** A figure without its unit, an unknown
  * instrument, a payload the shape does not recognise: the server answers with
@@ -58,6 +66,18 @@ const emptyBrainMap = (): BrainMapDraft => ({
 });
 
 const emptyQuestionnaire = (): QuestionnaireDraft => ({ answers: {} });
+
+const visitDayFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Dubai',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+
+/** A visit's day, as the picker reads it. The value is YYYY-MM-DD already. */
+function visitDay(isoDay: string): string {
+  return visitDayFormat.format(new Date(`${isoDay}T12:00:00+04:00`));
+}
 
 /** The figures a person actually typed, as the shape declares them. */
 function figuresFrom(
@@ -92,6 +112,8 @@ export function RecordDrawer({
   useDrawer(drawerRef, closeRef, onClose);
 
   const [instrument, setInstrument] = useState<Instrument>('qeeg');
+  const [visits, setVisits] = useState<readonly AssessmentVisit[]>([]);
+  const [sessionId, setSessionId] = useState('');
   const [performedOn, setPerformedOn] = useState(today);
   const [software, setSoftware] = useState('');
   const [softwareVersion, setSoftwareVersion] = useState('');
@@ -102,6 +124,23 @@ export function RecordDrawer({
   const [questionnaire, setQuestionnaire] = useState<QuestionnaireDraft>(emptyQuestionnaire);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The household's completed visits, for the picker. A failure here is not an
+  // error the person has to act on: the field simply offers nothing, and the
+  // measurement is recorded without naming a visit.
+  useEffect(() => {
+    let live = true;
+    void apiFetch(`/api/assessments/visits?clientId=${encodeURIComponent(clientId)}`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const parsed = AssessmentVisitsResponse.safeParse(await res.json());
+        if (live && parsed.success) setVisits(parsed.data.visits);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [apiFetch, clientId]);
 
   const shape = shapeFor(instrument);
   const instrumentVersion = shape?.versions[0] ?? '1';
@@ -147,6 +186,7 @@ export function RecordDrawer({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           clientId,
+          sessionId: sessionId === '' ? null : sessionId,
           instrument,
           instrumentVersion,
           // Midday in the practice's own zone: the drawer records a day, and a
@@ -193,6 +233,7 @@ export function RecordDrawer({
     referenceAge,
     referenceSex,
     scored,
+    sessionId,
     software,
     softwareVersion,
   ]);
@@ -241,6 +282,20 @@ export function RecordDrawer({
             value={performedOn}
             onChange={(e) => setPerformedOn(e.target.value)}
           />
+          <Select
+            id="assessment-visit"
+            label="Visit it was taken at"
+            hint="Where the practice booked the day. Leave it unnamed for anything taken outside a visit."
+            value={sessionId}
+            onChange={(e) => setSessionId(e.target.value)}
+          >
+            <option value="">Not taken at a visit</option>
+            {visits.map((visit) => (
+              <option key={visit.id} value={visit.id}>
+                {`${visitDay(visit.on)}, ${visit.serviceName}`}
+              </option>
+            ))}
+          </Select>
           <Field
             id="assessment-software"
             label="Software that produced the figures"

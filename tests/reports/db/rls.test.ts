@@ -118,7 +118,13 @@ beforeAll(async () => {
     displayName: 'Contact A',
     roles: ['client_contact'],
   });
-  await client.query('update contact set user_id = $1 where id = $2', [
+  // The household's own login, and the legal guardian the read policy now
+  // asks for: `seedContact` writes a mother with `is_legal_guardian` false,
+  // which is the ordinary default and no longer enough to read a report
+  // (docs/SPEC/reports-v1.md section 7.3 as amended 2026-09-06; migration
+  // 955). `CONTACT_B` is deliberately left as it is, so the deny case below
+  // has somebody to be about.
+  await client.query('update contact set user_id = $1, is_legal_guardian = true where id = $2', [
     MORE_IDS.contactUserA,
     IDS.contactA,
   ]);
@@ -215,6 +221,33 @@ describe('who may read a report', () => {
     });
     expect(seen).toContain(SUPERSEDED);
     expect(seen).not.toContain(DRAFT);
+  });
+
+  it('shows a contact who is not a legal guardian nothing', async () => {
+    // The operator's decision of 2026-09-06: a report about a young person is
+    // read by a legal guardian, or by the person themselves once they are an
+    // adult, and by nobody else on the record. `CONTACT_B` is a contact of
+    // clientB with a login and no guardianship, so clientB's own issued
+    // report is refused them.
+    const seen = await rolledBack(client, async () => {
+      await client.query('update contact set user_id = $1 where id = $2', [
+        MORE_IDS.contactUserA,
+        CONTACT_B,
+      ]);
+      return asApiRole(
+        client,
+        IDS.tenantA,
+        async () => {
+          await client.query("select set_config('app.actor_id', $1, true)", [
+            MORE_IDS.contactUserA,
+          ]);
+          const { rows } = await client.query<{ id: string }>('select id from report');
+          return rows.map((row) => row.id);
+        },
+        'client_contact',
+      );
+    });
+    expect(seen).not.toContain(REPORT_TWO);
   });
 
   it('shows another practice nothing at all', async () => {

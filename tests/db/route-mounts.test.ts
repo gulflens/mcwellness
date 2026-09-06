@@ -159,3 +159,31 @@ describe('GET /api/portal/reports', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('GET /api/audit/activity', () => {
+  it("answers the seeded owner with the practice's trail, not the unmounted-route 404", async () => {
+    // docs/SPEC/audit.md section 9.2. The seed writes rows through the audit
+    // triggers, so a fresh practice has a trail to show.
+    const res = await call('GET', '/api/audit/activity?limit=5', authIdOf(0));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { events: unknown[]; hasMore: boolean };
+    expect(Array.isArray(body.events)).toBe(true);
+  });
+
+  it('answers the access report for one record, and refuses a practitioner both', async () => {
+    const client = data.clients[0];
+    if (!client) throw new Error('No seeded client.');
+    const report = await call('GET', `/api/audit/access-report?clientId=${client.id}`, authIdOf(0));
+    expect(report.status).toBe(200);
+    const body = (await report.json()) as { client: { mrn: string }; readers: unknown[] };
+    expect(body.client.mrn).toBe(client.mrn);
+    expect(Array.isArray(body.readers)).toBe(true);
+
+    // Seeded user 1 only treats: the trail is oversight's, not a
+    // practitioner's, and a 403 here is the route answering.
+    expect((await call('GET', '/api/audit/activity', authIdOf(1))).status).toBe(403);
+    expect(
+      (await call('GET', `/api/audit/access-report?clientId=${client.id}`, authIdOf(1))).status,
+    ).toBe(403);
+  });
+});

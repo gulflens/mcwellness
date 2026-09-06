@@ -31,6 +31,7 @@ import {
 import { isRoutingUnavailable, withRouting } from './_middleware/routing';
 import { mountAppointments } from './appointments/routes';
 import { mountAssessments } from './assessments/mount';
+import { mountActivity } from './audit/activity';
 import { mountTimeline } from './audit/timeline';
 import { mountBilling } from './billing/routes';
 import { mountClients } from './clients/list';
@@ -405,6 +406,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   mountClients(api, deps.now);
   mountClientRecord(api, deps.now);
   mountTimeline(api, deps.now);
+  mountActivity(api, deps.now);
   mountBilling(api, deps.now);
   mountAppointments(api, deps.now);
   mountSessions(api, deps.now);

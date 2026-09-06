@@ -18,18 +18,30 @@ import { MonthlyMoneyResponse } from './document-schema';
  * the deferred balance is a position at a moment and not a total for a period —
  * asking the database for "this month's credits" would answer a different
  * question and look right.
+ *
+ * **The ledger comes through `app.practice_money_ledger` (migration 952), and
+ * that is what makes the figure the same whoever asks.** Read as the caller,
+ * `payment` and `entitlement` pass through the erasure gate
+ * (db/policies/billing/ledger.sql), so a month holding an erased household
+ * answered finance a smaller total than the owner, silently. The function
+ * reads the ledger whole and names nobody — an amount and a day, no client, no
+ * invoice — because what an erasure protects is whose money it was, not what
+ * the practice took that month.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
-const PAYMENTS_SQL =
-  "select amount_fils, to_char(received_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as received_on " +
-  'from payment where tenant_id = app.current_tenant_id()';
+const LEDGER_SQL = 'select app.practice_money_ledger() as ledger';
 
-const CREDITS_SQL =
-  'select status, allocated_net_fils, ' +
-  "to_char(consumed_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as consumed_on " +
-  'from entitlement where tenant_id = app.current_tenant_id()';
+/** What the function answers: amounts and days, and nothing that names anybody. */
+type PracticeLedger = {
+  payments: { amountFils: number; receivedOn: string }[];
+  credits: {
+    status: 'available' | 'consumed' | 'expired' | 'refunded' | 'waived';
+    allocatedNetFils: number;
+    consumedOn: string | null;
+  }[];
+};
 
 /** YYYY-MM, and a month that exists. */
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -48,24 +60,18 @@ export function mountSummary(api: Hono<ApiEnv>, now: () => Date = () => new Date
     }
 
     const db = c.get('db');
-    const [payments, credits] = await Promise.all([
-      db.query<{ amount_fils: number; received_on: string }>(PAYMENTS_SQL),
-      db.query<{
-        status: 'available' | 'consumed' | 'expired' | 'refunded' | 'waived';
-        allocated_net_fils: number;
-        consumed_on: string | null;
-      }>(CREDITS_SQL),
-    ]);
+    const { rows } = await db.query<{ ledger: PracticeLedger }>(LEDGER_SQL);
+    const ledger = rows[0]?.ledger ?? { payments: [], credits: [] };
 
     const figures = monthlyMoney(
-      payments.rows.map((row) => ({
-        amountFils: fils(row.amount_fils),
-        receivedOn: row.received_on,
+      ledger.payments.map((row) => ({
+        amountFils: fils(row.amountFils),
+        receivedOn: row.receivedOn,
       })),
-      credits.rows.map((row) => ({
+      ledger.credits.map((row) => ({
         status: row.status,
-        allocatedNetFils: fils(row.allocated_net_fils),
-        consumedOn: row.consumed_on,
+        allocatedNetFils: fils(row.allocatedNetFils),
+        consumedOn: row.consumedOn,
       })),
       month,
     );

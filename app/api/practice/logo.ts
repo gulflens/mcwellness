@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import {
+  bytesMatchMimeType,
   canActor,
   practiceDocumentKey,
   DEFAULT_SIGNED_URL_TTL_SECONDS,
@@ -62,28 +63,6 @@ type LogoRow = { id: string; storage_key: string; mime_type: LogoMimeType };
 const SELECT_LOGO =
   'select id, storage_key, mime_type from document ' +
   "where tenant_id = app.current_tenant_id() and kind = 'practice_logo'";
-
-/**
- * The two file signatures this route accepts, checked against the bytes
- * themselves rather than against what the caller said they are.
- *
- * `domain/client/fileSignature.ts` holds the general version, over four media
- * types; it is the client-record stream's and `docs/SPEC/OWNERSHIP.md` rule 3
- * says a module never imports another module's `domain/`. Two magic numbers
- * are not worth a change request, and the rule they enforce is the same one:
- * a declared media type is a claim, and the leading bytes are the evidence. A
- * page filed as an image would otherwise be handed back through a signed link
- * that a browser may well render.
- */
-const SIGNATURES: Record<LogoMimeType, readonly number[]> = {
-  'image/png': [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-  'image/jpeg': [0xff, 0xd8, 0xff],
-};
-
-function bytesAre(bytes: Uint8Array, mimeType: LogoMimeType): boolean {
-  const signature = SIGNATURES[mimeType];
-  return signature.every((byte, index) => bytes[index] === byte);
-}
 
 /** The logo row for the caller's practice, or null. */
 async function readLogo(db: Db): Promise<LogoRow | null> {
@@ -162,7 +141,14 @@ export function mountPracticeLogo(api: Hono<ApiEnv>, now: () => Date = () => new
     if (bytes.byteLength === 0 || bytes.byteLength > MAX_LOGO_BYTES) {
       return c.json({ error: 'bad_request', code: 'logo_too_large', requestId }, 400);
     }
-    if (!bytesAre(bytes, body.data.mimeType)) {
+    // The declared media type is a claim and the leading bytes are the
+    // evidence: a page filed as an image would otherwise come back through a
+    // signed link that a browser may well render. `bytesMatchMimeType` is the
+    // one place that question is answered (`domain/shared/fileSignature.ts`),
+    // which is where the trunk's round 31 moved it — this route's own copy of
+    // two signatures, and the paragraph justifying it under rule 3, went with
+    // the move.
+    if (!bytesMatchMimeType(bytes, body.data.mimeType)) {
       return c.json({ error: 'bad_request', code: 'bytes_do_not_match_type', requestId }, 400);
     }
 

@@ -61,6 +61,7 @@ describe('canActor', () => {
   it('refuses everything to a user with no roles', () => {
     expect(canActor(actor([]), { type: 'client.read', clientId: CLIENT }, {}, NOW)).toBe(false);
     expect(canActor(actor([]), { type: 'audit.read', clientId: CLIENT }, {}, NOW)).toBe(false);
+    expect(canActor(actor([]), { type: 'audit.activity' }, {}, NOW)).toBe(false);
   });
 
   it('lets the owner and an admin read and write clients and grant roles', () => {
@@ -101,6 +102,16 @@ describe('canActor', () => {
       canActor(a, { type: 'session.execute', serviceTypeId: SERVICE, on: '2026-06-01' }, {}, NOW),
     ).toBe(false);
     expect(canActor(a, { type: 'audit.read', clientId: CLIENT }, {}, NOW)).toBe(false);
+    expect(canActor(a, { type: 'audit.activity' }, {}, NOW)).toBe(false);
+  });
+
+  it('lets the three oversight roles read the practice’s whole trail, and nobody else', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'audit.activity' }, {}, NOW)).toBe(true);
+    }
+    for (const role of ['finance', 'practitioner', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'audit.activity' }, {}, NOW)).toBe(false);
+    }
   });
 
   it('lets a client contact read only a client in their own household', () => {

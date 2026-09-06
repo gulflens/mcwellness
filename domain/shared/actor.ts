@@ -52,6 +52,7 @@ export type Action =
   | { type: 'report.supersede'; clientId: string }
   | { type: 'report.deliver' }
   | { type: 'audit.read'; clientId: string }
+  | { type: 'audit.activity' }
   | { type: 'appointment.list'; scope: 'practice' | 'own' }
   | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
   | { type: 'appointment.move' }
@@ -198,7 +199,13 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // asks the consent and the contact's own flag at the moment of sending;
       // this only says the role is allowed to ask.
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    // One record's timeline, and the practice's whole trail — which names no
+    // one record and so takes no client (docs/SPEC/audit.md section 9.2). One
+    // audience for both: reading who did what is oversight, and oversight is
+    // the owner's, an administrator's and the lead practitioner's. Finance
+    // reads money, never the trail.
     case 'audit.read':
+    case 'audit.activity':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.list':
       if (action.scope === 'own') {

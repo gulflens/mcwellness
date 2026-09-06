@@ -165,6 +165,10 @@ build made.
    does; the document half is a guard trigger, because `document` has no
    `(tenant_id, id, client_id)` key and adding one is the trunk's. The note
    below sets out what the trunk would need for the key to replace it.
+   **Answered: the trunk added the key** in round 31 — migration
+   `911_document_client_key.sql` — and migration
+   `502_assessment_document_key.sql` replaced the trigger with the foreign key.
+   501 was not edited and the deny case reads the same SQLSTATE it always did.
 6. **The erasure letter's words** live in `docs/CONSENT/erasure-letter/`, not
    in `domain/client/erasureLetter.ts` as section 6 says; item 5 above records
    where they were actually amended and why nothing in that file needed to
@@ -211,6 +215,12 @@ Spec section 6 says these are recorded here and not applied to the model, so
 `docs/SPEC/00-data-model.md` is untouched by this piece. Migrations 500 and 501
 implement them.
 
+*Two of them are now applied to the model, in the trunk's round 31 (the fix
+round, 2026-09-06), which is where the file is editable: the `assessment`
+sketch names `session_id` and reaches its files through `assessment_document`,
+each amendment marked where it stands. The other three rows below are still
+recorded here and not in the model.*
+
 | Change to `assessment` | Why |
 | --- | --- |
 | `supersede_reason text`, required when `version > 1` | Every other append-only entity requires a reason; section 4 omits it here by oversight, and `client_protocol` is the precedent. Without it the record says a figure changed and never says why. |
@@ -219,7 +229,9 @@ implement them.
 | `raw_document_id` dropped in favour of **`assessment_document`** | One brain map produces several files — an eyes-open recording, an eyes-closed recording, the software's own report. One column forces a choice and loses the rest. |
 | **No `session_id`** | The honest link is to `session`, in the 300 range, and apply order across ranges is not fixed. A `95x` trunk migration is where that link belongs, once both ranges are on `main`. |
 
-**A note on the composite key, for whoever answers the model.** Section 6 asks
+**A note on the composite key, for whoever answers the model.** *(Answered in
+the trunk's round 31: `document` now carries `document_tenant_id_client_key`
+and migration 502 uses it. The note stands as the reasoning.)* Section 6 asks
 for "a composite key binding the document to the assessment's own client, the
 pattern `billing_document` (407) already sets". Half of it is exactly that:
 `assessment_document (tenant_id, assessment_id, client_id)` references the
@@ -236,10 +248,18 @@ anybody else. If the trunk would rather have the key, `document` needs
 
 ## Requests, not edits: things this piece found and did not do
 
-1. **`bytesMatchMimeType` belongs in `domain/shared`.** It lives in
-   `domain/client/fileSignature.ts`, and `docs/SPEC/OWNERSHIP.md` rule 3
-   forbids one module importing another module's `domain/` — the two streams
-   before this one made the same note rather than the same import
+1. **`bytesMatchMimeType` belongs in `domain/shared`.** **Answered: the trunk
+   moved it** in round 31 of `docs/CHANGE-REQUESTS/trunk-notes.md`, which
+   closes this item. `domain/shared/fileSignature.ts` is where it lives now,
+   `domain/client` re-exports it so no caller moved, and this piece's own
+   five-byte copy is gone — `bytesAreAPdf` asks the shared question and
+   `domain/assessment/fileType.ts` keeps only the practice's own decision about
+   which media type an export may be. What follows is the request as it was
+   raised.
+
+   It lives in `domain/client/fileSignature.ts`, and `docs/SPEC/OWNERSHIP.md`
+   rule 3 forbids one module importing another module's `domain/` — the two
+   streams before this one made the same note rather than the same import
    (`app/api/sessions/photo.ts`, `app/api/appointments/create.ts`). So this
    piece has its own five-byte PDF check in `domain/assessment/fileType.ts`,
    with a comment saying why, and the request is that the shared question move
@@ -248,7 +268,13 @@ anybody else. If the trunk would rather have the key, `document` needs
    the trunk", which no stream but `client-record` can act on today.
 2. **The link from a measurement to the visit that produced it**, as a `95x`
    trunk migration once the 300 and 500 ranges are both on `main` (spec
-   section 6). Nothing in this piece assumes it.
+   section 6). Nothing in this piece assumes it. **Answered: the trunk built
+   it** in round 31 — migration `951_assessment_session.sql` — which closes
+   this item. The column is `assessment.session_id`, nullable, bound to the
+   assessment's own client by a composite foreign key onto a new client-scoped
+   key on `session`, so a measurement can never name another household's
+   visit. The recording route and the drawer name the visit; a correction
+   carries it forward.
 3. **`app/api/_middleware/audit.ts` refuses about one document id in eighty,
    and the filing fails with it.** **Answered: the trunk fixed it** in round 30
    of `docs/CHANGE-REQUESTS/trunk-notes.md`, which closes this item and item 4.

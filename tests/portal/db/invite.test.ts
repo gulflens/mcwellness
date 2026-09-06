@@ -334,14 +334,22 @@ describe('two redemptions of one link', () => {
       );
       expect(won.rows[0]?.id).toBe(PORTAL.motherUser);
 
-      // The second waits on that lock, and is refused the moment it is released.
-      const racing = second.query('select app.redeem_portal_invite($1, $2, $3)', [
-        hash,
-        AUTH_TWO,
-        'somebody.else@example.com',
-      ]);
+      // The second waits on that lock, and is refused the moment it is
+      // released — which is inside the `commit` below, before any handler
+      // written after it could be listening. So the rejection is parked as a
+      // value here rather than left for an expectation two lines later: Node
+      // reports an unhandled rejection for the gap, and vitest fails the whole
+      // run for it even though the assertion itself is right (the note on
+      // pull request 83, answered in the trunk's round 31).
+      const racing = second
+        .query('select app.redeem_portal_invite($1, $2, $3)', [
+          hash,
+          AUTH_TWO,
+          'somebody.else@example.com',
+        ])
+        .catch((error: unknown) => error);
       await first.query('commit');
-      await expect(racing).rejects.toThrow('portal_invite_used');
+      expect(String(await racing)).toContain('portal_invite_used');
       await second.query('rollback');
 
       const account = await owner.query<{ auth_id: string }>(

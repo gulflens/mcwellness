@@ -17,7 +17,7 @@ import { progressBody, SEEDED, startHarness, type Harness } from './support';
 const NOW = () => new Date('2026-09-06T08:00:00.000Z');
 
 let h: Harness;
-let household: { authId: string; clientId: string };
+let household: { authId: string; clientId: string; contactId: string };
 
 beforeAll(async () => {
   h = await startHarness(NOW);
@@ -44,7 +44,7 @@ beforeAll(async () => {
   );
   await h.owner.query('update contact set user_id = $1 where id = $2', [userId, found.contact_id]);
 
-  household = { authId, clientId: found.client_id };
+  household = { authId, clientId: found.client_id, contactId: found.contact_id };
 }, 120_000);
 
 afterAll(async () => {
@@ -147,6 +147,109 @@ describe('the household’s own screen', () => {
     // record" rather than as "this screen is not yours".
     const res = await h.call('GET', '/api/portal/reports', SEEDED.owner);
     expect(res.status).toBe(403);
+  });
+});
+
+/**
+ * **Who of a household may read a report** (docs/SPEC/reports-v1.md section
+ * 7.3, as the operator amended it on 2026-09-06, reversing default 4 of pull
+ * request 83). A legal guardian, or the person themselves once they are an
+ * adult. A young person's own login reads no report about themselves, and it
+ * is the row policy that refuses it (`app.actor_may_read_reports_of`,
+ * migration 955) rather than a screen that leaves a line out.
+ */
+describe('a report about a minor is the guardian’s to read', () => {
+  let minorClientId: string;
+  let guardianAuth: string;
+  let minorAuth: string;
+  let issuedId: string;
+  let documentId: string;
+
+  beforeAll(async () => {
+    // A seeded minor: the generator gives every one of them a parent recorded
+    // as a legal guardian, and gives an adult client a `self` contact instead.
+    // The seed erases nobody, so every seeded client stands.
+    const guardian = h.data.contacts.find(
+      (contact) => contact.isLegalGuardian && contact.id !== household.contactId,
+    );
+    if (!guardian) throw new Error('The seed has no guarded child.');
+    minorClientId = guardian.clientId;
+
+    // Two portal logins on the same child: the guardian's, and the child's own.
+    const login = async (userId: string, authId: string, displayName: string): Promise<void> => {
+      await h.owner.query(
+        'insert into app_user (id, tenant_id, auth_id, display_name) values ($1, $2, $3, $4)',
+        [userId, h.data.tenant.id, authId, displayName],
+      );
+      await h.owner.query(
+        "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'client_contact')",
+        [h.data.tenant.id, userId],
+      );
+    };
+
+    const guardianUser = '00000000-0000-4000-8000-0000000006f1';
+    guardianAuth = '00000000-0000-4000-8000-0000000006f2';
+    await login(guardianUser, guardianAuth, 'Guardian login');
+    await h.owner.query('update contact set user_id = $1 where id = $2', [
+      guardianUser,
+      guardian.id,
+    ]);
+
+    const minorUser = '00000000-0000-4000-8000-0000000006f3';
+    minorAuth = '00000000-0000-4000-8000-0000000006f4';
+    await login(minorUser, minorAuth, 'Young person login');
+    await h.owner.query(
+      'insert into contact (id, tenant_id, client_id, user_id, relationship, given_name, ' +
+        'family_name, is_legal_guardian, can_consent, can_receive_reports, can_pay, phone) ' +
+        "values ($1, $2, $3, $4, 'self', 'Cedar', 'Meadow', false, false, true, false, $5)",
+      [
+        '00000000-0000-4000-8000-0000000006f5',
+        h.data.tenant.id,
+        minorClientId,
+        minorUser,
+        '+971500000031',
+      ],
+    );
+
+    issuedId = await issueFor(minorClientId);
+    const filed = await h.owner.query<{ document_id: string }>(
+      'select document_id from report where id = $1',
+      [issuedId],
+    );
+    const found = filed.rows[0]?.document_id;
+    if (!found) throw new Error('The report was not filed.');
+    documentId = found;
+  }, 120_000);
+
+  it('shows it to the guardian, and opens it', async () => {
+    const res = await h.callAs('GET', '/api/portal/reports', guardianAuth);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PortalReportsResponse;
+    expect(body.reports.map((report) => report.id)).toContain(issuedId);
+    expect(body.clients.map((client) => client.id)).toContain(minorClientId);
+
+    const link = await h.callAs('GET', `/api/portal/reports/${documentId}/link`, guardianAuth);
+    expect(link.status).toBe(200);
+  });
+
+  it('refuses the young person’s own login, screen and link alike', async () => {
+    const res = await h.callAs('GET', '/api/portal/reports', minorAuth);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PortalReportsResponse;
+    expect(body.reports).toEqual([]);
+    expect(body.clients).toEqual([]);
+
+    const link = await h.callAs('GET', `/api/portal/reports/${documentId}/link`, minorAuth);
+    expect(link.status).toBe(404);
+  });
+
+  it('refuses it in the database, not merely on the screen', async () => {
+    // The practice's own route reads the same row under the same policy, so a
+    // household that went round the portal reaches nothing either.
+    const direct = await h.callAs('GET', `/api/reports/${issuedId}`, minorAuth);
+    expect(direct.status).toBe(404);
+    const asGuardian = await h.callAs('GET', `/api/reports/${issuedId}`, guardianAuth);
+    expect(asGuardian.status).toBe(200);
   });
 });
 

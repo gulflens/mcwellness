@@ -11,16 +11,17 @@ cmd="$input"
 # ever reaches it.
 OLD_APP_PROJECT_REF='gqvpapvdqcfjlifgwhpk'
 
-# This platform's own production Supabase project, and it is empty because no
-# such project exists yet. docs/SPEC/hosting.md section 10 holds its creation
-# until the founder's lawyer has answered the region question, because a
-# Supabase project's region cannot be changed after the project is created.
-# Fill this in with the project reference — the twenty characters in the
-# project's URL — on the day the project is created; nothing else in this file
-# changes. Until then the migration guard in db/runner/plan.ts stands in its
-# place: it refuses any database that is not on this machine unless
-# MIGRATE_TARGET names it, so it needs no reference to be complete.
-PLATFORM_PRODUCTION_PROJECT_REF=''
+# This platform's own production Supabase project. It was created by the
+# operator at 06:22 on 6 September 2026, and this is the reference — the twenty
+# characters in the project's URL, which is not a credential: the project's own
+# keys and every runtime setting live in the host's secret store and never
+# enter this repository (docs/SPEC/hosting.md section 4.4).
+#
+# Nothing else in this file changed when it was filled in, and the migration
+# guard in db/runner/plan.ts is unchanged too: it refuses any database that is
+# not on this machine unless MIGRATE_TARGET names it, so it needed no reference
+# to be complete and does not need this one now. This line is the second lock.
+PLATFORM_PRODUCTION_PROJECT_REF='ipiluvnlnzdbolbqwtpl'
 
 # MIGRATE_TARGET=production is the one word that lets `pnpm db:migrate` past
 # the guard in db/runner/plan.ts and onto a production database, and the guard's

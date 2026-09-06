@@ -25,7 +25,9 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
   { key: 'schedule', label: 'Schedule', to: '/admin/schedule', icon: <ScheduleIcon /> },
   { key: 'sessions', label: 'Sessions', icon: <SessionsIcon /> },
   { key: 'billing', label: 'Billing', to: '/admin/billing', icon: <BillingIcon /> },
-  { key: 'audit', label: 'Audit', icon: <AuditIcon /> },
+  // The practice's whole trail, and who has read one record. AdminLayout shows
+  // it only to the three oversight roles (adminAccess.ts).
+  { key: 'audit', label: 'Audit', to: '/admin/audit', icon: <AuditIcon /> },
   // The practice's own details. AdminLayout shows it only to an owner or an
   // admin (adminAccess.ts), the two who may change what an invoice says the
   // supplier is.
