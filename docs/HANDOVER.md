@@ -1,6 +1,6 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on the morning of 6 September (08:40) with pieces nine and ten built, reviewed and merged, trunk round 31 merged, the operator's decisions of 06:15 acted on, and two agents still in flight. This file exists so that the next Claude session,
+Written 4 September 2026, updated on 6 September at 13:00 with pieces nine and ten built, reviewed and merged, trunk rounds 31 and 32 merged, the production database migrated and able to take its first practice, and the hand deploy waiting on the operator's secrets. This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -108,9 +108,14 @@ an unanswered decision. The next session's first act is section 10.
   findings recorded. What it exposed: nothing in the code creates the first
   practice and its owner except the seed, and the per-practice defaults the
   migrations write need a practice to exist when they run. **Trunk round 32,
-  the first practice** (a `95x` bootstrap function, branch `trunk-round-32`),
-  is running as this is written; until it merges and is applied to
-  production, the operator cannot sign in there.
+  the first practice**, merged as pull request 95 at 12:24: migration 956,
+  `app.bootstrap_practice`, creates the practice and its owner from one
+  statement, lets the six per-practice defaults arrive by their own triggers
+  and checks each, refuses a second practice or an unknown sign-in id, and is
+  never reachable through the API. It is on production and staging (pull
+  request 96, the second production pass and the eleventh staging pass; both
+  fingerprints match a fresh build). Three time-of-day fixtures that made CI
+  red between 08:00 and 12:00 UTC were fixed in the same round.
 - The operator's morning page is `docs/OPERATOR/2026-09-06-decisions.md`
   (pull request 85): every decision and action that is theirs, with the
   Hostinger question and the lawyer's note drafted.
@@ -443,13 +448,11 @@ nine and ten; see the records on pull requests 73 to 83).
    (pull request 92) are done; staging carries both. The start file for a
    Node.js host (pull request 93) and the production database's first pass
    (pull request 94) are done.
-2a. **In flight as this is written: trunk round 32, the first practice**
-   (branch `trunk-round-32`, worktree `mcwellness-trunk`, brief
-   `round32-builder-brief.md` in section 9's second directory): one combined
-   review and one re-check under section 6, the record, the merge; then its
-   migration applied to production through the Supabase tools as
-   `docs/PRODUCTION.md` records a pass, and to staging in an eleventh pass;
-   then the operator runs the bootstrap statement.
+2a. Trunk round 32, the first practice (pull request 95), and its application
+   to production and staging (pull request 96) are done. **Nothing is in
+   flight.** The operator's next act is `docs/PRODUCTION.md`, "The first
+   practice": the Auth user, then the one statement, after the secrets of
+   `docs/RUNBOOK/go-live.md` are in the host's environment.
 2b. **The hand deploy on Hostinger** waits on the operator's secrets; when
    the process starts, measure `TRUSTED_PROXY_HOPS` and record the first
    live pass in `docs/PRODUCTION.md`. If the process never starts, buy the
