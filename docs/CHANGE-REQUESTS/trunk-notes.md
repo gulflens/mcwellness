@@ -1824,9 +1824,17 @@ have to find it in a diff.
    changes, so a fixture that called a visit off would also add a row to the
    Visits screen and burn an invoice number the suite's own fixtures had
    written by hand. Each fixture leaves the visit proposed — shown nowhere —
-   and writes the row it wants to ask about. The waiver itself is **not**
-   written by hand: it goes through `app.waive_call_out_fee`, because that
-   function is the only thing that may set those three columns.
+   and writes the row it wants to ask about.
+
+   **The two part company over the waiver itself.**
+   `tests/portal/db/routes.test.ts` goes through the practice's own door,
+   `app.waive_call_out_fee`, with the practice, the actor and the reason in
+   context, because that route's test is about what a household is shown after
+   a real waiver. `tests/db/vat-threshold.test.ts` writes `waived_at`,
+   `waived_by` and `waiver_reason` by hand as the database owner, and lifts
+   them by hand again, because that test has to read the figure with the same
+   invoice waived and then unwaived inside one rolled-back transaction, and
+   nothing in the schema un-waives a fee: the door is one way, by design.
 8. **957 does not restate 953's `revoke` and `grant`.** `create or replace`
    keeps the privileges a function already has, and 954 set that precedent: it
    restated neither when it replaced `app.erase_client`. It is no precedent for
