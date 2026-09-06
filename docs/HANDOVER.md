@@ -80,6 +80,37 @@ an unanswered decision. The next session's first act is section 10.
   as this is written. Two laptop faults it found are fixed in place: the
   keep-alive script now checks both loopback addresses, and the tenth pass
   rebuilds the laptop's stale seed.
+- **The first hand deploy to `app.mcwellnessuae.com` (09:25 to 10:20, on the
+  operator's instruction)**: the subdomain exists on the Premium plan with
+  its DNS records added by Hostinger; the site is classed as a Node.js
+  application with stored build settings (Node 24, npm, root `mcwellness`,
+  build `build:production`, output `dist`, entry `app/api/start.mjs`, the
+  start file merged as pull request 93 with `docs/RUNBOOK/go-live.md`); the
+  eleven public settings are in its environment; the source archive of `main`
+  at `9d85d13` built on the server (631 packages, the screens and the service
+  worker). Two facts learned: Hostinger's build cannot fetch pnpm through
+  corepack, so the hosted build uses npm with a lockfile generated from the
+  same manifest; and `NODE_ENV=production` in the environment makes npm skip
+  the build tools, so it is not set. **The process is not running**: every
+  path answers Hostinger's own 404, the runtime log is empty, and the
+  expected cause is the seven secrets the API refuses to start without, which
+  only the operator pastes (the guide's steps 1 to 8). The first thing to
+  read after pasting is the runtime log: either the health routes answer, or
+  it names the next fault, or nothing appears and the plan cannot run an
+  always-on process, in which case decision 1's product is the answer.
+- The browser walk's five defects are fixed and merged (pull request 91) and
+  staging carries them; the lawyer's pack is in the operator's Documents
+  folder under "For review" (twelve documents, Word and PDF).
+- **The production database's first pass** (pull request 94, `docs/PRODUCTION.md`,
+  10:50): seventy migrations and twenty policy files applied through the
+  Supabase tools with their bookkeeping rows, no seed and no row written, the
+  fingerprint identical to a fresh build in all nine parts, the advisors'
+  findings recorded. What it exposed: nothing in the code creates the first
+  practice and its owner except the seed, and the per-practice defaults the
+  migrations write need a practice to exist when they run. **Trunk round 32,
+  the first practice** (a `95x` bootstrap function, branch `trunk-round-32`),
+  is running as this is written; until it merges and is applied to
+  production, the operator cannot sign in there.
 - The operator's morning page is `docs/OPERATOR/2026-09-06-decisions.md`
   (pull request 85): every decision and action that is theirs, with the
   Hostinger question and the lawyer's note drafted.
@@ -294,6 +325,13 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
+- **To sign in on production**, in this order: paste the seven secrets into
+  the app site's environment in hPanel (`docs/RUNBOOK/go-live.md`, steps 1 to
+  8); set the API role's password and the pooler string as `docs/PRODUCTION.md`
+  says; create your own Auth user in the Supabase dashboard; then, once trunk
+  round 32 has merged and been applied to production, run its one bootstrap
+  statement with your practice's names and that user's id. The runtime log in
+  hPanel is the first thing to read if the address stays silent.
 - **Piece nine's live half**, in the order they unblock each other
   (`docs/SPEC/hosting.md` section 11, pull request 80's body, and the
   operator's page): buy Hostinger Web Apps Hosting in Mumbai (decided 06:15);
@@ -401,14 +439,22 @@ nine and ten; see the records on pull requests 73 to 83).
 
 1. The ninth staging pass (pull request 86) and trunk round 31 (pull request
    87, the streams' debts and every small thing but none left) are done.
-2. **In flight as this is written**: the fix round for the browser walk's
-   five defects on branch `qa-fixes-1` (worktree `mcwellness-scheduling`,
-   brief `qa-fix-builder-brief.md` in section 9's second directory), which
-   takes one combined review and one re-check under section 6, the record,
-   and the merge; and the tenth staging pass (branch `staging-tenth-pass`),
-   which merges after the integrator's read. If the fix round adds a
-   migration, an eleventh pass follows it; otherwise a rebuild and restart
-   of the staging server is enough.
+2. The browser walk's fixes (pull request 91) and the tenth staging pass
+   (pull request 92) are done; staging carries both. The start file for a
+   Node.js host (pull request 93) and the production database's first pass
+   (pull request 94) are done.
+2a. **In flight as this is written: trunk round 32, the first practice**
+   (branch `trunk-round-32`, worktree `mcwellness-trunk`, brief
+   `round32-builder-brief.md` in section 9's second directory): one combined
+   review and one re-check under section 6, the record, the merge; then its
+   migration applied to production through the Supabase tools as
+   `docs/PRODUCTION.md` records a pass, and to staging in an eleventh pass;
+   then the operator runs the bootstrap statement.
+2b. **The hand deploy on Hostinger** waits on the operator's secrets; when
+   the process starts, measure `TRUSTED_PROXY_HOPS` and record the first
+   live pass in `docs/PRODUCTION.md`. If the process never starts, buy the
+   Web Apps Hosting product (decision 1) and repeat the deploy there with the
+   same archive and settings (the facts are in `docs/RUNBOOK/go-live.md`).
 3. Owed to later rounds, recorded in `qa-01.md`, `reports-01.md` and
    trunk-notes: the household's own step in confirming a booking, if the
    scheduling spec names one; the "one press" to the access report from the
