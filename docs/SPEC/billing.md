@@ -190,6 +190,14 @@ never rewritten; and nothing was backfilled, so credits taken under the old
 rule are still consumed and are given back one at a time through the credit
 waiver, which is a decision for a person.
 
+**Once the practice is registered for VAT, a fee is reversed by a credit note
+and not by this flag.** A credit note is the Federal Tax Authority's own
+mechanism for undoing a taxable supply, with its own number and its own entry
+in the VAT return; `waived_at` is a switch on the charge, which is honest
+bookkeeping for an unregistered practice and is not a tax document. The flag is
+for the unregistered period only, and registering is the moment to build the
+credit note rather than widen it.
+
 **A no-show carrying the fee is Claude's default of 2026-09-06, not the
 founder's decision**, and it is recorded as one in
 `docs/CHANGE-REQUESTS/billing-05.md`. The founder ruled on cancellations and on

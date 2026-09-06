@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { BalanceResponse, PackagesResponse } from '../../../app/api/billing/ledger-schema';
+import {
+  InvoicesResponse,
+  type BalanceResponse,
+  type PackagesResponse,
+} from '../../../app/api/billing/ledger-schema';
 import { callOutFeeDescription } from '../../../domain/billing/document';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import {
@@ -425,6 +429,24 @@ describe('waiving the fee', () => {
       [invoiceId],
     );
     expect(trail[0]?.reason).toBe('The family had an emergency; the practice let it go.');
+  });
+
+  it('shows in the invoice book as waived, with the day it was', async () => {
+    // The row keeps its number and its figures and stops counting in the
+    // balance, so the book has to say which of its charges a family still
+    // owes — otherwise the total and the list above it do not add up and
+    // nobody can see why (compliance review of this pull request).
+    const res = await h.call('GET', '/api/billing/invoices', SEEDED.owner);
+    const book = InvoicesResponse.parse(await res.json());
+    const row = book.invoices.find((invoice) => invoice.id === invoiceId);
+    const { rows } = await h.owner.query<{ waived_on: string }>(
+      "select to_char(waived_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as waived_on " +
+        'from invoice where id = $1',
+      [invoiceId],
+    );
+    expect(row?.waivedAt).toBe(rows[0]?.waived_on);
+    // And every other invoice in the book stands.
+    expect(book.invoices.filter((invoice) => invoice.waivedAt !== null)).toHaveLength(1);
   });
 
   it('refuses to waive the same fee twice', async () => {

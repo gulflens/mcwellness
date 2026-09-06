@@ -167,6 +167,25 @@ export function callOutFeeDescription(visitDate: string): Phrase {
   };
 }
 
+/**
+ * What a forgiven call-out fee says on its own document (migration 408).
+ *
+ * The invoice is append-only: a waived fee keeps its number, its line and its
+ * figures, and `app.billing_ledger` simply stops counting it. So the page has
+ * to say what the ledger knows, or it goes on presenting a live charge for
+ * money the family does not owe (compliance review of this pull request).
+ *
+ * Two short sentences, in both languages: when it was forgiven, and that
+ * nothing is owed. The date is written out the way every other date on these
+ * documents is, with the Arabic month name on the Arabic side.
+ */
+export function waivedNotice(waivedOn: string): Phrase {
+  return {
+    en: `Waived on ${formatDocumentDate(waivedOn)}. Nothing is owed.`,
+    ar: `أُعفي هذا المبلغ بتاريخ ${arabicDocumentDate(waivedOn)}. لا يوجد مبلغ مستحق.`,
+  };
+}
+
 /** The wordmark at the top of the page. */
 export const WORDMARK = 'McWellness';
 

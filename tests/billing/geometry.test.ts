@@ -79,6 +79,7 @@ function invoice(over: Partial<InvoiceDocument> = {}): InvoiceDocument {
     reference: 'INV-000001',
     issuedOn: '2026-09-02',
     suppliedOn: null,
+    waivedOn: null,
     lines: [
       {
         description: 'Neurofeedback session',

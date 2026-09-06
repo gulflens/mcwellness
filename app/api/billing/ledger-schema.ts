@@ -290,6 +290,14 @@ export const InvoiceRow = z.object({
   vatFils: z.number().int().nonnegative(),
   grossFils: z.number().int().nonnegative(),
   /**
+   * The day the practice forgave this call-out fee (YYYY-MM-DD, in the
+   * practice's own time zone), and null on every row that stands. A waived
+   * charge keeps its number, its line and its figures and simply stops
+   * counting in `app.billing_ledger` (migration 408), so the book says which
+   * is which rather than leaving a balance that does not add up.
+   */
+  waivedAt: z.string().nullable(),
+  /**
    * The rendered PDF, when one has been filed. Null means it has not been
    * rendered yet, not that it cannot be: the screen offers to make it.
    */

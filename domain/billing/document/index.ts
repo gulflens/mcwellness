@@ -54,6 +54,7 @@ export {
   formatRate,
   NOT_REGISTERED_BASIS,
   SIMPLIFIED_BASIS,
+  waivedNotice,
   WORDMARK,
   WORDS,
 } from './strings';

@@ -59,6 +59,7 @@ import {
   NOT_REGISTERED_BASIS,
   receiptBasis,
   SIMPLIFIED_BASIS,
+  waivedNotice,
   WORDMARK,
   WORDS,
   type Phrase,
@@ -399,7 +400,7 @@ function documentHeading(sheet: Sheet, title: Phrase): void {
   sheet.down(LINE + 2);
 }
 
-function footer(sheet: Sheet, basis: Phrase): void {
+function footer(sheet: Sheet, basis: Phrase, grey = MUTED): void {
   const english = sheet.wrap(basis.en, RIGHT - LEFT, SIZE.small, {}).length;
   const arabic = sheet.wrap(basis.ar, RIGHT - LEFT, SIZE.small, { rtl: true }).length;
   sheet.room(LINE + 6 + (english + arabic) * SMALL_LINE);
@@ -412,7 +413,7 @@ function footer(sheet: Sheet, basis: Phrase): void {
     basis.en,
     RIGHT - LEFT,
     SIZE.small,
-    { grey: MUTED },
+    { grey },
     SMALL_LINE,
   );
   sheet.down(english * SMALL_LINE + 1);
@@ -422,7 +423,7 @@ function footer(sheet: Sheet, basis: Phrase): void {
     basis.ar,
     RIGHT - LEFT,
     SIZE.small,
-    { grey: MUTED, align: 'end', rtl: true },
+    { grey, align: 'end', rtl: true },
     SMALL_LINE,
   );
   sheet.down(arabic * SMALL_LINE);
@@ -562,6 +563,16 @@ function invoicePage(document_: InvoiceDocument, fonts: FontSet): Page[] {
     // that charges no VAT invites the reader to look for a rate that is not
     // there (round 20, request 1c).
     totalRow(sheet, WORDS.total, formatFils(document_.grossFils), true);
+  }
+
+  // A charge the practice has forgiven, said on the document rather than left
+  // to the ledger. The invoice keeps its number and its figures — it is
+  // append-only, and what happened is never rewritten — so a page that said
+  // nothing would go on billing a family for money it does not owe (migration
+  // 408, and the compliance review of this pull request). In ink rather than
+  // in the footer's grey: it is the first thing a reader of this page needs.
+  if (document_.waivedOn) {
+    footer(sheet, waivedNotice(document_.waivedOn), INK);
   }
 
   footer(sheet, registered ? SIMPLIFIED_BASIS : NOT_REGISTERED_BASIS);

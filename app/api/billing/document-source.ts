@@ -33,6 +33,11 @@ import type { Db } from '../_middleware/request-context';
 
 const INVOICE_SQL =
   'select i.id, i.reference, i.issued_on, i.supplied_on, i.net_fils, i.vat_fils, i.gross_fils, ' +
+  // The day the charge was forgiven, in the practice's own time zone, so the
+  // page can say so. A waived fee keeps its number and its figures — the row
+  // is append-only — and a document that did not say it had been forgiven
+  // would go on presenting a live charge (migration 408).
+  "to_char(i.waived_at at time zone 'Asia/Dubai', 'YYYY-MM-DD') as waived_on, " +
   'i.client_id, i.supplier_legal_name, i.supplier_legal_name_ar, i.supplier_address, ' +
   'i.supplier_licence_number, i.supplier_licensing_authority, i.supplier_trn, ' +
   'i.supplier_vat_registered, i.supplier_vat_trn, ' +
@@ -108,6 +113,7 @@ type InvoiceRow = SupplierColumns & {
   net_fils: number;
   vat_fils: number;
   gross_fils: number;
+  waived_on: string | null;
   client_id: string;
   client_mrn: string;
   client_name: string;
@@ -143,6 +149,7 @@ export async function invoiceDocument(
       reference: row.reference,
       issuedOn: row.issued_on,
       suppliedOn: row.supplied_on,
+      waivedOn: row.waived_on,
       lines: lines.rows.map((line) => ({
         description: line.description,
         descriptionAr: line.description_ar,

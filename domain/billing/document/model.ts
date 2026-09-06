@@ -66,6 +66,17 @@ export type InvoiceDocument = {
   issuedOn: string;
   /** The date of supply, only when it differs from the issue date; null when it does not. */
   suppliedOn: string | null;
+  /**
+   * The day the practice forgave this charge, when it has (migration 408's
+   * `invoice.waived_at`, in the practice's own time zone); null while it
+   * stands.
+   *
+   * A waived call-out fee keeps its number, its line and its figures — the
+   * invoice is append-only and what happened is never rewritten — so without
+   * this the document would go on presenting a live charge for money the
+   * family does not owe. The renderer says so on the page instead.
+   */
+  waivedOn: string | null;
   lines: readonly InvoiceLine[];
   netFils: number;
   vatFils: number;
