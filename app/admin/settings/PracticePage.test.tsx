@@ -427,14 +427,17 @@ describe('Practice settings — the VAT threshold watch', () => {
     expect(screen.getByText('42,000.00')).toBeTruthy();
     expect(screen.getByText('187,500.00')).toBeTruthy();
     expect(screen.getByText('375,000.00')).toBeTruthy();
-    expect(screen.queryByText(/may register for VAT if it chooses/)).toBeNull();
     expect(screen.queryByText(/duty within thirty days/)).toBeNull();
   });
 
-  it('says registering has become a choice past the first mark', async () => {
+  it('says nothing new past the first mark, which changes nothing the practice must do', async () => {
+    // The mark is on the page; passing it is not a notice. The plan asks for
+    // the duty sentence past the second mark and no more.
     mountPractice({ ...PRACTICE, vatTaxableSuppliesFils: 18_750_000 });
-    expect(await screen.findByText(/may register for VAT if it chooses/)).toBeTruthy();
+    // The figure has reached the mark, so both cells read the same.
+    expect(await screen.findAllByText('187,500.00')).toHaveLength(2);
     expect(screen.queryByText(/duty within thirty days/)).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('says registering has become a duty past the second, on every visit', async () => {
@@ -443,7 +446,8 @@ describe('Practice settings — the VAT threshold watch', () => {
     expect(notice).toBeTruthy();
     // Said loudly enough that a screen reader announces it without being asked.
     expect(notice.getAttribute('role')).toBe('alert');
-    expect(screen.queryByText(/may register for VAT if it chooses/)).toBeNull();
+    // The duty and nothing after it: where to apply is the paragraph above's.
+    expect(notice.textContent).not.toContain('Apply to the Federal Tax Authority');
   });
 
   it('stops saying it once the practice has registered', async () => {

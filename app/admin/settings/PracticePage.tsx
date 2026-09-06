@@ -73,6 +73,16 @@ function text(value: string | null): ReactNode {
  * is on, which is the one place in this application something repeats itself
  * — and it repeats because the consequence of missing it is a penalty from
  * the tax authority rather than an inconvenience.
+ *
+ * **One notice, and only past the second mark** (the fix round of trunk round
+ * 31). The first build added a second notice at the voluntary mark and told
+ * the reader at the mandatory one to go and apply. The plan asks for the two
+ * marks on the page and the duty sentence past the second, and no more:
+ * passing the voluntary mark changes nothing the practice must do, so a
+ * notice about it repeats itself to no consequence, which is the pattern the
+ * anti-engagement rule exists to refuse — and the paragraph above already
+ * says whose act registering is. The mark itself stays in the list, where a
+ * reader can see where the practice stands against both.
  */
 function VatWatch({ practice }: { practice: Practice }) {
   const stand = vatThresholdStand(practice.vatTaxableSuppliesFils);
@@ -98,14 +108,7 @@ function VatWatch({ practice }: { practice: Practice }) {
       {stand === 'mandatory' && !practice.vatRegistered ? (
         <Note tone="critical">
           Taxable supplies have passed AED {formatFils(VAT_MANDATORY_THRESHOLD_FILS)}. Registering
-          for VAT is a duty within thirty days of passing it. Apply to the Federal Tax Authority,
-          then record the registration here.
-        </Note>
-      ) : null}
-      {stand === 'voluntary' && !practice.vatRegistered ? (
-        <Note tone="attention">
-          Taxable supplies have passed AED {formatFils(VAT_VOLUNTARY_THRESHOLD_FILS)}. The practice
-          may register for VAT if it chooses to; it is not required to yet.
+          for VAT is a duty within thirty days of passing it.
         </Note>
       ) : null}
     </>
