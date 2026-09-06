@@ -39,8 +39,9 @@ import { KNOWN_MIME_TYPES, bytesMatchMimeType } from '../shared/fileSignature';
  * `docs/SPEC/assessment.md` names — and it is fenced rather than opened: bytes
  * the platform already recognises as one of its four known types are refused,
  * because a PDF under this extension is a mislabelled PDF, and so is anything
- * beginning as markup, which is the one shape a signed link could ever be
- * talked into rendering. A second sample would let a signature replace all of
+ * beginning as markup — past a byte-order mark and any leading whitespace,
+ * because that is what a browser itself reads past — which is the one shape a
+ * signed link could ever be talked into rendering. A second sample would let a signature replace all of
  * that, and it should.
  *
  * **An extension is not a file name.** What crosses the door is the few
@@ -117,9 +118,26 @@ export function bytesAreAPdf(bytes: Uint8Array): boolean {
   return bytesMatchMimeType(bytes, ASSESSMENT_FILE_MIME_TYPE);
 }
 
-/** `<`: the one opening byte a browser could ever be talked into rendering. */
+/**
+ * The bytes a parser steps over before it reads anything: tab, line feed, form
+ * feed, carriage return and space.
+ */
+const LEADING_WHITESPACE: readonly number[] = [0x09, 0x0a, 0x0c, 0x0d, 0x20];
+
+/**
+ * `<`: the one opening byte a browser could ever be talked into rendering.
+ *
+ * Read past whatever a browser itself reads past, which is a UTF-8 byte-order
+ * mark and then any run of whitespace. A newline in front of `<` is still a
+ * page, and a fence that looked only at byte zero would have called it a
+ * recording — the file would then be filed as `application/octet-stream`, which
+ * is why this was hardening rather than a hole, but the fence should hold on
+ * its own terms.
+ */
 function beginsAsMarkup(bytes: Uint8Array): boolean {
-  return bytes[0] === 0x3c;
+  let at = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
+  while (at < bytes.length && LEADING_WHITESPACE.includes(bytes[at]!)) at += 1;
+  return bytes[at] === 0x3c;
 }
 
 /** Whether these bytes are one of the four types the platform already knows. */

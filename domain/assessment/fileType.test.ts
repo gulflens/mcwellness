@@ -118,6 +118,38 @@ describe('the amplifier software’s own recording', () => {
     });
   });
 
+  it('refuses markup behind whitespace or a byte-order mark', () => {
+    // A browser reads past both before it reads anything, so a fence that
+    // looked only at the first byte would have been reading a different file
+    // from the one that would eventually be rendered.
+    const BOM = [0xef, 0xbb, 0xbf];
+    const leading: readonly number[][] = [
+      [0x0a],
+      [0x20, 0x20, 0x09],
+      [0x0d, 0x0a],
+      [0x0c],
+      BOM,
+      [...BOM, 0x0a, 0x20],
+    ];
+    for (const prefix of leading) {
+      const bytes = new Uint8Array([...prefix, ...MARKUP]);
+      expect(classify(bytes, 'application/octet-stream', NATIVE_RECORDING_EXTENSION)).toEqual({
+        ok: false,
+        reason: 'not_a_recording',
+      });
+    }
+  });
+
+  it('still takes a recording whose own bytes begin with one of those', () => {
+    // The fence reads past whitespace to find markup, and finds none: a
+    // recording that happens to open with a space is a recording.
+    const bytes = new Uint8Array([0x20, 0x0a, ...nativeRecording()]);
+    expect(classify(bytes, 'application/octet-stream', NATIVE_RECORDING_EXTENSION)).toEqual({
+      ok: true,
+      kind: 'native_recording',
+    });
+  });
+
   it('refuses something the platform already recognises as another type', () => {
     // A PDF renamed to the recording's extension is a mislabelled PDF, and a
     // door that took it would hold a document nothing could read as what its
