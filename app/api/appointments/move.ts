@@ -16,9 +16,9 @@ import {
   ConflictResponse,
   MoveAppointmentRequest,
   MoveAppointmentResponse,
-  type AppointmentActionCode,
   type AppointmentRow,
   type DeliveryMode,
+  type MoveActionCode,
 } from './schema';
 
 /**
@@ -173,7 +173,7 @@ type OtherAppointmentRow = {
   travel_buffer_minutes: number;
 };
 
-function badRequest(c: Context<ApiEnv>, requestId: string | null, code: AppointmentActionCode) {
+function badRequest(c: Context<ApiEnv>, requestId: string | null, code: MoveActionCode) {
   return c.json({ error: 'bad_request', code, requestId }, 400);
 }
 

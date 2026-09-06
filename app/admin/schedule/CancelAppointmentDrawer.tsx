@@ -11,8 +11,8 @@ import {
   CancelAppointmentResponse,
   CANCELLATION_REASONS,
   SchedulingSettingsResponse,
-  type AppointmentActionCode,
   type AppointmentRow,
+  type CancelActionCode,
   type CancellationReason,
 } from '../../api/appointments/schema';
 import { formatFils } from '../billing/money';
@@ -57,7 +57,7 @@ const REASON_LABELS: Record<CancellationReason, string> = {
 const NOT_FOUND =
   'This appointment is no longer there. Close this and reload the day to see what changed.';
 
-const ACTION_MESSAGES: Record<AppointmentActionCode, string> = {
+const ACTION_MESSAGES: Record<CancelActionCode, string> = {
   invalid_request: 'Choose a reason, then try again.',
   appointment_not_found: NOT_FOUND,
   appointment_settled:
@@ -206,7 +206,7 @@ export function CancelAppointmentDrawer({
       }
       if (res.status === 400 || res.status === 404) {
         const body = (await res.json().catch(() => null)) as { code?: string } | null;
-        const code = body?.code as AppointmentActionCode | undefined;
+        const code = body?.code as CancelActionCode | undefined;
         setState({ kind: 'error', message: (code && ACTION_MESSAGES[code]) ?? NOT_FOUND });
         return;
       }

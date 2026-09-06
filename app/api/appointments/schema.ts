@@ -296,30 +296,43 @@ export const ConfirmAppointmentResponse = z.object({
 });
 export type ConfirmAppointmentResponse = z.infer<typeof ConfirmAppointmentResponse>;
 
-/** Why a move or a cancellation was refused before any rule was consulted. */
-export const APPOINTMENT_ACTION_CODES = [
+/** Why a move was refused before any rule was consulted. */
+export const MOVE_ACTION_CODES = [
   'invalid_request',
   'appointment_not_found',
   'appointment_settled',
   'reason_required',
-  // "Could not go ahead at the door", given before the door could have been
-  // reached. The one reason with a moment of its own.
-  'reason_too_early',
   // A visit somebody has already started delivering. How it ends is the
   // session's to say, not the calendar's.
   'session_open',
+] as const;
+export type MoveActionCode = (typeof MOVE_ACTION_CODES)[number];
+
+/**
+ * Why a cancellation was refused. The move's five and two of its own, for the
+ * reason `CONFIRM_ACTION_CODES` below is its own list: both refusals here are
+ * about *which reason was given* for calling a visit off, a move asks for a
+ * reason but judges none of them, and a `Record` over one shared union made
+ * the move drawer carry two sentences ending "Choose another reason" for
+ * refusals its own route cannot produce.
+ */
+export const CANCEL_ACTION_CODES = [
+  ...MOVE_ACTION_CODES,
+  // "Could not go ahead at the door", given before the door could have been
+  // reached. The one reason with a moment of its own.
+  'reason_too_early',
   // A reason that says the household did something, given about a visit the
   // household has never been told about.
   'household_not_told',
 ] as const;
-export type AppointmentActionCode = (typeof APPOINTMENT_ACTION_CODES)[number];
+export type CancelActionCode = (typeof CANCEL_ACTION_CODES)[number];
 
 /**
  * Why confirming a visit was refused. Its own short list rather than three
- * more members of the one above: a move and a cancellation can be refused for
- * six reasons each and this can be refused for three, and a `Record` over the
- * union would make every screen carry sentences for refusals its own route
- * cannot produce.
+ * more members of the ones above: a cancellation can be refused for seven
+ * reasons and this can be refused for three, and a `Record` over one union
+ * would make every screen carry sentences for refusals its own route cannot
+ * produce.
  */
 export const CONFIRM_ACTION_CODES = [
   'invalid_request',

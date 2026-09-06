@@ -13,8 +13,8 @@ import type { ApiEnv, Db } from '../_middleware/request-context';
 import {
   CancelAppointmentRequest,
   CancelAppointmentResponse,
-  type AppointmentActionCode,
   type AppointmentRow,
+  type CancelActionCode,
   type CancellationReason,
 } from './schema';
 
@@ -128,7 +128,7 @@ type AppointmentDbRow = {
   window_start: Date;
 };
 
-function badRequest(c: Context<ApiEnv>, requestId: string | null, code: AppointmentActionCode) {
+function badRequest(c: Context<ApiEnv>, requestId: string | null, code: CancelActionCode) {
   return c.json({ error: 'bad_request', code, requestId }, 400);
 }
 
