@@ -229,3 +229,34 @@ reads every other client-scoped table in this platform and reads **no** report
 money"). That is implemented in `db/policies/reports/reports.sql` and is worth
 a line beside the other audiences, so the absence reads as a decision rather
 than as a policy somebody forgot to widen.
+
+**Still open.** The trunk's round 31 did not write that summary — there is no
+one place in the specifications where the platform's read audiences are listed,
+and inventing one is a documentation decision rather than a note. Beside it,
+round 31 added a second absence of the same kind and for the same reason:
+finance reads no audit trail either (`audit.activity` in
+`domain/shared/actor.ts`), because finance reads money and not who did what.
+Both belong in whatever page eventually answers this request.
+
+---
+
+## What the trunk's round 31 closed
+
+Three of this file's own items, recorded here so a reader of the file does not
+have to cross-reference the round
+(`docs/CHANGE-REQUESTS/trunk-notes.md`, round 31, 2026-09-06):
+
+- **The widening note's count** — item 8 names five report actions in
+  `domain/shared/actor.ts` and `docs/SPEC/OWNERSHIP.md` said four. Corrected.
+- **The retired name** in a comment in `tests/reports/document.test.ts`. The
+  comment says what happened without naming anybody.
+- **The whitespace-only edit** in `domain/shared/audit-narrative.test.ts` that
+  the re-check flagged. It needed nothing: it was a stray second blank line and
+  commit `e2fda42`, in this stream's own pull request, had already removed it.
+
+The race in `tests/portal/db/invite.test.ts` that this stream's pull request
+recorded but could not fix — `tests/portal/**` is the portal stream's path — is
+fixed in the same round, in the one line that comment proposed.
+
+**R3 is still open**: the shared writer still sets type and strokes rules in
+greyscale only, so a printed ribbon carries the figure's shape and no hue.
