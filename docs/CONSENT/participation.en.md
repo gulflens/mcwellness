@@ -1,7 +1,7 @@
 ---
 purpose: participation
 locale: en
-version: 0.1-draft
+version: 0.2-draft
 status: draft
 written: 2026-09-03
 ---
@@ -62,7 +62,7 @@ first session, and whenever anything changes, if you:
 
 - have epilepsy, or have ever had a seizure;
 - have a pacemaker or any implanted electrical device;
-- have had a head injury in the last year;
+- have had a head injury at any time;
 - are pregnant;
 - take medication that affects mood, sleep, attention or the nervous
   system;
@@ -156,4 +156,6 @@ Signature: ______________________________ Date: ______________
 
 Practitioner present: ______________________________
 
-Version 0.1-draft, 3 September 2026. Supersedes nothing.
+Version 0.2-draft, 6 September 2026. Supersedes 0.1-draft: the health
+question now asks about a head injury at any time, not only in the last
+year.

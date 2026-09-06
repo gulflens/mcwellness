@@ -67,7 +67,12 @@ describe('the seeded consent wording', () => {
     for (const row of rows) {
       // Not the lawyer's yet, and the schema says so rather than a comment.
       expect(row.status).toBe('draft');
-      expect(row.version).toBe('0.1-draft');
+      // Two of the four moved to 0.2-draft on 6 September 2026, when the
+      // health question began asking about a head injury at any time rather
+      // than only in the last year (the founder's review of 4 September).
+      const participation =
+        row.purpose === 'participation' || row.purpose === 'minor_participation';
+      expect(row.version).toBe(participation ? '0.2-draft' : '0.1-draft');
       expect(row.mime_type).toBe('text/markdown');
       // A practice document: it belongs to no one client, and is never rewritten.
       expect(row.client_id).toBeNull();
