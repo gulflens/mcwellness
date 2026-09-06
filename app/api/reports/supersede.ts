@@ -32,7 +32,7 @@ import { asRow, readReport } from './source';
 const INSERT_SQL =
   'insert into report (tenant_id, client_id, kind, locale, service_type_id, ' +
   'coverage_from, coverage_to, content, version, supersedes_id, amendment_reason, created_by) ' +
-  'values (app.current_tenant_id(), $1, $2::report_kind, $3, $4, $5::date, $6::date, ' +
+  'values (app.current_tenant_id(), $1, $2::report_kind, $3::locale, $4, $5::date, $6::date, ' +
   '$7::jsonb, $8, $9, $10, app.current_actor_id()) returning id';
 
 const MARK_SQL =

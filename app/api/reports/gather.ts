@@ -25,12 +25,18 @@ import type { Db } from '../_middleware/request-context';
  *
  * When the table is absent the comparison is empty and the report says nothing
  * about brain maps. That is the honest answer rather than a heading over a
- * hole, and it is the case the route's own test proves; the present-table case
- * is proved on staging after both streams merge.
+ * hole.
  *
- * The visits and the credits are read the same way, and for the same reason:
- * `session` and `entitlement` are other streams' tables, already on this
- * database but not this migration range's to assume.
+ * **The visits and the credits are asked the same question first, and that is
+ * not decoration.** `session` (300–399) and `entitlement` (400–499) are other
+ * streams' tables, on this database today and not this range's to assume, and
+ * a route that queried them unguarded answered 500 on a database carrying
+ * neither range — which is an ordinary state of affairs while the streams are
+ * built side by side. Absent, there are no visits and no credits, which is the
+ * same honest empty answer the brain maps give.
+ *
+ * `goal` is asked unguarded on purpose: it is the client record's own table
+ * (100–199), and a database without that range has no client to report on.
  */
 
 const VISITS_SQL =
@@ -136,18 +142,29 @@ export async function gatherForClient(
     narrative?: ProgressNarrative;
   },
 ): Promise<Gathered> {
+  const [visitsPresent, entitlementsPresent, brainMapsRead] = await Promise.all([
+    tableExists(db, 'public.session'),
+    tableExists(db, 'public.entitlement'),
+    tableExists(db, 'public.assessment'),
+  ]);
+
   const [visits, entitlements, goals] = await Promise.all([
-    db.query<{
-      id: string;
-      on_day: string;
-      signal_quality_score: string | null;
-      telemetry: unknown;
-    }>(VISITS_SQL, [input.clientId, input.timeZone]),
-    db.query<{ id: string; status: EntitlementRow['status'] }>(ENTITLEMENTS_SQL, [input.clientId]),
+    visitsPresent
+      ? db.query<{
+          id: string;
+          on_day: string;
+          signal_quality_score: string | null;
+          telemetry: unknown;
+        }>(VISITS_SQL, [input.clientId, input.timeZone])
+      : Promise.resolve({ rows: [] }),
+    entitlementsPresent
+      ? db.query<{ id: string; status: EntitlementRow['status'] }>(ENTITLEMENTS_SQL, [
+          input.clientId,
+        ])
+      : Promise.resolve({ rows: [] }),
     db.query<{ id: string; description: string; status: string }>(GOALS_SQL, [input.clientId]),
   ]);
 
-  const brainMapsRead = await tableExists(db, 'public.assessment');
   let assessments: AssessmentRow[] = [];
   if (brainMapsRead) {
     const found = await db.query<{

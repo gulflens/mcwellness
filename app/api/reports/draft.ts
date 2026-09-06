@@ -41,11 +41,11 @@ const GatherQuery = z.object({
 const INSERT_SQL =
   'insert into report (tenant_id, client_id, kind, locale, service_type_id, ' +
   'coverage_from, coverage_to, content, created_by) values (' +
-  'app.current_tenant_id(), $1, $2::report_kind, $3, $4, $5::date, $6::date, $7::jsonb, ' +
+  'app.current_tenant_id(), $1, $2::report_kind, $3::locale, $4, $5::date, $6::date, $7::jsonb, ' +
   'app.current_actor_id()) returning id';
 
 const UPDATE_SQL =
-  'update report set locale = $2, service_type_id = $3, coverage_from = $4::date, ' +
+  'update report set locale = $2::locale, service_type_id = $3, coverage_from = $4::date, ' +
   'coverage_to = $5::date, content = $6::jsonb ' +
   'where tenant_id = app.current_tenant_id() and id = $1 returning id';
 

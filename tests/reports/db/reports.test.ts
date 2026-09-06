@@ -119,9 +119,12 @@ describe('drafting', () => {
     expect((await res.json()) as { field: string }).toMatchObject({ field: 'visitDate' });
   });
 
-  it('says nothing about brain maps while the assessment table is not on this database', async () => {
-    // The assessment stream builds beside this one and its table is in another
-    // range (section 6, no foreign key). The absent case is the ordinary one.
+  it('reads the brain maps where the table is there, and says nothing about a household never measured', async () => {
+    // The assessment stream merged beside this one, so its table is on this
+    // database and the guarded read takes the present path (section 6 still
+    // declares no foreign key: another database may carry neither range).
+    // Client 0 has never been measured, so there is nothing to compare and the
+    // report says nothing rather than putting a heading over a hole.
     const res = await h.call(
       'GET',
       `/api/reports/gather?clientId=${h.clientId(0)}&from=2026-06-01&to=2026-09-01`,
@@ -129,7 +132,29 @@ describe('drafting', () => {
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as GatherResponse;
-    expect(body.brainMapsRead).toBe(false);
+    expect(body.brainMapsRead).toBe(true);
+    expect((body.content as { comparison: unknown }).comparison).toBeNull();
+  });
+
+  it('quotes no brain-map figure the report is not allowed to print', async () => {
+    // Client 5 carries two brain maps of one instrument, and the comparison is
+    // still empty. That is not a fault here: what a brain map's `derived`
+    // holds is a band power per electrode site, and **no report may print an
+    // electrode site or a band** (CLAUDE.md, and the specification's section
+    // 5). `figuresOf` quotes a figure only where the measurement carries a
+    // plain label and a unit, and nothing the assessment stream writes today
+    // does. Which figure a household may be shown is a decision for the
+    // practice, not something this route should guess; until it is taken the
+    // comparison is honestly empty. Named in the pull-request body so the
+    // staging walk is not surprised by it.
+    const res = await h.call(
+      'GET',
+      `/api/reports/gather?clientId=${h.clientId(5)}&from=2026-01-01&to=2026-09-01`,
+      SEEDED.owner,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as GatherResponse;
+    expect(body.brainMapsRead).toBe(true);
     expect((body.content as { comparison: unknown }).comparison).toBeNull();
   });
 });

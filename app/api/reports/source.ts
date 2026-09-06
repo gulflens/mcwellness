@@ -22,7 +22,8 @@ import type { ReportRow } from './schema';
  */
 
 export const REPORT_COLUMNS =
-  'r.id, r.client_id, r.kind::text as kind, r.status::text as status, r.locale, ' +
+  'r.id, r.client_id, r.kind::text as kind, r.status::text as status, ' +
+  'r.locale::text as locale, ' +
   'r.service_type_id, r.reference, r.number, ' +
   "to_char(r.issued_on, 'YYYY-MM-DD') as issued_on, " +
   "to_char(r.coverage_from, 'YYYY-MM-DD') as coverage_from, " +

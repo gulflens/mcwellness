@@ -43,11 +43,11 @@
 -- Their ids ride inside `content`, where an absent table costs nothing — and
 -- where the snapshot rule wanted them anyway.
 --
--- Needs: 010 (tenant), 020 (app_user), 040 (service_type), 050 (practitioner,
--- credential), 060 (client, document), 080 (app.audit_row), 095 (app.actor_roles),
--- 098 (app.erasure_active), 099 (the tenant-scoped keys this table's composite
--- foreign keys reference on client, document, practitioner and service_type),
--- 100 (app.current_actor_id).
+-- Needs: 010 (tenant), 020 (app_user, and the `locale` enum this table's own
+-- locale column is), 040 (service_type), 050 (practitioner, credential), 060
+-- (client, document), 080 (app.audit_row), 098 (app.erasure_active), 099 (the
+-- tenant-scoped keys this table's composite foreign keys reference on client,
+-- document, practitioner and service_type), 100 (app.current_actor_id).
 
 create type report_kind as enum ('session', 'progress');
 create type report_status as enum ('draft', 'issued', 'superseded');
@@ -127,7 +127,7 @@ create table report (
   -- Which language the practitioner's own narrative was written in. Every
   -- fixed label prints in both; a paragraph a person wrote prints in the one
   -- they wrote it in (section 5).
-  locale                        text not null default 'en' check (locale in ('en', 'ar')),
+  locale                        locale not null default 'en',
   -- What the report is about, where it is about one service. A progress
   -- report over a whole programme names none, and then any valid signing
   -- credential will do (domain/reports/canIssue.ts).
@@ -222,6 +222,7 @@ create index report_client_idx on report (tenant_id, client_id, created_at desc)
 create index report_status_idx on report (tenant_id, status);
 create index report_document_idx on report (document_id);
 create index report_supersedes_idx on report (supersedes_id);
+create index report_service_type_idx on report (service_type_id);
 create index report_signer_idx on report (signed_by_practitioner_id);
 create index report_created_by_idx on report (created_by);
 
