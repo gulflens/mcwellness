@@ -858,8 +858,9 @@ nine and ten; see the records on pull requests 73 to 83).
    `docs/SPEC/route-planning.md`. **Approved at 22:54** ("lets go"),
    defaults standing.
 
-   **Piece seventeen, the day map and the optimised day, is built**
-   (8 September, on branch `scheduling-5` in the `scheduling` worktree, from
+   **Piece seventeen, the day map and the optimised day, is MERGED**
+   (8 September 02:40, pull request **121**, `main` at `a22dd4d`, on the
+   rebased head `bdf7810`; from
    `docs/superpowers/plans/2026-09-07-route-planning-day-map.md`, fourteen
    tasks): the seam's grid call, the pure rule `optimiseDay`, the practice-day
    read and the optimise call, `POST /api/appointments/reorder` applying a
@@ -868,7 +869,33 @@ nine and ten; see the records on pull requests 73 to 83).
    Optimise drawer, and a planning day of five visits in the seed. The
    shared-zone edits ride in the pull request and are listed in
    `docs/CHANGE-REQUESTS/scheduling-05.md`; five refinements the build learned
-   are marked in the specification itself. Pull request **121**.
+   are marked in the specification itself.
+
+   **How it was checked, and what the review caught.** Builder, combined
+   review, fix round, re-check, second fix round, all on Opus — the Fable
+   allowance ran out at 00:51 (see the note under rule 3 of section 6) — then
+   the integrator's own read of the last two closures, the rebase onto `main`,
+   the gate and the merge. About 1.5 million tokens in agents. The review
+   found two blocking defects and the re-check refused the merge once; the
+   record on the pull request has all of it, and both are worth remembering:
+
+   - *An exhaustive synchronous search can stop the whole practice.*
+     `optimiseDay` walked every ordering of the day (ten stops is 3.6 million)
+     and `hourBucket` built a fresh `Intl.DateTimeFormat` on every lookup:
+     8.5 seconds at eight stops, still running after twelve minutes at ten,
+     with the screen advertising ten as supported. Node has one event loop, so
+     nothing else in the practice is answered while it runs and the request
+     timeout cannot fire, because its own timer cannot run. Closed by hoisting
+     the formatters per zone and capping the day at eight stops — 0.44 seconds
+     at eight and 4.3 at nine, measured twice, independently.
+   - *A content security policy belongs to a document, not to a React tree.*
+     The map page was mounted inside `/admin`, whose rail navigates
+     client-side and whose guard redirects client-side, so the sign-in form
+     and every console screen could render under `'unsafe-eval'`. It took
+     three attempts to close: the route moved out of the layout; then a
+     `DocumentBoundary` (`app/admin/schedule/map/documentBoundary.tsx`) inside
+     which every outward link renders as a fresh document load; then the
+     service worker taught never to cache that document as the offline shell.
 
    **Two console acts are still owed, and they are the integrator's rather
    than a builder's**, at piece seventeen's staging pass
