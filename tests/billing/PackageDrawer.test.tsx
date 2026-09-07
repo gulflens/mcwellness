@@ -160,6 +160,42 @@ describe('the discount and the price now', () => {
     expect((screen.getByLabelText('Discount (AED)') as HTMLInputElement).value).toBe('1,825.00');
   });
 
+  it('keeps the price now in step when the list price changes after a discount', async () => {
+    // The founder chooses a share off the list, then moves the list figure —
+    // by retyping it, or by adding one more service to the contents. The
+    // request carries the discount, not the price now, so a price now left
+    // behind is a figure nobody agreed to (docs/SPEC/billing.md section 2.4).
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Silver' } });
+    fireEvent.change(screen.getByLabelText(/Consultation/), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/Brain map/), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/Neurofeedback session/), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Discount off the list price'), {
+      target: { value: 'percent' },
+    });
+    fireEvent.change(screen.getByLabelText('Discount (%)'), { target: { value: '15' } });
+    expect((screen.getByLabelText(/^Price now/) as HTMLInputElement).value).toBe('10,327.50');
+
+    // AED 12,850 less fifteen per cent is AED 10,922.50.
+    fireEvent.change(screen.getByLabelText(/^List price/), { target: { value: '12,850.00' } });
+    expect((screen.getByLabelText(/^Price now/) as HTMLInputElement).value).toBe('10,922.50');
+
+    fireEvent.change(screen.getByLabelText('Why this is the price'), {
+      target: { value: 'Fifteen per cent off for the launch.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+    await waitFor(() => {
+      expect(requests.some((request) => request.url === '/api/billing/packages')).toBe(true);
+    });
+    const sent = requests.find((request) => request.url === '/api/billing/packages')?.body as {
+      listPriceFils: number;
+      price: { discount: { kind: string; basisPoints: number } };
+    };
+    expect(sent.listPriceFils).toBe(1_285_000);
+    expect(sent.price.discount).toEqual({ kind: 'percent', basisPoints: 1500 });
+  });
+
   it('refuses a price now above the list price on the screen', async () => {
     const { requests } = mount();
     await screen.findByLabelText(/Brain map/);

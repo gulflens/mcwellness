@@ -41,6 +41,12 @@ import {
  * discount percentage is kept anywhere; a percentage is kept now, when that is
  * how the figure was set). The list price is the ceiling: a price now above it
  * is refused here rather than at the server.
+ *
+ * Because the request carries the discount, the price now follows the list
+ * figure whenever that moves afterwards — the founder retypes it, or the
+ * contents change and the offered total with them — and a price now that no
+ * longer agrees with the discount is refused here rather than written as a
+ * figure nobody saw.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -51,6 +57,7 @@ const GENERIC_MESSAGE = 'The package could not be saved. Try again.';
 const DISCOUNT_TOO_LARGE_MESSAGE = 'The discount is larger than the list price.';
 const ABOVE_LIST_MESSAGE =
   'The price now is above the list price. Raise the list price or lower the price now.';
+const DISAGREE_MESSAGE = 'The price now and the discount no longer agree. Retype one of them.';
 const BAD_REQUEST_MESSAGES: Record<string, string> = {
   duplicate_component: 'Each service may appear once. Change the quantity instead.',
   discount_too_large: DISCOUNT_TOO_LARGE_MESSAGE,
@@ -99,7 +106,15 @@ export function PackageDrawer({
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [listPrice, setListPrice] = useState('');
   const [listPriceTouched, setListPriceTouched] = useState(false);
-  const [salePrice, setSalePrice] = useState('');
+  // The price now as it was last set — by a discount, or by the founder
+  // typing it — beside the list figure it was set against. When the list
+  // moves afterwards the stored text is stale, and a discount is what
+  // determines the price now, so the field is derived from the discount
+  // rather than left showing a figure the server will not write.
+  const [salePrice, setSalePrice] = useState<{ text: string; listFils: number | null }>({
+    text: '',
+    listFils: null,
+  });
   const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
   const [discountValue, setDiscountValue] = useState('');
   const [validFrom, setValidFrom] = useState(() => isoDateIn(new Date(), PRACTICE_TIME_ZONE));
@@ -148,6 +163,22 @@ export function PackageDrawer({
   const applied = listFils === null ? null : previewDiscount(listFils, discountKind, discountValue);
 
   /**
+   * What the price now field shows: the figure that was typed, unless the
+   * list price has moved under it while a discount is chosen — the founder
+   * retypes the list, or the offered total changes because the contents did.
+   * Then the discount is the authority, because the discount is what the
+   * request carries, and the screen must say what the server will write.
+   *
+   * Derived rather than written back by an effect: a synchronous `setState`
+   * in an effect is refused by `react-hooks/set-state-in-effect`, and the
+   * stale text is only ever displayed, never a second source of truth.
+   */
+  const priceNow =
+    discountKind !== 'none' && applied !== null && salePrice.listFils !== listFils
+      ? formatFils(applied.netFils)
+      : salePrice.text;
+
+  /**
    * The two halves of one figure, kept together. A discount sets the price
    * now; a price now sets the discount, as an amount, because that is what
    * the founder just named. Neither is derived at submit time — both are on
@@ -159,11 +190,11 @@ export function PackageDrawer({
     clearFieldError('price');
     if (listFils === null) return;
     const preview = previewDiscount(listFils, next.kind, next.value);
-    if (preview) setSalePrice(formatFils(preview.netFils));
+    if (preview) setSalePrice({ text: formatFils(preview.netFils), listFils });
   }
 
   function choosePriceNow(typed: string): void {
-    setSalePrice(typed);
+    setSalePrice({ text: typed, listFils });
     clearFieldError('price');
     const now = parseAedToFils(typed);
     if (listFils === null || now === null || now > listFils) return;
@@ -186,10 +217,10 @@ export function PackageDrawer({
       errors.code = 'A code is lower case letters, digits and hyphens, at least two characters.';
     }
     if (chosen.length === 0) errors.contents = 'Say how many of at least one service it contains.';
-    const saleFils = parseAedToFils(salePrice);
+    const saleFils = parseAedToFils(priceNow);
     if (listFils === null || saleFils === null) {
       errors.price =
-        isAedAmountTooLarge(effectiveListPrice) || isAedAmountTooLarge(salePrice)
+        isAedAmountTooLarge(effectiveListPrice) || isAedAmountTooLarge(priceNow)
           ? `Enter a price of AED ${formatFils(AED_MAX_FILS)} or less.`
           : 'Enter both prices in AED, such as 10325.00.';
     } else if (saleFils > listFils) {
@@ -199,6 +230,11 @@ export function PackageDrawer({
         discountKind === 'percent'
           ? 'Enter a percentage between 0 and 100, such as 15.'
           : DISCOUNT_TOO_LARGE_MESSAGE;
+    } else if (saleFils !== applied.netFils) {
+      // The request carries the discount. If the two halves of the one figure
+      // have come apart — a price now typed before the list price was — the
+      // person retypes one of them rather than the server writing the other.
+      errors.price = DISAGREE_MESSAGE;
     }
     const trimmedReason = reason.trim();
     if (!isRealText(trimmedReason)) {
@@ -394,7 +430,7 @@ export function PackageDrawer({
             type="text"
             inputMode="decimal"
             placeholder="0.00"
-            value={salePrice}
+            value={priceNow}
             onChange={(e) => choosePriceNow(e.target.value)}
             error={fieldErrors.price}
           />
