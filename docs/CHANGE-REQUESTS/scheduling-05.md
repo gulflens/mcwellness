@@ -22,15 +22,49 @@ here rather than assumed. All of them ride in this pull request, as
 | 1 | `domain/shared/routing.ts`, `app/api/_middleware/routing/**` (trunk) | `driveGrid` on `RoutingProvider`, `GRID_MAX_ELEMENTS = 625`, `straightLineGrid`, and the grid in both implementations | the optimiser prices every pair of places at once; leg-by-leg calls would be one request per pair | the optimiser, entirely |
 | 2 | `domain/shared/actor.ts` (trunk) | `routing.practiceDay.read`, answered for owner, admin and lead practitioner | the map shows the day `appointment.list` with scope `practice` already shows | both practice-day routes |
 | 3 | `app/api/_middleware/security.ts`, `app/api/_middleware/request-context.ts`, `app/api/serve-app.ts`, `app/api/create-api.ts`, `app/api/server.ts` (trunk) | `mapDocumentPaths`, `MAP_DOCUMENT_PATHS`, the `cspNonce` context variable, and the shell stamped with it | Google's map needs `'strict-dynamic'`, `'unsafe-eval'` and four of its own hosts; exactly one document gets them | the map draws nothing without it |
-| 4 | `app/shell/App.tsx` (trunk) | A route for `/admin/schedule/map`, guarded by `canOpenSchedule` exactly as the week is | a reload of that address would otherwise land nowhere | the page is unreachable |
+| 4 | `app/shell/App.tsx`, `app/shell/App.test.tsx` (trunk) | A route for `/admin/schedule/map`, guarded by `canOpenSchedule` exactly as the week is, and its test | a reload of that address would otherwise land nowhere | the page is unreachable |
 | 5 | `.env.example` (trunk) | `VITE_GOOGLE_MAPS_BROWSER_KEY`, blank, with the comment that says it is a browser key and not the server one | the value is baked at build time as `VITE_SUPABASE_ANON_KEY` is | the map, on a laptop and on staging |
 | 6 | `package.json`, `pnpm-lock.yaml`, `tsconfig.json` (trunk) | `@types/google.maps` as a development dependency, and `"google.maps"` in `types` | the namespace is typed rather than cast | the typecheck |
-| 7 | `db/seed/generate.ts`, `db/seed/apply.ts`, `db/seed/index.ts` (trunk) | `SeedAppointment`, `SeedData.appointments`, `SeedOptions.planningDay`, and five visits written last | a day map is worth nothing on a day with no visits on it | the demonstration, and Task 14's own walk-through |
+| 7 | `db/seed/generate.ts` with its test `db/seed/generate.test.ts`, `db/seed/apply.ts`, `db/seed/index.ts` (trunk) | `SeedAppointment`, `SeedData.appointments`, `SeedOptions.planningDay`, and five visits written last | a day map is worth nothing on a day with no visits on it | the demonstration, and Task 14's own walk-through |
 | 8 | `tests/security/headers.test.ts`, `tests/security/static.test.ts` (trunk) | The cases that pin **both** policies: the map document's, and every other document's unchanged | a widening nobody pinned is a widening that spreads | the proof that item 3 is confined |
+| 9 | `tests/db/seed.test.ts`, `tests/db/bootstrap-practice.test.ts` (trunk) | `seed.test.ts` gains the case that the seeded day is one the map can draw — five visits, each with a place that has a coordinate and a practitioner credentialled to deliver it; `bootstrap-practice.test.ts` adds `'appointment'` to `SEED_TABLES`, which is read in one place (`defaultsOnly`) to set the seed's own content aside before a seeded practice is compared with a bootstrapped one. Additive: the migration scan beside it does not consult the list and is untouched | item 7 puts rows in a table these two read | `pnpm test:db` |
 
 No migration, no policy file and no schema change: `drive_estimate`
 (migration 204) already admits owner, admin and lead practitioner, and
 `appointment` already carries everything the reorder writes.
+
+## The documentation this piece edits outside its own spec
+
+Named here as `billing-05.md` names its own, because a document edited in a
+piece's pull request and listed nowhere is a document nobody agreed to.
+`docs/SPEC/route-planning.md` and `docs/SPEC/scheduling-manual.md` are this
+stream's own and are not in this list; the plan file
+`docs/superpowers/plans/2026-09-07-route-planning-day-map.md` is the piece's
+working record. Eight others are touched, each in one place:
+
+- `docs/COMPLIANCE/approved-vendors.md` — Google Maps Platform as a vendor:
+  what the browser sends it (its own IP address, the map viewport and the key)
+  and what the server sends it (coordinates and a departure time).
+- `docs/SECURITY.md` — the one document served with a wider content security
+  policy, why, and what keeps it to that one document.
+- `docs/SEAMS.md` — `driveGrid` on the routing seam beside `driveMatrix`.
+- `docs/SPEC/practitioner-phone.md` — the routing seam's section, so the phone's
+  own spec still describes the seam it shares.
+- `docs/SPEC/OWNERSHIP.md` — the widening note for this piece.
+- `docs/HANDOVER.md` — where the work stands: piece seventeen built, and the
+  number of this pull request.
+- `docs/STAGING.md` and `docs/RUNBOOK/go-live.md` —
+  `VITE_GOOGLE_MAPS_BROWSER_KEY` in the build environment: which key it is,
+  why it is public by design, how it is restricted, and that leaving it out
+  costs the picture and nothing else.
+
+**Amended in the fix round, 2026-09-08.** The round that answered the combined
+review of this pull request also touched, outside this stream's own paths:
+`domain/shared/routing.ts` and its test (one `Intl.DateTimeFormat` held per
+zone, item 1's file); `app/shell/App.tsx` and `app/shell/App.test.tsx` (the day
+map mounted outside the `/admin` layout, item 4's file); and
+`tests/security/headers.test.ts` (the near misses, item 8's file). Nothing new
+was opened.
 
 ---
 
