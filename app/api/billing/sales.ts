@@ -15,6 +15,7 @@ import {
   type PurchaseRow,
 } from './ledger-schema';
 import { readPackages } from './packages';
+import { readVatRegistered } from './supplier';
 
 /**
  * `POST /api/billing/package-purchases` — a family buys a bundle.
@@ -222,7 +223,13 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
 
     // The catalogue as it stood on the day of the sale: the package price and
     // every component's standalone price in force then, not today's.
-    const packages = await readPackages(db, input.purchasedOn);
+    // The registration decides the money figures on the rows this returns;
+    // the sale below reads it again, in one statement with the price row, for
+    // the reason written there. Nothing here reads those figures — the sale
+    // charges from the price and its own resolveSaleVat — but a list that
+    // says one thing and a sale that charges another would be a trap for the
+    // next reader.
+    const packages = await readPackages(db, input.purchasedOn, await readVatRegistered(db));
     const bundle = packages.find((row) => row.id === input.packageId);
     if (!bundle) {
       return c.json({ error: 'not_found', requestId }, 404);

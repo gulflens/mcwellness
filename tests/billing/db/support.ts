@@ -258,3 +258,13 @@ export async function setVatRegistration(
     registered ? [tenantId, TEST_VAT_TRN] : [tenantId],
   );
 }
+
+/** The same, for a suite that holds the whole harness. */
+export async function setPracticeVatRegistration(h: Harness, registered: boolean): Promise<void> {
+  await setVatRegistration(
+    h.owner,
+    h.data.tenant.id,
+    h.data.users[SEEDED.owner]?.id ?? null,
+    registered,
+  );
+}

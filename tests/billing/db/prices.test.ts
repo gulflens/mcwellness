@@ -454,22 +454,26 @@ describe('GET /api/billing/prices, and the registration', () => {
     const before = await priceList();
     const beforeStamps = await stamped();
 
-    await setVatRegistration(owner, SEED_TENANT_ID, SEED_OWNER_USER_ID, true);
-    const after = await priceList();
+    try {
+      await setVatRegistration(owner, SEED_TENANT_ID, SEED_OWNER_USER_ID, true);
+      const after = await priceList();
 
-    expect(after.vatRegistered).toBe(true);
-    expect(after.prices).toHaveLength(before.prices.length);
-    for (const price of after.prices) {
-      expect(price.vatFils).toBe(Math.round(price.unitPriceFils * 0.05));
-      expect(price.grossFils).toBe(price.unitPriceFils + price.vatFils);
+      expect(after.vatRegistered).toBe(true);
+      expect(after.prices).toHaveLength(before.prices.length);
+      for (const price of after.prices) {
+        expect(price.vatFils).toBe(Math.round(price.unitPriceFils * 0.05));
+        expect(price.grossFils).toBe(price.unitPriceFils + price.vatFils);
+      }
+      // The registration changes what is charged and nothing that was stamped:
+      // the rate and the setting version on every row are the ones they were
+      // written with, so a price already shown to a family is not rewritten.
+      expect(await stamped()).toEqual(beforeStamps);
+      const sameRows = after.prices.map((price) => [price.id, price.vatRateBasisPoints]);
+      expect(sameRows).toEqual(before.prices.map((price) => [price.id, price.vatRateBasisPoints]));
+    } finally {
+      // The practice this suite reads is the real one: unregistered. A failed
+      // assertion must not leave a registration behind for the next test.
+      await setVatRegistration(owner, SEED_TENANT_ID, SEED_OWNER_USER_ID, false);
     }
-    // The registration changes what is charged and nothing that was stamped:
-    // the rate and the setting version on every row are the ones they were
-    // written with, so a price already shown to a family is not rewritten.
-    expect(await stamped()).toEqual(beforeStamps);
-    const sameRows = after.prices.map((price) => [price.id, price.vatRateBasisPoints]);
-    expect(sameRows).toEqual(before.prices.map((price) => [price.id, price.vatRateBasisPoints]));
-
-    await setVatRegistration(owner, SEED_TENANT_ID, SEED_OWNER_USER_ID, false);
   });
 });

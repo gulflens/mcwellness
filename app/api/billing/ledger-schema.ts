@@ -95,7 +95,16 @@ export const PackageRow = z.object({
 });
 export type PackageRow = z.infer<typeof PackageRow>;
 
-export const PackagesResponse = z.object({ packages: z.array(PackageRow) });
+export const PackagesResponse = z.object({
+  packages: z.array(PackageRow),
+  /**
+   * Whether the practice is registered for VAT today, which is what decides
+   * the `vatFils` and `grossFils` on every price above (migration 406). The
+   * table says it in one sentence rather than leaving a reader to work out
+   * why a VAT column reads nothing.
+   */
+  vatRegistered: z.boolean(),
+});
 export type PackagesResponse = z.infer<typeof PackagesResponse>;
 
 export const CreatePackageInput = z.object({

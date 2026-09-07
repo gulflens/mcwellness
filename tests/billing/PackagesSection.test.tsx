@@ -88,9 +88,9 @@ const UNSELLABLE = {
   sellable: false,
 };
 
-function mount(me: unknown, packages: unknown[]) {
+function mount(me: unknown, packages: unknown[], vatRegistered = true) {
   return mountWith(me, <PackagesSection canWrite={me === OWNER} />, (url) =>
-    url === '/api/billing/packages' ? json({ packages }) : null,
+    url === '/api/billing/packages' ? json({ packages, vatRegistered }) : null,
   );
 }
 
