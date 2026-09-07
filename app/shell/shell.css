@@ -9,16 +9,25 @@
   white-space: nowrap;
 }
 
-/* The ledger: rail and content */
+/* The ledger: rail and content. Compact first — these are the smallest
+   screen's rules and the two tiers below add to them
+   (docs/SPEC/responsive-console.md section 4). */
 .admin {
   display: grid;
+  /* minmax(0, 1fr): a table wider than its column scrolls inside its own
+     container rather than widening the page. The body never scrolls sideways. */
   grid-template-columns: var(--rail) minmax(0, 1fr);
   min-block-size: 100dvh;
 }
 
+/* Closed, the rail is a strip of icons and the width goes to the content. */
+.admin[data-rail='closed'] {
+  --rail: var(--rail-closed);
+}
+
 .admin__main {
   min-inline-size: 0;
-  padding: var(--s-8) var(--s-8) var(--s-16);
+  padding: var(--s-4) var(--s-4) var(--s-12);
   max-inline-size: var(--content-max);
 }
 
@@ -28,23 +37,63 @@
   block-size: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: var(--s-6) var(--s-4);
+  padding: var(--s-4) var(--s-2);
   border-inline-end: var(--hairline) solid var(--rule);
   background: var(--paper);
+  overflow: hidden;
+}
+
+/* The wordmark and the control that puts the rail away, on one line. The
+   control takes a rail item's own 44px rather than the 48px of a drawer's
+   close: it sits in the rail's rhythm, and the wordmark needs the width. */
+.rail__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  margin-block-end: var(--s-6);
 }
 
 .rail__mark {
   font-weight: var(--w-medium);
   font-size: var(--t-h3);
   line-height: var(--lh-h3);
-  padding-inline: var(--s-3);
-  margin-block-end: var(--s-8);
+  padding-inline-start: var(--s-3);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.rail__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--row);
+  min-block-size: var(--row);
+  margin-inline-start: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.rail__toggle:hover {
+  color: var(--ink);
+}
+
+/* The sections scroll on their own, so a long list can never push the person's
+   name and the way out off the screen (docs/SPEC/responsive-console.md
+   section 6). */
 .rail__list {
   display: flex;
   flex-direction: column;
   gap: var(--s-1);
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
 }
 
 .rail__item {
@@ -73,7 +122,8 @@
 }
 
 .rail__person {
-  margin-block-start: auto;
+  flex: none;
+  margin-block-start: var(--s-4);
   padding: var(--s-4) var(--s-3) 0;
   border-block-start: var(--hairline) solid var(--rule);
 }
@@ -425,36 +475,62 @@
   max-inline-size: var(--measure);
 }
 
-@media (max-width: 720px) {
-  .admin {
-    /* minmax(0, 1fr): the table scrolls inside its own container instead of widening the page. */
-    grid-template-columns: minmax(0, 1fr);
+/* Closed: the icons stay and the words stand down. Every label is still in the
+   markup and hidden the visually-hidden way, so a section closed to an icon
+   keeps its accessible name. */
+.admin[data-rail='closed'] .rail__label,
+.admin[data-rail='closed'] .rail__later {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.admin[data-rail='closed'] .rail__item,
+.admin[data-rail='closed'] .rail__signout {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.admin[data-rail='closed'] .rail__toggle {
+  margin-inline-start: 0;
+}
+
+.admin[data-rail='closed'] .rail__head {
+  justify-content: center;
+}
+
+.admin[data-rail='closed'] .rail__person {
+  padding-inline: 0;
+}
+
+/* The tablet tier. */
+@media (min-width: 768px) {
+  .admin__main {
+    padding: var(--s-6) var(--s-6) var(--s-16);
   }
 
   .rail {
-    position: static;
-    block-size: auto;
-    border-inline-end: 0;
-    border-block-end: var(--hairline) solid var(--rule);
+    padding: var(--s-6) var(--s-3);
   }
+}
 
-  .rail__list {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  .rail__item--later {
-    display: none;
-  }
-
-  .rail__person {
-    margin-block-start: var(--s-4);
-  }
-
+/* The desk tier. */
+@media (min-width: 1200px) {
   .admin__main {
-    padding: var(--s-6) var(--s-4) var(--s-12);
+    padding: var(--s-8) var(--s-8) var(--s-16);
   }
 
+  .rail {
+    padding: var(--s-6) var(--s-4);
+  }
+}
+
+/* Below the tablet tier a toolbar field takes the whole line rather than
+   leaving a gap beside it. */
+@media (max-width: 767px) {
   .toolbar .field {
     flex: 1 1 100%;
     min-inline-size: 0;
@@ -566,68 +642,31 @@ a.rail__item:active,
   color: var(--ink);
 }
 
-@media (max-width: 720px) {
-  /* The rail folds to one line: mark and person, then the sections, then the heading. */
-  .rail {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      'mark person'
-      'list list';
-    align-items: center;
-    row-gap: var(--s-3);
-    padding-block: var(--s-4);
-  }
+/* The record and the name stay put while the rest of the row scrolls
+   (docs/SPEC/responsive-console.md section 8). Unconditional: a sticky column
+   in a container it already fits inside has nothing to stick to and no visible
+   effect, so nothing has to measure the table against the viewport. What
+   matters is the table against its own container, which is not a question a
+   width query can ask. */
+.ledger--pinned th:nth-child(1),
+.ledger--pinned td:nth-child(1) {
+  position: sticky;
+  inset-inline-start: 0;
+  background: var(--paper);
+  inline-size: 7.5rem;
+  min-inline-size: 7.5rem;
+}
 
-  .rail__mark {
-    grid-area: mark;
-    margin: 0;
-  }
+.ledger--pinned th:nth-child(2),
+.ledger--pinned td:nth-child(2) {
+  position: sticky;
+  inset-inline-start: 7.5rem;
+  background: var(--paper);
+  box-shadow: inset calc(-1 * var(--hairline)) 0 0 var(--rule);
+}
 
-  .rail__person {
-    grid-area: person;
-    display: flex;
-    align-items: baseline;
-    gap: var(--s-4);
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-
-  .rail__person .micro {
-    display: none;
-  }
-
-  .rail__signout {
-    margin: 0;
-    min-block-size: var(--row);
-  }
-
-  .rail__list {
-    grid-area: list;
-  }
-
-  /* The record and the name stay pinned while the rest of the row scrolls. */
-  .ledger th:nth-child(1),
-  .ledger td:nth-child(1) {
-    position: sticky;
-    inset-inline-start: 0;
-    background: var(--paper);
-    inline-size: 7.5rem;
-    min-inline-size: 7.5rem;
-  }
-
-  .ledger th:nth-child(2),
-  .ledger td:nth-child(2) {
-    position: sticky;
-    inset-inline-start: 7.5rem;
-    background: var(--paper);
-    box-shadow: inset calc(-1 * var(--hairline)) 0 0 var(--rule);
-  }
-
-  .ledger th:nth-child(1) {
-    z-index: 1;
-  }
+.ledger--pinned th:nth-child(1) {
+  z-index: 1;
 }
 
 /* PR 6: the drawer and the record timeline */
@@ -768,7 +807,9 @@ a.rail__item:active,
   padding-block: var(--s-6);
 }
 
-@media (max-width: 720px) {
+/* Below the tablet tier the drawer is the whole width and drops its edge
+   hairline; above it the clamp in tokens.css decides. */
+@media (max-width: 767px) {
   .drawer {
     inline-size: 100%;
     border-inline-start: 0;

@@ -84,11 +84,19 @@
   --r-3: 8px;
   --hairline: 1px;
   --row: 44px;
-  --rail: 220px;
-  --drawer: 480px;
+  /* The rail at its two sizes. shell.css picks one from data-rail; the tier
+     and the person's own choice decide which (docs/SPEC/responsive-console.md
+     sections 4 and 6). */
+  --rail-open: 220px;
+  --rail-closed: 64px;
+  --rail: var(--rail-open);
+  /* Never much more than half the screen, so the ledger stays readable beside
+     an open drawer on a tablet. */
+  --drawer: clamp(320px, 55vw, 480px);
   --tap: 48px;
   --measure: 68ch;
-  --content-max: 1200px;
+  /* Tables and the schedule may fill a wide display; prose keeps --measure. */
+  --content-max: 1600px;
 
   /* Motion answers an action: 160ms, ease-out. Nothing else moves. */
   --motion: 160ms;
