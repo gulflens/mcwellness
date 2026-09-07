@@ -209,6 +209,11 @@ Summarised here; FINANCE-SPEC is authoritative.
   `discount_fils` and `discount_basis_points` are what came off it, and the
   check is `net = quantity × unit − discount` (409). `credit_note` was never
   built; a correction is a reversing journal entry.
+- **The practice's own contact details** — `tenant` carries `contact_phone`,
+  `contact_email` and `website` (912), the three facts printed in the footer of
+  every document it issues, and `invoice` snapshots all three at numbering time
+  as `supplier_contact_phone`, `supplier_contact_email` and `supplier_website`
+  (959), so a document keeps saying what it said (`billing.md` section 5.6).
 - **The books** (`accounting.md`, migrations 450–454): `accounting_setting`
   (one per practice: start day, year end, the lock date, the corporate-tax
   estimate and Small Business Relief settings, the entry counter); `account`
