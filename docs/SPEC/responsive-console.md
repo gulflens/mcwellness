@@ -81,8 +81,10 @@ Taken on 7 September 2026, each with the recommendation accepted.
 3. **A wide display is used for tables, not for prose.** Tables, the schedule
    and the books fill the display; paragraphs, consent wording and settings
    keep their 68-character measure.
-4. **A table too wide for its space pins its first columns and scrolls.**
-   Every column stays reachable; no column is dropped and none is hidden.
+4. **A table too wide for its space pins its first column and scrolls.**
+   Every column stays reachable; no column is dropped and none is hidden. The
+   operator chose this as "pin the first columns"; section 8 records why it
+   became one column rather than two.
 
 ## 4. The three tiers
 
@@ -198,10 +200,19 @@ screen sees.
 The behaviour that lives below 720px today becomes the behaviour whenever a
 table is wider than the space it has, at any size:
 
-- the first two columns, the record at 7.5rem and the name, are pinned on the
-  inline start, the name column drawing an inset hairline on its end edge;
+- the first column, the one that says which row this is, is pinned on the
+  inline start and draws an inset hairline on its end edge;
 - the rest scrolls inside `.ledger__scroll`, never the page body;
-- the pinned columns take the paper ground so rows do not show through.
+- the pinned column takes the paper ground so rows do not show through.
+
+**One column, not the two the 720px rule pinned.** A second sticky column has
+to be offset by the first one's width, and CSS cannot read that. The rule it
+replaces assumed 7.5rem, which is true of a record number and false of the kit
+register's serial: making the rule unconditional showed the two columns
+overlapping there as soon as the row scrolled. Pinning the identifying column
+alone is correct for every table and needs nothing measured. The clients
+ledger loses nothing in practice, because at the tablet tier it now hides 37px
+rather than 209px and the name is on screen without scrolling at all.
 
 Pinning is unconditional rather than driven by a width query. A sticky column
 in a container it already fits inside has nothing to stick to and no visible

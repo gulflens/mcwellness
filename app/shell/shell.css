@@ -642,30 +642,27 @@ a.rail__item:active,
   color: var(--ink);
 }
 
-/* The record and the name stay put while the rest of the row scrolls
-   (docs/SPEC/responsive-console.md section 8). Unconditional: a sticky column
-   in a container it already fits inside has nothing to stick to and no visible
-   effect, so nothing has to measure the table against the viewport. What
-   matters is the table against its own container, which is not a question a
-   width query can ask. */
-.ledger--pinned th:nth-child(1),
-.ledger--pinned td:nth-child(1) {
+/* The column that says which row this is stays put while the rest of the row
+   scrolls beside it (docs/SPEC/responsive-console.md section 8).
+
+   Unconditional: a sticky column inside a container it already fits has
+   nothing to stick to and no visible effect, so nothing has to measure the
+   table against the viewport. What matters is the table against its own
+   container, and that is not a question a width query can ask.
+
+   One column, not two. A second sticky column has to be offset by the first
+   one's width, and CSS cannot read that: the old rule assumed 7.5rem, which is
+   true of a record number and false of the kit register's serial, where the
+   two columns then overlapped as soon as the row scrolled. */
+.ledger--pinned th:first-child,
+.ledger--pinned td:first-child {
   position: sticky;
   inset-inline-start: 0;
-  background: var(--paper);
-  inline-size: 7.5rem;
-  min-inline-size: 7.5rem;
-}
-
-.ledger--pinned th:nth-child(2),
-.ledger--pinned td:nth-child(2) {
-  position: sticky;
-  inset-inline-start: 7.5rem;
   background: var(--paper);
   box-shadow: inset calc(-1 * var(--hairline)) 0 0 var(--rule);
 }
 
-.ledger--pinned th:nth-child(1) {
+.ledger--pinned th:first-child {
   z-index: 1;
 }
 
