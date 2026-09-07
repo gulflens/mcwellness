@@ -107,10 +107,13 @@ function mount(me: unknown, pricesStatus: { body: unknown; status?: number }) {
 }
 
 describe('BillingPage', () => {
-  it("renders the price list's seeded-shaped rows: the service, its Arabic name, unit price, VAT, total and effective date", async () => {
+  it("renders the price list's seeded-shaped rows: the service, unit price, VAT, total and effective date", async () => {
     mount(OWNER, { body: PRICES });
     expect(await screen.findByText('Neurofeedback session')).toBeTruthy();
-    expect(screen.getByText('جلسة التغذية الراجعة العصبية')).toBeTruthy();
+    // The service's Arabic name is on the row and is not drawn: the console is
+    // English only (operator's decision of 7 September 2026,
+    // docs/DESIGN-BRIEF.md section 10 item 4). An invoice still prints it.
+    expect(screen.queryByText('جلسة التغذية الراجعة العصبية')).toBeNull();
     // Bare figures: the currency word is named once, in the "Unit price (AED)" header.
     expect(screen.getByText('900.00')).toBeTruthy();
     expect(screen.getByText('45.00')).toBeTruthy();

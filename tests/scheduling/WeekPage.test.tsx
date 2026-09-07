@@ -131,11 +131,11 @@ describe('WeekPage', () => {
     expect(screen.getByText('Cedar Ridge')).toBeTruthy();
     expect(screen.getByText('Standard session, Home')).toBeTruthy();
     expect(screen.getByText('Confirmed')).toBeTruthy();
-    // And the Arabic name, in its own script and direction, as every other
-    // screen in the console renders it.
-    const arabic = screen.getByText('إيريس كليف');
-    expect(arabic.getAttribute('lang')).toBe('ar');
-    expect(arabic.getAttribute('dir')).toBe('rtl');
+    // And no Arabic name: the console is English only (operator's decision of
+    // 7 September 2026, docs/DESIGN-BRIEF.md section 10 item 4). The fixture
+    // still carries one, which is the point — Arabic on the wire breaks
+    // nothing, it is simply not drawn.
+    expect(screen.queryByText('إيريس كليف')).toBeNull();
   });
 
   it('keeps the arrival window in one order in a right-to-left layout', async () => {
