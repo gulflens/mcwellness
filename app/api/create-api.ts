@@ -186,6 +186,12 @@ export type ApiOptions = RequestContextDeps & {
    */
   routing?: RoutingProvider;
   /**
+   * Paths served with the day map's own content security policy; the server
+   * passes `MAP_DOCUMENT_PATHS` (docs/SPEC/route-planning.md section 8.2).
+   * Absent on a laptop test, where nothing is widened.
+   */
+  mapDocumentPaths?: readonly string[];
+  /**
    * Whoever holds the sign-ins (app/api/portal/auth-admin.ts, docs/SEAMS.md).
    * Absent: the portal's invitation door is not mounted at all, so a
    * deployment that has not been given one answers 404 there rather than
@@ -240,7 +246,13 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
 
   // Outermost, so the duration on the line above covers the whole request.
   api.use('*', withRequestTiming);
-  api.use('*', securityHeaders(deps.appEnv, { supabaseUrl: deps.supabaseUrl }));
+  api.use(
+    '*',
+    securityHeaders(deps.appEnv, {
+      supabaseUrl: deps.supabaseUrl,
+      mapDocumentPaths: deps.mapDocumentPaths,
+    }),
+  );
   // Ahead of the fence, unlike identityKeys: the local store's own signed-URL
   // route below carries its authorisation in the link and has no session.
   if (deps.storage) {

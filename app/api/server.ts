@@ -3,6 +3,7 @@ import { createPool } from './_middleware/db';
 import { identityKeysFromEnv } from './_middleware/identity-key';
 import { limitsFromEnv, trustedProxyHopsFromEnv } from './_middleware/rate-limit';
 import { routingFromEnv } from './_middleware/routing';
+import { MAP_DOCUMENT_PATHS } from './_middleware/security';
 import { storageFromEnv } from './_middleware/storage';
 import { issuerFor, verifierFromEnv } from './_middleware/token-verifier';
 import { createApi } from './create-api';
@@ -60,6 +61,10 @@ const api = createApi({
   storage,
   routing,
   authAdmin,
+  // The one document served with the wider policy a browser map needs
+  // (docs/SPEC/route-planning.md section 8.2). Named here, in the trunk, so
+  // the widening is visible where the process is assembled.
+  mapDocumentPaths: MAP_DOCUMENT_PATHS,
 });
 
 // SERVE_APP=true: the built app (pnpm build) is served by this process too, so

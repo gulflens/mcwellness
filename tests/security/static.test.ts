@@ -21,7 +21,10 @@ function build(): string {
   mkdirSync(join(root, 'assets'));
   writeFileSync(
     join(root, 'index.html'),
-    '<!doctype html><title>McWellness</title><div id="root"></div>',
+    '<!doctype html><html><head><title>McWellness</title>' +
+      '<link rel="modulepreload" href="/assets/app-abc123.js">' +
+      '<script type="module" crossorigin src="/assets/app-abc123.js"></script>' +
+      '</head><body><div id="root"></div></body></html>',
   );
   writeFileSync(join(root, 'assets', 'app-abc123.js'), 'console.log(1)');
   return root;
@@ -60,5 +63,23 @@ describe('serving the built app', () => {
     const res = await api.request('/api/nothing');
     expect(res.status).toBe(401);
     expect(res.headers.get('content-type')).toContain('application/json');
+  });
+
+  it('stamps the shell with the map document’s own nonce, and leaves every other page unstamped', async () => {
+    const api = createApi({ ...deps, mapDocumentPaths: ['/admin/schedule/map'] });
+    mountApp(api, build());
+    const res = await api.request('/admin/schedule/map');
+    const nonce = /'nonce-([A-Za-z0-9+/=]+)'/.exec(
+      res.headers.get('content-security-policy') ?? '',
+    )?.[1];
+    const html = await res.text();
+    expect(nonce).toBeTruthy();
+    expect(html).toContain(`<script nonce="${nonce}"`);
+    expect(html).toContain(`<link rel="modulepreload" nonce="${nonce}"`);
+    // Google's API copies the nonce off the first style element it finds, so
+    // the document carries one for it to find.
+    expect(html).toContain(`<style nonce="${nonce}"></style>`);
+    const plain = await (await api.request('/admin/clients')).text();
+    expect(plain).not.toContain('nonce=');
   });
 });

@@ -107,3 +107,63 @@ describe('the policy and the sign-in project', () => {
     expect(broken.headers.get('content-security-policy')).toContain("connect-src 'self';");
   });
 });
+
+describe('the day map document, and only it', () => {
+  const withMap = { ...deps, mapDocumentPaths: ['/admin/schedule/map'] };
+
+  it('carries the wider policy Google needs, with a nonce, on that one path', async () => {
+    const res = await createApi(withMap).request('/admin/schedule/map');
+    const csp = res.headers.get('content-security-policy') ?? '';
+    const nonce = /'nonce-([A-Za-z0-9+/=]+)'/.exec(csp)?.[1];
+    expect(nonce, csp).toBeTruthy();
+    const directives = csp.split(';').map((d) => d.trim());
+    expect(directives).toContain(
+      `script-src 'nonce-${nonce}' 'strict-dynamic' https: 'unsafe-eval' blob:`,
+    );
+    expect(directives).toContain(`style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com`);
+    expect(directives).toContain('frame-src *.google.com');
+    expect(directives).toContain("worker-src 'self' blob:");
+    expect(csp).toContain('https://*.googleapis.com');
+    // The protections that never move.
+    expect(directives).toContain("frame-ancestors 'none'");
+    expect(directives).toContain("object-src 'none'");
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+    // The key is restricted by referrer, and Google refuses a request with none.
+    expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+  });
+
+  it('mints a new nonce for every response', async () => {
+    const api = createApi(withMap);
+    const first = (await api.request('/admin/schedule/map')).headers.get('content-security-policy');
+    const second = (await api.request('/admin/schedule/map')).headers.get(
+      'content-security-policy',
+    );
+    expect(first).not.toBe(second);
+  });
+
+  it('leaves every other document, and every API answer, exactly as they were', async () => {
+    const api = createApi(withMap);
+    for (const path of ['/admin/schedule', '/admin/clients', '/today', '/api/health', '/nothing']) {
+      const csp = (await api.request(path)).headers.get('content-security-policy') ?? '';
+      expect(csp, path).toContain("script-src 'self'");
+      expect(csp, path).not.toContain('googleapis');
+      expect(csp, path).not.toContain('unsafe-eval');
+      expect((await api.request(path)).headers.get('referrer-policy'), path).toBe('no-referrer');
+    }
+  });
+
+  it('is the strict policy again when no map path is configured', async () => {
+    const csp = (await createApi(deps).request('/admin/schedule/map')).headers.get(
+      'content-security-policy',
+    );
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).not.toContain('unsafe-eval');
+  });
+
+  it('widens nothing for a POST to that path', async () => {
+    const csp = (
+      await createApi(withMap).request('/admin/schedule/map', { method: 'POST' })
+    ).headers.get('content-security-policy');
+    expect(csp).toContain("script-src 'self'");
+  });
+});
