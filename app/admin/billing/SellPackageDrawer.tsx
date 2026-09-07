@@ -109,7 +109,12 @@ export function SellPackageDrawer({
           ? {
               payment: {
                 method,
-                // The gross figure: what the family actually hands over.
+                // The gross figure: what the family actually hands over. The
+                // API's gross is what the practice charges today — the price
+                // plus VAT while it is registered for VAT, and the price
+                // itself while it is not (migration 406) — so this is the
+                // same figure as the invoice the same request creates, and a
+                // sale leaves nothing owed and nothing overpaid.
                 amountFils: price.grossFils,
                 reference: reference.trim() || null,
               },
@@ -214,7 +219,9 @@ export function SellPackageDrawer({
             </div>
             <div className="price-preview__row">
               <span className="small muted">
-                {price ? `VAT (${price.vatRateBasisPoints / 100}%)` : 'VAT'}
+                {/* The percentage is the row's stamped rate; it is named only while
+                    something is charged at it (migration 406). */}
+                {price && price.vatFils > 0 ? `VAT (${price.vatRateBasisPoints / 100}%)` : 'VAT'}
               </span>
               <span className="numeric">{price ? formatFils(price.vatFils) : '—'}</span>
             </div>

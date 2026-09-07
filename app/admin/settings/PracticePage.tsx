@@ -249,9 +249,9 @@ export function PracticePage() {
             <p className="small muted">
               &ldquo;Tax registration number&rdquo; is what the Federal Tax Authority calls a VAT
               registration, so the field above names corporate tax on its face. It is the number the
-              practice holds for corporate tax and is never printed as a VAT one. Recording a VAT
-              registration does not change what an invoice charges: VAT is worked out from the
-              practice&rsquo;s standard rate today, whichever way the switch is set.
+              practice holds for corporate tax and is never printed as a VAT one. While the practice
+              is not registered for VAT, its invoices carry no VAT and show one figure; recording a
+              registration adds VAT at the practice&rsquo;s standard rate to every new sale.
             </p>
             <VatWatch practice={practice} />
           </section>

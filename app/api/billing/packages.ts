@@ -1,9 +1,10 @@
 import type { Hono } from 'hono';
-import { resolveVat, validateNewPrice, type Price } from '../../../domain/billing';
+import { resolveSaleVat, resolveVat, validateNewPrice, type Price } from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { isUuid } from './ids';
 import { mayReadCatalogue, mayWriteCatalogue } from './access';
+import { readVatRegistered } from './supplier';
 import {
   AddPackagePriceInput,
   CreatePackageInput,
@@ -107,8 +108,19 @@ const VAT_SETTING_ON_DATE_SQL =
   'where tenant_id = app.current_tenant_id() and effective_from <= $1 ' +
   'order by effective_from desc, version desc limit 1';
 
-/** Every bundle the practice has, with its contents and today's price. */
-export async function readPackages(db: Db, today: string): Promise<PackageRow[]> {
+/**
+ * Every bundle the practice has, with its contents and today's price.
+ *
+ * `vatRegistered` is the practice's own registration, read once by the caller
+ * (app/api/billing/supplier.ts) and passed in rather than asked per bundle:
+ * it decides what each price carries as VAT, and every bundle on the list is
+ * charged under the same one.
+ */
+export async function readPackages(
+  db: Db,
+  today: string,
+  vatRegistered: boolean,
+): Promise<PackageRow[]> {
   const [packages, components, prices] = await Promise.all([
     db.query<PackageDbRow>(PACKAGES_SQL),
     db.query<ComponentDbRow>(COMPONENTS_SQL, [today, JURISDICTION, RECIPIENT_TYPE]),
@@ -130,14 +142,21 @@ export async function readPackages(db: Db, today: string): Promise<PackageRow[]>
       ? own.reduce((total, c) => total + c.quantity * (c.standalone_net_fils ?? 0), 0)
       : null;
     const price = priceByPackage.get(row.id) ?? null;
-    // Recomputed from the row's own stamped rate, not the practice's current
-    // one, so a later VAT change can never quietly alter a figure a family
-    // was already shown (the same rule prices.ts follows).
+    // The rate is the row's own — stamped when the price was written, not the
+    // practice's current one, so a later rate change can never quietly alter a
+    // figure a family was already shown. The charging follows the
+    // registration: an unregistered practice charges nothing at that rate and
+    // its gross is its net, so what this answers is what the family hands over
+    // today (migration 406, the same rule prices.ts follows).
     const vat = price
-      ? resolveVat(fils(price.amount_fils), {
-          rateBasisPoints: price.vat_rate_basis_points,
-          version: price.vat_setting_version,
-        })
+      ? resolveSaleVat(
+          fils(price.amount_fils),
+          {
+            rateBasisPoints: price.vat_rate_basis_points,
+            version: price.vat_setting_version,
+          },
+          { vatRegistered },
+        )
       : null;
 
     return {
@@ -162,7 +181,9 @@ export async function readPackages(db: Db, today: string): Promise<PackageRow[]>
           ? {
               id: price.id,
               amountFils: price.amount_fils,
-              vatRateBasisPoints: vat.rateBasisPoints,
+              // The stamp itself, untouched by the registration: what the
+              // standard rate was on the day this price was written.
+              vatRateBasisPoints: price.vat_rate_basis_points,
               vatFils: vat.vatFils,
               grossFils: vat.grossFils,
               validFrom: price.valid_from,
@@ -299,8 +320,10 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
-    const packages = await readPackages(c.get('db'), today);
-    return c.json(PackagesResponse.parse({ packages }));
+    const db = c.get('db');
+    const vatRegistered = await readVatRegistered(db);
+    const packages = await readPackages(db, today, vatRegistered);
+    return c.json(PackagesResponse.parse({ packages, vatRegistered }));
   });
 
   api.post('/api/billing/packages', async (c) => {
@@ -368,7 +391,7 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
 
     await insertPackagePrice(db, packageId, input.price, approval);
 
-    const packages = await readPackages(db, today);
+    const packages = await readPackages(db, today, await readVatRegistered(db));
     const created = packages.find((row) => row.id === packageId);
     if (!created) {
       throw new Error('The package just created could not be read back.');
@@ -405,7 +428,7 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: approval.code, requestId }, approval.status);
     }
     await insertPackagePrice(db, packageId, body.data, approval);
-    const packages = await readPackages(db, today);
+    const packages = await readPackages(db, today, await readVatRegistered(db));
     const updated = packages.find((row) => row.id === packageId);
     if (!updated) {
       throw new Error('The package just priced could not be read back.');

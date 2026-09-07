@@ -10,6 +10,7 @@ import {
   GOLD_CODE,
   SEEDED,
   setPracticePrices,
+  setPracticeVatRegistration,
   silverInput,
   SILVER_CODE,
   startHarness,
@@ -34,6 +35,18 @@ beforeAll(async () => {
 afterAll(async () => {
   await h.close();
 });
+
+/** What each bundle price is stamped with, read from the table, not the route. */
+async function stampedPackagePrices(): Promise<Record<string, string>> {
+  const { rows } = await h.owner.query<{
+    id: string;
+    vat_rate_basis_points: number;
+    vat_setting_version: number;
+  }>('select id, vat_rate_basis_points, vat_setting_version from package_price');
+  return Object.fromEntries(
+    rows.map((row) => [row.id, `${row.vat_rate_basis_points}/${row.vat_setting_version}`]),
+  );
+}
 
 describe('the bundle catalogue', () => {
   it('holds whatever the practice sells, and nothing this suite has not added yet', async () => {
@@ -91,14 +104,52 @@ describe('the bundle catalogue', () => {
     expect(body.package.expiryMonths).toBe(12);
   });
 
-  it('adds VAT on top of the net launch price, at the rate in force', async () => {
+  it('charges no VAT while the practice is not registered, so the total is the price', async () => {
+    await setPracticeVatRegistration(h, false);
     const res = await h.call('GET', '/api/billing/packages', SEEDED.owner);
-    const silver = ((await res.json()) as PackagesResponse).packages.find(
-      (p) => p.code === SILVER_CODE,
-    );
+    const body = (await res.json()) as PackagesResponse;
+    const silver = body.packages.find((p) => p.code === SILVER_CODE);
+
+    expect(body.vatRegistered).toBe(false);
+    // The rate the price row was written under is still on it — what the
+    // standard rate was on the day — and nothing is charged at it.
     expect(silver?.currentPrice?.vatRateBasisPoints).toBe(500);
-    expect(silver?.currentPrice?.vatFils).toBe(51_625); // 5% of 1,032,500
-    expect(silver?.currentPrice?.grossFils).toBe(1_084_125);
+    expect(silver?.currentPrice?.vatFils).toBe(0);
+    expect(silver?.currentPrice?.grossFils).toBe(1_032_500);
+  });
+
+  it('adds VAT on top of the same net price once the practice registers, restamping nothing', async () => {
+    await setPracticeVatRegistration(h, false);
+    const before = (await (
+      await h.call('GET', '/api/billing/packages', SEEDED.owner)
+    ).json()) as PackagesResponse;
+    const stampedBefore = await stampedPackagePrices();
+
+    try {
+      await setPracticeVatRegistration(h, true);
+      const after = (await (
+        await h.call('GET', '/api/billing/packages', SEEDED.owner)
+      ).json()) as PackagesResponse;
+      const silver = after.packages.find((p) => p.code === SILVER_CODE);
+
+      expect(after.vatRegistered).toBe(true);
+      expect(silver?.currentPrice?.amountFils).toBe(1_032_500);
+      expect(silver?.currentPrice?.vatRateBasisPoints).toBe(500);
+      expect(silver?.currentPrice?.vatFils).toBe(51_625); // 5% of 1,032,500
+      expect(silver?.currentPrice?.grossFils).toBe(1_084_125);
+      // Registering changes what is charged and nothing that was stamped: the
+      // rate and the setting version on every price row are the ones they were
+      // written with, on both reads.
+      expect(await stampedPackagePrices()).toEqual(stampedBefore);
+      expect(after.packages.map((p) => [p.id, p.currentPrice?.vatRateBasisPoints])).toEqual(
+        before.packages.map((p) => [p.id, p.currentPrice?.vatRateBasisPoints]),
+      );
+    } finally {
+      // Whatever happened above, the practice this suite sells under is the
+      // real one: unregistered. A failed assertion must not leave a
+      // registration behind for the sale below to charge under.
+      await setPracticeVatRegistration(h, false);
+    }
   });
 
   it('lists the contents with what each costs on its own', async () => {
@@ -442,5 +493,51 @@ describe('the exact-sum guard in the database', () => {
     } finally {
       await h.owner.query('rollback');
     }
+  });
+});
+
+/**
+ * The sale the Sell drawer makes: it sends `price.grossFils` from this very
+ * route as `payment.amountFils`, "what the family actually hands over". While
+ * the catalogue answered with the stamped rate applied, that was the net price
+ * plus five per cent against an invoice charging none, and every package sold
+ * with payment taken left a five per cent overpayment on the family's balance.
+ */
+describe('taking payment for exactly what the catalogue showed', () => {
+  it('records a payment equal to the invoice, and the family owes nothing', async () => {
+    await setPracticeVatRegistration(h, false);
+    const listed = (await (
+      await h.call('GET', '/api/billing/packages', SEEDED.owner)
+    ).json()) as PackagesResponse;
+    expect(listed.vatRegistered).toBe(false);
+    const gold = listed.packages.find((p) => p.code === GOLD_CODE);
+    const grossFils = gold?.currentPrice?.grossFils;
+    if (!gold || grossFils === undefined) {
+      throw new Error('Gold was not in the catalogue with a price.');
+    }
+
+    const clientId = h.clientId(3);
+    const sold = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: gold.id,
+      clientId,
+      purchasedOn: SEED_TODAY,
+      payment: { method: 'transfer', amountFils: grossFils, reference: null },
+    });
+    expect(sold.status).toBe(201);
+    const body = (await sold.json()) as SellPackageResponse;
+
+    const { rows } = await h.owner.query<{ amount_fils: number; gross_fils: number }>(
+      'select p.amount_fils, i.gross_fils from payment p join invoice i on i.id = p.invoice_id ' +
+        'where i.package_purchase_id = $1',
+      [body.purchase.id],
+    );
+    expect(rows).toEqual([{ amount_fils: 1_697_500, gross_fils: 1_697_500 }]);
+
+    const balance = (await (
+      await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner)
+    ).json()) as BalanceResponse;
+    expect(balance.chargedFils).toBe(1_697_500);
+    expect(balance.paidFils).toBe(1_697_500);
+    expect(balance.outstandingFils).toBe(0);
   });
 });

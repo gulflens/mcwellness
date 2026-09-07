@@ -416,10 +416,10 @@ export function PracticeDrawer({
             <span className="vat-switch-copy">
               <span>Registered for VAT</span>
               <span className="small muted" id="practice-vat-consequence">
-                This records the registration and the number it was issued under. Turning it off
-                removes the number from the record. It does not change what an invoice charges: VAT
-                is worked out from the practice&rsquo;s standard rate today, whichever way this is
-                set.
+                This records the registration and the number it was issued under. While it is off,
+                invoices carry no VAT and show one figure; turning it on adds VAT at the
+                practice&rsquo;s standard rate to every new sale. Turning it off removes the number
+                from the record.
               </span>
             </span>
             <span className={vatRegistered ? 'vat-switch vat-switch--on' : 'vat-switch'}>

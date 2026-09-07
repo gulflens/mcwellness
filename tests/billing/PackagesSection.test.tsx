@@ -65,6 +65,16 @@ const SILVER = {
   sellable: true,
 };
 
+// The practice as it actually is: not registered for VAT, so the rate stamped
+// on the price charges nothing and the total is the price (migration 406).
+const SILVER_UNREGISTERED = {
+  ...SILVER,
+  currentPrice: { ...SILVER.currentPrice, vatFils: 0, grossFils: 1_032_500 },
+};
+
+const NO_VAT_NOTE =
+  'The practice is not registered for VAT, so no VAT is charged and the total is the price.';
+
 const UNSELLABLE = {
   ...SILVER,
   id: '00000004-0000-4000-8000-000000000202',
@@ -88,9 +98,9 @@ const UNSELLABLE = {
   sellable: false,
 };
 
-function mount(me: unknown, packages: unknown[]) {
+function mount(me: unknown, packages: unknown[], vatRegistered = true) {
   return mountWith(me, <PackagesSection canWrite={me === OWNER} />, (url) =>
-    url === '/api/billing/packages' ? json({ packages }) : null,
+    url === '/api/billing/packages' ? json({ packages, vatRegistered }) : null,
   );
 }
 
@@ -118,6 +128,24 @@ describe('PackagesSection', () => {
     expect(screen.getByText('10,841.25')).toBeTruthy();
     expect(screen.getByText('List (AED)')).toBeTruthy();
     expect(screen.getByText('Price now')).toBeTruthy();
+  });
+
+  it('says in one line that no VAT is charged while the practice is not registered', async () => {
+    mount(OWNER, [SILVER_UNREGISTERED], false);
+    await screen.findByText('Silver');
+    // The sentence, the VAT column left where it is, and the total reading
+    // the price: AED 10,325 in both the price and the total column.
+    expect(screen.getByText(NO_VAT_NOTE)).toBeTruthy();
+    expect(screen.getByText('VAT')).toBeTruthy();
+    expect(screen.getByText('0.00')).toBeTruthy();
+    expect(screen.getAllByText('10,325.00')).toHaveLength(2);
+  });
+
+  it('says nothing extra once the practice is registered for VAT', async () => {
+    mount(OWNER, [SILVER]);
+    await screen.findByText('Silver');
+    expect(screen.queryByText(NO_VAT_NOTE)).toBeNull();
+    expect(screen.getByText('516.25')).toBeTruthy();
   });
 
   it('offers "Add package" and "Sell to a client" to the owner', async () => {

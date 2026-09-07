@@ -39,6 +39,13 @@ export type PriceRow = z.infer<typeof PriceRow>;
 
 export const PricesResponse = z.object({
   prices: z.array(PriceRow),
+  /**
+   * Whether the practice is registered for VAT today, which is what decides
+   * the `vatFils` and `grossFils` on every row above (migration 406). The
+   * screen shows it as one sentence rather than leaving a reader to work out
+   * why a VAT column reads nothing.
+   */
+  vatRegistered: z.boolean(),
 });
 export type PricesResponse = z.infer<typeof PricesResponse>;
 

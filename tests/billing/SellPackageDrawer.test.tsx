@@ -55,14 +55,24 @@ const SILVER = {
   currentPrice: {
     id: '00000004-0000-4000-8000-000000000301',
     amountFils: 1_032_500,
+    // The practice as it actually is: not registered for VAT, so the rate
+    // stamped on the price row charges nothing and the gross is the net
+    // (migration 406). This is what /api/billing/packages answers today, and
+    // it is what the drawer sends as the payment.
     vatRateBasisPoints: 500,
-    vatFils: 51_625,
-    grossFils: 1_084_125,
+    vatFils: 0,
+    grossFils: 1_032_500,
     validFrom: '2026-09-02',
     amendmentReason: "Launch pricing, ends on the founder's word.",
   },
   componentsTotalFils: 1_215_000,
   sellable: true,
+};
+
+/** The same bundle, as a practice registered for VAT would be answered it. */
+const SILVER_REGISTERED = {
+  ...SILVER,
+  currentPrice: { ...SILVER.currentPrice, vatFils: 51_625, grossFils: 1_084_125 },
 };
 
 const CLIENT = {
@@ -78,10 +88,13 @@ const CLIENT = {
   emirate: 'DXB',
 };
 
-function mount(onSold: (summary: string) => void = () => undefined) {
+function mount(
+  onSold: (summary: string) => void = () => undefined,
+  bundle: typeof SILVER = SILVER,
+) {
   return mountWith(
     OWNER,
-    <SellPackageDrawer bundle={SILVER} onClose={() => undefined} onSold={onSold} />,
+    <SellPackageDrawer bundle={bundle} onClose={() => undefined} onSold={onSold} />,
     (url, init) => {
       if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
       if (url === '/api/billing/package-purchases' && init?.method === 'POST') {
@@ -90,13 +103,13 @@ function mount(onSold: (summary: string) => void = () => undefined) {
             purchase: {
               id: '00000004-0000-4000-8000-000000000401',
               clientId: CLIENT.id,
-              packageId: SILVER.id,
+              packageId: bundle.id,
               packageName: 'Silver',
               packageNameAr: 'الفضية',
               purchasedOn: '2026-09-02',
-              netFils: 1_032_500,
-              vatFils: 51_625,
-              grossFils: 1_084_125,
+              netFils: bundle.currentPrice.amountFils,
+              vatFils: bundle.currentPrice.vatFils,
+              grossFils: bundle.currentPrice.grossFils,
               listPriceFils: 1_215_000,
               expiresOn: '2027-09-02',
               extendedTo: null,
@@ -120,12 +133,60 @@ async function findClient() {
   fireEvent.click(await screen.findByRole('button', { name: /Hazel Harbour/ }));
 }
 
+/** The payload the drawer sent to the sale route, if it sent one. */
+function saleBody(requests: { url: string; body: unknown }[]): {
+  payment?: { amountFils: number };
+} {
+  const sent = requests.find((request) => request.url === '/api/billing/package-purchases');
+  if (!sent) throw new Error('The drawer sent no sale.');
+  return sent.body as { payment?: { amountFils: number } };
+}
+
 describe('SellPackageDrawer', () => {
   it('shows the price, the VAT on top of it and the total', () => {
-    mount();
+    mount(() => undefined, SILVER_REGISTERED);
     expect(screen.getByText('10,325.00')).toBeTruthy();
     expect(screen.getByText('VAT (5%)')).toBeTruthy();
     expect(screen.getByText('10,841.25')).toBeTruthy();
+  });
+
+  it('names no rate while nothing is charged at it', () => {
+    // The stamped rate is the row's; the label says it only when the
+    // registration makes it a charge (migration 406).
+    mount();
+    // The price and the total are the same figure, so it appears twice.
+    expect(screen.getAllByText('10,325.00')).toHaveLength(2);
+    expect(screen.getByText('VAT')).toBeTruthy();
+    expect(screen.queryByText('VAT (5%)')).toBeNull();
+  });
+
+  it("sends the API's gross as the payment: what the family actually hands over", async () => {
+    // The practice is not registered for VAT, so the gross is the net and the
+    // payment matches the invoice the same request creates. While the
+    // catalogue answered the stamped rate applied, this sent AED 10,841.25
+    // against an invoice of AED 10,325 and left the difference on the
+    // family's balance as an overpayment.
+    const { requests } = mount();
+    await findClient();
+    fireEvent.click(screen.getByLabelText('Money has changed hands'));
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    await waitFor(() =>
+      expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(true),
+    );
+    expect(saleBody(requests).payment?.amountFils).toBe(SILVER.currentPrice.grossFils);
+    expect(saleBody(requests).payment?.amountFils).toBe(1_032_500);
+  });
+
+  it('sends the gross with the VAT in it once the practice is registered', async () => {
+    const { requests } = mount(() => undefined, SILVER_REGISTERED);
+    await findClient();
+    fireEvent.click(screen.getByLabelText('Money has changed hands'));
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    await waitFor(() =>
+      expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(true),
+    );
+    expect(saleBody(requests).payment?.amountFils).toBe(SILVER_REGISTERED.currentPrice.grossFils);
+    expect(saleBody(requests).payment?.amountFils).toBe(1_084_125);
   });
 
   it('calls a mixed holding credits, and says what they are', () => {
