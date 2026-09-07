@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BooksPage } from '../../app/admin/accounting/BooksPage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
@@ -553,7 +553,10 @@ describe('the chart of accounts', () => {
     await screen.findByText('Result, year to date');
     fireEvent.click(screen.getByRole('button', { name: 'Accounts' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Open 1010' }));
-    expect(await screen.findByText('Running balance (AED)')).toBeTruthy();
+    expect(await screen.findByText('Running balance')).toBeTruthy();
+    // AED once per table: the debit column carries it for the ledger's three.
+    const ledger = screen.getByRole('table', { name: '1010 Bank, operating' });
+    expect(within(ledger).getAllByText(/\(AED\)/)).toHaveLength(1);
     expect(screen.getByText('JE-000004')).toBeTruthy();
     // The debit and the running balance are the same figure on a first line.
     expect(screen.getAllByText('1,050.00')).toHaveLength(2);

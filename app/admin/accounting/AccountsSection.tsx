@@ -143,7 +143,9 @@ export function AccountsSection({ reloadKey }: { reloadKey: number }) {
               },
               {
                 key: 'running',
-                header: 'Running balance (AED)',
+                // AED is named once per table: 'Debit (AED)' above carries it
+                // for the three money columns (docs/DESIGN-BRIEF.md).
+                header: 'Running balance',
                 numeric: true,
                 align: 'end',
                 render: (row) => formatFils(row.runningBalanceFils),
