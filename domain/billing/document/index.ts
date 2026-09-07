@@ -35,7 +35,17 @@ export {
   toVisualOrder,
   widthOf,
 } from '../../shared/document';
-export type { Align, Font, FontSet, FontSlot, Op, Page, Style } from '../../shared/document';
+export type {
+  Align,
+  DocumentImage,
+  Font,
+  FontSet,
+  FontSlot,
+  ImageSet,
+  Op,
+  Page,
+  Style,
+} from '../../shared/document';
 export { chargesVat } from './model';
 export type {
   InvoiceDocument,
