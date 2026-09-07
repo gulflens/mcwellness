@@ -13,12 +13,18 @@ export type ServerStorageProvider = StorageProvider & {
   describe(): string;
 } & Partial<LocalOnly>;
 
-/** The parts only the local implementation has, because only it is asked to serve bytes. */
+/**
+ * The parts only the local implementation has, because only it is asked to
+ * serve bytes.
+ *
+ * Reading an object back is **not** here any more: it is `get` on the seam
+ * itself (domain/shared/storage.ts), which both implementations answer, so the
+ * local route below and billing's logo read call the same method rather than
+ * one of them reaching for a local-only one.
+ */
 export type LocalOnly = {
   root: string;
   verifySigned(parts: { key: string; expires: number; token: string }, now?: number): boolean;
-  /** The bytes, or null when nothing is stored at that key. */
-  read(key: string): Promise<Buffer | null>;
 };
 
 /** Narrows a provider to the one that serves its own signed URLs. */

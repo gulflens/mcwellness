@@ -120,11 +120,42 @@ const WhatsappNumber = z
   })
   .refine((value) => value === null || /^\+[1-9][0-9]{6,14}$/.test(value), WHATSAPP_MESSAGE);
 
+/**
+ * The three facts the footer band of a rendered document is set from
+ * (migration 912, docs/SPEC/billing.md section 5.6): where a reader of an
+ * invoice rings, writes and looks the practice up.
+ *
+ * Not `whatsappNumber`, which is where a **household** messages: these go on
+ * paper, and the checks below are the columns' own — light enough to accept a
+ * local number written the way the practice writes it, strict enough to refuse
+ * a sentence typed into the telephone field or an address with no scheme on
+ * it.
+ */
+export const CONTACT_PHONE_MESSAGE = 'A telephone number is digits, spaces and + ( ) -.';
+const ContactPhone = optional(32).refine(
+  (value) => value === null || /^[0-9+()\- ]{4,32}$/.test(value),
+  CONTACT_PHONE_MESSAGE,
+);
+export const CONTACT_EMAIL_MESSAGE = 'An email address is name@example.com.';
+const ContactEmail = optional(200).refine(
+  (value) => value === null || /^[^\s@]+@[^\s@]+$/.test(value),
+  CONTACT_EMAIL_MESSAGE,
+);
+export const WEBSITE_MESSAGE = 'A website starts https:// or http://.';
+const Website = optional(200).refine(
+  (value) => value === null || /^https?:\/\/\S+$/.test(value),
+  WEBSITE_MESSAGE,
+);
+
 export const Practice = z.object({
   legalName: z.string(),
   legalNameAr: z.string().nullable(),
   /** What the portal's "ask for a visit" button opens (migration 910). */
   whatsappNumber: z.string().nullable(),
+  /** The three printed in the footer of every document (migration 912). */
+  contactPhone: z.string().nullable(),
+  contactEmail: z.string().nullable(),
+  website: z.string().nullable(),
   /** The corporate-tax registration, never the VAT one (migration 905). */
   taxRegistrationNumber: z.string().nullable(),
   licenceNumber: z.string().nullable(),
@@ -179,6 +210,18 @@ export const UpdatePracticeInput = z
     vatRegistered: z.boolean(),
     vatTrn: VatTrn,
     whatsappNumber: WhatsappNumber,
+    /**
+     * Optional, and the three are the only optional fields on this form.
+     *
+     * The rest of it is saved at once because a settings screen sends the
+     * whole thing; these arrived with the documents round and the screen
+     * cannot edit them yet (`docs/CHANGE-REQUESTS/billing-09.md` item 6), so a
+     * body that omits them leaves the row as it is rather than clearing three
+     * columns the sender never saw.
+     */
+    contactPhone: ContactPhone.optional(),
+    contactEmail: ContactEmail.optional(),
+    website: Website.optional(),
     address: AddressInput.nullable(),
   })
   .refine((value) => !value.vatRegistered || value.vatTrn !== null, {

@@ -22,14 +22,25 @@ capability that sends personal data anywhere is approved before it exists.
 
 ## Documents (the storage seam)
 
-**The interface** — `domain/shared/storage.ts`, browser-safe, four calls:
+**The interface** — `domain/shared/storage.ts`, browser-safe, five calls:
 
 ```
 put(key, bytes, mimeType, { overwrite? }) -> { sha256, size }
+get(key) -> bytes | null
 getSignedUrl(key, ttlSeconds) -> url
 delete(key)
 exists(key)
 ```
+
+**`get` is the server reading bytes back for itself, and writes no trail.** It
+is the one call that hands a document's bytes to this API process rather than
+to a person: the practice's logo, read out of its own `document` row and drawn
+onto every invoice it renders (`docs/SPEC/billing.md` section 5.6). Handing
+somebody a file is `getSignedUrl`, and that is the act the audit rule below
+records; nothing is handed to anybody here, so there is no read to attribute
+and no actor to name. A key that holds nothing answers null, which is an
+answer and not a fault, and a store that cannot be reached raises
+`StorageUnavailableError` exactly as every other call here does.
 
 **A document is written once.** `overwrite` is **false by default on both
 implementations**, and a second write to a key that already holds an object is

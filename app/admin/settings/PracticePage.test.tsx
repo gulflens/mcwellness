@@ -40,6 +40,13 @@ const PRACTICE = {
   vatTaxableSuppliesAsOf: '2026-09-06',
   // What the client portal's ask-for-a-visit button opens (migration 910).
   whatsappNumber: null,
+  // The three printed in the footer of every document the practice issues
+  // (migration 912). This page cannot edit them yet — the round that adds them
+  // to the form is docs/CHANGE-REQUESTS/billing-09.md item 6 — but the practice
+  // it reads back carries them.
+  contactPhone: null,
+  contactEmail: null,
+  website: null,
   defaultEmirate: 'DXB',
   timezone: 'Asia/Dubai',
   address: {

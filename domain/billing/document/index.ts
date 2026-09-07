@@ -30,12 +30,23 @@ export {
   PAGE_HEIGHT,
   PAGE_WIDTH,
   readFont,
+  readPng,
   renderPdf,
   shape,
   toVisualOrder,
   widthOf,
 } from '../../shared/document';
-export type { Align, Font, FontSet, FontSlot, Op, Page, Style } from '../../shared/document';
+export type {
+  Align,
+  DocumentImage,
+  Font,
+  FontSet,
+  FontSlot,
+  ImageSet,
+  Op,
+  Page,
+  Style,
+} from '../../shared/document';
 export { chargesVat } from './model';
 export type {
   InvoiceDocument,
@@ -50,9 +61,10 @@ export { clampForDocument, GEOMETRY, layout, titleOf } from './render';
 export {
   arabicDocumentDate,
   callOutFeeDescription,
-  discountNote,
+  discountLine,
   formatDocumentDate,
   formatRate,
+  money,
   NOT_REGISTERED_BASIS,
   SIMPLIFIED_BASIS,
   waivedNotice,
@@ -62,10 +74,22 @@ export {
 export type { Phrase } from './strings';
 
 import { layout, titleOf } from './render';
-import { renderPdf, type FontSet } from '../../shared/document';
+import { renderPdf, type DocumentImage, type FontSet } from '../../shared/document';
 import type { MoneyDocument } from './model';
 
-/** The one call: a document and the faces, in; the file, out. */
-export function renderDocument(document_: MoneyDocument, fonts: FontSet): Uint8Array {
-  return renderPdf(layout(document_, fonts), fonts, titleOf(document_));
+/**
+ * The one call: a document, the faces and — when the practice has filed one —
+ * its own mark, in; the file, out.
+ *
+ * The logo is optional and nullable in the same breath, because "this practice
+ * has no logo" and "this practice's logo cannot be drawn" arrive at the same
+ * place and mean the same thing to the page: the wordmark is set in type
+ * instead (`app/api/billing/document-source.ts`, `practiceLogo`).
+ */
+export function renderDocument(
+  document_: MoneyDocument,
+  fonts: FontSet,
+  logo?: DocumentImage | null,
+): Uint8Array {
+  return renderPdf(layout(document_, fonts, logo), fonts, titleOf(document_), logo ? { logo } : {});
 }

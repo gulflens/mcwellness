@@ -35,6 +35,32 @@ export const PAGE_HEIGHT = 841.89;
 export type FontSlot = 'regular' | 'bold' | 'arabic';
 export type FontSet = Readonly<Record<FontSlot, Font>>;
 
+/**
+ * A bitmap ready to embed: a PNG's own compressed scanlines, unchanged.
+ *
+ * **Nothing here is decoded, and that is the design.** A PNG's `IDAT` stream
+ * is zlib-deflated scanlines each prefixed by PNG's own predictor byte, which
+ * is precisely what PDF's `/FlateDecode` with `/Predictor 15` consumes. So the
+ * bytes the practice uploaded travel into the file untouched: no image
+ * library on the path that renders a household's financial record, no
+ * dependency in `package.json` (the shared zone, docs/SPEC/OWNERSHIP.md), and
+ * a document that renders to the same bytes every time because nothing about
+ * it was recompressed.
+ *
+ * `domain/shared/document/png.ts` is what makes one of these out of a file.
+ */
+export type DocumentImage = {
+  width: number;
+  height: number;
+  /** 'rgb' (PNG colour type 2) or 'grey' (type 0). */
+  colours: 'rgb' | 'grey';
+  /** The concatenated IDAT bytes: zlib-deflated, PNG-predicted scanlines. */
+  data: Uint8Array;
+};
+
+/** Images a page may draw, by the name its ops use. */
+export type ImageSet = Readonly<Record<string, DocumentImage>>;
+
 export type Style = {
   font: FontSlot;
   size: number;
@@ -81,10 +107,36 @@ export type Op =
       x: number;
       y: number;
       width: number;
+      /**
+       * How far the rule rises over its run. Absent is 0 — a horizontal
+       * hairline, which is every rule on every document filed before the
+       * totals box on the practice's own design needed a side to it
+       * (docs/SPEC/billing.md section 5.6). A vertical rule is `width: 0` with
+       * the height here.
+       */
+      dy?: number;
       thickness?: number;
       grey?: number;
       /** As `Style.rgb`: when absent the rule is stroked in grey, unchanged. */
       rgb?: readonly [number, number, number];
+    }
+  | {
+      /**
+       * One of the caller's images, drawn into the rectangle given.
+       *
+       * `x`, `y` is the **bottom-left** corner in points, as PDF measures
+       * everything else here, and `width` and `height` are the box it fills —
+       * the writer scales to them and does not read the bitmap's own
+       * dimensions, so an aspect ratio is the caller's arithmetic and not a
+       * surprise from inside the file.
+       */
+      kind: 'image';
+      /** The key in the `images` argument. An image nobody supplied is not drawn. */
+      image: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
     };
 
 export type Page = { ops: Op[] };
@@ -240,6 +292,7 @@ function contentOf(
   fonts: FontSet,
   resourceOf: Map<FontSlot, string>,
   used: Used,
+  imageOf: ReadonlyMap<string, string>,
 ): string {
   const out: string[] = [];
   // What the writer has already told the reader the fill is, as the operator
@@ -274,7 +327,24 @@ function contentOf(
         : `${num(op.grey ?? 0.8)} G`;
       out.push(
         `q ${num(op.thickness ?? 0.5)} w ${stroke} ` +
-          `${num(op.x)} ${num(op.y)} m ${num(op.x + op.width)} ${num(op.y)} l S Q`,
+          `${num(op.x)} ${num(op.y)} m ${num(op.x + op.width)} ${num(op.y + (op.dy ?? 0))} l S Q`,
+      );
+      continue;
+    }
+
+    if (op.kind === 'image') {
+      const resource = imageOf.get(op.image);
+      // An image the caller never supplied is not drawn, exactly as a
+      // character no face carries is not drawn: a document must still render
+      // when the practice's mark cannot be, and a box where the logo belongs
+      // is worse than a page that is simply set in type.
+      if (!resource) continue;
+      // The transform lives and dies inside its own q/Q, so the text runs
+      // either side of it inherit nothing — and because nothing between them
+      // touches the fill, the `fill` above still describes what the reader has
+      // been told.
+      out.push(
+        `q ${num(op.width)} 0 0 ${num(op.height)} ${num(op.x)} ${num(op.y)} cm /${resource} Do Q`,
       );
       continue;
     }
@@ -398,12 +468,30 @@ function widthsArray(font: Font, glyphs: ReadonlyMap<number, readonly number[]>)
  * beside the font programs, and an uncompressed content stream is one a person
  * can read in a text editor when they need to know what the practice sent.
  */
-export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string): Uint8Array {
+export function renderPdf(
+  pages: readonly Page[],
+  fonts: FontSet,
+  title: string,
+  images: ImageSet = {},
+): Uint8Array {
   const slots: FontSlot[] = ['regular', 'bold', 'arabic'];
   const resourceOf = new Map<FontSlot, string>(slots.map((slot, index) => [slot, `F${index + 1}`]));
 
+  // Only the images a page actually draws, named in the order they are first
+  // drawn — so an image nobody used costs the file nothing and the names do
+  // not depend on the order the caller happened to build its record in.
+  const drawn: string[] = [];
+  for (const page of pages) {
+    for (const op of page.ops) {
+      if (op.kind !== 'image') continue;
+      if (!Object.prototype.hasOwnProperty.call(images, op.image)) continue;
+      if (!drawn.includes(op.image)) drawn.push(op.image);
+    }
+  }
+  const imageOf = new Map<string, string>(drawn.map((name, index) => [name, `Im${index + 1}`]));
+
   const used: Used = new Map();
-  const contents = pages.map((page) => contentOf(page, fonts, resourceOf, used));
+  const contents = pages.map((page) => contentOf(page, fonts, resourceOf, used, imageOf));
 
   // Only the faces this document actually drew with. A receipt in English sets
   // no Arabic, and embedding the Arabic face anyway put ninety kilobytes of
@@ -413,11 +501,17 @@ export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string)
 
   // Object numbering, decided up front so references can be written as they go.
   // 1 catalogue, 2 page tree, then a page and a content stream each, then five
-  // objects per face.
+  // objects per face, then one per image. The images sit after the faces
+  // rather than before them so a document that draws none numbers every object
+  // exactly as it did before this writer could draw one.
   const pageObjectAt = 3;
   const fontObjectAt = pageObjectAt + pages.length * 2;
   const fontObject = new Map<FontSlot, number>(
     embedded.map((slot, index) => [slot, fontObjectAt + index * 5]),
+  );
+  const imageObjectAt = fontObjectAt + embedded.length * 5;
+  const imageObject = new Map<string, number>(
+    drawn.map((name, index) => [name, imageObjectAt + index]),
   );
 
   const objects: string[] = [];
@@ -430,6 +524,12 @@ export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string)
   const fontResources = embedded
     .map((slot) => `/${resourceOf.get(slot)} ${fontObject.get(slot)} 0 R`)
     .join(' ');
+  // Absent entirely when nothing is drawn, so the resource dictionary of every
+  // document already filed is the dictionary it was filed with.
+  const imageResources =
+    drawn.length === 0
+      ? ''
+      : ` /XObject << ${drawn.map((name) => `/${imageOf.get(name)} ${imageObject.get(name)} 0 R`).join(' ')} >>`;
 
   push('<< /Type /Catalog /Pages 2 0 R >>');
   push(
@@ -442,7 +542,8 @@ export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string)
     const contentNumber = pageObjectAt + index * 2 + 1;
     push(
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(PAGE_WIDTH)} ${num(PAGE_HEIGHT)}] ` +
-        `/Resources << /Font << ${fontResources} >> >> /Contents ${contentNumber} 0 R >>`,
+        `/Resources << /Font << ${fontResources} >>${imageResources} >> ` +
+        `/Contents ${contentNumber} 0 R >>`,
     );
     const stream = contents[index] ?? '';
     push(`<< /Length ${ascii(stream).length} >>\nstream\n${stream}\nendstream`);
@@ -480,6 +581,21 @@ export function renderPdf(pages: readonly Page[], fonts: FontSet, title: string)
     push(
       `<< /Length ${ascii(toUnicodeCMap(glyphs)).length} >>\nstream\n${toUnicodeCMap(glyphs)}\nendstream`,
     );
+  }
+
+  for (const name of drawn) {
+    const image = images[name];
+    if (!image) continue;
+    const colours = image.colours === 'grey' ? 1 : 3;
+    const space = image.colours === 'grey' ? '/DeviceGray' : '/DeviceRGB';
+    const marker = push(
+      '<< /Type /XObject /Subtype /Image ' +
+        `/Width ${image.width} /Height ${image.height} /ColorSpace ${space} ` +
+        '/BitsPerComponent 8 /Filter /FlateDecode ' +
+        `/DecodeParms << /Predictor 15 /Colors ${colours} /BitsPerComponent 8 ` +
+        `/Columns ${image.width} >> /Length ${image.data.length} >>\nstream\n`,
+    );
+    binary.set(marker, image.data);
   }
 
   // The information dictionary. No dates: a document that carries the moment it

@@ -347,7 +347,13 @@ describe('a rendered progress report', () => {
     const pages = layout(report(), fonts);
     const coloured = pages
       .flatMap((page) => page.ops)
-      .filter((op) => (op.kind === 'rule' ? op.rgb : op.style.rgb) !== undefined);
+      // The writer's `Op` gained an image in the billing stream's design
+      // round; a report draws none, and an image carries no colour of its own.
+      .filter(
+        (op) =>
+          (op.kind === 'rule' ? op.rgb : op.kind === 'text' ? op.style.rgb : undefined) !==
+          undefined,
+      );
     expect(coloured.every((op) => op.kind === 'rule')).toBe(true);
     // Three of the four slices carry a band; nothing else on the report does.
     expect(coloured).toHaveLength(3);

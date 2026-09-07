@@ -49,6 +49,14 @@ function boxesOf(page: Page): Box[] {
   return page.ops.map(boxOf).filter((box): box is Box => box !== null);
 }
 
+/** A tiny synthetic PNG's worth of image, so a page can be laid out with a mark on it. */
+const LOGO = {
+  width: 420,
+  height: 205,
+  colours: 'rgb' as const,
+  data: new Uint8Array([0x78, 0x9c]),
+};
+
 const SUPPLIER: SupplierSnapshot = {
   legalName: 'Synthetic Wellness Studio',
   legalNameAr: 'استوديو العافية التجريبي',
@@ -58,6 +66,9 @@ const SUPPLIER: SupplierSnapshot = {
   corporateTaxNumber: '000000000000000',
   vatRegistered: true,
   vatNumber: '100000000000003',
+  contactPhone: '+971 50 000 0011',
+  contactEmail: 'studio@example.com',
+  website: 'https://example.com',
 };
 
 /** Everything a household could plausibly make long, made long. */
@@ -173,6 +184,38 @@ const CASES: [string, Page[]][] = [
     ),
   ],
   ['a receipt', layout(RECEIPT, fonts)],
+  ['an invoice carrying the practice’s mark', layout(invoice(), fonts, LOGO)],
+  [
+    // A figure grows with the money and the totals box does not. "Before
+    // discount" is the tightest row in it — the longest English label, the
+    // widest Arabic beside it — and at a figure in the millions the two reach
+    // each other. What is asserted is the invariant every other case asserts,
+    // that no two pieces of type are printed on top of each other; how the
+    // box keeps them apart is the layout's business.
+    'an invoice for a figure in the millions',
+    layout(
+      invoice({
+        supplier: { ...SUPPLIER, vatRegistered: false, vatNumber: null },
+        lines: Array.from({ length: 2 }, () => ({
+          description: 'Neurofeedback programme, ten sessions',
+          descriptionAr: 'جلسة نيوروفيدباك',
+          quantity: 10,
+          unitNetFils: 69_000_000,
+          discountFils: 69_000_000,
+          discountBasisPoints: 1000,
+          netFils: 621_000_000,
+          vatRateBasisPoints: 0,
+          vatFils: 0,
+          grossFils: 621_000_000,
+        })),
+        netFils: 1_242_000_000,
+        vatFils: 0,
+        grossFils: 1_242_000_000,
+        discountFils: 138_000_000,
+      }),
+      fonts,
+    ),
+  ],
 ];
 
 describe.each(CASES)('%s', (_name, pages) => {
@@ -256,15 +299,15 @@ describe('a document that outgrows its page', () => {
   it('repeats the column headings after a break, so the figures are still labelled', () => {
     const second = pages[1];
     if (!second) throw new Error('There is no second page.');
-    expect(boxesOf(second).map((box) => box.text)).toContain('Unit price (AED)');
+    expect(boxesOf(second).map((box) => box.text)).toContain('Unit price');
   });
 
   it('keeps the totals and the footer on the last page', () => {
     const last = pages[pages.length - 1];
     if (!last) throw new Error('There is no last page.');
     const text = boxesOf(last).map((box) => box.text);
-    expect(text).toContain('Total (AED)');
-    expect(text).toContain('21,000.00');
+    expect(text).toContain('Total');
+    expect(text).toContain('AED 21,000.00');
     expect(text.some((line) => line.startsWith('A simplified tax invoice'))).toBe(true);
   });
 });
@@ -298,5 +341,125 @@ describe('a single value long enough to fill the page on its own', () => {
         expect(box.right).toBeLessThanOrEqual(GEOMETRY.PAGE_WIDTH - GEOMETRY.MARGIN + TOLERANCE);
       }
     }
+  });
+});
+
+describe('the practice’s mark', () => {
+  it('is centred, 150 points wide, and in the proportions of the file itself', () => {
+    const page = layout(invoice(), fonts, LOGO)[0];
+    if (!page) throw new Error('There is no page.');
+    const drawn = page.ops.filter((op) => op.kind === 'image');
+    expect(drawn).toHaveLength(1);
+    const mark = drawn[0];
+    if (!mark || mark.kind !== 'image') throw new Error('The mark was not drawn.');
+    expect(mark.width).toBe(GEOMETRY.LOGO_WIDTH);
+    // Never stretched: the height follows the bitmap's own aspect ratio.
+    expect(mark.height).toBeCloseTo((GEOMETRY.LOGO_WIDTH * LOGO.height) / LOGO.width, 5);
+    // Centred on the paper, and inside the margins on both sides.
+    expect(mark.x + mark.width / 2).toBeCloseTo(GEOMETRY.PAGE_WIDTH / 2, 5);
+    expect(mark.x).toBeGreaterThanOrEqual(GEOMETRY.MARGIN);
+    expect(mark.y + mark.height).toBeLessThanOrEqual(GEOMETRY.TOP + TOLERANCE);
+  });
+
+  it('gives way to the wordmark set in type when the practice has none', () => {
+    const page = layout(invoice(), fonts)[0];
+    if (!page) throw new Error('There is no page.');
+    expect(page.ops.some((op) => op.kind === 'image')).toBe(false);
+    expect(boxesOf(page).map((box) => box.text)).toContain('McWellness');
+  });
+});
+
+describe('the totals box', () => {
+  it('is four rules that meet at its corners, against the right margin', () => {
+    const pages = layout(invoice(), fonts);
+    const last = pages[pages.length - 1];
+    if (!last) throw new Error('There is no last page.');
+    const left = GEOMETRY.RIGHT - GEOMETRY.TOTALS_WIDTH;
+    const sides = last.ops.filter((op) => op.kind === 'rule' && (op.dy ?? 0) !== 0);
+    expect(sides).toHaveLength(2);
+
+    // The two sides run between the same pair of heights, and each of them has
+    // a horizontal rule of the box's own width at both ends.
+    const [a, b] = sides;
+    if (!a || a.kind !== 'rule' || !b || b.kind !== 'rule') throw new Error('No box was drawn.');
+    expect(a.y).toBe(b.y);
+    expect(a.dy).toBe(b.dy);
+    expect([a.x, b.x].sort((one, two) => one - two)).toEqual([left, GEOMETRY.RIGHT]);
+
+    const bottom = a.y;
+    const top = a.y + (a.dy ?? 0);
+    for (const y of [top, bottom]) {
+      const edge = last.ops.find(
+        (op) => op.kind === 'rule' && !op.dy && Math.abs(op.y - y) < 0.001 && op.x === left,
+      );
+      if (!edge || edge.kind !== 'rule') throw new Error(`No rule closes the box at ${y}.`);
+      expect(edge.width).toBe(GEOMETRY.TOTALS_WIDTH);
+    }
+  });
+
+  it('keeps every figure and label inside its own walls', () => {
+    const pages = layout(invoice({ discountFils: 10_000, netFils: 60_000 }), fonts);
+    const last = pages[pages.length - 1];
+    if (!last) throw new Error('There is no last page.');
+    const sides = last.ops.filter((op) => op.kind === 'rule' && (op.dy ?? 0) !== 0);
+    const first = sides[0];
+    if (!first || first.kind !== 'rule') throw new Error('No box was drawn.');
+    const top = first.y + (first.dy ?? 0);
+    const inside = boxesOf(last).filter((box) => box.y < top && box.y > first.y);
+    expect(inside.length).toBeGreaterThan(0);
+    for (const box of inside) {
+      expect(box.left, box.text).toBeGreaterThanOrEqual(
+        GEOMETRY.RIGHT - GEOMETRY.TOTALS_WIDTH - TOLERANCE,
+      );
+      expect(box.right, box.text).toBeLessThanOrEqual(GEOMETRY.RIGHT + TOLERANCE);
+    }
+  });
+});
+
+describe('the footer band', () => {
+  it('sits above the paper’s edge, on the last sheet, under a hairline of its own', () => {
+    const pages = layout(
+      invoice({ lines: manyLines(30), netFils: 2_100_000, vatFils: 105_000, grossFils: 2_205_000 }),
+      fonts,
+    );
+    const last = pages[pages.length - 1];
+    if (!last) throw new Error('There is no last page.');
+
+    const hairline = last.ops.find((op) => op.kind === 'rule' && op.y === GEOMETRY.BAND);
+    expect(hairline).toBeDefined();
+
+    const band = boxesOf(last).filter((box) => box.y < GEOMETRY.BAND);
+    // Two centred lines and the page number, all of them on the paper.
+    expect(band.length).toBeGreaterThanOrEqual(2);
+    for (const box of band) {
+      expect(box.y, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+      expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+      expect(box.right, box.text).toBeLessThanOrEqual(
+        GEOMETRY.PAGE_WIDTH - GEOMETRY.MARGIN + TOLERANCE,
+      );
+    }
+  });
+
+  it('is on the last sheet and on no other', () => {
+    const pages = layout(
+      invoice({ lines: manyLines(30), netFils: 2_100_000, vatFils: 105_000, grossFils: 2_205_000 }),
+      fonts,
+    );
+    for (const [index, page] of pages.entries()) {
+      const hairlines = page.ops.filter((op) => op.kind === 'rule' && op.y === GEOMETRY.BAND);
+      expect(hairlines).toHaveLength(index === pages.length - 1 ? 1 : 0);
+    }
+  });
+
+  it('leaves the contact line out entirely when the practice has recorded none', () => {
+    const bare = layout(
+      invoice({
+        supplier: { ...SUPPLIER, contactPhone: null, contactEmail: null, website: null },
+      }),
+      fonts,
+    )[0];
+    if (!bare) throw new Error('There is no page.');
+    const band = boxesOf(bare).filter((box) => box.y < GEOMETRY.BAND);
+    expect(band).toHaveLength(1);
   });
 });

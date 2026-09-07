@@ -307,6 +307,45 @@ practice's own records point at accounts, never the other way round.
 
 ---
 
+## 4a. The practice's own brand on its documents
+
+The invoice and the receipt carry the practice's logo at the top and its
+telephone number, email address and website in the band at the foot of the page
+(`docs/SPEC/billing.md` section 5.6). None of the four is in this repository:
+they are the practice's own row, set once against a live environment.
+
+The logo can be replaced from **Settings → Practice** in the console, by an
+owner or an admin. The three contact fields have no screen yet
+(`docs/CHANGE-REQUESTS/billing-09.md` item 6), so both are set with one script:
+
+```bash
+node scripts/practice-brand.mjs https://app.mcwellnessuae.com "<bearer token>" ~/Documents/mcwellness-logo.png \
+  --phone "+971 55 586 4039" --email info@mcwellnessuae.com --website https://mcwellnessuae.com/
+```
+
+- The **bearer token** is the one a signed-in owner's browser holds. Take it
+  from the console's own session; it is short-lived and belongs in no file.
+- The **logo** is a PNG or a JPEG under 500 KB. Only a PNG is drawn onto a
+  document — truecolour or greyscale, eight bits, not interlaced, no alpha
+  channel — and a file the writer cannot embed leaves the wordmark set in type
+  at the top of the page rather than a gap. Export it against a white
+  background.
+- Every flag is optional and nothing is cleared: run it with a file alone to
+  replace the mark, or with the flags alone to change the footer.
+
+Two things follow, and both are deliberate:
+
+- **Documents already filed keep the mark they were filed with.** The logo is
+  drawn as it is today, so a re-render of last year's invoice would carry this
+  year's mark — which is why the platform never replaces a document it has
+  already filed. Nothing about what a document *states* changes: the legal
+  name, the address and the registrations are snapshotted onto the invoice at
+  numbering time and read back from it for ever.
+- **The contact details are snapshotted too**, so changing the telephone number
+  changes the documents issued from that moment and no earlier one.
+
+Check it by opening one invoice in the console and pressing the link.
+
 ## 5. If the site goes to sleep
 
 The thing to watch for in the first fortnight: the deep check

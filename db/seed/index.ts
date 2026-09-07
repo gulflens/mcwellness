@@ -60,7 +60,7 @@ try {
         // so a key that is already there is the same run's own work — proved
         // by its fingerprint, not assumed — and is left exactly as it is.
         // Anything else stops the seed rather than being written over.
-        const existing = await storage.read(document.storageKey);
+        const existing = await storage.get(document.storageKey);
         if (existing !== null) {
           const found = createHash('sha256').update(existing).digest('hex');
           if (found !== document.sha256Hex) {

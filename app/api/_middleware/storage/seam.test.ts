@@ -329,11 +329,11 @@ describe('a document is written once', () => {
         StorageConflictError,
       );
       // And the first bytes are still the ones in the folder.
-      expect(await storage.read(KEY)).toEqual(Buffer.from(BYTES));
+      expect(await storage.get(KEY)).toEqual(Buffer.from(BYTES));
 
       // Only a caller that says so replaces them.
       await storage.put(KEY, second, 'text/markdown', { overwrite: true });
-      expect(await storage.read(KEY)).toEqual(Buffer.from(second));
+      expect(await storage.get(KEY)).toEqual(Buffer.from(second));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -352,7 +352,7 @@ describe('the folder store and a link planted inside it', () => {
       const storage = localDiskStorage({ dir: root });
 
       // The name resolves inside the folder; the filesystem says otherwise.
-      await expect(storage.read(KEY)).rejects.toThrow('That storage key is not a valid one.');
+      await expect(storage.get(KEY)).rejects.toThrow('That storage key is not a valid one.');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -411,5 +411,82 @@ describe('the vendor says a missing object is a 400, not a 404', () => {
         ),
     });
     await expect(store.exists(KEY)).rejects.toThrow();
+  });
+});
+
+describe('reading an object back through the seam', () => {
+  /**
+   * The practice's logo is filed like every other document and then read back
+   * to be drawn onto an invoice (docs/SPEC/billing.md section 5.6). Until this
+   * round the seam could write bytes, sign a link to them, ask whether they
+   * were there and remove them — everything but hand them to the server that
+   * put them there.
+   */
+
+  it('gives back exactly the bytes that were put, on the folder', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcwellness-get-'));
+    try {
+      const storage = localDiskStorage({ dir });
+      await storage.put(KEY, BYTES, 'image/png');
+      expect(Buffer.from((await storage.get(KEY)) ?? new Uint8Array())).toEqual(Buffer.from(BYTES));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('answers null for a key with nothing at it, on the folder', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mcwellness-get-absent-'));
+    try {
+      expect(await localDiskStorage({ dir }).get(KEY)).toBeNull();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('gives back exactly the bytes the vendor answered with', async () => {
+    const storage = supabaseStorage({
+      url: 'https://project.supabase.co',
+      serviceKey: 'not-a-real-key',
+      fetchImpl: async () => new Response(BYTES, { status: 200 }),
+    });
+    expect(Buffer.from((await storage.get(KEY)) ?? new Uint8Array())).toEqual(Buffer.from(BYTES));
+  });
+
+  it('answers null when the vendor says there is nothing there', async () => {
+    for (const response of [
+      (): Response => new Response('', { status: 404 }),
+      (): Response =>
+        new Response(JSON.stringify({ statusCode: '404', code: 'NoSuchKey' }), {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        }),
+    ]) {
+      const storage = supabaseStorage({
+        url: 'https://project.supabase.co',
+        serviceKey: 'not-a-real-key',
+        fetchImpl: async () => response(),
+      });
+      expect(await storage.get(KEY)).toBeNull();
+    }
+  });
+
+  it('raises the outage every other call raises when the vendor cannot be reached', async () => {
+    // A bucket that is down reads as a 503 and never as a bug in the document
+    // that wanted the picture.
+    const storage = supabaseStorage({
+      url: 'https://project.supabase.co',
+      serviceKey: 'not-a-real-key',
+      fetchImpl: async () => {
+        throw new Error('getaddrinfo ENOTFOUND');
+      },
+    });
+    await expect(storage.get(KEY)).rejects.toBeInstanceOf(StorageUnavailableError);
+
+    const refusing = supabaseStorage({
+      url: 'https://project.supabase.co',
+      serviceKey: 'not-a-real-key',
+      fetchImpl: async () => new Response('nope', { status: 500 }),
+    });
+    await expect(refusing.get(KEY)).rejects.toBeInstanceOf(StorageUnavailableError);
   });
 });

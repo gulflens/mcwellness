@@ -54,8 +54,8 @@ describe('the local disk store', () => {
     expect(isLocalStorage(storage)).toBe(true);
     if (!isLocalStorage(storage)) return;
 
-    expect(await storage.read(KEY)).toEqual(Buffer.from(BYTES));
-    expect(await storage.read('tenant/a/practice/absent')).toBeNull();
+    expect(await storage.get(KEY)).toEqual(Buffer.from(BYTES));
+    expect(await storage.get('tenant/a/practice/absent')).toBeNull();
   });
 
   it('signs a URL that verifies, and refuses a tampered or stale one', async () => {
@@ -97,7 +97,7 @@ describe('the local disk store', () => {
     await expect(storage.delete(outside)).rejects.toThrow('not a valid one');
     await expect(storage.getSignedUrl(outside, 60)).rejects.toThrow('not a valid one');
     if (isLocalStorage(storage)) {
-      await expect(storage.read(outside)).rejects.toThrow('not a valid one');
+      await expect(storage.get(outside)).rejects.toThrow('not a valid one');
     }
 
     // Belt and braces: a file really does sit outside, and none of the above reached it.

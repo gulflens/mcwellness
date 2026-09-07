@@ -42,7 +42,7 @@ export type Harness = {
   /**
    * The document store, as the fallback implementation: a folder under the
    * system temporary directory, which is what every test and every laptop uses
-   * (docs/SEAMS.md). No vendor, no network, and the same four calls the real
+   * (docs/SEAMS.md). No vendor, no network, and the same five calls the real
    * one answers.
    */
   storage: ReturnType<typeof localDiskStorage>;

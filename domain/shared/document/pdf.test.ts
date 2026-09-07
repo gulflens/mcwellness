@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractText } from './extract';
-import { PAGE_HEIGHT, renderPdf, type FontSet, type Page } from './pdf';
+import { PAGE_HEIGHT, renderPdf, type DocumentImage, type FontSet, type Page } from './pdf';
 import type { Font } from './truetype';
 
 /**
@@ -383,5 +383,141 @@ describe('a document that carries the ribbon’s hue', () => {
     };
     const stream = streamOf(renderPdf([page], fonts, 'Synthetic'));
     expect(stream.match(/0\.24 0\.29 0\.53 rg/g)).toHaveLength(1);
+  });
+});
+
+// --------------------------------------------------------------------------
+// Images
+// --------------------------------------------------------------------------
+
+/**
+ * The one picture these documents draw: the practice's own mark at the top of
+ * an invoice (docs/SPEC/billing.md section 5.6).
+ *
+ * **Nothing is decoded on the way in.** A PNG's IDAT stream is already
+ * zlib-deflated scanlines carrying PNG's own per-row predictor bytes, which is
+ * exactly what PDF's `/FlateDecode` with `/Predictor 15` consumes — so the
+ * bytes the practice uploaded are the bytes in the file, and no image library
+ * enters the dependency tree of the path that renders a household's financial
+ * record.
+ *
+ * As with the colour operator before it, the promise that matters most is the
+ * one about absence: a page that draws no image must render to exactly the
+ * bytes it did before the writer could draw one.
+ */
+
+/** A four-byte "image": the writer embeds it verbatim and never looks inside. */
+const MARK: DocumentImage = {
+  width: 2,
+  height: 2,
+  colours: 'rgb',
+  data: new Uint8Array([0x78, 0x9c, 0x01, 0x00]),
+};
+
+const IMAGE_PAGE: Page = {
+  ops: [
+    { kind: 'text', x: 56, y: 700, text: 'Ink', style: { font: 'regular', size: 10 } },
+    { kind: 'image', image: 'logo', x: 200, y: 720, width: 150, height: 60 },
+    { kind: 'text', x: 56, y: 670, text: 'Under', style: { font: 'regular', size: 10 } },
+  ],
+};
+
+describe('a page that draws an image', () => {
+  const file = (): string =>
+    new TextDecoder('latin1').decode(renderPdf([IMAGE_PAGE], fonts, 'Synthetic', { logo: MARK }));
+
+  it('names the image as a resource of the page that draws it', () => {
+    expect(file()).toContain('/XObject << /Im1');
+  });
+
+  it('writes the bitmap as an image object a reader can decode without unpacking it', () => {
+    const text = file();
+    expect(text).toContain('/Subtype /Image');
+    expect(text).toContain('/Width 2');
+    expect(text).toContain('/Height 2');
+    expect(text).toContain('/ColorSpace /DeviceRGB');
+    expect(text).toContain('/BitsPerComponent 8');
+    expect(text).toContain('/Filter /FlateDecode');
+    // PNG's own predictor and PDF's are the same arithmetic, which is the
+    // whole reason the IDAT bytes go in untouched.
+    expect(text).toContain(
+      '/DecodeParms << /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns 2 >>',
+    );
+  });
+
+  it('draws it at the size and the corner it was given, inside its own q and Q', () => {
+    const stream = streamOf(renderPdf([IMAGE_PAGE], fonts, 'Synthetic', { logo: MARK }));
+    expect(stream).toContain('q 150 0 0 60 200 720 cm /Im1 Do Q');
+  });
+
+  it('leaves the text either side of it exactly as it was', () => {
+    // An image between two text runs may not leak a transform onto the second:
+    // the fill is untouched, the q/Q is balanced, and the text state is the
+    // text state.
+    const stream = streamOf(renderPdf([IMAGE_PAGE], fonts, 'Synthetic', { logo: MARK }));
+    const lines = stream.split('\n');
+    expect(lines.filter((line) => line.startsWith('q ')).length).toBe(1);
+    expect(lines.filter((line) => line.endsWith(' Q')).length).toBe(1);
+    expect(stream).toContain('1 0 0 1 56 670 Tm');
+  });
+
+  it('embeds a greyscale bitmap as one component rather than three', () => {
+    const page: Page = {
+      ops: [{ kind: 'image', image: 'mark', x: 0, y: 0, width: 10, height: 10 }],
+    };
+    const text = new TextDecoder('latin1').decode(
+      renderPdf([page], fonts, 'Synthetic', { mark: { ...MARK, colours: 'grey' } }),
+    );
+    expect(text).toContain('/ColorSpace /DeviceGray');
+    expect(text).toContain('/Colors 1');
+  });
+
+  it('writes only the images a page actually drew', () => {
+    const text = new TextDecoder('latin1').decode(
+      renderPdf([IMAGE_PAGE], fonts, 'Synthetic', { logo: MARK, unused: { ...MARK, width: 99 } }),
+    );
+    expect(text).not.toContain('/Width 99');
+    expect(text.match(/\/Subtype \/Image/g)).toHaveLength(1);
+  });
+
+  it('draws nothing at all for an image the caller never supplied', () => {
+    // The same discipline a character no face can draw is held to: the page is
+    // rendered without it rather than with a box where the practice's mark
+    // should be.
+    const stream = streamOf(renderPdf([IMAGE_PAGE], fonts, 'Synthetic'));
+    expect(stream).not.toContain('Do');
+    expect(stream).toContain('1 0 0 1 56 670 Tm');
+  });
+});
+
+describe('a page that draws no image', () => {
+  it('renders to exactly the bytes it did before the writer could draw one', () => {
+    expect(streamOf(renderPdf([GREY_PAGE], fonts, 'Synthetic'))).toBe(GREY_STREAM_BEFORE_COLOUR);
+  });
+
+  it('gains no /XObject key in its resources, with or without an images argument', () => {
+    const without = renderPdf([GREY_PAGE], fonts, 'Synthetic');
+    const with_ = renderPdf([GREY_PAGE], fonts, 'Synthetic', { logo: MARK });
+    expect(new TextDecoder('latin1').decode(without)).not.toContain('/XObject');
+    // An unused image is not written, so the two files are the same file.
+    expect(Buffer.from(with_).equals(Buffer.from(without))).toBe(true);
+  });
+});
+
+describe('a rule that is not horizontal', () => {
+  it('runs from where it starts to where its rise puts it', () => {
+    // The side of a totals box (docs/SPEC/billing.md section 5.6): the same op
+    // with no run and a rise.
+    const page: Page = { ops: [{ kind: 'rule', x: 300, y: 400, width: 0, dy: 60 }] };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toContain(
+      'q 0.50 w 0.80 G 300 400 m 300 460 l S Q',
+    );
+  });
+
+  it('leaves a rule with no rise exactly as it was', () => {
+    const page: Page = { ops: [{ kind: 'rule', x: 56, y: 690, width: 200 }] };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe(
+      'q 0.50 w 0.80 G 56 690 m 256 690 l S Q',
+    );
   });
 });

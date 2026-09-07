@@ -26,6 +26,8 @@ export const WORDS = {
   invoiceNumber: { en: 'Invoice number', ar: 'رقم الفاتورة' },
   receiptNumber: { en: 'Receipt number', ar: 'رقم الإيصال' },
   dateOfIssue: { en: 'Date of issue', ar: 'تاريخ الإصدار' },
+  /** The short form the design sets beneath the reference: "Issued 8 September 2026". */
+  issued: { en: 'Issued', ar: 'صدرت في' },
   dateOfSupply: { en: 'Date of supply', ar: 'تاريخ التوريد' },
   dateReceived: { en: 'Date received', ar: 'تاريخ الاستلام' },
 
@@ -51,11 +53,27 @@ export const WORDS = {
     ar: 'رقم التسجيل في ضريبة القيمة المضافة',
   },
 
+  /**
+   * Who the document is for, above the household's name. A receipt says the
+   * other one: money came from a family rather than a charge going to it.
+   */
+  billedTo: { en: 'Billed to', ar: 'إلى' },
+  receivedFrom: { en: 'Received from', ar: 'من' },
+
   description: { en: 'Description', ar: 'الوصف' },
   quantity: { en: 'Quantity', ar: 'الكمية' },
-  unitPrice: { en: 'Unit price (AED)', ar: 'سعر الوحدة' },
+  /**
+   * **The headings carry no `(AED)` any more**, and every figure beneath them
+   * carries its own currency instead (`money` below). That is the operator's
+   * design of 8 September 2026 and `docs/SPEC/billing.md` section 5.6 records
+   * why it differs from the console's rule: naming the currency once per table
+   * is a rule for a screen whose reader is inside the practice, and a document
+   * a family may take to a bank, an insurer or an accountant says what its
+   * figures are in, in every cell, on its own.
+   */
+  unitPrice: { en: 'Unit price', ar: 'سعر الوحدة' },
   vatRate: { en: 'VAT rate', ar: 'نسبة الضريبة' },
-  vatAmount: { en: 'VAT (AED)', ar: 'ضريبة القيمة المضافة' },
+  vatAmount: { en: 'VAT', ar: 'ضريبة القيمة المضافة' },
   /**
    * The same column, named short. "ضريبة القيمة المضافة" is the term, and it is
    * what the totals row says; as a column heading beside "نسبة الضريبة" it is
@@ -63,14 +81,14 @@ export const WORDS = {
    * the short form where the row beneath it is unambiguous — the figures are in
    * dirhams under a heading that says so in English on the same line.
    */
-  vatColumn: { en: 'VAT (AED)', ar: 'الضريبة' },
-  amount: { en: 'Amount (AED)', ar: 'المبلغ' },
+  vatColumn: { en: 'VAT', ar: 'الضريبة' },
+  amount: { en: 'Amount', ar: 'المبلغ' },
 
-  beforeDiscount: { en: 'Before discount (AED)', ar: 'قبل الخصم' },
-  discount: { en: 'Discount (AED)', ar: 'الخصم' },
-  net: { en: 'Net (AED)', ar: 'المبلغ الصافي' },
-  total: { en: 'Total (AED)', ar: 'الإجمالي' },
-  amountReceived: { en: 'Amount received (AED)', ar: 'المبلغ المستلم' },
+  beforeDiscount: { en: 'Before discount', ar: 'قبل الخصم' },
+  discount: { en: 'Discount', ar: 'الخصم' },
+  net: { en: 'Net', ar: 'المبلغ الصافي' },
+  total: { en: 'Total', ar: 'الإجمالي' },
+  amountReceived: { en: 'Received', ar: 'المبلغ المستلم' },
 
   paymentMethod: { en: 'Payment method', ar: 'طريقة الدفع' },
   paymentReference: { en: 'Payment reference', ar: 'مرجع الدفع' },
@@ -191,28 +209,45 @@ export function waivedNotice(waivedOn: string): Phrase {
 }
 
 /**
- * What a discounted line says beneath its description, in both languages.
+ * What a discounted line says beneath its description, in both languages:
+ * the design's own phrasing, `List AED 12,150.00 · less AED 2,325.00`.
  *
- * The percentage when there was one and the figure always: "Discount 15%:
- * 105.00" or "Discount: 105.00". Two discounts added together carry no single
- * percentage, and this says so by naming none rather than by inventing one
- * (domain/billing/discount.ts's `combineDiscounts`).
+ * **Both figures, and no percentage.** The operator's design states the list
+ * price and what came off it, which is the pair a family actually wants: the
+ * number they were quoted and the number they are paying. A share can always
+ * be worked out from the two, while two discounts added together carry no
+ * single percentage at all (`domain/billing/discount.ts`, `combineDiscounts`)
+ * — so a line that named one would have to invent it.
  *
  * The Federal Tax Authority asks a full tax invoice to state the amount of any
  * discount offered. A simplified one need not, and this document does anyway:
  * a family looking at a figure below the price they were quoted should be able
  * to see, on the page, why.
+ *
+ * The middle dot is the design's, and it is a document rather than a screen.
+ * `CLAUDE.md`'s rule against middle-dot-joined metadata is a rule about the
+ * console's own chrome (`.claude/rules/ui.md` scopes it to `app/**`); here it
+ * joins two halves of one sentence a person reads once.
  */
-export function discountNote(line: {
-  discountFils: number;
-  discountBasisPoints: number | null;
-}): Phrase {
-  const figure = formatFils(line.discountFils);
-  const share = line.discountBasisPoints === null ? null : formatRate(line.discountBasisPoints);
+export function discountLine(listFils: number, discountFils: number): Phrase {
   return {
-    en: share === null ? `Discount: ${figure}` : `Discount ${share}: ${figure}`,
-    ar: share === null ? `الخصم: ${figure}` : `الخصم ${share}: ${figure}`,
+    en: `List ${money(listFils)} · less ${money(discountFils)}`,
+    ar: `السعر قبل الخصم ${formatFils(listFils)} درهم · ناقص ${formatFils(discountFils)} درهم`,
   };
+}
+
+/**
+ * A figure as it is written on a money document: `AED 1,650.00`.
+ *
+ * The currency in the cell, following the operator's design, and the reason is
+ * in section 5.6 of the specification: a client-facing document is read
+ * outside the practice, and a column heading two hundred points above a figure
+ * is not where a bank or an insurer looks for the currency. `formatFils` is
+ * still the one piece of arithmetic that turns fils into a figure; this is a
+ * prefix on it and nothing more.
+ */
+export function money(fils: number): string {
+  return `AED ${formatFils(fils)}`;
 }
 
 /** The wordmark at the top of the page. */

@@ -51,6 +51,21 @@ export type StorageProvider = {
     mimeType: string,
     options?: PutOptions,
   ): Promise<StoredObject>;
+  /**
+   * The bytes at a key, or null when nothing is there.
+   *
+   * For the server that filed them, not for a person: handing somebody a
+   * document is `getSignedUrl`, which is audited as the read it is
+   * (docs/SEAMS.md). This is for the one case where the API itself needs the
+   * bytes back — the practice's logo, read out of its own `document` row and
+   * drawn onto every invoice it renders (docs/SPEC/billing.md section 5.6).
+   *
+   * Null is "nothing is stored there", which is an answer and not a fault; a
+   * store that cannot be reached raises `StorageUnavailableError` exactly as
+   * every other call here does, so a bucket that is down never reads as a bug
+   * in the document that wanted the picture.
+   */
+  get(key: string): Promise<Uint8Array | null>;
   /** A URL that fetches those bytes without a session, good for `ttlSeconds` and no longer. */
   getSignedUrl(key: string, ttlSeconds: number): Promise<string>;
   /** Removes the object. Removing what is not there is not an error. */
