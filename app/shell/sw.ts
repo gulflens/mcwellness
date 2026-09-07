@@ -21,7 +21,9 @@ import { precacheAndRoute } from 'workbox-precaching';
  * **Three runtime rules and no others:**
  *
  *   1. a navigation is network-first and falls back to the cached shell, so
- *      the app opens with no signal and the outbox can resume the visit;
+ *      the app opens with no signal and the outbox can resume the visit —
+ *      except that the day map's own document is never written into that
+ *      cache (`WIDENED_DOCUMENTS` below);
  *   2. `/assets/*` is served from the precache, because it is immutable and
  *      hashed;
  *   3. exactly the GET reads section 3.4 names keep their last good answer,
@@ -58,6 +60,44 @@ const KEEP = [SHELL, READS];
  * under `/api/sessions/:id` is here at all: a visit in progress is the
  * outbox's, not the HTTP cache's.
  */
+/**
+ * The addresses the API serves with a wider content security policy, because
+ * a browser map cannot run under the strict one
+ * (`MAP_DOCUMENT_PATHS` in app/api/_middleware/security.ts, docs/SECURITY.md).
+ *
+ * **Why the worker has to know.** The shell cache is keyed on `/` alone, so
+ * whatever document was last fetched successfully answers every later
+ * navigation that has no signal. One visit to the day map would therefore make
+ * that widened document this device's shell, and an offline navigation to
+ * Clients, to the practitioner's Today, to the sign-in form would boot the
+ * whole app under `'unsafe-eval'` and `'strict-dynamic'` (the re-check of pull
+ * request 121). The map returns a page to a signed-out visitor too, so one
+ * visit to that address by anybody is enough.
+ *
+ * Reading still falls back to the cached shell for this path, which is honest:
+ * with no signal the map cannot draw anyway, and the page says so.
+ *
+ * The list is duplicated here rather than imported because the worker is its
+ * own bundle and the API's copy is server code. It is one line in both places
+ * and `tests/security/headers.test.ts` pins the server's.
+ */
+const WIDENED_DOCUMENTS = ['/admin/schedule/map'];
+
+/**
+ * Whether this navigation is for one of them. The path is decoded first, as
+ * the API's own router decodes it before matching (`decodeURI`, which leaves
+ * `%2F` alone), so `/admin/schedule/%6dap` — served widened — is recognised
+ * here too. A malformed escape is not one of these paths and is not this
+ * function's business to complain about.
+ */
+function isWidenedDocument(pathname: string): boolean {
+  try {
+    return WIDENED_DOCUMENTS.includes(decodeURI(pathname));
+  } catch {
+    return false;
+  }
+}
+
 const CACHEABLE_READS = [
   '/api/appointments',
   '/api/sessions/service-types',
@@ -97,8 +137,9 @@ self.addEventListener('activate', (event) => {
 async function networkFirst(
   request: Request,
   cacheName: string,
-  fallbackRequest?: Request,
+  options: { fallbackRequest?: Request; keepTheAnswer?: boolean } = {},
 ): Promise<Response> {
+  const { fallbackRequest, keepTheAnswer = true } = options;
   const cache = await caches.open(cacheName);
   const key = fallbackRequest ?? request;
   try {
@@ -106,7 +147,7 @@ async function networkFirst(
     // `no-store` on the answer does not stop this: Cache.put is an explicit
     // act by this worker, not the HTTP cache obeying a header, and keeping the
     // day the practitioner last saw is the whole point (section 3.4).
-    if (response.ok) await cache.put(key, response.clone());
+    if (keepTheAnswer && response.ok) await cache.put(key, response.clone());
     return response;
   } catch (error) {
     const cached = await cache.match(key);
@@ -122,7 +163,14 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(networkFirst(request, SHELL, new Request('/')));
+    event.respondWith(
+      networkFirst(request, SHELL, {
+        fallbackRequest: new Request('/'),
+        // Read from the shell, never written into it: this document carries a
+        // policy no other screen of the practice may be rendered under.
+        keepTheAnswer: !isWidenedDocument(url.pathname),
+      }),
+    );
     return;
   }
   if (CACHEABLE_READS.includes(url.pathname)) {

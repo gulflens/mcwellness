@@ -28,6 +28,7 @@ here rather than assumed. All of them ride in this pull request, as
 | 7 | `db/seed/generate.ts` with its test `db/seed/generate.test.ts`, `db/seed/apply.ts`, `db/seed/index.ts` (trunk) | `SeedAppointment`, `SeedData.appointments`, `SeedOptions.planningDay`, and five visits written last | a day map is worth nothing on a day with no visits on it | the demonstration, and Task 14's own walk-through |
 | 8 | `tests/security/headers.test.ts`, `tests/security/static.test.ts` (trunk) | The cases that pin **both** policies: the map document's, and every other document's unchanged | a widening nobody pinned is a widening that spreads | the proof that item 3 is confined |
 | 9 | `tests/db/seed.test.ts`, `tests/db/bootstrap-practice.test.ts` (trunk) | `seed.test.ts` gains the case that the seeded day is one the map can draw — five visits, each with a place that has a coordinate and a practitioner credentialled to deliver it; `bootstrap-practice.test.ts` adds `'appointment'` to `SEED_TABLES`, which is read in one place (`defaultsOnly`) to set the seed's own content aside before a seeded practice is compared with a bootstrapped one. Additive: the migration scan beside it does not consult the list and is untouched | item 7 puts rows in a table these two read | `pnpm test:db` |
+| 10 | `app/shell/sw.ts`, `app/shell/sw.test.ts` (trunk) | The service worker never writes the day map's own document into the shell cache, and still answers that address from the shell when there is no signal | the shell cache is keyed on `/` alone, so whatever document was last fetched answers every later offline navigation — one visit to the map would have made the widened document this device's shell for Clients, for the practitioner's Today, for the sign-in form | the proof that item 3 is confined offline as well as online |
 
 No migration, no policy file and no schema change: `drive_estimate`
 (migration 204) already admits owner, admin and lead practitioner, and
@@ -65,6 +66,20 @@ zone, item 1's file); `app/shell/App.tsx` and `app/shell/App.test.tsx` (the day
 map mounted outside the `/admin` layout, item 4's file); and
 `tests/security/headers.test.ts` (the near misses, item 8's file). Nothing new
 was opened.
+
+**Amended again in the second fix round, 2026-09-08.** The re-check of the
+first fix round found the widened document still reachable from two directions,
+and closing them opened **item 10 above** — the service worker, which is
+`app/shell/**` and had not been touched by this piece before. Its own half of
+that round, the day map's document boundary, is entirely inside this stream's
+paths (`app/admin/schedule/map/documentBoundary.tsx`,
+`app/admin/schedule/CancelAppointmentDrawer.tsx`,
+`app/admin/schedule/map/DayMapPage.tsx`, `tests/scheduling/DayMapPage.test.tsx`
+and `tests/scheduling/MoveAndCancelDrawers.test.tsx`). Beyond item 10 the round
+touches `app/shell/App.tsx` (item 4's file, one docblock paragraph),
+`docs/SECURITY.md` and `docs/PLAN/route-planning.md` — the operator's own plan,
+whose "more than ten stops" line the first round's new ceiling of eight had
+left stale. Nothing else new was opened.
 
 ---
 
