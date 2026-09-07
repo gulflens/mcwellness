@@ -356,6 +356,67 @@ tax point on prepaid packages, and record the answer here.
 
 Structure invoices as PINT AE (UBL/XML) objects from day one. Your wave: appoint an Accredited Service Provider by **31 March 2027**, live by **1 July 2027**. Building the invoice as a structured object now costs nothing; retrofitting it in 2027 costs a sprint.
 
+### 5.6 What a money document looks like (the operator's design, 8 September 2026)
+
+_The operator supplied a designed tax invoice and receipt on 8 September 2026 and
+asked the platform's own documents to match them. Three questions were answered
+in the same message: the fifteen-digit number on the design is the **corporate-tax**
+registration and not a VAT one, so documents stay honest until the practice
+registers; the **look** is what is being matched, not the period-statement content
+the design's example happens to show, which remains piece thirteen's; and the
+numbering stays as it is, `INV-000001` and `RCP-000001`._
+
+**The page, top to bottom.** The practice's logo, centred, about 150 points wide.
+The document's title, English against the left margin and Arabic against the
+right, both large and in the brand violet. The supplier as a block rather than
+as labelled rows: legal name in bold, the address beneath it in grey, then the
+licence, the licensing authority and the corporate-tax registration, each on its
+own line, with the Arabic mirror right-aligned opposite. A hairline. The
+document's own facts: its reference large and bold on the left with the date
+beneath it, and on the right "Billed to" with the household's name and record
+number. A hairline. The lines table. The totals in a bordered box against the
+right margin. The footer band: a hairline, then the practice's legal name and
+address on one centred line and its telephone, email and website on the next,
+both small and grey.
+
+**The brand violet is `#380473`**, sampled from the practice's own mark, and it
+is used for exactly three things: the two title words, the table's column
+headings, and the reference. Everything else stays the ink and two greys the
+documents already use. This is the first place the inherited McWellness violet
+becomes an accent; `PRODUCT.md`'s open question is answered for **documents
+only**, and the console's own rule that hue is reserved for band data and three
+status states is untouched.
+
+**The lines table** keeps the columns the platform's invoices actually have —
+description, quantity, unit price, and, while the practice is registered, the
+VAT rate and the VAT amount — rather than the design example's date column,
+which repeats an invoice's single date on every row. Beneath a line's
+description sit its Arabic name and, when a discount was given, the design's own
+phrasing for it: `List AED 12,150.00 · less AED 2,325.00`. Money is written with
+its currency in the cell, `AED 1,650.00`, following the design; the console's
+"name the currency once per table" rule is a rule for screens and does not reach
+a client-facing document.
+
+**The logo is the practice's own row, not a file in this repository** (migration
+909, and the decision of 3 September 2026). The renderer draws it when the
+practice has one and falls back to the wordmark set in type when it does not, so
+a practice with no logo still gets a document that looks deliberate. The bytes
+are read from the practice's `practice_logo` document and embedded; nothing
+about the document's own snapshot changes, because a logo is the practice's
+mark today and re-rendering last year's invoice with this year's mark is the
+one drift a reader will neither notice nor be harmed by.
+
+**The footer needs three facts the practice did not record**: a telephone number
+for the document, an email address and a website. They join `tenant` and are
+snapshotted onto the invoice like every other supplier fact, so a document keeps
+saying what it said.
+
+**Nothing about what the document claims changes.** The heading is still
+"Invoice" and not "Tax Invoice" while the practice is unregistered, the
+corporate-tax number is still labelled as itself and never as a VAT number, the
+VAT column and the VAT line still appear only under a registration, and the
+footer still says which of the two the document is. The design is a design.
+
 ---
 
 ## 6. Reconciliation
