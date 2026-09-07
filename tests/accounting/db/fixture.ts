@@ -11,8 +11,9 @@ import { SEEDED, setPracticePrices, silverInput, SILVER_CODE, type Harness } fro
  * transfer; two visits delivered, which billing's own trigger turns into
  * consumed credits; a second payment in cash; a visit called off late, which
  * billing's own trigger turns into a call-out fee, and then forgiven; and a
- * payment from a second household that is then erased — whose money the books
- * must still hold, because the practice's takings are a fact about the practice.
+ * payment from a second household, which `eraseHousehold` below then really
+ * erases — whose money the books must still hold, because the practice's
+ * takings are a fact about the practice.
  */
 
 const REQUEST_ID = '0000000e-0000-4000-8000-0000000000fa';
@@ -170,7 +171,6 @@ export async function buildActivity(h: Harness): Promise<Activity> {
   if (theirs.status !== 201) {
     throw new Error(`The second household's payment was not recorded: ${theirs.status}`);
   }
-  await h.owner.query("update client set status = 'erased' where id = $1", [erasedClientId]);
 
   return {
     packageId: silver.id,
@@ -179,4 +179,31 @@ export async function buildActivity(h: Harness): Promise<Activity> {
     feeInvoiceId,
     month: SEED_TODAY.slice(0, 7),
   };
+}
+
+/**
+ * The erasure the platform really performs (docs/SPEC/client-record.md section
+ * 8): the request is recorded and then carried out, through the routes a
+ * coordinator uses, and not by an update to `client.status`. The books have no
+ * step in it — no row here names a household — which is exactly what
+ * `tests/accounting/db/posting.test.ts` asks the statements to prove.
+ */
+export async function eraseHousehold(h: Harness, clientId: string): Promise<void> {
+  const asked = await h.call('POST', `/api/clients/${clientId}/erasure-requests`, SEEDED.admin, {
+    reason: 'The household asked for their record to be removed.',
+  });
+  if (asked.status !== 201) {
+    throw new Error(`The erasure was not recorded: ${asked.status}`);
+  }
+  const { id } = (await asked.json()) as { id: string };
+  const done = await h.call(
+    'POST',
+    `/api/clients/${clientId}/erasure-requests/${id}/execute`,
+    SEEDED.admin,
+    {},
+    { 'x-reason': 'Erasure requested by the household.' },
+  );
+  if (done.status !== 200) {
+    throw new Error(`The erasure was not performed: ${done.status}`);
+  }
 }

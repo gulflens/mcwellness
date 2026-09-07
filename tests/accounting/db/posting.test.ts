@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PostResponse, SettingsResponse } from '../../../app/api/accounting/schema';
-import { buildActivity, type Activity } from './fixture';
+import { buildActivity, eraseHousehold, type Activity } from './fixture';
 import { FINANCE, SEEDED, seedFinanceUser, startHarness, type Harness } from './support';
 
 /**
@@ -193,6 +193,53 @@ describe('the identities of section 7', () => {
     const books = await balances();
     expect(books.totalDebitFils).toBe(books.totalCreditFils);
     expect(books.totalDebitFils).toBeGreaterThan(0);
+  });
+});
+
+describe('the books survive a real erasure', () => {
+  /**
+   * Done-when 3, through `app.erase_client` itself and not through an update
+   * to `client.status`: the second household is really forgotten, and the
+   * books are asked before and after, as the owner and as finance
+   * (docs/SPEC/accounting.md section 11).
+   *
+   * `app.unposted_money_events()` steps past the erasure gate on purpose, so
+   * finance sees the erased household's money in the books exactly as the
+   * owner does; if it did not, the books would depend on who read them.
+   */
+  const ENTRIES = '/api/accounting/entries';
+  const TRIAL_BALANCE = '/api/accounting/statements/trial-balance?asOf=2026-12-31';
+
+  async function books(): Promise<{ owner: string[]; finance: string[] }> {
+    const owner: string[] = [];
+    const finance: string[] = [];
+    for (const path of [ENTRIES, TRIAL_BALANCE]) {
+      const asOwner = await h.call('GET', path, SEEDED.owner);
+      expect(asOwner.status, path).toBe(200);
+      owner.push(await asOwner.text());
+      const asFinance = await h.callAs('GET', path, FINANCE.authId);
+      expect(asFinance.status, path).toBe(200);
+      finance.push(await asFinance.text());
+    }
+    return { owner, finance };
+  }
+
+  it('reads exactly the same before and after, for the owner and for finance', async () => {
+    await post(SEEDED.owner);
+    const before = await books();
+    expect(before.finance).toEqual(before.owner);
+
+    await eraseHousehold(h, activity.erasedClientId);
+    const status = await h.owner.query<{ status: string }>(
+      'select status from client where id = $1',
+      [activity.erasedClientId],
+    );
+    expect(status.rows[0]?.status).toBe('erased');
+
+    const after = await books();
+    expect(after.owner).toEqual(before.owner);
+    expect(after.finance).toEqual(before.finance);
+    expect(after.finance).toEqual(after.owner);
   });
 });
 
