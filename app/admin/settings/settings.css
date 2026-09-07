@@ -73,7 +73,7 @@
   margin: 0;
 }
 
-@media (width < 40rem) {
+@media (max-width: 767px) {
   .practice__facts {
     grid-template-columns: 1fr;
     gap: var(--s-1) 0;

@@ -131,7 +131,7 @@
   gap: var(--s-3);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .week {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -139,7 +139,12 @@
 
 /* The terser row: what identifies a stop stays — the window, and the name in
    both scripts, because a name is not a detail — and the practitioner and the
-   service stand down so seven columns keep their places. */
+   service stand down so seven columns keep their places.
+
+   Kept deliberately rather than folded into the shell's tiers: this asks
+   whether seven columns still fit their own content, which is a different
+   question from which tier the screen is in
+   (docs/SPEC/responsive-console.md section 9). */
 @media (max-width: 1100px) {
   .week__aside {
     display: none;
