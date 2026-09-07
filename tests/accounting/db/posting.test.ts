@@ -238,6 +238,97 @@ describe('the books name nobody', () => {
   });
 });
 
+describe('a late payment lands on the first open day', () => {
+  /**
+   * Rule 4 through the poster itself, and not only through `landingDayFor`:
+   * an event the books could not take on its own day is posted on the first
+   * day they can, and the memo says which day it really was
+   * (docs/SPEC/accounting.md section 4.3, done-when 5).
+   */
+  type Landed = { entered_on: string; occurred_on: string | null; memo: string };
+
+  async function payTo(clientId: string, receivedAt: string, amountFils: number): Promise<string> {
+    const res = await h.call('POST', '/api/billing/payments', SEEDED.owner, {
+      clientId,
+      method: 'cash',
+      amountFils,
+      receivedAt,
+    });
+    if (res.status !== 201) {
+      throw new Error(`The payment was not recorded: ${res.status}`);
+    }
+    return ((await res.json()) as { payment: { id: string } }).payment.id;
+  }
+
+  async function entryFor(paymentId: string): Promise<Landed> {
+    const { rows } = await h.owner.query<Landed>(
+      'select entered_on::text as entered_on, occurred_on::text as occurred_on, memo ' +
+        "from journal_entry where tenant_id = $1 and source_table = 'payment' and source_id = $2",
+      [h.data.tenant.id, paymentId],
+    );
+    const row = rows[0];
+    if (!row) {
+      throw new Error('The payment did not reach the books.');
+    }
+    return row;
+  }
+
+  it('leaves an entry the books can take on its own day where it is, with no occurred day', async () => {
+    const open = await payTo(activity.clientId, '2026-09-01T08:00:00.000Z', 28_000);
+    expect((await post(SEEDED.owner)).posted).toBe(1);
+    const landed = await entryFor(open);
+    expect(landed.entered_on).toBe('2026-09-01');
+    expect(landed.occurred_on).toBeNull();
+    expect(landed.memo).toBe('Payment received');
+  });
+
+  it('posts a payment dated inside a closed year on the first day of the next', async () => {
+    // The year must exist and hold its own trading before it can be closed,
+    // so one payment is posted inside it and then the year is shut.
+    await payTo(activity.clientId, '2025-06-15T08:00:00.000Z', 25_000);
+    expect((await post(SEEDED.owner)).posted).toBe(1);
+
+    const years = (await (await h.call('GET', '/api/accounting/years', SEEDED.owner)).json()) as {
+      years: { id: string; startsOn: string }[];
+    };
+    const y2025 = years.years.find((year) => year.startsOn === '2025-01-01');
+    expect(y2025).toBeTruthy();
+    const closed = await h.call(
+      'POST',
+      `/api/accounting/years/${y2025!.id}/close`,
+      SEEDED.owner,
+      {},
+      { 'x-reason': 'The adviser has signed 2025 off.' },
+    );
+    expect(closed.status).toBe(200);
+
+    const late = await payTo(activity.clientId, '2025-07-20T08:00:00.000Z', 26_000);
+    expect((await post(SEEDED.owner)).posted).toBe(1);
+    const landed = await entryFor(late);
+    expect(landed.entered_on).toBe('2026-01-01');
+    expect(landed.occurred_on).toBe('2025-07-20');
+    expect(landed.memo).toBe('Payment received (occurred 2025-07-20)');
+  });
+
+  it('posts a payment dated on or before the lock date on the day after it', async () => {
+    const onTheLock = await payTo(activity.clientId, '2026-09-01T08:00:00.000Z', 27_000);
+    const locked = await h.call(
+      'POST',
+      '/api/accounting/lock',
+      SEEDED.owner,
+      { lockedThrough: '2026-09-02' },
+      { 'x-reason': 'The second quarter has been filed.' },
+    );
+    expect(locked.status).toBe(200);
+
+    expect((await post(SEEDED.owner)).posted).toBe(1);
+    const landed = await entryFor(onTheLock);
+    expect(landed.entered_on).toBe('2026-09-03');
+    expect(landed.occurred_on).toBe('2026-09-01');
+    expect(landed.memo).toBe('Payment received (occurred 2026-09-01)');
+  });
+});
+
 describe('two posting runs at once', () => {
   /**
    * The page's opening `POST` beside the nightly job, or two tabs. Both read
