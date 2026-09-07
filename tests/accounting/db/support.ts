@@ -39,6 +39,9 @@ export const SEEDED = {
   admin: 3,
 } as const;
 
+/** The books are amended as well as written: PATCH is one of their methods. */
+export type HttpMethod = 'GET' | 'POST' | 'PATCH';
+
 export type Harness = {
   owner: pg.Client;
   pool: pg.Pool;
@@ -52,7 +55,7 @@ export type Harness = {
   storage: ReturnType<typeof localDiskStorage>;
   data: SeedData;
   call: (
-    method: 'GET' | 'POST',
+    method: HttpMethod,
     path: string,
     seededUser: number,
     body?: unknown,
@@ -61,7 +64,7 @@ export type Harness = {
   ) => Promise<Response>;
   /** The same call, as any auth id at all: a fixture's own user, not a seeded one. */
   callAs: (
-    method: 'GET' | 'POST',
+    method: HttpMethod,
     path: string,
     authId: string,
     body?: unknown,
@@ -111,7 +114,7 @@ export async function startHarness(now: () => Date): Promise<Harness> {
   }
 
   async function callAs(
-    method: 'GET' | 'POST',
+    method: HttpMethod,
     path: string,
     authId: string,
     body?: unknown,

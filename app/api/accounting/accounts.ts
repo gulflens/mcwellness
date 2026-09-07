@@ -1,11 +1,20 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { accountLedger, balanceOf } from '../../../domain/accounting';
+import { accountLedger, balanceOf, codeMatchesType, mayArchive } from '../../../domain/accounting';
 import { fils } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
-import { mayReadBooks } from './access';
+import { mayReadBooks, mayWriteBooks } from './access';
+import { requiredReason } from './reason';
 import { readAccountTotals, readChart, readPostedLines } from './rows';
-import { AccountsResponse, IsoDate, LedgerResponse, type AccountRow } from './schema';
+import {
+  AccountResponse,
+  AccountsResponse,
+  CreateAccountInput,
+  IsoDate,
+  LedgerResponse,
+  PatchAccountInput,
+  type AccountRow,
+} from './schema';
 
 /**
  * The chart, and one account's ledger (docs/SPEC/accounting.md sections 5.3
@@ -68,5 +77,118 @@ export function mountAccounts(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         closingBalanceFils: ledger.closingBalanceFils,
       }),
     );
+  });
+}
+
+const INSERT_SQL =
+  'insert into account (tenant_id, code, name, name_ar, type, created_by) ' +
+  'values (app.current_tenant_id(), $1, $2, $3, $4, app.current_actor_id()) returning id';
+
+const RENAME_SQL =
+  'update account set name = coalesce($2, name), name_ar = case when $3 then $4 else name_ar end ' +
+  'where tenant_id = app.current_tenant_id() and id = $1';
+
+const ARCHIVE_SQL =
+  'update account set archived_at = now(), archive_reason = $2 ' +
+  'where tenant_id = app.current_tenant_id() and id = $1';
+
+/** Postgres: unique_violation. Here, always the practice's own code. */
+function isDuplicateCode(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+  );
+}
+
+/**
+ * Adding an account, renaming one and archiving one (docs/SPEC/accounting.md
+ * section 5.3, rules 7 and 8). Nothing deletes an account, ever: the chart is
+ * a history of what the practice has counted, and a code that once carried a
+ * line keeps carrying it.
+ */
+export function mountAccountWrites(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  api.post('/api/accounting/accounts', async (c) => {
+    const requestId = c.get('requestId');
+    if (!mayWriteBooks(c.get('actor'), now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    if (requiredReason(c) === null) {
+      return c.json({ error: 'reason_required', requestId }, 400);
+    }
+    const body = CreateAccountInput.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const input = body.data;
+    if (!codeMatchesType(input.code, input.type)) {
+      return c.json({ error: 'bad_request', code: 'code_type_mismatch', requestId }, 400);
+    }
+    const db = c.get('db');
+    // The unique index is the answer, not a read beforehand: two people adding
+    // the same code at once would both find it free.
+    await db.query('savepoint account_attempt');
+    let id: string;
+    try {
+      const created = await db.query<{ id: string }>(INSERT_SQL, [
+        input.code,
+        input.name,
+        input.nameAr,
+        input.type,
+      ]);
+      id = created.rows[0]?.id ?? '';
+    } catch (error) {
+      if (!isDuplicateCode(error)) {
+        throw error;
+      }
+      await db.query('rollback to savepoint account_attempt');
+      return c.json({ error: 'conflict', code: 'duplicate_code', requestId }, 409);
+    }
+    const accounts = await chartWithBalances(db);
+    const account = accounts.find((row) => row.id === id);
+    if (!account) {
+      throw new Error('The account was written and could not be read back.');
+    }
+    return c.json(AccountResponse.parse({ account }), 201);
+  });
+
+  api.patch('/api/accounting/accounts/:id', async (c) => {
+    const requestId = c.get('requestId');
+    if (!mayWriteBooks(c.get('actor'), now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const reason = requiredReason(c);
+    if (reason === null) {
+      return c.json({ error: 'reason_required', requestId }, 400);
+    }
+    const body = PatchAccountInput.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const input = body.data;
+    const db = c.get('db');
+    const before = await chartWithBalances(db);
+    const account = before.find((row) => row.id === c.req.param('id'));
+    if (!account) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (input.name !== undefined || input.nameAr !== undefined) {
+      await db.query(RENAME_SQL, [
+        account.id,
+        input.name ?? null,
+        input.nameAr !== undefined,
+        input.nameAr ?? null,
+      ]);
+    }
+    if (input.archive === true) {
+      if (!mayArchive(account, fils(account.balanceFils))) {
+        return c.json({ error: 'conflict', code: 'cannot_archive', requestId }, 409);
+      }
+      await db.query(ARCHIVE_SQL, [account.id, reason]);
+    }
+    const after = await chartWithBalances(db);
+    const updated = after.find((row) => row.id === account.id);
+    if (!updated) {
+      throw new Error('The account could not be read back.');
+    }
+    return c.json(AccountResponse.parse({ account: updated }));
   });
 }

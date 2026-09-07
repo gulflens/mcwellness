@@ -1,10 +1,10 @@
 import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
-import { mountAccounts } from './accounts';
-import { mountEntries } from './entries';
+import { mountAccountWrites, mountAccounts } from './accounts';
+import { mountEntries, mountEntryWrites } from './entries';
 import { mountPosting } from './post';
-import { mountSettings } from './settings';
-import { mountYears } from './years';
+import { mountSettings, mountSettingsWrites } from './settings';
+import { mountYearWrites, mountYears } from './years';
 
 /**
  * Mounts every route of the books. Called from app/api/create-api.ts beside
@@ -17,5 +17,9 @@ export function mountAccounting(api: Hono<ApiEnv>, now: () => Date = () => new D
   mountAccounts(api, now);
   mountYears(api, now);
   mountEntries(api, now);
+  mountAccountWrites(api, now);
+  mountSettingsWrites(api, now);
+  mountYearWrites(api, now);
+  mountEntryWrites(api, now);
   mountPosting(api, now);
 }
