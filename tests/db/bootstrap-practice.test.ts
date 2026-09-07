@@ -74,6 +74,11 @@ const SEED_TABLES = [
   'document',
   'consent',
   'assessment',
+  // The planning day the seed books for the day map (piece seventeen,
+  // docs/SPEC/route-planning.md section 14). A visit is emphatically not a
+  // default a new practice is given: the seed writes five so the map has a
+  // day to draw, and `bootstrap_practice` writes none, which is right.
+  'appointment',
 ];
 
 /** Columns that differ between two databases by construction, and so say nothing. */
