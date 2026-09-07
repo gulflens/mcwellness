@@ -16,6 +16,7 @@ import { isRoutingUnavailable } from '../_middleware/routing';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { dayRange, estimateLegs, readFactors } from './estimates';
 import { pictureKey, readPicture, writePicture } from './picture-cache';
+import { mountPracticeDay } from './practice-day';
 import { RoutingDayResponse, type DayLegRow } from './schema';
 
 /**
@@ -57,7 +58,7 @@ import { RoutingDayResponse, type DayLegRow } from './schema';
 const Query = z.object({ date: z.iso.date() });
 const PictureQuery = z.object({ date: z.iso.date(), v: z.string().min(1).max(64) });
 
-type StopRow = {
+export type StopRow = {
   id: string;
   window_start: Date;
   window_end: Date;
@@ -114,7 +115,7 @@ const HOME_BASE_SQL =
 const PRACTITIONER_SQL =
   'select id from practitioner where user_id = $1 and tenant_id = app.current_tenant_id()';
 
-function point(lng: number | null, lat: number | null): GeoPoint | null {
+export function point(lng: number | null, lat: number | null): GeoPoint | null {
   return lng === null || lat === null ? null : { lat, lng };
 }
 
@@ -123,7 +124,7 @@ function endOfDay(date: string): Date {
   return dayRange(date)[1];
 }
 
-function toLegStop(row: StopRow): LegStop {
+export function toLegStop(row: StopRow): LegStop {
   return {
     id: row.id,
     windowStart: row.window_start,
@@ -183,6 +184,8 @@ function toLegRow(leg: DayLeg, estimate: DriveEstimate | undefined): DayLegRow |
 }
 
 export function mountRouting(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  mountPracticeDay(api, now);
+
   api.get('/api/routing/day', async (c) => {
     const actor = c.get('actor');
     const requestId = c.get('requestId');
