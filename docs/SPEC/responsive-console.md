@@ -246,9 +246,18 @@ stylesheet for a `max-width` rule; it is updated to read the tier instead.
   declares a `min-width` or `max-width` media query except
   `app/shell/shell.css` and the three files section 9 exempts by name. This is
   the guard that keeps a sixth breakpoint from appearing quietly.
-- `tests/lint/layout-at-every-size.test.ts`: a rendering test that mounts the
-  console at each of the seven widths of section 2 and asserts the page body's
-  scroll width never exceeds the viewport.
+- `tests/lint/layout-tokens.test.ts`: reads `app/shell/shell.css` and asserts
+  the two tier boundaries are 768px and 1200px and are written as
+  `min-width`, that the console's grid uses `minmax(0, 1fr)` for its content
+  column, which is what keeps a wide table inside its own scroller instead of
+  pushing the page sideways, and that no rule sets `user-scalable` or
+  `maximum-scale`.
+
+Real layout cannot be measured in the test environment: jsdom computes no
+widths, so a test that mounted the console at seven viewport sizes would
+assert nothing. The widths of section 2 are checked in a browser instead, as
+part of the staging pass, and the figures in this specification came from that
+same measurement on 7 September 2026.
 
 `pnpm verify` must pass. The `no-hex-colour` and `no-design-tells` rules apply
 to every file this piece touches.
