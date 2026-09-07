@@ -216,3 +216,45 @@ export function silverInput(h: Harness, validFrom: string) {
     },
   };
 }
+
+/**
+ * The synthetic fifteen-digit registration number the suites register under.
+ * Not a real TRN: the shape the column's check constraint wants (migration
+ * 905), and nothing more.
+ */
+export const TEST_VAT_TRN = '100000000000003';
+
+const VAT_REQUEST_ID = '00000000-0000-4000-8000-0000000000ef';
+
+/**
+ * Registers the practice for VAT, or takes the registration away — as the
+ * Practice settings screen would.
+ *
+ * The practice's identity is floored to an owner or an admin in the database
+ * itself (app.guard_tenant_identity, migration 905), so a fixture that changes
+ * the registration has to be somebody entitled to, which is the right shape
+ * for the fixture anyway: registering for VAT is the owner's act.
+ *
+ * The default state everywhere is "not registered", because the real practice
+ * is not: its tax certificate is a corporate-tax registration and the AED
+ * 375,000 threshold has not been crossed (docs/SPEC/billing.md section 5.1).
+ */
+export async function setVatRegistration(
+  owner: pg.Client,
+  tenantId: string,
+  actorId: string | null,
+  registered: boolean,
+): Promise<void> {
+  await owner.query(
+    "select set_config('app.tenant_id', $1, false), set_config('app.actor_id', $2, false), " +
+      "set_config('app.actor_roles', 'owner,admin,finance,lead_practitioner', false), " +
+      "set_config('app.request_id', $3, false), set_config('app.reason', '', false)",
+    [tenantId, actorId, VAT_REQUEST_ID],
+  );
+  await owner.query(
+    registered
+      ? 'update tenant set vat_registered = true, vat_trn = $2 where id = $1'
+      : 'update tenant set vat_registered = false, vat_trn = null where id = $1',
+    registered ? [tenantId, TEST_VAT_TRN] : [tenantId],
+  );
+}

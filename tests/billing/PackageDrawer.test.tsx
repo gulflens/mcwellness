@@ -63,7 +63,9 @@ function mount(onCreated: (row: unknown) => void = () => undefined) {
     OWNER,
     <PackageDrawer onClose={() => undefined} onCreated={onCreated as never} />,
     (url) => {
-      if (url === '/api/billing/prices') return json({ prices: PRICES });
+      // The fixture's rows carry five per cent, which is a practice that is
+      // registered for it: the answer says so beside them.
+      if (url === '/api/billing/prices') return json({ prices: PRICES, vatRegistered: true });
       if (url === '/api/billing/packages') return json({ package: null }, 201);
       return null;
     },

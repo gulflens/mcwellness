@@ -31,7 +31,11 @@ const SERVICE_TYPES = {
   ],
 };
 
+// A practice registered for VAT: the rate is stamped on the row and it is
+// charged, so the total carries five per cent. The unregistered practice —
+// which is the real one — is PRICES_UNREGISTERED below.
 const PRICES = {
+  vatRegistered: true,
   prices: [
     {
       id: '00000004-0000-4000-8000-000000000101',
@@ -141,7 +145,7 @@ describe('BillingPage', () => {
   });
 
   it('says so when no price has been set yet', async () => {
-    mount(OWNER, { body: { prices: [] } });
+    mount(OWNER, { body: { prices: [], vatRegistered: true } });
     expect(await screen.findByText('No prices are set yet.')).toBeTruthy();
   });
 

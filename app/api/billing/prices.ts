@@ -1,8 +1,9 @@
 import type { Hono } from 'hono';
-import { resolveVat, validateNewPrice, type Price } from '../../../domain/billing';
+import { resolveSaleVat, resolveVat, validateNewPrice, type Price } from '../../../domain/billing';
 import { canActor, fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
 import { CreatePriceInput, CreatePriceResponse, PriceRow, PricesResponse } from './schema';
+import { readVatRegistered } from './supplier';
 
 /**
  * GET and POST /api/billing/prices. The price in force today is the one
@@ -91,25 +92,33 @@ const INSERT_PRICE_SQL =
   'vat_rate_basis_points, vat_setting_version, valid_from, supersedes_id, amendment_reason) ' +
   'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9) returning id';
 
-function toPriceRow(row: {
-  id: string;
-  service_type_id: string;
-  service_type_code: string;
-  service_type_name: string;
-  service_type_name_ar: string | null;
-  unit_price_fils: number;
-  vat_rate_basis_points: number;
-  vat_setting_version: number;
-  valid_from: string;
-  supersedes_id: string | null;
-  amendment_reason: string;
-}): PriceRow {
-  // Recomputed from the row's own stamped setting, not the tenant's current
-  // one, so a later VAT change can never quietly alter a price already shown.
-  const resolution = resolveVat(fils(row.unit_price_fils), {
-    rateBasisPoints: row.vat_rate_basis_points,
-    version: row.vat_setting_version,
-  });
+function toPriceRow(
+  row: {
+    id: string;
+    service_type_id: string;
+    service_type_code: string;
+    service_type_name: string;
+    service_type_name_ar: string | null;
+    unit_price_fils: number;
+    vat_rate_basis_points: number;
+    vat_setting_version: number;
+    valid_from: string;
+    supersedes_id: string | null;
+    amendment_reason: string;
+  },
+  vatRegistered: boolean,
+): PriceRow {
+  // The rate is the row's own — stamped when the price was written, never
+  // the tenant's current one, so a later rate change cannot quietly alter a
+  // price already shown. The charging follows the registration: an
+  // unregistered practice charges nothing at that rate, so its gross is its
+  // net and the list shows a family the figure it will actually pay
+  // (migration 406; domain/billing/vat.ts's resolveSaleVat).
+  const resolution = resolveSaleVat(
+    fils(row.unit_price_fils),
+    { rateBasisPoints: row.vat_rate_basis_points, version: row.vat_setting_version },
+    { vatRegistered },
+  );
   return {
     id: row.id,
     serviceTypeId: row.service_type_id,
@@ -117,7 +126,10 @@ function toPriceRow(row: {
     serviceTypeName: row.service_type_name,
     serviceTypeNameAr: row.service_type_name_ar,
     unitPriceFils: row.unit_price_fils,
-    vatRateBasisPoints: resolution.rateBasisPoints,
+    // The stamp itself, unchanged by the registration: what the standard rate
+    // was on the day, which is what makes the row live again if a
+    // registration is granted.
+    vatRateBasisPoints: row.vat_rate_basis_points,
     vatFils: resolution.vatFils,
     grossFils: resolution.grossFils,
     validFrom: row.valid_from,
@@ -134,10 +146,17 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
-    const { rows } = await c
-      .get('db')
-      .query<PriceListRow>(LIST_SQL, [today, JURISDICTION, RECIPIENT_TYPE]);
-    return c.json(PricesResponse.parse({ prices: rows.map(toPriceRow) }));
+    const db = c.get('db');
+    // Once per request, not once per row: every price on the list is charged
+    // under the same registration.
+    const vatRegistered = await readVatRegistered(db);
+    const { rows } = await db.query<PriceListRow>(LIST_SQL, [today, JURISDICTION, RECIPIENT_TYPE]);
+    return c.json(
+      PricesResponse.parse({
+        prices: rows.map((row) => toPriceRow(row, vatRegistered)),
+        vatRegistered,
+      }),
+    );
   });
 
   api.post('/api/billing/prices', async (c) => {
@@ -222,21 +241,27 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
       throw new Error('Insert of a price did not return an id.');
     }
 
+    // The row is stamped with the rate above; what it reports as charged is
+    // what the practice would charge for it today.
+    const vatRegistered = await readVatRegistered(db);
     return c.json(
       CreatePriceResponse.parse({
-        price: toPriceRow({
-          id,
-          service_type_id: body.data.serviceTypeId,
-          service_type_code: service.code,
-          service_type_name: service.name,
-          service_type_name_ar: service.name_ar,
-          unit_price_fils: body.data.unitPriceFils,
-          vat_rate_basis_points: resolution.rateBasisPoints,
-          vat_setting_version: resolution.settingVersion,
-          valid_from: body.data.validFrom,
-          supersedes_id: currentPrice?.id ?? null,
-          amendment_reason: body.data.amendmentReason,
-        }),
+        price: toPriceRow(
+          {
+            id,
+            service_type_id: body.data.serviceTypeId,
+            service_type_code: service.code,
+            service_type_name: service.name,
+            service_type_name_ar: service.name_ar,
+            unit_price_fils: body.data.unitPriceFils,
+            vat_rate_basis_points: resolution.rateBasisPoints,
+            vat_setting_version: resolution.settingVersion,
+            valid_from: body.data.validFrom,
+            supersedes_id: currentPrice?.id ?? null,
+            amendment_reason: body.data.amendmentReason,
+          },
+          vatRegistered,
+        ),
       }),
       201,
     );

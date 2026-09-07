@@ -18,6 +18,7 @@ import {
 } from '../../../db/seed/generate';
 import { deriveIdentityKeys } from '../../../domain/shared/identity';
 import { freshDatabase } from '../../db/helpers';
+import { setVatRegistration } from './support';
 
 // Everything synthetic: the seeded practice, a test secret that unlocks
 // nothing, and a second practice with one admin to prove the fence between
@@ -164,8 +165,11 @@ describe('GET /api/billing/prices, whatever the seed left there', () => {
     expect(res.status).toBe(200);
     const { prices } = (await res.json()) as PricesResponse;
     expect(Array.isArray(prices)).toBe(true);
-    // One row per service at most, VAT stamped and the total adding up: true
-    // of the practice's own seeded list and vacuously true of an empty one.
+    // One row per service at most, the standard rate stamped on it and the
+    // total adding up: true of the practice's own seeded list and vacuously
+    // true of an empty one. The stamped rate is what the standard rate was on
+    // the day the price was written; whether it is charged is the
+    // registration's to say, which is the figures below it.
     for (const price of prices) {
       expect(price.grossFils).toBe(price.unitPriceFils + price.vatFils);
       expect(price.vatRateBasisPoints).toBe(500);
@@ -183,7 +187,10 @@ describe('GET /api/billing/prices, whatever the seed left there', () => {
       return;
     }
     expect(session.unitPriceFils).toBe(70_000);
-    expect(session.vatFils).toBe(3_500);
+    // Nothing on top: the practice is not registered for VAT, so the figure
+    // the list shows is the figure a family pays (migration 406).
+    expect(session.vatFils).toBe(0);
+    expect(session.grossFils).toBe(70_000);
     expect(seededPriceFor('brain-map')?.unitPriceFils).toBe(82_500);
     expect(seededPriceFor('consultation')?.unitPriceFils).toBe(0);
   });
@@ -210,9 +217,12 @@ describe('POST /api/billing/prices', () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as CreatePriceResponse;
     expect(body.price.unitPriceFils).toBe(90_000);
+    // The rate the row is stamped with is the standard rate on the day; the
+    // money beside it is what the practice would charge today, which is
+    // nothing while it holds no registration.
     expect(body.price.vatRateBasisPoints).toBe(500);
-    expect(body.price.vatFils).toBe(4_500);
-    expect(body.price.grossFils).toBe(94_500);
+    expect(body.price.vatFils).toBe(0);
+    expect(body.price.grossFils).toBe(90_000);
     expect(body.price.validFrom).toBe(SEED_TODAY);
     // Null on a practice that had no price for this service, and the seeded
     // row's id on one that did: a price supersedes whatever it replaces.
@@ -394,5 +404,72 @@ describe('GET /api/billing/prices', () => {
     const res = await call('GET', '/api/billing/prices', ADMIN_B_AUTH);
     expect(res.status).toBe(200);
     expect(((await res.json()) as PricesResponse).prices).toEqual([]);
+  });
+});
+
+/**
+ * The list says what the practice would charge today, not what the standard
+ * rate was on the day each price was written. The two were the same figure
+ * until migration 406 made VAT follow the registration, and the price list
+ * went on adding five per cent a practice registered for nothing may not
+ * charge.
+ */
+describe('GET /api/billing/prices, and the registration', () => {
+  async function priceList(): Promise<PricesResponse> {
+    const res = await call('GET', '/api/billing/prices', authIdOf(0));
+    expect(res.status).toBe(200);
+    return (await res.json()) as PricesResponse;
+  }
+
+  /** What each row is stamped with, read from the table rather than the route. */
+  async function stamped(): Promise<Record<string, string>> {
+    const { rows } = await owner.query<{
+      id: string;
+      vat_rate_basis_points: number;
+      vat_setting_version: number;
+    }>('select id, vat_rate_basis_points, vat_setting_version from price where tenant_id = $1', [
+      SEED_TENANT_ID,
+    ]);
+    return Object.fromEntries(
+      rows.map((row) => [row.id, `${row.vat_rate_basis_points}/${row.vat_setting_version}`]),
+    );
+  }
+
+  it('charges no VAT while the practice is not registered, and the total is the price', async () => {
+    await setVatRegistration(owner, SEED_TENANT_ID, SEED_OWNER_USER_ID, false);
+    const body = await priceList();
+
+    expect(body.vatRegistered).toBe(false);
+    expect(body.prices.length).toBeGreaterThan(0);
+    for (const price of body.prices) {
+      expect(price.vatFils).toBe(0);
+      expect(price.grossFils).toBe(price.unitPriceFils);
+      // The rate the row was written under is still on it, untouched.
+      expect(price.vatRateBasisPoints).toBe(500);
+    }
+  });
+
+  it('reports the standard rate on the same rows once the practice registers', async () => {
+    await setVatRegistration(owner, SEED_TENANT_ID, SEED_OWNER_USER_ID, false);
+    const before = await priceList();
+    const beforeStamps = await stamped();
+
+    await setVatRegistration(owner, SEED_TENANT_ID, SEED_OWNER_USER_ID, true);
+    const after = await priceList();
+
+    expect(after.vatRegistered).toBe(true);
+    expect(after.prices).toHaveLength(before.prices.length);
+    for (const price of after.prices) {
+      expect(price.vatFils).toBe(Math.round(price.unitPriceFils * 0.05));
+      expect(price.grossFils).toBe(price.unitPriceFils + price.vatFils);
+    }
+    // The registration changes what is charged and nothing that was stamped:
+    // the rate and the setting version on every row are the ones they were
+    // written with, so a price already shown to a family is not rewritten.
+    expect(await stamped()).toEqual(beforeStamps);
+    const sameRows = after.prices.map((price) => [price.id, price.vatRateBasisPoints]);
+    expect(sameRows).toEqual(before.prices.map((price) => [price.id, price.vatRateBasisPoints]));
+
+    await setVatRegistration(owner, SEED_TENANT_ID, SEED_OWNER_USER_ID, false);
   });
 });

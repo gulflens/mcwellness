@@ -202,8 +202,11 @@ describe("migration 400's vat_setting backfill", () => {
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as CreatePriceResponse;
+    // The rate the row is stamped with is the standard rate the backfill
+    // wrote; the money beside it is what this practice would charge today,
+    // and it holds no VAT registration (migration 406).
     expect(body.price.vatRateBasisPoints).toBe(500);
-    expect(body.price.vatFils).toBe(4_500);
-    expect(body.price.grossFils).toBe(94_500);
+    expect(body.price.vatFils).toBe(0);
+    expect(body.price.grossFils).toBe(90_000);
   });
 });
