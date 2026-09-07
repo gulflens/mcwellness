@@ -67,6 +67,10 @@ export type Action =
   | { type: 'billing.invoice.read' }
   | { type: 'billing.refund.read' }
   | { type: 'billing.balance.read'; clientId: string }
+  | { type: 'accounting.read' }
+  | { type: 'accounting.write' }
+  | { type: 'accounting.year.close' }
+  | { type: 'accounting.settings.write' }
   | { type: 'contact.write_own'; contactUserId: string | null }
   | { type: 'portal.request.write'; clientId: string }
   | { type: 'portal.request.handle' }
@@ -276,6 +280,18 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
         return true;
       }
       return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(action.clientId);
+    case 'accounting.read':
+    case 'accounting.write':
+      // The books (docs/SPEC/accounting.md section 3): the owner and finance.
+      // An admin records a household's money (billing.payment.write) but does
+      // not keep the practice's books; piece twelve admits an admin to
+      // expenses and to nothing else.
+      return hasRole(actor, 'owner', 'finance');
+    case 'accounting.year.close':
+    case 'accounting.settings.write':
+      // Closing a year, locking a date and the books' own settings are the
+      // owner's alone.
+      return hasRole(actor, 'owner');
     case 'contact.write_own':
       // A household correcting its own telephone, email or WhatsApp
       // preference (docs/SPEC/client-portal.md section 5, rule 2). The route

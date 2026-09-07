@@ -470,6 +470,39 @@ describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 
   });
 });
 
+describe('the four accounting actions (docs/SPEC/accounting.md section 3)', () => {
+  // The books are the owner's and finance's; closing a year, locking a date
+  // and the books' settings are the owner's alone. An admin is deliberately
+  // outside all four: piece twelve admits an admin to expenses and nothing
+  // else, and db/policies/accounting/access.sql says the same underneath.
+  const BOOKKEEPERS = ['owner', 'finance'] as const;
+  const floors: { action: Action; allowed: readonly Role[] }[] = [
+    { action: { type: 'accounting.read' }, allowed: BOOKKEEPERS },
+    { action: { type: 'accounting.write' }, allowed: BOOKKEEPERS },
+    { action: { type: 'accounting.year.close' }, allowed: ['owner'] },
+    { action: { type: 'accounting.settings.write' }, allowed: ['owner'] },
+  ];
+
+  it('answers every role for every action, allow and deny', () => {
+    for (const { action, allowed } of floors) {
+      for (const role of ROLES) {
+        expect(canActor(actor([role]), action, {}, NOW), `${action.type} for ${role}`).toBe(
+          allowed.includes(role),
+        );
+      }
+      expect(canActor(actor([]), action, {}, NOW), `${action.type} for no role`).toBe(false);
+    }
+  });
+
+  it('lets finance keep the books without closing a year or changing the settings', () => {
+    const money = actor(['finance']);
+    expect(canActor(money, { type: 'accounting.read' }, {}, NOW)).toBe(true);
+    expect(canActor(money, { type: 'accounting.write' }, {}, NOW)).toBe(true);
+    expect(canActor(money, { type: 'accounting.year.close' }, {}, NOW)).toBe(false);
+    expect(canActor(money, { type: 'accounting.settings.write' }, {}, NOW)).toBe(false);
+  });
+});
+
 describe('the kit register and the day picture', () => {
   it('gives managing the register to the owner, an admin and the lead practitioner', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
