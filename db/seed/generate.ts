@@ -1239,7 +1239,13 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
   const visitable = clients.filter((c) => c.status === 'active');
   const placeOf = (clientId: string): SeedLocation | undefined =>
     locations.find((l) => l.ownerType === 'client' && l.ownerId === clientId);
-  const spread = ['AUH', 'DXB', 'SHJ', 'RAK', 'DXB'];
+  // Three emirates that a car can actually cross between two visits: Dubai to
+  // Sharjah is about forty minutes under the practice's own straight-line
+  // arithmetic, Sharjah to Ajman about fifteen, and the day's gaps are ninety.
+  // A wider spread — Abu Dhabi in the morning and Ras Al Khaimah at noon —
+  // makes a day nobody could drive, and the optimiser rightly refuses to
+  // improve a day that is already impossible rather than merely wasteful.
+  const spread = ['DXB', 'SHJ', 'AJM', 'SHJ', 'AJM'];
   const chosen: SeedClient[] = [];
   for (const emirate of spread) {
     const next = visitable.find((c) => !chosen.includes(c) && placeOf(c.id)?.emirate === emirate);
@@ -1267,9 +1273,9 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       windowStart: start,
       windowEnd: new Date(new Date(start).getTime() + 45 * 60_000).toISOString(),
       travelBufferMinutes: 15,
-      // The middle one has been agreed with its household, so the optimiser
-      // has an anchor to plan around.
-      status: i === 2 ? 'confirmed' : 'proposed',
+      // The second has been agreed with its household, so the optimiser has an
+      // anchor to plan around and the drawer has a "kept (confirmed)" to show.
+      status: i === 1 ? 'confirmed' : 'proposed',
     };
   });
 
