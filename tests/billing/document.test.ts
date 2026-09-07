@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
+  discountNote,
   extractAll,
   extractText,
   NOT_REGISTERED_BASIS,
@@ -80,12 +81,15 @@ function invoiceFor(supplier: SupplierSnapshot): InvoiceDocument {
         descriptionAr: 'جلسة نيوروفيدباك',
         quantity: 1,
         unitNetFils: 70_000,
+        discountFils: 0,
+        discountBasisPoints: null,
         netFils: 70_000,
         vatRateBasisPoints: rate,
         vatFils: vat,
         grossFils: 70_000 + vat,
       },
     ],
+    discountFils: 0,
     netFils: 70_000,
     vatFils: vat,
     grossFils: 70_000 + vat,
@@ -387,5 +391,87 @@ describe('the bytes of a rendered document', () => {
 
   it.each(GOLDEN)('%s renders to the bytes it always has', (_name, render, golden) => {
     expect(sha256(render())).toBe(golden);
+  });
+});
+
+/**
+ * A discount on the page (docs/SPEC/billing.md section 2.4). The Federal Tax
+ * Authority asks a full tax invoice to state "the amount of any discount
+ * offered"; a simplified one need not, and this one does anyway, because a
+ * family reading a figure below the list price should be able to see why.
+ */
+function discountedInvoice(supplier: SupplierSnapshot): InvoiceDocument {
+  const registered = supplier.vatRegistered === true;
+  const vat = registered ? 2_975 : 0;
+  return {
+    ...invoiceFor(supplier),
+    lines: [
+      {
+        description: 'Neurofeedback session',
+        descriptionAr: 'جلسة نيوروفيدباك',
+        quantity: 1,
+        unitNetFils: 70_000,
+        discountFils: 10_500,
+        discountBasisPoints: 1500,
+        netFils: 59_500,
+        vatRateBasisPoints: registered ? 500 : 0,
+        vatFils: vat,
+        grossFils: 59_500 + vat,
+      },
+    ],
+    netFils: 59_500,
+    vatFils: vat,
+    grossFils: 59_500 + vat,
+    discountFils: 10_500,
+  };
+}
+
+describe('an invoice with a discount on it', () => {
+  const page = extractAll(renderDocument(discountedInvoice(UNREGISTERED), fonts));
+
+  it('prints the discount beneath a discounted line and in the totals, in both languages', () => {
+    expect(page).toContain('Discount 15%: 105.00');
+    // The Arabic word itself, as a reader copies it off the page. The whole
+    // note is a mixed run — Arabic label, Western figures — and a bidirectional
+    // run is not reversible character for character, so what is pinned here is
+    // the word and the figure beside it rather than the visual order of both.
+    expect(page).toContain(asCopied('الخصم'));
+    expect(page).toContain('Before discount (AED)');
+    expect(page).toContain('Discount (AED)');
+    // The list figure, what came off it, and what is charged.
+    expect(page).toContain('700.00');
+    expect(page).toContain('105.00');
+    expect(page).toContain('595.00');
+  });
+
+  it('says nothing about a discount when none was given', () => {
+    const plain = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
+    expect(plain).not.toContain('Discount');
+    expect(plain).not.toContain('Before discount');
+  });
+});
+
+describe('a registered practice’s invoice with a discount on it', () => {
+  const page = extractAll(renderDocument(discountedInvoice(REGISTERED), fonts));
+
+  it('charges VAT on the net after the discount, and says both figures', () => {
+    expect(page).toContain('Before discount (AED)');
+    expect(page).toContain('Discount (AED)');
+    expect(page).toContain('Net (AED)');
+    // Five per cent of 595.00, which is what the row says; the renderer
+    // recomputes nothing.
+    expect(page).toContain('29.75');
+    expect(page).toContain('624.75');
+  });
+});
+
+describe('the discount note', () => {
+  it('names the percentage when there was one, and only the figure when there was not', () => {
+    expect(discountNote({ discountFils: 10_500, discountBasisPoints: 1500 }).en).toBe(
+      'Discount 15%: 105.00',
+    );
+    expect(discountNote({ discountFils: 10_500, discountBasisPoints: null }).en).toBe(
+      'Discount: 105.00',
+    );
   });
 });

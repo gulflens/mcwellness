@@ -46,6 +46,7 @@ const INVOICES = [
     netFils: 70_000,
     vatFils: 3_500,
     grossFils: 73_500,
+    discountFils: 0,
     waivedAt: null,
     documentId: null,
   },
@@ -61,6 +62,8 @@ const INVOICES = [
     netFils: 1_032_500,
     vatFils: 51_625,
     grossFils: 1_084_125,
+    // AED 12,150 less the launch discount of AED 1,825.
+    discountFils: 182_500,
     waivedAt: null,
     documentId: null,
   },
@@ -97,6 +100,7 @@ describe('InvoicesSection', () => {
       reference: 'INV-000003',
       number: 3,
       kind: 'call_out_fee' as const,
+      discountFils: 0,
       netFils: 15_000,
       vatFils: 0,
       grossFils: 15_000,
@@ -342,5 +346,15 @@ describe('sending a document from a row', () => {
 
     expect(await screen.findByRole('dialog', { name: 'Send it' })).toBeTruthy();
     expect(await screen.findByRole('option', { name: 'Rowan Meadow' })).toBeTruthy();
+  });
+});
+
+describe('the discount column', () => {
+  it('says what came off an invoice, and nothing on the invoices where nothing did', async () => {
+    mountWith(OWNER, <InvoicesSection />, routes({ invoices: INVOICES }, true));
+    await screen.findByText('INV-000001');
+    expect(screen.getByText('Discount')).toBeTruthy();
+    expect(screen.getByText('1,825.00')).toBeTruthy();
+    expect(screen.getByText('—')).toBeTruthy();
   });
 });

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { Discount } from '../../../domain/billing';
+import { fils } from '../../../domain/shared';
 import { cleanText } from '../_middleware/text';
 
 /**
@@ -25,6 +27,12 @@ export const PriceRow = z.object({
   serviceTypeCode: z.string(),
   serviceTypeName: z.string(),
   serviceTypeNameAr: z.string().nullable(),
+  /** The figure before any discount, net of VAT. */
+  listPriceFils: z.number().int().nonnegative(),
+  discountFils: z.number().int().nonnegative(),
+  /** The share the discount was typed as; null when it was a sum, or none was given. */
+  discountBasisPoints: z.number().int().min(0).max(10_000).nullable(),
+  /** What a family pays, net of VAT: the list figure less the discount. */
   unitPriceFils: z.number().int().nonnegative(),
   vatRateBasisPoints: z.number().int().min(0).max(10_000),
   vatFils: z.number().int().nonnegative(),
@@ -98,21 +106,80 @@ export function isRealText(value: string): boolean {
   return new Set(withoutSpaces).size > 1;
 }
 
-export const CreatePriceInput = z.object({
-  serviceTypeId: z.uuid(),
-  unitPriceFils: z.number().int().nonnegative().max(INT4_MAX),
-  validFrom: IsoDate,
-  /** Why: required on every price, including a service's first. */
-  /**
-   * Why, in enough words to be worth reading a year later. The same rule the
-   * ledger's own reasons carry (app/api/billing/ledger-schema.ts): eight
-   * characters of real text, not one, and not the same character repeated.
-   */
-  amendmentReason: z
-    .string()
-    .transform((value) => cleanText(value, 200))
-    .refine(isRealText, `A reason is at least ${MINIMUM_REASON} characters, and says something.`),
-});
+/**
+ * How a discount was expressed: a share of the list figure, or a sum of money
+ * (docs/SPEC/billing.md section 2.4). The server turns either into fils
+ * through `domain/billing/discount.ts`, so the two never mean different
+ * things on two screens.
+ */
+export const DiscountInput = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('percent'), basisPoints: z.number().int().min(0).max(10_000) }),
+  z.object({ kind: z.literal('amount'), fils: z.number().int().nonnegative().max(INT4_MAX) }),
+]);
+export type DiscountInput = z.infer<typeof DiscountInput>;
+
+/**
+ * The wire's discount as `domain/billing/discount.ts` wants it: money is
+ * `Fils`, not a bare number, so the branding is put back on at the boundary
+ * rather than loosened in the rule.
+ */
+export function toDiscount(input: DiscountInput | null | undefined): Discount | null {
+  if (!input) {
+    return null;
+  }
+  return input.kind === 'percent' ? input : { kind: 'amount', fils: fils(input.fils) };
+}
+
+export const CreatePriceInput = z
+  .object({
+    serviceTypeId: z.uuid(),
+    /**
+     * The figure before any discount. What is charged is this less the
+     * discount, worked out on the server: a caller never sends both, so the
+     * two cannot disagree.
+     */
+    listPriceFils: z.number().int().nonnegative().max(INT4_MAX).optional(),
+    /**
+     * What the list figure was called before a price could carry a discount.
+     * Still accepted, and read as a list figure with nothing off it — which is
+     * exactly what it meant. The accounting stream writes the practice's
+     * prices through this route from its own fixtures, and those are not
+     * billing's to edit (docs/SPEC/OWNERSHIP.md), so the older body stays
+     * valid; sending it beside a discount is refused, because then the two
+     * names would be claiming different figures.
+     */
+    unitPriceFils: z.number().int().nonnegative().max(INT4_MAX).optional(),
+    discount: DiscountInput.nullable().optional(),
+    validFrom: IsoDate,
+    /**
+     * Why, in enough words to be worth reading a year later. The same rule the
+     * ledger's own reasons carry (app/api/billing/ledger-schema.ts): eight
+     * characters of real text, not one, and not the same character repeated.
+     * Required on every price, including a service's first.
+     */
+    amendmentReason: z
+      .string()
+      .transform((value) => cleanText(value, 200))
+      .refine(isRealText, `A reason is at least ${MINIMUM_REASON} characters, and says something.`),
+  })
+  .superRefine((value, ctx) => {
+    if (value.listPriceFils === undefined && value.unitPriceFils === undefined) {
+      ctx.addIssue({ code: 'custom', message: 'A price names the figure it is set at.' });
+    }
+    if (value.unitPriceFils !== undefined && value.listPriceFils !== undefined) {
+      ctx.addIssue({ code: 'custom', message: 'Name the list price once.' });
+    }
+    if (value.unitPriceFils !== undefined && value.discount) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A discount is taken off listPriceFils, not off the older unitPriceFils.',
+      });
+    }
+  })
+  .transform((value) => ({
+    ...value,
+    listPriceFils: value.listPriceFils ?? value.unitPriceFils ?? 0,
+  }));
 export type CreatePriceInput = z.infer<typeof CreatePriceInput>;
 
 export const CreatePriceResponse = z.object({

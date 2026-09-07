@@ -32,9 +32,9 @@ beforeAll(async () => {
   await seedTenant(client, IDS.tenantA, IDS.ownerA, 'Synthetic Studio A');
   await seedServiceType(client, IDS.tenantA, MORE_IDS.serviceTypeA, 'nf-session');
   await client.query(
-    'insert into price (id, tenant_id, service_type_id, unit_price_fils, vat_rate_basis_points, ' +
-      'vat_setting_version, valid_from, amendment_reason) values ' +
-      "($1, $2, $3, 90000, 500, 1, '2018-01-01', 'Seed price for the RLS floor tests')",
+    'insert into price (id, tenant_id, service_type_id, list_price_fils, unit_price_fils, ' +
+      'vat_rate_basis_points, vat_setting_version, valid_from, amendment_reason) values ' +
+      "($1, $2, $3, 90000, 90000, 500, 1, '2018-01-01', 'Seed price for the RLS floor tests')",
     [PRICE_ID, IDS.tenantA, MORE_IDS.serviceTypeA],
   );
   await client.query('begin');
@@ -158,9 +158,9 @@ describe('who may write the catalogue', () => {
       IDS.tenantA,
       async () => {
         await client.query(
-          'insert into price (tenant_id, service_type_id, unit_price_fils, vat_rate_basis_points, ' +
-            'vat_setting_version, valid_from, amendment_reason) values ($1, $2, 11000, 500, 1, ' +
-            "'2026-09-03', 'Set by finance')",
+          'insert into price (tenant_id, service_type_id, list_price_fils, unit_price_fils, ' +
+            'vat_rate_basis_points, vat_setting_version, valid_from, amendment_reason) ' +
+            "values ($1, $2, 11000, 11000, 500, 1, '2026-09-03', 'Set by finance')",
           [IDS.tenantA, MORE_IDS.serviceTypeA],
         );
         await rejectsWith(

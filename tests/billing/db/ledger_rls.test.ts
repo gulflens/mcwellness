@@ -74,9 +74,10 @@ beforeAll(async () => {
     [IDS.tenantA, PACKAGE_ID, MORE_IDS.serviceTypeA],
   );
   await client.query(
-    'insert into package_price (id, tenant_id, package_id, amount_fils, vat_rate_basis_points, ' +
-      'vat_setting_version, valid_from, amendment_reason) values ($1, $2, $3, 1032500, 500, 1, ' +
-      "'2026-09-02', 'Launch pricing for the row security tests')",
+    'insert into package_price (id, tenant_id, package_id, list_price_fils, discount_fils, ' +
+      'amount_fils, vat_rate_basis_points, vat_setting_version, valid_from, amendment_reason) ' +
+      "values ($1, $2, $3, 1215000, 182500, 1032500, 500, 1, '2026-09-02', " +
+      "'Launch pricing for the row security tests')",
     [PACKAGE_PRICE_ID, IDS.tenantA, PACKAGE_ID],
   );
   // The purchase and its one credit go in together: 403's deferred

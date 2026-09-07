@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { cleanText } from '../_middleware/text';
-import { IsoDate, isRealText, MINIMUM_REASON } from './schema';
+import { DiscountInput, IsoDate, isRealText, MINIMUM_REASON } from './schema';
 
 /**
  * The shapes the packages, sales, payments, balance, invoice and refund
@@ -67,6 +67,12 @@ export type PackageComponentRow = z.infer<typeof PackageComponentRow>;
 
 export const PackagePriceRow = z.object({
   id: z.uuid(),
+  /** The bundle's list price as it stood when this row was written. */
+  listPriceFils: z.number().int().nonnegative(),
+  discountFils: z.number().int().nonnegative(),
+  /** The share the discount was typed as; null when it was a sum, or none was given. */
+  discountBasisPoints: z.number().int().min(0).max(10_000).nullable(),
+  /** What the bundle sells for: the list figure less the discount. */
   amountFils: z.number().int().nonnegative(),
   vatRateBasisPoints: z.number().int().min(0).max(10_000),
   vatFils: z.number().int().nonnegative(),
@@ -107,6 +113,32 @@ export const PackagesResponse = z.object({
 });
 export type PackagesResponse = z.infer<typeof PackagesResponse>;
 
+/**
+ * What a bundle is put on sale at, said either way round: the discount off its
+ * list price, or the price now, which is the same fact expressed as the figure
+ * rather than the gap (docs/SPEC/billing.md section 2.4 — "the Add package
+ * drawer accepts either the discount or the price now and computes the
+ * other"). Exactly one of the two; the server works out the one that was not
+ * sent, so nothing on the wire can contradict itself. `amountFils` is also the
+ * older shape of this body, which the accounting stream's own fixtures still
+ * send and which billing does not own (docs/SPEC/OWNERSHIP.md).
+ */
+const PackagePriceBody = z
+  .object({
+    discount: DiscountInput.nullable().optional(),
+    amountFils: Fils.optional(),
+    validFrom: IsoDate,
+    amendmentReason: Reason,
+  })
+  .superRefine((value, ctx) => {
+    if (value.discount && value.amountFils !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Name either the discount or the price now, not both.',
+      });
+    }
+  });
+
 export const CreatePackageInput = z.object({
   code: z
     .string()
@@ -127,15 +159,11 @@ export const CreatePackageInput = z.object({
     .min(1)
     .max(20),
   /** A bundle is created with the price it goes on sale at; there is no unsellable draft. */
-  price: z.object({ amountFils: Fils, validFrom: IsoDate, amendmentReason: Reason }),
+  price: PackagePriceBody,
 });
 export type CreatePackageInput = z.infer<typeof CreatePackageInput>;
 
-export const AddPackagePriceInput = z.object({
-  amountFils: Fils,
-  validFrom: IsoDate,
-  amendmentReason: Reason,
-});
+export const AddPackagePriceInput = PackagePriceBody;
 export type AddPackagePriceInput = z.infer<typeof AddPackagePriceInput>;
 
 export const PackageResponse = z.object({ package: PackageRow });
@@ -165,6 +193,14 @@ export const SellPackageInput = z.object({
       reference: PaymentReference.nullable().optional(),
     })
     .optional(),
+  /**
+   * One more discount for this sale alone, off the same list figure the price
+   * list discounts (docs/SPEC/billing.md section 2.4). It always carries a
+   * reason — the price list's own discount had its reason when the price was
+   * written, and this one has none until somebody gives it — and only the
+   * owner, an admin or finance may give one.
+   */
+  extraDiscount: z.object({ discount: DiscountInput, reason: Reason }).optional(),
 });
 export type SellPackageInput = z.infer<typeof SellPackageInput>;
 
@@ -179,6 +215,12 @@ export const PurchaseRow = z.object({
   vatFils: z.number().int().nonnegative(),
   grossFils: z.number().int().nonnegative(),
   listPriceFils: z.number().int().nonnegative(),
+  /** The list figure less what was charged: the price list's discount and any extra, together. */
+  discountFils: z.number().int().nonnegative(),
+  /** The combined share, when both discounts were percentages; null otherwise. */
+  discountBasisPoints: z.number().int().min(0).max(10_000).nullable(),
+  /** Why an extra discount was given at this sale; null when there was none. */
+  discountReason: z.string().nullable(),
   expiresOn: z.string(),
   extendedTo: z.string().nullable(),
   extensionReason: z.string().nullable(),
@@ -298,6 +340,8 @@ export const InvoiceRow = z.object({
   netFils: z.number().int().nonnegative(),
   vatFils: z.number().int().nonnegative(),
   grossFils: z.number().int().nonnegative(),
+  /** What was taken off the list figures across this invoice's lines. */
+  discountFils: z.number().int().nonnegative(),
   /**
    * The day the practice forgave this call-out fee (YYYY-MM-DD, in the
    * practice's own time zone), and null on every row that stands. A waived

@@ -42,8 +42,8 @@ const PURCHASE_SQL =
 const EXTEND_SQL =
   'update package_purchase set extended_to = $2, extension_reason = $3 where id = $1 ' +
   'returning id, client_id, package_id, package_name, package_name_ar, purchased_on, ' +
-  'net_fils, vat_fils, list_price_fils, expires_on, extended_to, extension_reason, status, ' +
-  'invoice_id';
+  'net_fils, vat_fils, list_price_fils, discount_basis_points, discount_reason, expires_on, ' +
+  'extended_to, extension_reason, status, invoice_id';
 
 type PurchaseDbRow = {
   id: string;
@@ -55,6 +55,8 @@ type PurchaseDbRow = {
   net_fils: number;
   vat_fils: number;
   list_price_fils: number;
+  discount_basis_points: number | null;
+  discount_reason: string | null;
   expires_on: string;
   extended_to: string | null;
   extension_reason: string | null;
@@ -136,6 +138,12 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
           vatFils: row.vat_fils,
           grossFils: row.net_fils + row.vat_fils,
           listPriceFils: row.list_price_fils,
+          // Not a fifth column on the row: the discount is the gap between
+          // what the list said and what was charged, and both are already
+          // here (migration 409's fourth section).
+          discountFils: Math.max(0, row.list_price_fils - row.net_fils),
+          discountBasisPoints: row.discount_basis_points,
+          discountReason: row.discount_reason,
           expiresOn: row.expires_on,
           extendedTo: row.extended_to,
           extensionReason: row.extension_reason,

@@ -46,8 +46,8 @@ const INVOICE_SQL =
   'where i.tenant_id = app.current_tenant_id() and i.id = $1';
 
 const LINES_SQL =
-  'select description, description_ar, quantity, unit_net_fils, net_fils, ' +
-  'vat_rate_basis_points, vat_fils, gross_fils from invoice_line ' +
+  'select description, description_ar, quantity, unit_net_fils, discount_fils, ' +
+  'discount_basis_points, net_fils, vat_rate_basis_points, vat_fils, gross_fils from invoice_line ' +
   'where tenant_id = app.current_tenant_id() and invoice_id = $1 order by line_no';
 
 const PAYMENT_SQL =
@@ -124,6 +124,8 @@ type LineRow = {
   description_ar: string | null;
   quantity: number;
   unit_net_fils: number;
+  discount_fils: number;
+  discount_basis_points: number | null;
   net_fils: number;
   vat_rate_basis_points: number;
   vat_fils: number;
@@ -155,6 +157,8 @@ export async function invoiceDocument(
         descriptionAr: line.description_ar,
         quantity: line.quantity,
         unitNetFils: line.unit_net_fils,
+        discountFils: line.discount_fils,
+        discountBasisPoints: line.discount_basis_points,
         netFils: line.net_fils,
         vatRateBasisPoints: line.vat_rate_basis_points,
         vatFils: line.vat_fils,
@@ -163,6 +167,9 @@ export async function invoiceDocument(
       netFils: row.net_fils,
       vatFils: row.vat_fils,
       grossFils: row.gross_fils,
+      // Summed from the lines, which is where a discount is given; the invoice
+      // keeps no second copy of the figure (migration 409).
+      discountFils: lines.rows.reduce((total, line) => total + line.discount_fils, 0),
     },
   };
 }

@@ -94,9 +94,18 @@ describe('the bundle catalogue', () => {
     const body = (await res.json()) as PackageResponse;
 
     // AED 12,150 published, AED 10,325 charged. Neither is derived from the
-    // other, and no discount percentage is stored anywhere.
+    // other. The founder's decision of 2026-09-03 — that no discount
+    // percentage is stored anywhere — was amended by the operator on
+    // 2026-09-07 (docs/SPEC/billing.md section 2.4): the price row names the
+    // gap between the two as a discount, and this one is a sum, so there is
+    // still no percentage to store.
     expect(body.package.listPriceFils).toBe(1_215_000);
-    expect(body.package.currentPrice?.amountFils).toBe(1_032_500);
+    expect(body.package.currentPrice).toMatchObject({
+      listPriceFils: 1_215_000,
+      discountFils: 182_500,
+      discountBasisPoints: null,
+      amountFils: 1_032_500,
+    });
     // The same sum done against the practice's own price list agrees with the
     // figure the founder published.
     expect(body.package.componentsTotalFils).toBe(1_215_000);
@@ -202,7 +211,7 @@ describe('the bundle catalogue', () => {
         { serviceTypeId: h.serviceTypeId('brain-map'), quantity: 3 },
         { serviceTypeId: h.serviceTypeId('nf-session'), quantity: 25 },
       ],
-      price: { ...input.price, amountFils: 1_697_500 },
+      price: { ...input.price, discount: { kind: 'amount' as const, fils: 300_000 } },
     });
     expect(res.status).toBe(201);
   });

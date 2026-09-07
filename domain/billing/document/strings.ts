@@ -1,3 +1,5 @@
+import { formatFils } from '../../shared/fils';
+
 /**
  * Every word on a rendered money document, in both languages.
  *
@@ -64,6 +66,8 @@ export const WORDS = {
   vatColumn: { en: 'VAT (AED)', ar: 'الضريبة' },
   amount: { en: 'Amount (AED)', ar: 'المبلغ' },
 
+  beforeDiscount: { en: 'Before discount (AED)', ar: 'قبل الخصم' },
+  discount: { en: 'Discount (AED)', ar: 'الخصم' },
   net: { en: 'Net (AED)', ar: 'المبلغ الصافي' },
   total: { en: 'Total (AED)', ar: 'الإجمالي' },
   amountReceived: { en: 'Amount received (AED)', ar: 'المبلغ المستلم' },
@@ -183,6 +187,31 @@ export function waivedNotice(waivedOn: string): Phrase {
   return {
     en: `Waived on ${formatDocumentDate(waivedOn)}. Nothing is owed.`,
     ar: `أُعفي هذا المبلغ بتاريخ ${arabicDocumentDate(waivedOn)}. لا يوجد مبلغ مستحق.`,
+  };
+}
+
+/**
+ * What a discounted line says beneath its description, in both languages.
+ *
+ * The percentage when there was one and the figure always: "Discount 15%:
+ * 105.00" or "Discount: 105.00". Two discounts added together carry no single
+ * percentage, and this says so by naming none rather than by inventing one
+ * (domain/billing/discount.ts's `combineDiscounts`).
+ *
+ * The Federal Tax Authority asks a full tax invoice to state the amount of any
+ * discount offered. A simplified one need not, and this document does anyway:
+ * a family looking at a figure below the price they were quoted should be able
+ * to see, on the page, why.
+ */
+export function discountNote(line: {
+  discountFils: number;
+  discountBasisPoints: number | null;
+}): Phrase {
+  const figure = formatFils(line.discountFils);
+  const share = line.discountBasisPoints === null ? null : formatRate(line.discountBasisPoints);
+  return {
+    en: share === null ? `Discount: ${figure}` : `Discount ${share}: ${figure}`,
+    ar: share === null ? `الخصم: ${figure}` : `الخصم ${share}: ${figure}`,
   };
 }
 

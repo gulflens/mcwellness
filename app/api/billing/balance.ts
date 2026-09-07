@@ -51,7 +51,8 @@ const LEDGER_SQL =
 
 const PURCHASES_SQL =
   'select id, client_id, package_id, package_name, package_name_ar, purchased_on, net_fils, ' +
-  'vat_fils, list_price_fils, expires_on, extended_to, extension_reason, status, invoice_id ' +
+  'vat_fils, list_price_fils, discount_basis_points, discount_reason, expires_on, ' +
+  'extended_to, extension_reason, status, invoice_id ' +
   'from package_purchase where tenant_id = app.current_tenant_id() and client_id = $1 ' +
   'order by purchased_on desc, id';
 
@@ -97,6 +98,8 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
         net_fils: number;
         vat_fils: number;
         list_price_fils: number;
+        discount_basis_points: number | null;
+        discount_reason: string | null;
         expires_on: string;
         extended_to: string | null;
         extension_reason: string | null;
@@ -184,6 +187,12 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
           vatFils: row.vat_fils,
           grossFils: row.net_fils + row.vat_fils,
           listPriceFils: row.list_price_fils,
+          // Not a fifth column on the row: the discount is the gap between
+          // what the list said and what was charged, and both are already
+          // here (migration 409's fourth section).
+          discountFils: Math.max(0, row.list_price_fils - row.net_fils),
+          discountBasisPoints: row.discount_basis_points,
+          discountReason: row.discount_reason,
           expiresOn: row.expires_on,
           extendedTo: row.extended_to,
           extensionReason: row.extension_reason,

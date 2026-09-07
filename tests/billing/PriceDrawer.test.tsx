@@ -33,6 +33,9 @@ const CREATED_PRICE = {
   serviceTypeCode: 'nf-session',
   serviceTypeName: 'Neurofeedback session',
   serviceTypeNameAr: 'جلسة التغذية الراجعة العصبية',
+  listPriceFils: 1_234,
+  discountFils: 0,
+  discountBasisPoints: null,
   unitPriceFils: 1_234,
   vatRateBasisPoints: 500,
   vatFils: 62,
@@ -62,7 +65,8 @@ function json(body: unknown, status = 200): Response {
 /** Every POST /api/billing/prices call this mount received, decoded. */
 type Posted = {
   serviceTypeId: string;
-  unitPriceFils: number;
+  listPriceFils: number;
+  discount: { kind: 'percent'; basisPoints: number } | { kind: 'amount'; fils: number } | null;
   validFrom: string;
   amendmentReason: string;
 };
@@ -114,7 +118,7 @@ async function fillPriceAndDate(price: string) {
   // before choosing it, or the value never takes.
   await screen.findByRole('option', { name: 'Neurofeedback session' });
   fireEvent.change(screen.getByLabelText('Service'), { target: { value: NF_SESSION_ID } });
-  fireEvent.change(screen.getByLabelText('Price (AED, excluding VAT)'), {
+  fireEvent.change(screen.getByLabelText('List price (AED, excluding VAT)'), {
     target: { value: price },
   });
   fireEvent.change(screen.getByLabelText('Effective from'), { target: { value: '2026-12-01' } });
@@ -132,7 +136,8 @@ describe('PriceDrawer', () => {
     expect(posted).toEqual([
       {
         serviceTypeId: NF_SESSION_ID,
-        unitPriceFils: 1234,
+        listPriceFils: 1234,
+        discount: null,
         validFrom: '2026-12-01',
         amendmentReason: 'Testing conversion.',
       },
@@ -150,7 +155,7 @@ describe('PriceDrawer', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
-    expect(posted[0]?.unitPriceFils).toBe(30);
+    expect(posted[0]?.listPriceFils).toBe(30);
   });
 
   it("requires a reason worth reading, through the field's own error slot, and sends nothing until it has one", async () => {
@@ -297,10 +302,12 @@ describe('PriceDrawer', () => {
       { body: { price: CREATED_PRICE }, status: 201 },
       { body: { rateBasisPoints: 500, effectiveFrom: '2018-01-01' } },
     );
-    fireEvent.change(screen.getByLabelText('Price (AED, excluding VAT)'), {
+    fireEvent.change(screen.getByLabelText('List price (AED, excluding VAT)'), {
       target: { value: '900' },
     });
-    expect(await screen.findByText('900.00')).toBeTruthy(); // unit price
+    // The list price and, with nothing off it, the price charged: the same
+    // figure on two rows of the preview.
+    expect(await screen.findAllByText('900.00')).toHaveLength(2);
     expect(screen.getByText('45.00')).toBeTruthy(); // VAT at 5%
     expect(screen.getByText('945.00')).toBeTruthy(); // total
     expect(vatRateCalls.length).toBeGreaterThan(0);
@@ -316,7 +323,7 @@ describe('PriceDrawer', () => {
           ? { rateBasisPoints: 700, effectiveFrom: '2027-01-01' }
           : STANDARD_VAT_RATE,
     }));
-    fireEvent.change(screen.getByLabelText('Price (AED, excluding VAT)'), {
+    fireEvent.change(screen.getByLabelText('List price (AED, excluding VAT)'), {
       target: { value: '900' },
     });
     // At today's default date (the standard 5% rate): 45.00 VAT, 945.00 total.
@@ -341,11 +348,60 @@ describe('PriceDrawer', () => {
       { body: { price: CREATED_PRICE }, status: 201 },
       { body: { error: 'not_found' }, status: 404 },
     );
-    fireEvent.change(screen.getByLabelText('Price (AED, excluding VAT)'), {
+    fireEvent.change(screen.getByLabelText('List price (AED, excluding VAT)'), {
       target: { value: '900' },
     });
     expect(
       await screen.findByText("There isn't a VAT rate on record for that date yet."),
     ).toBeTruthy();
+  });
+});
+
+describe('a discount on a price', () => {
+  it('previews the list price, the discount and the price charged, and sends the discount', async () => {
+    const { posted, onCreated } = mount({ body: { price: CREATED_PRICE }, status: 201 });
+    await fillPriceAndDate('700');
+    fireEvent.change(screen.getByLabelText('Discount'), { target: { value: 'percent' } });
+    fireEvent.change(screen.getByLabelText('Discount (%)'), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Why this price changes'), {
+      target: { value: 'Launch discount of fifteen per cent.' },
+    });
+    // The same arithmetic the server writes the row with: 700.00 less 105.00.
+    expect(await screen.findByText('105.00')).toBeTruthy();
+    expect(screen.getByText('595.00')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(posted[0]).toMatchObject({
+      listPriceFils: 70_000,
+      discount: { kind: 'percent', basisPoints: 1500 },
+    });
+  });
+
+  it('refuses a discount larger than the list price before anything is sent', async () => {
+    const { posted } = mount({ body: { price: CREATED_PRICE }, status: 201 });
+    await fillPriceAndDate('700');
+    fireEvent.change(screen.getByLabelText('Discount'), { target: { value: 'amount' } });
+    fireEvent.change(screen.getByLabelText('Discount (AED)'), { target: { value: '900' } });
+    fireEvent.change(screen.getByLabelText('Why this price changes'), {
+      target: { value: 'A discount larger than the price.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    expect(await screen.findByText('The discount is larger than the list price.')).toBeTruthy();
+    expect(posted).toHaveLength(0);
+  });
+
+  it('says so in a fixed sentence when the server refuses the discount', async () => {
+    const { onCreated } = mount({
+      body: { error: 'bad_request', code: 'discount_too_large' },
+      status: 400,
+    });
+    await fillPriceAndDate('700');
+    fireEvent.change(screen.getByLabelText('Why this price changes'), {
+      target: { value: 'A discount the server refuses.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    expect(await screen.findByText('The discount is larger than the list price.')).toBeTruthy();
+    expect(onCreated).not.toHaveBeenCalled();
   });
 });

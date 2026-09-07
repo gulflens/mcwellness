@@ -111,6 +111,27 @@ export function mayExtend(actor: Actor, now: Date): boolean {
   return may(actor, 'billing.waiver.write', PRICE_WRITE, now);
 }
 
+/**
+ * Giving an extra discount at a sale: the owner, an admin or finance, and
+ * nobody else (docs/SPEC/billing.md section 2.4). The same three roles
+ * migration 408 lets forgive a call-out fee, for the same reason — a discount
+ * and a waiver are both money the practice decides not to collect.
+ *
+ * The fallback names the three roles outright rather than borrowing
+ * `billing.price.write` as the wrappers above do. Setting a price and giving
+ * one family a discount are different acts, and a future widening of who may
+ * publish a price should not quietly widen who may hand money back. The
+ * audience is pinned in tests/billing/access.test.ts beside every other
+ * wrapper's either way.
+ */
+export function mayDiscount(actor: Actor, now: Date): boolean {
+  const action = named('billing.discount.write');
+  if (action) {
+    return canActor(actor, action, {}, now);
+  }
+  return hasRole(actor, 'owner', 'admin', 'finance');
+}
+
 /** Invoices: read by everyone who reads the price list. */
 export function mayReadInvoices(actor: Actor, now: Date): boolean {
   return may(actor, 'billing.invoice.read', PRICE_READ, now);

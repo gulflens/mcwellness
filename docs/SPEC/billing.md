@@ -86,6 +86,73 @@ Three deliberate choices in there:
 
 Prices are never edited or deleted, only superseded: a new price row must take effect today or later, and strictly after the row it replaces, and it always carries a reason. Nothing rewrites what a client was already shown or charged. The price-list screen (pull request 25, the billing stream's second piece) shows the net amount, the VAT and the gross total for each row, all from the prices route's answer; it never accepts a typed VAT figure — VAT is always resolved from the standard-rate setting and stamped onto the price at the moment it is written, per CLAUDE.md rule 6.
 
+### 2.4 Discounts (the operator's decision of 7 September 2026)
+
+_Amends the founder's decision of 2026-09-03 that a package price is a figure
+she sets and no discount percentage is stored anywhere. On 7 September 2026 at
+21:49 the operator asked for a discount field on transactions, packages and
+individual prices, so that the books show what was given away and why. The
+figure is still the founder's to set: a discount is one of the two ways of
+setting it, and both are kept._
+
+**One meaning, everywhere.** A discount is money off a **list figure**, shown
+on the document that charges for it. It is expressed either as a share of the
+list figure (basis points: 1,500 is fifteen per cent) or as a sum of money, and
+it is stored as fils either way, with the percentage kept beside it when that
+is how it was typed. The arithmetic is `domain/billing/discount.ts` and nothing
+else: `applyDiscount` rounds half up to the fils, refuses a negative, a
+percentage over one hundred and a sum larger than the list figure.
+
+**On a service price** (`price`): `list_price_fils` is the figure before any
+discount, `discount_fils` and `discount_basis_points` are the discount, and
+`unit_price_fils` — the column every reader already uses — is what a family
+pays net of VAT, held to `list − discount` by a check constraint. A price with
+no discount has `list = unit` and a discount of nothing. The list stays
+append-only: a new discount is a new price row with a reason.
+
+**On a package price** (`package_price`): the same three columns, with
+`list_price_fils` a snapshot of the package's list price at the moment the row
+was written, so the arithmetic on the row never depends on a figure that can
+be edited later. `amount_fils` stays what the bundle sells for and is held to
+`list − discount`. The Add package drawer accepts either the discount or the
+price now and computes the other; nothing here derives a package's list price.
+
+**At a sale** (`POST /api/billing/package-purchases`): the sale carries the
+price list's own discount, and may carry an **extra discount** for this sale —
+a percentage of the same list figure or a sum — with a reason of at least eight
+characters. Only the owner, an admin or finance may give one: the three roles
+that may forgive a charge (migration 408). The two are combined by
+`combineDiscounts`: when both are percentages the combined percentage is applied
+once to the list figure, otherwise the two sums are added; the combined discount
+may not exceed the list figure, and a sale never charges more than the price
+list says. The purchase records the combined percentage, when there is one, and
+the extra discount's reason; `net_fils` on the purchase, the credits'
+allocation, the deferred balance, revenue recognition and the books all keep
+their meaning, because every one of them reads the net **after** discount.
+
+**On the invoice line** (`invoice_line`): `unit_net_fils` is the list figure,
+`discount_fils` and `discount_basis_points` are the discount, and the check
+becomes `net = quantity × unit − discount`, with the discount held between
+nothing and the line's gross. VAT is computed on the net after discount, as UAE
+VAT values a supply net of discounts. A line with no discount is unchanged.
+The single-visit charge (`app.charge_single_visit`) applies the price row's
+own discount and nothing more: no person is present when a session closes.
+A call-out fee carries no discount; the waiver is its door.
+
+**On the document.** The rendered invoice prints the unit price as the list
+figure and the amount as the net after discount; beneath a discounted line's
+description it says the discount, with the percentage when there was one, in
+both languages; and the totals gain "Before discount" and "Discount" above the
+rows already there, only when a discount was given. The Federal Tax Authority
+asks a full tax invoice to state "the amount of any discount offered"; a
+simplified one need not, and this does anyway.
+
+**In the books, nothing changes.** Revenue is recorded net of discount, which
+is the standard treatment of a discount given at the point of sale. "Discounts
+given against list price" as a figure is piece thirteen's
+(`docs/SPEC/accounting.md` section 14), reading the invoice lines this section
+records; no contra-revenue account is opened for it now.
+
 ---
 
 ## 3. Payment methods

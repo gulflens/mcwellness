@@ -207,6 +207,20 @@
   text-align: end;
 }
 
+/* The discount control: the kind, and the value beside it when there is one.
+   Two fields on one line where there is room and stacked where there is not,
+   so a narrow drawer never puts the value below the fold. */
+.discount-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: var(--s-3);
+}
+
+.discount-fields > * {
+  flex: 1 1 10rem;
+}
+
 /* Money changing hands, and what a family has bought. */
 .checkbox {
   display: flex;

@@ -1,8 +1,21 @@
 import type { Hono } from 'hono';
-import { resolveSaleVat, resolveVat, validateNewPrice, type Price } from '../../../domain/billing';
+import {
+  applyDiscount,
+  resolveSaleVat,
+  resolveVat,
+  validateNewPrice,
+  type AppliedDiscount,
+  type Price,
+} from '../../../domain/billing';
 import { canActor, fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
-import { CreatePriceInput, CreatePriceResponse, PriceRow, PricesResponse } from './schema';
+import {
+  CreatePriceInput,
+  CreatePriceResponse,
+  PriceRow,
+  PricesResponse,
+  toDiscount,
+} from './schema';
 import { readVatRegistered } from './supplier';
 
 /**
@@ -51,6 +64,9 @@ type PriceListRow = {
   service_type_code: string;
   service_type_name: string;
   service_type_name_ar: string | null;
+  list_price_fils: number;
+  discount_fils: number;
+  discount_basis_points: number | null;
   unit_price_fils: number;
   vat_rate_basis_points: number;
   vat_setting_version: number;
@@ -66,6 +82,7 @@ type PriceListRow = {
 const LIST_SQL =
   'select distinct on (p.service_type_id) p.id, p.service_type_id, ' +
   'st.code as service_type_code, st.name as service_type_name, st.name_ar as service_type_name_ar, ' +
+  'p.list_price_fils, p.discount_fils, p.discount_basis_points, ' +
   'p.unit_price_fils, p.vat_rate_basis_points, p.vat_setting_version, p.valid_from, ' +
   'p.supersedes_id, p.amendment_reason ' +
   'from price p join service_type st on st.id = p.service_type_id ' +
@@ -88,9 +105,10 @@ const VAT_SETTING_ON_DATE_SQL =
   'order by effective_from desc, version desc limit 1';
 
 const INSERT_PRICE_SQL =
-  'insert into price (tenant_id, service_type_id, jurisdiction, recipient_type, unit_price_fils, ' +
+  'insert into price (tenant_id, service_type_id, jurisdiction, recipient_type, ' +
+  'list_price_fils, discount_fils, discount_basis_points, unit_price_fils, ' +
   'vat_rate_basis_points, vat_setting_version, valid_from, supersedes_id, amendment_reason) ' +
-  'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9) returning id';
+  'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id';
 
 function toPriceRow(
   row: {
@@ -99,6 +117,9 @@ function toPriceRow(
     service_type_code: string;
     service_type_name: string;
     service_type_name_ar: string | null;
+    list_price_fils: number;
+    discount_fils: number;
+    discount_basis_points: number | null;
     unit_price_fils: number;
     vat_rate_basis_points: number;
     vat_setting_version: number;
@@ -125,6 +146,9 @@ function toPriceRow(
     serviceTypeCode: row.service_type_code,
     serviceTypeName: row.service_type_name,
     serviceTypeNameAr: row.service_type_name_ar,
+    listPriceFils: row.list_price_fils,
+    discountFils: row.discount_fils,
+    discountBasisPoints: row.discount_basis_points,
     unitPriceFils: row.unit_price_fils,
     // The stamp itself, unchanged by the registration: what the standard rate
     // was on the day, which is what makes the row live again if a
@@ -220,7 +244,20 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
       return c.json({ error: 'no_vat_setting', requestId }, 422);
     }
 
-    const resolution = resolveVat(fils(body.data.unitPriceFils), {
+    // The list figure less whatever is off it, worked out once by the one rule
+    // (domain/billing/discount.ts) and written whole: the browser's preview
+    // calls the same function, so a family is never shown one figure and
+    // charged another.
+    let applied: AppliedDiscount;
+    try {
+      applied = applyDiscount(fils(body.data.listPriceFils), toDiscount(body.data.discount));
+    } catch {
+      return c.json({ error: 'bad_request', code: 'discount_too_large', requestId }, 400);
+    }
+
+    // VAT falls on the net after the discount: UAE VAT values a supply net of
+    // discounts (docs/SPEC/billing.md sections 2.4 and 5.1).
+    const resolution = resolveVat(applied.netFils, {
       rateBasisPoints: setting.rate_basis_points,
       version: setting.version,
     });
@@ -229,7 +266,10 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
       body.data.serviceTypeId,
       JURISDICTION,
       RECIPIENT_TYPE,
-      body.data.unitPriceFils,
+      applied.listFils,
+      applied.discountFils,
+      applied.basisPoints,
+      applied.netFils,
       resolution.rateBasisPoints,
       resolution.settingVersion,
       body.data.validFrom,
@@ -253,7 +293,10 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
             service_type_code: service.code,
             service_type_name: service.name,
             service_type_name_ar: service.name_ar,
-            unit_price_fils: body.data.unitPriceFils,
+            list_price_fils: applied.listFils,
+            discount_fils: applied.discountFils,
+            discount_basis_points: applied.basisPoints,
+            unit_price_fils: applied.netFils,
             vat_rate_basis_points: resolution.rateBasisPoints,
             vat_setting_version: resolution.settingVersion,
             valid_from: body.data.validFrom,

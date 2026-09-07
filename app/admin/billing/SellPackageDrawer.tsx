@@ -7,13 +7,21 @@ import {
   type PaymentMethod,
 } from '../../api/billing/ledger-schema';
 import type { ClientRow } from '../../api/clients/schema';
+import { isRealText, MINIMUM_REASON } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { ClientPicker } from './ClientPicker';
+import { DiscountFields } from './DiscountFields';
 import { useAttemptKey } from './attempt';
 import { useDrawer } from './useDrawer';
-import { formatFils } from './money';
+import {
+  discountBody,
+  formatFils,
+  previewSaleDiscount,
+  previewVat,
+  type DiscountKind,
+} from './money';
 
 /**
  * "Sell a package" — one family, one bundle, and the money if it changed
@@ -22,8 +30,14 @@ import { formatFils } from './money';
  * The price is not a field. It is the figure on the price list on the day of
  * the sale, shown here so the coordinator can read it out, and the server
  * takes it from the same place rather than from anything typed here. Selling
- * at a different figure means changing the price list first, which leaves a
+ * at a different *figure* means changing the price list first, which leaves a
  * reason behind it (the founder's decision, 2026-09-03).
+ *
+ * What may be given here is an **extra discount** off the same list figure,
+ * with a reason, by the owner, an admin or finance (docs/SPEC/billing.md
+ * section 2.4). The preview combines it with the price list's own discount
+ * through `domain/billing/discount.ts` — the arithmetic the server runs — so
+ * what the coordinator reads out is what the invoice will say.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -40,6 +54,8 @@ const NOT_SELLABLE_MESSAGE =
   'This package cannot be sold until every service in it has a price. Set the missing price first.';
 const GENERIC_MESSAGE = 'The sale could not be recorded. Try again.';
 const IN_FUTURE_MESSAGE = 'A sale cannot be dated in the future. Choose today or an earlier date.';
+const DISCOUNT_TOO_LARGE_MESSAGE = 'The discount is larger than the list price.';
+const NO_DISCOUNT_PERMISSION_MESSAGE = "You don't have permission to give an extra discount.";
 
 export function SellPackageDrawer({
   bundle,
@@ -59,6 +75,11 @@ export function SellPackageDrawer({
   const [takingPayment, setTakingPayment] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>('transfer');
   const [reference, setReference] = useState('');
+  const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
+  const [discountValue, setDiscountValue] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
+  const [discountError, setDiscountError] = useState<string | undefined>();
+  const [reasonError, setReasonError] = useState<string | undefined>();
   const [clientError, setClientError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,6 +94,25 @@ export function SellPackageDrawer({
   useDrawer(drawerRef, closeRef, onClose);
 
   const price = bundle.currentPrice;
+  // The price list's own discount and this sale's extra, combined once against
+  // the list figure — the same call the sale route makes.
+  const applied = price
+    ? previewSaleDiscount(
+        price.listPriceFils,
+        { discountFils: price.discountFils, basisPoints: price.discountBasisPoints },
+        discountKind,
+        discountValue,
+      )
+    : null;
+  // The rate is charged only while the row itself carries VAT: an unregistered
+  // practice's gross is its net (migration 406), and what the family hands over
+  // must equal the invoice's gross.
+  const charged =
+    applied === null || price === null
+      ? null
+      : price.vatFils > 0
+        ? previewVat(applied.netFils, price.vatRateBasisPoints)
+        : { vatFils: 0, grossFils: applied.netFils };
   const credits = bundle.components.reduce((total, component) => total + component.quantity, 0);
   /**
    * "15 sessions, 2 brain maps, 1 consultation".
@@ -98,6 +138,22 @@ export function SellPackageDrawer({
       setFormError(NOT_SELLABLE_MESSAGE);
       return;
     }
+    if (discountKind !== 'none' && applied === null) {
+      setDiscountError(
+        discountKind === 'percent'
+          ? 'Enter a percentage between 0 and 100, such as 5.'
+          : DISCOUNT_TOO_LARGE_MESSAGE,
+      );
+      return;
+    }
+    setDiscountError(undefined);
+    const trimmedReason = discountReason.trim();
+    if (discountKind !== 'none' && !isRealText(trimmedReason)) {
+      setReasonError(`Say why in at least ${MINIMUM_REASON} characters.`);
+      return;
+    }
+    setReasonError(undefined);
+    const extra = discountBody(discountKind, discountValue);
 
     setBusy(true);
     try {
@@ -105,6 +161,7 @@ export function SellPackageDrawer({
         packageId: bundle.id,
         clientId: client.id,
         purchasedOn,
+        ...(extra ? { extraDiscount: { discount: extra, reason: trimmedReason } } : {}),
         ...(takingPayment
           ? {
               payment: {
@@ -114,8 +171,9 @@ export function SellPackageDrawer({
                 // plus VAT while it is registered for VAT, and the price
                 // itself while it is not (migration 406) — so this is the
                 // same figure as the invoice the same request creates, and a
-                // sale leaves nothing owed and nothing overpaid.
-                amountFils: price.grossFils,
+                // sale leaves nothing owed and nothing overpaid — including
+                // when an extra discount has just moved it.
+                amountFils: charged?.grossFils ?? price.grossFils,
                 reference: reference.trim() || null,
               },
             }
@@ -138,7 +196,7 @@ export function SellPackageDrawer({
         return;
       }
       if (res.status === 403) {
-        setFormError(FORBIDDEN_MESSAGE);
+        setFormError(extra ? NO_DISCOUNT_PERMISSION_MESSAGE : FORBIDDEN_MESSAGE);
         return;
       }
       if (res.status === 404) {
@@ -151,7 +209,13 @@ export function SellPackageDrawer({
       }
       if (res.status === 400) {
         const body = (await res.json().catch(() => null)) as { code?: string } | null;
-        setFormError(body?.code === 'purchase_in_future' ? IN_FUTURE_MESSAGE : GENERIC_MESSAGE);
+        setFormError(
+          body?.code === 'purchase_in_future'
+            ? IN_FUTURE_MESSAGE
+            : body?.code === 'discount_too_large'
+              ? DISCOUNT_TOO_LARGE_MESSAGE
+              : GENERIC_MESSAGE,
+        );
         return;
       }
       setFormError(GENERIC_MESSAGE);
@@ -214,8 +278,22 @@ export function SellPackageDrawer({
               <span className="small muted">{contents}</span>
             </div>
             <div className="price-preview__row">
-              <span className="small muted">Price</span>
-              <span className="numeric">{price ? formatFils(price.amountFils) : '—'}</span>
+              <span className="small muted">List price</span>
+              <span className="numeric">{price ? formatFils(price.listPriceFils) : '—'}</span>
+            </div>
+            {price && price.discountFils > 0 ? (
+              <div className="price-preview__row">
+                <span className="small muted">
+                  {price.discountBasisPoints === null
+                    ? 'Discount on the list'
+                    : `Discount on the list (${price.discountBasisPoints / 100}%)`}
+                </span>
+                <span className="numeric">{formatFils(price.discountFils)}</span>
+              </div>
+            ) : null}
+            <div className="price-preview__row">
+              <span className="small muted">Price after discount</span>
+              <span className="numeric">{applied ? formatFils(applied.netFils) : '—'}</span>
             </div>
             <div className="price-preview__row">
               <span className="small muted">
@@ -223,16 +301,45 @@ export function SellPackageDrawer({
                     something is charged at it (migration 406). */}
                 {price && price.vatFils > 0 ? `VAT (${price.vatRateBasisPoints / 100}%)` : 'VAT'}
               </span>
-              <span className="numeric">{price ? formatFils(price.vatFils) : '—'}</span>
+              <span className="numeric">{charged ? formatFils(charged.vatFils) : '—'}</span>
             </div>
             <div className="price-preview__row price-preview__row--total">
               <span>Total (AED)</span>
-              <span className="numeric">{price ? formatFils(price.grossFils) : '—'}</span>
+              <span className="numeric">{charged ? formatFils(charged.grossFils) : '—'}</span>
             </div>
             <p className="small muted">
               The price on the list. To sell at a different figure, add a package price first.
             </p>
           </div>
+
+          <DiscountFields
+            id="sell-discount"
+            label="Extra discount for this sale"
+            kind={discountKind}
+            value={discountValue}
+            error={discountError}
+            onChange={(next) => {
+              setDiscountKind(next.kind);
+              setDiscountValue(next.value);
+              setDiscountError(undefined);
+              setFormError(null);
+            }}
+          />
+          {discountKind === 'none' ? null : (
+            <Field
+              id="sell-discount-reason"
+              label="Why"
+              type="text"
+              maxLength={200}
+              value={discountReason}
+              onChange={(e) => {
+                setDiscountReason(e.target.value);
+                setReasonError(undefined);
+              }}
+              error={reasonError}
+              hint="Only the owner, an admin or finance may give an extra discount."
+            />
+          )}
 
           <label className="checkbox" htmlFor="sell-taking-payment">
             <input

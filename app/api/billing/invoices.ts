@@ -32,6 +32,12 @@ const PAGE_SIZE = 50;
 const SQL =
   'select i.id, i.reference, i.number, i.kind, i.issued_on, i.client_id, i.net_fils, ' +
   'i.vat_fils, i.gross_fils, bd.document_id, c.mrn as client_mrn, ' +
+  // What was taken off the list figures across this invoice's lines. Summed
+  // here rather than kept on the invoice: the line is where a discount is
+  // given, and a second copy of the same figure is a second thing to keep
+  // right (migration 409).
+  '(select coalesce(sum(l.discount_fils), 0) from invoice_line l ' +
+  '  where l.tenant_id = i.tenant_id and l.invoice_id = i.id)::int as discount_fils, ' +
   // The day a call-out fee was forgiven, in the practice's own time zone. The
   // row keeps its number and its figures, and `app.billing_ledger` stops
   // counting it (migration 408), so the book has to say which of its rows a
@@ -61,6 +67,7 @@ type InvoiceDbRow = {
   net_fils: number;
   vat_fils: number;
   gross_fils: number;
+  discount_fils: number;
   waived_on: string | null;
   document_id: string | null;
 };
@@ -112,6 +119,7 @@ export function mountInvoices(api: Hono<ApiEnv>, now: () => Date = () => new Dat
           netFils: row.net_fils,
           vatFils: row.vat_fils,
           grossFils: row.gross_fils,
+          discountFils: row.discount_fils,
           waivedAt: row.waived_on,
           documentId: row.document_id,
         })),

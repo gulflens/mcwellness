@@ -199,14 +199,16 @@ Scheduling's cache of the drive between two places (`SPEC/scheduling-manual.md` 
 
 Summarised here; FINANCE-SPEC is authoritative.
 
-- **`price`** — resolved per `(service_type_id, jurisdiction, recipient_type, valid_from)`, never constants in code. `unit_price_fils`, `vat_treatment` (computed snapshot, billing.md section 5); superseded the way every append-only entity in section 7 is, by `supersedes_id` and `amendment_reason`, so there is no `valid_to` column to keep in step.
-- **`package`** — a sellable bundle. `code`, `name`, `price_fils`, `components` (service_type × qty), `expiry_months`, `status`.
-- **`client_package`** — a purchase. `client_id`, `package_id`, `purchased_at`, `paid_by_contact_id`, `invoice_id`, `expires_at`, `status`.
+- **`price`** — resolved per `(service_type_id, jurisdiction, recipient_type, valid_from)`, never constants in code. `list_price_fils`, `discount_fils` and `discount_basis_points` (the figure before any discount and what came off it, migration 409), `unit_price_fils` (what a family pays, held to `list − discount` by a check), `vat_treatment` (computed snapshot, billing.md section 5); superseded the way every append-only entity in section 7 is, by `supersedes_id` and `amendment_reason`, so there is no `valid_to` column to keep in step.
+- **`package`** — a sellable bundle. `code`, `name`, `price_fils`, `components` (service_type × qty), `expiry_months`, `status`. Its `package_price` rows carry the same three discount columns, with `list_price_fils` a snapshot of the bundle's list price at the moment the row was written and `amount_fils` held to `list − discount`.
+- **`client_package`** — a purchase. `client_id`, `package_id`, `purchased_at`, `paid_by_contact_id`, `invoice_id`, `expires_at`, `status`. It also records how a sale's discount was expressed — `discount_basis_points` when both the price list's and the sale's own were percentages — and `discount_reason`, why an extra one was given (409).
 - **`entitlement`** — the ledger; one row per credit. `client_id`, `service_type_id`, `source_type`, `source_id`, `allocated_value_fils`, `vat_treatment` (computed snapshot), `status`, `consumed_by_session_id`, `expires_at`. Completing a session flips exactly one entitlement to `consumed` and recognises its allocated value.
 - **`invoice`, `invoice_line`, `payment`** — `billing.md` sections 4 to 6.
   Issued invoices are immutable; a call-out fee is waived in place with a
-  reason (408). `credit_note` was never built; a correction is a reversing
-  journal entry.
+  reason (408). A line names its discount: `unit_net_fils` is the list figure,
+  `discount_fils` and `discount_basis_points` are what came off it, and the
+  check is `net = quantity × unit − discount` (409). `credit_note` was never
+  built; a correction is a reversing journal entry.
 - **The books** (`accounting.md`, migrations 450–454): `accounting_setting`
   (one per practice: start day, year end, the lock date, the corporate-tax
   estimate and Small Business Relief settings, the entry counter); `account`

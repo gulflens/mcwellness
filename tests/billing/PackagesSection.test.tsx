@@ -53,6 +53,9 @@ const SILVER = {
     },
   ],
   currentPrice: {
+    listPriceFils: 1_215_000,
+    discountFils: 182_500,
+    discountBasisPoints: null,
     id: '00000004-0000-4000-8000-000000000301',
     amountFils: 1_032_500,
     vatRateBasisPoints: 500,
@@ -229,5 +232,15 @@ describe('PackagesSection', () => {
         'The packages could not be loaded. Try again.',
       ),
     );
+  });
+});
+
+describe('the discount column', () => {
+  it('names what came off the list price', async () => {
+    mount(OWNER, [SILVER]);
+    await screen.findByText('Silver');
+    expect(screen.getByText('Discount')).toBeTruthy();
+    // A sum, because the founder named the price now rather than a share.
+    expect(screen.getByText('1,825.00')).toBeTruthy();
   });
 });
