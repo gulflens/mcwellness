@@ -1,12 +1,15 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 7 September at 00:30: the site is live
-at app.mcwellnessuae.com (the first live pass, pull request 106); trunk
-rounds 33 and 34 (pull requests 103 and 105) built, reviewed and re-checked,
-waiting only on a GitHub billing block to merge, 105 stacked on 103; every check
-on the repository refused by GitHub since 13:03 UTC for the account's
-billing; the address on Hostinger built and still never started, for want of
-the operator's secrets. This file exists so that the next Claude session,
+Written 4 September 2026, updated on 7 September at 17:45: **piece eleven,
+the books' ledger, was planned, approved, built, reviewed, fixed, re-checked
+and merged in one day** (pull request 109, `main` at `dce3ca1`), and the
+fourteenth staging pass carries its six migrations (`docs/STAGING.md`).
+Earlier the same day the repository was made public to free GitHub's checks,
+pull requests 103 to 108 merged, migrations 205 and 957 reached staging and
+production, and the live process at app.mcwellnessuae.com was rebuilt from
+`main` at `e6d08ae` (`docs/PRODUCTION.md`, the second live pass). Production
+does **not** yet carry 450 to 454 and 958; that pass waits on the operator's
+word (section 8). This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -229,6 +232,22 @@ the specs are listed on each pull request and recorded in the change
 requests `assessment-01.md` and `reports-01.md` and trunk-notes rounds 28 to
 30.
 
+**Approved on 7 September 2026 at 14:18** (operator, this session): piece
+eleven, the books' ledger — `docs/PLAN/piece-eleven.md` and
+`docs/SPEC/accounting.md`, with the seven defaults as Claude's standing until
+overruled — and, in order only, the six-piece accounting roadmap the plan's
+table lists (twelve spending and VAT; thirteen performance and statements;
+fourteen pay and profit; fifteen bank reconciliation; sixteen corporate
+clients and e-invoicing). Each later piece comes back with its own
+plain-language plan before anything is built. The shape had been approved in
+conversation at 03:30 and amended at 13:20 after a comparison with Zoho
+Books' UAE edition, when the operator adopted all fifteen additions it
+proposed and answered two more questions: corporate clients are likely
+within the year, and the free zone requires the founder's salary to go
+through WPS. Piece eleven is built and merged (pull request 109, 17:12); the
+implementation plan the builder followed is
+`docs/superpowers/plans/2026-09-07-accounting-ledger.md`.
+
 ## 4. How the work is done
 
 - One builder per piece, in its own worktree (`git worktree add
@@ -401,6 +420,18 @@ review on Fable 0.22; fix round on Opus 0.15; re-check on Fable 0.14. About
 0.8 million in agents. The evening's two rounds together: about 1.5 million
 in agents, plus the integrator's conversation.
 
+**What piece eleven cost (7 September, 17:15).** Builder on Opus about 0.59
+million in one run of 74 minutes, from a written implementation plan of
+sixteen tasks; combined review on Fable 0.35; fix round on Opus 0.34 (twelve
+findings, one blocking); re-check on Fable 0.15; the fourteenth staging pass
+on Sonnet, see its record. About 1.43 million in agents, plus the
+integrator's conversation, which wrote the spec, the operator's plan, the
+Zoho comparison and the implementation plan. Two lessons kept: a plan that
+gives the builder exact file names, signatures and test code lets one Opus
+run carry sixteen tasks without a stall; and a worktree's ports must be
+checked against every running container, not only the ownership table — the
+two trunk worktrees had taken 5441 and 5442 by hand.
+
 ## 7. The failed-run emails
 
 GitHub emails the repository owner for every failed or cancelled workflow
@@ -430,12 +461,23 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
-- **First, before anything merges: GitHub's billing.** In GitHub, Settings,
-  Billing and plans, raise the Actions spending limit or fix the failed
-  payment, then rerun the last run on `main`
-  (`gh run rerun 34034899740 -R gulflens/mcwellness`) and pull request 103's.
-  Until then every pull request is red through no fault of its own and the
-  merge rule holds everything.
+- **The books' production pass, on your word.** Migrations 450 to 454 and
+  958 (piece eleven) are on staging and not yet on production. The bundle a
+  person can run is `~/Documents/mcwellness-migrations-450-958.sql`
+  (staging first, then production; run once per database), or say so and a
+  session applies them through the Supabase tools as the second live pass
+  did. **Apply them before any rebuild of the live process from `main`**:
+  the code on Hostinger is `e6d08ae`, which has no Books; a rebuild from
+  today's `main` would open Books against a database without its tables.
+- **Two decisions the books need, neither urgent.** The day the books start
+  defaults to the day the practice was created and can be changed in Books,
+  Settings until the first entry is written; if the founder wants her books
+  to start on an earlier day, say which. And the corporate-tax figure assumes
+  Small Business Relief is elected (revenue under AED 3 million, relief
+  extended to the end of 2029); the adviser confirms, and the switch is one
+  setting.
+- *(Resolved 7 September 02:55: GitHub's billing block, by making the
+  repository public after a scan of its whole history; checks run again.)*
 - **Three wordings to see** from round 33 and 34 (named in their pull-request
   bodies): the bookings page now says the AED 150 fee is "plus VAT once the
   practice is registered for it", in both mentions; the household's money
@@ -544,8 +586,14 @@ for each of `nine`, `writer-move`, `assessment`, `reports` and `audit-uuid`
 a `*-builder-brief.md` (or `*-brief.md`) and report, a `*-review-brief.md`
 and report, a `*-fix-brief.md` and report, and for nine, assessment and
 reports a `*-recheck-brief.md` and report; plus `ninth-staging-brief.md` and
-its report. Both directories are temporary; anything a later session needs
-from them is in the pull-request records or in this file.
+its report. The session that planned and built piece eleven (7 September)
+kept its in
+`/private/tmp/claude-501/-Volumes-Storage-McWellness/fac94f8e-e3d7-43ee-954f-a7acaf7d0224/scratchpad/`:
+`eleven-builder-brief.md` and report, `eleven-review-brief.md` and report,
+`eleven-fix-brief.md` and report, `eleven-recheck-brief.md` and report,
+`eleven-staging-brief.md` and report, and `eleven-pr-record.md` (posted on
+pull request 109). All three directories are temporary; anything a later
+session needs from them is in the pull-request records or in this file.
 
 ## 10. The next steps, in order
 
@@ -581,15 +629,12 @@ nine and ten; see the records on pull requests 73 to 83).
    `docs/PRODUCTION.md`, and the founder's account and the practice exist and
    she can sign in. Left from it: measure `TRUSTED_PROXY_HOPS` (still `1`;
    the method is in the pass) and merge pull request 106.
-2c. **Trunk round 33 is built and reviewed** (pull request 103; the record is
-   on it). It merges when GitHub's checks run again; then `pnpm db:migrate`
-   in the laptop checkout, and migrations 205 and 957 go to staging and
-   production in one pass (the fourth production pass, the thirteenth staging
-   pass) with their records in `docs/PRODUCTION.md` and `docs/STAGING.md`.
-2d. **Trunk round 34 is built and reviewed** (pull request 105, stacked on
-   round 33, section 2; the record is on it). after 103 merges, `gh pr edit <n> --base main` and a
-   rebase; then its own merge and passes. It takes step 3's items except the
-   scoped security scan.
+2c. **Done, 7 September (02:50 to 13:12):** the repository made public, pull
+   requests 103, 104, 106, 107, 105 and 108 merged in that order, migrations
+   205 and 957 applied to staging (the thirteenth pass) and production (the
+   second live pass), `TRUSTED_PROXY_HOPS` measured, the live process rebuilt
+   from `main` at `e6d08ae`. Records in `docs/PRODUCTION.md` and
+   `docs/STAGING.md`.
 3. Owed to later rounds, recorded in `qa-01.md`, `reports-01.md` and
    trunk-notes: the household's own step in confirming a booking, if the
    scheduling spec names one; the "one press" to the access report from the
@@ -603,16 +648,34 @@ nine and ten; see the records on pull requests 73 to 83).
    operator's approval on the environment; the security scan runs against
    that tag in its own session, at high effort, before the tag is pushed.
 
-5. **Piece eleven, the books, is planned and approved.** On 7
-   September (03:30, amended 13:20) the operator approved in conversation an
-   accounting roadmap of six pieces (ledger; spending and VAT; performance
-   and statements; pay and profit; bank reconciliation; corporate clients and
-   e-invoicing) and all fifteen additions from a comparison with Zoho Books.
-   The written plan `docs/PLAN/piece-eleven.md`, the spec
-   `docs/SPEC/accounting.md` and `docs/CHANGE-REQUESTS/accounting-01.md`
-   sit on branch `accounting-spec-1`, not pushed. The operator approved the
-   written plan at 14:18; the implementation plan and the builder on Opus
-   follow, then one review and one re-check.
+5. **Piece eleven, the books' ledger, is done** (7 September): approved at
+   14:18, built by one Opus run from
+   `docs/superpowers/plans/2026-09-07-accounting-ledger.md`, rebased onto
+   `main`, reviewed, fixed (twelve findings) and re-checked, merged as pull
+   request 109 at 17:12 with its record on the pull request. The fourteenth
+   staging pass applied its six migrations (450 to 454, 958) and re-applied
+   the policies; its record is in `docs/STAGING.md`. The `accounting`
+   worktree is removed; the stream keeps its row in `OWNERSHIP.md` (range
+   450–499, ports 5443/3011/5184) for pieces twelve to sixteen.
+6. **Next, in order.** (a) The books' production pass, on the operator's
+   word (section 8, first item), then a rebuild of the live process from
+   `main`. (b) **Piece twelve, spending and VAT**: the next planning act is a
+   plain-language plan for the operator in `docs/PLAN/piece-twelve.md` and a
+   spec, in the shape of piece eleven's, covering what
+   `docs/SPEC/accounting.md` section 14 lists for it — suppliers, expenses
+   and purchases with a receipt photograph, recurring costs, foreign-currency
+   purchases, fixed assets and depreciation, Salik and parking claims, the
+   refund's money out, tax credit notes on the billing side, input VAT and
+   Form 201 with reverse charge, the FTA Audit File, the lock date moved by a
+   filed return, an admin admitted to expenses. Nothing of it is built until
+   the operator approves that plan. (c) Small things owed from piece eleven's
+   review, for piece twelve's round: `Asia/Dubai` hard-coded in the
+   accounting routes as in billing's; the Statements and Accounts period
+   pickers default to the calendar year rather than the financial year; a
+   partial unique index to close the race between two simultaneous opening
+   entries; the deferred balance check answering 500 rather than a coded 400
+   if a route ever bypassed `assertBalanced`. (d) Step 3's leftovers and
+   `assessment-02.md` as before.
 
 ## 11. Where Claude's own memory lives
 
