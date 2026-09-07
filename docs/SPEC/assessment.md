@@ -34,7 +34,7 @@ The practice's own words for this are already written and already agreed with ev
 
 **3.3 The comparison.** Two or more assessments of one instrument for one client, side by side: the earlier figure, the later figure, the difference, and nothing else. A band figure carries its band's hue from the design brief and no other colour; nothing is red, nothing is labelled high, low or abnormal. The screen shows the age and sex each reference comparison was made against, because a comparison made against a nine-year-old is not the comparison made against a ten-year-old.
 
-A table, not a chart, in the first version. The practice reads figures, and a chart invites a shape to be over-read. One fixed sentence, in English and Arabic, sits on the screen and on anything printed from it: **this is a comparison of measurements taken on different days; it is not a diagnosis.** The words are the consent's own, so the two can never drift apart.
+A table, not a chart, in the first version. The practice reads figures, and a chart invites a shape to be over-read. One fixed sentence sits on the screen in English, and in English and Arabic on anything printed from it: **this is a comparison of measurements taken on different days; it is not a diagnosis.** The words are the consent's own, so the two can never drift apart.
 
 **3.4 The reference figures.** Where the equipment's software has compared a recording against its own database, the platform keeps what the software reported, with the age and sex it used, and computes no comparison of its own. It attaches no word to a figure. What a measurement means is the practitioner's judgement, written in a report and signed by a person (`reports-v1.md`). The screen does arithmetic; the practitioner does the reading.
 
@@ -108,7 +108,7 @@ A normative comparison of the platform's own. Any automatic interpretation of a 
 
 - Every function in `domain/assessment` has tests covering each branch, including a payload with a missing unit, a comparison of mismatched units, and a supersede of a superseded row.
 - The deny cases pass: a `client_contact` reads neither table for their own client; `finance` reads neither; a practitioner off that client's schedule can neither read nor record, and the attempt is audited; another tenant sees nothing on every route; `update` and `delete` on `assessment` are refused to the API role; an `assessment_document` naming another client's document is refused by the composite key; recording without `participation`, and for a minor without `minor_participation`, is refused; a lapsed credential is refused with the reason named.
-- On staging, a synthetic client is given a baseline and a re-map, a file is attached to each, and the comparison shows the difference with the "not a diagnosis" sentence in both languages.
+- On staging, a synthetic client is given a baseline and a re-map, a file is attached to each, and the comparison shows the difference with the "not a diagnosis" sentence in English, and a report printed from it carries the sentence in both languages.
 - An erasure of that client leaves no assessment bytes, keeps the figures, and the confirmation letter says so.
 - Migrations 500 and 501 apply on a fresh database and on one carrying every stream's range; the audit trigger and the classification comment are on both tables.
 - `pnpm verify` and `pnpm test:db` green; one combined review and one re-check under `docs/HANDOVER.md` section 6, with the record posted.

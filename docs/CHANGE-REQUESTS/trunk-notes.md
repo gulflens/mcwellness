@@ -2274,3 +2274,91 @@ ribbon and on nothing else in a document, and a test in
 `tests/reports/document.test.ts` now enforces that for a report rather than
 leaving it to a comment. And `docs/SECURITY.md`'s "Who may read what" is
 rewritten in the same pull request as any policy that changes it.
+
+## Round 35, 2026-09-07 (the console is English only)
+
+**The decision.** The operator, 7 September 2026 at 19:37 Dubai: "everything in
+app.mcwellnessuae.com should be English only, no need to show the Arabic
+fields; Arabic is made only to communicate with clients. Anything facing the
+client can be bilingual, but the admin and staff side of the business will be
+English only." That closes item 4 of `docs/DESIGN-BRIEF.md` section 10, "Arabic
+scope for v1", which had stood open since the brief was written: an English
+product for staff, with every client-facing surface bilingual.
+
+**What changed.** Every Arabic display and every Arabic input on the staff
+screens — `app/admin/**` and `app/therapist/**` — is gone. Nothing else is.
+The API still serves the Arabic columns, the portal and the documents still
+render them, and production's Arabic legal name, one client's Arabic name,
+three package names and five service names sit exactly where they were.
+`tests/lint/console-is-english.test.ts` walks both directories and fails on
+`lang="ar"` or `dir="rtl"`, with one allowlisted file —
+`app/admin/clients/RecordConsentForm.tsx`, because the consent wording is the
+household's own text, read and signed in its own language on the practice's
+screen. **No migration and no policy file**, and no schema, seed or data
+change: this round is a rendering decision and nothing a database enforces.
+
+Two consequences worth naming, because they are losses of an ability and not
+of a display. The Arabic **legal name** and a package's Arabic **name** can no
+longer be typed in the app. Both are still stored, still printed on invoices
+and still editable by an audited data step; a screen that needs to edit one
+again is a small addition, not a repair.
+
+### Every file this round touched outside the trunk's own paths
+
+**client-record.** `app/admin/clients/ClientDrawer.tsx`, `ClientsPage.tsx`,
+`ContactsTab.tsx`, `contactName.tsx` (which loses `contactNameAr` and
+`ContactNameAr`; the contacts tab was their only importer), `ContactForm.tsx`
+and `ContactForm.test.tsx`, `EnrolmentWizard.tsx` and `EnrolmentWizard.test.tsx`.
+
+**scheduling.** `app/admin/schedule/SchedulePage.tsx`, `WeekPage.tsx` and
+`ScheduleClientDrawer.tsx`; `app/therapist/today/TodayPage.tsx` and `today.css`.
+
+**billing.** `app/admin/billing/BillingPage.tsx`, `BalancesSection.tsx`,
+`PackagesSection.tsx` and `PackageDrawer.tsx`.
+
+**assessment.** `app/admin/assessments/Comparison.tsx`, `copy.ts` (its doc
+comment only — the `ar` half of `NOT_A_DIAGNOSIS` is unchanged) and
+`AssessmentsTab.test.tsx`.
+
+**session-capture.** `app/therapist/session/CheckInPage.tsx`,
+`PreflightStep.tsx`, `Slider.tsx`, `SummaryStep.tsx` and `SessionRunner.css`.
+
+**Practice settings**, which no stream's row owns:
+`app/admin/settings/PracticePage.tsx`, `PracticeDrawer.tsx` and
+`PracticePage.test.tsx`.
+
+The trunk's own half is `tests/lint/console-is-english.test.ts`,
+`docs/DESIGN-BRIEF.md`, `docs/SPEC/assessment.md`, `docs/HANDOVER.md` and this
+file. Nothing in the stream paths above is the trunk's beyond this round.
+
+### What the streams should know
+
+**client-record.** The Arabic columns and the API contract are unchanged. The
+enrolment wizard's POST omits `givenNameAr` and `familyNameAr`, which the
+create body already treated as optional, and the contact form's PATCH never
+mentions them — `app/api/clients/contacts.ts` guards each with
+`if (d.givenNameAr !== undefined)`, so an Arabic name already on a contact
+survives an edit made from the form. Both tests now assert the body's shape.
+The fixtures that carry Arabic names stay: they prove Arabic data on the wire
+breaks nothing.
+
+**scheduling.** `AppointmentRow.client` still carries the Arabic name; the day
+table, the week grid, the schedule's drawer and the practitioner's day sheet
+simply do not render it.
+
+**billing.** `CreatePackageInput.nameAr` is `.nullable().optional()`, so the
+package drawer omits the key rather than sending null, and the route's
+`input.nameAr ?? null` makes those the same insert. `serviceTypeNameAr` is
+still on every price and balance row.
+
+**assessment.** `NOT_A_DIAGNOSIS` keeps both halves, byte for byte. The screen
+renders the English one; `tests/reports/document.test.ts` still proves a
+printed document carries the pair.
+
+**session-capture.** `RatingQuestion.labelAr`, the checklist's `labelAr` and
+the catalogue's `nameAr` are all still on the wire and still typed. The runner
+does not render them.
+
+**Everyone.** A screen that wants to show Arabic again is a decision for the
+operator, not a fix — and the guard test will fail until the allowlist beside
+it says why.

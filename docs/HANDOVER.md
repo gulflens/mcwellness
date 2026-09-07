@@ -1,6 +1,11 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 7 September at 19:15: **piece eleven,
+Written 4 September 2026, updated on 7 September at 20:10: the operator
+decided at 19:37 that **the console and the practitioner app are English
+only** — Arabic is for talking to clients, so the portal, the invoices, the
+reports, the consent wording and the messages the practice sends stay
+bilingual and the staff screens do not — and trunk round 35 carried that
+through the screens (section 10 step 7). Earlier the same day: **piece eleven,
 the books' ledger, was planned, approved, built, reviewed, fixed, re-checked
 and merged in one day** (pull request 109, `main` at `dce3ca1`), and the
 fourteenth staging pass and the third live pass carry its six migrations to
@@ -696,6 +701,18 @@ nine and ten; see the records on pull requests 73 to 83).
    entries; the deferred balance check answering 500 rather than a coded 400
    if a route ever bypassed `assertBalanced`. (d) Step 3's leftovers and
    `assessment-02.md` as before.
+
+7. **Trunk round 35, the console in English only, is built** (7 September,
+   19:53 to 20:10): the operator's decision of 19:37 removed every Arabic
+   display and every Arabic input from `app/admin/**` and `app/therapist/**`,
+   with no API, schema, policy, seed or data change, and
+   `tests/lint/console-is-english.test.ts` keeps them out. The record is
+   `docs/CHANGE-REQUESTS/trunk-notes.md`, round 35, and the brief is
+   `docs/superpowers/plans/2026-09-07-english-only-console.md`. Merged as
+   pull request (number to follow). Two abilities are deliberately gone with
+   it: the practice's Arabic legal name and a package's Arabic name can no
+   longer be typed in the app, though both are still stored and still
+   printed.
 
 ## 11. Where Claude's own memory lives
 
