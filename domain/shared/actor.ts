@@ -44,6 +44,13 @@ export type Action =
   | { type: 'client.write'; clientId: string }
   | { type: 'user_role.grant'; role: Role }
   | { type: 'practice.settings.write' }
+  | {
+      type: 'practitioner.base.write';
+      /** Whose base is being set. */
+      practitionerId: string;
+      /** The caller's own practitioner row, resolved by the route; null when they have none. */
+      ownPractitionerId: string | null;
+    }
   | { type: 'session.execute'; serviceTypeId: string; on: IsoDate }
   | { type: 'report.sign'; serviceTypeId?: string }
   | { type: 'report.list'; clientId: string }
@@ -142,6 +149,39 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // change the name the receipt is issued under. The floor beneath this is
       // app.guard_tenant_identity (migration 905), not this rule.
       return hasRole(actor, 'owner', 'admin');
+    case 'practitioner.base.write':
+      // Where a practitioner's driving day starts and ends
+      // (docs/SPEC/route-planning.md section 5.4). The operator's instruction
+      // of 8 September 2026 — "This is Shauna's home, every practioner can add
+      // their own address" — overturns decision 14, which said the base would
+      // only ever reach production by a data step.
+      //
+      // A base is a **person's home**, so this is the narrowest write in this
+      // file. The office roles set anybody's, because somebody has to be able
+      // to correct a coordinate for a practitioner who is out on the road; a
+      // practitioner sets their own and nobody else's, because a colleague's
+      // front door is not theirs to move. Finance and a client contact never:
+      // finance may reach a household's money but has no business in where a
+      // member of staff sleeps, and a client contact is outside the practice
+      // altogether.
+      //
+      // `ownPractitionerId` is the route's to resolve, on every request, from
+      // the caller's own `practitioner` row — never from anything the caller
+      // claims — the way `ctx.clientIds` and `ctx.assigneeCapabilities`
+      // already are. Null means this user is not a practitioner at all, and
+      // null must never match: a user with no practitioner row asking to set a
+      // base identified by nothing is refused, not admitted by two nulls
+      // meeting. The floor beneath this is the restrictive policy on
+      // `practitioner` and `app.set_practitioner_base` (migration 913), which
+      // asks the same question again in the database.
+      if (hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+        return true;
+      }
+      return (
+        hasRole(actor, 'practitioner') &&
+        action.ownPractitionerId !== null &&
+        action.ownPractitionerId === action.practitionerId
+      );
     case 'session.execute':
       return (
         hasRole(actor, 'practitioner', 'lead_practitioner') &&
