@@ -1,0 +1,65 @@
+/* The day map (docs/SPEC/route-planning.md section 4). Tokens and logical
+   properties only; no hue, because the brief reserves it for the bands and the
+   three status states. */
+
+.daymap {
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.daymap__canvas {
+  position: absolute;
+  inset: 0;
+  background: var(--paper);
+}
+
+/* The pins and the labels sit above the canvas and let every other press
+   through to the map underneath. */
+.daymap__layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.daymap__pin {
+  position: absolute;
+  pointer-events: auto;
+  translate: -50% -50%;
+  min-inline-size: var(--tap);
+  min-block-size: var(--tap);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.daymap__pin[aria-current='true'] {
+  background: var(--ink);
+  color: var(--surface);
+  border-color: var(--ink);
+}
+
+.daymap__pin--base {
+  cursor: default;
+  color: var(--slate);
+}
+
+.daymap__leg {
+  position: absolute;
+  translate: -50% -50%;
+  padding-block: 0.125rem;
+  padding-inline: 0.375rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius, 4px);
+  background: var(--surface);
+  color: var(--slate);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
