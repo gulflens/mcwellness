@@ -1527,6 +1527,134 @@ them. Any region serves staging, since only synthetic people live there.
 Record the project reference (the `abcdefghij` part of its URL) and its
 region; they appear in every URL below.
 
+## What was done on 2026-09-07: the fifteenth staging pass — migration 409, the discount
+
+Pull request 118 (`billing-discounts`, merged to `main` as `6c32f2c`) owed
+staging one migration, `db/migrations/409_billing_discount.sql`
+(sha256 `4e301ba51ddcbda25b6244954f720d38eaaaad8ae41b7b81a4b96d2f2a47c6aa`, computed
+locally with `shasum -a 256` and confirmed against the brief). Before
+anything was touched, `select filename from schema_migration order by 1` on
+staging (81 rows) was diffed against `ls db/migrations` on the checkout (82
+files): the only file missing was exactly `409_billing_discount.sql`, and
+nothing else differed.
+
+- **The file was applied as one call**, `409_billing_discount` through
+  `mcp__claude_ai_Supabase__apply_migration`: the runner's own audit context
+  (`app.reason = 'migration 409_billing_discount.sql'`, a fresh
+  `app.request_id`), the file's full text unchanged (verified byte-identical
+  to the source file with `diff` before sending), then the bookkeeping insert
+  carrying the checksum above. It succeeded on the first try.
+  `schema_migration` now holds **eighty-two rows**, its filenames matching
+  `ls db/migrations` exactly, and the new row for `409_billing_discount.sql`
+  carries checksum `4e301ba51ddcbda25b6244954f720d38eaaaad8ae41b7b81a4b96d2f2a47c6aa`.
+- **The 22 policy files were re-applied in one call**, `policies_after_409`,
+  in path order (`find db/policies -name '*.sql' | sort`) inside a single
+  `apply_migration` transaction whose query opened with the same
+  `app.reason = 'policies'` stamp the runner's own `applyPolicies` uses. It
+  succeeded on the first try. `pg_policies` on `public` counts **155**,
+  unchanged from the fourteenth pass — this migration added no new table and
+  so no new policy.
+- **The rows the backfill touched, before and after.** Before: `price` held
+  5 rows summing to 152500 fils of `unit_price_fils`; `package_price` held
+  3 rows (`gold` amount 1697500 against the package's own list 1997500;
+  `platinum` amount 2660500 against list 3130000; `silver` amount 1032500
+  against list 1215000); `invoice_line` held 0 rows; `package_purchase` held
+  0 rows — the synthetic practice has sold nothing yet. After: every `price`
+  row now has `list_price_fils = unit_price_fils`, `discount_fils = 0` and
+  `discount_basis_points` null (`count(*) filter (...)` reads **0**), and the
+  count and sum are unchanged at 5 and 152500. Every `package_price` row now
+  carries `list_price_fils` = `greatest(package.list_price_fils, amount_fils)`,
+  which was the package's own list figure in all three cases since every
+  bundle sells under its list price: `gold` list 1997500, discount 300000,
+  amount 1697500; `platinum` list 3130000, discount 469500, amount 2660500;
+  `silver` list 1215000, discount 182500, amount 1032500 — `amount_fils =
+  list_price_fils - discount_fils` holds in each row (checked by arithmetic,
+  not merely by the constraint's existence). `invoice_line` and
+  `package_purchase` remain at 0 rows; there was nothing for the backfill to
+  touch on either.
+- **The eleven constraints the brief named are present** (read off the
+  migration's own text, which the brief said to do): 
+  `price_unit_is_list_less_discount`, `price_discount_within_list`,
+  `price_discount_percent_range`, `price_list_nonnegative`,
+  `package_price_amount_is_list_less_discount`,
+  `package_price_discount_within_list`, `package_price_discount_percent_range`,
+  `package_price_list_nonnegative`,
+  `invoice_line_net_is_quantity_times_unit_less_discount`,
+  `invoice_line_discount_within_line`, `invoice_line_discount_percent_range` —
+  all eleven found in `pg_constraint`; `invoice_line_net_is_quantity_times_unit`
+  (406's constraint, dropped by 409) was queried for in the same call and is
+  confirmed gone.
+- **`pg_get_functiondef('app.charge_single_visit'::regproc)`** contains both
+  `discount_fils` and `list_price_fils`, read back from the installed body:
+  the invoice line now inserts `v_price.list_price_fils` as the unit and
+  `v_price.discount_fils`/`v_price.discount_basis_points` alongside it, with
+  `net_fils` (`v_price.unit_price_fils`) unchanged.
+- **The column comments.** The migration text carries ten `comment on column`
+  statements, not the brief's nine — `price.list_price_fils`,
+  `price.discount_fils`, `price.discount_basis_points`,
+  `package_price.list_price_fils`, `package_price.discount_fils`,
+  `package_price.discount_basis_points`, `invoice_line.discount_fils`,
+  `invoice_line.discount_basis_points`, `package_purchase.discount_basis_points`
+  and `package_purchase.discount_reason` — and `col_description` confirms all
+  ten are installed on staging with exactly the wording the migration file
+  carries. Recorded here as a difference from the brief rather than silently
+  matched to it.
+- **`audit_log`.** The backfill's two `update` statements (one touching all 5
+  `price` rows, one touching all 3 `package_price` rows) fired the audit
+  trigger: `count(*) where reason = 'migration 409_billing_discount.sql'`
+  reads **8**, exactly 5 + 3. `audit_log` overall now stands at **994** rows,
+  consistent with the fourteenth pass's own 986 plus this pass's 8; nothing
+  else this pass wrote to an audited table.
+- **The fingerprint**, against a fresh `pnpm db:reset && pnpm db:migrate` in
+  this same worktree (its own database on port 5436, container
+  `mcwellness-billing-db-1`, confirmed by `docker ps` before use; `psql` is
+  not installed on this Mac, so the counts were run with
+  `docker exec mcwellness-billing-db-1 psql ...` instead). Eighty-two
+  migrations and twenty-two policy files applied cleanly to an empty local
+  database. All seven parts the brief asked for matched staging exactly,
+  count for count: columns in `information_schema.columns` for `public`
+  **1,290 = 1,290**; constraints in `pg_constraint` for `public` **613 = 613**;
+  indexes in `pg_indexes` for `public` **501 = 501**; policies on `public`
+  **155 = 155**; functions in schemas `app` and `public` together **95 = 95**;
+  triggers on `public` tables **240 = 240**; tables in `public` with row
+  security enabled **74 = 74**. The two known benign differences earlier
+  passes record (Supabase's own `service_role` carrying grants a fresh local
+  build has no such role to hold, and `schema_migration.checksum`'s physical
+  column slot differing by history rather than by name, type, nullability or
+  default) were not expected to surface at this count-level grain, and did
+  not.
+- **The audit chain.** `select app.verify_audit_chain()` returned **null**
+  (the chain verifies), read immediately after the 994-row count above.
+- **What this pass deliberately did not do.** Nothing was sold, no price or
+  package was created, and production was never touched: every
+  `apply_migration` and `execute_sql` call above named `ajjkvjtqxktkgrvcrzkh`
+  and nothing else. The staging app is still the build from before this pass;
+  the discount fields on a sale only become reachable once the app is
+  rebuilt from `main` (`pnpm exec vite build --mode staging`, section 6
+  below), which this pass leaves for the next one.
+- **A pre-flight correction, for the record.** This pass began with
+  `git diff origin/main --stat` in the billing worktree showing three
+  unrelated documentation files (`docs/HANDOVER.md`,
+  `docs/PLAN/route-planning.md`, `docs/SPEC/route-planning.md`) — main had
+  moved on after pull request 118 merged, because a second pull request
+  (route-planning-plan, 117) landed docs-only changes around it. Work was
+  stopped and reported per the brief's literal instruction; the coordinator
+  then fast-forwarded the worktree to `main`'s tip `6c32f2c`, at which point
+  `git diff origin/main --stat` printed nothing, confirmed independently
+  before this pass's step 1 began. `db/migrations/409_billing_discount.sql`'s
+  checksum was unaffected throughout.
+- **How to read this in a fresh session.** This bullet list is the whole of
+  what changed: one migration and one policy re-apply against
+  `ajjkvjtqxktkgrvcrzkh` only, nothing local except the fingerprint's
+  disposable `pnpm db:reset && pnpm db:migrate`. To confirm the state
+  independently, re-run the "before anything" check in the brief (`select
+  filename from schema_migration order by 1` against `ls db/migrations`) and
+  it should find nothing pending; `db/migrations/409_billing_discount.sql` is
+  the one file this pass added, no policy file is new (the same 22 as the
+  fourteenth pass were re-applied, unchanged), and this session's report sits
+  at
+  `/private/tmp/claude-501/-Volumes-Storage-McWellness/25a98803-ac1e-426c-a865-7919fa0cbca3/scratchpad/discounts-staging-report.md`.
+
 ## 2. The database schema
 
 Run the migrations once, from a laptop, with the project's direct connection

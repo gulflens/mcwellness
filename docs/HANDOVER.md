@@ -1,6 +1,13 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 7 September at 20:30: the operator
+Written 4 September 2026, updated on 7 September at 23:50: the operator asked
+at 21:49 for **a discount on any transaction**, and the billing round that
+answers it is built, reviewed, fixed, re-checked and merged as pull request
+118 (`main` at `6c32f2c`, migration 409, on staging): a discount is money off
+a list figure, on a service price, on a package price and on a sale, printed
+on the invoice, and every price already on the list carries forward untouched
+(`docs/PLAN/billing-discounts.md`, `docs/SPEC/billing.md` section 2.4).
+Production waits on the operator's word. Earlier the same evening the operator
 decided at 19:37 that **the console and the practitioner app are English
 only** — Arabic is for talking to clients, so the portal, the invoices, the
 reports, the consent wording and the messages the practice sends stay
@@ -218,6 +225,27 @@ an unanswered decision. The next session's first act is section 10.
 - The operator's morning page is `docs/OPERATOR/2026-09-06-decisions.md`
   (pull request 85): every decision and action that is theirs, with the
   Hostinger question and the lawyer's note drafted.
+- **The discount round** (7 September, 21:49 to 23:38, pull request 118,
+  `main` at `6c32f2c`). The operator asked for a discount field on the
+  transactions, the packages and the individual prices, so the books show what
+  is given away. One meaning everywhere: money off a **list** figure, typed as
+  a percentage or a sum, always with a reason. `price` and `package_price`
+  gained `list_price_fils`, `discount_fils` and `discount_basis_points`, with
+  the charged figure held to `list − discount` by a check constraint;
+  `invoice_line` gained the two discount columns and its net check became
+  `net = quantity × unit − discount`; `package_purchase` records the combined
+  share and the reason an extra discount was given. A sale may carry an extra
+  discount for that sale alone, and only the owner, an admin or finance may
+  give one — the trio that may forgive a call-out fee. The rendered invoice
+  prints the discount under the line and in the totals, in both languages.
+  **The books did not change**: income was already recorded net, so nothing
+  under `domain/accounting` moved and the accounting identities still hold.
+  Migration 409 backfills every existing row as "list equals the figure, no
+  discount", and the three launch package prices as "list minus the
+  difference", so nothing a family was shown changed — proved on staging,
+  where the five prices came through with their sum unchanged at 152,500 fils.
+  The five defaults are Claude's, listed in `docs/PLAN/billing-discounts.md`
+  and in section 8.
 - The old Flutter app (`McWellness UAE`, a separate repository) is not this
   platform. Nothing in it needs revisiting for this work.
 
@@ -446,6 +474,26 @@ run carry sixteen tasks without a stall; and a worktree's ports must be
 checked against every running container, not only the ownership table — the
 two trunk worktrees had taken 5441 and 5442 by hand.
 
+**What the discount round cost (7 September, 23:50).** Builder on Opus about
+0.43 million in one run of 46 minutes from a written plan of ten tasks; the
+combined review on Fable 5.1 0.21 million (one blocking finding and three
+gaps); the fix round on Opus 0.16 million; the re-check on Opus 0.10 million;
+the fifteenth staging pass on Sonnet 0.23 million, plus 0.08 million for the
+run of it that stopped at its pre-flight check. About 1.2 million in agents,
+plus the integrator's own conversation, which wrote the specification section,
+the operator's plan and the implementation plan. Three lessons kept. **The
+account's Fable allowance ran out at 23:14**, in the middle of the round, and
+the re-check was refused outright; the operator switched the session to Opus
+and it ran there, so rule 3's second half needs a named fallback and Opus is
+it. A brief that tells an agent "stop if this check differs" must scope the
+check to what actually matters: `git diff origin/main` in a stream worktree
+compares against a `main` that other sessions keep moving, and three unrelated
+documentation files stopped the staging pass twice before the worktree was
+simply fast-forwarded. And a piece of work whose whole purpose is a figure on
+a document is worth checking on the document: the round's own review caught
+that the Add package drawer could show a price the server would not write, one
+screen away from a catalogue row carrying a reason for a figure nobody saw.
+
 ## 7. The failed-run emails
 
 GitHub emails the repository owner for every failed or cancelled workflow
@@ -475,6 +523,30 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
+- **The discount round is merged and on staging, not on production.** Pull
+  request 118 (`main` at `6c32f2c`) adds migration 409 and a discount
+  everywhere money is set or taken; the fifteenth staging pass carried it to
+  staging at 23:45. **Production does not have it and will not until you say
+  so.** Five defaults are Claude's until you overrule them, all set out in
+  `docs/PLAN/billing-discounts.md`: a discount is money off the list figure and
+  nothing is ever sold above it; the price list's own discount and a sale's
+  extra discount add into one discount on the invoice; an extra discount at a
+  sale is the owner's, an admin's or finance's; income is recorded net of the
+  discount, with the report of discounts given left to piece thirteen; and
+  percentages round half up to the fils. One question is genuinely yours: your
+  three launch prices carry forward as the **sums** the price list of 7
+  September named, which are close to fifteen per cent but not exactly it,
+  because they were rounded to the nearest five dirhams. Say the word and they
+  can be re-expressed as a true fifteen per cent, which would move each price
+  by a few dirhams.
+- **Pull request 116 is stale and needs your call.** It is the earlier
+  session's record of the fourth live pass, three documentation files. No
+  check ever ran on it and it now sits behind `main`, so this session left it
+  alone rather than merge something unchecked. Its content matters, because
+  this file's own opening still described that live pass as waiting while 116
+  records it as done at 20:26 on 7 September. Either let a session rebase it
+  and merge it once its checks are green, or close it and let a later
+  hand-over carry the fact.
 - **The books are live.** On your word ("lets go live", 18:28 on 7
   September) migrations 450 to 454 and 958 were applied to production and the
   live process was rebuilt from `main` at `727310e` (18:48; `docs/PRODUCTION.md`,
@@ -730,6 +802,25 @@ nine and ten; see the records on pull requests 73 to 83).
    `9fc6cb5`. Two abilities are deliberately gone with it: the practice's
    Arabic legal name and a package's Arabic name can no longer be typed in
    the app, though both are still stored and still printed.
+
+8. **The discount round is done** (7 September, 21:49 to 23:45). Asked at
+   21:49, specified as `docs/SPEC/billing.md` section 2.4 beside the
+   operator's plan `docs/PLAN/billing-discounts.md`, built by one Opus run
+   from `docs/superpowers/plans/2026-09-07-billing-discounts.md`, reviewed on
+   Fable 5.1 (security, schema and compliance pass; one blocking design
+   finding and three gaps), fixed on Opus, re-checked clean on Opus, both
+   checks read positively on the head commit, and merged as pull request 118
+   with its record on the pull request; `main` at `6c32f2c`. The fifteenth
+   staging pass carried migration 409 and the policy files to staging and
+   proved the backfill left every existing figure alone (`docs/STAGING.md`).
+   **Production waits on the operator's word**; the recipe is
+   `docs/RUNBOOK/go-live.md` and `docs/PRODUCTION.md`'s own live passes, and
+   the one migration to apply is `409_billing_discount.sql`. Left for later
+   rounds: "discounts given against list price" as a figure is piece
+   thirteen's, reading `invoice_line.discount_fils`; and a corporate
+   customer's negotiated rate, which piece sixteen will want, would be a
+   standing discount per client, which this round deliberately does not
+   pre-build.
    **The next act is the fourth live pass**: rebuild app.mcwellnessuae.com
    from `main` at `9fc6cb5` by the recipe in `docs/PRODUCTION.md` (the third
    live pass), which the auto-mode classifier refused at 20:25 at the upload
