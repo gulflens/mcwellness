@@ -23,7 +23,7 @@ import {
   SendDocumentInput,
   SendDocumentResponse,
 } from './document-schema';
-import { invoiceDocument, receiptDocument } from './document-source';
+import { invoiceDocument, practiceLogo, receiptDocument } from './document-source';
 import { documentFonts } from './fonts';
 import { isUuid } from './ids';
 import { documentSender } from '../_middleware/sending';
@@ -151,7 +151,13 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
       return c.json({ error: 'not_found', requestId }, 404);
     }
 
-    const bytes = renderDocument(source.document, documentFonts());
+    // The practice's own mark, when it has filed one this writer can draw. Null
+    // is a real answer and the wordmark stands in its place; a store that
+    // cannot be reached raises instead, because filing a document is a
+    // once-only act and a permanent invoice should not lose the practice's mark
+    // to a second's outage (document-source.ts, `practiceLogo`).
+    const logo = await practiceLogo(db, storage);
+    const bytes = renderDocument(source.document, documentFonts(), logo);
     const documentId = randomUUID();
     const key = clientDocumentKey(actor.tenantId, source.clientId, documentId);
     const sha256 = createHash('sha256').update(bytes).digest();
@@ -245,9 +251,11 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
     //
     // The hash on the row is what decides. A re-render whose fingerprint differs
     // is not a repair: something the document was rendered from has moved since
-    // it was filed, and writing the new bytes under the old row's key would
-    // replace a filed financial document with a different one and leave the row
-    // asserting a hash for bytes that no longer match it. So it is refused, and
+    // it was filed — the practice's own mark included, which is drawn as it is
+    // today rather than as it was (docs/SPEC/billing.md section 5.6) — and
+    // writing the new bytes under the old row's key would replace a filed
+    // financial document with a different one and leave the row asserting a
+    // hash for bytes that no longer match it. So it is refused, and
     // the mismatch is logged with the request id and nothing else — a key and a
     // hash both name a client's document.
     if (!(await storage.exists(row.storage_key))) {
@@ -255,7 +263,7 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
       if (!remade) {
         return c.json({ error: 'not_found', requestId }, 404);
       }
-      const bytes = renderDocument(remade, documentFonts());
+      const bytes = renderDocument(remade, documentFonts(), await practiceLogo(db, storage));
       if (createHash('sha256').update(bytes).digest('hex') !== row.sha256.toString('hex')) {
         console.error(
           JSON.stringify({ requestId, name: 'DocumentWouldNotMatchWhatWasFiled', documentId }),

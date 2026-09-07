@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
-  discountNote,
+  discountLine,
   extractAll,
   extractText,
   NOT_REGISTERED_BASIS,
@@ -113,13 +113,19 @@ describe('an invoice from a practice that is not registered for VAT', () => {
     expect(page).not.toContain('VAT registration number');
     expect(page).not.toContain('100000000000003');
     expect(page).not.toContain('5%');
-    expect(page).not.toContain('VAT (AED)');
-    expect(page).not.toContain('Net (AED)');
+    expect(page).not.toContain('VAT rate');
+    // The totals box holds one row, so neither of the two a registration adds
+    // is on the page at all.
+    expect(page).not.toContain('Net');
+    expect(page).not.toContain(asCopied(WORDS.net.ar));
   });
 
   it('shows one amount, and it is the net price to the fils', () => {
-    expect(page).toContain('Total (AED)');
-    expect(page).toContain('700.00');
+    expect(page).toContain('Total');
+    // The currency is in the cell now, following the operator's design
+    // (docs/SPEC/billing.md section 5.6), so a reader outside the practice
+    // never has to look at a column heading to know what a figure is in.
+    expect(page).toContain('AED 700.00');
   });
 
   it('states plainly why there is no VAT on it, in both languages', () => {
@@ -150,14 +156,14 @@ describe('an invoice from a practice that is registered', () => {
     expect(page).toContain('VAT registration number');
     expect(page).toContain('100000000000003');
     expect(page).toContain('5%');
-    expect(page).toContain('Net (AED)');
-    expect(page).toContain('VAT (AED)');
+    expect(page).toContain('VAT rate');
+    expect(page).toContain('Net');
   });
 
   it('adds VAT on top of the net price, to the fils', () => {
-    expect(page).toContain('700.00'); // net
-    expect(page).toContain('35.00'); // VAT at five per cent
-    expect(page).toContain('735.00'); // total
+    expect(page).toContain('AED 700.00'); // net
+    expect(page).toContain('AED 35.00'); // VAT at five per cent
+    expect(page).toContain('AED 735.00'); // total
   });
 
   it('says on what basis it is issued to a household', () => {
@@ -190,7 +196,39 @@ describe('every invoice, whatever the registration', () => {
     expect(page).toContain('Neurofeedback session');
     expect(page).toContain(asCopied('جلسة نيوروفيدباك'));
     expect(page).toContain('Quantity');
-    expect(page).toContain('Unit price (AED)');
+    // The headings lost their "(AED)" when every figure gained its own.
+    expect(page).toContain('Unit price');
+    expect(page).not.toContain('Unit price (AED)');
+  });
+
+  it('names who it is for, and how to reach the practice', () => {
+    // The design's own two blocks: "Billed to" against the right margin above
+    // the household's name, and the practice's contact details in the band at
+    // the foot of the page.
+    expect(page).toContain('Billed to');
+    expect(page).toContain('P: +971 50 000 0011');
+    expect(page).toContain('E: studio@example.com');
+    expect(page).toContain('W: https://example.com');
+  });
+
+  it('leaves the footer band a line shorter when the practice has recorded nothing', () => {
+    const bare = extractAll(
+      renderDocument(
+        invoiceFor({
+          ...UNREGISTERED,
+          contactPhone: null,
+          contactEmail: null,
+          website: null,
+        }),
+        fonts,
+      ),
+    );
+    // The legal name still sits under the hairline at the foot of the page; the
+    // second line is simply not there rather than being a row of empty labels.
+    expect(bare).toContain('Synthetic Wellness Studio');
+    expect(bare).not.toContain('P: ');
+    expect(bare).not.toContain('E: ');
+    expect(bare).not.toContain('W: ');
   });
 
   it('sets both languages on the same page, side by side', () => {
@@ -218,6 +256,7 @@ describe('every invoice, whatever the registration', () => {
 describe('the date of supply', () => {
   it('is shown only when it differs from the date of issue', () => {
     const same = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
+    expect(same).toContain('Issued 2 September 2026');
     expect(same).not.toContain('Date of supply');
 
     const differs = extractAll(
@@ -305,8 +344,8 @@ describe('a receipt makes no tax statement, whoever issued it', () => {
     const unregistered = extractAll(renderDocument(receiptFor(UNREGISTERED), fonts));
     for (const page of [registered, unregistered]) {
       expect(page).not.toContain('not registered for VAT');
-      expect(page).not.toContain('VAT (AED)');
       expect(page).not.toContain('VAT rate');
+      expect(page).not.toContain('Net');
     }
   });
 });
@@ -334,9 +373,16 @@ describe('a receipt', () => {
   it('carries its own number, from its own book', () => {
     // RCP, not INV: a payment settles a tax invoice, it is not one, and the
     // Federal Tax Authority sequence stays a sequence of invoices
-    // (405_billing_receipt.sql).
+    // (405_billing_receipt.sql). The design sets it large and in violet with
+    // no label, where an invoice sets its own.
     expect(page).toContain('RCP-000004');
-    expect(page).toContain('Receipt number');
+    expect(page).toContain('Date received 2 September 2026');
+  });
+
+  it('says who the money came from, and not who it is billed to', () => {
+    expect(page).toContain('Received from');
+    expect(page).not.toContain('Billed to');
+    expect(page).toContain('Robin Fairweather');
   });
 
   it('says how the money arrived and which invoice it settles', () => {
@@ -346,8 +392,8 @@ describe('a receipt', () => {
   });
 
   it('shows the amount received, to the fils', () => {
-    expect(page).toContain('Amount received (AED)');
-    expect(page).toContain('700.00');
+    expect(page).toContain('Received');
+    expect(page).toContain('AED 700.00');
   });
 });
 
@@ -369,6 +415,16 @@ describe('a receipt', () => {
  * These depend on the version of the font package the faces are read from
  * (`app/api/billing/fonts.ts` embeds the programs verbatim), so upgrading it
  * moves all three at once — which is itself worth seeing rather than not.
+ *
+ * **All three moved on 8 September 2026**, when the practice's own design
+ * replaced the layout these documents had carried since round 20
+ * (docs/SPEC/billing.md section 5.6). That is the largest change any of them
+ * has had and it is exactly the sort this pinning exists to make somebody
+ * declare.
+ *
+ * They are rendered with no logo, deliberately: the mark is the practice's own
+ * row and not a file in this repository, so a golden that embedded one would
+ * be a golden about a picture rather than about the writer.
  */
 describe('the bytes of a rendered document', () => {
   const sha256 = (bytes: Uint8Array): string =>
@@ -378,17 +434,17 @@ describe('the bytes of a rendered document', () => {
     [
       'an invoice from an unregistered practice',
       () => renderDocument(invoiceFor(UNREGISTERED), fonts),
-      'be2d58f7062ce25bbd68b81f088d5f494ac0eaf5b01e42ec07f2289e32368dbb',
+      '0eec4cde068c99d28b3d92108b12e826f8a19c5cd402ab95a85b4996d488951c',
     ],
     [
       'an invoice from a registered practice',
       () => renderDocument(invoiceFor(REGISTERED), fonts),
-      'e810db7bb5c027dfde70daf39ff56fdf9af434281ac700daeac3b6bb0c697563',
+      '16d6281eec2122ec742c93350bb877da767f0288cfd73c14c3d732911d65ee7e',
     ],
     [
       'a receipt',
       () => renderDocument(receiptFor(UNREGISTERED), fonts),
-      'ad3aca707e149e85e3787aedf500c008ecafe52b6fa31e0f823b8da5c94b1e77',
+      'b396c5dfd1a6e149d8adf452ccd8500f04984170122670226c32a5962059c0ea',
     ],
   ];
 
@@ -433,18 +489,20 @@ describe('an invoice with a discount on it', () => {
   const page = extractAll(renderDocument(discountedInvoice(UNREGISTERED), fonts));
 
   it('prints the discount beneath a discounted line and in the totals, in both languages', () => {
-    expect(page).toContain('Discount 15%: 105.00');
+    // The design's own phrasing: the price that was quoted and what came off
+    // it, rather than a percentage a reader has to apply for themselves.
+    expect(page).toContain('List AED 700.00 · less AED 105.00');
     // The Arabic word itself, as a reader copies it off the page. The whole
     // note is a mixed run — Arabic label, Western figures — and a bidirectional
     // run is not reversible character for character, so what is pinned here is
     // the word and the figure beside it rather than the visual order of both.
     expect(page).toContain(asCopied('الخصم'));
-    expect(page).toContain('Before discount (AED)');
-    expect(page).toContain('Discount (AED)');
+    expect(page).toContain('Before discount');
+    expect(page).toContain('Discount');
     // The list figure, what came off it, and what is charged.
-    expect(page).toContain('700.00');
-    expect(page).toContain('105.00');
-    expect(page).toContain('595.00');
+    expect(page).toContain('AED 700.00');
+    expect(page).toContain('AED 105.00');
+    expect(page).toContain('AED 595.00');
   });
 
   it('says nothing about a discount when none was given', () => {
@@ -458,23 +516,20 @@ describe('a registered practice’s invoice with a discount on it', () => {
   const page = extractAll(renderDocument(discountedInvoice(REGISTERED), fonts));
 
   it('charges VAT on the net after the discount, and says both figures', () => {
-    expect(page).toContain('Before discount (AED)');
-    expect(page).toContain('Discount (AED)');
-    expect(page).toContain('Net (AED)');
+    expect(page).toContain('Before discount');
+    expect(page).toContain('Discount');
+    expect(page).toContain('Net');
     // Five per cent of 595.00, which is what the row says; the renderer
     // recomputes nothing.
-    expect(page).toContain('29.75');
-    expect(page).toContain('624.75');
+    expect(page).toContain('AED 29.75');
+    expect(page).toContain('AED 624.75');
   });
 });
 
-describe('the discount note', () => {
-  it('names the percentage when there was one, and only the figure when there was not', () => {
-    expect(discountNote({ discountFils: 10_500, discountBasisPoints: 1500 }).en).toBe(
-      'Discount 15%: 105.00',
-    );
-    expect(discountNote({ discountFils: 10_500, discountBasisPoints: null }).en).toBe(
-      'Discount: 105.00',
-    );
+describe('the discount line', () => {
+  it('names the price that was quoted and what came off it, with the currency in each', () => {
+    expect(discountLine(1_215_000, 232_500).en).toBe('List AED 12,150.00 · less AED 2,325.00');
+    expect(discountLine(1_215_000, 232_500).ar).toContain('12,150.00');
+    expect(discountLine(1_215_000, 232_500).ar).toContain('2,325.00');
   });
 });
