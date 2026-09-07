@@ -734,3 +734,50 @@ CDN's and worth a line to Hostinger; the deep security scan against the first
 release tag. New: a cron job for the nightly poster, and the tax adviser's
 confirmation of the Small Business Relief election (`docs/HANDOVER.md`,
 section 8).
+
+## What was done on 2026-09-07: the catalogue loaded — the price list of 7 September
+
+At 19:07 on 7 September (Dubai), on the operator's instruction ("i need it
+ingested to my database", 18:57, with the practice's price-list PDF) and their
+four answers (the PDF's 15% figures, not the 20% the message said; five service
+types; no certification requirement for now; load it now), the practice's
+opening catalogue was written to production in one transaction, as a data step
+through the Supabase tools, under the audit reason "Price list of 7 September
+2026, launch pricing; ends on the founder's word." and with no author recorded,
+the way the migrations' own data steps write. The script is
+`~/Documents/mcwellness-catalogue-2026-09-07.sql` on the operator's laptop,
+outside the repository; a second run fails on the unique keys, so it cannot
+double-load.
+
+Production had no service type, price or package before this. The app lists
+service types but does not create them, so this could not have been typed in;
+the seed generator (`db/seed/generate.ts`) already carried the same catalogue
+in the founder's decisions of 3 September, and its shapes were copied.
+
+- **Five service types**, `requires_certification` null on all (the operator's
+  choice for now; the seed's QEEG-vendor and BCIA gates can be switched on
+  later): discovery call (60 minutes, remote), consultation (45, home or
+  remote), brain map (QEEG) (90, home), results call (30, remote),
+  neurofeedback session (60, home, carrying the seed's five-item pre-session
+  checklist and three 0–10 ratings as drafts to edit in Settings).
+- **Five prices** valid from 7 September, VAT stamped at 500 basis points from
+  setting version 1: brain map AED 825, neurofeedback session AED 700;
+  discovery call, consultation and results call AED 0, each with a reason
+  saying it is included or free and never billed — a zero price, not a
+  missing one, so delivering them raises no billing exception.
+- **Three packages**, twelve months' expiry, the list price stored as the
+  "normally" figure and the launch price as the selling price, no percentage
+  stored anywhere (401's rule): Silver, 1 consultation + 2 brain maps + 15
+  sessions, list AED 12,150, launch AED 10,325; Gold, 2 + 3 + 25, list 19,975,
+  launch 16,975; Platinum, 3 + 4 + 40, list 31,300, launch 26,605. The launch
+  figures are the PDF's own, rounded to a five where 15% is not exact.
+- **Read back**: five service types, five prices, three packages with nine
+  components and three package prices; twenty-five audit rows carry the
+  reason; `app.verify_audit_chain()` verifies. The practice is not
+  VAT-registered, so these amounts are what clients pay; 5% goes on top once
+  it is.
+
+**Left to the founder, in the app.** Her practitioner row and credentials
+before the first assignment; the certification requirement when she wants it;
+the launch prices superseded with a reason when the launch ends; Compassionate
+Inquiry added when it has a price.
