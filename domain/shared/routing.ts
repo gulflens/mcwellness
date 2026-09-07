@@ -53,6 +53,18 @@ export type RoutingProvider = {
    * not code" true without the seam reading a table.
    */
   driveMatrix(legs: readonly DriveLeg[], factors: DriveFactors): Promise<DriveEstimate[]>;
+  /**
+   * Every origin to every destination, all leaving at one instant: rows in
+   * origin order, columns in destination order. At most `GRID_MAX_ELEMENTS`
+   * elements — the vendor's ceiling on one call — and refused above it
+   * before anything is sent (docs/SPEC/route-planning.md section 7).
+   */
+  driveGrid(
+    origins: readonly GeoPoint[],
+    destinations: readonly GeoPoint[],
+    departAt: Date,
+    factors: DriveFactors,
+  ): Promise<DriveEstimate[][]>;
   /** A PNG of the day's stops in order, or null when this implementation draws none. */
   dayPicture(points: readonly GeoPoint[]): Promise<Uint8Array | null>;
 };
@@ -190,6 +202,28 @@ export function straightLineMatrix(
     ...straightLineSeconds(leg.from, leg.to, leg.departAt, factors, timeZone),
     source: 'straight-line' as const,
   }));
+}
+
+/** Google's own ceiling on one compute-route-matrix call: origins times destinations. */
+export const GRID_MAX_ELEMENTS = 625;
+
+/**
+ * The fallback's grid: the same arithmetic as `straightLineMatrix`, for every
+ * pair. The diagonal is a drive of no distance, which is an honest zero.
+ */
+export function straightLineGrid(
+  origins: readonly GeoPoint[],
+  destinations: readonly GeoPoint[],
+  departAt: Date,
+  factors: DriveFactors,
+  timeZone: string,
+): DriveEstimate[][] {
+  return origins.map((from) =>
+    destinations.map((to) => ({
+      ...straightLineSeconds(from, to, departAt, factors, timeZone),
+      source: 'straight-line' as const,
+    })),
+  );
 }
 
 /**

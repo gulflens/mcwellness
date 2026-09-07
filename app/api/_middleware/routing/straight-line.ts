@@ -1,4 +1,5 @@
 import {
+  straightLineGrid,
   straightLineMatrix,
   type DriveEstimate,
   type DriveFactors,
@@ -37,6 +38,8 @@ export function straightLineRouting(options: StraightLineOptions): RoutingProvid
     describe: () => `Straight-line drive estimates in ${options.timeZone}, with no map`,
     driveMatrix: (legs: readonly DriveLeg[], factors: DriveFactors): Promise<DriveEstimate[]> =>
       Promise.resolve(straightLineMatrix(legs, factors, options.timeZone)),
+    driveGrid: (origins, destinations, departAt, factors) =>
+      Promise.resolve(straightLineGrid(origins, destinations, departAt, factors, options.timeZone)),
     dayPicture: () => Promise.resolve(null),
   };
 }

@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PEAK_MULTIPLIER,
   DEFAULT_ROAD_FACTOR,
+  GRID_MAX_ELEMENTS,
   dayFingerprint,
   haversineMetres,
   hourBucket,
   isPeakHour,
+  straightLineGrid,
   straightLineMatrix,
   straightLineSeconds,
 } from './routing';
@@ -162,5 +164,29 @@ describe('dayFingerprint', () => {
 
   it('names an empty day rather than answering an empty string', () => {
     expect(dayFingerprint([])).toBe('empty');
+  });
+});
+
+describe('straightLineGrid', () => {
+  it('answers every origin to every destination, zero on the diagonal, labelled straight-line', () => {
+    const grid = straightLineGrid(
+      [DUBAI, ABU_DHABI],
+      [DUBAI, ABU_DHABI],
+      MONDAY_1300,
+      FACTORS,
+      ZONE,
+    );
+    expect(grid).toHaveLength(2);
+    expect(grid[0]).toHaveLength(2);
+    expect(grid[0]?.[0]).toEqual({ seconds: 0, metres: 0, source: 'straight-line' });
+    expect(grid[1]?.[1]).toEqual({ seconds: 0, metres: 0, source: 'straight-line' });
+    // Symmetric off the diagonal: the straight line has no direction.
+    expect(grid[0]?.[1]).toEqual(grid[1]?.[0]);
+    expect(grid[0]?.[1]?.seconds).toBeGreaterThan(0);
+    expect(grid[0]?.[1]?.source).toBe('straight-line');
+  });
+
+  it('names the vendor ceiling on one call', () => {
+    expect(GRID_MAX_ELEMENTS).toBe(625);
   });
 });

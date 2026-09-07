@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_PEAK_MULTIPLIER,
   DEFAULT_ROAD_FACTOR,
+  GRID_MAX_ELEMENTS,
   RoutingUnavailableError,
 } from '../../../../domain/shared/routing';
 import { googleRouting } from './google';
@@ -126,6 +127,13 @@ describe('the fallback', () => {
 
   it('draws no picture, which is an answer and not a failure', async () => {
     expect(await routing.dayPicture([DUBAI, SHARJAH])).toBeNull();
+  });
+
+  it('answers a grid with no network, labelled straight-line', async () => {
+    const grid = await routing.driveGrid([DUBAI], [DUBAI, SHARJAH], DEPART, FACTORS);
+    expect(grid).toHaveLength(1);
+    expect(grid[0]?.map((cell) => cell.source)).toEqual(['straight-line', 'straight-line']);
+    expect(grid[0]?.[0]?.seconds).toBe(0);
   });
 
   it('reaches nothing at all', async () => {
@@ -331,5 +339,59 @@ describe('the real implementation, against a fake fetch', () => {
       ),
     });
     await expect(routing.dayPicture([DUBAI])).rejects.toBeInstanceOf(RoutingUnavailableError);
+  });
+
+  it('asks a grid for every origin and every destination in one call, and reads each cell by its two indexes', async () => {
+    let sent: Record<string, unknown> = {};
+    const routing = googleRouting({
+      apiKey: FAKE_KEY,
+      timeZone: ZONE,
+      now: BEFORE_DEPART,
+      fetchImpl: fakeFetch((_url, init) => {
+        sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Response.json([
+          { originIndex: 1, destinationIndex: 0, duration: '1600s', distanceMeters: 18500 },
+          { originIndex: 0, destinationIndex: 0, duration: '0s', distanceMeters: 0 },
+          { originIndex: 1, destinationIndex: 1, duration: '0s', distanceMeters: 0 },
+          { originIndex: 0, destinationIndex: 1, duration: '1500s', distanceMeters: 18000 },
+        ]);
+      }),
+    });
+    const grid = await routing.driveGrid([DUBAI, SHARJAH], [DUBAI, SHARJAH], DEPART, FACTORS);
+    expect((sent.origins as unknown[]).length).toBe(2);
+    expect((sent.destinations as unknown[]).length).toBe(2);
+    expect(sent.departureTime).toBe('2026-09-07T04:00:00.000Z');
+    expect(grid[0]?.[1]).toEqual({ seconds: 1500, metres: 18000, source: 'traffic' });
+    expect(grid[1]?.[0]).toEqual({ seconds: 1600, metres: 18500, source: 'traffic' });
+    expect(grid[0]?.[0]?.seconds).toBe(0);
+  });
+
+  it('refuses a grid past the vendor ceiling before sending anything', async () => {
+    const fetchImpl = vi.fn();
+    const routing = googleRouting({ apiKey: FAKE_KEY, timeZone: ZONE, fetchImpl });
+    const many = Array.from({ length: 26 }, (_, i) => ({ lat: 25 + i * 0.01, lng: 55 }));
+    await expect(routing.driveGrid(many, many, DEPART, FACTORS)).rejects.toBeInstanceOf(
+      RoutingUnavailableError,
+    );
+    expect(26 * 26).toBeGreaterThan(GRID_MAX_ELEMENTS);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('refuses a grid with a cell the vendor could not answer', async () => {
+    const routing = googleRouting({
+      apiKey: FAKE_KEY,
+      timeZone: ZONE,
+      fetchImpl: fakeFetch(() =>
+        Response.json([
+          { originIndex: 0, destinationIndex: 0, duration: '0s', distanceMeters: 0 },
+          { originIndex: 0, destinationIndex: 1, condition: 'ROUTE_NOT_FOUND' },
+          { originIndex: 1, destinationIndex: 0, duration: '900s', distanceMeters: 9000 },
+          { originIndex: 1, destinationIndex: 1, duration: '0s', distanceMeters: 0 },
+        ]),
+      ),
+    });
+    await expect(
+      routing.driveGrid([DUBAI, SHARJAH], [DUBAI, SHARJAH], DEPART, FACTORS),
+    ).rejects.toBeInstanceOf(RoutingUnavailableError);
   });
 });
