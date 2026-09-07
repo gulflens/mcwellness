@@ -3,6 +3,7 @@ import type {
   BooksSetting,
   ChartAccount,
   FiscalYear,
+  JournalKind,
   PostedLine,
 } from '../../../domain/accounting';
 import type { Db } from '../_middleware/request-context';
@@ -239,7 +240,7 @@ export async function readPostedLines(db: Db): Promise<PostedLine[]> {
 
 export async function readEntries(
   db: Db,
-  filter: { from?: string; to?: string; accountId?: string; limit: number },
+  filter: { from?: string; to?: string; accountId?: string; kind?: JournalKind; limit: number },
 ): Promise<{ entries: EntryRow[]; truncated: boolean }> {
   const sql =
     `select ${ENTRY_COLUMNS}${ENTRY_JOINS}` +
@@ -248,13 +249,15 @@ export async function readEntries(
     'and ($2::date is null or e.entered_on <= $2) ' +
     'and ($3::uuid is null or exists (select 1 from journal_line l ' +
     'where l.tenant_id = e.tenant_id and l.entry_id = e.id and l.account_id = $3)) ' +
+    'and ($4::journal_kind is null or e.kind = $4) ' +
     // One row past the page, so the route can say "there are more" without a
     // second count-only query (the invoice book's own shape).
-    'order by e.entered_on desc, e.number desc limit $4';
+    'order by e.entered_on desc, e.number desc limit $5';
   const { rows } = await db.query<EntryDbRow>(sql, [
     filter.from ?? null,
     filter.to ?? null,
     filter.accountId ?? null,
+    filter.kind ?? null,
     filter.limit + 1,
   ]);
   const truncated = rows.length > filter.limit;

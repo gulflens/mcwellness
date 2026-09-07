@@ -69,9 +69,14 @@ export function mountOverview(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const receivableFils = balanceOf(receivable.type, fils(owed.debitFils), fils(owed.creditFils));
 
     const pending = await classifyPending(db);
+    // Section 5.1 asks for "the month's automatic entries", and the screen's
+    // caption says so: an entry somebody wrote by hand, or a reversal, belongs
+    // to the journal and not to the overview's account of what the platform
+    // itself put in the books this month.
     const recent = await readEntries(db, {
       from: `${month}-01`,
       to: lastDayOf(month),
+      kind: 'automatic',
       limit: RECENT_ENTRIES,
     });
 

@@ -65,8 +65,18 @@ type Overview = {
   reliefElected: boolean;
   unpostedCount: number;
   unknownCount: number;
-  recentEntries: { reference: string }[];
+  recentEntries: { reference: string; kind: string }[];
 };
+
+/** An account's id by its code, read from the chart the route itself answers. */
+async function accountId(code: string): Promise<string> {
+  const chart = await get<{ accounts: { id: string; code: string }[] }>('/api/accounting/accounts');
+  const account = chart.accounts.find((one) => one.code === code);
+  if (!account) {
+    throw new Error(`No account ${code} in the chart.`);
+  }
+  return account.id;
+}
 
 async function get<T>(path: string, user: number = SEEDED.owner): Promise<T> {
   const res = await h.call('GET', path, user);
@@ -151,6 +161,35 @@ describe('the trial balance', () => {
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(asOwner);
+  });
+
+  it('shows the month’s automatic entries and none of the ones written by hand', async () => {
+    const byHand = await h.call(
+      'POST',
+      '/api/accounting/entries',
+      SEEDED.owner,
+      {
+        kind: 'manual',
+        enteredOn: '2026-09-02',
+        memo: 'Office supplies',
+        lines: [
+          { accountId: await accountId('6000'), debitFils: 20_000, creditFils: 0 },
+          { accountId: await accountId('1010'), debitFils: 0, creditFils: 20_000 },
+        ],
+      },
+      { 'x-reason': 'The stationery order for September.' },
+    );
+    expect(byHand.status).toBe(201);
+
+    const overview = await get<Overview>(`/api/accounting/overview?month=${activity.month}`);
+    expect(overview.recentEntries.length).toBeGreaterThan(0);
+    expect(overview.recentEntries.every((entry) => entry.kind === 'automatic')).toBe(true);
+
+    // The journal itself still holds it: the overview is a narrower question.
+    const all = (await (
+      await h.call('GET', '/api/accounting/entries?from=2026-09-01&to=2026-09-30', SEEDED.owner)
+    ).json()) as { entries: { kind: string }[] };
+    expect(all.entries.some((entry) => entry.kind === 'manual')).toBe(true);
   });
 
   it('is refused to an admin', async () => {

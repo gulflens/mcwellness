@@ -166,11 +166,11 @@ export function OverviewSection({
       )}
 
       <Table
-        caption="This month's entries"
+        caption="This month's automatic entries"
         columns={ENTRY_COLUMNS}
         rows={overview.recentEntries}
         rowKey={(row) => row.id}
-        empty="Nothing has been posted this month."
+        empty="The platform has posted nothing this month."
       />
     </>
   );
