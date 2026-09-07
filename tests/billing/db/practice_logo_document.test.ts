@@ -1,6 +1,8 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { practiceLogo } from '../../../app/api/billing/document-source';
 import type { PracticeLogoResponse } from '../../../app/api/practice/schema';
+import { practiceDocumentKey } from '../../../domain/shared/storage';
 import { SEEDED, startHarness, type Harness } from './support';
 
 /**
@@ -36,17 +38,25 @@ function withAlpha(): string {
 /** A JPEG's first bytes, which migration 909 allows as a logo and readPng will not embed. */
 const JPEG = 'ffd8ffe000104a46494600010100000100010000ffd9';
 
+/** A second practice on the same database, which owns nothing the first one does. */
+const OTHER_TENANT = '00000000-0000-4000-8000-0000000000b1';
+
 let h: Harness;
 
-/** The database as the owner, with the practice's own tenant stamped on the session. */
-async function asOwner(): Promise<void> {
+/** The database as the owner, with a practice's tenant stamped on the session. */
+async function asPractice(tenantId: string): Promise<void> {
   const user = h.data.users[SEEDED.owner];
   await h.owner.query(
     "select set_config('app.tenant_id', $1, false), set_config('app.actor_id', $2, false), " +
       "set_config('app.actor_roles', 'owner', false), " +
       "set_config('app.request_id', $3, false), set_config('app.reason', '', false)",
-    [h.data.tenant.id, user?.id ?? null, '00000000-0000-4000-8000-0000000000fb'],
+    [tenantId, user?.id ?? null, '00000000-0000-4000-8000-0000000000fb'],
   );
+}
+
+/** The database as the owner, with the practice's own tenant stamped on the session. */
+async function asOwner(): Promise<void> {
+  await asPractice(h.data.tenant.id);
 }
 
 async function file(hex: string, mimeType: string, as: number = SEEDED.owner): Promise<Response> {
@@ -131,6 +141,56 @@ describe('reading it back onto a document', () => {
     // An alpha channel would need a soft mask, which means decoding. The page
     // is set with the wordmark instead; nothing about the invoice is refused.
     expect((await file(withAlpha(), 'image/png')).status).toBe(200);
+    await asOwner();
+    expect(await practiceLogo(h.owner, h.storage)).toBeNull();
+  });
+});
+
+/**
+ * The predicate that keeps one practice's mark off another's paperwork.
+ *
+ * `practiceLogo` reads `where tenant_id = app.current_tenant_id()` and the row
+ * sits under the generic `tenant_isolation` policy besides, but neither of
+ * those was proved here: every other tenant-scoped read in this folder carries
+ * a refusal test, and the picture at the top of a family's invoice is not the
+ * place to start trusting a predicate unread.
+ */
+describe('a second practice’s logo', () => {
+  it('is never the first practice’s, which still has none of its own', async () => {
+    // The first practice starts this case with nothing filed, whatever the
+    // cases above left behind.
+    await asOwner();
+    await h.owner.query('select app.remove_practice_logo()');
+    expect(await practiceLogo(h.owner, h.storage)).toBeNull();
+
+    // A real logo for a practice that is not this one: a row of its own and
+    // the bytes behind it in the store, filed as the owner's own maintenance
+    // rather than through a route, because the second practice has no people.
+    await h.owner.query(
+      "select set_config('app.tenant_id', '', false), set_config('app.actor_id', '', false), " +
+        "set_config('app.actor_roles', '', false), set_config('app.request_id', '', false), " +
+        "set_config('app.reason', '', false)",
+    );
+    await h.owner.query("insert into tenant (id, legal_name) values ($1, 'Synthetic Studio B')", [
+      OTHER_TENANT,
+    ]);
+    const documentId = randomUUID();
+    const key = practiceDocumentKey(OTHER_TENANT, documentId);
+    const bytes = Buffer.from(PNG_2X2, 'hex');
+    await h.storage.put(key, bytes, 'image/png');
+    await h.owner.query(
+      'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256, ' +
+        "is_immutable) values ($1, $2, null, 'practice_logo', $3, 'image/png', " +
+        "decode($4, 'hex'), false)",
+      [documentId, OTHER_TENANT, key, createHash('sha256').update(bytes).digest('hex')],
+    );
+
+    // It is a logo, and it reads back: without this the refusal below would
+    // pass against a row that was never there.
+    await asPractice(OTHER_TENANT);
+    expect(await practiceLogo(h.owner, h.storage)).not.toBeNull();
+
+    // And the first practice's documents still carry the wordmark set in type.
     await asOwner();
     expect(await practiceLogo(h.owner, h.storage)).toBeNull();
   });

@@ -114,6 +114,11 @@ describe('an invoice from a practice that is not registered for VAT', () => {
     expect(page).not.toContain('100000000000003');
     expect(page).not.toContain('5%');
     expect(page).not.toContain('VAT rate');
+    // Neither of the two columns a registration adds. The English heading is
+    // the bare word "VAT", which the basis sentence beneath the table uses
+    // too, so it is the Arabic heading — `الضريبة`, and no other string on
+    // this page — that proves the column itself absent.
+    expect(page).not.toContain(asCopied(WORDS.vatColumn.ar));
     // The totals box holds one row, so neither of the two a registration adds
     // is on the page at all.
     expect(page).not.toContain('Net');
