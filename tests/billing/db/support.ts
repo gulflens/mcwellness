@@ -257,6 +257,16 @@ export async function setVatRegistration(
       : 'update tenant set vat_registered = false, vat_trn = null where id = $1',
     registered ? [tenantId, TEST_VAT_TRN] : [tenantId],
   );
+  // And hands the connection back as it found it. These settings are session
+  // scoped, and the suites that call this go on to write directly as the table
+  // owner, where a stamped role is exactly what tells a guard not to stand
+  // aside (migration 905). A fixture should not change what the next statement
+  // in the file means.
+  await owner.query(
+    "select set_config('app.tenant_id', '', false), set_config('app.actor_id', '', false), " +
+      "set_config('app.actor_roles', '', false), set_config('app.request_id', '', false), " +
+      "set_config('app.reason', '', false)",
+  );
 }
 
 /** The same, for a suite that holds the whole harness. */
