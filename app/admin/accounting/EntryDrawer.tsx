@@ -5,7 +5,7 @@ import { isRealText, MINIMUM_REASON } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
-import { formatFils, isAedAmountTooLarge, parseAedToFils } from './money';
+import { formatDate, formatFils, isAedAmountTooLarge, parseAedToFils } from './money';
 import { focusFirstInvalid } from './refusal';
 import { useDrawer } from './useDrawer';
 
@@ -32,6 +32,8 @@ const EMPTY_LINE: Line = { accountId: '', side: 'debit', amount: '' };
 
 const REFUSALS: Record<string, string> = {
   unbalanced: 'The debits and the credits do not come to the same figure.',
+  // The lock's own date is named where the practice has one; this stands for a
+  // closed year, which the drawer cannot know the bounds of.
   period_locked: 'The books are closed or locked on that day. Choose a later day.',
   opening_day: 'An opening entry is dated the day the books start, and no other.',
   unknown_account: 'One of the accounts is no longer part of the chart. Reload and try again.',
@@ -73,6 +75,21 @@ export function EntryDrawer({
   const open = useMemo(() => accounts.filter((account) => account.archivedAt === null), [accounts]);
   const day = kind === 'opening' ? settings.booksStartOn : enteredOn;
 
+  /**
+   * Rule 3, said with the date in it (docs/SPEC/accounting.md section 5.2).
+   * The lock is already on this screen, so a day it shuts is refused here and
+   * the sentence names the day the books are locked through rather than
+   * leaving the person to guess which days are open. The same sentence answers
+   * the server's `409 period_locked`, so the drawer never says two things
+   * about one rule.
+   */
+  const locked = settings.lockedThrough;
+  const lockedOut = locked !== null && day <= locked;
+  const lockSentence =
+    locked === null
+      ? REFUSALS.period_locked!
+      : `The books are locked through ${formatDate(locked)}. Choose a later day.`;
+
   // The running difference the person watches, and how many lines actually
   // carry an amount. One pass, no early return: an amount that is not an amount
   // leaves the difference unreadable rather than silently counted as nothing.
@@ -100,7 +117,7 @@ export function EntryDrawer({
   }, [lines]);
 
   const balanced = totals.difference === 0 && totals.usable >= 2;
-  const complete = balanced && memo.trim() !== '' && isRealText(reason.trim());
+  const complete = balanced && memo.trim() !== '' && isRealText(reason.trim()) && !lockedOut;
 
   const setLine = useCallback((index: number, patch: Partial<Line>) => {
     setLines((current) => current.map((line, at) => (at === index ? { ...line, ...patch } : line)));
@@ -110,6 +127,12 @@ export function EntryDrawer({
 
   async function send(balanceWithOpeningEquity: boolean): Promise<void> {
     setFormError(null);
+    if (lockedOut) {
+      // The sentence is already under the day field and bound to it, so this
+      // moves to where it is rather than saying it a second time (./refusal.ts).
+      focusFirstInvalid(['entry-day']);
+      return;
+    }
     if (lines.some((line) => isAedAmountTooLarge(line.amount))) {
       setFormError('One of the amounts is larger than a single line may carry.');
       focusFirstInvalid(['entry-line-1-amount']);
@@ -148,7 +171,7 @@ export function EntryDrawer({
         error?: string;
       } | null;
       const code = answer?.code ?? answer?.error ?? '';
-      setFormError(REFUSALS[code] ?? GENERIC);
+      setFormError(code === 'period_locked' ? lockSentence : (REFUSALS[code] ?? GENERIC));
     } catch {
       setFormError(GENERIC);
     } finally {
@@ -203,6 +226,7 @@ export function EntryDrawer({
             type="date"
             value={day}
             disabled={kind === 'opening'}
+            error={lockedOut ? lockSentence : undefined}
             hint={
               kind === 'opening' ? 'An opening entry is dated the day the books start.' : undefined
             }
@@ -291,7 +315,7 @@ export function EntryDrawer({
               <Button
                 type="button"
                 variant="secondary"
-                disabled={busy || memo.trim() === '' || !isRealText(reason.trim())}
+                disabled={busy || lockedOut || memo.trim() === '' || !isRealText(reason.trim())}
                 onClick={() => void send(true)}
               >
                 Balance with opening equity

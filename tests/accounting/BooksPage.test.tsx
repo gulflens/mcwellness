@@ -318,7 +318,12 @@ function csv(name: string, status = 200): Response {
 
 function mount(
   me: unknown,
-  options: { overview?: unknown; overviewStatus?: number; csvStatus?: number } = {},
+  options: {
+    overview?: unknown;
+    overviewStatus?: number;
+    csvStatus?: number;
+    settings?: unknown;
+  } = {},
 ): Mounted {
   const calls: string[] = [];
   const posted: Mounted['posted'] = [];
@@ -364,7 +369,7 @@ function mount(
     if (url.startsWith('/api/accounting/entries/')) return json({ entry: ENTRY, lines: [] });
     if (url.startsWith('/api/accounting/entries')) return json(ENTRIES);
     if (url.startsWith('/api/accounting/accounts')) return json(ACCOUNTS);
-    if (url.startsWith('/api/accounting/settings')) return json(SETTINGS);
+    if (url.startsWith('/api/accounting/settings')) return json(options.settings ?? SETTINGS);
     if (url.startsWith('/api/accounting/years')) return json(YEARS);
     if (url.startsWith('/api/billing/summary')) return json(SUMMARY);
     throw new Error(`Unexpected fetch: ${url}`);
@@ -481,6 +486,52 @@ describe('the journal', () => {
         { accountId: ACCOUNT_IDS.bank, debitFils: 0, creditFils: 20_000 },
       ],
     });
+  });
+
+  it('names the lock when the chosen day is shut, before it asks the server', async () => {
+    const mounted = mount(OWNER, { settings: { ...SETTINGS, lockedThrough: '2026-06-30' } });
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Journal' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Post an entry' }));
+    await screen.findByRole('dialog');
+
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '2026-06-30' } });
+    expect(
+      await screen.findByText('The books are locked through 30 Jun 2026. Choose a later day.'),
+    ).toBeTruthy();
+
+    // Everything else about the entry is right, and it still cannot be posted.
+    fireEvent.change(screen.getByLabelText('What this entry is'), {
+      target: { value: 'Office supplies' },
+    });
+    fireEvent.change(screen.getByLabelText('Why this entry is posted'), {
+      target: { value: 'The stationery order for June.' },
+    });
+    fireEvent.change(screen.getByLabelText('Line 1 account'), {
+      target: { value: ACCOUNT_IDS.expenses },
+    });
+    fireEvent.change(screen.getByLabelText('Line 1 amount'), { target: { value: '200' } });
+    fireEvent.change(screen.getByLabelText('Line 2 account'), {
+      target: { value: ACCOUNT_IDS.bank },
+    });
+    fireEvent.change(screen.getByLabelText('Line 2 side'), { target: { value: 'credit' } });
+    fireEvent.change(screen.getByLabelText('Line 2 amount'), { target: { value: '200' } });
+
+    const save = screen.getByRole('button', { name: 'Post the entry' });
+    expect(save.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(save);
+    expect(mounted.posted.some((call) => call.path === '/api/accounting/entries')).toBe(false);
+
+    // A day the lock leaves open takes the sentence away again.
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '2026-07-01' } });
+    await waitFor(() =>
+      expect(
+        screen.queryByText('The books are locked through 30 Jun 2026. Choose a later day.'),
+      ).toBeNull(),
+    );
+    expect(screen.getByRole('button', { name: 'Post the entry' }).hasAttribute('disabled')).toBe(
+      false,
+    );
   });
 
   it('offers a finance actor the same two actions the owner has', async () => {
