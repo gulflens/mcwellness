@@ -353,10 +353,14 @@ describe('Practice settings — the VAT switch', () => {
     expect(described).toBe('practice-vat-consequence');
     const sentence = document.getElementById(described ?? '');
     // The three things a person needs before touching it: what it records,
-    // what turning it off costs them, and what it does not do.
+    // what it decides, and what turning it off costs them. Since migration
+    // 406 the switch decides whether an invoice carries VAT at all, so the
+    // sentence that said it changed nothing is gone
+    // (docs/CHANGE-REQUESTS/billing-07.md).
     expect(sentence?.textContent).toContain('records the registration');
+    expect(sentence?.textContent).toContain('invoices carry no VAT and show one figure');
     expect(sentence?.textContent).toContain('removes the number from the record');
-    expect(sentence?.textContent).toContain('does not change what an invoice charges');
+    expect(sentence?.textContent).not.toContain('does not change what an invoice charges');
   });
 
   it('drops the number when the switch goes off, so nothing is printed as a VAT number', async () => {
