@@ -25,7 +25,7 @@ forty-one files of room. `checkNeeds` is unchanged: an accounting file may
 name 402, 403 and 408, and the trunk's 958 may name 450 and 451.
 
 Add to the ports table, in Stage 2 order after `audit-ui`: `accounting` —
-database 5441, API 3009, web 5182 — and the same row to `WORKTREES` in
+database 5443, API 3011, web 5184 (5441 to 5442 and 3009 to 3010 turned out to be held by the two trunk worktrees, opened by hand) — and the same row to `WORKTREES` in
 `scripts/worktree.mjs`, which repeats the table so `pnpm worktree:add` can
 open the worktree.
 

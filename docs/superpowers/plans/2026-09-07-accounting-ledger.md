@@ -39,7 +39,7 @@ git branch --show-current            # must print accounting-spec-1
 pnpm worktree:add accounting accounting-spec-1
 ```
 
-Expected: `../mcwellness-accounting` exists on new branch `accounting`, its `.env` has `DB_PORT=5441`, `PORT=3009`, `WEB_PORT=5182`, `COMPOSE_PROJECT_NAME=mcwellness-accounting`; its database is up, migrated and seeded. Docker must be running.
+Expected: `../mcwellness-accounting` exists on new branch `accounting`, its `.env` has `DB_PORT=5443`, `PORT=3011`, `WEB_PORT=5184`, `COMPOSE_PROJECT_NAME=mcwellness-accounting`; its database is up, migrated and seeded. Docker must be running.
 
 - [ ] **Step 2: Prove the worktree is healthy before touching it**
 

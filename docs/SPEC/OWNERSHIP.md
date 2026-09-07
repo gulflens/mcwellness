@@ -119,4 +119,5 @@ Every port is a setting, so several worktrees run at once without collision
 | `session-capture` | 5435 | 3003 | 5176 |
 | `billing` | 5436 | 3004 | 5177 |
 | Stage 2 | 5437+ in table order | 3005+ | 5178+ |
-| `accounting` (Stage 2, fifth: the range `450–499` is carved from billing's upper half, 2026-09-07, `docs/CHANGE-REQUESTS/accounting-01.md` item 1) | 5441 | 3009 | 5182 |
+| `accounting` (Stage 2, fifth: the range `450–499` is carved from billing's upper half, 2026-09-07, `docs/CHANGE-REQUESTS/accounting-01.md` item 1) | 5443 | 3011 | 5184 |
+| the trunk's own worktrees `mcwellness-trunk` and `mcwellness-trunk-2`, opened by hand on 2026-09-06 and not in `scripts/worktree.mjs` | 5441, 5442 | 3009, 3010 | 5182, 5183 |
