@@ -46,11 +46,6 @@ export function isRealText(value: string): boolean {
   return new Set(withoutSpaces).size > 1;
 }
 
-const Reason = z
-  .string()
-  .transform((value) => cleanText(value, 200))
-  .refine(isRealText, `A reason is at least ${MINIMUM_REASON} characters, and says something.`);
-
 /** A memo is at most 200 characters and says something; it never names anybody. */
 const Memo = z
   .string()
@@ -187,9 +182,6 @@ export const CreateEntryInput = z.object({
   balanceWithOpeningEquity: z.boolean().default(false),
 });
 export type CreateEntryInput = z.infer<typeof CreateEntryInput>;
-
-export const ReversalInput = z.object({ reason: Reason });
-export type ReversalInput = z.infer<typeof ReversalInput>;
 
 export const CreateAccountInput = z.object({
   code: z.string().regex(/^[1-6][0-9]{3}$/),

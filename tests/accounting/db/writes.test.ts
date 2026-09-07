@@ -169,6 +169,33 @@ describe('posting an entry by hand', () => {
     expect(await res.json()).toMatchObject({ error: 'reason_required' });
   });
 
+  it('refuses a reason too short to read a year later, on every write', async () => {
+    // The drawers ask for eight characters of real text; the server asked only
+    // that the header not be empty, so anything that was not a browser could
+    // leave the trail a letter.
+    for (const reason of ['x', '        ', 'aaaaaaaa']) {
+      const res = await h.call(
+        'POST',
+        '/api/accounting/entries',
+        SEEDED.owner,
+        expense('2026-09-02'),
+        { 'x-reason': reason },
+      );
+      expect(res.status, reason).toBe(400);
+      expect(await res.json()).toMatchObject({ error: 'reason_required' });
+    }
+
+    const settings = await h.call(
+      'PATCH',
+      '/api/accounting/settings',
+      SEEDED.owner,
+      { smallBusinessReliefElected: false },
+      { 'x-reason': 'x' },
+    );
+    expect(settings.status).toBe(400);
+    expect(await settings.json()).toMatchObject({ error: 'reason_required' });
+  });
+
   it('refuses a line on an account the practice does not have', async () => {
     const draft = expense('2026-09-02');
     draft.lines[0]!.accountId = '0000000e-0000-4000-8000-0000000000ff';
