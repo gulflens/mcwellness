@@ -185,6 +185,37 @@ const CASES: [string, Page[]][] = [
   ],
   ['a receipt', layout(RECEIPT, fonts)],
   ['an invoice carrying the practice’s mark', layout(invoice(), fonts, LOGO)],
+  [
+    // A figure grows with the money and the totals box does not. "Before
+    // discount" is the tightest row in it — the longest English label, the
+    // widest Arabic beside it — and at a figure in the millions the two reach
+    // each other. What is asserted is the invariant every other case asserts,
+    // that no two pieces of type are printed on top of each other; how the
+    // box keeps them apart is the layout's business.
+    'an invoice for a figure in the millions',
+    layout(
+      invoice({
+        supplier: { ...SUPPLIER, vatRegistered: false, vatNumber: null },
+        lines: Array.from({ length: 2 }, () => ({
+          description: 'Neurofeedback programme, ten sessions',
+          descriptionAr: 'جلسة نيوروفيدباك',
+          quantity: 10,
+          unitNetFils: 69_000_000,
+          discountFils: 69_000_000,
+          discountBasisPoints: 1000,
+          netFils: 621_000_000,
+          vatRateBasisPoints: 0,
+          vatFils: 0,
+          grossFils: 621_000_000,
+        })),
+        netFils: 1_242_000_000,
+        vatFils: 0,
+        grossFils: 1_242_000_000,
+        discountFils: 138_000_000,
+      }),
+      fonts,
+    ),
+  ],
 ];
 
 describe.each(CASES)('%s', (_name, pages) => {

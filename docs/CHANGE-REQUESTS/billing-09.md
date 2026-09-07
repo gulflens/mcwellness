@@ -237,6 +237,11 @@ snapshots them.
   `db/policies/client/writers.sql`, both unchanged, and the three contact
   columns are governed by `app.guard_tenant_identity` (905), which is a
   before-update trigger on the whole `tenant` row.
+- **It built no Date / Method / Amount table on the receipt.** The design has
+  one; a receipt records a single payment, so its four facts stack as grey
+  lines under its reference instead, and the receipt leaves the corporate-tax
+  registration off its supplier block as the design does. Both are written
+  down in `docs/SPEC/billing.md` section 5.6.
 - **It touched no seed generator.** The three contact columns are nullable and
   the seeded practice records none of them, which is a case the footer band
   already renders correctly and which `tests/billing/document.test.ts` asserts.

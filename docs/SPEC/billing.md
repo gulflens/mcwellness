@@ -397,6 +397,19 @@ its currency in the cell, `AED 1,650.00`, following the design; the console's
 "name the currency once per table" rule is a rule for screens and does not reach
 a client-facing document.
 
+**The receipt is the same page with two deliberate departures.** It carries
+**no Date / Method / Amount table**: a receipt records one payment, and the four
+facts it has — the date received, the method, the payment reference and the
+invoice settled — stack as small grey lines under its own reference, where the
+invoice puts its dates. A table of three headings above a single row would be
+furniture around one fact. And it leaves the **corporate-tax registration** off
+the supplier block, as the operator's design does: an invoice is a tax document
+and names the registrations the practice holds, while a receipt acknowledges
+that money arrived and makes no tax claim in either direction, so the number has
+no work to do on it. Everything else — the mark, the title in both languages,
+the supplier block, the totals box, the basis sentence and the footer band — is
+the invoice's.
+
 **The logo is the practice's own row, not a file in this repository** (migration
 909, and the decision of 3 September 2026). The renderer draws it when the
 practice has one and falls back to the wordmark set in type when it does not, so

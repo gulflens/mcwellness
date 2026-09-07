@@ -427,6 +427,14 @@ describe('a receipt', () => {
  * has had and it is exactly the sort this pinning exists to make somebody
  * declare.
  *
+ * **And all three moved again on the same day**, in the fix round that
+ * followed the design review. Three things moved them: the supplier's address
+ * is set across the whole measure now rather than half of it, because nothing
+ * faces it; the totals box centres its rows in itself instead of sitting them
+ * high; and the receipt no longer carries the corporate-tax registration,
+ * which the design leaves off a document that makes no tax claim. Nothing
+ * about what any of the three says changed.
+ *
  * They are rendered with no logo, deliberately: the mark is the practice's own
  * row and not a file in this repository, so a golden that embedded one would
  * be a golden about a picture rather than about the writer.
@@ -439,17 +447,17 @@ describe('the bytes of a rendered document', () => {
     [
       'an invoice from an unregistered practice',
       () => renderDocument(invoiceFor(UNREGISTERED), fonts),
-      '0eec4cde068c99d28b3d92108b12e826f8a19c5cd402ab95a85b4996d488951c',
+      'f8d85ca98036108dce0d5e4d1b60b3eb712fc21a5f8013a846089cef34b8fced',
     ],
     [
       'an invoice from a registered practice',
       () => renderDocument(invoiceFor(REGISTERED), fonts),
-      '16d6281eec2122ec742c93350bb877da767f0288cfd73c14c3d732911d65ee7e',
+      '1fd506f45a562510705623164fa5e8270389fdc330ad965bcf18f9fcec25dec2',
     ],
     [
       'a receipt',
       () => renderDocument(receiptFor(UNREGISTERED), fonts),
-      'b396c5dfd1a6e149d8adf452ccd8500f04984170122670226c32a5962059c0ea',
+      '0f121539591402ba4046e1c91c0d17431eaca6d232ef642b781df92d7d39fa96',
     ],
   ];
 

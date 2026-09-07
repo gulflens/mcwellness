@@ -109,6 +109,8 @@ const LOGO_WIDTH = 150;
 const TOTALS_WIDTH = 200;
 const TOTALS_PAD = 10;
 const TOTALS_ROW = 15;
+/** From the top rule of the totals box to the first row's baseline. */
+const TOTALS_TOP_AIR = 14;
 
 /**
  * The page's own measurements, exported so the geometry tests assert against
@@ -407,7 +409,13 @@ function facing(sheet: Sheet, rows: readonly FacingRow[]): void {
   const half = (RIGHT - LEFT - GUTTER * 2) / 2;
   for (const row of rows) {
     const options: TextOptions = { bold: row.bold === true };
-    const english = sheet.wrap(row.en, half, SIZE.body, options);
+    // A row with no Arabic counterpart takes the whole measure rather than
+    // half of it. The address is the one such row — `location` holds no
+    // `display_address_ar` for it to face — and set in half the width it left
+    // a hole down the right of every page and wrapped where it need not.
+    // Nothing is beside it, so nothing can be printed through.
+    const measureWidth = row.ar ? half : RIGHT - LEFT;
+    const english = sheet.wrap(row.en, measureWidth, SIZE.body, options);
     const arabic = row.ar
       ? sheet.wrap(row.ar, half, SIZE.body, { ...options, rtl: true, align: 'end' })
       : [];
@@ -431,6 +439,11 @@ function facing(sheet: Sheet, rows: readonly FacingRow[]): void {
   }
 }
 
+type SupplierBlockOptions = {
+  /** False on a receipt, which claims nothing about tax. Absent means true. */
+  corporateTaxRegistration?: boolean;
+};
+
 /**
  * The practice, from the snapshot and nowhere else.
  *
@@ -440,8 +453,19 @@ function facing(sheet: Sheet, rows: readonly FacingRow[]): void {
  * the Federal Tax Authority uses for a VAT one would state a registration the
  * practice does not have (`strings.ts`, `WORDS.corporateTaxNumber`; the column
  * comments on `tenant.trn` and `invoice.supplier_trn`).
+ *
+ * **A receipt leaves the corporate-tax registration off**, as the operator's
+ * design does. An invoice is a tax document and names the registrations the
+ * practice holds; a receipt acknowledges that money arrived and makes no tax
+ * claim in either direction, so the number has no work to do on it
+ * (`docs/SPEC/billing.md` section 5.6). Everything else in the block is the
+ * same on both pages.
  */
-function supplierBlock(sheet: Sheet, supplier: SupplierSnapshot): void {
+function supplierBlock(
+  sheet: Sheet,
+  supplier: SupplierSnapshot,
+  options: SupplierBlockOptions = {},
+): void {
   const labelled = (label: Phrase, value: string): FacingRow => ({
     en: `${label.en} ${value}`,
     ar: `${label.ar} ${value}`,
@@ -454,7 +478,7 @@ function supplierBlock(sheet: Sheet, supplier: SupplierSnapshot): void {
   if (supplier.licensingAuthority) {
     rows.push(labelled(WORDS.licensingAuthority, supplier.licensingAuthority));
   }
-  if (supplier.corporateTaxNumber) {
+  if (supplier.corporateTaxNumber && options.corporateTaxRegistration !== false) {
     rows.push(labelled(WORDS.corporateTaxNumber, supplier.corporateTaxNumber));
   }
   // The VAT number appears only on a document whose own snapshot says the
@@ -539,9 +563,24 @@ type TotalRow = { label: Phrase; value: string; bold?: boolean };
  * Drawn as four rules that meet at the corners rather than as a filled
  * rectangle: the writer strokes lines and fills nothing, which is all this
  * needs and one operator fewer to own.
+ *
+ * **The rows sit in the middle of it**: `TOTALS_TOP_AIR` above the first
+ * baseline and the same below the last, which is the whole of the height. The
+ * box is exactly as tall as it was; the first version put twelve points above
+ * and sixteen below and read bottom-heavy on every page it was set on.
+ *
+ * **The Arabic label is measured against the figure, not assumed clear of it.**
+ * The English label, the Arabic beside it and the figure were placed by fixed
+ * arithmetic from the two edges, which holds for the figures a practice
+ * usually writes and stops holding as the money grows: at `AED 1,215,000.00`
+ * the widest row has two points left between them, and past that they collide.
+ * So the gap is worked out and the Arabic label is left off the row when it
+ * would come within the page's own gutter of the figure. The English label and
+ * the figure are always set, in both languages' reading of the row: what a
+ * reader loses is a translation of a word, never a number.
  */
 function totalsBox(sheet: Sheet, rows: readonly TotalRow[]): void {
-  const height = 18 + (rows.length - 1) * TOTALS_ROW + TOTALS_PAD;
+  const height = TOTALS_TOP_AIR * 2 + (rows.length - 1) * TOTALS_ROW;
   sheet.room(height + LINE);
 
   const top = sheet.baseline;
@@ -549,20 +588,26 @@ function totalsBox(sheet: Sheet, rows: readonly TotalRow[]): void {
   const left = RIGHT - TOTALS_WIDTH;
 
   rows.forEach((row, index) => {
-    const y = top - 18 + 6 - index * TOTALS_ROW;
-    const size = row.bold === true ? SIZE.body + 1 : SIZE.body;
+    const bold = row.bold === true;
+    const y = top - TOTALS_TOP_AIR - index * TOTALS_ROW;
+    const size = bold ? SIZE.body + 1 : SIZE.body;
     sheet.line(y, left + TOTALS_PAD, row.label.en, size, {
-      bold: row.bold === true,
-      grey: row.bold === true ? INK : MUTED,
+      bold,
+      grey: bold ? INK : MUTED,
     });
-    const labelWidth = sheet.width(row.label.en, size, { bold: row.bold === true });
-    sheet.line(y, left + TOTALS_PAD + labelWidth + 6, row.label.ar, SIZE.small, {
-      grey: MUTED,
-      rtl: true,
-      align: 'start',
-    });
+    const labelWidth = sheet.width(row.label.en, size, { bold });
+    const arabicAt = left + TOTALS_PAD + labelWidth + 6;
+    const arabicWidth = sheet.width(row.label.ar, SIZE.small, { rtl: true });
+    const figureAt = RIGHT - TOTALS_PAD - sheet.width(row.value, size, { bold });
+    if (arabicAt + arabicWidth + GUTTER <= figureAt) {
+      sheet.line(y, arabicAt, row.label.ar, SIZE.small, {
+        grey: MUTED,
+        rtl: true,
+        align: 'start',
+      });
+    }
     sheet.line(y, RIGHT - TOTALS_PAD, row.value, size, {
-      bold: row.bold === true,
+      bold,
       align: 'end',
     });
   });
@@ -798,7 +843,7 @@ function receiptPage(
   });
 
   masthead(sheet, WORDS.receipt, logo);
-  supplierBlock(sheet, document_.supplier);
+  supplierBlock(sheet, document_.supplier, { corporateTaxRegistration: false });
 
   sheet.down(4);
   sheet.rule();
