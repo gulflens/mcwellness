@@ -4,9 +4,13 @@ import { AccountsResponse, SettingsResponse } from '../../api/accounting/schema'
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, PageHeader } from '../../shell/components/Controls';
 import './books.css';
+import { AccountDrawer } from './AccountDrawer';
+import { AccountsSection } from './AccountsSection';
 import { EntryDrawer } from './EntryDrawer';
 import { JournalSection } from './JournalSection';
 import { OverviewSection } from './OverviewSection';
+import { SettingsSection } from './SettingsSection';
+import { StatementsSection } from './StatementsSection';
 
 /**
  * The practice's books, in `BillingPage.tsx`'s exact shape: a page header,
@@ -54,12 +58,18 @@ export function BooksPage() {
   // The same rule the API enforces (domain/shared/actor.ts, 'accounting.write'):
   // the owner and finance post; nobody else writes in the books.
   const canWrite = actor !== null && canActor(actor, { type: 'accounting.write' }, {}, new Date());
+  // Closing a year, moving the lock and the books' own settings are the
+  // owner's alone (docs/SPEC/accounting.md section 3).
+  const canChangeSettings =
+    actor !== null && canActor(actor, { type: 'accounting.settings.write' }, {}, new Date());
 
   // Null until the opening posting call has answered, so the overview's own
   // read follows the write rather than racing it.
   const [posted, setPosted] = useState<number | null>(null);
   const [journalKey, setJournalKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [accountDrawerOpen, setAccountDrawerOpen] = useState(false);
+  const [chartKey, setChartKey] = useState(0);
   const [chart, setChart] = useState<AccountsResponse['accounts'] | null>(null);
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [successNote, setSuccessNote] = useState<string | null>(null);
@@ -121,6 +131,11 @@ export function BooksPage() {
                 Post an entry
               </Button>
             ) : null}
+            {section === 'accounts' && canWrite ? (
+              <Button variant="secondary" onClick={() => setAccountDrawerOpen(true)}>
+                Add account
+              </Button>
+            ) : null}
           </span>
         }
       />
@@ -157,9 +172,9 @@ export function BooksPage() {
         />
       ) : null}
 
-      {section === 'accounts' ? <Note>The chart of accounts is on its way.</Note> : null}
-      {section === 'statements' ? <Note>The statements are on their way.</Note> : null}
-      {section === 'settings' ? <Note>The books&apos; settings are on their way.</Note> : null}
+      {section === 'accounts' ? <AccountsSection reloadKey={chartKey} /> : null}
+      {section === 'statements' ? <StatementsSection /> : null}
+      {section === 'settings' ? <SettingsSection canChange={canChangeSettings} /> : null}
 
       {drawerOpen && chart && settings ? (
         <EntryDrawer
@@ -170,6 +185,17 @@ export function BooksPage() {
             setDrawerOpen(false);
             setSuccessNote(`${entry.entry.reference} is in the journal.`);
             setJournalKey((key) => key + 1);
+          }}
+        />
+      ) : null}
+
+      {accountDrawerOpen ? (
+        <AccountDrawer
+          onClose={() => setAccountDrawerOpen(false)}
+          onAdded={(added) => {
+            setAccountDrawerOpen(false);
+            setSuccessNote(`${added.account.code} ${added.account.name} is in the chart.`);
+            setChartKey((key) => key + 1);
           }}
         />
       ) : null}

@@ -131,6 +131,127 @@ const SUMMARY = {
   deferredNetFils: 852_500,
 };
 
+const LEDGER = {
+  account: ACCOUNTS.accounts[0],
+  from: '2026-01-01',
+  to: '2026-12-31',
+  openingBalanceFils: 0,
+  rows: [
+    {
+      entryReference: 'JE-000004',
+      enteredOn: '2026-09-02',
+      memo: 'Payment received',
+      debitFils: 105_000,
+      creditFils: 0,
+      runningBalanceFils: 105_000,
+    },
+  ],
+  closingBalanceFils: 105_000,
+};
+
+const TRIAL_BALANCE = {
+  asOf: '2026-12-31',
+  rows: [
+    {
+      accountCode: '1010',
+      accountName: 'Bank, operating',
+      accountType: 'asset',
+      debitFils: 1_105_000,
+      creditFils: 20_000,
+      balanceFils: 1_085_000,
+    },
+  ],
+  totalDebitFils: 1_105_000,
+  totalCreditFils: 1_105_000,
+};
+
+const PROFIT_AND_LOSS = {
+  from: '2026-01-01',
+  to: '2026-12-31',
+  income: [
+    {
+      accountCode: '4000',
+      accountName: 'Session income',
+      accountType: 'income',
+      balanceFils: 180_000,
+    },
+  ],
+  expenses: [
+    {
+      accountCode: '6000',
+      accountName: 'General expenses',
+      accountType: 'expense',
+      balanceFils: 40_000,
+    },
+  ],
+  incomeFils: 180_000,
+  expenseFils: 40_000,
+  resultFils: 140_000,
+};
+
+const BALANCE_SHEET = {
+  asOf: '2026-12-31',
+  assets: [
+    {
+      accountCode: '1010',
+      accountName: 'Bank, operating',
+      accountType: 'asset',
+      balanceFils: 1_085_000,
+    },
+  ],
+  liabilities: [
+    {
+      accountCode: '2400',
+      accountName: 'Contract liability, sessions owed',
+      accountType: 'liability',
+      balanceFils: 852_500,
+    },
+  ],
+  equity: [
+    {
+      accountCode: '3100',
+      accountName: 'Opening balance equity',
+      accountType: 'equity',
+      balanceFils: 92_500,
+    },
+  ],
+  resultYearToDateFils: 140_000,
+  retainedEarningsFils: 0,
+  totalAssetsFils: 1_085_000,
+  totalLiabilitiesAndEquityFils: 1_085_000,
+};
+
+const CASH_FLOW = {
+  from: '2026-01-01',
+  to: '2026-12-31',
+  byCategory: {
+    fromHouseholds: 1_105_000,
+    forExpenses: -20_000,
+    toOwners: 0,
+    tax: 0,
+    other: 0,
+    transfers: 0,
+  },
+  openingCashFils: 0,
+  netChangeFils: 1_085_000,
+  closingCashFils: 1_085_000,
+};
+
+const YEARS = {
+  years: [
+    {
+      id: '0000000e-0000-4000-8000-000000002026',
+      startsOn: '2026-01-01',
+      endsOn: '2026-12-31',
+      status: 'open',
+      closedAt: null,
+      closeReason: null,
+      reopenedAt: null,
+      reopenReason: null,
+    },
+  ],
+};
+
 const provider: AuthProvider = {
   kind: 'development',
   signIn: async () => undefined,
@@ -186,11 +307,16 @@ function mount(
       const body = hasPosted && posted.length > 1 ? OVERVIEW : (options.overview ?? OVERVIEW);
       return json(body, options.overviewStatus ?? 200);
     }
+    if (url.includes('/ledger')) return json(LEDGER);
+    if (url.startsWith('/api/accounting/statements/trial-balance')) return json(TRIAL_BALANCE);
+    if (url.startsWith('/api/accounting/statements/profit-and-loss')) return json(PROFIT_AND_LOSS);
+    if (url.startsWith('/api/accounting/statements/balance-sheet')) return json(BALANCE_SHEET);
+    if (url.startsWith('/api/accounting/statements/cash-flow')) return json(CASH_FLOW);
     if (url.startsWith('/api/accounting/entries/')) return json({ entry: ENTRY, lines: [] });
     if (url.startsWith('/api/accounting/entries')) return json(ENTRIES);
     if (url.startsWith('/api/accounting/accounts')) return json(ACCOUNTS);
     if (url.startsWith('/api/accounting/settings')) return json(SETTINGS);
-    if (url.startsWith('/api/accounting/years')) return json({ years: [] });
+    if (url.startsWith('/api/accounting/years')) return json(YEARS);
     if (url.startsWith('/api/billing/summary')) return json(SUMMARY);
     throw new Error(`Unexpected fetch: ${url}`);
   }) as unknown as typeof fetch;
@@ -333,5 +459,137 @@ describe('the journal', () => {
     );
     const sent = mounted.posted.find((call) => call.path.endsWith('/reversal'))!;
     expect(sent.reason).toBe('It was posted against the wrong account.');
+  });
+});
+
+describe('the chart of accounts', () => {
+  it('lists every account in words, with its balance', async () => {
+    mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Accounts' }));
+    expect(await screen.findByText('Bank, operating')).toBeTruthy();
+    expect(screen.getByText('1010')).toBeTruthy();
+    expect(screen.getAllByText('Asset').length).toBeGreaterThan(0);
+    expect(screen.getByText('Bank')).toBeTruthy();
+    expect(screen.getByText('10,850.00')).toBeTruthy();
+  });
+
+  it('refuses a code whose first digit disagrees with the type before it asks the server', async () => {
+    const mounted = mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Accounts' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add account' }));
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText('Code'), { target: { value: '4999' } });
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Software' } });
+    fireEvent.change(screen.getByLabelText('Kind of account'), { target: { value: 'expense' } });
+    fireEvent.change(screen.getByLabelText('Why this account is added'), {
+      target: { value: 'The practice pays for software monthly.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add the account' }));
+    expect(await screen.findByText("An expense's code starts with 5 or 6.")).toBeTruthy();
+    expect(mounted.posted.some((call) => call.path === '/api/accounting/accounts')).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('Code'), { target: { value: '6300' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add the account' }));
+    await waitFor(() =>
+      expect(mounted.posted.some((call) => call.path === '/api/accounting/accounts')).toBe(true),
+    );
+    const sent = mounted.posted.find((call) => call.path === '/api/accounting/accounts')!;
+    expect(sent.reason).toBe('The practice pays for software monthly.');
+  });
+
+  it('shows an account’s ledger with a running balance', async () => {
+    mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Accounts' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open 1010' }));
+    expect(await screen.findByText('Running balance (AED)')).toBeTruthy();
+    expect(screen.getByText('JE-000004')).toBeTruthy();
+    // The debit and the running balance are the same figure on a first line.
+    expect(screen.getAllByText('1,050.00')).toHaveLength(2);
+  });
+});
+
+describe('the statements', () => {
+  it('shows the four of them, each with a file to download', async () => {
+    mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Statements' }));
+    expect(await screen.findByText('Trial balance')).toBeTruthy();
+    expect(screen.getByText('Profit and loss')).toBeTruthy();
+    expect(screen.getByText('Balance sheet')).toBeTruthy();
+    expect(screen.getByText('Cash flow')).toBeTruthy();
+    const links = screen.getAllByRole('link', { name: /Download/ });
+    expect(links.length).toBe(6);
+    const hrefs = links.map((link) => link.getAttribute('href') ?? '');
+    expect(
+      hrefs.some((href) => href.startsWith('/api/accounting/statements/trial-balance.csv?asOf=')),
+    ).toBe(true);
+    expect(hrefs.some((href) => href.includes('zoho-journal.csv'))).toBe(true);
+    expect(hrefs.some((href) => href.includes('zoho-accounts.csv'))).toBe(true);
+  });
+
+  it('marks the balance sheet’s two computed lines as computed', async () => {
+    mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Statements' }));
+    expect(await screen.findByText('Result for the year to date, computed')).toBeTruthy();
+    expect(screen.getByText('Retained earnings, computed')).toBeTruthy();
+  });
+});
+
+describe('the books’ settings', () => {
+  it('shows the settings and the years to the owner, and refuses a lock in the future', async () => {
+    mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(await screen.findByText('The books start on')).toBeTruthy();
+    expect(screen.getByText('Small Business Relief is elected.')).toBeTruthy();
+    expect(screen.getByText('1 Jan 2026')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lock through' }));
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText('Lock the books through'), {
+      target: { value: '2030-01-01' },
+    });
+    fireEvent.change(screen.getByLabelText('Why the lock moves'), {
+      target: { value: 'The quarter has been filed.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Move the lock' }));
+    expect(await screen.findByText('The lock cannot be in the future.')).toBeTruthy();
+  });
+
+  it('says why the year end cannot move once the journal holds an entry', async () => {
+    mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(
+      await screen.findByText('The year end can change only while the journal is empty.'),
+    ).toBeTruthy();
+  });
+
+  it('closes a year with a reason', async () => {
+    const mounted = mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Close 2026' }));
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText('Why this year is closed'), {
+      target: { value: 'The adviser has signed the year off.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Close the year' }));
+    await waitFor(() =>
+      expect(mounted.posted.some((call) => call.path.endsWith('/close'))).toBe(true),
+    );
+  });
+
+  it('shows finance the settings and none of the buttons', async () => {
+    mount(FINANCE);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(await screen.findByText('The books start on')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Lock through' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Close 2026' })).toBeNull();
   });
 });
