@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SEED_TENANT_ID } from '../../../db/seed/generate';
-import { asApiRole, rejectsWith, rolledBack, setAuditContext } from '../../db/helpers';
+import {
+  asApiRole,
+  IDS,
+  rejectsWith,
+  rolledBack,
+  seedTenant,
+  setAuditContext,
+} from '../../db/helpers';
 import { startHarness, type Harness } from './support';
 
 /**
@@ -218,6 +225,53 @@ describe('the journal, numbered and balanced', () => {
         'update journal_line set debit_fils = 1 where entry_id = $1',
         [entryId],
       );
+    });
+  });
+});
+
+describe('the guard reads the caller’s practice, not the row’s', () => {
+  /**
+   * `app.guard_journal_entry` is security definer and judged the day against
+   * the year and the settings of `new.tenant_id` -- the caller's own value.
+   * Row security has the last word, but it is evaluated after a BEFORE ROW
+   * trigger, so an entry naming another practice used to reach that practice's
+   * lock date and print it in the refusal. The guard now compares the row to
+   * the context first, and says only that.
+   */
+  it('refuses an entry naming another practice, and repeats no day of theirs', async () => {
+    await rolledBack(h.owner, async () => {
+      await asBookkeeper();
+      await seedTenant(h.owner, IDS.tenantB, IDS.ownerB, 'Synthetic Neighbour');
+      // The second practice's own books, with a lock date of their own.
+      await h.owner.query(
+        "update accounting_setting set locked_through = '2026-06-30' where tenant_id = $1",
+        [IDS.tenantB],
+      );
+      const theirs = await h.owner.query<{ id: string }>(
+        'insert into fiscal_year (tenant_id, starts_on, ends_on) ' +
+          "values ($1, '2026-01-01', '2026-12-31') returning id",
+        [IDS.tenantB],
+      );
+      const theirYearId = theirs.rows[0]!.id;
+
+      const failure = await asApiRole(h.owner, SEED_TENANT_ID, async () => {
+        try {
+          await h.owner.query(
+            'insert into journal_entry (tenant_id, entered_on, fiscal_year_id, kind, memo) ' +
+              "values ($1, '2026-06-30', $2, 'manual', 'Somebody else''s books')",
+            [IDS.tenantB, theirYearId],
+          );
+          return null;
+        } catch (error) {
+          const shape = error as { code?: string; message?: string };
+          return { code: shape.code ?? '', message: shape.message ?? '' };
+        }
+      });
+
+      expect(failure).not.toBeNull();
+      expect(failure!.code).toBe('42501');
+      // Not their lock date, not their start day, not any day at all.
+      expect(failure!.message).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     });
   });
 });

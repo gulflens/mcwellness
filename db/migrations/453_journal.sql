@@ -102,8 +102,9 @@ comment on table public.journal_line is 'audited: no client - one side of one jo
 -- Security definer, in app.fiscal_year_for's pattern (452): the guard must read
 -- the practice's own year and settings to judge the day, whoever is inserting,
 -- and a reader who may not see those rows must still be refused by the row
--- policy rather than by a guard that could not find them. It reads only rows of
--- new.tenant_id and returns nothing, so it hands nothing back to its caller.
+-- policy rather than by a guard that could not find them. Its first statement
+-- is therefore that the row's practice is the caller's own: what a definer
+-- guard hands back is the text of its refusals, and those name days.
 create function app.guard_journal_entry() returns trigger
 language plpgsql security definer
 set search_path = pg_catalog, pg_temp
@@ -112,6 +113,16 @@ declare
   v_year     public.fiscal_year%rowtype;
   v_setting  public.accounting_setting%rowtype;
 begin
+  -- The row's practice, before anything of that practice is read. Row security
+  -- says the same thing, but it is evaluated after a BEFORE ROW trigger, so an
+  -- entry naming somebody else would otherwise reach their lock date and their
+  -- start day and print one of them in the refusal below. 452 and 454 take the
+  -- practice from the context and never from the caller; this is the same rule
+  -- said where the row already carries a value.
+  if new.tenant_id is distinct from app.current_tenant_id() then
+    raise exception 'the entry names a practice that is not the caller''s'
+      using errcode = 'insufficient_privilege';
+  end if;
   select * into v_year from public.fiscal_year
    where id = new.fiscal_year_id and tenant_id = new.tenant_id;
   if v_year.id is null then
