@@ -59,6 +59,14 @@ export const BillingIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** The books: a ledger stood on its spine, two columns and three rules. */
+export const BooksIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3.25 3.75h13.5v12.5H3.25z" />
+    <path d="M10 3.75v12.5M6.25 7h1.5M6.25 10h1.5M6.25 13h1.5M12.25 7h1.5M12.25 10h1.5M12.25 13h1.5" />
+  </Icon>
+);
+
 export const AuditIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M10 2.75 4 5v4.5c0 3.4 2.5 6.2 6 7.75 3.5-1.55 6-4.35 6-7.75V5z" />

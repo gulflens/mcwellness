@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   AuditIcon,
   BillingIcon,
+  BooksIcon,
   ClientsIcon,
   KitIcon,
   PortalIcon,
@@ -25,6 +26,10 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
   { key: 'schedule', label: 'Schedule', to: '/admin/schedule', icon: <ScheduleIcon /> },
   { key: 'sessions', label: 'Sessions', icon: <SessionsIcon /> },
   { key: 'billing', label: 'Billing', to: '/admin/billing', icon: <BillingIcon /> },
+  // The practice's own books. AdminLayout shows it only to the owner and
+  // finance (adminAccess.ts): an admin records a household's money and does not
+  // keep the practice's books (docs/SPEC/accounting.md section 3).
+  { key: 'books', label: 'Books', to: '/admin/books', icon: <BooksIcon /> },
   // The practice's whole trail, and who has read one record. AdminLayout shows
   // it only to the three oversight roles (adminAccess.ts).
   { key: 'audit', label: 'Audit', to: '/admin/audit', icon: <AuditIcon /> },

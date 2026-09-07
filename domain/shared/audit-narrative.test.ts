@@ -656,3 +656,149 @@ describe('the article before an entity', () => {
     expect(withArticle('appointment')).toBe('an appointment');
   });
 });
+
+describe('the books (docs/SPEC/accounting.md section 11)', () => {
+  it('says which kind of journal entry was posted, and never who it was for', () => {
+    const posted = narrate(
+      event({ entityType: 'journal_entry', newValues: { kind: 'manual' } }),
+      'en',
+    );
+    expect(posted?.sentence).toBe('Hazel Harbour posted a journal entry');
+    expect(
+      narrate(event({ entityType: 'journal_entry', newValues: { kind: 'reversal' } }), 'en')
+        ?.sentence,
+    ).toBe('Hazel Harbour reversed a journal entry');
+    expect(
+      narrate(event({ entityType: 'journal_entry', newValues: { kind: 'opening' } }), 'en')
+        ?.sentence,
+    ).toBe('Hazel Harbour posted the opening balances');
+    expect(
+      narrate(event({ entityType: 'journal_entry', newValues: { kind: 'automatic' } }), 'ar')
+        ?.sentence,
+    ).toBe('Hazel Harbour سجّل قيد يومية');
+  });
+
+  it('tells opening a year from closing one and from reopening one', () => {
+    expect(narrate(event({ entityType: 'fiscal_year' }), 'en')?.sentence).toBe(
+      'Hazel Harbour opened a financial year',
+    );
+    expect(
+      narrate(
+        event({
+          entityType: 'fiscal_year',
+          action: 'update',
+          changedFields: ['status', 'closed_at', 'close_reason'],
+          oldValues: { closed_at: null },
+          newValues: { closed_at: '2027-01-04T06:00:00.000Z' },
+        }),
+        'en',
+      )?.sentence,
+    ).toBe('Hazel Harbour closed a financial year');
+    expect(
+      narrate(
+        event({
+          entityType: 'fiscal_year',
+          action: 'update',
+          changedFields: ['status', 'reopened_at', 'reopen_reason'],
+          oldValues: { reopened_at: null, closed_at: '2027-01-04T06:00:00.000Z' },
+          newValues: {
+            reopened_at: '2027-02-01T06:00:00.000Z',
+            closed_at: '2027-01-04T06:00:00.000Z',
+          },
+        }),
+        'en',
+      )?.sentence,
+    ).toBe('Hazel Harbour reopened a financial year');
+  });
+
+  it('tells adding an account from renaming one and from archiving one', () => {
+    expect(narrate(event({ entityType: 'account' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added an account',
+    );
+    expect(
+      narrate(
+        event({
+          entityType: 'account',
+          action: 'update',
+          changedFields: ['name'],
+          oldValues: { name: 'Software' },
+          newValues: { name: 'Software subscriptions' },
+        }),
+        'en',
+      )?.sentence,
+    ).toBe('Hazel Harbour renamed an account');
+    expect(
+      narrate(
+        event({
+          entityType: 'account',
+          action: 'update',
+          changedFields: ['archived_at', 'archive_reason'],
+          oldValues: { archived_at: null },
+          newValues: { archived_at: '2026-09-07T06:00:00.000Z' },
+        }),
+        'en',
+      )?.sentence,
+    ).toBe('Hazel Harbour archived an account');
+  });
+
+  it('says which way the books’ lock moved, and what else the settings changed', () => {
+    expect(
+      narrate(
+        event({
+          entityType: 'accounting_setting',
+          action: 'update',
+          changedFields: ['locked_through'],
+          oldValues: { locked_through: null },
+          newValues: { locked_through: '2026-06-30' },
+        }),
+        'en',
+      )?.sentence,
+    ).toBe('Hazel Harbour locked the books through a date');
+    expect(
+      narrate(
+        event({
+          entityType: 'accounting_setting',
+          action: 'update',
+          changedFields: ['locked_through'],
+          oldValues: { locked_through: '2026-06-30' },
+          newValues: { locked_through: '2026-03-31' },
+        }),
+        'en',
+      )?.sentence,
+    ).toBe("Hazel Harbour moved the books' lock back");
+    expect(
+      narrate(
+        event({
+          entityType: 'accounting_setting',
+          action: 'update',
+          changedFields: ['small_business_relief_elected'],
+          oldValues: { small_business_relief_elected: true },
+          newValues: { small_business_relief_elected: false },
+        }),
+        'en',
+      )?.sentence,
+    ).toBe('Hazel Harbour changed the books settings');
+  });
+
+  it('names no household in any of the books’ sentences', () => {
+    const events: AuditEvent[] = [
+      event({ entityType: 'journal_entry', newValues: { kind: 'automatic' } }),
+      event({ entityType: 'fiscal_year' }),
+      event({ entityType: 'account' }),
+      event({
+        entityType: 'accounting_setting',
+        action: 'update',
+        changedFields: ['locked_through'],
+        oldValues: { locked_through: null },
+        newValues: { locked_through: '2026-06-30' },
+      }),
+    ];
+    for (const one of events) {
+      for (const locale of ['en', 'ar'] as const) {
+        const sentence = narrate(one, locale)?.sentence ?? '';
+        expect(sentence, `${one.entityType} ${locale}`).not.toContain('household');
+        expect(sentence, `${one.entityType} ${locale}`).not.toContain('record');
+      }
+    }
+  });
+});

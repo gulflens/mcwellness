@@ -47,6 +47,7 @@ const ENTRY_POINTS: ReadonlyArray<{ readonly label: string; readonly file: strin
   { label: "domain/billing's own barrel", file: join(ROOT, 'domain/billing/index.ts') },
   { label: "domain/scheduling's own barrel", file: join(ROOT, 'domain/scheduling/index.ts') },
   { label: "domain/session's own barrel", file: join(ROOT, 'domain/session/index.ts') },
+  { label: "domain/accounting's own barrel", file: join(ROOT, 'domain/accounting/index.ts') },
   // Not a stream barrel: the document writer's byte-level half, which no
   // barrel re-exports (`domain/shared/document/index.ts` says why) and which
   // would therefore be walked from nowhere. It renders a client's financial

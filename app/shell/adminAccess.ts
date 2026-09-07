@@ -16,6 +16,17 @@ export function canOpenBilling(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `accounting.read` (app/api/accounting) — who may open the Books.
+ * The owner and finance, and nobody else in this piece: an admin records a
+ * household's money without keeping the practice's books
+ * (docs/SPEC/accounting.md section 3), and db/policies/accounting/access.sql
+ * refuses the rows beneath both this screen and the routes.
+ */
+export function canOpenBooks(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'accounting.read' }, {}, now);
+}
+
+/**
  * Matches `appointment.list`'s practice scope (app/api/appointments/list.ts,
  * the only scope the admin console's day schedule ever requests) — who may
  * open it. Finance can read prices but not the day's appointments.

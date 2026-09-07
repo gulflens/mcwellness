@@ -26,6 +26,10 @@ describe('Rail', () => {
       'href',
       expect.stringContaining('/admin/billing'),
     );
+    expect(screen.getByRole('link', { name: 'Books' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/books'),
+    );
     expect(screen.getByRole('link', { name: 'Audit' })).toHaveProperty(
       'href',
       expect.stringContaining('/admin/audit'),

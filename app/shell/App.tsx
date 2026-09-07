@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { hasRole } from '@domain/shared';
 import { AuditPage } from '../admin/audit/AuditPage';
+import { BooksPage } from '../admin/accounting/BooksPage';
 import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
 import { KitPage } from '../admin/kit/KitPage';
@@ -24,6 +25,7 @@ import { AdminLayout } from './AdminLayout';
 import {
   canOpenAudit,
   canOpenBilling,
+  canOpenBooks,
   canOpenKit,
   canOpenPortalAccess,
   canOpenSchedule,
@@ -76,6 +78,20 @@ export function App() {
               {(actor) =>
                 canOpenBilling(actor, new Date()) ? (
                   <BillingPage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="books"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenBooks(actor, new Date()) ? (
+                  <BooksPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )

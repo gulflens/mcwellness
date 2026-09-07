@@ -1,0 +1,63 @@
+/*
+ * Only what the shell does not already give the Books page. Tokens and logical
+ * properties throughout (.claude/rules/ui.md): no colour is chosen here, and
+ * nothing is placed on the left or the right by name, so the Arabic edition
+ * mirrors without a second stylesheet.
+ */
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--s-4);
+  margin-block: var(--s-4);
+}
+
+.figures__figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding-block: var(--s-3);
+  border-block-start: 1px solid var(--rule);
+}
+
+.figures__label {
+  margin: 0;
+}
+
+.figures__value {
+  margin: 0;
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+}
+
+.lines-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.lines-editor__row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 2fr) minmax(6rem, 1fr) minmax(6rem, 1fr);
+  gap: var(--s-2);
+  align-items: end;
+}
+
+.difference {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding-block: var(--s-3);
+  border-block-start: 1px solid var(--rule);
+}
+
+.entry-lines {
+  margin-block-start: var(--s-3);
+}
+
+.exports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-block: var(--s-4);
+}
