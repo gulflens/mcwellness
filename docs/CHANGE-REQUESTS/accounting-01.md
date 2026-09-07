@@ -1,8 +1,9 @@
 # accounting-01: what the ledger needs from the shared zone
 
 Written 7 September 2026 with `docs/SPEC/accounting.md` (piece eleven, the
-books). Nine items. By the precedent of pieces seven to ten and the cost rules
-of `docs/HANDOVER.md` section 6, all nine are proposed to ride in the piece's
+books). Ten items, and an eleventh added during the build (the lint test's
+barrel list). By the precedent of pieces seven to ten and the cost rules
+of `docs/HANDOVER.md` section 6, all of them are proposed to ride in the piece's
 own pull request under the integrator's widening for one round, each file
 named in the round's record; none is applied until the plan is approved.
 
@@ -184,6 +185,14 @@ and 451 beside 100, 202, 400, 402, 405 and 600. The second test in that file
 ("checks for exactly the defaults the migrations write from tenant") needs no
 edit: it reads both sets from the migrations and the database, and 958 (item
 3) is what makes them agree.
+
+## 11. `tests/lint/no-node-imports-in-browser-bundle.test.ts` — the barrel list
+
+The test walks each domain barrel by name to prove nothing under it can reach
+a Node built-in, and the list is written out in the file. `domain/accounting/index.ts`
+joins it beside `domain/session`'s: the Books page imports `codeMatchesType`
+and the account types through the barrel, so it is on the browser's side of
+the fence and must be proved so. Nothing else in the file changes.
 
 ## 9. `.claude/rules/data-model.md` — nothing
 
