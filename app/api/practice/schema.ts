@@ -217,7 +217,7 @@ export const UpdatePracticeInput = z
      * whole thing; these arrived with the documents round and the screen
      * cannot edit them yet (`docs/CHANGE-REQUESTS/billing-09.md` item 6), so a
      * body that omits them leaves the row as it is rather than clearing three
-     * columns the sender never saw. Sending null clears one deliberately.
+     * columns the sender never saw.
      */
     contactPhone: ContactPhone.optional(),
     contactEmail: ContactEmail.optional(),

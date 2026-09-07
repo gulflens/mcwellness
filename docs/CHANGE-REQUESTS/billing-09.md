@@ -83,6 +83,10 @@ argument, exactly as the font programs do.
 - `index.ts`: the local storage route calls `get`.
 - `seam.test.ts` and `local-disk.test.ts`: the rename, and five tests for the
   new method on both implementations.
+- `docs/SEAMS.md`: the seam is normative there, so its list is now five calls
+  rather than four, and it says why `get` sits outside the audit rule that
+  governs `getSignedUrl` — a server-side read hands nobody anything, so there
+  is no read to attribute and no actor to name.
 
 **Why it could not wait.** The practice's logo is a `document` row whose bytes
 are in the store. The seam could write them, sign a link to them, ask whether

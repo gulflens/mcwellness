@@ -30,7 +30,9 @@
 -- Trunk range, second half (950-999): it alters `invoice`, a stream's own
 -- table, so it must sort last (docs/SPEC/OWNERSHIP.md).
 --
--- Needs: 402 (invoice, app.stamp_invoice_supplier), 905 (the version of that
+-- Needs: 030 (location — the function this writes reads the studio's
+--        display_address through a left join on it, exactly as 905's does),
+--        402 (invoice, app.stamp_invoice_supplier), 905 (the version of that
 --        function this one replaces), 912 (the tenant columns it copies).
 
 alter table invoice
