@@ -58,31 +58,60 @@ credential); every read and write of a record is logged, hash-chained.
    carrying none; only the origin crosses, and no address of this app names a
    person.
 
-   **The widened document renders the day map and nothing else.** Two things
-   make that true, and the first alone did not. The widening is chosen by an
-   exact path match on a GET, so no neighbouring path can widen itself into
-   it — but that only settles which *document* is widened, and a console
-   screen is not a document. The day map is therefore mounted **outside the
-   `/admin` layout route** (`app/shell/App.tsx`), so the widened document
-   carries no rail: the rail navigates with `NavLink`, and Clients, Billing,
-   Books, Audit and Settings were otherwise each one client-side click from
-   rendering under `'unsafe-eval'` for the rest of that browsing session. Its
-   own two ways out — no session, and a signed-in person who may not open the
-   schedule — are **plain anchors and not `<Navigate>`**
-   (`RequireAuthDocument`), because a redirect renders the next screen inside
-   the document already loaded and an anchor makes the browser fetch a new one
-   with the strict policy on it. Anyone can hand anyone the map's address; what
-   they get is the map, a sentence and a link out. (The review of piece
-   seventeen's pull request, finding B2, 2026-09-08: before that round the
-   sign-in form itself, and a practitioner's Today, could both be rendered
-   under the wider policy.)
+   **The widened document renders the day map and nothing else, and every way
+   out of it is a fresh document load.** Four things make that true, and no
+   three of them were enough. The widening is chosen by an exact path match on
+   a GET, so no neighbouring path can widen itself into it — but that only
+   settles which *document* is widened, and a console screen is not a
+   document.
+
+   1. **No rail.** The day map is mounted **outside the `/admin` layout
+      route** (`app/shell/App.tsx`), so the widened document carries none: the
+      rail navigates with `NavLink`, and Clients, Billing, Books, Audit and
+      Settings were otherwise each one client-side click from rendering under
+      `'unsafe-eval'` for the rest of that browsing session.
+   2. **No redirect.** Its own two ways out — no session, and a signed-in
+      person who may not open the schedule — are **plain anchors and not
+      `<Navigate>`** (`RequireAuthDocument`), because a redirect renders the
+      next screen inside the document already loaded and an anchor makes the
+      browser fetch a new one with the strict policy on it. Anyone can hand
+      anyone the map's address; what they get is the map, a sentence and a
+      link out.
+   3. **No link out that stays in place.** `DayMapPage` wraps its whole tree,
+      drawers included, in the `DocumentBoundary` of
+      `app/admin/schedule/map/documentBoundary.tsx`, where a `BoundaryLink`
+      renders a plain `<a href>` instead of a router `Link`. The rule is a
+      property of the tree and not of each link, so a link added later by
+      somebody who has never read this page is safe too. The one that made
+      this necessary is the call-off drawer's **Open Billing**, shared with
+      the Schedule page — where it is still a client-side link, because there
+      the strict policy is already on the document.
+   4. **The worker never caches it.** The shell cache is keyed on `/` alone,
+      so whatever document was last fetched successfully answers every later
+      navigation with no signal. `app/shell/sw.ts` reads that cache for the
+      map's address and never writes to it, or one visit to the map would have
+      made the widened document this device's offline shell for Clients, for
+      the practitioner's Today and for the sign-in form.
+
+   (The review of piece seventeen's pull request, finding B2, 2026-09-08, and
+   the re-check of its fix round the same day: before the first round the
+   sign-in form itself and a practitioner's Today could be rendered under the
+   wider policy; after it, Billing and the rail behind it were still one click
+   away inside the call-off drawer, and the worker still replayed the widened
+   document offline.)
 
    `tests/security/headers.test.ts` pins **both** policies — the map
    document's, and every other document's and every API answer's unchanged —
    together with the near misses (a query string, a trailing slash, a letter
    more, a change of case, and a percent-encoded spelling, which Hono decodes
    before matching); `app/shell/App.test.tsx` pins that the map route renders
-   no rail and that both ways out are anchors.
+   no rail and that both ways out are anchors;
+   `tests/scheduling/DayMapPage.test.tsx` calls a visit off from the map and
+   presses Open Billing, asserting the router did not move, while
+   `tests/scheduling/MoveAndCancelDrawers.test.tsx` asserts the same press from
+   the Schedule still navigates in place; and `app/shell/sw.test.ts` asserts
+   the shell cache is untouched by a successful navigation to the map and still
+   updated by one to any other screen.
 3. **Rate limits** (`app/api/_middleware/rate-limit.ts`), per minute, from
    the environment: `RATE_LIMIT_PER_MINUTE` per address (300),
    `RATE_LIMIT_ACTOR_PER_MINUTE` per signed-in person (600),
