@@ -4,7 +4,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate } from './BillingPage';
-import { formatFils } from './money';
+import { formatDiscount, formatFils } from './money';
 import { PackageDrawer } from './PackageDrawer';
 import { SellPackageDrawer } from './SellPackageDrawer';
 
@@ -112,6 +112,15 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         numeric: true,
         align: 'end',
         render: (row) => formatFils(row.listPriceFils),
+      },
+      {
+        // What came off the list: the share when that is how it was set, the
+        // sum when it was a sum (docs/SPEC/billing.md section 2.4).
+        key: 'discount',
+        header: 'Discount',
+        numeric: true,
+        align: 'end',
+        render: (row) => (row.currentPrice ? formatDiscount(row.currentPrice) : '—'),
       },
       {
         key: 'price',

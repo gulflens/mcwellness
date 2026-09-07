@@ -12,9 +12,19 @@ import {
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
+import { DiscountFields } from './DiscountFields';
 import { focusFirstInvalid } from './refusal';
 import { useDrawer } from './useDrawer';
-import { AED_MAX_FILS, formatFils, isAedAmountTooLarge, parseAedToFils, previewVat } from './money';
+import {
+  AED_MAX_FILS,
+  discountBody,
+  formatFils,
+  isAedAmountTooLarge,
+  parseAedToFils,
+  previewDiscount,
+  previewVat,
+  type DiscountKind,
+} from './money';
 
 /**
  * The practice runs in one time zone; today's date on this form is that
@@ -43,6 +53,7 @@ type VatRateState =
 type FieldErrors = {
   service?: string;
   price?: string;
+  discount?: string;
   validFrom?: string;
   reason?: string;
 };
@@ -55,13 +66,16 @@ const CONFLICT_MESSAGE =
   'A price for this service already starts on that date. Choose a different date.';
 const NOT_FOUND_MESSAGE = 'This service is no longer part of the practice. Refresh and try again.';
 const NO_VAT_SETTING_MESSAGE = "There isn't a VAT rate on record for that date yet.";
+const DISCOUNT_TOO_LARGE_MESSAGE = 'The discount is larger than the list price.';
 const GENERIC_MESSAGE = 'The price could not be saved. Try again.';
 
-type BadRequestCode = 'date_not_future' | 'date_not_after_current' | 'invalid_request';
+type BadRequestCode =
+  'date_not_future' | 'date_not_after_current' | 'discount_too_large' | 'invalid_request';
 const BAD_REQUEST_MESSAGES: Record<BadRequestCode, string> = {
   date_not_future: 'A new price cannot take effect before today. Choose today or a later date.',
   date_not_after_current:
     'A new price must take effect after the price it supersedes. Choose a later date.',
+  discount_too_large: DISCOUNT_TOO_LARGE_MESSAGE,
   invalid_request: 'Check the price, date and reason, then try again.',
 };
 
@@ -70,6 +84,7 @@ const BAD_REQUEST_MESSAGES: Record<BadRequestCode, string> = {
 function badRequestMessage(code: string | undefined): string {
   return code === 'date_not_future' ||
     code === 'date_not_after_current' ||
+    code === 'discount_too_large' ||
     code === 'invalid_request'
     ? BAD_REQUEST_MESSAGES[code]
     : BAD_REQUEST_MESSAGES.invalid_request;
@@ -93,6 +108,8 @@ export function PriceDrawer({
   const [serviceTypes, setServiceTypes] = useState<ServiceTypesState>({ kind: 'loading' });
   const [serviceTypeId, setServiceTypeId] = useState('');
   const [price, setPrice] = useState('');
+  const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
+  const [discountValue, setDiscountValue] = useState('');
   const [validFrom, setValidFrom] = useState(() => isoDateIn(new Date(), PRACTICE_TIME_ZONE));
   const [reason, setReason] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -158,9 +175,13 @@ export function PriceDrawer({
 
   const vatRateBasisPoints = vatRate.kind === 'ready' ? vatRate.rateBasisPoints : null;
   const parsedFils = parseAedToFils(price);
+  // The same arithmetic the server writes the row with: the list figure, what
+  // comes off it, and what a family pays.
+  const applied =
+    parsedFils === null ? null : previewDiscount(parsedFils, discountKind, discountValue);
   const preview =
-    parsedFils !== null && vatRateBasisPoints !== null
-      ? previewVat(parsedFils, vatRateBasisPoints)
+    applied !== null && vatRateBasisPoints !== null
+      ? previewVat(applied.netFils, vatRateBasisPoints)
       : null;
 
   function clearFieldError(key: keyof FieldErrors) {
@@ -181,6 +202,12 @@ export function PriceDrawer({
         ? `Enter a price of AED ${formatFils(AED_MAX_FILS)} or less.`
         : 'Enter a price in AED, such as 120.00.';
     }
+    if (parsedFils !== null && applied === null) {
+      errors.discount =
+        discountKind === 'percent'
+          ? 'Enter a percentage between 0 and 100, such as 15.'
+          : DISCOUNT_TOO_LARGE_MESSAGE;
+    }
     if (!validFrom) {
       errors.validFrom = 'Choose the date this price takes effect.';
     }
@@ -199,6 +226,7 @@ export function PriceDrawer({
         [
           errors.service ? 'price-service' : null,
           errors.price ? 'price-amount' : null,
+          errors.discount ? 'price-discount-value' : null,
           errors.validFrom ? 'price-valid-from' : null,
           errors.reason ? 'price-reason' : null,
         ].filter((id): id is string => id !== null),
@@ -213,7 +241,8 @@ export function PriceDrawer({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           serviceTypeId,
-          unitPriceFils: parsedFils,
+          listPriceFils: parsedFils,
+          discount: discountBody(discountKind, discountValue),
           validFrom,
           amendmentReason: trimmedReason,
         }),
@@ -306,7 +335,7 @@ export function PriceDrawer({
 
           <Field
             id="price-amount"
-            label="Price (AED, excluding VAT)"
+            label="List price (AED, excluding VAT)"
             type="text"
             inputMode="decimal"
             placeholder="0.00"
@@ -316,6 +345,19 @@ export function PriceDrawer({
               clearFieldError('price');
             }}
             error={fieldErrors.price}
+          />
+
+          <DiscountFields
+            id="price-discount"
+            label="Discount"
+            kind={discountKind}
+            value={discountValue}
+            error={fieldErrors.discount}
+            onChange={(next) => {
+              setDiscountKind(next.kind);
+              setDiscountValue(next.value);
+              clearFieldError('discount');
+            }}
           />
 
           <Field
@@ -345,8 +387,18 @@ export function PriceDrawer({
 
           <div className="price-preview">
             <div className="price-preview__row">
-              <span className="small muted">Unit price</span>
+              <span className="small muted">List price</span>
               <span className="numeric">{parsedFils !== null ? formatFils(parsedFils) : '—'}</span>
+            </div>
+            {applied && applied.discountFils > 0 ? (
+              <div className="price-preview__row">
+                <span className="small muted">Discount</span>
+                <span className="numeric">{formatFils(applied.discountFils)}</span>
+              </div>
+            ) : null}
+            <div className="price-preview__row">
+              <span className="small muted">Price</span>
+              <span className="numeric">{applied ? formatFils(applied.netFils) : '—'}</span>
             </div>
             <div className="price-preview__row">
               <span className="small muted">

@@ -10,9 +10,18 @@ import {
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
+import { DiscountFields } from './DiscountFields';
 import { focusFirstInvalid } from './refusal';
 import { useDrawer } from './useDrawer';
-import { AED_MAX_FILS, formatFils, isAedAmountTooLarge, parseAedToFils } from './money';
+import {
+  AED_MAX_FILS,
+  discountBody,
+  formatFils,
+  isAedAmountTooLarge,
+  parseAedToFils,
+  previewDiscount,
+  type DiscountKind,
+} from './money';
 
 /**
  * "Add package" — the drawer that puts a programme on the price list
@@ -23,9 +32,15 @@ import { AED_MAX_FILS, formatFils, isAedAmountTooLarge, parseAedToFils } from '.
  * standalone value cannot be given its share of the package price
  * (domain/billing/allocation.ts). It then totals those services at today's
  * prices and offers that figure as the list price — a starting point the
- * founder may overwrite, never a figure the app decides. The sale price is a
- * second field with its own reason, and the two are stored separately: no
- * discount percentage is kept anywhere.
+ * founder may overwrite, never a figure the app decides.
+ *
+ * What it sells for is said either way round: a discount off the list, or the
+ * price now. Typing one works out the other, and the request carries the
+ * discount (docs/SPEC/billing.md section 2.4 — the operator's decision of
+ * 7 September 2026, which amends the founder's decision of 2026-09-03 that no
+ * discount percentage is kept anywhere; a percentage is kept now, when that is
+ * how the figure was set). The list price is the ceiling: a price now above it
+ * is refused here rather than at the server.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -33,8 +48,12 @@ const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 const FORBIDDEN_MESSAGE = "You don't have permission to add a package.";
 const CODE_TAKEN_MESSAGE = 'A package already uses that code. Choose another.';
 const GENERIC_MESSAGE = 'The package could not be saved. Try again.';
+const DISCOUNT_TOO_LARGE_MESSAGE = 'The discount is larger than the list price.';
+const ABOVE_LIST_MESSAGE =
+  'The price now is above the list price. Raise the list price or lower the price now.';
 const BAD_REQUEST_MESSAGES: Record<string, string> = {
   duplicate_component: 'Each service may appear once. Change the quantity instead.',
+  discount_too_large: DISCOUNT_TOO_LARGE_MESSAGE,
   date_not_future: 'A price cannot take effect before today. Choose today or a later date.',
   date_not_after_current:
     'A price must take effect after the one it replaces. Choose a later date.',
@@ -81,6 +100,8 @@ export function PackageDrawer({
   const [listPrice, setListPrice] = useState('');
   const [listPriceTouched, setListPriceTouched] = useState(false);
   const [salePrice, setSalePrice] = useState('');
+  const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
+  const [discountValue, setDiscountValue] = useState('');
   const [validFrom, setValidFrom] = useState(() => isoDateIn(new Date(), PRACTICE_TIME_ZONE));
   const [reason, setReason] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -123,6 +144,37 @@ export function PackageDrawer({
   );
   const effectiveListPrice = listPriceTouched ? listPrice : formatFils(contentsTotalFils);
   const effectiveCode = codeTouched ? code : codeFrom(name);
+  const listFils = parseAedToFils(effectiveListPrice);
+  const applied = listFils === null ? null : previewDiscount(listFils, discountKind, discountValue);
+
+  /**
+   * The two halves of one figure, kept together. A discount sets the price
+   * now; a price now sets the discount, as an amount, because that is what
+   * the founder just named. Neither is derived at submit time — both are on
+   * screen, and a person must be able to see the other move.
+   */
+  function chooseDiscount(next: { kind: DiscountKind; value: string }): void {
+    setDiscountKind(next.kind);
+    setDiscountValue(next.value);
+    clearFieldError('price');
+    if (listFils === null) return;
+    const preview = previewDiscount(listFils, next.kind, next.value);
+    if (preview) setSalePrice(formatFils(preview.netFils));
+  }
+
+  function choosePriceNow(typed: string): void {
+    setSalePrice(typed);
+    clearFieldError('price');
+    const now = parseAedToFils(typed);
+    if (listFils === null || now === null || now > listFils) return;
+    setDiscountKind(now === listFils ? 'none' : 'amount');
+    setDiscountValue(now === listFils ? '' : formatFils(listFils - now));
+  }
+
+  function clearFieldError(key: keyof FieldErrors) {
+    setFieldErrors((prev) => (prev[key] === undefined ? prev : { ...prev, [key]: undefined }));
+    setFormError(null);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -135,18 +187,25 @@ export function PackageDrawer({
     }
     if (chosen.length === 0) errors.contents = 'Say how many of at least one service it contains.';
     const saleFils = parseAedToFils(salePrice);
-    const listFils = parseAedToFils(effectiveListPrice);
-    if (saleFils === null || listFils === null) {
-      errors.price = isAedAmountTooLarge(salePrice)
-        ? `Enter a price of AED ${formatFils(AED_MAX_FILS)} or less.`
-        : 'Enter both prices in AED, such as 10325.00.';
+    if (listFils === null || saleFils === null) {
+      errors.price =
+        isAedAmountTooLarge(effectiveListPrice) || isAedAmountTooLarge(salePrice)
+          ? `Enter a price of AED ${formatFils(AED_MAX_FILS)} or less.`
+          : 'Enter both prices in AED, such as 10325.00.';
+    } else if (saleFils > listFils) {
+      errors.price = ABOVE_LIST_MESSAGE;
+    } else if (applied === null) {
+      errors.price =
+        discountKind === 'percent'
+          ? 'Enter a percentage between 0 and 100, such as 15.'
+          : DISCOUNT_TOO_LARGE_MESSAGE;
     }
     const trimmedReason = reason.trim();
     if (!isRealText(trimmedReason)) {
       errors.reason = `Say why in at least ${MINIMUM_REASON} characters.`;
     }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0 || saleFils === null || listFils === null) {
+    if (Object.keys(errors).length > 0 || listFils === null || applied === null) {
       // In the order the fields sit on screen, so focus moves to the first
       // thing wrong rather than the first thing checked.
       focusFirstInvalid(
@@ -181,7 +240,11 @@ export function PackageDrawer({
             serviceTypeId: entry.price.serviceTypeId,
             quantity: entry.quantity,
           })),
-          price: { amountFils: saleFils, validFrom, amendmentReason: trimmedReason },
+          price: {
+            discount: discountBody(discountKind, discountValue),
+            validFrom,
+            amendmentReason: trimmedReason,
+          },
         }),
       });
       if (res.status === 201) {
@@ -318,6 +381,13 @@ export function PackageDrawer({
             }}
             hint="What the contents come to bought one at a time. Offered from the price list; change it if the practice publishes a different figure."
           />
+          <DiscountFields
+            id="package-discount"
+            label="Discount off the list price"
+            kind={discountKind}
+            value={discountValue}
+            onChange={chooseDiscount}
+          />
           <Field
             id="package-sale-price"
             label="Price now (AED, excluding VAT)"
@@ -325,7 +395,7 @@ export function PackageDrawer({
             inputMode="decimal"
             placeholder="0.00"
             value={salePrice}
-            onChange={(e) => setSalePrice(e.target.value)}
+            onChange={(e) => choosePriceNow(e.target.value)}
             error={fieldErrors.price}
           />
           <Field

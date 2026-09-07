@@ -27,6 +27,9 @@ function price(serviceTypeId: string, name: string, unitPriceFils: number, n: nu
     serviceTypeCode: name.toLowerCase().replace(/[^a-z]+/g, '-'),
     serviceTypeName: name,
     serviceTypeNameAr: null,
+    listPriceFils: unitPriceFils,
+    discountFils: 0,
+    discountBasisPoints: null,
     unitPriceFils,
     vatRateBasisPoints: 500,
     vatFils: Math.round(unitPriceFils * 0.05),
@@ -92,11 +95,13 @@ describe('PackageDrawer', () => {
     });
     const sent = requests.find((request) => request.url === '/api/billing/packages')?.body as {
       listPriceFils: number;
-      price: { amountFils: number };
+      price: { discount: { kind: 'amount'; fils: number } | null };
       components: { serviceTypeId: string; quantity: number }[];
     };
     expect(sent.listPriceFils).toBe(1_215_000);
-    expect(sent.price.amountFils).toBe(1_032_500);
+    // The gap between the two figures, which is what the founder just named
+    // by typing the price now (docs/SPEC/billing.md section 2.4).
+    expect(sent.price.discount).toEqual({ kind: 'amount', fils: 182_500 });
     expect(sent.components).toEqual([
       { serviceTypeId: CONSULTATION, quantity: 1 },
       { serviceTypeId: BRAIN_MAP, quantity: 2 },
@@ -113,6 +118,59 @@ describe('PackageDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
 
     expect(await screen.findByText(/Enter both prices in AED/)).toBeTruthy();
+    expect(requests.some((request) => request.url === '/api/billing/packages')).toBe(false);
+  });
+});
+
+describe('the discount and the price now', () => {
+  it('works out the price now from a percentage off the list', async () => {
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Silver' } });
+    fireEvent.change(screen.getByLabelText(/Consultation/), { target: { value: '1' } });
+    fireEvent.change(screen.getByLabelText(/Brain map/), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText(/Neurofeedback session/), { target: { value: '15' } });
+    fireEvent.change(screen.getByLabelText('Discount off the list price'), {
+      target: { value: 'percent' },
+    });
+    fireEvent.change(screen.getByLabelText('Discount (%)'), { target: { value: '15' } });
+    // Fifteen per cent off AED 12,150 is AED 10,327.50.
+    expect((screen.getByLabelText(/^Price now/) as HTMLInputElement).value).toBe('10,327.50');
+
+    fireEvent.change(screen.getByLabelText('Why this is the price'), {
+      target: { value: 'Fifteen per cent off for the launch.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+    await waitFor(() => {
+      expect(requests.some((request) => request.url === '/api/billing/packages')).toBe(true);
+    });
+    const sent = requests.find((request) => request.url === '/api/billing/packages')?.body as {
+      price: { discount: { kind: string; basisPoints: number } };
+    };
+    expect(sent.price.discount).toEqual({ kind: 'percent', basisPoints: 1500 });
+  });
+
+  it('works the discount out from a price now typed directly', async () => {
+    mount();
+    await screen.findByLabelText(/Brain map/);
+    buildSilver();
+    expect((screen.getByLabelText('Discount off the list price') as HTMLSelectElement).value).toBe(
+      'amount',
+    );
+    expect((screen.getByLabelText('Discount (AED)') as HTMLInputElement).value).toBe('1,825.00');
+  });
+
+  it('refuses a price now above the list price on the screen', async () => {
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    buildSilver();
+    fireEvent.change(screen.getByLabelText(/^Price now/), { target: { value: '13000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+    expect(
+      await screen.findByText(
+        'The price now is above the list price. Raise the list price or lower the price now.',
+      ),
+    ).toBeTruthy();
     expect(requests.some((request) => request.url === '/api/billing/packages')).toBe(false);
   });
 });

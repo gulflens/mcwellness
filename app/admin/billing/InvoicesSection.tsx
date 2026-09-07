@@ -129,6 +129,15 @@ export function InvoicesSection() {
         render: (row) => formatDate(row.issuedOn),
       },
       {
+        // What came off the list figures on this invoice's lines; an em dash
+        // on the invoices where nothing did.
+        key: 'discount',
+        header: 'Discount',
+        numeric: true,
+        align: 'end',
+        render: (row) => (row.discountFils > 0 ? formatFils(row.discountFils) : '—'),
+      },
+      {
         key: 'net',
         header: 'Net (AED)',
         numeric: true,

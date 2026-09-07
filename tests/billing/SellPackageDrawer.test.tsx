@@ -116,6 +116,9 @@ function mount(
               vatFils: bundle.currentPrice.vatFils,
               grossFils: bundle.currentPrice.grossFils,
               listPriceFils: 1_215_000,
+              discountFils: 182_500,
+              discountBasisPoints: null,
+              discountReason: null,
               expiresOn: '2027-09-02',
               extendedTo: null,
               extensionReason: null,
@@ -252,5 +255,69 @@ describe('SellPackageDrawer', () => {
     } finally {
       behind.remove();
     }
+  });
+});
+
+describe('an extra discount at the sale', () => {
+  it("shows the list price and the price list's own discount", () => {
+    mount();
+    expect(screen.getByText('List price')).toBeTruthy();
+    expect(screen.getByText('Discount on the list')).toBeTruthy();
+    expect(screen.getByText('1,825.00')).toBeTruthy();
+    expect(screen.getByText('Price after discount')).toBeTruthy();
+  });
+
+  it('combines it with the list’s own discount and sends it with its reason', async () => {
+    const { requests } = mount();
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'amount' },
+    });
+    fireEvent.change(screen.getByLabelText('Discount (AED)'), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText('Why'), {
+      target: { value: 'Sibling of an existing client.' },
+    });
+    // AED 12,150 less 1,825 less 500. Twice on the page: the price after the
+    // discount, and the total, because this practice charges no VAT.
+    expect(screen.getAllByText('9,825.00')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    await waitFor(() => {
+      expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(true);
+    });
+    const sent = requests.find((r) => r.url === '/api/billing/package-purchases')?.body as {
+      extraDiscount: { discount: { kind: string; fils: number }; reason: string };
+    };
+    expect(sent.extraDiscount).toEqual({
+      discount: { kind: 'amount', fils: 50_000 },
+      reason: 'Sibling of an existing client.',
+    });
+  });
+
+  it('asks why before it will send one', async () => {
+    const { requests } = mount();
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'percent' },
+    });
+    fireEvent.change(screen.getByLabelText('Discount (%)'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    expect(await screen.findByText('Say why in at least 8 characters.')).toBeTruthy();
+    expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(false);
+  });
+
+  it('refuses a discount larger than what is left of the list, before anything is sent', async () => {
+    const { requests } = mount();
+    await findClient();
+    fireEvent.change(screen.getByLabelText('Extra discount for this sale'), {
+      target: { value: 'amount' },
+    });
+    fireEvent.change(screen.getByLabelText('Discount (AED)'), { target: { value: '11000' } });
+    fireEvent.change(screen.getByLabelText('Why'), {
+      target: { value: 'A discount larger than the price.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record the sale' }));
+    expect(await screen.findByText('The discount is larger than the list price.')).toBeTruthy();
+    expect(requests.some((r) => r.url === '/api/billing/package-purchases')).toBe(false);
   });
 });

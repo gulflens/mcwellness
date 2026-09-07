@@ -37,6 +37,9 @@ const NF_PRICE = {
   serviceTypeCode: 'nf-session',
   serviceTypeName: 'Neurofeedback session',
   serviceTypeNameAr: 'جلسة التغذية الراجعة العصبية',
+  listPriceFils: 90_000,
+  discountFils: 0,
+  discountBasisPoints: null,
   unitPriceFils: 90_000,
   vatRateBasisPoints: 500,
   vatFils: 4_500,
@@ -66,6 +69,9 @@ const CREATED_PRICE = {
   serviceTypeCode: 'nf-session',
   serviceTypeName: 'Neurofeedback session',
   serviceTypeNameAr: null,
+  listPriceFils: 90_000,
+  discountFils: 0,
+  discountBasisPoints: null,
   unitPriceFils: 90_000,
   vatRateBasisPoints: 500,
   vatFils: 4_500,
@@ -124,8 +130,9 @@ describe('BillingPage', () => {
     // English only (operator's decision of 7 September 2026,
     // docs/DESIGN-BRIEF.md section 10 item 4). An invoice still prints it.
     expect(screen.queryByText('جلسة التغذية الراجعة العصبية')).toBeNull();
-    // Bare figures: the currency word is named once, in the "Unit price (AED)" header.
-    expect(screen.getByText('900.00')).toBeTruthy();
+    // Bare figures: the currency word is named once, in the "List price (AED)"
+    // header. 900.00 twice — the list price and, with nothing off it, the price.
+    expect(screen.getAllByText('900.00')).toHaveLength(2);
     expect(screen.getByText('45.00')).toBeTruthy();
     expect(screen.getByText('945.00')).toBeTruthy();
     // Formatted like RecordTimeline's own dates: Intl, en-GB, Asia/Dubai — never the raw ISO string.
@@ -143,7 +150,9 @@ describe('BillingPage', () => {
     expect(screen.getByText(NO_VAT_NOTE)).toBeTruthy();
     expect(screen.getByText('VAT')).toBeTruthy();
     expect(screen.getByText('0.00')).toBeTruthy();
-    expect(screen.getAllByText('900.00')).toHaveLength(2);
+    // The list price, the price and the total: three columns, one figure,
+    // because nothing is off it and no VAT is charged on it.
+    expect(screen.getAllByText('900.00')).toHaveLength(3);
   });
 
   it('says nothing extra once the practice is registered for VAT', async () => {
@@ -153,10 +162,39 @@ describe('BillingPage', () => {
     expect(screen.getByText('45.00')).toBeTruthy();
   });
 
-  it('names the currency once, on the unit price column', async () => {
+  it('names the currency once, on the list price column', async () => {
     mount(OWNER, { body: PRICES });
     await screen.findByText('Neurofeedback session');
-    expect(screen.getByText('Unit price (AED)')).toBeTruthy();
+    expect(screen.getByText('List price (AED)')).toBeTruthy();
+    expect(screen.getByText('Price')).toBeTruthy();
+    expect(screen.getByText('Discount')).toBeTruthy();
+  });
+
+  it('shows an em dash in the discount column when a price carries none', async () => {
+    mount(OWNER, { body: PRICES });
+    await screen.findByText('Neurofeedback session');
+    expect(screen.getByText('—')).toBeTruthy();
+  });
+
+  it('shows the share in the discount column when a price was set as one', async () => {
+    mount(OWNER, {
+      body: {
+        vatRegistered: false,
+        prices: [
+          {
+            ...NF_PRICE,
+            discountFils: 13_500,
+            discountBasisPoints: 1500,
+            unitPriceFils: 76_500,
+            vatFils: 0,
+            grossFils: 76_500,
+          },
+        ],
+      },
+    });
+    await screen.findByText('Neurofeedback session');
+    expect(screen.getByText('15%')).toBeTruthy();
+    expect(screen.getAllByText('765.00')).toHaveLength(2);
   });
 
   it('offers "Add price" to the owner, as the page header\'s secondary action', async () => {
@@ -190,7 +228,7 @@ describe('BillingPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Add price' }));
     await screen.findByRole('option', { name: 'Neurofeedback session' });
     fireEvent.change(screen.getByLabelText('Service'), { target: { value: NF_SESSION_ID } });
-    fireEvent.change(screen.getByLabelText('Price (AED, excluding VAT)'), {
+    fireEvent.change(screen.getByLabelText('List price (AED, excluding VAT)'), {
       target: { value: '900' },
     });
     fireEvent.change(screen.getByLabelText('Why this price changes'), {

@@ -7,7 +7,7 @@ import { Table, type Column } from '../../shell/components/Table';
 import './billing.css';
 import { BalancesSection } from './BalancesSection';
 import { InvoicesSection } from './InvoicesSection';
-import { formatFils } from './money';
+import { formatDiscount, formatFils } from './money';
 import { PackagesSection } from './PackagesSection';
 import { PriceDrawer } from './PriceDrawer';
 import { ReceiptsSection } from './ReceiptsSection';
@@ -135,9 +135,27 @@ export function BillingPage() {
       },
       {
         // The one column that names the currency (docs/DESIGN-BRIEF.md: say
-        // it once); VAT and Total are obviously the same currency and stay bare.
+        // it once); every other money column is obviously the same currency
+        // and stays bare.
+        key: 'listPrice',
+        header: 'List price (AED)',
+        numeric: true,
+        align: 'end',
+        render: (row) => formatFils(row.listPriceFils),
+      },
+      {
+        // The share when that is how the discount was set, the sum when it
+        // was a sum, and an em dash when there is none: the column says what
+        // was given, not how the row happens to store it.
+        key: 'discount',
+        header: 'Discount',
+        numeric: true,
+        align: 'end',
+        render: (row) => formatDiscount(row),
+      },
+      {
         key: 'unitPrice',
-        header: 'Unit price (AED)',
+        header: 'Price',
         numeric: true,
         align: 'end',
         render: (row) => formatFils(row.unitPriceFils),
