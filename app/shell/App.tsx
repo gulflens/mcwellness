@@ -37,6 +37,7 @@ import { Note } from './components/Controls';
 import { NoAccessPage } from './pages/NoAccessPage';
 import { SignInPage } from './pages/SignInPage';
 import { homeFor } from './routing';
+import { useViewport } from './viewport';
 
 /** Waits for the session, then either renders or sends the person to sign in. */
 function RequireAuth({ children }: { children: (actor: Actor) => ReactNode }) {
@@ -56,6 +57,10 @@ function RequireAuth({ children }: { children: (actor: Actor) => ReactNode }) {
 }
 
 export function App() {
+  // The console is shown whole and zoomed out on a phone; every other area
+  // keeps the device's own width (docs/SPEC/responsive-console.md section 5).
+  const { pathname } = useLocation();
+  useViewport(pathname);
   return (
     <Routes>
       <Route path="/sign-in" element={<SignInPage />} />

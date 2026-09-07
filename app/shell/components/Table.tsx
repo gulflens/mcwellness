@@ -3,6 +3,11 @@ import type { ReactNode } from 'react';
 /**
  * The ledger's table: sticky header, 44px rows, hairline rules, no zebra, no
  * cards (docs/DESIGN-BRIEF.md section 6.2). Numeric columns take tabular figures.
+ *
+ * `ledger--pinned` keeps the record and the name in place while the rest of a
+ * wide row scrolls beside them (docs/SPEC/responsive-console.md section 8). It
+ * is unconditional: a sticky column inside a container it already fits has
+ * nothing to stick to and no visible effect.
  */
 export type Column<Row> = {
   key: string;
@@ -29,7 +34,7 @@ export function Table<Row>({
 }) {
   return (
     <div className="ledger__scroll">
-      <table className="ledger">
+      <table className="ledger ledger--pinned">
         <caption className="visually-hidden">{caption}</caption>
         <thead>
           <tr>

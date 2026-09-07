@@ -180,7 +180,9 @@ Offline state is a persistent, calm band — not a red alert. Working offline is
 
 Light ground, high density, **tables not cards.** Cards are for heterogeneous content; your admin data is homogeneous rows and belongs in a table. Chopping it into identical rounded cards with the same soft grey shadow is the SaaS-kit default and it actively reduces scannability.
 
-Structure: fixed left rail (icon + label, no collapse toggle), content area with sticky table headers, right-side detail drawer rather than modal dialogs. Row height 44px. Zebra striping off; use hairline rules at `--rule`.
+Structure: a left rail (icon + label) that opens and closes, content area with sticky table headers, right-side detail drawer rather than modal dialogs. Row height 44px. Zebra striping off; use hairline rules at `--rule`.
+
+*Changed 7 September 2026 on the operator's instruction. This line read "no collapse toggle". A console opened on a tablet needs the width back, and the rail's 220px is a quarter of an iPad in portrait; closed, it is a 64px strip of icons and every section is still one tap away. The person's choice is remembered on their device, and the rail's sections scroll inside it so a long list never pushes the person's name and the way out off a short screen. The three sizes the console now understands are in `docs/SPEC/responsive-console.md`.*
 
 The dispatch map is the one full-bleed screen — map fills the viewport, practitioner list overlays left, no chrome competing with it.
 

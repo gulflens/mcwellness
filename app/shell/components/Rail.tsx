@@ -7,6 +7,7 @@ import {
   ClientsIcon,
   KitIcon,
   PortalIcon,
+  RailIcon,
   ScheduleIcon,
   SessionsIcon,
   SettingsIcon,
@@ -15,9 +16,11 @@ import {
 } from './Icons';
 
 /**
- * The admin console's fixed left rail: icon and label, no collapse toggle
- * (docs/DESIGN-BRIEF.md section 6.2). Sections that have not arrived are
- * listed as such, never as dead links.
+ * The admin console's left rail: icon and label, and a control that closes it
+ * to a strip of icons (docs/DESIGN-BRIEF.md section 6.2, reversed on the
+ * operator's instruction of 7 September 2026; docs/SPEC/responsive-console.md
+ * section 6). Sections that have not arrived are listed as such, never as dead
+ * links.
  */
 export type RailSection = { key: string; label: string; to?: string; icon: ReactNode };
 
@@ -53,33 +56,55 @@ export function Rail({
   sections = ADMIN_SECTIONS,
   person,
   onSignOut,
+  open,
+  onToggle,
 }: {
   sections?: readonly RailSection[];
   person: { name: string; roles: string };
   onSignOut: () => void;
+  /** Whether the labels are shown; closed, the rail is a strip of icons. */
+  open: boolean;
+  onToggle: () => void;
 }) {
   return (
     <nav className="rail" aria-label="Sections">
-      <div className="rail__mark">McWellness</div>
+      <div className="rail__head">
+        <div className="rail__mark rail__label">McWellness</div>
+        <button
+          type="button"
+          className="rail__toggle"
+          onClick={onToggle}
+          aria-expanded={open}
+          title="Sections"
+        >
+          <RailIcon />
+          <span className="visually-hidden">Sections</span>
+        </button>
+      </div>
       <ul className="rail__list">
         {sections.map((section) =>
           section.to ? (
             <li key={section.key}>
               <NavLink
                 to={section.to}
+                title={section.label}
                 className={({ isActive }) =>
                   isActive ? 'rail__item rail__item--active' : 'rail__item'
                 }
               >
                 {section.icon}
-                <span>{section.label}</span>
+                <span className="rail__label">{section.label}</span>
               </NavLink>
             </li>
           ) : (
             <li key={section.key}>
-              <span className="rail__item rail__item--later" aria-disabled="true">
+              <span
+                className="rail__item rail__item--later"
+                aria-disabled="true"
+                title={section.label}
+              >
                 {section.icon}
-                <span>{section.label}</span>
+                <span className="rail__label">{section.label}</span>
                 <span className="rail__later micro">Arriving</span>
               </span>
             </li>
@@ -87,11 +112,11 @@ export function Rail({
         )}
       </ul>
       <div className="rail__person">
-        <div className="rail__name">{person.name}</div>
-        <div className="micro">{person.roles}</div>
-        <button type="button" className="rail__signout" onClick={onSignOut}>
+        <div className="rail__name rail__label">{person.name}</div>
+        <div className="micro rail__label">{person.roles}</div>
+        <button type="button" className="rail__signout" onClick={onSignOut} title="Sign out">
           <SignOutIcon />
-          <span>Sign out</span>
+          <span className="rail__label">Sign out</span>
         </button>
       </div>
     </nav>

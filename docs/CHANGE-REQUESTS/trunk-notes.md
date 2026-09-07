@@ -2369,3 +2369,52 @@ does not render them.
 **Everyone.** A screen that wants to show Arabic again is a decision for the
 operator, not a fix — and the guard test will fail until the allowlist beside
 it says why.
+
+---
+
+## Piece nineteen, 2026-09-08 (the console on any screen)
+
+`docs/SPEC/responsive-console.md`, branch `responsive-console`. The piece is
+almost entirely inside the shared zone the trunk owns, `app/shell/**`. Six
+files outside it were edited, each because the change is the same change and
+splitting it across six branches would leave the console folding at four
+different widths in the meantime. Each is listed here as a request.
+
+### 1. Three module stylesheets join the shell's tiers
+
+**Who.** `scheduling`, the trunk (settings), `audit-ui`.
+
+**What.** `app/admin/schedule/schedule.css` folded the week at 640px,
+`app/admin/settings/settings.css` folded its facts at 40rem and
+`app/admin/audit/audit.css` narrowed its event grid at 48rem. All three are now
+the compact tier's own boundary, 767px. The week's second rule, at 1100px, and
+the consent's height rule in `app/admin/clients/clients.css` both stay: each
+asks a question the tiers cannot, and each now says so in a comment beside it,
+which `tests/lint/one-set-of-breakpoints.test.ts` requires.
+
+### 2. The week's own test reads the tier
+
+**Who.** `scheduling`.
+
+**What.** `tests/scheduling/WeekPage.test.tsx` read the fold out of the
+stylesheet and asserted it was at or below 640px. It now asserts there is
+exactly one fold and that it is the tier's 767px.
+
+### 3. The clients page's autofocus joins the tiers
+
+**Who.** `client-record`.
+
+**What.** `app/admin/clients/ClientsPage.tsx` autofocused the search field at
+`(min-width: 720px)`, a sixth breakpoint written in TypeScript rather than CSS.
+It is now the tablet tier's 768px. The guard test was widened to read `.ts` and
+`.tsx` as well as `.css`, because a width drifts as easily in one as the other,
+and this is the one it caught.
+
+### 4. The household's portal records why it keeps its own width
+
+**Who.** `client-portal`.
+
+**What.** `app/client/portal.css` keeps its 720px phone layout, by the
+operator's decision that the household's screens reflow rather than being shown
+zoomed out. It had no comment saying so, and the guard test requires every
+exception to state itself, so one was added. No rule changed.

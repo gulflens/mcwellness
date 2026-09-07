@@ -189,6 +189,11 @@
   overflow-x: auto;
 }
 
+/* Kept deliberately, at the portal's own width rather than the console's
+   tiers: the household's screens are phone-first and reflow, and are never
+   shown zoomed out the way the console is on a phone. A parent reading this at
+   eleven at night should not have to pinch and pan
+   (docs/SPEC/responsive-console.md sections 9 and 11). */
 @media (max-width: 720px) {
   .portal__bar,
   .portal__nav,

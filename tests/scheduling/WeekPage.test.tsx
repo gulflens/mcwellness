@@ -91,12 +91,16 @@ describe('the week keeps seven columns', () => {
   // jsdom test, so `import.meta.url` here is an http URL and not a path.
   const css = readFileSync('app/admin/schedule/schedule.css', 'utf8');
 
-  it('declares seven columns and folds them only below phone width', () => {
+  it('declares seven columns and folds them only in the compact tier', () => {
     expect(css).toContain('grid-template-columns: repeat(7, minmax(0, 1fr))');
     // Every media query that changes the week's column count, with its width.
+    // The fold belongs to the shell's compact tier and nowhere else
+    // (docs/SPEC/responsive-console.md section 4): a week narrower than that
+    // is four characters a column and is not a week at all.
     const folds = [...css.matchAll(/@media \(max-width: (\d+)px\)\s*\{\s*\.week\s*\{/g)];
+    expect(folds).toHaveLength(1);
     for (const [, width] of folds) {
-      expect(Number(width), `a fold at ${width}px`).toBeLessThanOrEqual(640);
+      expect(Number(width), `a fold at ${width}px`).toBe(767);
     }
   });
 

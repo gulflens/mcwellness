@@ -285,6 +285,8 @@
 /* A consent runs to several screens, and 20rem of it on a tall display is a
    great deal of scrolling for a person the practice is asking to read every
    word. Where there is room, give them more of it at once. */
+/* Kept deliberately: this asks about height, which the shell's tiers do not
+   (docs/SPEC/responsive-console.md section 9). */
 @media (min-height: 50rem) {
   .consent-text {
     max-block-size: 32rem;

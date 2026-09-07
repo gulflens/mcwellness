@@ -123,7 +123,7 @@
   padding-block: var(--s-6);
 }
 
-@media (width < 48rem) {
+@media (max-width: 767px) {
   .audit__event {
     grid-template-columns: 4rem minmax(0, 1fr);
   }

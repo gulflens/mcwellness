@@ -136,3 +136,15 @@ export const EyeOffIcon = (p: IconProps) => (
     <path d="M3.5 3.5l13 13" />
   </Icon>
 );
+
+/**
+ * A panel with its inline-start column marked: the rail itself. One icon for
+ * both states, because the control is the rail and not a direction; whether it
+ * is open is said by `aria-expanded`, not by a rotating chevron.
+ */
+export const RailIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="2.75" y="3.75" width="14.5" height="12.5" rx="1.5" />
+    <path d="M7.75 3.75v12.5" />
+  </Icon>
+);
