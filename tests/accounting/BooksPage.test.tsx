@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BooksPage } from '../../app/admin/accounting/BooksPage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
@@ -9,6 +9,39 @@ afterEach(cleanup);
 // The page names its section in the address bar, so one test's last click
 // would otherwise decide the next test's opening section.
 afterEach(() => window.history.replaceState(null, '', '#'));
+
+/**
+ * jsdom has no object URLs and its anchors do not download, so the pair is
+ * stubbed and counted, and the temporary anchor's `download` name is recorded
+ * (app/admin/accounting/download.ts).
+ */
+const objectUrls = { created: [] as string[], revoked: [] as string[] };
+let downloaded: string[] = [];
+
+beforeEach(() => {
+  objectUrls.created = [];
+  objectUrls.revoked = [];
+  downloaded = [];
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => {
+      const url = `blob:mcwellness/${objectUrls.created.length}`;
+      objectUrls.created.push(url);
+      return url;
+    }),
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: vi.fn((url: string) => objectUrls.revoked.push(url)),
+  });
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    downloaded.push(this.download);
+  });
+});
+
+afterEach(() => vi.restoreAllMocks());
 
 /**
  * The Books page (docs/SPEC/accounting.md section 5). Synthetic throughout:
@@ -272,9 +305,20 @@ type Mounted = {
   posted: { path: string; body: unknown; reason: string | null }[];
 };
 
+/** A statement as the routes send one: text/csv with the name on the header. */
+function csv(name: string, status = 200): Response {
+  return new Response('Account code,Account name\r\n1010,Bank\r\n', {
+    status,
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename="${name}"`,
+    },
+  });
+}
+
 function mount(
   me: unknown,
-  options: { overview?: unknown; overviewStatus?: number } = {},
+  options: { overview?: unknown; overviewStatus?: number; csvStatus?: number } = {},
 ): Mounted {
   const calls: string[] = [];
   const posted: Mounted['posted'] = [];
@@ -308,6 +352,11 @@ function mount(
       return json(body, options.overviewStatus ?? 200);
     }
     if (url.includes('/ledger')) return json(LEDGER);
+    // The `.csv` twin of every statement, and the two Zoho files.
+    if (url.includes('.csv')) {
+      const name = `${url.split('?')[0]?.split('/').pop()?.replace('.csv', '')}-2026-12-31.csv`;
+      return csv(name, options.csvStatus ?? 200);
+    }
     if (url.startsWith('/api/accounting/statements/trial-balance')) return json(TRIAL_BALANCE);
     if (url.startsWith('/api/accounting/statements/profit-and-loss')) return json(PROFIT_AND_LOSS);
     if (url.startsWith('/api/accounting/statements/balance-sheet')) return json(BALANCE_SHEET);
@@ -520,14 +569,39 @@ describe('the statements', () => {
     expect(screen.getByText('Profit and loss')).toBeTruthy();
     expect(screen.getByText('Balance sheet')).toBeTruthy();
     expect(screen.getByText('Cash flow')).toBeTruthy();
-    const links = screen.getAllByRole('link', { name: /Download/ });
-    expect(links.length).toBe(6);
-    const hrefs = links.map((link) => link.getAttribute('href') ?? '');
-    expect(
-      hrefs.some((href) => href.startsWith('/api/accounting/statements/trial-balance.csv?asOf=')),
-    ).toBe(true);
-    expect(hrefs.some((href) => href.includes('zoho-journal.csv'))).toBe(true);
-    expect(hrefs.some((href) => href.includes('zoho-accounts.csv'))).toBe(true);
+    // Buttons, not links: a link would navigate, and a navigation carries no
+    // bearer token (app/admin/accounting/download.ts).
+    expect(screen.queryAllByRole('link', { name: /Download/ })).toHaveLength(0);
+    expect(screen.getAllByRole('button', { name: /Download/ })).toHaveLength(6);
+  });
+
+  it('fetches the trial balance through the auth provider’s own fetch, and never navigates', async () => {
+    const mounted = mount(OWNER);
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Statements' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Download the trial balance' }));
+
+    await waitFor(() =>
+      expect(
+        mounted.calls.some((call) =>
+          call.startsWith('GET /api/accounting/statements/trial-balance.csv?asOf='),
+        ),
+      ).toBe(true),
+    );
+    const asked = mounted.calls.find((call) => call.includes('trial-balance.csv'))!;
+    expect(asked).toContain(`asOf=${new Date().getUTCFullYear()}-12-31`);
+    expect(objectUrls.created).toHaveLength(1);
+    await waitFor(() => expect(objectUrls.revoked).toEqual(objectUrls.created));
+    expect(downloaded).toEqual(['trial-balance-2026-12-31.csv']);
+  });
+
+  it('says one fixed sentence when the file is refused, and not the server’s', async () => {
+    mount(OWNER, { csvStatus: 403 });
+    await screen.findByText('Result, year to date');
+    fireEvent.click(screen.getByRole('button', { name: 'Statements' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Download the cash flow' }));
+    expect(await screen.findByText('The file could not be prepared. Try again.')).toBeTruthy();
+    expect(screen.queryByText(/forbidden/)).toBeNull();
   });
 
   it('marks the balance sheet’s two computed lines as computed', async () => {

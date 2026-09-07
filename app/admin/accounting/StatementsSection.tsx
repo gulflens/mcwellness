@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   BalanceSheetResponse,
   CashFlowResponse,
@@ -6,16 +6,18 @@ import {
   TrialBalanceResponse,
 } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Field, Note } from '../../shell/components/Controls';
+import { Button, Field, Note } from '../../shell/components/Controls';
 import { Table } from '../../shell/components/Table';
+import { DOWNLOAD_REFUSED, downloadCsv } from './download';
 import { formatFils } from './money';
 import { ACCOUNT_TYPE_WORDS } from './words';
 
 /**
  * The four statements, each with the same rows as a file (docs/SPEC/accounting.md
- * sections 4.5, 4.6 and 5.4). The files are links and not fetches: the browser
- * downloads what the server sends, and the link's own address is the statement's
- * `.csv` twin with the days the reader chose.
+ * sections 4.5, 4.6 and 5.4). Every file is fetched and never linked to: the
+ * API admits nothing without the bearer token and the token lives only inside
+ * `apiFetch`, so a plain `<a href="/api/...">` would be a link to a 401
+ * (./download.ts).
  *
  * The balance sheet's two computed lines say so in their own labels: there are
  * no closing entries in these books, so retained earnings and the year's result
@@ -51,6 +53,34 @@ const MONEY_COLUMNS = [
     render: (row: { balanceFils: number }) => formatFils(row.balanceFils),
   },
 ];
+
+/**
+ * One file, one press. The sentence a refusal shows is fixed and lives beside
+ * the button that asked for it, so a person who pressed low on a long page is
+ * told there and not at the top of it.
+ */
+function DownloadCsv({ path, children }: { path: string; children: ReactNode }) {
+  const { apiFetch } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState(false);
+
+  function press(): void {
+    setBusy(true);
+    setRefused(false);
+    void downloadCsv(apiFetch, path)
+      .then((arrived) => setRefused(!arrived))
+      .finally(() => setBusy(false));
+  }
+
+  return (
+    <>
+      <Button variant="quiet" disabled={busy} onClick={press}>
+        {children}
+      </Button>
+      {refused ? <Note tone="critical">{DOWNLOAD_REFUSED}</Note> : null}
+    </>
+  );
+}
 
 export function StatementsSection() {
   const { apiFetch } = useAuth();
@@ -141,12 +171,9 @@ export function StatementsSection() {
               rowKey={(row) => row.accountCode}
               empty="Nothing has been posted yet."
             />
-            <a
-              className="button button--quiet"
-              href={`/api/accounting/statements/trial-balance.csv?asOf=${to}`}
-            >
+            <DownloadCsv path={`/api/accounting/statements/trial-balance.csv?asOf=${to}`}>
               Download the trial balance
-            </a>
+            </DownloadCsv>
           </section>
 
           <section aria-label="Profit and loss">
@@ -166,12 +193,9 @@ export function StatementsSection() {
                 state.statements.profitAndLoss.expenseFils,
               )}, result ${formatFils(state.statements.profitAndLoss.resultFils)}.`}
             </p>
-            <a
-              className="button button--quiet"
-              href={`/api/accounting/statements/profit-and-loss.csv?${period}`}
-            >
+            <DownloadCsv path={`/api/accounting/statements/profit-and-loss.csv?${period}`}>
               Download the profit and loss
-            </a>
+            </DownloadCsv>
           </section>
 
           <section aria-label="Balance sheet">
@@ -206,12 +230,9 @@ export function StatementsSection() {
                 state.statements.balanceSheet.totalLiabilitiesAndEquityFils,
               )}.`}
             </p>
-            <a
-              className="button button--quiet"
-              href={`/api/accounting/statements/balance-sheet.csv?asOf=${to}`}
-            >
+            <DownloadCsv path={`/api/accounting/statements/balance-sheet.csv?asOf=${to}`}>
               Download the balance sheet
-            </a>
+            </DownloadCsv>
           </section>
 
           <section aria-label="Cash flow">
@@ -254,24 +275,18 @@ export function StatementsSection() {
               rowKey={(row) => row.heading}
               empty="No money moved in this period."
             />
-            <a
-              className="button button--quiet"
-              href={`/api/accounting/statements/cash-flow.csv?${period}`}
-            >
+            <DownloadCsv path={`/api/accounting/statements/cash-flow.csv?${period}`}>
               Download the cash flow
-            </a>
+            </DownloadCsv>
           </section>
 
           <section aria-label="Exports" className="exports">
-            <a
-              className="button button--quiet"
-              href={`/api/accounting/exports/zoho-journal.csv?${period}`}
-            >
+            <DownloadCsv path={`/api/accounting/exports/zoho-journal.csv?${period}`}>
               Download the journal for Zoho Books
-            </a>
-            <a className="button button--quiet" href="/api/accounting/exports/zoho-accounts.csv">
+            </DownloadCsv>
+            <DownloadCsv path="/api/accounting/exports/zoho-accounts.csv">
               Download the chart for Zoho Books
-            </a>
+            </DownloadCsv>
           </section>
         </>
       ) : null}
