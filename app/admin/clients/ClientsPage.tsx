@@ -172,11 +172,6 @@ export function ClientsPage() {
             <button type="button" className="link" onClick={() => selectClient(row)}>
               {row.givenName} {row.familyName}
             </button>
-            {row.givenNameAr ? (
-              <span className="name__ar small muted" lang="ar" dir="rtl">
-                {row.givenNameAr} {row.familyNameAr}
-              </span>
-            ) : null}
           </span>
         ),
       },

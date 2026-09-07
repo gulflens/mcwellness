@@ -98,7 +98,10 @@ describe('PackagesSection', () => {
   it("shows the practice's own package with what it contains", async () => {
     mount(OWNER, [SILVER]);
     expect(await screen.findByText('Silver')).toBeTruthy();
-    expect(screen.getByText('الفضية')).toBeTruthy();
+    // The package's Arabic name is on the row and is not drawn: the console is
+    // English only (operator's decision of 7 September 2026,
+    // docs/DESIGN-BRIEF.md section 10 item 4).
+    expect(screen.queryByText('الفضية')).toBeNull();
     expect(
       screen.getByText('1 × Consultation, 2 × Brain map (QEEG), 15 × Neurofeedback session'),
     ).toBeTruthy();

@@ -162,15 +162,15 @@ describe('CheckInPage', () => {
     expect(calls[0]?.body.clientMrn).toBe('MW-000123');
   });
 
-  it('shows the chosen service in both languages, the Arabic marked as Arabic', async () => {
-    // A native <option> holds no markup, so the Arabic name cannot be marked
-    // or laid out inside one; it sits beneath the picker instead, the way
-    // every checklist item and question on the runner carries its own.
+  it('shows the chosen service in English alone', async () => {
+    // The practitioner app is English only (operator's decision of 7 September
+    // 2026, docs/DESIGN-BRIEF.md section 10 item 4). The catalogue is still
+    // bilingual and the service still arrives with its Arabic name; the
+    // check-in screen simply does not draw it.
     mount();
     await ready();
-    const arabic = await screen.findByText('جلسة نيوروفيدباك');
-    expect(arabic.getAttribute('lang')).toBe('ar');
-    expect(arabic.getAttribute('dir')).toBe('rtl');
+    expect(await screen.findByRole('option', { name: 'Neurofeedback session' })).toBeTruthy();
+    expect(screen.queryByText('جلسة نيوروفيدباك')).toBeNull();
   });
 
   it('lists the caller’s certified services, and explains an empty list', async () => {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { ClientRecordResponse, Contact } from '../../api/clients/record-schema';
 import { Button, Note } from '../../shell/components/Controls';
 import { ContactForm } from './ContactForm';
-import { ContactNameAr, contactName } from './contactName';
+import { contactName } from './contactName';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   self: 'Self',
@@ -74,7 +74,6 @@ export function ContactsTab({
                     {RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship}
                   </p>
                 ) : null}
-                <ContactNameAr contact={contact} />
                 <p className="small muted">{contact.phone ?? 'No phone'}</p>
                 {contact.email ? <p className="small muted">{contact.email}</p> : null}
                 <ul className="record-row__flags small muted">

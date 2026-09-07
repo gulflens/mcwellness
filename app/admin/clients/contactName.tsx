@@ -24,34 +24,6 @@ export function contactName(
   return name === '' ? null : name;
 }
 
-/** The Arabic pair, for the one place it is rendered beneath the Latin one. */
-export function contactNameAr(
-  contact: Pick<Contact, 'givenNameAr' | 'familyNameAr'> | null | undefined,
-): string | null {
-  if (!contact) return null;
-  const name = [contact.givenNameAr, contact.familyNameAr].filter(Boolean).join(' ').trim();
-  return name === '' ? null : name;
-}
-
-/**
- * The Arabic name, rendered the way every Arabic string in this console is:
- * `lang="ar" dir="rtl"`, so it is shaped and ordered correctly whatever the
- * page around it is doing (CLAUDE.md, docs/DESIGN-BRIEF.md).
- */
-export function ContactNameAr({
-  contact,
-}: {
-  contact: Pick<Contact, 'givenNameAr' | 'familyNameAr'>;
-}) {
-  const name = contactNameAr(contact);
-  if (name === null) return null;
-  return (
-    <p className="small muted" lang="ar" dir="rtl">
-      {name}
-    </p>
-  );
-}
-
 /** A relationship in words, never the raw enum value a screen should not show. */
 const RELATIONSHIP_LABELS: Record<string, string> = {
   self: 'Self',

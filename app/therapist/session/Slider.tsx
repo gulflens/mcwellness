@@ -2,14 +2,15 @@ import type { RatingQuestion } from '../../api/sessions/schema';
 
 /**
  * One 0-to-10 question (docs/SPEC/session-capture.md sections 3.2 and 3.5):
- * the practice's own wording, the Arabic beneath it, a wide track and the
- * value large enough to read at arm's length.
+ * the practice's own wording, a wide track and the value large enough to read
+ * at arm's length.
  *
- * The Arabic label is on the wire already (service_type.rating_questions
- * carries `label_ar`) and the day sheet renders Arabic beside English
- * everywhere else; the runner had been dropping it. Marked `lang` and `dir`
- * so it is shaped and read correctly rather than laid out as though it were
- * English (docs/DESIGN-BRIEF.md section 4.1).
+ * English only, on purpose. The Arabic label is on the wire already
+ * (service_type.rating_questions carries `label_ar`) and `RatingQuestion`
+ * still carries it, but the practitioner app is a staff tool and staff tools
+ * are English (operator's decision of 7 September 2026, docs/DESIGN-BRIEF.md
+ * section 10 item 4). What a household reads — the portal, the reports, the
+ * documents — is still bilingual.
  */
 export function Slider({
   id,
@@ -27,11 +28,6 @@ export function Slider({
       <label className="rating__label" htmlFor={id}>
         {question.labelEn}
       </label>
-      {question.labelAr ? (
-        <span className="rating__label-ar small muted" lang="ar" dir="rtl">
-          {question.labelAr}
-        </span>
-      ) : null}
       <div className="rating__row">
         <input
           id={id}

@@ -194,7 +194,7 @@ describe('TodayPage', () => {
     expect(screen.queryByText(/MW-000123/)).toBeNull();
   });
 
-  it('renders an Arabic name as given name and initial, in its own script and direction', async () => {
+  it('renders an Arabic name in English, because the practitioner app is English only', async () => {
     renderPage(
       dayOf(
         stop({
@@ -210,9 +210,12 @@ describe('TodayPage', () => {
         }),
       ),
     );
-    const arabic = await screen.findByText('سوسن ج.');
-    expect(arabic.getAttribute('lang')).toBe('ar');
-    expect(arabic.getAttribute('dir')).toBe('rtl');
+    // The stop carries the Arabic name and the day sheet does not draw it
+    // (operator's decision of 7 September 2026, docs/DESIGN-BRIEF.md section 10
+    // item 4). The English short name is the whole of what a practitioner
+    // reads at the door.
+    expect(await screen.findByText('Iris C.')).toBeTruthy();
+    expect(screen.queryByText('سوسن ج.')).toBeNull();
   });
 
   it('drives to the parking point when there is one, and says where the link goes', async () => {

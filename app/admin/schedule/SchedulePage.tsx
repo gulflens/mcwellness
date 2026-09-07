@@ -186,8 +186,8 @@ export function SchedulePage() {
       {
         key: 'client',
         header: 'Client',
-        // The same cell pattern the clients table uses for a name (ClientsPage.tsx):
-        // a link that opens the record, the Arabic name beneath it.
+        // The same cell pattern the clients table uses for a name
+        // (ClientsPage.tsx): a link that opens the record.
         render: (row) => (
           <span className="name">
             <button
@@ -200,11 +200,6 @@ export function SchedulePage() {
             >
               {row.client.givenName} {row.client.familyName}
             </button>
-            {row.client.givenNameAr ? (
-              <span className="name__ar small muted" lang="ar" dir="rtl">
-                {row.client.givenNameAr} {row.client.familyNameAr}
-              </span>
-            ) : null}
           </span>
         ),
       },

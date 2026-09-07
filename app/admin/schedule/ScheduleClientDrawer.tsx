@@ -10,7 +10,9 @@ import { CloseIcon } from '../../shell/components/Icons';
  * the clients table's own `ClientRow` (record number, status, contact,
  * emirate), and `app/admin/clients/**` sits outside this pull request's edit
  * paths (docs/SPEC/OWNERSHIP.md). `AppointmentRow.client` carries only
- * identity — id, name, Arabic name — so this drawer shows exactly that, plus
+ * identity — id, name, and the Arabic name, which travels but is not shown:
+ * the console is English only (operator's decision of 7 September 2026,
+ * docs/DESIGN-BRIEF.md section 10 item 4). So this drawer shows the name, plus
  * the record timeline, which needs nothing but the id.
  */
 export function ScheduleClientDrawer({
@@ -42,11 +44,6 @@ export function ScheduleClientDrawer({
           <h2 id="schedule-client-title">
             {client.givenName} {client.familyName}
           </h2>
-          {client.givenNameAr ? (
-            <p className="small muted" lang="ar" dir="rtl">
-              {client.givenNameAr} {client.familyNameAr}
-            </p>
-          ) : null}
         </div>
         <button
           ref={closeRef}

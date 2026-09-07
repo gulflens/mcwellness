@@ -224,11 +224,10 @@ function fetchPicture(apiFetch: ApiFetch, path: string): Promise<Blob | null> {
 }
 
 /**
- * The window, in the practice's zone and in that order in both languages:
- * `formatArrivalWindow` isolates the range so an Arabic name beside it cannot
- * reverse the two clock times (domain/scheduling/window.ts). The admin
- * console's own screens call the same function through
- * app/admin/schedule/windows.ts.
+ * The window, in the practice's zone and in that order:
+ * `formatArrivalWindow` isolates the range so nothing beside it can reverse
+ * the two clock times (domain/scheduling/window.ts). The admin console's own
+ * screens call the same function through app/admin/schedule/windows.ts.
  */
 function formatWindow(windowStart: string, windowEnd: string): string {
   return formatArrivalWindow(new Date(windowStart), new Date(windowEnd), PRACTICE_TIME_ZONE);
@@ -385,9 +384,6 @@ function Stop({
   onCheckIn: (stop: DayStop) => void;
 }) {
   const name = shortName(stop.client.givenName, stop.client.familyInitial);
-  const arabicName = stop.client.givenNameAr
-    ? shortName(stop.client.givenNameAr, stop.client.familyInitialAr)
-    : null;
   const age = describeAge(stop.client.age);
   const note = STOP_NOTES[stop.status];
 
@@ -400,11 +396,6 @@ function Stop({
     <>
       <span className="stop__window numeric">{formatWindow(stop.windowStart, stop.windowEnd)}</span>
       <span className="stop__name">{name}</span>
-      {arabicName ? (
-        <span className="stop__name-ar small muted" lang="ar" dir="rtl">
-          {arabicName}
-        </span>
-      ) : null}
       {note ? (
         <span
           className={

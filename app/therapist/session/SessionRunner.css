@@ -137,15 +137,6 @@
   line-height: var(--lh-body);
 }
 
-/* Arabic sits under its English, at the small step, shaped and read right to
-   left rather than laid out as though it were English
-   (docs/DESIGN-BRIEF.md section 4.1). */
-.check__label-ar,
-.rating__label-ar,
-.summary__label-ar {
-  display: block;
-}
-
 /* Sliders: a wide track and a wide value, both readable in bad light. */
 .ratings {
   display: flex;

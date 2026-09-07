@@ -24,7 +24,10 @@ const provider: AuthProvider = {
 
 const PRACTICE = {
   legalName: 'Synthetic Wellness Studio',
-  legalNameAr: null,
+  // Invented, like everything else here. The console is English only
+  // (docs/DESIGN-BRIEF.md section 10 item 4) so this is never shown and never
+  // typed — it is here to prove the drawer sends back what it loaded.
+  legalNameAr: 'استوديو صناعي للعافية',
   taxRegistrationNumber: '000000000000000',
   licenceNumber: 'SYN-000000',
   licensingAuthority: 'Synthetic Department of Economy and Tourism',
@@ -203,6 +206,11 @@ describe('Practice settings — the save', () => {
     );
     expect(JSON.parse(String(save?.init?.body))).toMatchObject({
       legalName: 'Synthetic Wellness Studio FZ-LLC',
+      // The whole form travels at once and legalNameAr is required in the
+      // body, so the drawer sends back the value it loaded rather than a
+      // blank: a save from this screen may never wipe the Arabic legal name
+      // that is printed on the practice's invoices.
+      legalNameAr: 'استوديو صناعي للعافية',
       licenceNumber: 'SYN-000001',
       vatRegistered: false,
       address: {

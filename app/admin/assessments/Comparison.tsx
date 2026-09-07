@@ -123,10 +123,10 @@ export function Comparison({ comparison }: { comparison: ComparisonValue }) {
       ) : null}
 
       <div className="comparison__standing">
+        {/* The console is English only (operator's decision of 7 September
+            2026, docs/DESIGN-BRIEF.md section 10 item 4); both halves still go
+            on anything printed from this screen, which a household reads. */}
         <p>{NOT_A_DIAGNOSIS.en}</p>
-        <p lang="ar" dir="rtl">
-          {NOT_A_DIAGNOSIS.ar}
-        </p>
       </div>
     </section>
   );

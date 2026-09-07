@@ -78,8 +78,10 @@ describe('SchedulePage', () => {
     renderPage(fetchImpl);
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());
-    // The Arabic name sits beneath the Latin one, exactly as the clients table renders it.
-    expect(screen.getByText('إيريس كليف')).toBeTruthy();
+    // No Arabic name beneath the Latin one: the console is English only
+    // (operator's decision of 7 September 2026, docs/DESIGN-BRIEF.md section
+    // 10 item 4). The appointment still carries one on the wire.
+    expect(screen.queryByText('إيريس كليف')).toBeNull();
     expect(screen.getByRole('cell', { name: 'Cedar Ridge' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'Standard session' })).toBeTruthy();
     expect(screen.getByRole('cell', { name: 'Home' })).toBeTruthy();
@@ -104,7 +106,7 @@ describe('SchedulePage', () => {
 
     const drawer = await screen.findByRole('dialog');
     expect(within(drawer).getByRole('heading', { name: 'Iris Cliff' })).toBeTruthy();
-    expect(within(drawer).getByText('إيريس كليف')).toBeTruthy();
+    expect(within(drawer).queryByText('إيريس كليف')).toBeNull();
   });
 
   it('Add appointment is a secondary action beside the heading, not a second primary button', async () => {

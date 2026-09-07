@@ -99,14 +99,7 @@ export function SummaryStep({
         </div>
         {ratingDeltas.map((delta) => (
           <div className="summary__row" key={delta.key}>
-            <dt>
-              {delta.label}
-              {delta.labelAr ? (
-                <span className="summary__label-ar small muted" lang="ar" dir="rtl">
-                  {delta.labelAr}
-                </span>
-              ) : null}
-            </dt>
+            <dt>{delta.label}</dt>
             <dd className="numeric">
               {delta.before} to {delta.after}
             </dd>
