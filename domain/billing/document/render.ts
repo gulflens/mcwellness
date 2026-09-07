@@ -54,6 +54,7 @@ import {
 } from '../../shared/document';
 import {
   arabicDocumentDate,
+  discountNote,
   formatDocumentDate,
   formatRate,
   NOT_REGISTERED_BASIS,
@@ -500,9 +501,13 @@ function invoicePage(document_: InvoiceDocument, fonts: FontSet): Page[] {
     const arabicRows = line.descriptionAr
       ? sheet.wrap(line.descriptionAr, descriptionWidth, SIZE.small, { rtl: true }).length
       : 0;
+    // A discounted line says so beneath its description, once in each
+    // language: two more small rows, counted into the height before anything
+    // is drawn so the break still happens between rows.
+    const noteRows = line.discountFils > 0 ? 2 : 0;
     // The whole row's height, worked out before anything is drawn, so the break
     // happens between rows and never through one.
-    const height = (englishRows - 1) * LINE + arabicRows * SMALL_LINE + LINE;
+    const height = (englishRows - 1) * LINE + (arabicRows + noteRows) * SMALL_LINE + LINE;
     sheet.room(height);
 
     const y = sheet.baseline;
@@ -538,6 +543,19 @@ function invoicePage(document_: InvoiceDocument, fonts: FontSet): Page[] {
         SMALL_LINE,
       );
     }
+    if (line.discountFils > 0) {
+      const note = discountNote(line);
+      const beneath = y - (englishRows - 1) * LINE - arabicRows * SMALL_LINE;
+      sheet.line(beneath - SMALL_LINE, columns.description, note.en, SIZE.small, {
+        grey: MUTED,
+        align: 'start',
+      });
+      sheet.line(beneath - SMALL_LINE * 2, columns.description, note.ar, SIZE.small, {
+        grey: MUTED,
+        rtl: true,
+        align: 'start',
+      });
+    }
     sheet.down(height);
   }
   sheet.setContinuation(null);
@@ -545,6 +563,14 @@ function invoicePage(document_: InvoiceDocument, fonts: FontSet): Page[] {
   sheet.room(LINE * 2);
   sheet.rule();
   sheet.down(LINE + 2);
+
+  // What was taken off, above whatever the totals say next. Only when there was
+  // a discount: a "Discount 0.00" row on every other invoice would be a figure
+  // a reader has to decide to ignore.
+  if (document_.discountFils > 0) {
+    totalRow(sheet, WORDS.beforeDiscount, formatFils(document_.netFils + document_.discountFils));
+    totalRow(sheet, WORDS.discount, formatFils(document_.discountFils));
+  }
 
   if (registered) {
     totalRow(sheet, WORDS.net, formatFils(document_.netFils));

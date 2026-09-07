@@ -48,7 +48,11 @@ export type InvoiceLine = {
   description: string;
   descriptionAr: string | null;
   quantity: number;
+  /** The list figure, before any discount: `net = quantity x unit - discount`. */
   unitNetFils: number;
+  discountFils: number;
+  /** The share the discount was typed as, or null when it was a sum. */
+  discountBasisPoints: number | null;
   netFils: number;
   /** Basis points: 500 is five per cent, 0 is what an unregistered practice charged. */
   vatRateBasisPoints: number;
@@ -81,6 +85,8 @@ export type InvoiceDocument = {
   netFils: number;
   vatFils: number;
   grossFils: number;
+  /** What came off the list figures across every line; nought when nothing did. */
+  discountFils: number;
 };
 
 export type PaymentMethod = 'cash' | 'transfer' | 'link';
