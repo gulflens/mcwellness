@@ -6,6 +6,7 @@ import { mountAppointmentCreate } from './create';
 import { mountAppointmentList } from './list';
 import { mountAppointmentMove } from './move';
 import { mountAppointmentOptions } from './options';
+import { mountAppointmentReorder } from './reorder';
 import { mountAppointmentSettings } from './settings';
 
 /**
@@ -19,6 +20,7 @@ export function mountAppointments(api: Hono<ApiEnv>, now: () => Date = () => new
   mountAppointmentCreate(api, now);
   mountAppointmentConfirm(api);
   mountAppointmentMove(api, now);
+  mountAppointmentReorder(api, now);
   mountAppointmentCancel(api, now);
   mountAppointmentSettings(api);
 }
