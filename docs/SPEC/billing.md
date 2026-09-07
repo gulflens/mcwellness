@@ -369,9 +369,15 @@ numbering stays as it is, `INV-000001` and `RCP-000001`._
 **The page, top to bottom.** The practice's logo, centred, about 150 points wide.
 The document's title, English against the left margin and Arabic against the
 right, both large and in the brand violet. The supplier as a block rather than
-as labelled rows: legal name in bold, the address beneath it in grey, then the
-licence, the licensing authority and the corporate-tax registration, each on its
-own line, with the Arabic mirror right-aligned opposite. A hairline. The
+as labelled rows: legal name in bold, then the licence, the licensing authority
+and the corporate-tax registration, each on its own line, with the Arabic
+mirror right-aligned opposite. **The address is not in this block** (the
+operator's instruction of 8 September 2026): the footer band states it once,
+and a page that prints the practice's address twice spends its best space
+repeating itself. The band's own line therefore wraps rather than being cut,
+because a UAE invoice must state the supplier's address and that line is now
+its only home; the band grows upward into the page so its last line stays
+where it was and the page number is never crowded. A hairline. The
 document's own facts: its reference large and bold on the left with the date
 beneath it, and on the right "Billed to" with the household's name and record
 number. A hairline. The lines table. The totals in a bordered box against the

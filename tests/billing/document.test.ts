@@ -190,6 +190,30 @@ describe('every invoice, whatever the registration', () => {
     expect(page).toContain('Synthetic Department of Economy and Tourism');
   });
 
+  it('states the address once, in the footer, and not again under the practice name', () => {
+    // The operator's instruction of 8 September 2026: the supplier block at the
+    // top of the page no longer repeats what the band at the foot already says.
+    // Once, though — never nought, because a UAE invoice must state it.
+    const address = 'Unit 1, Synthetic Tower, Dubai';
+    expect(page.split(address).length - 1).toBe(1);
+    // And it is the band's line that carries it: the practice's name sits
+    // immediately before it there, which is not how the supplier block set them.
+    expect(page).toContain(`Synthetic Wellness Studio  ${address}`);
+  });
+
+  it('wraps the footer line rather than cutting an address that will not fit', () => {
+    // `fit` would put an ellipsis through it, and the address is the one thing
+    // on that line a reader may actually need.
+    const long =
+      'Unit 1, Synthetic Tower, Synthetic Boulevard, Synthetic Business Bay, ' +
+      'Synthetic District, Dubai, United Arab Emirates';
+    const wide = extractAll(renderDocument(invoiceFor({ ...UNREGISTERED, address: long }), fonts));
+    expect(wide).not.toContain('…');
+    for (const piece of ['Synthetic Boulevard', 'Synthetic Business Bay', 'United Arab Emirates']) {
+      expect(wide).toContain(piece);
+    }
+  });
+
   it('carries its sequential number, its date, and who it is for', () => {
     expect(page).toContain('INV-000001');
     expect(page).toContain('2 September 2026');
@@ -435,6 +459,13 @@ describe('a receipt', () => {
  * which the design leaves off a document that makes no tax claim. Nothing
  * about what any of the three says changed.
  *
+ * **And all three moved once more, later on 8 September**, on the operator's
+ * instruction that the practice's address be stated once rather than twice.
+ * It left the supplier block at the top of the page and stayed on the footer
+ * band, where that line now wraps instead of being cut — the address is a
+ * thing a UAE invoice must carry, and it no longer has a second place to
+ * appear from.
+ *
  * They are rendered with no logo, deliberately: the mark is the practice's own
  * row and not a file in this repository, so a golden that embedded one would
  * be a golden about a picture rather than about the writer.
@@ -447,17 +478,17 @@ describe('the bytes of a rendered document', () => {
     [
       'an invoice from an unregistered practice',
       () => renderDocument(invoiceFor(UNREGISTERED), fonts),
-      'f8d85ca98036108dce0d5e4d1b60b3eb712fc21a5f8013a846089cef34b8fced',
+      '0b17f43d3c024d3b61a80cb959f5d5f10a9eca6d12ac39bc952060be402545b1',
     ],
     [
       'an invoice from a registered practice',
       () => renderDocument(invoiceFor(REGISTERED), fonts),
-      '1fd506f45a562510705623164fa5e8270389fdc330ad965bcf18f9fcec25dec2',
+      'a877c57c1e596fd266509e7381086e831d6e381e414739940a3846d75caab745',
     ],
     [
       'a receipt',
       () => renderDocument(receiptFor(UNREGISTERED), fonts),
-      '0f121539591402ba4046e1c91c0d17431eaca6d232ef642b781df92d7d39fa96',
+      '2410236d814da3c1564193de03d120b9439cc8b8dc006196c4402693198b988f',
     ],
   ];
 
