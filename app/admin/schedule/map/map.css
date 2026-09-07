@@ -123,3 +123,14 @@
   margin: 0;
   padding-block-end: 0.25rem;
 }
+
+/* The two figures the drawer compares, side by side. */
+.optimise__figures {
+  display: flex;
+  gap: 2rem;
+  margin: 0;
+}
+
+.optimise__figures dd {
+  margin: 0;
+}

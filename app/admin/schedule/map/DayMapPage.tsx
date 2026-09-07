@@ -11,6 +11,7 @@ import { MoveAppointmentDrawer } from '../MoveAppointmentDrawer';
 import { formatWindow, practiceDay } from '../windows';
 import { DayMap, formatDrive } from './DayMap';
 import { browserMapKey, loadGoogleMaps, type GoogleMaps } from './googleMaps';
+import { OptimiseDrawer } from './OptimiseDrawer';
 import './map.css';
 
 /**
@@ -82,7 +83,6 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
     null,
   );
   const [optimising, setOptimising] = useState(false);
-  void optimising;
   const [confirming, setConfirming] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [applied, setApplied] = useState<string | null>(null);
@@ -356,7 +356,19 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
           onCancelled={reload}
         />
       ) : null}
-      {/* The Optimise drawer is wired in beside this in the next commit. */}
+      {optimising && current !== null ? (
+        <OptimiseDrawer
+          date={date}
+          practitionerId={current.practitionerId}
+          stops={rows.map(({ row }) => row)}
+          onClose={() => setOptimising(false)}
+          onApplied={(message) => {
+            setOptimising(false);
+            setApplied(message);
+            reload();
+          }}
+        />
+      ) : null}
     </section>
   );
 }
