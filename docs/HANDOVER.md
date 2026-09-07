@@ -1,6 +1,6 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 7 September at 20:10: the operator
+Written 4 September 2026, updated on 7 September at 20:35: the operator
 decided at 19:37 that **the console and the practitioner app are English
 only** — Arabic is for talking to clients, so the portal, the invoices, the
 reports, the consent wording and the messages the practice sends stay
@@ -18,7 +18,10 @@ on the operator's word ("lets go live"), production received 450 to 454 and
 958 and the live process was rebuilt from `main` at `727310e`, so
 app.mcwellnessuae.com now carries Books (the third live pass); at 19:07 the
 price list of 7 September was loaded into production's empty catalogue on the
-operator's instruction (`docs/PRODUCTION.md`, "the catalogue loaded"). This file exists so that the next Claude session,
+operator's instruction (`docs/PRODUCTION.md`, "the catalogue loaded"); at 20:26
+the process was rebuilt again at `52fc1a9` after a billing round fixed the
+catalogue's VAT figures for an unregistered practice (pull request 113, the
+fourth live pass). This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -442,6 +445,14 @@ run carry sixteen tasks without a stall; and a worktree's ports must be
 checked against every running container, not only the ownership table — the
 two trunk worktrees had taken 5441 and 5442 by hand.
 
+**What the VAT round cost (7 September, 20:30).** Builder on Opus about 0.27
+million from a written brief (`vat-display-builder-brief.md`); review by the
+integrator in conversation, which also took three leftovers on the branch. Two
+lessons kept: a piped `tail` hides a red exit code, so any gate in a chain runs
+under `pipefail` with the exit code checked; and `gh pr checks --watch` straight
+after a push can pass on "no checks reported" or report the previous head's run,
+so the merge now waits on the head's own check roll-up, filtered by commit.
+
 ## 7. The failed-run emails
 
 GitHub emails the repository owner for every failed or cancelled workflow
@@ -488,6 +499,17 @@ desktop app's own CI monitor will still tell a running session.
   `~/Documents/mcwellness-catalogue-2026-09-07.sql`). Left to the founder in
   the app: her practitioner row and credentials before the first assignment,
   and the launch prices superseded when the launch ends.
+- **VAT is off, by design, and the screens now say so.** You asked at 19:23 to
+  keep VAT in the build but off: it already was. The practice row says not
+  registered, every sale charges none, and the switch waits in Settings,
+  Practice, with the fifteen-digit registration number required to turn it on.
+  Checking it found a defect beside it: the catalogue routes reported five per
+  cent VAT regardless, so a package sold with payment taken would have recorded
+  a five per cent overpayment. Fixed in pull request 113, live at 20:26
+  (`docs/PRODUCTION.md`, the fourth live pass). One decision is yours: should
+  the sale route refuse a payment that differs from the invoice? Today it
+  records what it is sent, which is right for part payments and wrong for
+  mistakes; a rule either way is a small billing item.
 - **Two decisions the books need, neither urgent.** The day the books start
   defaults to the day the practice was created and can be changed in Books,
   Settings until the first entry is written; if the founder wants her books
@@ -684,7 +706,8 @@ nine and ten; see the records on pull requests 73 to 83).
    pass and the rebuild of the live process from `main` at `727310e` (the
    third live pass in `docs/PRODUCTION.md`), and at 19:07 the price list of 7
    September loaded into production's catalogue (same file, "the catalogue
-   loaded"). (b) **Piece twelve, spending and VAT**: the next planning act is a
+   loaded"), and at 20:26 the fourth live pass carried pull request 113, the
+   catalogue's VAT figures following the registration. (b) **Piece twelve, spending and VAT**: the next planning act is a
    plain-language plan for the operator in `docs/PLAN/piece-twelve.md` and a
    spec, in the shape of piece eleven's, covering what
    `docs/SPEC/accounting.md` section 14 lists for it — suppliers, expenses

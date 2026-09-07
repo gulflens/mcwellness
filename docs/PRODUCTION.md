@@ -781,3 +781,68 @@ in the founder's decisions of 3 September, and its shapes were copied.
 before the first assignment; the certification requirement when she wants it;
 the launch prices superseded with a reason when the launch ends; Compassionate
 Inquiry added when it has a price.
+
+## What was done on 2026-09-07: the fourth live pass — VAT follows the registration on the Billing screens
+
+Between 19:23 and 20:26 on 7 September (Dubai), on the operator's instruction
+("toggle off the VAT … keep it in the build but toggled off", then "do it"), the
+practice's VAT position was confirmed and a defect found beside it was fixed,
+merged and deployed.
+
+**VAT was already off, by design.** `tenant.vat_registered` is false on
+production; every sale resolves VAT through `resolveSaleVat` from
+`app.tenant_charges_vat()` (migration 406), so an invoice carries no VAT, names
+no rate and shows one AED figure, and `app.guard_invoice_vat` refuses any
+invoice that says otherwise. The catalogue's prices are net; registering later
+adds five per cent on top of the same net prices and changes nothing already
+issued. The switch lives in Settings, Practice ("Registered for VAT"), and
+refuses to save without the fifteen-digit registration number.
+
+**The defect.** `app/api/billing/prices.ts` and `packages.ts` computed the
+`vatFils` and `grossFils` they returned at the row's stamped standard rate
+whatever the registration, and the Sell drawer sends the API's gross as the
+payment taken at the point of sale. Selling Silver with payment ticked would
+have recorded AED 10,841.25 against an invoice of AED 10,325 and left a five
+per cent overpayment on the family's balance. Beside it, the Billing page's
+price list and packages table showed a five per cent VAT column and a total
+including it, and two sentences in Settings said the switch "does not change
+what an invoice charges", untrue since 406.
+
+**The fix** (pull request 113, branch `billing-vat-display`, merged as
+`52fc1a9` at 20:21; the builder on Opus from a written brief, about 0.27
+million tokens; the integrator's review in conversation and three small
+commits of its own). `app/api/billing/supplier.ts` reads the registration once
+per request; both catalogue routes resolve the money with `resolveSaleVat` at
+the row's own stamped rate and return the stamp untouched; `PricesResponse` and
+`PackagesResponse` carry `vatRegistered`; both tables show one line while it is
+false ("The practice is not registered for VAT, so no VAT is charged and the
+total is the price"); the Sell drawer names its percentage only while something
+is charged at it; both Settings sentences now say what the switch decides
+(`docs/CHANGE-REQUESTS/billing-07.md`, both items applied before the merge).
+The proof: `tests/billing/db/packages.test.ts` sells Gold sending exactly the
+catalogue's gross and finds the payment equal to the invoice and the balance
+zero. Gates green on the builder's head, including the whole database suite
+(1,211 tests); the integrator's first test commit went up red because a piped
+`tail` hid the exit code, and a formatting miss followed — both corrected on
+the branch, checks green on the final head.
+
+**The process was rebuilt from `main`** at `52fc1a9`: archive
+`mcwellness-52fc1a9-npm.tar.gz` (5.7 MB) over TUS, build `01a07caf` with the
+stored settings, completed in two minutes two seconds (20:24:16 to 20:26:18);
+the served bundle changed from `index-CW0A6csP.js` to `index-BdMsUpd4.js` and
+carries the new sentence; `GET /api/health` and `/api/health/deep` answer
+`{"ok":true}`; the runtime log shows no error or warning. No migration in this
+round, so the database was not touched.
+
+**Left as a decision, not built.** `POST /api/billing/package-purchases`
+records whatever `payment.amountFils` it is sent; with this round the drawer's
+figure equals the invoice, but an API caller could still record an overpayment
+silently. Whether the route should refuse a mismatch, warn, or allow it (part
+payments would then need their own rule) is the operator's to decide;
+`tests/billing/db/idempotency.test.ts` still carries an overpayment fixture
+and is the natural place to prove whichever rule is chosen.
+
+**Still to do on this pass.** The same items as the third live pass; and the
+staging app is still an older build than `main` (rebuild with `pnpm exec vite
+build --mode staging`, `docs/STAGING.md` section 6, when a staging walk is
+wanted).

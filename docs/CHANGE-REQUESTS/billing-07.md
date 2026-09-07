@@ -73,11 +73,19 @@ contradict the switch's own help text as soon as item 1 landed.
 
 **Which spec.** `docs/SPEC/billing.md` section 5.1 and migration 406.
 
-**The file.** `app/admin/settings/PracticePage.tsx`, the trunk's, and not this
-round's to edit: the widening covered the switch's help text and its test, and
-this is a different sentence in a different file. *Left for the trunk.*
+**The file.** `app/admin/settings/PracticePage.tsx`, the trunk's, and not the
+builder's to edit: the widening covered the switch's help text and its test, and
+this is a different sentence in a different file. *Applied by the integrator on
+the branch before the merge* (commit `97be179`, 7 September 20:07): the clause
+now reads "While the practice is not registered for VAT, its invoices carry no
+VAT and show one figure; recording a registration adds VAT at the practice's
+standard rate to every new sale", and `PracticePage.test.tsx` asserts it. The
+same commit gave `app/shell/App.test.tsx`'s prices stub the new `vatRegistered`
+field and made the Sell drawer name its percentage only while something is
+charged at it.
 
 ---
 
-**Neither blocks the round.** Item 1 is applied; item 2 is one paragraph, and
-the screen reads correctly on the control itself in the meantime.
+**Both applied before the merge** (pull request 113, `52fc1a9`): item 1 by the
+builder, item 2 by the integrator. Nothing is left for the trunk from this
+request.
