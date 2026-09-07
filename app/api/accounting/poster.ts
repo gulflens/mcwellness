@@ -16,13 +16,35 @@ import { readChart, readSetting, readYears, type YearWithHistory } from './rows'
  * definer and steps past the erasure gate on purpose, so what the books say
  * never depends on who ran it. It writes through the journal's own unique key,
  * with `on conflict do nothing` on the header and lines written only when the
- * header was, so running it twice writes nothing the second time however many
- * run at once.
+ * header was, so running it twice writes nothing the second time; and it takes
+ * a per-practice advisory lock first, so two runs at once queue rather than
+ * overlap (`LOCK_SQL` below).
  *
  * Every rule it applies is a pure function: `postingsFor` decides the lines,
  * `landingDayFor` decides the day. This file is the plumbing between them and
  * the database, and holds no rule of its own.
  */
+
+/**
+ * One posting run per practice at a time.
+ *
+ * Two runs at once — the page's opening `POST` beside the nightly job, or two
+ * tabs — each read the same event list, because neither can see the other's
+ * uncommitted entries. The unique key stops the second writing anything, but
+ * not before its insert has fired the BEFORE trigger of migration 453, which
+ * takes a journal number from the counter *before* the key refuses the
+ * duplicate: `on conflict do nothing` is not an error, so the number stands
+ * consumed and the next entry written leaves it missing behind it. The journal
+ * is gapless by intent (450, and an auditor's first question), so the second
+ * run waits here instead, and finds nothing left to do.
+ *
+ * Transaction-scoped: the lock is released by the commit or the rollback the
+ * fence performs, whichever happens, and never by this file. A
+ * `select ... for update` on `accounting_setting` would not do the same job —
+ * `books_owner_settings` filters that row to nothing for finance.
+ */
+const LOCK_SQL =
+  "select pg_advisory_xact_lock(hashtext('post-books'), hashtext(app.current_tenant_id()::text))";
 
 const EVENTS_SQL = 'select * from app.unposted_money_events()';
 const YEAR_SQL = 'select app.fiscal_year_for($1) as id';
@@ -190,6 +212,7 @@ async function yearIdFor(
  * promise this function does not keep.
  */
 export async function postPendingEvents(db: Db): Promise<PostingReport> {
+  await db.query(LOCK_SQL);
   const chart: ChartAccount[] = await readChart(db);
   const setting = await readSetting(db);
   let years = await readYears(db);

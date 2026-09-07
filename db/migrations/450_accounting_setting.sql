@@ -14,9 +14,11 @@
 -- row a practice has is the row it keeps.
 --
 -- **Why the counter lives here.** `journal_entry.number` is per practice and
--- gapless-by-intent, exactly as an invoice number is, so it is allocated the
+-- gapless by intent, exactly as an invoice number is, so it is allocated the
 -- way 402 allocates one: a security-definer function that takes the row under
--- the update's own lock and hands back the number it consumed. Nothing else
+-- the update's own lock and hands back the number it consumed. Gaplessness
+-- itself is the poster's to keep, not this row's; the counter's own comment
+-- below says how. Nothing else
 -- may touch the column, which is why `app_role` reads the table but the
 -- counter moves only through `app.next_journal_entry_number()`.
 --
@@ -88,8 +90,16 @@ create trigger audit_row after insert or update or delete on public.accounting_s
 alter table public.accounting_setting enable always trigger audit_row;
 
 -- The journal's counter, in app.next_invoice_number()'s shape (402): the
--- update takes the row's own lock, so two concurrent posters queue rather than
--- collide, and the number returned is the one this caller consumed.
+-- update takes the row's own lock, so the number returned is the one this
+-- caller consumed and no two callers are ever handed the same one.
+--
+-- That is not the same as gapless, and this function alone cannot make it so.
+-- A number consumed by a statement that then writes no row -- the poster's
+-- `insert ... on conflict do nothing`, whose BEFORE trigger of 453 runs ahead
+-- of the unique key's verdict -- stands consumed all the same. What keeps the
+-- journal gapless is that only one posting run per practice is ever in flight:
+-- app/api/accounting/poster.ts takes a per-practice advisory lock before it
+-- reads. What this function keeps is that a number is never issued twice.
 create function app.next_journal_entry_number() returns integer
 language plpgsql security definer
 set search_path = pg_catalog, pg_temp

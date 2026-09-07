@@ -237,3 +237,69 @@ describe('the books name nobody', () => {
     }
   });
 });
+
+describe('two posting runs at once', () => {
+  /**
+   * The page's opening `POST` beside the nightly job, or two tabs. Both read
+   * the same event list; without the poster's own lock the loser's inserts
+   * still fire the BEFORE trigger, which takes a journal number before the
+   * unique key refuses the duplicate. Nothing double-posts — the key holds —
+   * but the counter walks on, and the next entry written carries a number with
+   * the burned ones missing behind it (docs/SPEC/accounting.md section 8).
+   */
+  async function payment(amountFils: number): Promise<void> {
+    const recorded = await h.call('POST', '/api/billing/payments', SEEDED.owner, {
+      clientId: activity.clientId,
+      method: 'cash',
+      amountFils,
+    });
+    expect(recorded.status).toBe(201);
+  }
+
+  it('writes each event once and leaves the journal’s numbers gapless', async () => {
+    // The pool holds one connection until a second request asks for one, and
+    // opening a fresh one outlasts a whole posting run: without this the two
+    // calls below would queue rather than overlap, and the race the lock is
+    // for would never be reached.
+    await Promise.all([
+      h.call('GET', '/api/accounting/settings', SEEDED.owner),
+      h.call('GET', '/api/accounting/settings', SEEDED.owner),
+    ]);
+
+    // Two fresh events, so both runs have something to find.
+    await payment(11_000);
+    await payment(12_000);
+
+    const [first, second] = await Promise.all([post(SEEDED.owner), post(SEEDED.owner)]);
+    expect(first.posted + second.posted).toBe(2);
+
+    const duplicates = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from (select source_table, source_id, source_event ' +
+        'from journal_entry where tenant_id = $1 and source_table is not null ' +
+        'group by 1, 2, 3 having count(*) > 1) as repeated',
+      [h.data.tenant.id],
+    );
+    expect(Number(duplicates.rows[0]?.n)).toBe(0);
+
+    // A number consumed and thrown away is a gap the counter carries forward,
+    // so it is the counter that shows it first.
+    const counter = await h.owner.query<{ next: string; highest: string }>(
+      'select s.next_entry_number::text as next, ' +
+        '(select coalesce(max(e.number), 0) from journal_entry e where e.tenant_id = s.tenant_id)::text ' +
+        'as highest from accounting_setting s where s.tenant_id = $1',
+      [h.data.tenant.id],
+    );
+    expect(counter.rows[0]?.next).toBe(String(Number(counter.rows[0]?.highest) + 1));
+
+    // And then in the journal itself: one more event, and the count and the
+    // highest number still agree.
+    await payment(13_000);
+    expect((await post(SEEDED.owner)).posted).toBe(1);
+    const numbers = await h.owner.query<{ n: string; highest: string }>(
+      'select count(*)::text as n, coalesce(max(number), 0)::text as highest ' +
+        'from journal_entry where tenant_id = $1',
+      [h.data.tenant.id],
+    );
+    expect(numbers.rows[0]?.n).toBe(numbers.rows[0]?.highest);
+  });
+});
