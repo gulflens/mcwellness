@@ -141,14 +141,7 @@ export function PreflightStep({
                   onChange={(event) => onToggle(item.key, event.target.checked)}
                 />
                 <span className="check__box" aria-hidden="true" />
-                <span className="check__label">
-                  {item.labelEn}
-                  {item.labelAr ? (
-                    <span className="check__label-ar small muted" lang="ar" dir="rtl">
-                      {item.labelAr}
-                    </span>
-                  ) : null}
-                </span>
+                <span className="check__label">{item.labelEn}</span>
               </label>
             </li>
           ))}

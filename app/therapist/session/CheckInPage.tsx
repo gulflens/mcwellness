@@ -355,8 +355,6 @@ export function CheckInPage() {
   // than defaulted via an effect and a second render.
   const services = servicesState.kind === 'ready' ? servicesState.services : [];
   const effectiveServiceId = selectedServiceId || (services[0]?.id ?? '');
-  const selectedServiceNameAr =
-    services.find((service) => service.id === effectiveServiceId)?.nameAr ?? null;
 
   const handleShareLocationChange = useCallback(async (next: boolean) => {
     setShareLocation(next);
@@ -660,17 +658,10 @@ export function CheckInPage() {
                 ))}
               </Select>
             ) : null}
-            {/* The practice's catalogue is bilingual and the chosen service's
-                Arabic name belongs on this screen, beneath its English, the
-                way every checklist item and question on the runner carries
-                its own. It sits here rather than inside the options because
-                a native <option> holds no markup, so nothing inside one can
-                be marked as Arabic or laid out right to left. */}
-            {selectedServiceNameAr ? (
-              <p className="small muted" lang="ar" dir="rtl">
-                {selectedServiceNameAr}
-              </p>
-            ) : null}
+            {/* The practitioner app is English only (operator's decision of
+                7 September 2026, docs/DESIGN-BRIEF.md section 10 item 4); the
+                catalogue's Arabic name stays on the wire for the portal and
+                the documents. */}
 
             <Select
               id="checkin-delivery-mode"

@@ -79,10 +79,9 @@
 .stop__detail {
   display: flex;
   flex-direction: column;
-  /* align-items: start so a line only ever takes the width of its own text.
-     The Arabic name carries dir="rtl", and stretched to the full column it
-     would align its text to the far edge and read as something unrelated to
-     the name above it. */
+  /* align-items: start so a line only ever takes the width of its own text,
+     rather than stretching to the column and aligning its text to an edge it
+     has nothing to do with. */
   align-items: start;
   gap: var(--s-1);
 }
