@@ -109,11 +109,6 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
         render: (row) => (
           <span className="name">
             <span>{row.serviceTypeName}</span>
-            {row.serviceTypeNameAr ? (
-              <span className="name__ar small muted" lang="ar" dir="rtl">
-                {row.serviceTypeNameAr}
-              </span>
-            ) : null}
           </span>
         ),
       },

@@ -74,7 +74,6 @@ export function PackageDrawer({
 
   const [prices, setPrices] = useState<PricesState>({ kind: 'loading' });
   const [name, setName] = useState('');
-  const [nameAr, setNameAr] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
   const [code, setCode] = useState('');
   const [expiryMonths, setExpiryMonths] = useState('12');
@@ -167,10 +166,15 @@ export function PackageDrawer({
       const res = await apiFetch('/api/billing/packages', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        // No nameAr: the console is English only (operator's decision of
+        // 7 September 2026, docs/DESIGN-BRIEF.md section 10 item 4), and
+        // CreatePackageInput's nameAr is nullable and optional
+        // (app/api/billing/ledger-schema.ts), so the key is simply left out.
+        // The column, and the Arabic names already on production's packages,
+        // are untouched.
         body: JSON.stringify({
           code: effectiveCode,
           name: name.trim(),
-          nameAr: nameAr.trim() || null,
           listPriceFils: listFils,
           expiryMonths: Number(expiryMonths),
           components: chosen.map((entry) => ({
@@ -241,17 +245,6 @@ export function PackageDrawer({
             value={name}
             onChange={(e) => setName(e.target.value)}
             error={fieldErrors.name}
-          />
-          <Field
-            id="package-name-ar"
-            label="Name in Arabic"
-            type="text"
-            maxLength={120}
-            lang="ar"
-            dir="rtl"
-            value={nameAr}
-            onChange={(e) => setNameAr(e.target.value)}
-            hint="Optional."
           />
           <Field
             id="package-code"

@@ -78,11 +78,6 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         render: (row) => (
           <span className="name">
             <span>{row.name}</span>
-            {row.nameAr ? (
-              <span className="name__ar small muted" lang="ar" dir="rtl">
-                {row.nameAr}
-              </span>
-            ) : null}
             {canWrite ? (
               row.sellable ? (
                 <button
