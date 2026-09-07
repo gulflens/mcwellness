@@ -101,10 +101,16 @@ achromatic: saturation removed everywhere, roads at `--rule`, labels at
 `--slate` on `--paper`, water at `--surface`, points of interest and transit
 off, administrative geometry off. `disableDefaultUI: true`; the app draws its
 own zoom buttons from the shell's controls; Google's attribution and terms
-link remain as the API renders them. **This is the fourth place a token's
-value is written out** (`docs/SPEC/practitioner-phone.md` 3.1 names three;
-this spec adds `app/admin/schedule/map/mapStyle.ts`, which names the tokens it
-copied). `colorScheme` stays light: the admin console is the light ground.
+link remain as the API renders them. `colorScheme` stays light: the admin
+console is the light ground.
+
+**Amended in the build, 2026-09-07:** this is **not** a fourth place a
+token's value is written out. `app/admin/schedule/map/mapStyle.ts` reads the
+running document's own custom properties with `getComputedStyle`, so the
+basemap follows `app/shell/tokens.css` with no copy at all and
+`.claude/rules/ui.md`'s "never hardcode colours" holds here with no
+exception. `docs/SPEC/practitioner-phone.md` 3.1 still names three places,
+and this piece adds none.
 
 **4.6 Loading Google.** `app/admin/schedule/map/googleMaps.ts` exports
 `loadGoogleMaps(key, options)`: one script element per document,
@@ -180,11 +186,27 @@ optimiseDay(day: DayInput, matrix: Matrix): DayPlan | PlanRefusal
   to first stop, departing so as to arrive at the first window's start, and
   a return leg from the last stop to base is counted in the sum and in the
   day's end. Today draws no return leg and this does not change that.
+
+  **Amended in the build, 2026-09-07:** the day ends at the **last stop's
+  departure** — its planned arrival plus the service's own length — and not
+  at the arrival home. The return leg still counts in the driving sum. With
+  the return in the end time, almost every better order was refused for
+  "ending later", because the order that drives least puts the far household
+  last and the drive back from it is the longest of the day.
 - **The day's bounds are its own.** The earliest new `windowStart` is not
   before the current earliest `windowStart` of the day, and no new
-  `windowStart` is before `now` plus sixty minutes; the new day's end
-  (arrival at base, or the last departure without one) is not later than the
-  current plan's end computed the same way. No working hours exist yet.
+  `windowStart` is before `now` plus sixty minutes; the new day's end (the
+  last departure) is not later than the current plan's end computed the same
+  way. No working hours exist yet.
+
+  **Amended in the build, 2026-09-07:** the floor is placement as well as
+  eligibility. No new `windowStart` is placed inside the coming hour, which
+  is the same line `isMovable` draws for what may move at all.
+- **A window kept.** **Amended in the build, 2026-09-07:** a movable stop
+  keeps its own current window when the new arrival still falls inside it,
+  and takes a new one only when it does not. A plan then moves the fewest
+  households for the same driving, which is what the tie-break on moves was
+  always for.
 - **Quarter hours.** Each movable stop's new `windowStart` is the earliest
   arrival rounded up to the quarter hour in the practice's zone
   (`ceilToQuarterHour` in `domain/scheduling/grid.ts`; Asia/Dubai has no
@@ -389,6 +411,12 @@ the API carries the coordinates of the day's places and one departure time."
 | `GET /api/routing/practice-day` | owner, admin, lead | `date` | `{ practitioners: [{ practitionerId, homeBase: { locationId, point } \| null, stops: [{ appointmentId, locationId, point, windowStart, status }], legs: DayLegRow[] }] }` |
 | `POST /api/routing/practice-day/optimise` | owner, admin, lead | `{ date, practitionerId }` | `DayPlan \| PlanRefusal` (wire form) |
 | `POST /api/appointments/reorder` | owner, admin, lead; `x-reason` | `{ date, practitionerId, moves: [{ appointmentId, windowStart, travelBufferMinutes, wasWindowStart }] }` | `{ appointments: AppointmentRow[], movedFrom: [{ id, windowStart }] }`; 409 `stale_plan`; 400 `reason_required` \| `invalid_request`; 409 `ConflictResponse` on a conflict |
+
+**Amended in the build, 2026-09-07:** the plan's own rows carry
+`wasWindowStart` as well — `PlannedStopRow` in `app/api/routing/schema.ts` is
+`{ appointmentId, windowStart, windowEnd, wasWindowStart, travelBufferMinutes,
+moved, anchor }` — so the drawer can send the reorder the window each plan was
+computed against without holding a second copy of the day beside the plan.
 
 Shapes in `app/api/routing/schema.ts` and `app/api/appointments/schema.ts`.
 `practice-day` and `optimise` mount from `app/api/routing/practice-day.ts`

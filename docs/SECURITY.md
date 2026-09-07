@@ -40,6 +40,26 @@ credential); every read and write of a record is logged, hash-chained.
    year with subdomains. API answers are `Cache-Control: no-store`. In
    production the API serves the built app itself (`SERVE_APP=true`), so the
    same headers cover the screens.
+
+   **One document is served with a wider policy, and only one**
+   (`docs/SPEC/route-planning.md` section 8, from piece seventeen):
+   `/admin/schedule/map`, the coordinator's day map. Google's Maps JavaScript
+   API needs directives the policy above refuses and should go on refusing, so
+   that document alone gets `script-src 'nonce-N' 'strict-dynamic' https:
+   'unsafe-eval' blob:`, Google's four hosts for images, fonts, connections
+   and frames, and `worker-src 'self' blob:`. The nonce is minted per response
+   (`randomBytes(16)`) and stamped on the shell's own script and preload tags,
+   which is what makes `'strict-dynamic'` safe: only those tags are trusted,
+   and only what they load is trusted onwards. `'unsafe-eval'` is on Google's
+   own documented list and is the one grant the practice would rather not
+   make; it reaches this page and no other. That document's `Referrer-Policy`
+   is `strict-origin-when-cross-origin` rather than `no-referrer`, because the
+   browser key is restricted by HTTP referrer and Google refuses a request
+   carrying none; only the origin crosses, and no address of this app names a
+   person. The widening is chosen by an exact path match on a GET, so no
+   neighbouring path can widen itself into it, and
+   `tests/security/headers.test.ts` pins **both** policies: the map document's,
+   and every other document's and every API answer's unchanged.
 3. **Rate limits** (`app/api/_middleware/rate-limit.ts`), per minute, from
    the environment: `RATE_LIMIT_PER_MINUTE` per address (300),
    `RATE_LIMIT_ACTOR_PER_MINUTE` per signed-in person (600),

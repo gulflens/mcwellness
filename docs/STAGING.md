@@ -1840,11 +1840,16 @@ Set at build time, so they are baked into the bundle:
 ```
 VITE_SUPABASE_URL=https://<ref>.supabase.co
 VITE_SUPABASE_ANON_KEY=<the project's anon / publishable key>
+VITE_GOOGLE_MAPS_BROWSER_KEY=<the browser map key, or leave it out>
 ```
 
 `VITE_SUPABASE_URL` must name the same project as `SUPABASE_URL`: the API
 trusts that project's tokens and names its origin in the content security
-policy. Build with the staging file named as the mode, because a plain
+policy. `VITE_GOOGLE_MAPS_BROWSER_KEY` is the day map's own **browser** key
+(`docs/SPEC/route-planning.md` section 8.5) — restricted to the Maps
+JavaScript API and to this address, and never `GOOGLE_MAPS_API_KEY`, which is
+the server key. Leave it out and the day map still lists the day, the drives
+and the optimiser; only the picture is missing, and the screen says so. Build with the staging file named as the mode, because a plain
 `pnpm build` reads `.env`, not `.env.staging`, and the sign-in page then
 falls back to the laptop door with "Email sign-in is not configured on this
 laptop" (found on 2026-09-03):

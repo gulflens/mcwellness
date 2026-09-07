@@ -36,7 +36,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 
 **4.1 Week calendar.** Practitioners as columns (or rows on narrow screens), days across, 15-minute grid. Appointment block shows client name, service, location label, delivery mode icon. Drag to move, drag edge to change duration, drag between columns to reassign. Every drag runs `checkConflicts` before commit and shows blocking errors or warnings inline.
 
-**4.2 Day map.** Full-bleed map for one day. Each practitioner a colour; pins numbered in time order; straight lines between consecutive stops with estimated drive minutes from the Maps API (cached per pair per hour-bucket). Click a pin → appointment. Toggle practitioners on/off. This is the screen for noticing "she's in Jumeirah at 2 and Mirdif at 3."
+**4.2 Day map.** **Built in piece seventeen (2026-09-07); the screen is specified in `docs/SPEC/route-planning.md` Part A, which supersedes the sketch below where the two differ.** Full-bleed map for one day. Pins numbered in time order; straight lines between consecutive stops with estimated drive minutes from the Maps API (cached per pair per hour-bucket). Click a pin → appointment. Toggle practitioners on/off. This is the screen for noticing "she's in Jumeirah at 2 and Mirdif at 3." *Not* each practitioner a colour: the design brief reserves hue for the bands and the three status states, so a pin carries its stop number and nothing more (`docs/SPEC/route-planning.md` 4.2).
 
 **4.3 New appointment.** From calendar slot, from client record, or from the "unscheduled" list. Fields: client, service type, delivery mode, location (client's locations, or the studio), practitioner (filtered to those credentialed for the service type), window start (window end = start + 45), travel buffer (default from previous stop's estimated drive + 10 min). Shows entitlement balance for that service type and blocks if zero unless admin overrides with reason (creates a receivable, see FINANCE).
 
@@ -80,7 +80,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 
 ## 8. Integrations
 
-Google Maps Distance Matrix for estimates; Places for pin verification is client-record's. Navigation handoff is a deep link, nothing more. No route optimisation.
+Google Maps Distance Matrix for estimates; Places for pin verification is client-record's. Navigation handoff is a deep link, nothing more. **From piece seventeen the day's own order is optimised** (`docs/SPEC/route-planning.md` section 5): within one day, around the visits already agreed with their households, applied through the move rule of section 3. A dispatch board and live tracking stay out.
 
 ## 9. Audit
 
@@ -88,7 +88,7 @@ Create, move, reassign, cancel each logged with before/after times and practitio
 
 ## 10. Out of scope
 
-Route solver, dispatch board, live tracking, client notifications, practitioner-initiated changes, recurring appointments (Phase 2: "book the next 10 Tuesdays").
+Dispatch board, live tracking, client notifications, practitioner-initiated changes, recurring appointments (Phase 2: "book the next 10 Tuesdays"). *Route solver* left this list in piece seventeen, within the limits section 8 now states: one day at a time, around the confirmed visits, never across days and never a fleet.
 
 ## 11. Done when
 

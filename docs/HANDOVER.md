@@ -797,8 +797,33 @@ nine and ten; see the records on pull requests 73 to 83).
    plain-language plan is `docs/PLAN/route-planning.md` (pieces seventeen
    and eighteen, in the `scheduling` worktree) and the specification
    `docs/SPEC/route-planning.md`. **Approved at 22:54** ("lets go"),
-   defaults standing; piece seventeen builds next in the `scheduling`
-   worktree; the two keys are not touched until its staging pass.
+   defaults standing.
+
+   **Piece seventeen, the day map and the optimised day, is built**
+   (8 September, on branch `scheduling-5` in the `scheduling` worktree, from
+   `docs/superpowers/plans/2026-09-07-route-planning-day-map.md`, fourteen
+   tasks): the seam's grid call, the pure rule `optimiseDay`, the practice-day
+   read and the optimise call, `POST /api/appointments/reorder` applying a
+   plan through the move rule inside one transaction, the map document's own
+   content security policy and nonce, the day map page with its panel and its
+   Optimise drawer, and a planning day of five visits in the seed. The
+   shared-zone edits ride in the pull request and are listed in
+   `docs/CHANGE-REQUESTS/scheduling-05.md`; five refinements the build learned
+   are marked in the specification itself. Pull request **PR_NUMBER**.
+
+   **Two console acts are still owed, and they are the integrator's rather
+   than a builder's**, at piece seventeen's staging pass
+   (`docs/SPEC/route-planning.md` section 8.5): re-restricting the practice's
+   two Google keys — the Flutter key renamed and confined to the Maps
+   JavaScript API and to the practice's own addresses, the server key losing
+   the map product it never used — and setting the recommended spending caps
+   (500 map loads and 3,000 matrix elements a day). No key of any kind is in
+   the repository, and until the browser key reaches a build the day map lists
+   the day, the drives and the optimiser and says plainly that the picture
+   needs the practice's key.
+
+   Part B, the week planner, is piece eighteen and is planned after this one
+   is on staging.
 
 7. **Trunk round 35, the console in English only, is merged** (7 September,
    19:53 to 20:20): the operator's decision of 19:37 removed every Arabic
