@@ -10,6 +10,21 @@
 
 **Spec:** `docs/SPEC/route-planning.md` (Part A, sections 1–11 and 13–17). The plan argues from the spec; read both. The operator's plan is `docs/PLAN/route-planning.md`.
 
+**Amended in the fix round, 2026-09-08:** this plan set `MAX_PLAN_STOPS = 10`
+and told the drawer to say "More than ten stops in a day is not optimised."
+**It is eight**, and the sentence says eight. The plan was wrong about what
+the search costs: ten stops with no anchors is 3.6 million orderings, and the
+review of pull request 121 measured eight at 8.5 s and gave up on ten after
+twelve minutes. What decides the ceiling is not how long the arithmetic takes
+to finish but how long one request may hold the process — `optimiseDay` is
+synchronous and awaits nothing, so while it runs Node answers nothing else in
+the practice, the request timeout included, and it holds a pooled connection
+for the same span. The two changes made in that round were to hold one
+`Intl.DateTimeFormat` per zone in `domain/shared/routing.ts` rather than build
+one per call, and to lower the ceiling to eight. Every listing below that says
+ten is superseded by this note and by `docs/SPEC/route-planning.md` 5.4 and
+5.5.
+
 ## Global Constraints
 
 - **Worktree and ports.** Build in `/Volumes/Storage/McWellness/mcwellness-scheduling` on branch `scheduling-5` (already checked out at `main` = `b3aa641`). Its `.env` carries `DB_PORT=5434`, `PORT=3002`, `WEB_PORT=5175`, `COMPOSE_PROJECT_NAME=mcwellness-scheduling`; the container `mcwellness-scheduling-db-1` is running. Never `cd` to another worktree.
@@ -559,7 +574,7 @@ describe('optimiseDay', () => {
     expect(plan).toEqual({ kind: 'refusal', reason: 'nothing_to_move' });
   });
 
-  it('refuses more than ten stops', () => {
+  it('refuses more than the day it can search', () => { // Amended in the fix round, 2026-09-08
     const stops = Array.from({ length: MAX_PLAN_STOPS + 1 }, (_, i) =>
       stop(`L${i + 1}`, `0${Math.min(9, i)}:00`),
     );
@@ -695,7 +710,7 @@ export type DayPlan = {
 export type PlanRefusalReason = 'nothing_to_move' | 'no_improvement' | 'infeasible' | 'too_many_stops';
 export type PlanRefusal = { kind: 'refusal'; reason: PlanRefusalReason };
 
-export const MAX_PLAN_STOPS = 10;
+export const MAX_PLAN_STOPS = 8; // Amended in the fix round, 2026-09-08: was 10; see the note at the top.
 /** A proposed visit closer than this to now is not moved: somebody may already be on the road. */
 export const MOVABLE_LEAD_MS = 60 * 60_000;
 const MINUTE_MS = 60_000;
@@ -2913,7 +2928,7 @@ describe('OptimiseDrawer', () => {
     ['nothing_to_move', 'Every visit today has been agreed with its household, or is already under way.'],
     ['no_improvement', 'This order already drives least.'],
     ['infeasible', 'The day cannot be improved around the confirmed visits.'],
-    ['too_many_stops', 'More than ten stops in a day is not optimised.'],
+    ['too_many_stops', 'More than eight stops in a day is not optimised.'], // Amended in the fix round, 2026-09-08
   ])('says why nothing should move: %s', async (reason, sentence) => {
     renderDrawer({ kind: 'refusal', reason });
     expect(await screen.findByText(sentence)).toBeTruthy();

@@ -27,8 +27,8 @@ import { windowFor } from './window';
  * **What is best.** The fewest seconds of driving; then the earlier end;
  * then the fewer households moved; then the order as it stands. The search
  * is exhaustive over orderings that keep the anchors in their own time
- * order, pruned by the best sum found so far, and refuses more than ten
- * stops rather than think for a minute.
+ * order, pruned by the best sum found so far, and refuses more than
+ * `MAX_PLAN_STOPS` stops rather than hold the event loop for minutes.
  */
 
 export type PlanStop = {
@@ -72,7 +72,29 @@ export type PlanRefusalReason =
   'nothing_to_move' | 'no_improvement' | 'infeasible' | 'too_many_stops';
 export type PlanRefusal = { kind: 'refusal'; reason: PlanRefusalReason };
 
-export const MAX_PLAN_STOPS = 10;
+/**
+ * The most stops a day may hold and still be optimised.
+ *
+ * **Amended in the fix round, 2026-09-08: ten became eight.** The search is
+ * exhaustive and `optimiseDay` is synchronous, so for as long as it runs Node
+ * answers nothing else in the practice — not a practitioner's check-in, not
+ * the health check, and not the request timeout, whose timer cannot fire
+ * while the loop is held. That makes the ceiling a question of what one
+ * request may spend without stopping everyone else, and not of what the
+ * arithmetic could eventually finish.
+ *
+ * Measured on this branch after the zone formatters were hoisted out of
+ * `hourBucket` (`domain/shared/routing.ts`), on a day whose stops lie along
+ * one road and so prune well: six stops 0.01 s, seven 0.03 s, eight 0.20 s,
+ * nine 1.6 s, ten 18 s. A day that prunes badly costs more — the eight-stop
+ * guard in this file's test took 7.5 s before this round and about a third
+ * of a second after, and the review measured ten as unfinished after twelve
+ * minutes. Eight is what a request may spend on the bad days as well as the
+ * good; the practice does at most six stops in a day
+ * (`docs/SPEC/practitioner-phone.md` section 5.5), so eight is well past the
+ * real ceiling and inside what the machine can do.
+ */
+export const MAX_PLAN_STOPS = 8;
 /** A proposed visit closer than this to now is not moved: somebody may already be on the road. */
 export const MOVABLE_LEAD_MS = 60 * 60_000;
 const MINUTE_MS = 60_000;

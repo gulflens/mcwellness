@@ -194,7 +194,7 @@ describe('OptimiseDrawer', () => {
     ],
     ['no_improvement', 'This order already drives least.'],
     ['infeasible', 'The day cannot be improved around the confirmed visits.'],
-    ['too_many_stops', 'More than ten stops in a day is not optimised.'],
+    ['too_many_stops', 'More than eight stops in a day is not optimised.'],
   ])('says why nothing should move: %s', async (reason, sentence) => {
     renderDrawer({ kind: 'refusal', reason } as OptimiseDayResponse);
     expect(await screen.findByText(sentence)).toBeTruthy();

@@ -31,7 +31,7 @@ const REFUSALS: Record<string, string> = {
   nothing_to_move: 'Every visit today has been agreed with its household, or is already under way.',
   no_improvement: 'This order already drives least.',
   infeasible: 'The day cannot be improved around the confirmed visits.',
-  too_many_stops: 'More than ten stops in a day is not optimised.',
+  too_many_stops: 'More than eight stops in a day is not optimised.',
 };
 
 const SOURCES: Record<string, string> = {

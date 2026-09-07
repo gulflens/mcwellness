@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import {
+  DEFAULT_PEAK_MULTIPLIER,
+  DEFAULT_ROAD_FACTOR,
+  hourBucket,
+  straightLineSeconds,
+} from '../shared/routing';
 import type { Matrix, PlanStop } from './optimise';
 import { MAX_PLAN_STOPS, optimiseDay } from './optimise';
 
@@ -114,7 +120,7 @@ describe('optimiseDay', () => {
     expect(plan).toEqual({ kind: 'refusal', reason: 'nothing_to_move' });
   });
 
-  it('refuses more than ten stops', () => {
+  it('refuses more than the day it can search', () => {
     const stops = Array.from({ length: MAX_PLAN_STOPS + 1 }, (_, i) =>
       stop(`L${i + 1}`, `0${Math.min(9, i)}:00`),
     );
@@ -166,6 +172,82 @@ describe('optimiseDay', () => {
     expect(plan.kind).toBe('plan');
     if (plan.kind !== 'plan') return;
     expect(plan.source).toBe('straight-line');
+  });
+
+  /**
+   * What this is guarding against, and it is not this machine's speed.
+   *
+   * `optimiseDay` is synchronous and awaits nothing, so for as long as it runs
+   * Node answers no other request in the practice — not a practitioner's
+   * check-in, not the health check, and not the request timeout, whose timer
+   * cannot fire either. The search is exhaustive, so its cost is a factorial
+   * of the movable stops, and every walk asks the matrix for a leg. This very
+   * day of eight took 7.5 seconds of that before the fix round of 2026-09-08,
+   * when `MAX_PLAN_STOPS` was ten and the matrix built a fresh
+   * `Intl.DateTimeFormat` on every lookup.
+   *
+   * Five seconds and not one: the assertion exists to catch a return to seven
+   * and a half, not to measure a laptop. It runs in about a third of a second
+   * here.
+   */
+  it('searches a full day of eight without stopping the practice', () => {
+    // A matrix built the way app/api/routing/estimates.ts builds one: the
+    // hour read per lookup, the cache consulted by that hour, and the
+    // practice's own straight-line arithmetic when the vendor never answered
+    // for that hour. So `hourBucket` is really called once per leg per walk.
+    const zone = 'Asia/Dubai';
+    const factors = { roadFactor: DEFAULT_ROAD_FACTOR, peakMultiplier: DEFAULT_PEAK_MULTIPLIER };
+    // Eight households strung out along one road east of the base, given to
+    // the day in an order that zigzags, so a better one exists to be found.
+    const order = [4, 0, 6, 2, 7, 1, 5, 3];
+    const points = new Map<string, { lat: number; lng: number }>([
+      ['B', { lat: 25.2, lng: 55.27 }],
+      ...order.map(
+        (along, i) => [`P${i + 1}`, { lat: 25.2, lng: 55.27 + 0.02 * (along + 1) }] as const,
+      ),
+    ]);
+    const cached = new Map<string, { seconds: number; metres: number }>();
+    for (const [fromId, from] of points) {
+      for (const [toId, to] of points) {
+        if (fromId === toId) continue;
+        for (let hour = 6; hour < 22; hour++) {
+          const at = new Date(`2026-09-07T${String(hour).padStart(2, '0')}:00:00+04:00`);
+          cached.set(`${fromId}:${toId}:${hour}`, straightLineSeconds(from, to, at, factors, zone));
+        }
+      }
+    }
+    const cachedMatrix: Matrix = (fromLocationId, toLocationId, departAt) => {
+      if (fromLocationId === toLocationId) return { seconds: 0, metres: 0, source: 'traffic' };
+      const hour = hourBucket(departAt, zone);
+      const exact = cached.get(`${fromLocationId}:${toLocationId}:${hour}`);
+      if (exact) return { ...exact, source: 'traffic' };
+      const from = points.get(fromLocationId);
+      const to = points.get(toLocationId);
+      if (!from || !to) return { seconds: 0, metres: 0, source: 'straight-line' };
+      return { ...straightLineSeconds(from, to, departAt, factors, zone), source: 'straight-line' };
+    };
+
+    // Ninety minutes apart from eight in the morning, which the sixty-minute
+    // service and the short drives between neighbours all fit inside.
+    const stops = order.map((_, i) => {
+      const at = new Date(dubai('08:00').getTime() + i * 90 * 60_000);
+      return {
+        ...stop(`P${i + 1}`, '08:00'),
+        windowStart: at,
+        windowEnd: new Date(at.getTime() + 45 * 60_000),
+        point: points.get(`P${i + 1}`) ?? { lat: 25.2, lng: 55.27 },
+      };
+    });
+    expect(stops).toHaveLength(MAX_PLAN_STOPS);
+
+    const started = performance.now();
+    const plan = optimiseDay(
+      { stops, homeBase: { locationId: 'B', point: { lat: 25.2, lng: 55.27 } }, now: NOW },
+      cachedMatrix,
+    );
+    const elapsed = performance.now() - started;
+    expect(plan.kind, JSON.stringify(plan)).toBe('plan');
+    expect(elapsed).toBeLessThan(5_000);
   });
 
   it('never starts the day earlier than now plus an hour, whatever the windows say', () => {

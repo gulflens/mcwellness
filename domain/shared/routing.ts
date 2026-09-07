@@ -139,9 +139,36 @@ export function haversineMetres(from: GeoPoint, to: GeoPoint): number {
  * Read in the given zone and never the server's: a laptop set to London would
  * otherwise file the school run under four in the morning.
  */
+/**
+ * One formatter per zone, held for the life of the process.
+ *
+ * Building an `Intl.DateTimeFormat` costs about thirty-five microseconds and
+ * using one costs almost nothing, and the two readings below are made
+ * millions of times inside a single `optimiseDay` search — `hourBucket` once
+ * per leg per walk, `isWorkingDay` once per straight-line estimate. Built
+ * afresh each time, that alone was most of the eight and a half seconds a
+ * full day of eight stops spent blocking the event loop (the review of the
+ * day map's pull request, finding B1). A formatter is immutable and its
+ * answer depends only on the zone and the instant, so holding one per zone
+ * changes no figure; the zones a practice ever asks about are one or two.
+ */
+const hourFormatters = new Map<string, Intl.DateTimeFormat>();
+const weekdayFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatterFor(
+  cache: Map<string, Intl.DateTimeFormat>,
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const held = cache.get(timeZone);
+  if (held !== undefined) return held;
+  const made = new Intl.DateTimeFormat('en-GB', { timeZone, ...options });
+  cache.set(timeZone, made);
+  return made;
+}
+
 export function hourBucket(departAt: Date, timeZone: string): number {
-  const hour = new Intl.DateTimeFormat('en-GB', {
-    timeZone,
+  const hour = formatterFor(hourFormatters, timeZone, {
     hour: '2-digit',
     hour12: false,
   }).format(departAt);
@@ -151,7 +178,7 @@ export function hourBucket(departAt: Date, timeZone: string): number {
 
 /** Monday to Friday: the working week the practice keeps. */
 function isWorkingDay(departAt: Date, timeZone: string): boolean {
-  const day = new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short' }).format(departAt);
+  const day = formatterFor(weekdayFormatters, timeZone, { weekday: 'short' }).format(departAt);
   return day !== 'Sat' && day !== 'Sun';
 }
 
