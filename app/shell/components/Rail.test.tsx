@@ -11,7 +11,12 @@ describe('Rail', () => {
     const onSignOut = vi.fn();
     render(
       <MemoryRouter initialEntries={['/admin/clients']}>
-        <Rail person={{ name: 'Owner', roles: 'Owner' }} onSignOut={onSignOut} />
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={onSignOut}
+          open
+          onToggle={vi.fn()}
+        />
       </MemoryRouter>,
     );
     expect(screen.getByRole('link', { name: 'Clients' })).toHaveProperty(
@@ -39,5 +44,42 @@ describe('Rail', () => {
     expect(screen.getAllByText('Arriving')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers a control that says whether the sections are shown', () => {
+    const onToggle = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={onToggle}
+        />
+      </MemoryRouter>,
+    );
+    const control = screen.getByRole('button', { name: 'Sections' });
+    expect(control.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(control);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps every section reachable by name when it is closed', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open={false}
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Sections' }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+    expect(screen.getByRole('link', { name: 'Clients' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Billing' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
   });
 });

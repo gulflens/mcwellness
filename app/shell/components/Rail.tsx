@@ -7,6 +7,7 @@ import {
   ClientsIcon,
   KitIcon,
   PortalIcon,
+  RailIcon,
   ScheduleIcon,
   SessionsIcon,
   SettingsIcon,
@@ -53,33 +54,55 @@ export function Rail({
   sections = ADMIN_SECTIONS,
   person,
   onSignOut,
+  open,
+  onToggle,
 }: {
   sections?: readonly RailSection[];
   person: { name: string; roles: string };
   onSignOut: () => void;
+  /** Whether the labels are shown; closed, the rail is a strip of icons. */
+  open: boolean;
+  onToggle: () => void;
 }) {
   return (
     <nav className="rail" aria-label="Sections">
-      <div className="rail__mark">McWellness</div>
+      <div className="rail__head">
+        <div className="rail__mark rail__label">McWellness</div>
+        <button
+          type="button"
+          className="rail__toggle"
+          onClick={onToggle}
+          aria-expanded={open}
+          title="Sections"
+        >
+          <RailIcon />
+          <span className="visually-hidden">Sections</span>
+        </button>
+      </div>
       <ul className="rail__list">
         {sections.map((section) =>
           section.to ? (
             <li key={section.key}>
               <NavLink
                 to={section.to}
+                title={section.label}
                 className={({ isActive }) =>
                   isActive ? 'rail__item rail__item--active' : 'rail__item'
                 }
               >
                 {section.icon}
-                <span>{section.label}</span>
+                <span className="rail__label">{section.label}</span>
               </NavLink>
             </li>
           ) : (
             <li key={section.key}>
-              <span className="rail__item rail__item--later" aria-disabled="true">
+              <span
+                className="rail__item rail__item--later"
+                aria-disabled="true"
+                title={section.label}
+              >
                 {section.icon}
-                <span>{section.label}</span>
+                <span className="rail__label">{section.label}</span>
                 <span className="rail__later micro">Arriving</span>
               </span>
             </li>
@@ -87,11 +110,11 @@ export function Rail({
         )}
       </ul>
       <div className="rail__person">
-        <div className="rail__name">{person.name}</div>
-        <div className="micro">{person.roles}</div>
-        <button type="button" className="rail__signout" onClick={onSignOut}>
+        <div className="rail__name rail__label">{person.name}</div>
+        <div className="micro rail__label">{person.roles}</div>
+        <button type="button" className="rail__signout" onClick={onSignOut} title="Sign out">
           <SignOutIcon />
-          <span>Sign out</span>
+          <span className="rail__label">Sign out</span>
         </button>
       </div>
     </nav>

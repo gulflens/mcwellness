@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet } from 'react-router';
 import {
   canOpenAudit,
@@ -12,7 +13,13 @@ import {
 import type { Actor } from './auth/AuthContext';
 import { useAuth } from './auth/AuthContext';
 import { ADMIN_SECTIONS, Rail, type RailSection } from './components/Rail';
+import { readRail, writeRail } from './railState';
 import { describeRoles } from './routing';
+
+/** The browser's own store, where there is one; a test environment may have none. */
+function store(): Storage | undefined {
+  return typeof localStorage === 'undefined' ? undefined : localStorage;
+}
 
 /**
  * The sections this actor may open, in `ADMIN_SECTIONS`' own order. Reads
@@ -40,15 +47,27 @@ function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
 /** The ledger: rail on the inline start, content beside it. */
 export function AdminLayout({ actorName }: { actorName: string }) {
   const { session, signOut } = useAuth();
+  // Open on a desk, closed to icons on anything smaller, and whatever this
+  // person last chose beats both (docs/SPEC/responsive-console.md section 6).
+  const [railOpen, setRailOpen] = useState(() => readRail(store(), window.innerWidth));
+  const toggleRail = () => {
+    setRailOpen((wasOpen) => {
+      const open = !wasOpen;
+      writeRail(store(), open);
+      return open;
+    });
+  };
   const roles = session.status === 'signed-in' ? describeRoles(session.actor.roles) : '';
   const sections =
     session.status === 'signed-in' ? visibleSections(session.actor, new Date()) : ADMIN_SECTIONS;
   return (
-    <div className="admin">
+    <div className="admin" data-rail={railOpen ? 'open' : 'closed'}>
       <Rail
         person={{ name: actorName, roles }}
         sections={sections}
         onSignOut={() => void signOut()}
+        open={railOpen}
+        onToggle={toggleRail}
       />
       <main className="admin__main">
         <Outlet />
