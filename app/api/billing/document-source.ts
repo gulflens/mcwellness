@@ -1,8 +1,11 @@
-import type {
-  InvoiceDocument,
-  ReceiptDocument,
-  SupplierSnapshot,
+import {
+  readPng,
+  type DocumentImage,
+  type InvoiceDocument,
+  type ReceiptDocument,
+  type SupplierSnapshot,
 } from '../../../domain/billing/document';
+import type { StorageProvider } from '../../../domain/shared/storage';
 import type { Db } from '../_middleware/request-context';
 
 /**
@@ -229,4 +232,64 @@ export async function receiptDocument(
           : null,
     },
   };
+}
+
+/**
+ * The practice's own mark, ready to draw on a document it issues
+ * (docs/SPEC/billing.md section 5.6).
+ *
+ * **The row, not a file in this repository.** The logo is a `practice_logo`
+ * document the owner replaces from the settings screen (migration 909,
+ * `app/api/practice/logo.ts`, and the operator's decision of 3 September
+ * 2026), so this reads the one row the practice has and fetches its bytes
+ * through the storage seam.
+ *
+ * **It is the current mark and not a snapshot, deliberately.** Nothing about a
+ * document's own snapshot changes: the legal name, the address and the
+ * registrations still come off the invoice's own `supplier_*` columns, so the
+ * page keeps *saying* what it said. A logo is the practice's mark today, and
+ * re-rendering last year's invoice with this year's mark is the one drift a
+ * reader will neither notice nor be harmed by (section 5.6). The cost is
+ * named where it is paid: a document filed under an older mark can no longer
+ * be re-rendered to the bytes its row's sha256 holds, so the recovery path in
+ * `documents.ts` refuses to overwrite it and says so, exactly as it does for
+ * any other document whose source has moved.
+ *
+ * **Null is a real answer, four times over**: no logo filed, a row whose bytes
+ * are gone, a JPEG, or a PNG shape `readPng` will not embed (a palette, an
+ * alpha channel, an interlaced image). Each of those leaves the wordmark set
+ * in type at the top of the page, because a document must still render when
+ * the practice's mark cannot be drawn.
+ *
+ * An outage is **not** one of them. `storage.get` raises
+ * `StorageUnavailableError` when the store cannot be reached, and that is
+ * allowed through: filing an invoice is a once-only act, and a store that
+ * happened to be down for a second should not silently commit a permanent
+ * document with the practice's mark missing from it.
+ */
+const LOGO_SQL =
+  'select storage_key, mime_type from document where tenant_id = app.current_tenant_id() ' +
+  "and kind = 'practice_logo'";
+
+export async function practiceLogo(
+  db: Db,
+  storage: StorageProvider,
+): Promise<DocumentImage | null> {
+  const found = await db.query<{ storage_key: string; mime_type: string }>(LOGO_SQL);
+  const row = found.rows[0];
+  // A practice with no logo, which is every practice until somebody uploads
+  // one: the wordmark stands in its place.
+  if (!row || row.mime_type !== 'image/png') return null;
+
+  const bytes = await storage.get(row.storage_key);
+  if (!bytes) return null;
+  try {
+    return readPng(bytes);
+  } catch (error) {
+    // A shape this writer cannot embed. Never a reason to refuse the invoice:
+    // the page is rendered with the wordmark instead, and the fault is on the
+    // settings screen where the file was chosen.
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
 }
