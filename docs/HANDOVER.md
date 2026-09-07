@@ -1,11 +1,15 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 7 September at 20:10: the operator
+Written 4 September 2026, updated on 7 September at 20:30: the operator
 decided at 19:37 that **the console and the practitioner app are English
 only** — Arabic is for talking to clients, so the portal, the invoices, the
 reports, the consent wording and the messages the practice sends stay
 bilingual and the staff screens do not — and trunk round 35 carried that
-through the screens (section 10 step 7). Earlier the same day: **piece eleven,
+through the screens, reviewed and merged as pull request 114 (`main` at
+`9fc6cb5`, section 10 step 7). **The live process has not yet been rebuilt
+from it**: the fourth live pass was refused by the auto-mode classifier at
+20:25 and waits for the same recipe outside auto mode (`docs/PRODUCTION.md`,
+"the fourth live pass waits"). Earlier the same day: **piece eleven,
 the books' ledger, was planned, approved, built, reviewed, fixed, re-checked
 and merged in one day** (pull request 109, `main` at `dce3ca1`), and the
 fourteenth staging pass and the third live pass carry its six migrations to
@@ -702,17 +706,24 @@ nine and ten; see the records on pull requests 73 to 83).
    if a route ever bypassed `assertBalanced`. (d) Step 3's leftovers and
    `assessment-02.md` as before.
 
-7. **Trunk round 35, the console in English only, is built** (7 September,
-   19:53 to 20:10): the operator's decision of 19:37 removed every Arabic
+7. **Trunk round 35, the console in English only, is merged** (7 September,
+   19:53 to 20:20): the operator's decision of 19:37 removed every Arabic
    display and every Arabic input from `app/admin/**` and `app/therapist/**`,
    with no API, schema, policy, seed or data change, and
    `tests/lint/console-is-english.test.ts` keeps them out. The record is
    `docs/CHANGE-REQUESTS/trunk-notes.md`, round 35, and the brief is
-   `docs/superpowers/plans/2026-09-07-english-only-console.md`. Merged as
-   pull request 114. Two abilities are deliberately gone with
-   it: the practice's Arabic legal name and a package's Arabic name can no
-   longer be typed in the app, though both are still stored and still
-   printed.
+   `docs/superpowers/plans/2026-09-07-english-only-console.md`. Built by one
+   Opus run (about 0.20 million tokens), reviewed on Fable 5.1 (verdict
+   merge, four notes, about 0.15 million), both checks green, merged as
+   pull request 114 with its record on the pull request; `main` at
+   `9fc6cb5`. Two abilities are deliberately gone with it: the practice's
+   Arabic legal name and a package's Arabic name can no longer be typed in
+   the app, though both are still stored and still printed.
+   **The next act is the fourth live pass**: rebuild app.mcwellnessuae.com
+   from `main` at `9fc6cb5` by the recipe in `docs/PRODUCTION.md` (the third
+   live pass), which the auto-mode classifier refused at 20:25 at the upload
+   step; run it outside auto mode, then record the pass there. No migration
+   travels with it.
 
 ## 11. Where Claude's own memory lives
 
