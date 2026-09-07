@@ -1,6 +1,6 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 7 September at 18:55: **piece eleven,
+Written 4 September 2026, updated on 7 September at 19:15: **piece eleven,
 the books' ledger, was planned, approved, built, reviewed, fixed, re-checked
 and merged in one day** (pull request 109, `main` at `dce3ca1`), and the
 fourteenth staging pass and the third live pass carry its six migrations to
@@ -11,7 +11,9 @@ production, and the live process at app.mcwellnessuae.com was rebuilt from
 `main` at `e6d08ae` (`docs/PRODUCTION.md`, the second live pass). At 18:48,
 on the operator's word ("lets go live"), production received 450 to 454 and
 958 and the live process was rebuilt from `main` at `727310e`, so
-app.mcwellnessuae.com now carries Books (the third live pass). This file exists so that the next Claude session,
+app.mcwellnessuae.com now carries Books (the third live pass); at 19:07 the
+price list of 7 September was loaded into production's empty catalogue on the
+operator's instruction (`docs/PRODUCTION.md`, "the catalogue loaded"). This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -472,6 +474,15 @@ desktop app's own CI monitor will still tell a running session.
   holds into the journal; the books start on 7 September, the practice's first
   day, so nothing predates them. The nightly poster is not scheduled on
   Hostinger yet; the page's own posting covers it until a cron job is added.
+- **The price list is in.** On your instruction at 18:57 (the PDF, and your
+  four answers: the PDF's 15% figures, five service types, no certification
+  requirement for now, load now) production's empty catalogue received five
+  service types, five prices and the Silver, Gold and Platinum packages with
+  list and launch prices, in one audited data step at 19:07
+  (`docs/PRODUCTION.md`, "the catalogue loaded"; the script is
+  `~/Documents/mcwellness-catalogue-2026-09-07.sql`). Left to the founder in
+  the app: her practitioner row and credentials before the first assignment,
+  and the launch prices superseded when the launch ends.
 - **Two decisions the books need, neither urgent.** The day the books start
   defaults to the day the practice was created and can be changed in Books,
   Settings until the first entry is written; if the founder wants her books
@@ -666,7 +677,9 @@ nine and ten; see the records on pull requests 73 to 83).
    `docs/PRODUCTION.md`): Books is live.
 6. **Next, in order.** (a) Done at 18:48 on 7 September: the books' production
    pass and the rebuild of the live process from `main` at `727310e` (the
-   third live pass in `docs/PRODUCTION.md`). (b) **Piece twelve, spending and VAT**: the next planning act is a
+   third live pass in `docs/PRODUCTION.md`), and at 19:07 the price list of 7
+   September loaded into production's catalogue (same file, "the catalogue
+   loaded"). (b) **Piece twelve, spending and VAT**: the next planning act is a
    plain-language plan for the operator in `docs/PLAN/piece-twelve.md` and a
    spec, in the shape of piece eleven's, covering what
    `docs/SPEC/accounting.md` section 14 lists for it — suppliers, expenses
