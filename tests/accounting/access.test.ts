@@ -6,6 +6,7 @@ import {
   mayReadBooks,
   mayWriteBooks,
 } from '../../app/api/accounting/access';
+import { canOpenBooks } from '../../app/shell/adminAccess';
 
 /**
  * Every books permission against every role, pinned (docs/SPEC/accounting.md
@@ -52,6 +53,15 @@ describe('who may keep the books', () => {
       expect(mayChangeBooksSettings(actor, NOW)).toBe(expected.owner);
     });
   }
+
+  it('offers the Books rail entry to exactly the roles that may read them', () => {
+    // app/shell/adminAccess.ts's canOpenBooks matches `accounting.read`, which
+    // is what both the rail and the route ask (docs/CHANGE-REQUESTS/accounting-01.md
+    // item 4). Restated as a role list anywhere it would drift from the action.
+    for (const role of ROLES) {
+      expect(canOpenBooks(actorWith(role), NOW), role).toBe(TABLE[role].read);
+    }
+  });
 
   it('an admin who is also finance reads and posts through the finance role', () => {
     const actor = actorWith('admin', 'finance');

@@ -2,6 +2,7 @@ import { Outlet } from 'react-router';
 import {
   canOpenAudit,
   canOpenBilling,
+  canOpenBooks,
   canOpenKit,
   canOpenPortalAccess,
   canOpenSchedule,
@@ -25,6 +26,7 @@ import { describeRoles } from './routing';
 function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
   return ADMIN_SECTIONS.filter((section) => {
     if (section.key === 'billing') return canOpenBilling(actor, now);
+    if (section.key === 'books') return canOpenBooks(actor, now);
     if (section.key === 'schedule') return canOpenSchedule(actor, now);
     if (section.key === 'today') return canOpenToday(actor);
     if (section.key === 'settings') return canOpenSettings(actor, now);

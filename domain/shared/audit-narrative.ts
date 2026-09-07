@@ -128,6 +128,14 @@ const ENTITY: Record<string, Text> = {
   // through the report's own sentences, and "X added a report delivery" is
   // nobody's idea of a sentence — the `send` action below says it properly.
   report: t('report', 'التقرير'),
+  // The books (docs/SPEC/accounting.md section 11). Every one of these rows
+  // names no household, because no row in the books carries one; the sentences
+  // below say so by saying nothing about anybody.
+  journal_entry: t('journal entry', 'قيد اليومية'),
+  journal_line: t('journal line', 'سطر القيد'),
+  fiscal_year: t('financial year', 'السنة المالية'),
+  account: t('account', 'الحساب'),
+  accounting_setting: t("the books' settings", 'إعدادات الدفاتر'),
 };
 
 /** The two kinds a report can be (docs/SPEC/reports-v1.md section 1). */
@@ -484,6 +492,18 @@ function locationClauses(fields: string[], locale: Locale): string[] {
         );
     }
   });
+}
+
+/**
+ * A column that had nothing in it and now has something: how "closed",
+ * "reopened" and "archived" are told apart from any other amendment to the same
+ * row. A redacted value is still a value, so the test is emptiness and not
+ * equality.
+ */
+function newlySet(event: AuditEvent, field: string): boolean {
+  const before = event.oldValues?.[field];
+  const after = event.newValues?.[field];
+  return (before === null || before === undefined) && after !== null && after !== undefined;
 }
 
 function sentenceFor(event: AuditEvent, locale: Locale): string | null {
@@ -887,6 +907,65 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
       // they are opaque ids and the trail's own words, and a reader wants to
       // know that somebody read the trail, not which select box they used.
       return pick(t(`${actor} read the practice's trail`, `${actor} اطّلع على سجل المركز`), locale);
+    // ---------------------------------------------------------------------
+    // The books (docs/CHANGE-REQUESTS/accounting-01.md item 6). A journal row
+    // is written once and never edited, so there is an insert sentence and no
+    // update one; a year and the settings are amended, and the sentence says
+    // which amendment it was.
+    // ---------------------------------------------------------------------
+    case 'journal_entry.insert': {
+      const kind = event.newValues?.kind;
+      if (kind === 'reversal') {
+        return pick(t(`${actor} reversed a journal entry`, `${actor} عكس قيد يومية`), locale);
+      }
+      if (kind === 'opening') {
+        return pick(
+          t(`${actor} posted the opening balances`, `${actor} سجّل الأرصدة الافتتاحية`),
+          locale,
+        );
+      }
+      return pick(t(`${actor} posted a journal entry`, `${actor} سجّل قيد يومية`), locale);
+    }
+    case 'fiscal_year.insert':
+      return pick(t(`${actor} opened a financial year`, `${actor} فتح سنة مالية`), locale);
+    case 'fiscal_year.update': {
+      if (newlySet(event, 'closed_at')) {
+        return pick(t(`${actor} closed a financial year`, `${actor} أغلق سنة مالية`), locale);
+      }
+      if (newlySet(event, 'reopened_at')) {
+        return pick(t(`${actor} reopened a financial year`, `${actor} أعاد فتح سنة مالية`), locale);
+      }
+      return pick(t(`${actor} changed a financial year`, `${actor} غيّر سنة مالية`), locale);
+    }
+    case 'account.insert':
+      return pick(t(`${actor} added an account`, `${actor} أضاف حسابًا`), locale);
+    case 'account.update': {
+      if (newlySet(event, 'archived_at')) {
+        return pick(t(`${actor} archived an account`, `${actor} أرشف حسابًا`), locale);
+      }
+      return pick(t(`${actor} renamed an account`, `${actor} أعاد تسمية حساب`), locale);
+    }
+    case 'accounting_setting.update': {
+      // The lock date is its own sentence, and moving it back is its own
+      // again: a practice that files a corrected return needs the door, and an
+      // audit row saying which way it went is the price of it
+      // (docs/SPEC/accounting.md section 4.4, rule 14).
+      if (fields.includes('locked_through')) {
+        const before = event.oldValues?.locked_through;
+        const after = event.newValues?.locked_through;
+        const movedBack = typeof before === 'string' && typeof after === 'string' && after < before;
+        return movedBack
+          ? pick(t(`${actor} moved the books' lock back`, `${actor} أرجع قفل الدفاتر`), locale)
+          : pick(
+              t(`${actor} locked the books through a date`, `${actor} أقفل الدفاتر حتى تاريخ`),
+              locale,
+            );
+      }
+      return pick(
+        t(`${actor} changed the books settings`, `${actor} غيّر إعدادات الدفاتر`),
+        locale,
+      );
+    }
     case 'client.erase':
       // The act itself, written by app/api/clients/erasure.ts after
       // app.erase_client returns: everything the erasure touched is already

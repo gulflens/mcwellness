@@ -207,6 +207,8 @@ describe('the CSV twins', () => {
     expect(file.lines).toHaveLength(tb.rows.length + 2);
     expect(fields(file.lines[1]!)[0]).toBe(tb.rows[0]!.accountCode);
     expect(fields(file.lines[1]!)[1]).toBe(tb.rows[0]!.accountName);
+    // The type in the words a person reads, not the enum's own.
+    expect(fields(file.lines[1]!)[2]).toBe('Asset');
   });
 
   it('gives the other three statements as files too', async () => {

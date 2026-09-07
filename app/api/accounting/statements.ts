@@ -57,6 +57,23 @@ function yearOf(setting: Books['setting'], day: string): { startsOn: string; end
 
 const MONEY_HEADINGS = ['Account code', 'Account name', 'Type', 'Amount AED'] as const;
 
+/**
+ * The five types as a person reads them, because a file is opened by a person
+ * as often as by a spreadsheet: the enum's own `asset` would be this codebase
+ * talking to itself in a document somebody prints.
+ */
+const TYPE_WORDS: Record<string, string> = {
+  asset: 'Asset',
+  liability: 'Liability',
+  equity: 'Equity',
+  income: 'Income',
+  expense: 'Expense',
+};
+
+function typeWord(type: string): string {
+  return TYPE_WORDS[type] ?? type;
+}
+
 function statementRows(
   rows: readonly {
     accountCode: string;
@@ -68,7 +85,7 @@ function statementRows(
   return rows.map((row) => [
     row.accountCode,
     row.accountName,
-    row.accountType,
+    typeWord(row.accountType),
     filsToDecimal(row.balanceFils),
   ]);
 }
@@ -147,7 +164,7 @@ export function mountStatements(api: Hono<ApiEnv>, now: () => Date = () => new D
       ...statement.rows.map((row) => [
         row.accountCode,
         row.accountName,
-        row.accountType,
+        typeWord(row.accountType),
         filsToDecimal(row.debitFils),
         filsToDecimal(row.creditFils),
         filsToDecimal(row.balanceFils),
