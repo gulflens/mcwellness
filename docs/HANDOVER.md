@@ -809,7 +809,7 @@ nine and ten; see the records on pull requests 73 to 83).
    Optimise drawer, and a planning day of five visits in the seed. The
    shared-zone edits ride in the pull request and are listed in
    `docs/CHANGE-REQUESTS/scheduling-05.md`; five refinements the build learned
-   are marked in the specification itself. Pull request **PR_NUMBER**.
+   are marked in the specification itself. Pull request **121**.
 
    **Two console acts are still owed, and they are the integrator's rather
    than a builder's**, at piece seventeen's staging pass
