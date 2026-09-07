@@ -219,7 +219,9 @@ export function SellPackageDrawer({
             </div>
             <div className="price-preview__row">
               <span className="small muted">
-                {price ? `VAT (${price.vatRateBasisPoints / 100}%)` : 'VAT'}
+                {/* The percentage is the row's stamped rate; it is named only while
+                    something is charged at it (migration 406). */}
+                {price && price.vatFils > 0 ? `VAT (${price.vatRateBasisPoints / 100}%)` : 'VAT'}
               </span>
               <span className="numeric">{price ? formatFils(price.vatFils) : '—'}</span>
             </div>

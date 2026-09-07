@@ -122,7 +122,7 @@ describe('Practice settings — what it shows', () => {
     // number this is, and that recording a registration charges nothing.
     expect(screen.getByText('Corporate tax registration number')).toBeTruthy();
     expect(screen.getByText(/never printed as a VAT one/)).toBeTruthy();
-    expect(screen.getByText(/does not change what an invoice/)).toBeTruthy();
+    expect(screen.getByText(/carry no VAT and show one figure/)).toBeTruthy();
   });
 
   it('says nothing is recorded rather than showing a gap', async () => {

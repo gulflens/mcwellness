@@ -84,7 +84,7 @@ function mount(me: unknown, path = '/today/check-in') {
     if (url === '/api/me') return json(me);
     if (url === '/api/sessions/service-types') return json({ serviceTypes: [] });
     if (url.startsWith('/api/clients')) return json({ clients: [], note: null });
-    if (url === '/api/billing/prices') return json({ prices: [] });
+    if (url === '/api/billing/prices') return json({ prices: [], vatRegistered: false });
     if (url === '/api/practice') return json({ practice: PRACTICE });
     if (url.startsWith('/api/appointments')) return json({ appointments: [] });
     return json({ error: 'not_found', requestId: null }, 404);

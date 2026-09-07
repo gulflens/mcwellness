@@ -150,6 +150,15 @@ describe('SellPackageDrawer', () => {
     expect(screen.getByText('10,841.25')).toBeTruthy();
   });
 
+  it('names no rate while nothing is charged at it', () => {
+    // The stamped rate is the row's; the label says it only when the
+    // registration makes it a charge (migration 406).
+    mount();
+    expect(screen.getByText('10,325.00')).toBeTruthy();
+    expect(screen.getByText('VAT')).toBeTruthy();
+    expect(screen.queryByText('VAT (5%)')).toBeNull();
+  });
+
   it("sends the API's gross as the payment: what the family actually hands over", async () => {
     // The practice is not registered for VAT, so the gross is the net and the
     // payment matches the invoice the same request creates. While the
