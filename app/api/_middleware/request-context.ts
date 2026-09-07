@@ -71,6 +71,13 @@ export type ApiEnv = {
     identityKeys: IdentityKeys | undefined;
     storage: ServerStorageProvider | undefined;
     routing: RoutingProvider | undefined;
+    /**
+     * The content security policy nonce this response was minted with, on the
+     * one document that loads a third-party map (docs/SPEC/route-planning.md
+     * section 8). Undefined on every other response, which is every other
+     * response's answer: they carry the strict policy and stamp nothing.
+     */
+    cspNonce: string | undefined;
   };
 };
 

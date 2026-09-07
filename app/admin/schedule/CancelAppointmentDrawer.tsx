@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import {
   REASONS_NEEDING_THE_HOUSEHOLD_TOLD,
   cancellationStatusFor,
@@ -20,6 +19,7 @@ import { callOutFeeFor, formatFils } from '../billing/money';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
+import { BoundaryLink } from './map/documentBoundary';
 import { dayOf, formatDay, formatWindow } from './windows';
 
 /**
@@ -367,9 +367,16 @@ export function CancelAppointmentDrawer({
                     {waiver.kind === 'saving' ? 'Waiving it…' : 'Waive the fee'}
                   </Button>
                 ) : null}
-                <Link className="button button--secondary" to="/admin/billing">
+                {/* A `BoundaryLink`, not a `Link`: this drawer is opened from
+                    the day map as well as from the Schedule, and the map is a
+                    document served with a wider content security policy that
+                    no other screen of the practice may be rendered inside
+                    (app/admin/schedule/map/documentBoundary.tsx). There it is a
+                    plain anchor and the browser loads Billing afresh; here it
+                    stays the client-side link it always was. */}
+                <BoundaryLink className="button button--secondary" to="/admin/billing">
                   Open Billing
-                </Link>
+                </BoundaryLink>
                 <Button variant="quiet" onClick={onClose}>
                   Close
                 </Button>

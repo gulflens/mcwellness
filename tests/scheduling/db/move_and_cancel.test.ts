@@ -1,5 +1,5 @@
 import { SignJWT } from 'jose';
-import type pg from 'pg';
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPool } from '@app/api/_middleware/db';
 import { createTokenVerifier } from '@app/api/_middleware/token-verifier';
@@ -106,6 +106,10 @@ const APPT_CONFIRM_REFUSED = '00000000-0000-4000-8000-000000006129';
 // honestly be given about it at all.
 const APPT_UNTOLD_LATE = '00000000-0000-4000-8000-000000006130';
 const APPT_UNTOLD_REASON = '00000000-0000-4000-8000-000000006131';
+/** The visit whose move loses a race to a booking committed mid-request. */
+const APPT_RACE = '00000000-0000-4000-8000-000000006132';
+/** The booking that wins that race, written from a second connection. */
+const APPT_RACE_RIVAL = '00000000-0000-4000-8000-000000006133';
 const CLIENT_NO_CREDIT = '00000000-0000-4000-8000-000000006120';
 const CONTACT_NO_CREDIT = '00000000-0000-4000-8000-000000006121';
 const LOCATION_NO_CREDIT = '00000000-0000-4000-8000-000000006122';
@@ -343,6 +347,7 @@ beforeAll(async () => {
   // transaction opens: the API runs on its own connection and would not see a
   // row written inside it.
   await seedAppointment(APPT_MOVE_OK, { clientId: IDS.clientA, windowStart: hoursFromNow(72) });
+  await seedAppointment(APPT_RACE, { clientId: IDS.clientA, windowStart: hoursFromNow(800) });
   await seedAppointment(APPT_MOVE_CLASH, { clientId: IDS.clientA, windowStart: hoursFromNow(96) });
   await seedAppointment(APPT_BLOCKING_THE_CLASH, {
     clientId: IDS.clientB,
@@ -532,6 +537,79 @@ describe('POST /api/appointments/:id/move', () => {
     // And nothing moved: a refused move leaves both rows exactly as they were.
     expect((await statusOf(APPT_MOVE_CLASH)).status).toBe('confirmed');
     expect((await statusOf(APPT_BLOCKING_THE_CLASH)).status).toBe('confirmed');
+  });
+
+  it('answers a slot taken while the move was in flight with its own 409, not an internal error', async () => {
+    /**
+     * The one refusal this route has never delivered (the review of the day
+     * map's pull request, finding S3, a defect older than that piece).
+     *
+     * A booking committed between the conflict read and the insert is caught
+     * by the exclusion constraint as `23P01`, which aborts the Postgres
+     * transaction. The route *returned* its 409 body, and
+     * `withRequestContext`'s guard for exactly that case then found the
+     * transaction unusable and replaced the answer with `{"error":"internal"}`
+     * 500. The data was always safe; what the coordinator read was an internal
+     * error instead of "that slot is taken". Raised rather than returned, the
+     * body survives the rollback.
+     *
+     * The race is arranged honestly and not simulated. A second connection
+     * inserts the rival booking and holds its transaction open: read committed
+     * hides an uncommitted row, so this move's own reads and `checkConflicts`
+     * pass, and its insert then blocks on the exclusion index until that
+     * transaction commits — at which point it is refused. The two paths are
+     * told apart by `conflictsWithAppointmentId`, which `checkConflicts` fills
+     * in and the constraint cannot.
+     */
+    const target = hoursFromNow(820);
+    const rival = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await rival.connect();
+    let pending: Promise<Response> | null = null;
+    try {
+      await rival.query('begin');
+      await rival.query(
+        'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+          'location_id, delivery_mode, window_start, window_end, status, created_by) ' +
+          "values ($1, $2, $3, $4, $5, $6, 'home', $7, $8, 'confirmed', $9)",
+        [
+          APPT_RACE_RIVAL,
+          IDS.tenantA,
+          CLIENT_NO_CREDIT,
+          MORE_IDS.practitionerA,
+          MORE_IDS.serviceTypeA,
+          LOCATION_NO_CREDIT,
+          target,
+          new Date(target.getTime() + 45 * 60_000),
+          IDS.ownerA,
+        ],
+      );
+      pending = call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_RACE}/move`, {
+        windowStart: target.toISOString(),
+      });
+      // Long enough for the request to finish its reads and block on the
+      // index, and far inside both the ten-second request budget and the
+      // API role's ten-second statement timeout.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await rival.query('commit');
+      const res = await pending;
+      pending = null;
+      expect(res.status).toBe(409);
+      const body = (await res.json()) as ConflictResponse;
+      expect(body.error).toBe('conflict');
+      expect(body.issues.map((issue) => issue.code)).toContain('practitioner_overlap');
+      // Null, and not the rival's id: this refusal came from the constraint at
+      // write time, which is the path that used to answer 500.
+      expect(body.issues[0]?.conflictsWithAppointmentId).toBeNull();
+      // And nothing is left half-done: the visit still stands where it was.
+      expect((await statusOf(APPT_RACE)).status).toBe('confirmed');
+    } finally {
+      await pending;
+      // The rival really committed, so the ambient rollback the rest of this
+      // file leans on will not sweep it away. Taken back on its own
+      // connection, which commits at once and holds no lock anybody waits on.
+      await rival.query('delete from appointment where id = $1', [APPT_RACE_RIVAL]);
+      await rival.end();
+    }
   });
 
   it('lets a visit be moved a second time, as a chain and not as two claims on one row', async () => {

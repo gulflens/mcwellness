@@ -33,3 +33,23 @@ export { PRACTICE_TIME_ZONE, currentStopIndex, practiceDate, stopPhases } from '
 export type { DayStop, StopPhase } from './day';
 export { directionsUrl, navigationTarget } from './navigation';
 export type { GeoPoint, NavigableLocation } from './navigation';
+export { ceilToQuarterHour } from './grid';
+export {
+  BUFFER_ALLOWANCE_MINUTES,
+  MAX_TRAVEL_BUFFER_MINUTES,
+  MIN_TRAVEL_BUFFER_MINUTES,
+  travelBufferFor,
+} from './buffer';
+export { MAX_PLAN_STOPS, MOVABLE_LEAD_MS, isMovable, optimiseDay } from './optimise';
+export type {
+  DayInput,
+  DayPlan,
+  Matrix,
+  PlanBase,
+  PlanRefusal,
+  PlanRefusalReason,
+  PlanSource,
+  PlanStop,
+  PlannedStop,
+  Totals,
+} from './optimise';

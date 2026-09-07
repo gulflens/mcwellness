@@ -65,6 +65,7 @@ at the first check.
 | `VITE_SUPABASE_URL` | the same address | The same thing, for the screens. These two must name the same project |
 | `SUPABASE_JWKS_URL` | that address followed by `/auth/v1/.well-known/jwks.json` | The public list of keys the API checks a sign-in against. Public by design: it proves who signed a token and unlocks nothing |
 | `VITE_SUPABASE_ANON_KEY` | the project's publishable key | The sign-in key the browser holds. Also public by design — it is in the screens anyone can view — and it is **never** the service key of steps 2 and 3 |
+| `VITE_GOOGLE_MAPS_BROWSER_KEY` | the browser map key | The key the day map's own screen holds, so the coordinator sees the day drawn. Public by design like the one above, and restricted to one Google product and to this address — see step 6b. Leave it out and everything still works except the picture |
 
 If a name is missing or a value differs, note it and ask; do not invent one.
 
@@ -210,6 +211,32 @@ Paste it as `GOOGLE_MAPS_API_KEY`.
 The day's screen then estimates in straight lines and says so on the screen.
 Nothing else is affected, and this is the one item here that can be finished
 next week (`docs/OPERATOR/2026-09-06-decisions.md` section 1.8).
+
+### Step 6b — `VITE_GOOGLE_MAPS_BROWSER_KEY`
+
+**Where it comes from.** The same Google Cloud console page as step 6, but a
+**different key**: the one named **McWellness browser map key**. It is the key
+the old phone app used, renamed and re-restricted for this purpose. It is
+**not** the key from step 6, and the two are never swapped: step 6's is a
+server key that never leaves the machine, and this one is meant to be read by
+anybody who opens the page.
+
+**Why that is safe.** This key is restricted twice over: to one Google product
+(the map that draws in a browser), and to this practice's own web address. A
+copy of it lifted off the page works nowhere else.
+
+**What it is for.** The coordinator's day map — the screen that shows a day's
+visits as pins on a map of the emirates, with the drive between them.
+
+**How it is set.** This one goes in with the **build settings**, not with the
+running process: it is baked into the screens when the app is built, exactly
+as `VITE_SUPABASE_ANON_KEY` is. Pasting it into the running process alone
+changes nothing until the next build.
+
+**If that key does not exist yet**, leave it out. The day map still lists the
+day, still shows the drive between each stop, and still offers "Optimise the
+day"; the screen says "The map needs the practice's browser key" where the
+picture would be. Nothing else is affected.
 
 ### Step 7 — `GOOGLE_MAPS_SIGNING_SECRET`, only if it exists
 

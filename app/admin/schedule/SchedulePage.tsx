@@ -305,6 +305,13 @@ export function SchedulePage() {
         <Link className="link schedule__week-link" to={`/admin/schedule/week?date=${date}`}>
           See the week
         </Link>
+        {/* A plain anchor, not a Link: the map is served as its own document
+            with the policy a browser map needs (docs/SPEC/route-planning.md
+            section 4.1), and a client-side navigation would carry this
+            screen's stricter policy into it. */}
+        <a className="link schedule__week-link" href={`/admin/schedule/map?date=${date}`}>
+          Open the day map
+        </a>
         {canEditPolicy ? (
           <Button
             variant="quiet"

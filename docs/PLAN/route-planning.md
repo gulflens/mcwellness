@@ -139,8 +139,12 @@ min", with a button to take it. It never chooses for her.
   recorded on the live system; Claude writes it by an audited data step, as
   the price list was loaded on 7 September. A field on the Practice page is a
   small later addition.
-- More than ten stops in one day. The practice does at most six; beyond ten
-  the button says the day is too long to optimise.
+- More than eight stops in one day. The practice does at most six; beyond
+  eight the button says the day is too long to optimise. Eight and not ten
+  because the search that finds the best order has to finish while somebody is
+  sitting there waiting for it: each extra stop multiplies the number of
+  orders to try, so eight is under a second and ten would hold the whole
+  system up for minutes (measured while this piece was reviewed, 8 September).
 - Several vehicles, several practitioners sharing a day, recurring bookings,
   Ramadan traffic tables.
 

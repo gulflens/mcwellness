@@ -404,3 +404,52 @@ export const UpdateSchedulingSettingsRequest = z
     'Change at least one of the two figures.',
   );
 export type UpdateSchedulingSettingsRequest = z.infer<typeof UpdateSchedulingSettingsRequest>;
+
+/**
+ * Applying an optimised day (docs/SPEC/route-planning.md section 5.7). One
+ * request, several moves, one transaction: every old row is retired before
+ * any new slot is taken, so an order that swaps two visits is not refused by
+ * the exclusion constraints for clashing with itself.
+ *
+ * `wasWindowStart` is the window the plan was computed against. A row whose
+ * window has moved since — or which is no longer `proposed` — refuses the
+ * whole request as `stale_plan`, rather than applying half a plan to a day
+ * that has changed underneath it.
+ */
+export const ReorderRequest = z.object({
+  date: z.iso.date(),
+  practitionerId: z.uuid(),
+  moves: z
+    .array(
+      z.object({
+        appointmentId: z.uuid(),
+        windowStart: z.iso.datetime(),
+        wasWindowStart: z.iso.datetime(),
+        travelBufferMinutes: z.number().int().min(15).max(90),
+      }),
+    )
+    .min(1)
+    .max(10),
+});
+export type ReorderRequest = z.infer<typeof ReorderRequest>;
+
+export const ReorderResponse = z.object({
+  /** The visits that now stand, in the order they were asked for. */
+  appointments: z.array(AppointmentRow),
+  /** What each replaced, so the screen can say what moved from where. */
+  movedFrom: z.array(z.object({ id: z.uuid(), windowStart: z.iso.datetime() })),
+});
+export type ReorderResponse = z.infer<typeof ReorderResponse>;
+
+/** Why a reorder was refused before anything was written. */
+export const REORDER_ACTION_CODES = [
+  'invalid_request',
+  'reason_required',
+  'appointment_not_found',
+  'appointment_settled',
+  'session_open',
+  // The day moved while the plan was on screen: a window, a status or a
+  // session is no longer what the plan was computed against.
+  'stale_plan',
+] as const;
+export type ReorderActionCode = (typeof REORDER_ACTION_CODES)[number];

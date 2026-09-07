@@ -53,6 +53,18 @@ export type RoutingProvider = {
    * not code" true without the seam reading a table.
    */
   driveMatrix(legs: readonly DriveLeg[], factors: DriveFactors): Promise<DriveEstimate[]>;
+  /**
+   * Every origin to every destination, all leaving at one instant: rows in
+   * origin order, columns in destination order. At most `GRID_MAX_ELEMENTS`
+   * elements — the vendor's ceiling on one call — and refused above it
+   * before anything is sent (docs/SPEC/route-planning.md section 7).
+   */
+  driveGrid(
+    origins: readonly GeoPoint[],
+    destinations: readonly GeoPoint[],
+    departAt: Date,
+    factors: DriveFactors,
+  ): Promise<DriveEstimate[][]>;
   /** A PNG of the day's stops in order, or null when this implementation draws none. */
   dayPicture(points: readonly GeoPoint[]): Promise<Uint8Array | null>;
 };
@@ -127,9 +139,36 @@ export function haversineMetres(from: GeoPoint, to: GeoPoint): number {
  * Read in the given zone and never the server's: a laptop set to London would
  * otherwise file the school run under four in the morning.
  */
+/**
+ * One formatter per zone, held for the life of the process.
+ *
+ * Building an `Intl.DateTimeFormat` costs about thirty-five microseconds and
+ * using one costs almost nothing, and the two readings below are made
+ * millions of times inside a single `optimiseDay` search — `hourBucket` once
+ * per leg per walk, `isWorkingDay` once per straight-line estimate. Built
+ * afresh each time, that alone was most of the eight and a half seconds a
+ * full day of eight stops spent blocking the event loop (the review of the
+ * day map's pull request, finding B1). A formatter is immutable and its
+ * answer depends only on the zone and the instant, so holding one per zone
+ * changes no figure; the zones a practice ever asks about are one or two.
+ */
+const hourFormatters = new Map<string, Intl.DateTimeFormat>();
+const weekdayFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function formatterFor(
+  cache: Map<string, Intl.DateTimeFormat>,
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const held = cache.get(timeZone);
+  if (held !== undefined) return held;
+  const made = new Intl.DateTimeFormat('en-GB', { timeZone, ...options });
+  cache.set(timeZone, made);
+  return made;
+}
+
 export function hourBucket(departAt: Date, timeZone: string): number {
-  const hour = new Intl.DateTimeFormat('en-GB', {
-    timeZone,
+  const hour = formatterFor(hourFormatters, timeZone, {
     hour: '2-digit',
     hour12: false,
   }).format(departAt);
@@ -139,7 +178,7 @@ export function hourBucket(departAt: Date, timeZone: string): number {
 
 /** Monday to Friday: the working week the practice keeps. */
 function isWorkingDay(departAt: Date, timeZone: string): boolean {
-  const day = new Intl.DateTimeFormat('en-GB', { timeZone, weekday: 'short' }).format(departAt);
+  const day = formatterFor(weekdayFormatters, timeZone, { weekday: 'short' }).format(departAt);
   return day !== 'Sat' && day !== 'Sun';
 }
 
@@ -190,6 +229,28 @@ export function straightLineMatrix(
     ...straightLineSeconds(leg.from, leg.to, leg.departAt, factors, timeZone),
     source: 'straight-line' as const,
   }));
+}
+
+/** Google's own ceiling on one compute-route-matrix call: origins times destinations. */
+export const GRID_MAX_ELEMENTS = 625;
+
+/**
+ * The fallback's grid: the same arithmetic as `straightLineMatrix`, for every
+ * pair. The diagonal is a drive of no distance, which is an honest zero.
+ */
+export function straightLineGrid(
+  origins: readonly GeoPoint[],
+  destinations: readonly GeoPoint[],
+  departAt: Date,
+  factors: DriveFactors,
+  timeZone: string,
+): DriveEstimate[][] {
+  return origins.map((from) =>
+    destinations.map((to) => ({
+      ...straightLineSeconds(from, to, departAt, factors, timeZone),
+      source: 'straight-line' as const,
+    })),
+  );
 }
 
 /**

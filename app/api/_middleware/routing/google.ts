@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import {
+  GRID_MAX_ELEMENTS,
   RoutingUnavailableError,
   type DriveEstimate,
   type DriveLeg,
@@ -146,6 +147,48 @@ export function googleRouting(options: GoogleRoutingOptions): RoutingProvider {
     return response;
   }
 
+  /** One compute-route-matrix call: the body in, the vendor's elements out, everything else an outage. */
+  async function askMatrix(body: unknown): Promise<MatrixElement[]> {
+    const response = await call(ROUTE_MATRIX_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-goog-api-key': options.apiKey,
+        // Ask for the fields that are used and no others: a field mask is what
+        // stops a vendor answering with more than was wanted.
+        'x-goog-fieldmask': 'originIndex,destinationIndex,duration,distanceMeters,condition',
+      },
+      body: JSON.stringify(body),
+    });
+    let elements: unknown;
+    try {
+      elements = await response.json();
+    } catch (cause) {
+      throw new RoutingUnavailableError('The routing vendor answered something else.', { cause });
+    }
+    if (!Array.isArray(elements)) {
+      throw new RoutingUnavailableError('The routing vendor answered something else.');
+    }
+    return elements as MatrixElement[];
+  }
+
+  function waypoint(point: GeoPoint) {
+    return { waypoint: { location: { latLng: { latitude: point.lat, longitude: point.lng } } } };
+  }
+
+  /** The vendor's answer for one cell, or an outage: a figure is never invented. */
+  function estimateOf(element: MatrixElement | undefined): DriveEstimate {
+    const seconds = secondsFrom(element?.duration);
+    if (seconds === null || element?.condition === 'ROUTE_NOT_FOUND') {
+      throw new RoutingUnavailableError('The routing vendor found no route between two places.');
+    }
+    return {
+      seconds,
+      metres: Math.max(0, Math.round(element?.distanceMeters ?? 0)),
+      source: 'traffic',
+    };
+  }
+
   return {
     kind: 'google',
     describe: () =>
@@ -174,38 +217,15 @@ export function googleRouting(options: GoogleRoutingOptions): RoutingProvider {
       const inFuture = departAt !== undefined && departAt.getTime() > now().getTime();
       const body = {
         origins: legs.map((leg) => ({
-          waypoint: { location: { latLng: { latitude: leg.from.lat, longitude: leg.from.lng } } },
+          ...waypoint(leg.from),
           routeModifiers: { avoidFerries: true },
         })),
-        destinations: legs.map((leg) => ({
-          waypoint: { location: { latLng: { latitude: leg.to.lat, longitude: leg.to.lng } } },
-        })),
+        destinations: legs.map((leg) => waypoint(leg.to)),
         travelMode: 'DRIVE',
         routingPreference: 'TRAFFIC_AWARE',
         ...(inFuture && departAt ? { departureTime: departAt.toISOString() } : {}),
       };
-      const response = await call(ROUTE_MATRIX_URL, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-goog-api-key': options.apiKey,
-          // Ask for the three fields that are used and no others: a field mask
-          // is what stops a vendor answering with more than was wanted.
-          'x-goog-fieldmask': 'originIndex,destinationIndex,duration,distanceMeters,condition',
-        },
-        body: JSON.stringify(body),
-      });
-      let elements: MatrixElement[];
-      try {
-        elements = (await response.json()) as MatrixElement[];
-      } catch (cause) {
-        throw new RoutingUnavailableError('The routing vendor answered something else.', {
-          cause,
-        });
-      }
-      if (!Array.isArray(elements)) {
-        throw new RoutingUnavailableError('The routing vendor answered something else.');
-      }
+      const elements = await askMatrix(body);
       // The matrix answers out of order and answers every pair; only the
       // diagonal is this call's business.
       const answers = new Map<number, MatrixElement>();
@@ -214,18 +234,34 @@ export function googleRouting(options: GoogleRoutingOptions): RoutingProvider {
           answers.set(element.originIndex, element);
         }
       }
-      return legs.map((_, index) => {
-        const element = answers.get(index);
-        const seconds = secondsFrom(element?.duration);
-        if (seconds === null || element?.condition === 'ROUTE_NOT_FOUND') {
-          throw new RoutingUnavailableError('The routing vendor found no route for a stop.');
+      return legs.map((_, index) => estimateOf(answers.get(index)));
+    },
+
+    async driveGrid(origins, destinations, departAt): Promise<DriveEstimate[][]> {
+      if (origins.length === 0 || destinations.length === 0) return origins.map(() => []);
+      if (origins.length * destinations.length > GRID_MAX_ELEMENTS) {
+        throw new RoutingUnavailableError('That is more places than one grid can hold.');
+      }
+      const inFuture = departAt.getTime() > now().getTime();
+      const body = {
+        origins: origins.map((point) => ({
+          ...waypoint(point),
+          routeModifiers: { avoidFerries: true },
+        })),
+        destinations: destinations.map(waypoint),
+        travelMode: 'DRIVE',
+        routingPreference: 'TRAFFIC_AWARE',
+        ...(inFuture ? { departureTime: departAt.toISOString() } : {}),
+      };
+      const elements = await askMatrix(body);
+      // Every cell, by both indexes: the vendor answers in any order.
+      const cells = new Map<string, MatrixElement>();
+      for (const element of elements) {
+        if (element.originIndex !== undefined && element.destinationIndex !== undefined) {
+          cells.set(`${element.originIndex}:${element.destinationIndex}`, element);
         }
-        return {
-          seconds,
-          metres: Math.max(0, Math.round(element?.distanceMeters ?? 0)),
-          source: 'traffic',
-        };
-      });
+      }
+      return origins.map((_, i) => destinations.map((__, j) => estimateOf(cells.get(`${i}:${j}`))));
     },
 
     async dayPicture(points: readonly GeoPoint[]): Promise<Uint8Array | null> {

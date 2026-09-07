@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_PEAK_MULTIPLIER,
   DEFAULT_ROAD_FACTOR,
+  GRID_MAX_ELEMENTS,
   dayFingerprint,
   haversineMetres,
   hourBucket,
   isPeakHour,
+  straightLineGrid,
   straightLineMatrix,
   straightLineSeconds,
 } from './routing';
@@ -88,6 +90,51 @@ describe('isPeakHour', () => {
   });
 });
 
+/**
+ * The two readings above are made millions of times inside one optimiser
+ * search — `hourBucket` once per leg per walk, `isPeakHour` once per
+ * straight-line estimate — and building an `Intl.DateTimeFormat` costs about
+ * thirty-five microseconds apiece. Built afresh each time, that alone put
+ * eight movable stops past eight seconds of a blocked event loop (the review
+ * of the day map's pull request, finding B1).
+ *
+ * These are guards and not measurements: fifty thousand readings took about
+ * 1.8 and 3.1 seconds with the formatters built per call, and a few
+ * milliseconds with one held per zone. Half a second is far enough below the
+ * first and far enough above the second to mean only one thing.
+ */
+describe('the cost of reading a clock', () => {
+  it('reads fifty thousand hours without building fifty thousand formatters', () => {
+    const started = performance.now();
+    for (let i = 0; i < 50_000; i++) hourBucket(MONDAY_0800, ZONE);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it('judges fifty thousand peaks without building a hundred thousand formatters', () => {
+    const started = performance.now();
+    for (let i = 0; i < 50_000; i++) isPeakHour(MONDAY_0800, ZONE);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it('holds one formatter per zone, so two zones never answer for each other', () => {
+    // Interleaved deliberately: a single cached formatter, or one keyed by
+    // nothing, would give the second zone the first zone's hour.
+    for (let i = 0; i < 3; i++) {
+      expect(hourBucket(MONDAY_0800, ZONE)).toBe(8);
+      expect(hourBucket(MONDAY_0800, 'UTC')).toBe(4);
+      expect(hourBucket(MONDAY_0800, 'Europe/London')).toBe(5);
+    }
+    // The weekday reading behind isPeakHour is cached the same way, and the
+    // same instant is peak in one zone and not in another: 08:00 in Dubai is
+    // the morning peak, and the same moment is 04:00 in UTC, which is not.
+    for (let i = 0; i < 3; i++) {
+      expect(isPeakHour(SATURDAY_0800, ZONE)).toBe(false);
+      expect(isPeakHour(MONDAY_0800, ZONE)).toBe(true);
+      expect(isPeakHour(MONDAY_0800, 'UTC')).toBe(false);
+    }
+  });
+});
+
 describe('straightLineSeconds', () => {
   it('turns the straight line into road metres with the road factor', () => {
     const { metres } = straightLineSeconds(DUBAI, ABU_DHABI, MONDAY_1300, FACTORS, ZONE);
@@ -162,5 +209,29 @@ describe('dayFingerprint', () => {
 
   it('names an empty day rather than answering an empty string', () => {
     expect(dayFingerprint([])).toBe('empty');
+  });
+});
+
+describe('straightLineGrid', () => {
+  it('answers every origin to every destination, zero on the diagonal, labelled straight-line', () => {
+    const grid = straightLineGrid(
+      [DUBAI, ABU_DHABI],
+      [DUBAI, ABU_DHABI],
+      MONDAY_1300,
+      FACTORS,
+      ZONE,
+    );
+    expect(grid).toHaveLength(2);
+    expect(grid[0]).toHaveLength(2);
+    expect(grid[0]?.[0]).toEqual({ seconds: 0, metres: 0, source: 'straight-line' });
+    expect(grid[1]?.[1]).toEqual({ seconds: 0, metres: 0, source: 'straight-line' });
+    // Symmetric off the diagonal: the straight line has no direction.
+    expect(grid[0]?.[1]).toEqual(grid[1]?.[0]);
+    expect(grid[0]?.[1]?.seconds).toBeGreaterThan(0);
+    expect(grid[0]?.[1]?.source).toBe('straight-line');
+  });
+
+  it('names the vendor ceiling on one call', () => {
+    expect(GRID_MAX_ELEMENTS).toBe(625);
   });
 });

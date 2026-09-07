@@ -78,6 +78,7 @@ export type Action =
   | { type: 'kit.manage' }
   | { type: 'kit.read'; assignedToSelf: boolean }
   | { type: 'routing.day.read'; scope: 'own' }
+  | { type: 'routing.practiceDay.read' }
   | { type: 'assessment.read' }
   | { type: 'assessment.record' }
   | { type: 'assessment.file' };
@@ -352,6 +353,12 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
         action.scope === 'own' &&
         hasRole(actor, 'owner', 'admin', 'lead_practitioner', 'practitioner')
       );
+    case 'routing.practiceDay.read':
+      // The whole practice's day on a map, and the plan that reorders it
+      // (docs/SPEC/route-planning.md section 6). The calendar's own three
+      // roles, exactly as `appointment.list` with scope 'practice': the map
+      // shows the day the schedule already shows, drawn instead of listed.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'assessment.read':
       // A measurement and the files behind it (docs/SPEC/assessment.md
       // sections 4 and 7). The practice's three oversight roles, and a

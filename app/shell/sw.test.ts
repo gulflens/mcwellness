@@ -214,6 +214,58 @@ describe('rule 1: a navigation falls back to the cached shell', () => {
   });
 });
 
+describe('rule 1, continued: the day map never becomes the offline shell', () => {
+  /**
+   * The day map is served with a wider content security policy than the rest
+   * of the console, because a browser map needs it (docs/SECURITY.md,
+   * docs/SPEC/route-planning.md section 8). The shell cache is keyed on `/`
+   * alone, so whatever document was last fetched successfully is what every
+   * offline navigation is answered with — and one visit to the map would
+   * otherwise make that widened document the shell for Clients, for the
+   * practitioner's Today, for everything (the re-check of pull request 121).
+   */
+  it('leaves the shell as it was when the map is opened online', async () => {
+    const map = new Request(`${ORIGIN}/admin/schedule/map?date=2026-09-10`);
+    Object.defineProperty(map, 'mode', { value: 'navigate' });
+    const answer = await handleFetch(map);
+    // The person still gets their map: only the cache is left alone.
+    expect(await (answer as Response).text()).toBe(
+      `live ${ORIGIN}/admin/schedule/map?date=2026-09-10`,
+    );
+    const shell = caches.get('mcwellness-shell-v1')?.entries.get(`${ORIGIN}/`);
+    expect(await (shell as Response).text()).toBe('the shell');
+  });
+
+  it('still keeps the last console document a device saw as its shell', async () => {
+    const clients = new Request(`${ORIGIN}/admin/clients`);
+    Object.defineProperty(clients, 'mode', { value: 'navigate' });
+    await handleFetch(clients);
+    const shell = caches.get('mcwellness-shell-v1')?.entries.get(`${ORIGIN}/`);
+    expect(await (shell as Response).text()).toBe(`live ${ORIGIN}/admin/clients`);
+  });
+
+  it('recognises the map however the address was written', async () => {
+    // The API decodes the path before it decides which policy to serve, so
+    // `/admin/schedule/%6dap` is served widened too (the near misses pinned in
+    // tests/security/headers.test.ts). The worker decodes for the same reason.
+    const map = new Request(`${ORIGIN}/admin/schedule/%6dap`);
+    Object.defineProperty(map, 'mode', { value: 'navigate' });
+    await handleFetch(map);
+    const shell = caches.get('mcwellness-shell-v1')?.entries.get(`${ORIGIN}/`);
+    expect(await (shell as Response).text()).toBe('the shell');
+  });
+
+  it('still answers the map from the shell when there is no signal, rather than nothing', async () => {
+    // Offline the map cannot draw anyway and the page says so; what matters
+    // is that the app opens at all.
+    const map = new Request(`${ORIGIN}/admin/schedule/map`);
+    Object.defineProperty(map, 'mode', { value: 'navigate' });
+    fetchImpl.mockRejectedValueOnce(new Error('offline'));
+    const answer = await handleFetch(map);
+    expect(await (answer as Response).text()).toBe('the shell');
+  });
+});
+
 describe('rule 3: the named reads keep their last good answer', () => {
   it('keeps one entry per query string, so two dates are two answers', async () => {
     await handleFetch(day());

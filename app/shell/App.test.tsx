@@ -35,6 +35,14 @@ const ADMIN = {
   capabilities: [],
 };
 
+const OWNER = {
+  userId: '00000002-0000-4000-8000-000000000013',
+  displayName: 'Marlow Bay',
+  tenantId: TENANT_ID,
+  roles: ['owner'],
+  capabilities: [],
+};
+
 const FINANCE = {
   userId: '00000002-0000-4000-8000-000000000012',
   displayName: 'Priya Nair',
@@ -76,6 +84,9 @@ const provider: AuthProvider = {
   onChange: () => () => undefined,
 };
 
+/** No token, so the session settles on signed-out without a request. */
+const signedOutProvider: AuthProvider = { ...provider, getAccessToken: async () => null };
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -83,7 +94,7 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function mount(me: unknown, path = '/today/check-in') {
+function mount(me: unknown, path = '/today/check-in', auth: AuthProvider = provider) {
   const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === '/api/me') return json(me);
@@ -91,12 +102,13 @@ function mount(me: unknown, path = '/today/check-in') {
     if (url.startsWith('/api/clients')) return json({ clients: [], note: null });
     if (url === '/api/billing/prices') return json({ prices: [], vatRegistered: false });
     if (url === '/api/practice') return json({ practice: PRACTICE });
+    if (url.startsWith('/api/routing/practice-day')) return json({ practitioners: [] });
     if (url.startsWith('/api/appointments')) return json({ appointments: [] });
     return json({ error: 'not_found', requestId: null }, 404);
   }) as unknown as typeof fetch;
 
   return render(
-    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+    <AuthProviderBoundary provider={auth} fetchImpl={fetchImpl}>
       <MemoryRouter initialEntries={[path]}>
         <App />
       </MemoryRouter>
@@ -300,5 +312,55 @@ describe('App — /today is the day sheet for someone who treats', () => {
     mount(ADMIN, '/today');
     await screen.findByText(/There is no day of visits for this account/);
     expect(screen.queryByText('Nothing is booked for you today.')).toBeNull();
+  });
+});
+
+/**
+ * The day map is the one document the API serves with a wider content
+ * security policy (`app/api/_middleware/security.ts`,
+ * docs/SPEC/route-planning.md section 8). What that policy must not reach is
+ * any other screen of the practice, and until the fix round of 2026-09-08 it
+ * could: the route sat inside the `/admin` layout, whose rail navigates with
+ * `NavLink`, and the guard sent a signed-out or unpermitted person on with
+ * `<Navigate>` — both client-side, both inside the document already loaded
+ * (the review of pull request 121, finding B2).
+ */
+describe('App — the day map is a document of its own', () => {
+  it('renders the map with no rail, so the wider policy reaches one screen', async () => {
+    mount(OWNER, '/admin/schedule/map');
+    expect(await screen.findByRole('heading', { name: 'Day map' })).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Sections' })).toBeNull();
+    // And none of the rail's destinations is one click away inside it.
+    expect(screen.queryByRole('link', { name: 'Clients' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Billing' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Audit' })).toBeNull();
+  });
+
+  it('offers a signed-out person a plain anchor, never the sign-in form itself', async () => {
+    mount(null, '/admin/schedule/map', signedOutProvider);
+    expect(await screen.findByText('Sign in to open the day map.')).toBeTruthy();
+    const anchor = screen.getByRole('link', { name: 'Sign in' });
+    expect(anchor).toHaveProperty('href', expect.stringContaining('/sign-in'));
+    // The sign-in form would be the practice's own screen rendered under
+    // `'unsafe-eval'`; an anchor loads a new document and the strict policy
+    // comes with it. The form's submit is a button named "Sign in" and the
+    // way out of here is a link, so this tells the two apart.
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Day map' })).toBeTruthy();
+  });
+
+  it('offers a practitioner a plain anchor home, never their own Today screen', async () => {
+    mount(PRACTITIONER, '/admin/schedule/map');
+    expect(await screen.findByText('You do not have access to the schedule.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Go to your own screen' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/today'),
+    );
+    expect(screen.queryByRole('heading', { name: 'Today' })).toBeNull();
+  });
+
+  it('keeps the rail on every other console screen', async () => {
+    mount(OWNER, '/admin/clients');
+    expect(await screen.findByRole('navigation', { name: 'Sections' })).toBeTruthy();
   });
 });

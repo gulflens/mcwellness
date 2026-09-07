@@ -101,10 +101,16 @@ achromatic: saturation removed everywhere, roads at `--rule`, labels at
 `--slate` on `--paper`, water at `--surface`, points of interest and transit
 off, administrative geometry off. `disableDefaultUI: true`; the app draws its
 own zoom buttons from the shell's controls; Google's attribution and terms
-link remain as the API renders them. **This is the fourth place a token's
-value is written out** (`docs/SPEC/practitioner-phone.md` 3.1 names three;
-this spec adds `app/admin/schedule/map/mapStyle.ts`, which names the tokens it
-copied). `colorScheme` stays light: the admin console is the light ground.
+link remain as the API renders them. `colorScheme` stays light: the admin
+console is the light ground.
+
+**Amended in the build, 2026-09-07:** this is **not** a fourth place a
+token's value is written out. `app/admin/schedule/map/mapStyle.ts` reads the
+running document's own custom properties with `getComputedStyle`, so the
+basemap follows `app/shell/tokens.css` with no copy at all and
+`.claude/rules/ui.md`'s "never hardcode colours" holds here with no
+exception. `docs/SPEC/practitioner-phone.md` 3.1 still names three places,
+and this piece adds none.
 
 **4.6 Loading Google.** `app/admin/schedule/map/googleMaps.ts` exports
 `loadGoogleMaps(key, options)`: one script element per document,
@@ -180,11 +186,27 @@ optimiseDay(day: DayInput, matrix: Matrix): DayPlan | PlanRefusal
   to first stop, departing so as to arrive at the first window's start, and
   a return leg from the last stop to base is counted in the sum and in the
   day's end. Today draws no return leg and this does not change that.
+
+  **Amended in the build, 2026-09-07:** the day ends at the **last stop's
+  departure** — its planned arrival plus the service's own length — and not
+  at the arrival home. The return leg still counts in the driving sum. With
+  the return in the end time, almost every better order was refused for
+  "ending later", because the order that drives least puts the far household
+  last and the drive back from it is the longest of the day.
 - **The day's bounds are its own.** The earliest new `windowStart` is not
   before the current earliest `windowStart` of the day, and no new
-  `windowStart` is before `now` plus sixty minutes; the new day's end
-  (arrival at base, or the last departure without one) is not later than the
-  current plan's end computed the same way. No working hours exist yet.
+  `windowStart` is before `now` plus sixty minutes; the new day's end (the
+  last departure) is not later than the current plan's end computed the same
+  way. No working hours exist yet.
+
+  **Amended in the build, 2026-09-07:** the floor is placement as well as
+  eligibility. No new `windowStart` is placed inside the coming hour, which
+  is the same line `isMovable` draws for what may move at all.
+- **A window kept.** **Amended in the build, 2026-09-07:** a movable stop
+  keeps its own current window when the new arrival still falls inside it,
+  and takes a new one only when it does not. A plan then moves the fewest
+  households for the same driving, which is what the tie-break on moves was
+  always for.
 - **Quarter hours.** Each movable stop's new `windowStart` is the earliest
   arrival rounded up to the quarter hour in the practice's zone
   (`ceilToQuarterHour` in `domain/scheduling/grid.ts`; Asia/Dubai has no
@@ -197,6 +219,36 @@ optimiseDay(day: DayInput, matrix: Matrix): DayPlan | PlanRefusal
   ten stops on the day; more is `too_many_stops`. Ten stops with no anchors
   is 3.6 million orderings and well under a second; the seeded practice never
   exceeds six.
+
+  **Amended in the fix round, 2026-09-08:** at most **eight** stops on the
+  day, not ten, and the sentence above was wrong about the cost. Ten stops
+  with no anchors is 3.6 million orderings and is nowhere near a second: the
+  review of this piece measured eight at 8.5 s and gave up on ten after
+  twelve minutes.
+
+  The figure that decides the ceiling is not how long the arithmetic takes
+  to finish but how long one request may hold the process. `optimiseDay` is
+  synchronous and awaits nothing, so while it runs Node answers nothing else
+  in the practice — not a practitioner's check-in on the road, not
+  `/api/health/deep`, not the portal — and `timeout(REQUEST_TIMEOUT_MS)`
+  cannot fire either, because its timer cannot run. It also runs inside the
+  request's open transaction, so a pooled connection is held for the same
+  span.
+
+  Measured on this branch after the zone formatters were hoisted (below), on
+  a day whose stops lie along one road and so prune well: six 0.01 s, seven
+  0.03 s, eight 0.20 s, nine 1.6 s, ten 18 s. A day that prunes badly costs
+  more — the guard test's own eight-stop day took 7.5 s before this round
+  and about a third of a second after. Eight is what a request may spend on
+  the bad days as well as the good ones; the practice does at most six stops
+  in a day (`docs/SPEC/practitioner-phone.md` section 5.5), so the ceiling is
+  still well past the real day.
+
+  The second half of the fix is in `domain/shared/routing.ts`: `hourBucket`
+  and the weekday reading behind `isPeakHour` hold one `Intl.DateTimeFormat`
+  per zone instead of building one per call. A formatter costs about
+  thirty-five microseconds to build and almost nothing to use, and the
+  matrix calls `hourBucket` once per leg per walk.
 - **Travel buffer.** Each stop's `travelBufferMinutes` becomes
   `travelBufferFor(driveSecondsToNext)` (`domain/scheduling/buffer.ts`, the
   scheduling specification's rule 6.2: the drive in whole minutes rounded up
@@ -228,6 +280,11 @@ visit today has been agreed with its household, or is already under way."
 `no_improvement` "This order already drives least." `infeasible` "The day
 cannot be improved around the confirmed visits." `too_many_stops` "More than
 ten stops in a day is not optimised."
+
+**Amended in the fix round, 2026-09-08:** `too_many_stops` reads "More than
+**eight** stops in a day is not optimised." — the ceiling 5.4 now sets, for
+the reason it gives there: the search is exhaustive and synchronous, so what
+it may cost is what one request may spend without stopping everything else.
 
 **5.6 The matrix behind the rule.** `app/api/routing/practice-day.ts` fills
 a total function from the cache and the seam before calling the rule, so the
@@ -390,6 +447,12 @@ the API carries the coordinates of the day's places and one departure time."
 | `POST /api/routing/practice-day/optimise` | owner, admin, lead | `{ date, practitionerId }` | `DayPlan \| PlanRefusal` (wire form) |
 | `POST /api/appointments/reorder` | owner, admin, lead; `x-reason` | `{ date, practitionerId, moves: [{ appointmentId, windowStart, travelBufferMinutes, wasWindowStart }] }` | `{ appointments: AppointmentRow[], movedFrom: [{ id, windowStart }] }`; 409 `stale_plan`; 400 `reason_required` \| `invalid_request`; 409 `ConflictResponse` on a conflict |
 
+**Amended in the build, 2026-09-07:** the plan's own rows carry
+`wasWindowStart` as well — `PlannedStopRow` in `app/api/routing/schema.ts` is
+`{ appointmentId, windowStart, windowEnd, wasWindowStart, travelBufferMinutes,
+moved, anchor }` — so the drawer can send the reorder the window each plan was
+computed against without holding a second copy of the day beside the plan.
+
 Shapes in `app/api/routing/schema.ts` and `app/api/appointments/schema.ts`.
 `practice-day` and `optimise` mount from `app/api/routing/practice-day.ts`
 through the existing `mountRouting`; `reorder` from
@@ -525,7 +588,9 @@ appears and "Use this time" fills the start.
 7. *The day is its own bound*: never earlier, never later.
 8. *Anchors are everything not `proposed`, and any `proposed` stop within the
    hour.*
-9. *Exhaustive search, ten stops at most.*
+9. *Exhaustive search, ten stops at most.* **Amended in the fix round,
+   2026-09-08: eight at most** (5.4), because a synchronous exhaustive search
+   blocks every other request in the practice while it runs.
 10. *The buffer is the drive plus ten*, rule 6.2 as written.
 11. *One grid per hour bucket, cached*, rather than one representative hour:
     migration 204's own reason.

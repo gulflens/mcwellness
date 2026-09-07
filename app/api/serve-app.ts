@@ -32,6 +32,24 @@ const ROOT_FILES: Record<string, { type: string; cacheControl: string }> = {
   '/sw.js': { type: 'text/javascript; charset=utf-8', cacheControl: 'no-cache' },
 };
 
+/**
+ * The nonce on every tag that loads a script, for the one document whose
+ * policy needs it (docs/SPEC/route-planning.md section 8.2). `'strict-dynamic'`
+ * ignores `'self'` and every host for scripts, so the shell's own tags are
+ * trusted by their nonce and everything they load is trusted onwards.
+ *
+ * The empty `<style nonce>` is not decoration: Google's Maps JavaScript API
+ * copies the nonce off the first style element it finds and puts it on the
+ * styles it injects, and the built page has stylesheet links and no style
+ * element of its own.
+ */
+function stamp(html: string, nonce: string): string {
+  return html
+    .replace(/<script(?=[\s>])/g, `<script nonce="${nonce}"`)
+    .replace(/<link rel="modulepreload"/g, `<link rel="modulepreload" nonce="${nonce}"`)
+    .replace('</head>', `<style nonce="${nonce}"></style></head>`);
+}
+
 export function mountApp(api: Hono<ApiEnv>, root = 'dist'): void {
   const index = readFileSync(join(root, 'index.html'), 'utf8');
   for (const [path, { type, cacheControl }] of Object.entries(ROOT_FILES)) {
@@ -64,6 +82,7 @@ export function mountApp(api: Hono<ApiEnv>, root = 'dist'): void {
   api.get('*', (c) => {
     if (c.req.path.startsWith('/api/')) return c.notFound();
     c.header('Cache-Control', 'no-store');
-    return c.html(index);
+    const nonce = c.get('cspNonce');
+    return c.html(nonce === undefined ? index : stamp(index, nonce));
   });
 }

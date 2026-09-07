@@ -1,16 +1,7 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { canActor } from '@domain/shared';
-import {
-  DEFAULT_PEAK_MULTIPLIER,
-  DEFAULT_ROAD_FACTOR,
-  dayFingerprint,
-  hourBucket,
-  type DriveEstimate,
-  type DriveFactors,
-  type GeoPoint,
-  type RoutingProvider,
-} from '../../../domain/shared/routing';
+import { dayFingerprint, type DriveEstimate, type GeoPoint } from '../../../domain/shared/routing';
 // By its own path, as the storage seam's own helpers are imported: this is the
 // one file of domain/scheduling piece eight owns, and the scheduling barrel is
 // not this piece's to add to (docs/SPEC/OWNERSHIP.md).
@@ -21,9 +12,11 @@ import {
   type HomeBase,
   type LegStop,
 } from '../../../domain/scheduling/legs';
-import { isRoutingUnavailable, PRACTICE_TIME_ZONE } from '../_middleware/routing';
+import { isRoutingUnavailable } from '../_middleware/routing';
 import type { ApiEnv, Db } from '../_middleware/request-context';
+import { dayRange, estimateLegs, readFactors } from './estimates';
 import { pictureKey, readPicture, writePicture } from './picture-cache';
+import { mountPracticeDay } from './practice-day';
 import { RoutingDayResponse, type DayLegRow } from './schema';
 
 /**
@@ -62,14 +55,10 @@ import { RoutingDayResponse, type DayLegRow } from './schema';
  * `app/api/appointments/settings.ts` records for the practice's own settings.
  */
 
-const PRACTICE_UTC_OFFSET = '+04:00';
-/** How long a cached estimate stands before it is asked again (section 5.2). */
-const FRESH_FOR_DAYS = 30;
-
 const Query = z.object({ date: z.iso.date() });
 const PictureQuery = z.object({ date: z.iso.date(), v: z.string().min(1).max(64) });
 
-type StopRow = {
+export type StopRow = {
   id: string;
   window_start: Date;
   window_end: Date;
@@ -126,35 +115,8 @@ const HOME_BASE_SQL =
 const PRACTITIONER_SQL =
   'select id from practitioner where user_id = $1 and tenant_id = app.current_tenant_id()';
 
-const FACTORS_SQL =
-  'select drive_road_factor::float8 as road, drive_peak_multiplier::float8 as peak ' +
-  'from scheduling_setting where tenant_id = app.current_tenant_id()';
-
-const CACHED_SQL =
-  'select from_location_id, to_location_id, hour_bucket, seconds, metres, source::text as source ' +
-  'from drive_estimate where tenant_id = app.current_tenant_id() ' +
-  'and fetched_at > now() - make_interval(days => $1)';
-
-/**
- * One figure in, or refreshed in place. `on conflict` on the cache's own key,
- * because two devices opening the same day at once is an ordinary thing and
- * neither should fail.
- */
-const WRITE_SQL =
-  'insert into drive_estimate (tenant_id, from_location_id, to_location_id, hour_bucket, ' +
-  'seconds, metres, source, fetched_at, created_by) values ' +
-  '(app.current_tenant_id(), $1, $2, $3, $4, $5, $6, now(), $7) ' +
-  'on conflict (tenant_id, from_location_id, to_location_id, hour_bucket) do update set ' +
-  'seconds = excluded.seconds, metres = excluded.metres, source = excluded.source, ' +
-  'fetched_at = excluded.fetched_at';
-
-function point(lng: number | null, lat: number | null): GeoPoint | null {
+export function point(lng: number | null, lat: number | null): GeoPoint | null {
   return lng === null || lat === null ? null : { lat, lng };
-}
-
-function dayRange(date: string): [Date, Date] {
-  const start = new Date(`${date}T00:00:00${PRACTICE_UTC_OFFSET}`);
-  return [start, new Date(start.getTime() + 24 * 60 * 60_000)];
 }
 
 /** The instant the practice's day ends, which is when a picture of it stops being useful. */
@@ -162,7 +124,7 @@ function endOfDay(date: string): Date {
   return dayRange(date)[1];
 }
 
-function toLegStop(row: StopRow): LegStop {
+export function toLegStop(row: StopRow): LegStop {
   return {
     id: row.id,
     windowStart: row.window_start,
@@ -176,20 +138,6 @@ function toLegStop(row: StopRow): LegStop {
     },
   };
 }
-
-async function readFactors(db: Db): Promise<DriveFactors> {
-  const { rows } = await db.query<{ road: number; peak: number }>(FACTORS_SQL);
-  // Migration 204 gives every practice this row and never lets it be deleted,
-  // so the fallback is for a database mid-migration rather than for ordinary
-  // life — and it falls back to the same two figures a new practice starts
-  // with, so a screen and the arithmetic behind it cannot disagree.
-  return {
-    roadFactor: rows[0]?.road ?? DEFAULT_ROAD_FACTOR,
-    peakMultiplier: rows[0]?.peak ?? DEFAULT_PEAK_MULTIPLIER,
-  };
-}
-
-const cacheKey = (from: string, to: string, hour: number): string => `${from}:${to}:${hour}`;
 
 /** The caller's own day, resolved once: their practitioner row, stops and home base. */
 async function readDay(
@@ -222,98 +170,6 @@ async function readDay(
   };
 }
 
-/**
- * Every leg's estimate: the cache first, then one call to the seam for
- * whatever is missing, then the answers written back.
- *
- * A vendor that is down is not a failure of the day: the legs that were cached
- * are answered and the rest are left out, so the day sheet renders its "– –"
- * against them and the practitioner gets on with the drive.
- */
-async function estimateLegs(
-  db: Db,
-  legs: readonly DayLeg[],
-  factors: DriveFactors,
-  routing: RoutingProvider,
-  actorUserId: string,
-): Promise<Map<string, DriveEstimate>> {
-  const answers = new Map<string, DriveEstimate>();
-  if (legs.length === 0) return answers;
-
-  const cached = await db.query<{
-    from_location_id: string;
-    to_location_id: string;
-    hour_bucket: number;
-    seconds: number;
-    metres: number;
-    source: 'traffic' | 'straight-line';
-  }>(CACHED_SQL, [FRESH_FOR_DAYS]);
-  const fresh = new Map(
-    cached.rows.map((row) => [
-      cacheKey(row.from_location_id, row.to_location_id, row.hour_bucket),
-      { seconds: row.seconds, metres: row.metres, source: row.source },
-    ]),
-  );
-
-  // The missing legs, gathered into the hour they leave in. One call per hour
-  // and not one call for the day: a compute-route-matrix request carries a
-  // single departureTime, so a day sheet asked in one call priced the
-  // afternoon's drive with the morning's traffic and then cached that figure
-  // under the afternoon's own hour — a wrong answer, kept. A day of six stops
-  // is at most six legs, so this is a handful of calls at the very worst and
-  // usually two or three.
-  const missing = new Map<number, DayLeg[]>();
-  for (const leg of legs) {
-    const hour = hourBucket(leg.departAt, PRACTICE_TIME_ZONE);
-    const hit = fresh.get(cacheKey(leg.fromLocationId, leg.toLocationId, hour));
-    if (hit) {
-      answers.set(leg.toStopId, hit);
-      continue;
-    }
-    const bucket = missing.get(hour);
-    if (bucket) bucket.push(leg);
-    else missing.set(hour, [leg]);
-  }
-  if (missing.size === 0) return answers;
-
-  // In the day's own order, so the drives are asked for in the order they will
-  // be driven and a vendor that goes down mid-day answers the earlier stops.
-  for (const hour of [...missing.keys()].sort((a, b) => a - b)) {
-    const bucket = missing.get(hour) ?? [];
-    let estimates: DriveEstimate[];
-    try {
-      estimates = await routing.driveMatrix(
-        bucket.map((leg) => ({ from: leg.from, to: leg.to, departAt: leg.departAt })),
-        factors,
-      );
-    } catch (error) {
-      if (isRoutingUnavailable(error)) {
-        // The cached legs stand; the rest render as "– –". A day sheet that
-        // refused to open because a vendor was down would be worse than a day
-        // sheet with a blank in it.
-        return answers;
-      }
-      throw error;
-    }
-
-    for (const [index, leg] of bucket.entries()) {
-      const estimate = estimates[index];
-      if (!estimate) continue;
-      answers.set(leg.toStopId, estimate);
-      await db.query(WRITE_SQL, [
-        leg.fromLocationId,
-        leg.toLocationId,
-        hour,
-        estimate.seconds,
-        estimate.metres,
-        estimate.source,
-        actorUserId,
-      ]);
-    }
-  }
-  return answers;
-}
-
 function toLegRow(leg: DayLeg, estimate: DriveEstimate | undefined): DayLegRow | null {
   if (!estimate) return null;
   return {
@@ -328,6 +184,8 @@ function toLegRow(leg: DayLeg, estimate: DriveEstimate | undefined): DayLegRow |
 }
 
 export function mountRouting(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+  mountPracticeDay(api, now);
+
   api.get('/api/routing/day', async (c) => {
     const actor = c.get('actor');
     const requestId = c.get('requestId');

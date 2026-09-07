@@ -16,7 +16,7 @@ capability that sends personal data anywhere is approved before it exists.
 |---|---|---|---|---|
 | Documents | `domain/shared/storage.ts` | Supabase Storage, private bucket `documents` | a folder on this machine | `STORAGE_PROVIDER` |
 | Documents out | `domain/shared/sending.ts` | an email vendor, once one is approved | the message composed and the link handed back for the share sheet | `DOCUMENT_EMAIL_VENDOR` |
-| Drive estimates | `domain/shared/routing.ts` | Google Maps Platform: the Routes API's compute route matrix, and the Maps Static API for the day's picture | straight-line distance times a road factor and an hour multiplier, and no picture | `ROUTING_PROVIDER` |
+| Drive estimates | `domain/shared/routing.ts` | Google Maps Platform: the Routes API's compute route matrix (one leg at a time, or a whole grid), and the Maps Static API for the day's picture | straight-line distance times a road factor and an hour multiplier, for a leg or a grid, and no picture | `ROUTING_PROVIDER` |
 
 ---
 
@@ -296,13 +296,21 @@ context.
 
 ## Drive estimates (the routing seam)
 
-**The interface** — `domain/shared/routing.ts`, browser-safe, two calls
-(`docs/SPEC/practitioner-phone.md` section 5):
+**The interface** — `domain/shared/routing.ts`, browser-safe, three calls
+(`docs/SPEC/practitioner-phone.md` section 5;
+`docs/SPEC/route-planning.md` section 7):
 
 ```
-driveMatrix(legs: { from, to, departAt }[]) -> { seconds, metres, source }[]
-dayPicture(points: GeoPoint[])              -> Uint8Array | null
+driveMatrix(legs: { from, to, departAt }[])            -> { seconds, metres, source }[]
+driveGrid(origins, destinations, departAt, factors)    -> { seconds, metres, source }[][]
+dayPicture(points: GeoPoint[])                         -> Uint8Array | null
 ```
+
+`driveGrid` answers every origin against every destination in one call, rows
+in origin order and columns in destination order, so the day optimiser can
+price a whole day's places at one hour without one request per pair. At most
+`GRID_MAX_ELEMENTS` (625, the vendor's own ceiling) elements, refused above
+it before anything is sent.
 
 **What leaves the server is coordinates and a departure time.** Never a name,
 a record number, an address, a Makani number or an id: the request is built
@@ -321,6 +329,15 @@ from the fallback. The fallback's road factor and peak multiplier are rows in
 the two locations and the hour bucket and read back for thirty days, so a day
 is looked up once; the picture is held in process memory until the day ends
 and cached on the device by the worker, and is written to no table.
+
+**The map in the coordinator's browser is not this seam.** From piece
+seventeen the day map (`docs/SPEC/route-planning.md` section 8) loads Google's
+Maps JavaScript API in the browser under a separate **browser** key,
+`VITE_GOOGLE_MAPS_BROWSER_KEY`, restricted to that one product and to the
+practice's own address. It draws a basemap and nothing else: the pins and the
+lines are the app's own DOM, and no household coordinate is sent to Google by
+the map. The server key above never reaches a browser, and neither key is
+ever in this repository.
 
 **Chosen by `ROUTING_PROVIDER`**, `google` or `straight-line`, explicit
 outside development or the API refuses to start, exactly as `STORAGE_PROVIDER`

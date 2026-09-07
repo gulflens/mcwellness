@@ -107,3 +107,104 @@ describe('the policy and the sign-in project', () => {
     expect(broken.headers.get('content-security-policy')).toContain("connect-src 'self';");
   });
 });
+
+describe('the day map document, and only it', () => {
+  const withMap = { ...deps, mapDocumentPaths: ['/admin/schedule/map'] };
+
+  it('carries the wider policy Google needs, with a nonce, on that one path', async () => {
+    const res = await createApi(withMap).request('/admin/schedule/map');
+    const csp = res.headers.get('content-security-policy') ?? '';
+    const nonce = /'nonce-([A-Za-z0-9+/=]+)'/.exec(csp)?.[1];
+    expect(nonce, csp).toBeTruthy();
+    const directives = csp.split(';').map((d) => d.trim());
+    expect(directives).toContain(
+      `script-src 'nonce-${nonce}' 'strict-dynamic' https: 'unsafe-eval' blob:`,
+    );
+    expect(directives).toContain(`style-src 'self' 'nonce-${nonce}' https://fonts.googleapis.com`);
+    expect(directives).toContain('frame-src *.google.com');
+    expect(directives).toContain("worker-src 'self' blob:");
+    expect(csp).toContain('https://*.googleapis.com');
+    // The protections that never move.
+    expect(directives).toContain("frame-ancestors 'none'");
+    expect(directives).toContain("object-src 'none'");
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+    // The key is restricted by referrer, and Google refuses a request with none.
+    expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+  });
+
+  it('mints a new nonce for every response', async () => {
+    const api = createApi(withMap);
+    const first = (await api.request('/admin/schedule/map')).headers.get('content-security-policy');
+    const second = (await api.request('/admin/schedule/map')).headers.get(
+      'content-security-policy',
+    );
+    expect(first).not.toBe(second);
+  });
+
+  it('leaves every other document, and every API answer, exactly as they were', async () => {
+    const api = createApi(withMap);
+    for (const path of ['/admin/schedule', '/admin/clients', '/today', '/api/health', '/nothing']) {
+      const csp = (await api.request(path)).headers.get('content-security-policy') ?? '';
+      expect(csp, path).toContain("script-src 'self'");
+      expect(csp, path).not.toContain('googleapis');
+      expect(csp, path).not.toContain('unsafe-eval');
+      expect((await api.request(path)).headers.get('referrer-policy'), path).toBe('no-referrer');
+    }
+  });
+
+  it('is the strict policy again when no map path is configured', async () => {
+    const csp = (await createApi(deps).request('/admin/schedule/map')).headers.get(
+      'content-security-policy',
+    );
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).not.toContain('unsafe-eval');
+  });
+
+  it('widens nothing for a POST to that path', async () => {
+    const csp = (
+      await createApi(withMap).request('/admin/schedule/map', { method: 'POST' })
+    ).headers.get('content-security-policy');
+    expect(csp).toContain("script-src 'self'");
+  });
+
+  /**
+   * The near misses, pinned rather than changed (the review's note N5). Two
+   * of them are served widened and three are not, and none of the five can
+   * put another screen of the practice under the wider policy: the shell
+   * mounts `/admin/schedule/map` outside the `/admin` layout, so the widened
+   * document carries the day map, no rail, and two plain anchors out
+   * (`app/shell/App.tsx`, `RequireAuthDocument`). Where a near miss is served
+   * strictly the map still renders, and Google's script is refused — which is
+   * the "wrong door" note the page already shows.
+   */
+  const nearMisses: readonly [path: string, widened: boolean, why: string][] = [
+    // The form the Schedule page actually links by. Hono matches on the path
+    // alone, so a query string never narrows the policy — and must not, or the
+    // one address the coordinator uses would be the one that fails.
+    ['/admin/schedule/map?date=2026-09-10', true, 'a query string is not part of the path'],
+    // Hono percent-decodes before matching, so this is the same path to it.
+    // React Router decodes too, so the document that comes back renders the
+    // day map, exactly as the plain spelling does.
+    ['/admin/schedule/%6dap', true, 'Hono decodes percent escapes before matching'],
+    // The exact-match list is exact: a trailing slash, a letter more and a
+    // change of case are each a different string, and get the strict policy.
+    ['/admin/schedule/map/', false, 'a trailing slash is a different path'],
+    ['/admin/schedule/maps', false, 'one letter more is a different path'],
+    ['/Admin/Schedule/Map', false, 'the match is case-sensitive'],
+  ];
+
+  for (const [path, widened, why] of nearMisses) {
+    it(`serves ${path} with the ${widened ? 'wider' : 'strict'} policy, because ${why}`, async () => {
+      const csp =
+        (await createApi(withMap).request(path)).headers.get('content-security-policy') ?? '';
+      if (widened) {
+        expect(csp, path).toContain("'unsafe-eval'");
+        expect(csp, path).toContain("'strict-dynamic'");
+      } else {
+        expect(csp, path).toContain("script-src 'self'");
+        expect(csp, path).not.toContain("'unsafe-eval'");
+        expect(csp, path).not.toContain('googleapis');
+      }
+    });
+  }
+});

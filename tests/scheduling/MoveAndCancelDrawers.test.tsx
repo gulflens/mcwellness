@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppointmentRow } from '../../app/api/appointments/schema';
 import { CancelAppointmentDrawer } from '../../app/admin/schedule/CancelAppointmentDrawer';
@@ -93,10 +93,20 @@ function headerOf(init: RequestInit | undefined, name: string): string | null {
   return new Headers(init?.headers).get(name);
 }
 
+/** Reads back where the router thinks it is, so a test can prove it moved. */
+let whereTheRouterIs = '';
+function LocationProbe() {
+  whereTheRouterIs = useLocation().pathname;
+  return null;
+}
+
 function mount(node: React.ReactNode, fetchImpl: typeof fetch) {
   return render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <MemoryRouter>{node}</MemoryRouter>
+      <MemoryRouter initialEntries={['/admin/schedule']}>
+        <LocationProbe />
+        {node}
+      </MemoryRouter>
     </AuthProviderBoundary>,
   );
 }
@@ -702,5 +712,45 @@ describe('CancelAppointmentDrawer', () => {
     expect(
       (screen.getByRole('button', { name: 'Call off this visit' }) as HTMLButtonElement).disabled,
     ).toBe(true);
+  });
+
+  /**
+   * The other half of the day map's document boundary
+   * (app/admin/schedule/map/documentBoundary.tsx). Opened from the Schedule,
+   * this drawer is in an ordinary console document under the strict policy,
+   * and Open Billing is the client-side link it has always been: a full
+   * document load here would cost a coordinator the whole app for nothing.
+   * The boundary is the map's alone, and this is what proves it was not
+   * quietly applied everywhere.
+   */
+  it('opens Billing in place from the Schedule, where there is no boundary to keep', async () => {
+    mount(
+      <CancelAppointmentDrawer
+        appointment={IMMINENT}
+        onClose={() => undefined}
+        onCancelled={() => undefined}
+      />,
+      settingsAnd(
+        () =>
+          new Response(
+            JSON.stringify({
+              id: IMMINENT.id,
+              status: 'cancelled_late',
+              reason: 'client_request',
+              noticeHours: 24,
+              callOutFeeNetFils: null,
+              callOutFeeVatFils: null,
+              callOutFeeGrossFils: null,
+              feeInvoiceId: null,
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    fireEvent.change(screen.getByLabelText('What happened?'), { target: { value: 'No answer.' } });
+    await policyRead();
+    fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Open Billing' }));
+    expect(whereTheRouterIs).toBe('/admin/billing');
   });
 });
