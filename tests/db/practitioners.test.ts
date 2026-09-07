@@ -45,6 +45,10 @@ const FIRST = homes[0];
 const SECOND = homes[1];
 if (!FIRST || !SECOND) throw new Error('The seed has no client homes to borrow a lattice from.');
 
+/** The practice's own address, which the seed gives every practitioner as their base. */
+const STUDIO = data.locations.find((location) => location.ownerType === 'tenant');
+if (!STUDIO) throw new Error('The seed has no studio.');
+
 let owner: pg.Client;
 let pool: pg.Pool;
 let api: ReturnType<typeof createApi>;
@@ -184,8 +188,9 @@ describe('GET /api/practitioners', () => {
     const person = rowFor(answer, practitionerId(0));
     expect(person?.displayName).toBe(data.users[0]?.displayName);
     // The seed points every practitioner at the studio, so a base is recorded.
-    expect(person?.base?.point).toEqual({ lat: 25.19, lng: 55.26 });
-    expect(JSON.stringify(person)).not.toContain('Synthetic Tower');
+    expect(person?.base?.point).toEqual({ lat: STUDIO.entrance.lat, lng: STUDIO.entrance.lng });
+    // Which has a display address on it, and the answer still carries none.
+    expect(JSON.stringify(person)).not.toContain(STUDIO.displayAddress);
     expect(Object.keys(person?.base ?? {})).toEqual(['locationId', 'point', 'emirate']);
   });
 

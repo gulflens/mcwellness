@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Field, Note } from '../../shell/components/Controls';
+import { Button, Field, Note } from './Controls';
 import { googleMapsUrl, requestCurrentPosition } from './geolocation';
 
 /**
@@ -9,6 +9,17 @@ import { googleMapsUrl, requestCurrentPosition } from './geolocation';
  * never blocking when geolocation is refused or unsupported. Shared by
  * LocationForm's entrance point and the standalone "Verify pin" action on an
  * existing location.
+ *
+ * **Where it lives, and why it moved.** It began in `app/admin/clients/`,
+ * where "verify pin" was the only screen that needed it. From 8 September
+ * 2026 a practitioner sets their own home base on
+ * `/admin/settings/practitioners` — standing at their own front door, tapping
+ * "Use my current position" — which is the second module to need exactly this
+ * form. `docs/SPEC/OWNERSHIP.md`'s own rule for a thing two modules share is
+ * that it moves here, whole and unforked, and both import it: the alternative
+ * is two copies of a coordinate box drifting apart, and a coordinate box is
+ * not a thing to have two opinions about. `geolocation.ts` came with it,
+ * being the browser API half of the same component.
  *
  * Text with a decimal keypad, never `type="number"`: a spinner or a scroll
  * wheel over a coordinate box moves where a practitioner drives, and does it

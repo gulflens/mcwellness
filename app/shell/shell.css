@@ -896,3 +896,34 @@ a.rail__item:active,
 .status--neutral .status__dot {
   background: var(--slate);
 }
+
+/*
+  CoordinateFields (app/shell/components/CoordinateFields.tsx): a latitude and
+  a longitude side by side, because they are one fact, and the two actions
+  beneath them. Here rather than in a module's stylesheet since the component
+  moved to the shell the moment a second module needed it — the client
+  record's "verify pin" and a practitioner's own home base. The row rule is
+  scoped to the component, so `app/admin/clients/clients.css` keeps its own
+  `.field-row` for the forms that were already using it.
+*/
+.coordinate-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.coordinate-fields .field-row {
+  display: flex;
+  gap: var(--s-3);
+}
+
+.coordinate-fields .field-row .field {
+  flex: 1 1 0;
+}
+
+.coordinate-fields__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
