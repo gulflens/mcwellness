@@ -56,7 +56,7 @@
   padding-block: 0.125rem;
   padding-inline: 0.375rem;
   border: 1px solid var(--rule);
-  border-radius: var(--radius, 4px);
+  border-radius: var(--r-2);
   background: var(--surface);
   color: var(--slate);
   font-size: 0.75rem;
@@ -64,17 +64,16 @@
   white-space: nowrap;
 }
 
-/* The one full-bleed screen (docs/DESIGN-BRIEF.md 6.2). The rail stays; the
-   content area's own padding and measure stand down for this page alone. */
-.admin__main:has(.page--bleed) {
-  padding: 0;
-  max-inline-size: none;
-}
-
+/* The one full-bleed screen (docs/DESIGN-BRIEF.md 6.2): the map fills the
+   viewport and nothing competes with it. This page is its own top-level
+   document — outside the `/admin` layout, so there is no rail and no
+   `.admin__main` to stand down (docs/SPEC/route-planning.md section 8; the
+   review's findings B2 and N8, the second because the rule that did that
+   reached into a class app/shell/shell.css owns). */
 .daymap__page {
   position: relative;
-  block-size: 100%;
-  min-block-size: 60vh;
+  block-size: 100dvh;
+  overflow: hidden;
 }
 
 .daymap--absent {

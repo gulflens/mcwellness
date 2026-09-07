@@ -216,7 +216,7 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
   const canOptimise = state.kind === 'ready' && rows.length >= 2 && movable > 0;
 
   return (
-    <section className="page page--bleed daymap__page">
+    <section className="page daymap__page">
       {maps !== null && current !== null ? (
         <DayMap maps={maps} day={current} selectedId={selectedId} onSelect={setSelectedId} />
       ) : (

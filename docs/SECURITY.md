@@ -56,10 +56,33 @@ credential); every read and write of a record is logged, hash-chained.
    is `strict-origin-when-cross-origin` rather than `no-referrer`, because the
    browser key is restricted by HTTP referrer and Google refuses a request
    carrying none; only the origin crosses, and no address of this app names a
-   person. The widening is chosen by an exact path match on a GET, so no
-   neighbouring path can widen itself into it, and
-   `tests/security/headers.test.ts` pins **both** policies: the map document's,
-   and every other document's and every API answer's unchanged.
+   person.
+
+   **The widened document renders the day map and nothing else.** Two things
+   make that true, and the first alone did not. The widening is chosen by an
+   exact path match on a GET, so no neighbouring path can widen itself into
+   it — but that only settles which *document* is widened, and a console
+   screen is not a document. The day map is therefore mounted **outside the
+   `/admin` layout route** (`app/shell/App.tsx`), so the widened document
+   carries no rail: the rail navigates with `NavLink`, and Clients, Billing,
+   Books, Audit and Settings were otherwise each one client-side click from
+   rendering under `'unsafe-eval'` for the rest of that browsing session. Its
+   own two ways out — no session, and a signed-in person who may not open the
+   schedule — are **plain anchors and not `<Navigate>`**
+   (`RequireAuthDocument`), because a redirect renders the next screen inside
+   the document already loaded and an anchor makes the browser fetch a new one
+   with the strict policy on it. Anyone can hand anyone the map's address; what
+   they get is the map, a sentence and a link out. (The review of piece
+   seventeen's pull request, finding B2, 2026-09-08: before that round the
+   sign-in form itself, and a practitioner's Today, could both be rendered
+   under the wider policy.)
+
+   `tests/security/headers.test.ts` pins **both** policies — the map
+   document's, and every other document's and every API answer's unchanged —
+   together with the near misses (a query string, a trailing slash, a letter
+   more, a change of case, and a percent-encoded spelling, which Hono decodes
+   before matching); `app/shell/App.test.tsx` pins that the map route renders
+   no rail and that both ways out are anchors.
 3. **Rate limits** (`app/api/_middleware/rate-limit.ts`), per minute, from
    the environment: `RATE_LIMIT_PER_MINUTE` per address (300),
    `RATE_LIMIT_ACTOR_PER_MINUTE` per signed-in person (600),

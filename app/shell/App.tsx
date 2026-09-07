@@ -57,6 +57,61 @@ function RequireAuth({ children }: { children: (actor: Actor) => ReactNode }) {
   return <>{children(session.actor)}</>;
 }
 
+/**
+ * The same wait, for the one document the API serves with the wider content
+ * security policy a browser map needs (`app/api/_middleware/security.ts`,
+ * docs/SPEC/route-planning.md section 8, docs/SECURITY.md).
+ *
+ * **Every way out of this page is a plain anchor, never a `<Navigate>`.**
+ * `RequireAuth` redirects on the client, which renders the next screen inside
+ * the document already loaded — and this document carries `'unsafe-eval'` and
+ * `'strict-dynamic'`. A person handed `/admin/schedule/map` with no session
+ * would have had the practice's sign-in form rendered under those grants, and
+ * a practitioner would have had their own Today (the review of this pull
+ * request, finding B2). An anchor makes the browser load a new document, and
+ * the strict policy comes with it.
+ *
+ * For the same reason the route is mounted outside `/admin` and carries no
+ * rail: the rail navigates with `NavLink`, so Clients, Billing, Books, Audit
+ * and Settings were each one click from being rendered here. Losing it is the
+ * design brief's own intent — 6.2 calls this "the one full-bleed screen — map
+ * fills the viewport, practitioner list overlays left, no chrome competing
+ * with it".
+ */
+function RequireAuthDocument({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
+  if (session.status === 'loading') {
+    return (
+      <main className="plain">
+        <Note>Checking who you are.</Note>
+      </main>
+    );
+  }
+  if (session.status === 'signed-out') {
+    return (
+      <main className="plain">
+        <h1>Day map</h1>
+        <Note>Sign in to open the day map.</Note>
+        <a className="link" href="/sign-in">
+          Sign in
+        </a>
+      </main>
+    );
+  }
+  if (!canOpenSchedule(session.actor, new Date())) {
+    return (
+      <main className="plain">
+        <h1>Day map</h1>
+        <Note>You do not have access to the schedule.</Note>
+        <a className="link" href={homeFor(session.actor)}>
+          Go to your own screen
+        </a>
+      </main>
+    );
+  }
+  return <>{children}</>;
+}
+
 export function App() {
   // The console is shown whole and zoomed out on a phone; every other area
   // keeps the device's own width (docs/SPEC/responsive-console.md section 5).
@@ -68,6 +123,24 @@ export function App() {
       <Route
         path="/"
         element={<RequireAuth>{(actor) => <Navigate to={homeFor(actor)} replace />}</RequireAuth>}
+      />
+      {/*
+        The day map (docs/SPEC/route-planning.md section 4.1), reached by a
+        plain anchor rather than a Link because it is served as its own
+        document with the wider policy a browser map needs. **Deliberately
+        outside the `/admin` layout route**, so it carries no rail and no
+        client-side way into any other screen of the practice: the widened
+        document renders the day map and nothing else, by construction. The
+        path is unchanged, so every link and the middleware's exact-match list
+        stand as they were.
+      */}
+      <Route
+        path="/admin/schedule/map"
+        element={
+          <RequireAuthDocument>
+            <DayMapPage />
+          </RequireAuthDocument>
+        }
       />
       <Route
         path="/admin"
@@ -112,26 +185,6 @@ export function App() {
               {(actor) =>
                 canOpenSchedule(actor, new Date()) ? (
                   <SchedulePage />
-                ) : (
-                  <Navigate to={homeFor(actor)} replace />
-                )
-              }
-            </RequireAuth>
-          }
-        />
-        {/*
-          The day map (docs/SPEC/route-planning.md section 4.1). Reached by a
-          plain anchor rather than a Link, because it is served as its own
-          document with the wider content security policy a browser map needs;
-          the route is here so a reload of that address lands on the page.
-        */}
-        <Route
-          path="schedule/map"
-          element={
-            <RequireAuth>
-              {(actor) =>
-                canOpenSchedule(actor, new Date()) ? (
-                  <DayMapPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )
