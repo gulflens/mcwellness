@@ -603,16 +603,16 @@ nine and ten; see the records on pull requests 73 to 83).
    operator's approval on the environment; the security scan runs against
    that tag in its own session, at high effort, before the tag is pushed.
 
-5. **Piece eleven, the books, is planned and awaits the operator's read.** On 7
+5. **Piece eleven, the books, is planned and approved.** On 7
    September (03:30, amended 13:20) the operator approved in conversation an
    accounting roadmap of six pieces (ledger; spending and VAT; performance
    and statements; pay and profit; bank reconciliation; corporate clients and
    e-invoicing) and all fifteen additions from a comparison with Zoho Books.
    The written plan `docs/PLAN/piece-eleven.md`, the spec
    `docs/SPEC/accounting.md` and `docs/CHANGE-REQUESTS/accounting-01.md`
-   sit on branch `accounting-spec-1`, not pushed. Nothing builds until the
-   operator has read the plan and step 4 above is done; then the usual path
-   (implementation plan, builder on Opus, one review and one re-check).
+   sit on branch `accounting-spec-1`, not pushed. The operator approved the
+   written plan at 14:18; the implementation plan and the builder on Opus
+   follow, then one review and one re-check.
 
 ## 11. Where Claude's own memory lives
 

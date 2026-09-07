@@ -2,7 +2,7 @@
 
 _Worktree: `accounting`, owning `domain/accounting/**`, `app/admin/accounting/**`, `app/api/accounting/**`, `db/policies/accounting/**`, `jobs/accounting/**`, `tests/accounting/**` and migrations `450–499` (carved from the upper half of billing's range; the ownership row is item 1 of `docs/CHANGE-REQUESTS/accounting-01.md`). Entities are summarised in `00-data-model.md` section 6 once item 2 of the same request is applied; this file is authoritative for them. Builds on `billing.md` sections 1, 4 and 7, on migrations 402, 403 and 408, and on `docs/SEAMS.md` ("After the commit"). This file defines behaviour._
 
-Status: **the shape and its defaults were approved by the operator on 2026-09-07 (03:30 +04) in conversation, and amended the same day at 13:20 after a comparison with Zoho Books' UAE edition, when the operator adopted all fifteen additions that comparison proposed.** The four that belong to this piece are the lock date (4.4), the cash flow statement (4.5), the Small Business Relief switch with its revenue watch (4.5, 5.1) and the Zoho-shaped exports (4.6); the roadmap became six pieces (section 14). This written specification awaits the operator's read with `docs/PLAN/piece-eleven.md`.
+Status: **the shape and its defaults were approved by the operator on 2026-09-07 (03:30 +04) in conversation, and amended the same day at 13:20 after a comparison with Zoho Books' UAE edition, when the operator adopted all fifteen additions that comparison proposed.** The four that belong to this piece are the lock date (4.4), the cash flow statement (4.5), the Small Business Relief switch with its revenue watch (4.5, 5.1) and the Zoho-shaped exports (4.6); the roadmap became six pieces (section 14). **Approved by the operator on 2026-09-07 (14:18 +04) with `docs/PLAN/piece-eleven.md`.**
 
 ---
 
@@ -205,7 +205,7 @@ Mounted by `mountAccounting(api, deps.now)` from `app/api/accounting/routes.ts` 
 | --- | --- | --- |
 | `POST /api/accounting/post` | `accounting.write` | Runs the poster; answers how many entries it wrote and how many events remain unknown |
 | `GET /api/accounting/overview?month=` | `accounting.read` | Section 5.1's figures from the books, the relief watch and the unposted count; the three billing figures come from `/api/billing/summary`, which finance already reads |
-| `GET /api/accounting/entries?from&to&account&cursor` | `accounting.read` | Entries, newest first, paged |
+| `GET /api/accounting/entries?from&to&account&limit` | `accounting.read` | Entries, newest first, at most 500 (default 200), with `truncated: true` when more exist; the codebase bounds lists with a limit and no cursor (billing's invoice book) |
 | `GET /api/accounting/entries/:id` | `accounting.read` | One entry with its lines |
 | `POST /api/accounting/entries` | `accounting.write` | A manual or opening entry (rules 1, 3, 9) |
 | `POST /api/accounting/entries/:id/reversal` | `accounting.write` | The reversing entry (section 4.2) |

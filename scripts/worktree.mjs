@@ -17,6 +17,7 @@ const WORKTREES = {
   reports: { db: 5438, api: 3006, web: 5179 },
   'client-portal': { db: 5439, api: 3007, web: 5180 },
   'audit-ui': { db: 5440, api: 3008, web: 5181 },
+  accounting: { db: 5441, api: 3009, web: 5182 },
 };
 
 const [command, name, base = 'main'] = process.argv.slice(2);

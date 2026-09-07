@@ -1,8 +1,8 @@
 # McWellness Piece Eleven: the books
 
-Written 7 September 2026 by Claude for the operator. **The shape was approved
-in conversation on 7 September at 03:30 and amended at 13:20 after a
-comparison with Zoho Books; this written plan awaits your read.**
+Written 7 September 2026 by Claude for the operator. **Approved by the operator on 7 September 2026 at 14:18.** The shape was
+approved in conversation at 03:30 and amended at 13:20 after a comparison
+with Zoho Books.
 
 On 7 September the operator asked for the platform to handle the practice's
 accounting: purchases, income and expenses, salaries, profit and profit

@@ -25,7 +25,14 @@ forty-one files of room. `checkNeeds` is unchanged: an accounting file may
 name 402, 403 and 408, and the trunk's 958 may name 450 and 451.
 
 Add to the ports table, in Stage 2 order after `audit-ui`: `accounting` —
-database 5441, API 3009, web 5182.
+database 5441, API 3009, web 5182 — and the same row to `WORKTREES` in
+`scripts/worktree.mjs`, which repeats the table so `pnpm worktree:add` can
+open the worktree.
+
+**Applied by the integrator on the spec branch `accounting-spec-1` on
+2026-09-07 (14:40), ahead of the rest:** a worktree cannot be opened without
+the row, and the builder's branch is cut from that branch. The remaining items
+ride in the piece's pull request as proposed.
 
 ## 2. `docs/SPEC/00-data-model.md` section 6 — the books' entities
 
@@ -98,9 +105,12 @@ Four actions:
 ```
 
 `adminAccess.ts` gains `canOpenBooks(actor, now)` matching
-`accounting.read`, in the shape of `canOpenBilling`. The rail's section list
-gains `books` labelled **Books** beside Billing, admitted by `canOpenBooks`
-in `AdminLayout.tsx`'s switch; `App.tsx` gains the route `books` under
+`accounting.read`, in the shape of `canOpenBilling`. `ADMIN_SECTIONS` in
+`app/shell/components/Rail.tsx` gains
+`{ key: 'books', label: 'Books', to: '/admin/books', icon: <BooksIcon /> }`
+after `billing`, with `BooksIcon` added to `app/shell/components/Icons.tsx`
+in the shape of `BillingIcon`; `AdminLayout.tsx`'s `visibleSections` switch
+gains `if (section.key === 'books') return canOpenBooks(actor, now);`; `App.tsx` gains the route `books` under
 `/admin`, guarded the way `billing` is, rendering `BooksPage` from
 `app/admin/accounting/BooksPage.tsx`. `docs/SPEC/00-data-model.md` section 11
 gains the round's line as every shared-zone round has.
@@ -150,6 +160,30 @@ and the bookkeeping tables" enumerates tables by name, it gains
 `journal_line`. The seed generator itself gains nothing: both defaults arrive
 by trigger, and the poster is deliberately not run at seed time so that
 `tests/accounting/db/` can prove the section 7 identities from a known state.
+
+## 10. `tests/db/bootstrap-practice.test.ts` — the hard-coded list of defaults
+
+The test "gives the practice the same defaults a seeded practice has, table by
+table" ends by asserting the exact set of default-carrying tables:
+
+```ts
+    expect(Object.keys(actual.counts).sort()).toEqual([
+      'goal_category',
+      'invoice_number_series',
+      'payment_receipt_series',
+      'report_number_series',
+      'scheduling_setting',
+      'vat_setting',
+    ]);
+```
+
+With 450 and 451 applied, both the seeded and the bootstrapped practice carry
+`account` and `accounting_setting` rows, so the list gains the two names (in
+sort order: `account`, `accounting_setting` first) and its comment names 450
+and 451 beside 100, 202, 400, 402, 405 and 600. The second test in that file
+("checks for exactly the defaults the migrations write from tenant") needs no
+edit: it reads both sets from the migrations and the database, and 958 (item
+3) is what makes them agree.
 
 ## 9. `.claude/rules/data-model.md` — nothing
 
