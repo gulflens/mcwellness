@@ -473,7 +473,12 @@ function supplierBlock(
   });
 
   const rows: FacingRow[] = [{ en: supplier.legalName, ar: supplier.legalNameAr, bold: true }];
-  if (supplier.address) rows.push({ en: supplier.address, ar: null, grey: MUTED });
+  // The address is deliberately not here. It is on the footer band, once, at
+  // the operator's instruction of 8 September 2026: a document that prints the
+  // practice's address twice on the same page spends its most valuable space
+  // saying the same thing again. The band is what carries it, and `band()`
+  // wraps that line rather than cutting it for exactly this reason — the
+  // address is a thing a UAE invoice must state, and it now has one home.
   if (supplier.licenceNumber) rows.push(labelled(WORDS.licenceNumber, supplier.licenceNumber));
   if (supplier.licensingAuthority) {
     rows.push(labelled(WORDS.licensingAuthority, supplier.licensingAuthority));
@@ -654,12 +659,22 @@ function footer(sheet: Sheet, basis: Phrase, grey = MUTED): void {
 function band(sheet: Sheet, supplier: SupplierSnapshot): void {
   const centre = PAGE_WIDTH / 2;
   const measureWidth = RIGHT - LEFT;
-  sheet.ruleAt(BAND, LEFT, measureWidth);
 
   const who = [supplier.legalName, supplier.address].filter(Boolean).join('  ');
-  sheet.line(BAND - 12, centre, sheet.fit(who, measureWidth, SIZE.small), SIZE.small, {
-    grey: MUTED,
-    align: 'centre',
+  // **Wrapped, never cut.** Since 8 September the supplier block above no
+  // longer repeats the address, so this line is the only place a reader finds
+  // it — and a UAE invoice must state the supplier's address. `fit` would put
+  // an ellipsis through a long one. The band grows *upward* into the empty
+  // page instead, so its last line stays exactly where it was and the page
+  // number below it is never crowded.
+  const whoLines = sheet.wrap(who, measureWidth, SIZE.small);
+  const top = BAND + (whoLines.length - 1) * SMALL_LINE;
+  sheet.ruleAt(top, LEFT, measureWidth);
+  whoLines.forEach((line, index) => {
+    sheet.line(top - 12 - index * SMALL_LINE, centre, line, SIZE.small, {
+      grey: MUTED,
+      align: 'centre',
+    });
   });
 
   const parts = [
@@ -669,7 +684,7 @@ function band(sheet: Sheet, supplier: SupplierSnapshot): void {
   ].filter((part): part is string => part !== null);
   if (parts.length === 0) return;
   sheet.line(
-    BAND - 12 - SMALL_LINE,
+    top - 12 - whoLines.length * SMALL_LINE,
     centre,
     sheet.fit(parts.join('     '), measureWidth, SIZE.small),
     SIZE.small,
