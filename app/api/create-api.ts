@@ -29,6 +29,7 @@ import {
   timedOut,
 } from './_middleware/security';
 import { isRoutingUnavailable, withRouting } from './_middleware/routing';
+import { mountAccounting } from './accounting/routes';
 import { mountAppointments } from './appointments/routes';
 import { mountAssessments } from './assessments/mount';
 import { mountActivity } from './audit/activity';
@@ -426,6 +427,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   mountTimeline(api, deps.now);
   mountActivity(api, deps.now);
   mountBilling(api, deps.now);
+  mountAccounting(api, deps.now);
   mountAppointments(api, deps.now);
   mountSessions(api, deps.now);
   mountKit(api, deps.now);
