@@ -89,8 +89,6 @@ export function ContactForm({
   // relationship predates the name columns (migration 101, CR-07).
   const [givenName, setGivenName] = useState(contact?.givenName ?? '');
   const [familyName, setFamilyName] = useState(contact?.familyName ?? '');
-  const [givenNameAr, setGivenNameAr] = useState(contact?.givenNameAr ?? '');
-  const [familyNameAr, setFamilyNameAr] = useState(contact?.familyNameAr ?? '');
   const [relationship, setRelationship] = useState(contact?.relationship ?? '');
   const [isLegalGuardian, setIsLegalGuardian] = useState(contact?.isLegalGuardian ?? false);
   const [canConsent, setCanConsent] = useState(contact?.canConsent ?? false);
@@ -183,7 +181,13 @@ export function ContactForm({
     const trimmedEmail = email.trim();
     // The same dialect difference applies to the name: on an edit a cleared
     // field means null, on a create it means "not given" and is omitted.
-    const names = { givenName, familyName, givenNameAr, familyNameAr };
+    // The console is English only (operator's decision of 7 September 2026,
+    // docs/DESIGN-BRIEF.md section 10 item 4); the Arabic name stays on the
+    // wire for the portal and the documents. The edit body never mentions
+    // givenNameAr or familyNameAr, and the route's PATCH leaves a column it is
+    // not sent alone (app/api/clients/contacts.ts lines 159 to 162), so an
+    // Arabic name already on a contact survives an edit made here.
+    const names = { givenName, familyName };
     const nameFields = editing
       ? Object.fromEntries(Object.entries(names).map(([key, value]) => [key, value.trim() || null]))
       : Object.fromEntries(
@@ -274,24 +278,6 @@ export function ContactForm({
           label="Family name (optional)"
           value={familyName}
           onChange={(e) => setFamilyName(e.target.value)}
-        />
-      </div>
-      <div className="field-row">
-        <Field
-          id="contact-given-name-ar"
-          label="Given name (Arabic, optional)"
-          lang="ar"
-          dir="rtl"
-          value={givenNameAr}
-          onChange={(e) => setGivenNameAr(e.target.value)}
-        />
-        <Field
-          id="contact-family-name-ar"
-          label="Family name (Arabic, optional)"
-          lang="ar"
-          dir="rtl"
-          value={familyNameAr}
-          onChange={(e) => setFamilyNameAr(e.target.value)}
         />
       </div>
       <Select

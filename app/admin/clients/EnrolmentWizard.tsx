@@ -110,8 +110,6 @@ export function EnrolmentWizard({
   // Identity step's own fields.
   const [givenName, setGivenName] = useState('');
   const [familyName, setFamilyName] = useState('');
-  const [givenNameAr, setGivenNameAr] = useState('');
-  const [familyNameAr, setFamilyNameAr] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [referralSource, setReferralSource] = useState('');
   const [relationship, setRelationship] = useState('');
@@ -198,8 +196,6 @@ export function EnrolmentWizard({
         body: JSON.stringify({
           givenName: givenName.trim(),
           familyName: familyName.trim(),
-          ...(givenNameAr.trim() ? { givenNameAr: givenNameAr.trim() } : {}),
-          ...(familyNameAr.trim() ? { familyNameAr: familyNameAr.trim() } : {}),
           ...(dateOfBirth ? { dateOfBirth } : {}),
           ...(referralSource.trim() ? { referralSource: referralSource.trim() } : {}),
           contact: {
@@ -386,22 +382,6 @@ export function EnrolmentWizard({
                 clearIdentityError('familyName');
               }}
               error={identityErrors.familyName}
-            />
-            <Field
-              id="wizard-given-name-ar"
-              label="Given name (Arabic, optional)"
-              lang="ar"
-              dir="rtl"
-              value={givenNameAr}
-              onChange={(e) => setGivenNameAr(e.target.value)}
-            />
-            <Field
-              id="wizard-family-name-ar"
-              label="Family name (Arabic, optional)"
-              lang="ar"
-              dir="rtl"
-              value={familyNameAr}
-              onChange={(e) => setFamilyNameAr(e.target.value)}
             />
             <Field
               id="wizard-dob"

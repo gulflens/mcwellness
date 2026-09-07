@@ -197,11 +197,18 @@ describe('EnrolmentWizard', () => {
     await waitFor(() => expect(screen.getByText(MRN)).toBeTruthy());
     const postCall = calls.find((c) => c.url === '/api/clients' && c.init?.method === 'POST');
     expect(postCall).toBeTruthy();
-    expect(JSON.parse(String(postCall?.init?.body))).toMatchObject({
+    const body = JSON.parse(String(postCall?.init?.body));
+    expect(body).toMatchObject({
       givenName: 'Laurel',
       familyName: 'Meadow',
       contact: { relationship: 'self', phone: '+971500000058' },
     });
+    // The console is English only (docs/DESIGN-BRIEF.md section 10 item 4), so
+    // the wizard has no Arabic field and sends no Arabic name at all. The
+    // columns are still there and the portal and the documents still show
+    // them; nothing here writes one.
+    expect(body).not.toHaveProperty('givenNameAr');
+    expect(body).not.toHaveProperty('familyNameAr');
     // Contacts, the second step, is reached automatically.
     expect(await screen.findByRole('button', { name: 'Add contact' })).toBeTruthy();
   });

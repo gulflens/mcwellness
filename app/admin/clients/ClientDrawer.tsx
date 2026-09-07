@@ -105,14 +105,9 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
               ? clientHeadingName('Erased client', 'Erased client')
               : clientHeadingName(client.givenName, client.familyName)}
           </h2>
-          {/* The Arabic pair goes with the Latin one: an erased record has
-              neither, and the row this drawer was opened from still carries
-              the name the erasure has just taken away. */}
-          {!erased && client.givenNameAr ? (
-            <p className="small muted" lang="ar" dir="rtl">
-              {client.givenNameAr} {client.familyNameAr}
-            </p>
-          ) : null}
+          {/* The console is English only (operator's decision of 7 September
+              2026, docs/DESIGN-BRIEF.md section 10 item 4); the Arabic name
+              stays on the wire for the portal and the documents. */}
           <p className="drawer__facts small">
             <span className="numeric">{client.mrn}</span>
             {/* The record's own status once it has loaded: activating from Overview must

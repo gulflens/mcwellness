@@ -91,6 +91,13 @@ describe('ContactForm', () => {
     const body = bodyOf(calls[0]);
     expect(body).toMatchObject({ phone: null });
     expect(UpdateContactBody.safeParse(body).success).toBe(true);
+    // The console is English only (docs/DESIGN-BRIEF.md section 10 item 4) and
+    // this form no longer holds the Arabic name — but the contact on file has
+    // one. An edit must leave it where it is, which the PATCH does only if the
+    // body never mentions the key (app/api/clients/contacts.ts lines 159-162:
+    // `if (d.givenNameAr !== undefined)`).
+    expect(body).not.toHaveProperty('givenNameAr');
+    expect(body).not.toHaveProperty('familyNameAr');
   });
 
   it('refuses an Emirates ID that fails its checksum before any request is made', async () => {
