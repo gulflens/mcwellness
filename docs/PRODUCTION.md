@@ -781,3 +781,29 @@ in the founder's decisions of 3 September, and its shapes were copied.
 before the first assignment; the certification requirement when she wants it;
 the launch prices superseded with a reason when the launch ends; Compassionate
 Inquiry added when it has a price.
+
+## What was done on 2026-09-07: the fourth live pass waits — round 35 merged, the rebuild refused in auto mode
+
+At 20:20 trunk round 35 merged as pull request 114 (`main` at `9fc6cb5`):
+the console and the practitioner app are English only, on the operator's
+decision of 19:37; the portal and the documents stay bilingual. **No
+migration, no policy, no data change**, so nothing in this database moves for
+it; the live process alone needs rebuilding.
+
+The same recipe as the third pass was started at 20:25: the archive built
+from `origin/main` (`git archive --prefix=mcwellness/`, 5.65 MB), the upload
+URL issued, and then the auto-mode classifier refused the TUS upload (the
+`curl` carries the upload's auth headers). Per the standing rule the step is
+retried outside auto mode and never routed around. **Until it is, the live
+process still runs `main` at `727310e` (bundle `index-CW0A6csP.js`)** and the
+staff screens on app.mcwellnessuae.com still show Arabic beneath English.
+
+**To finish the pass, outside auto mode:** build the archive from `main` at
+`9fc6cb5` or later; `hosting_generateUploadURLV1`; the two `curl` calls (POST
+then PATCH) with `-4` and a User-Agent; `hosting_startNode_jsBuildV1` with the
+stored settings (root `mcwellness`, output `.`, entry `app/api/start.mjs`,
+script `build:production`, npm, Node 24, `source_type` archive) — a first 500
+from that call creates no build, call it again; watch the served bundle name
+flip with `curl -4`; then `/api/health` and `/api/health/deep`, and the
+clients table or the Settings page signed in as the founder to see no Arabic
+line. Record it here as the fourth live pass.
