@@ -174,7 +174,7 @@ export async function setPracticePrices(h: Harness, validFrom: string): Promise<
   for (const price of PRACTICE_PRICES) {
     const res = await h.call('POST', '/api/billing/prices', SEEDED.owner, {
       serviceTypeId: h.serviceTypeId(price.code),
-      unitPriceFils: price.netFils,
+      listPriceFils: price.netFils,
       validFrom,
       amendmentReason: price.reason,
     });
@@ -210,7 +210,10 @@ export function silverInput(h: Harness, validFrom: string) {
       { serviceTypeId: h.serviceTypeId('nf-session'), quantity: 15 },
     ],
     price: {
-      amountFils: 1_032_500,
+      // A sum off the list, not a percentage: the founder named the price now
+      // (AED 10,325 against a list of AED 12,150), and the discount is the gap
+      // (docs/SPEC/billing.md section 2.4).
+      discount: { kind: 'amount' as const, fils: 182_500 },
       validFrom,
       amendmentReason: "Launch pricing, ends on the founder's word.",
     },

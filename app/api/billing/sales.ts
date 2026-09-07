@@ -1,13 +1,16 @@
 import type { Hono } from 'hono';
 import {
   allocateEntitlements,
+  combineDiscounts,
   expiryOn,
   resolveSaleVat,
+  type AppliedDiscount,
   type PackageComponent,
 } from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv } from '../_middleware/request-context';
-import { maySell } from './access';
+import { maySell, mayDiscount } from './access';
+import { toDiscount } from './schema';
 import {
   IdempotencyKey,
   SellPackageInput,
@@ -27,11 +30,20 @@ import { readVatRegistered } from './supplier';
  * that fails half-way leaves a practice with no half-sold package, no orphan
  * invoice number, and no credits a client did not pay for.
  *
- * **The price is not typed here.** The sale takes the package price in force
- * on the day of the purchase, from the append-only list. Selling at a
- * different figure means appending a price row first, which leaves a reason
- * behind it — the founder's own arrangement (2026-09-03: a package price is a
- * figure she sets), and the reason there is no `netFils` in the request body.
+ * **The price is still not typed here, and a discount is not a price.** The
+ * sale takes the package price in force on the day of the purchase, from the
+ * append-only list, and there is no `netFils` in the request body: selling at
+ * a different *figure* means appending a price row first, which leaves a
+ * reason behind it (the founder's arrangement of 2026-09-03).
+ *
+ * What the body may carry is an **extra discount** off the same list figure,
+ * with a reason, given by the owner, an admin or finance and nobody else
+ * (docs/SPEC/billing.md section 2.4, the operator's decision of 7 September
+ * 2026). The price list's own discount and the extra are combined once by
+ * `domain/billing/discount.ts`, so the invoice carries one discount rather
+ * than two; the combined discount can never exceed the list figure, so a sale
+ * never charges below nothing, and it can never be negative, so a sale never
+ * charges more than the price list says.
  *
  * **The allocation.** Each credit carries its share of what was paid, worked
  * out from what its service costs on its own on the day of sale
@@ -66,8 +78,8 @@ const CLIENT_SQL =
 const INSERT_PURCHASE_SQL =
   'insert into package_purchase (tenant_id, client_id, package_id, package_name, package_name_ar, ' +
   'purchased_on, net_fils, vat_fils, vat_rate_basis_points, vat_setting_version, list_price_fils, ' +
-  'expires_on, idempotency_key, created_by) ' +
-  'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ' +
+  'discount_basis_points, discount_reason, expires_on, idempotency_key, created_by) ' +
+  'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, ' +
   'app.current_actor_id()) ' +
   'returning id, expires_on, status';
 
@@ -83,7 +95,8 @@ function isDuplicateKey(error: unknown): boolean {
 
 const REPLAY_SQL =
   'select p.id, p.client_id, p.package_id, p.package_name, p.package_name_ar, p.purchased_on, ' +
-  'p.net_fils, p.vat_fils, p.list_price_fils, p.expires_on, p.extended_to, p.extension_reason, ' +
+  'p.net_fils, p.vat_fils, p.list_price_fils, p.discount_basis_points, p.discount_reason, ' +
+  'p.expires_on, p.extended_to, p.extension_reason, ' +
   'p.status, p.invoice_id, i.reference, ' +
   '(select count(*)::int from entitlement e where e.package_purchase_id = p.id) as credits ' +
   'from package_purchase p left join invoice i on i.id = p.invoice_id ' +
@@ -109,6 +122,8 @@ async function replaySale(
     net_fils: number;
     vat_fils: number;
     list_price_fils: number;
+    discount_basis_points: number | null;
+    discount_reason: string | null;
     expires_on: string;
     extended_to: string | null;
     extension_reason: string | null;
@@ -133,6 +148,11 @@ async function replaySale(
       vatFils: row.vat_fils,
       grossFils: row.net_fils + row.vat_fils,
       listPriceFils: row.list_price_fils,
+      // The gap between the list figure and what was charged; both are on the
+      // row already, so the discount is never a third figure to keep right.
+      discountFils: Math.max(0, row.list_price_fils - row.net_fils),
+      discountBasisPoints: row.discount_basis_points,
+      discountReason: row.discount_reason,
       expiresOn: row.expires_on,
       extendedTo: row.extended_to,
       extensionReason: row.extension_reason,
@@ -150,11 +170,14 @@ const INSERT_INVOICE_SQL =
   "app.next_invoice_number(), 'package', $2, $3, $4, $5, $6, app.current_actor_id()) " +
   'returning id, reference';
 
+// The unit is the list figure and the net is what is charged, with the
+// discount between them: the rendered invoice prints all three, and the check
+// constraint holds net = quantity x unit - discount (migration 409).
 const INSERT_LINE_SQL =
   'insert into invoice_line (tenant_id, invoice_id, client_id, line_no, description, ' +
-  'description_ar, package_id, quantity, unit_net_fils, net_fils, vat_rate_basis_points, ' +
-  'vat_setting_version, vat_fils, gross_fils, created_by) ' +
-  'values (app.current_tenant_id(), $1, $2, 1, $3, $4, $5, 1, $6, $6, $7, $8, $9, $10, ' +
+  'description_ar, package_id, quantity, unit_net_fils, discount_fils, discount_basis_points, ' +
+  'net_fils, vat_rate_basis_points, vat_setting_version, vat_fils, gross_fils, created_by) ' +
+  'values (app.current_tenant_id(), $1, $2, 1, $3, $4, $5, 1, $6, $7, $8, $9, $10, $11, $12, $13, ' +
   'app.current_actor_id())';
 
 // Every credit in one statement rather than forty-seven round trips.
@@ -242,6 +265,31 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     }
 
     const price = bundle.currentPrice;
+
+    // An extra discount is the owner's, an admin's or finance's: the three
+    // roles migration 408 lets forgive a charge. Refused before anything is
+    // read, so a role that may sell but may not discount is told plainly
+    // rather than quietly sold at the list price.
+    if (input.extraDiscount && !mayDiscount(actor, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+
+    // The price list's own discount and the extra, combined once against the
+    // same list figure (domain/billing/discount.ts). Everything below charges
+    // `applied.netFils`: the allocation, the VAT, the purchase, the line and
+    // the invoice, so there is one net and the books read it as they always
+    // have.
+    let applied: AppliedDiscount;
+    try {
+      applied = combineDiscounts(
+        fils(price.listPriceFils),
+        { discountFils: fils(price.discountFils), basisPoints: price.discountBasisPoints },
+        toDiscount(input.extraDiscount?.discount),
+      );
+    } catch {
+      return c.json({ error: 'bad_request', code: 'discount_too_large', requestId }, 400);
+    }
+
     const components: PackageComponent[] = bundle.components.map((component) => ({
       serviceTypeId: component.serviceTypeId,
       quantity: component.quantity,
@@ -250,7 +298,7 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
 
     let allocation;
     try {
-      allocation = allocateEntitlements(components, fils(price.amountFils));
+      allocation = allocateEntitlements(components, applied.netFils);
     } catch {
       // The one shape the catalogue's own `sellable` cannot rule out: every
       // component priced at zero, under a package that is not free.
@@ -284,8 +332,10 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     if (version === undefined) {
       throw new Error('The package price just read has no VAT setting version.');
     }
+    // VAT falls on the net after every discount, as UAE VAT values a supply
+    // net of discounts (docs/SPEC/billing.md section 2.4).
     const vat = resolveSaleVat(
-      fils(price.amountFils),
+      applied.netFils,
       { rateBasisPoints: price.vatRateBasisPoints, version },
       { vatRegistered: stamped.rows[0]?.vat_registered === true },
     );
@@ -314,14 +364,19 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
         bundle.name,
         bundle.nameAr,
         input.purchasedOn,
-        price.amountFils,
+        applied.netFils,
         vat.vatFils,
         // The purchase records what was charged, so its rate is the charged
         // one; the credits below keep the price row's own standard rate, which
         // is a fact about the service and is never printed on a document.
         vat.rateBasisPoints,
         version,
-        bundle.listPriceFils,
+        // The price row's own snapshot, not the bundle's published list: the
+        // discount on this sale was taken off that figure, and the bundle's
+        // may be edited tomorrow.
+        applied.listFils,
+        applied.basisPoints,
+        input.extraDiscount?.reason ?? null,
         expiresOn,
         idempotencyKey,
       ]);
@@ -348,7 +403,7 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
       input.clientId,
       input.purchasedOn,
       purchaseId,
-      price.amountFils,
+      applied.netFils,
       vat.vatFils,
       vat.grossFils,
     ]);
@@ -367,7 +422,10 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
       bundle.name,
       bundle.nameAr,
       bundle.id,
-      price.amountFils,
+      applied.listFils,
+      applied.discountFils,
+      applied.basisPoints,
+      applied.netFils,
       vat.rateBasisPoints,
       version,
       vat.vatFils,
@@ -409,10 +467,13 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
           packageName: bundle.name,
           packageNameAr: bundle.nameAr,
           purchasedOn: input.purchasedOn,
-          netFils: price.amountFils,
+          netFils: applied.netFils,
           vatFils: vat.vatFils,
           grossFils: vat.grossFils,
-          listPriceFils: bundle.listPriceFils,
+          listPriceFils: applied.listFils,
+          discountFils: applied.discountFils,
+          discountBasisPoints: applied.basisPoints,
+          discountReason: input.extraDiscount?.reason ?? null,
           expiresOn,
           extendedTo: null,
           extensionReason: null,

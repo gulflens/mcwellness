@@ -196,7 +196,7 @@ describe("migration 400's vat_setting backfill", () => {
   it('lets a price be set straight away, with no setting endpoint, carrying that rate', async () => {
     const res = await call('POST', '/api/billing/prices', OWNER_AUTH, {
       serviceTypeId: SERVICE_TYPE_ID,
-      unitPriceFils: 90_000,
+      listPriceFils: 90_000,
       validFrom: '2026-09-02',
       amendmentReason: 'Setting the launch price.',
     });

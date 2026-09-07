@@ -54,6 +54,11 @@ const SILVER = {
   ],
   currentPrice: {
     id: '00000004-0000-4000-8000-000000000301',
+    // The launch price as a list figure and the discount off it: AED 12,150
+    // less AED 1,825 (docs/SPEC/billing.md section 2.4).
+    listPriceFils: 1_215_000,
+    discountFils: 182_500,
+    discountBasisPoints: null as number | null,
     amountFils: 1_032_500,
     // The practice as it actually is: not registered for VAT, so the rate
     // stamped on the price row charges nothing and the gross is the net

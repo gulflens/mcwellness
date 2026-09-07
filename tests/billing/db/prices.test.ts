@@ -200,7 +200,7 @@ describe('POST /api/billing/prices', () => {
   it('refuses a practitioner: reading prices is one thing, setting them is another', async () => {
     const res = await call('POST', '/api/billing/prices', authIdOf(1), {
       serviceTypeId: serviceTypeId('nf-session'),
-      unitPriceFils: 90_000,
+      listPriceFils: 90_000,
       validFrom: SEED_TODAY,
       amendmentReason: 'Setting the launch price.',
     });
@@ -210,7 +210,7 @@ describe('POST /api/billing/prices', () => {
   it('sets the first price for a service, VAT resolved from the tenant rate and stamped on the row', async () => {
     const res = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: serviceTypeId('nf-session'),
-      unitPriceFils: 90_000,
+      listPriceFils: 90_000,
       validFrom: SEED_TODAY,
       amendmentReason: 'Setting the launch price.',
     });
@@ -240,7 +240,7 @@ describe('POST /api/billing/prices', () => {
   it('lets an admin, not only the owner, set a price', async () => {
     const res = await call('POST', '/api/billing/prices', authIdOf(3), {
       serviceTypeId: serviceTypeId('brain-map'),
-      unitPriceFils: 145_000,
+      listPriceFils: 145_000,
       validFrom: SEED_TODAY,
       amendmentReason: 'Setting the launch price for the brain map.',
     });
@@ -250,7 +250,7 @@ describe('POST /api/billing/prices', () => {
   it('refuses a second price for the same service that does not start after the current one', async () => {
     const sameDay = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: serviceTypeId('nf-session'),
-      unitPriceFils: 95_000,
+      listPriceFils: 95_000,
       validFrom: SEED_TODAY,
       amendmentReason: 'Trying to reprice the same day.',
     });
@@ -258,7 +258,7 @@ describe('POST /api/billing/prices', () => {
 
     const earlier = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: serviceTypeId('nf-session'),
-      unitPriceFils: 95_000,
+      listPriceFils: 95_000,
       validFrom: '2026-01-01',
       amendmentReason: 'Trying to backdate a reprice.',
     });
@@ -268,7 +268,7 @@ describe('POST /api/billing/prices', () => {
   it('accepts a future price, which supersedes without touching the current row', async () => {
     const res = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: serviceTypeId('nf-session'),
-      unitPriceFils: 99_000,
+      listPriceFils: 99_000,
       validFrom: '2026-12-01',
       amendmentReason: "Scheduling next quarter's increase.",
     });
@@ -279,7 +279,7 @@ describe('POST /api/billing/prices', () => {
     const svc = serviceTypeId('results-call');
     const first = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: svc,
-      unitPriceFils: 20_000,
+      listPriceFils: 20_000,
       validFrom: SEED_TODAY,
       amendmentReason: 'Initial price for results calls.',
     });
@@ -290,7 +290,7 @@ describe('POST /api/billing/prices', () => {
 
     const second = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: svc,
-      unitPriceFils: 22_000,
+      listPriceFils: 22_000,
       validFrom: '2026-10-01',
       amendmentReason: 'Aligning with the updated price list.',
     });
@@ -303,7 +303,7 @@ describe('POST /api/billing/prices', () => {
   it('cannot price a service type in a tenant it does not belong to', async () => {
     const res = await call('POST', '/api/billing/prices', ADMIN_B_AUTH, {
       serviceTypeId: serviceTypeId('nf-session'),
-      unitPriceFils: 90_000,
+      listPriceFils: 90_000,
       validFrom: SEED_TODAY,
       amendmentReason: 'Attempting to price a service in another practice.',
     });
@@ -334,7 +334,7 @@ describe('POST /api/billing/prices', () => {
 
     const beforeChange = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: serviceTypeId('consultation'),
-      unitPriceFils: 50_000,
+      listPriceFils: 50_000,
       validFrom: SEED_TODAY,
       amendmentReason: 'Setting the consultation price ahead of the rate change.',
     });
@@ -343,7 +343,7 @@ describe('POST /api/billing/prices', () => {
 
     const afterChange = await call('POST', '/api/billing/prices', authIdOf(0), {
       serviceTypeId: serviceTypeId('consultation'),
-      unitPriceFils: 52_000,
+      listPriceFils: 52_000,
       validFrom: '2027-02-01',
       amendmentReason: 'Re-pricing once the new VAT rate is in force.',
     });
@@ -355,7 +355,7 @@ describe('POST /api/billing/prices', () => {
     it('refuses a date that does not exist, as a bad request, not a database error', async () => {
       const res = await call('POST', '/api/billing/prices', authIdOf(0), {
         serviceTypeId: serviceTypeId('discovery-call'),
-        unitPriceFils: 10_000,
+        listPriceFils: 10_000,
         validFrom: '2026-13-45',
         amendmentReason: 'Testing an impossible date.',
       });
@@ -365,7 +365,7 @@ describe('POST /api/billing/prices', () => {
     it('refuses a price above the integer column maximum', async () => {
       const res = await call('POST', '/api/billing/prices', authIdOf(0), {
         serviceTypeId: serviceTypeId('discovery-call'),
-        unitPriceFils: 2_147_483_648,
+        listPriceFils: 2_147_483_648,
         validFrom: SEED_TODAY,
         amendmentReason: 'Testing an oversized price.',
       });
@@ -375,7 +375,7 @@ describe('POST /api/billing/prices', () => {
     it('refuses a price with no reason', async () => {
       const res = await call('POST', '/api/billing/prices', authIdOf(0), {
         serviceTypeId: serviceTypeId('discovery-call'),
-        unitPriceFils: 10_000,
+        listPriceFils: 10_000,
         validFrom: SEED_TODAY,
         amendmentReason: '',
       });

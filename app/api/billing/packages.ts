@@ -1,9 +1,17 @@
 import type { Hono } from 'hono';
-import { resolveSaleVat, resolveVat, validateNewPrice, type Price } from '../../../domain/billing';
+import {
+  applyDiscount,
+  resolveSaleVat,
+  resolveVat,
+  validateNewPrice,
+  type AppliedDiscount,
+  type Price,
+} from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { isUuid } from './ids';
 import { mayReadCatalogue, mayWriteCatalogue } from './access';
+import { toDiscount, type DiscountInput } from './schema';
 import { readVatRegistered } from './supplier';
 import {
   AddPackagePriceInput,
@@ -23,8 +31,16 @@ import {
  * practice publishes. The `package_price` row is what it is actually selling
  * for, appended with a reason and never edited, so "launch pricing, ends on
  * the founder's word" is a fact in the table rather than a memory. The app
- * derives neither from the other and stores no discount percentage: both are
- * figures the founder sets (her decision, 2026-09-03).
+ * derives neither from the other: both are figures the founder sets (her
+ * decision, 2026-09-03).
+ *
+ * A price row now also names the gap between the two as a discount, which the
+ * operator asked for on 7 September 2026 (docs/SPEC/billing.md section 2.4,
+ * amending the founder's "no discount percentage is stored anywhere"). The
+ * row snapshots the bundle's list price as it stood when it was written, so
+ * editing the bundle's published list later cannot change what an old price
+ * row says it took off. Either the discount or the price now is sent, never
+ * both; `domain/billing/discount.ts` works out the other.
  *
  * `componentsTotalFils` is the same sum done against today's price list, sent
  * alongside so the screen can show the practice when its published list price
@@ -67,6 +83,9 @@ type ComponentDbRow = {
 type PriceDbRow = {
   package_id: string;
   id: string;
+  list_price_fils: number;
+  discount_fils: number;
+  discount_basis_points: number | null;
   amount_fils: number;
   vat_rate_basis_points: number;
   vat_setting_version: number;
@@ -93,7 +112,8 @@ const COMPONENTS_SQL =
   'where pc.tenant_id = app.current_tenant_id() order by pc.package_id, pc.line_no';
 
 const CURRENT_PRICES_SQL =
-  'select distinct on (package_id) package_id, id, amount_fils, vat_rate_basis_points, ' +
+  'select distinct on (package_id) package_id, id, list_price_fils, discount_fils, ' +
+  'discount_basis_points, amount_fils, vat_rate_basis_points, ' +
   'vat_setting_version, valid_from, amendment_reason from package_price ' +
   'where tenant_id = app.current_tenant_id() and valid_from <= $1 ' +
   'order by package_id, valid_from desc';
@@ -180,6 +200,9 @@ export async function readPackages(
         price && vat
           ? {
               id: price.id,
+              listPriceFils: price.list_price_fils,
+              discountFils: price.discount_fils,
+              discountBasisPoints: price.discount_basis_points,
               amountFils: price.amount_fils,
               // The stamp itself, untouched by the registration: what the
               // standard rate was on the day this price was written.
@@ -279,25 +302,53 @@ async function checkPackagePrice(
   };
 }
 
+/**
+ * What a bundle price comes to, from whichever half of it was sent. A price
+ * now is turned into the discount it implies, so one arithmetic
+ * (`domain/billing/discount.ts`) decides both figures and the check constraint
+ * behind them. Throws `RangeError` — as `applyDiscount` does — when the price
+ * now is above the list, because the list is the ceiling (the operator's first
+ * default, docs/PLAN/billing-discounts.md).
+ */
+export function applyPackageDiscount(
+  listPriceFils: number,
+  input: { discount?: DiscountInput | null; amountFils?: number },
+): AppliedDiscount {
+  if (input.amountFils !== undefined) {
+    return applyDiscount(fils(listPriceFils), {
+      kind: 'amount',
+      fils: fils(listPriceFils - input.amountFils),
+    });
+  }
+  return applyDiscount(fils(listPriceFils), toDiscount(input.discount));
+}
+
 /** Writes the row `checkPackagePrice` has already approved. */
 async function insertPackagePrice(
   db: Db,
   packageId: string,
-  input: { amountFils: number; validFrom: string; amendmentReason: string },
+  applied: AppliedDiscount,
+  input: { validFrom: string; amendmentReason: string },
   approval: PriceApproval,
 ): Promise<string> {
-  const resolution = resolveVat(fils(input.amountFils), {
+  // VAT falls on the net after the discount, as it always has: net_fils and
+  // amount_fils keep their meaning, which is why the books do not change.
+  const resolution = resolveVat(applied.netFils, {
     rateBasisPoints: approval.rateBasisPoints,
     version: approval.settingVersion,
   });
   const inserted = await db.query<{ id: string }>(
-    'insert into package_price (tenant_id, package_id, amount_fils, vat_rate_basis_points, ' +
+    'insert into package_price (tenant_id, package_id, list_price_fils, discount_fils, ' +
+      'discount_basis_points, amount_fils, vat_rate_basis_points, ' +
       'vat_setting_version, valid_from, supersedes_id, amendment_reason, created_by) ' +
-      'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, app.current_actor_id()) ' +
-      'returning id',
+      'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, ' +
+      'app.current_actor_id()) returning id',
     [
       packageId,
-      input.amountFils,
+      applied.listFils,
+      applied.discountFils,
+      applied.basisPoints,
+      applied.netFils,
       resolution.rateBasisPoints,
       resolution.settingVersion,
       input.validFrom,
@@ -365,10 +416,17 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
 
     // Before the first insert, not after the last one: a refused price must
-    // leave no package behind holding the code the founder wanted.
+    // leave no package behind holding the code the founder wanted. The
+    // discount is worked out here for the same reason.
     const approval = await checkPackagePrice(db, null, input.price, today);
     if (!approval.ok) {
       return c.json({ error: 'bad_request', code: approval.code, requestId }, approval.status);
+    }
+    let applied: AppliedDiscount;
+    try {
+      applied = applyPackageDiscount(input.listPriceFils, input.price);
+    } catch {
+      return c.json({ error: 'bad_request', code: 'discount_too_large', requestId }, 400);
     }
 
     const inserted = await db.query<{ id: string }>(
@@ -389,7 +447,7 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       );
     }
 
-    await insertPackagePrice(db, packageId, input.price, approval);
+    await insertPackagePrice(db, packageId, applied, input.price, approval);
 
     const packages = await readPackages(db, today, await readVatRegistered(db));
     const created = packages.find((row) => row.id === packageId);
@@ -414,11 +472,15 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
     }
     const db = c.get('db');
-    const found = await db.query<{ id: string }>(
-      'select id from package where tenant_id = app.current_tenant_id() and id = $1',
+    // The bundle's list price as it stands today: the row about to be written
+    // snapshots it, so a later edit to the bundle cannot change what this
+    // price says it took off.
+    const found = await db.query<{ id: string; list_price_fils: number }>(
+      'select id, list_price_fils from package where tenant_id = app.current_tenant_id() and id = $1',
       [packageId],
     );
-    if (!found.rows[0]) {
+    const bundle = found.rows[0];
+    if (!bundle) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
 
@@ -427,7 +489,13 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     if (!approval.ok) {
       return c.json({ error: 'bad_request', code: approval.code, requestId }, approval.status);
     }
-    await insertPackagePrice(db, packageId, body.data, approval);
+    let applied: AppliedDiscount;
+    try {
+      applied = applyPackageDiscount(bundle.list_price_fils, body.data);
+    } catch {
+      return c.json({ error: 'bad_request', code: 'discount_too_large', requestId }, 400);
+    }
+    await insertPackagePrice(db, packageId, applied, body.data, approval);
     const packages = await readPackages(db, today, await readVatRegistered(db));
     const updated = packages.find((row) => row.id === packageId);
     if (!updated) {
