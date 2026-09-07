@@ -236,9 +236,12 @@ export function ClientsPage() {
           className="field--search"
           label="Search"
           type="search"
+          // The tablet tier and above, the shell's own boundary
+          // (docs/SPEC/responsive-console.md section 4). Below it a focused
+          // field raises the keyboard over the list the person came to read.
           autoFocus={
             typeof window.matchMedia === 'function' &&
-            window.matchMedia('(min-width: 720px)').matches
+            window.matchMedia('(min-width: 768px)').matches
           }
           placeholder="Name, record number or Emirates ID"
           value={query}

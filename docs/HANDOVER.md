@@ -251,6 +251,17 @@ an unanswered decision. The next session's first act is section 10.
 
 ## 3. What is approved
 
+**`docs/PLAN/responsive-console.md`, piece nineteen, approved by the operator
+on 8 September 2026** ("go ahead"). The console adapts to the screen it is on:
+three sizes in place of one breakpoint, a sidebar that scrolls on its own and
+closes to a strip of icons, and a phone that is shown the whole console zoomed
+out rather than a squeezed version of it. The four decisions of 7 September are
+section 3 of `docs/SPEC/responsive-console.md`, and one of them reverses the
+design brief's line about the rail having no collapse toggle; the reversal is
+recorded in the brief with its date and reason. Built on branch
+`responsive-console` from `main` at `0a24f85`. The practitioner app and the
+household's portal are untouched by design.
+
 `docs/PLAN/pieces-seven-to-nine.md`, approved by the operator on 4
 September 2026: pieces seven and eight are built, piece nine's domain and
 host were answered on 5 September, and the same approval authorised the

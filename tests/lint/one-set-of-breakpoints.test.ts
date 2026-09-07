@@ -27,37 +27,42 @@ const EXCEPTIONS = new Map([
   ['app/client/portal.css', [720]],
 ]);
 
-function stylesheets(dir: string, found: string[] = []): string[] {
+/**
+ * Stylesheets, and the modules that ask the same question through
+ * `matchMedia`: a width written in TypeScript drifts from the tiers exactly as
+ * easily as one written in CSS, and the clients page's autofocus had.
+ */
+function sources(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const path = join(dir, entry);
     if (statSync(path).isDirectory()) {
-      stylesheets(path, found);
-    } else if (entry.endsWith('.css')) {
+      sources(path, found);
+    } else if (/\.(?:css|ts|tsx)$/.test(entry) && !/\.test\.tsx?$/.test(entry)) {
       found.push(path);
     }
   }
   return found;
 }
 
-/** Every width a stylesheet's media queries name, in pixels. */
-function widthsIn(css: string): number[] {
-  const pixels = [...css.matchAll(/@media[^{]*?\b(?:min|max)-width:\s*(\d+(?:\.\d+)?)px/g)].map(
-    (match) => Number(match[1]),
-  );
-  const rems = [...css.matchAll(/@media[^{]*?\b(?:min|max)-width:\s*(\d+(?:\.\d+)?)rem/g)].map(
-    (match) => Number(match[1]) * 16,
-  );
-  // The range syntax, `@media (width < 40rem)`, says the same thing again.
-  const ranges = [...css.matchAll(/@media[^{]*?\bwidth\s*[<>]=?\s*(\d+(?:\.\d+)?)(px|rem)/g)].map(
+/**
+ * Every width a source names, in pixels: `@media` in a stylesheet, the range
+ * syntax `(width < 40rem)` that says the same thing again, and the query
+ * strings a module hands to `matchMedia`.
+ */
+function widthsIn(source: string): number[] {
+  const declared = [...source.matchAll(/\b(?:min|max)-width:\s*(\d+(?:\.\d+)?)(px|rem)/g)].map(
     (match) => (match[2] === 'rem' ? Number(match[1]) * 16 : Number(match[1])),
   );
-  return [...pixels, ...rems, ...ranges];
+  const ranges = [
+    ...source.matchAll(/@media[^{]*?\bwidth\s*[<>]=?\s*(\d+(?:\.\d+)?)(px|rem)/g),
+  ].map((match) => (match[2] === 'rem' ? Number(match[1]) * 16 : Number(match[1])));
+  return [...declared, ...ranges];
 }
 
 describe('one set of breakpoints', () => {
   it('lets no stylesheet invent a width of its own', () => {
     const offenders: string[] = [];
-    for (const path of stylesheets('app')) {
+    for (const path of sources('app')) {
       const allowed = [...TIERS, ...(EXCEPTIONS.get(path) ?? [])];
       for (const width of widthsIn(readFileSync(path, 'utf8'))) {
         if (!allowed.includes(width)) {

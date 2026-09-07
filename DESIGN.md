@@ -289,17 +289,23 @@ A 40px/44px display step (-0.02em) exists in the tokens for report covers only; 
 
 ## Layout
 
-The ledger is a two-column grid: a 220px rail on the inline start and a content column beside it (`grid-template-columns: 220px minmax(0, 1fr)`), the whole at least the viewport height. The rail is sticky and full height, padded 24px vertically and 16px horizontally, with a hairline on its inline-end edge. The content column pads 32px on top and sides and 64px below, and its content is capped at 1200px. Everything is written in logical properties (inline-start, block-end, padding-inline) so the layout mirrors for Arabic without a second stylesheet; `index.html` carries `lang` and `dir`.
+The ledger is a two-column grid: the rail on the inline start and a content column beside it (`grid-template-columns: var(--rail) minmax(0, 1fr)`), the whole at least the viewport height. The rail is sticky and full height, with a hairline on its inline-end edge. It is 220px with its labels and 64px as a strip of icons, and which of the two is decided by the tier and then by the person (see Tiers, below). The content column is capped at 1600px, so a wide display is used by a table while prose keeps the 68ch measure. Everything is written in logical properties (inline-start, block-end, padding-inline) so the layout mirrors for Arabic without a second stylesheet; `index.html` carries `lang` and `dir`.
 
 Page furniture is fixed: the heading and its count sit on one baseline with a 16px gap and 24px beneath; the toolbar is a wrapping row with 16px gaps aligned to the bottom edge, 24px beneath; then the table. The search field is the primary action and takes the width (`flex: 1 1 24rem`, capped at the 68ch measure) while the status select sits beside it at a minimum of 12rem. Both fields sit on a 4px gap under their label.
 
-The drawer is the ledger's second width token beside the rail: 480px (`--drawer`), fixed to the block edges and the inline end, above the content (`z-index: 2`) with no scrim and no shift of the list beneath, never wider than the viewport. Its header and body each pad 24px; the header closes with a hairline, and the body scrolls on its own so the title stays put. Inside it the timeline keeps the ledger's rhythm at a finer step: a day heading with 16px above and 8px of block padding, events padded 12px block on hairline rules, 4px between a sentence and its meta line and again before a reason, and 24px of block padding around the paging button.
+The drawer is the ledger's second width token beside the rail: `clamp(320px, 55vw, 480px)` (`--drawer`), so on a tablet it takes a share of the screen rather than most of it and the ledger stays readable beside it. It is fixed to the block edges and the inline end, above the content (`z-index: 2`) with no scrim and no shift of the list beneath, never wider than the viewport. Its header and body each pad 24px; the header closes with a hairline, and the body scrolls on its own so the title stays put. Inside it the timeline keeps the ledger's rhythm at a finer step: a day heading with 16px above and 8px of block padding, events padded 12px block on hairline rules, 4px between a sentence and its meta line and again before a reason, and 24px of block padding around the paging button.
 
 The spacing scale is a 4px step: 4, 8, 12, 16, 20, 24, 32, 48, 64. Twelve is the horizontal unit inside rows, rail items and inputs, and the block unit of a timeline event; sixteen is the gap between siblings; twenty-four is the gap between blocks and the drawer's padding; thirty-two is the page's outer padding.
 
 Density is set by one number: every row, input, button and rail item is 44px tall. The tap target rises to 48px for the sign-out control, the drawer's close control and, by the brief, on the instrument. Sign-in and the plain landing pages are a single centred column, 24rem wide (28rem on the instrument, the 68ch measure on the record), padded 64px above and 24px at the sides.
 
-There is one breakpoint, at 720px. Below it the grid collapses to one column; the rail becomes a static band under a hairline, laid out as a two-row grid with the wordmark and the person on the first line and the sections wrapping on the second; not-yet-arrived sections and the roles line are hidden; the page pads 24px above, 16px at the sides and 48px below; the toolbar fields go full width; the drawer takes the full width and drops its edge hairline; and the table scrolls inside its own container with the first two columns (the record, 7.5rem wide, and the name) pinned on the inline start, the name column drawing an inset hairline on its end edge. The page body never scrolls sideways.
+### Tiers
+
+There are three sizes, written compact first, with two boundaries: the tablet tier at 768px and the desk tier at 1200px (`app/shell/shell.css`; `docs/SPEC/responsive-console.md`). The compact tier pads the page 16px at the sides, the tablet tier 24px and the desk tier 32px, and the rail's own padding steps with them. The rail is open with its labels on the desk tier and closed to a strip of icons below it; whichever the person last chose beats the tier and is remembered on that device under `mcwellness.rail`. The rail's sections scroll inside the rail, so the person's name and the way out are never pushed off a short screen. Below the tablet tier a toolbar field takes the whole line and the drawer takes the full width, dropping its edge hairline.
+
+A table wider than its column scrolls inside its own container with its first column pinned on the inline start, drawing an inset hairline on its end edge. That rule is unconditional: a sticky column in a container it already fits has nothing to stick to. It pins one column and not two, because a second has to be offset by the first one's width and CSS cannot read it. The page body never scrolls sideways.
+
+On a phone the console is not folded at all. It declares a 1024px layout width (`app/shell/viewport.ts`) and the browser shows the whole page scaled to fit, for the person to pinch and pan, so a phone shows the same console a laptop does. The practitioner app, the household's portal and the sign-in page keep the device's own width: each is designed for a phone and must read without zooming. Nothing anywhere writes `user-scalable` or `maximum-scale`, and a test refuses either.
 
 ### Named Rules
 **The 44 Rule.** Rows, inputs, buttons and rail items are 44px tall. One height sets the ledger's rhythm; the sign-out control, the drawer's close control and the instrument's controls take 48px.
@@ -308,7 +314,7 @@ There is one breakpoint, at 720px. Below it the grid collapses to one column; th
 
 **The Hairline Rule.** Structure is drawn with 1px rules in Rule (#cbd5d6): table rows, the rail's edge, field borders, the drawer's edge, the rule under each event. No zebra striping, no card borders, no boxes around groups.
 
-**The Beside Rule.** A record's detail opens in the drawer at the inline end, 480px wide, over the ledger with no scrim, so the list stays readable beside it; below 720px the drawer takes the full width. Detail is never a modal dialog.
+**The Beside Rule.** A record's detail opens in the drawer at the inline end, over the ledger with no scrim, so the list stays readable beside it. It takes a share of the screen, `clamp(320px, 55vw, 480px)`, and the full width below the tablet tier. Detail is never a modal dialog.
 
 ## Elevation & Depth
 
@@ -350,7 +356,7 @@ An in-page control that reads as a link: in the ledger, the client's name opens 
 A label above, a box below, both in the ledger's vocabulary.
 - **Style:** the label is small (14px) in second ink with a 4px gap; the input is 44px tall, surface fill, a 1px Rule border, 4px radius, 12px horizontal padding, ink text, placeholder in second ink. Browser chrome is removed (`appearance: none`, search decorations hidden).
 - **Select:** the same box, with a 20px chevron in second ink absolutely placed 12px from the inline end and 40px of end padding so the value never runs under it.
-- **Search:** the primary action on the clients page; it takes the toolbar's width and autofocuses at 720px and above.
+- **Search:** the primary action on the clients page; it takes the toolbar's width and autofocuses at the tablet tier and above, where a keyboard does not rise over the list.
 - **Focus:** the shared ring. **Error:** there is no red border; the message takes over the hint's own slot in critical ink, wired to the control by `aria-invalid`/`aria-describedby`. A field's error sits with its field; a Note is for an outcome (loading, empty, a submission failing), never for a field's own validation.
 - **Disabled:** the value stays in ink but the field loses its white fill and sits on the paper ground, which is what carries the state; the same hairline border in Rule, a default cursor and no hover change, its select chevron dimmed to slate; the hint still renders beneath so a locked step can say what it is waiting for.
 
@@ -360,7 +366,7 @@ The rail: the console's fixed inline-start column, icon and label, no collapse t
 - **Items:** 44px tall, 12px horizontal padding, 12px gap between a 20px icon and the label, 4px radius, ink text; 4px between items.
 - **Hover:** surface fill, instant. **Active:** surface fill and medium weight.
 - **Arriving:** a section that has not shipped is listed as text in second ink with its icon in slate and the word "Arriving" in micro on the end, `aria-disabled`; never a dead link.
-- **Mobile:** below 720px the rail becomes a band under a hairline: wordmark and person on one line, the live sections wrapping beneath, arriving sections hidden.
+- **Closed:** below the desk tier, and whenever the person asks, the rail is a 64px strip of icons. The labels stay in the markup and are hidden the visually-hidden way, so every section keeps its accessible name and gains a title for the pointer. The sections scroll inside the rail.
 
 ### Status Chip
 - **Style:** a word in ink, preceded by a 6px dot with an 8px gap; no background, no border, no pill.
@@ -393,7 +399,7 @@ A record's detail opens beside the ledger, not over a dimmed page.
 - **Close:** a 48px square control at the header's end: transparent, the 20px close icon in second ink, 4px radius, pulled 8px into the padding on every side so the glyph sits on the title's grid. Hover: ink on paper, instant. It takes focus when the drawer opens; Escape closes; focus returns to the name that opened it.
 - **Body:** 24px padding, scrolls inside itself; the section heading (h3 in ink), then the content.
 - **Entrance:** the one motion in the shell. 160ms on the ease-out (`cubic-bezier(0.2, 0, 0, 1)`), sliding 24px in from its own edge and fading from 0 through `@starting-style`; `:dir(rtl)` mirrors the translate so the Arabic drawer enters from its own side; both properties drop to 0ms under `prefers-reduced-motion`. It leaves instantly; there is no exit animation.
-- **Mobile:** below 720px it is the full width and drops its edge hairline.
+- **Compact tier:** below 768px it is the full width and drops its edge hairline.
 - **Semantics:** an `aside` with `role="dialog"` labelled by its title. No backdrop, no focus trap.
 
 ### The Record Timeline (signature)
@@ -417,7 +423,7 @@ A client's history as sentences on rules: the ledger's vocabulary turned to time
 - **Do** answer loading, empty and error states with a Note line in second ink or critical, capped at 68ch.
 - **Do** put the dark ground on a surface with `data-ground='dark'` and let the tokens swap; never restyle a component for dark.
 - **Do** keep the Latin wordmark "McWellness" in every locale.
-- **Do** open a record's detail in the drawer: 480px at the inline end on surface, a hairline edge and the one soft shadow, no scrim, full width below 720px.
+- **Do** open a record's detail in the drawer: a share of the screen at the inline end on surface, a hairline edge and the one soft shadow, no scrim, full width below the tablet tier.
 - **Do** make an in-page control that reads as a link a `button.link` in ink with a hairline underline that thickens to 2px on hover.
 - **Do** write history as sentences on hairline rules at a 12px block step: a change or creation in medium ink, a read or system row in regular second ink, roles and a tabular time in micro beneath.
 
