@@ -705,6 +705,17 @@ nine and ten; see the records on pull requests 73 to 83).
    entries; the deferred balance check answering 500 rather than a coded 400
    if a route ever bypassed `assertBalanced`. (d) Step 3's leftovers and
    `assessment-02.md` as before.
+   (e) **Route planning, awaiting the operator's approval** (7 September,
+   22:18 to 23:30): the operator asked for route planning and stop
+   optimisation on a map, reusing the Flutter app's Google key. Four
+   decisions at 22:40 (the console's day map, Today keeps its picture;
+   Optimise re-times `proposed` visits around confirmed anchors; the
+   Flutter key becomes the browser map key; a week planner too). The
+   plain-language plan is `docs/PLAN/route-planning.md` (pieces seventeen
+   and eighteen, in the `scheduling` worktree) and the specification
+   `docs/SPEC/route-planning.md`. **Approved at 22:54** ("lets go"),
+   defaults standing; piece seventeen builds next in the `scheduling`
+   worktree; the two keys are not touched until its staging pass.
 
 7. **Trunk round 35, the console in English only, is merged** (7 September,
    19:53 to 20:20): the operator's decision of 19:37 removed every Arabic
