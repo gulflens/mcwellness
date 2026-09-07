@@ -1401,6 +1401,122 @@ db/policies` and `-- db/seed` are both empty, so neither owed a re-apply.
   `rls_enabled_no_policy` `INFO` findings and the one leaked-password
   `WARN` are unaffected by two DDL files that touch none of those tables.
 
+## What was done on 2026-09-07: the fourteenth staging pass — the books' six migrations
+
+Piece eleven (pull request 109, merged to `main` as `dce3ca1`) owed staging its
+six accounting migrations and the two new policy files. Before anything was
+touched, `select filename from schema_migration order by 1` on staging (75
+rows) was diffed against `ls db/migrations` on the checkout (81 files): the
+only six missing were exactly `450_accounting_setting.sql`,
+`451_account.sql`, `452_fiscal_year.sql`, `453_journal.sql`,
+`454_unposted_money_events.sql` and `958_bootstrap_knows_the_books.sql`, and
+nothing else differed.
+
+- **The six files were applied in order**, each through
+  `mcp__claude_ai_Supabase__apply_migration` as one call: the runner's own
+  audit context (`app.reason` naming the file, a fresh `app.request_id`), the
+  file's full text unchanged, then the bookkeeping insert carrying the
+  sha256 computed locally with `shasum -a 256`. All six succeeded on the
+  first try, in this order and with these checksums:
+  `450_accounting_setting.sql` `daa3baa67cd5580704b2e58cce20570aa32879d617522a164d4db66edc967954`,
+  `451_account.sql` `1e575bad5e46631702f3b588eab21b1a18a639300c63b00afb7bee74e0e5cc5d`,
+  `452_fiscal_year.sql` `67273091d8b8376d9a182aca38ae98571c541b81d551e48aa5a20841810c69b8`,
+  `453_journal.sql` `8c11bdad68a82abad3bbbdac1c5b6d3d5c9dba858fdc60dd71b387eef53d4da5`,
+  `454_unposted_money_events.sql` `5d5657df3195c37444a23ed83f7ae0edec96dcc671bc140717aa20ec45f38032`,
+  `958_bootstrap_knows_the_books.sql` `f6895f863f12e9305bcf14aaed34128bfb1a762449f32c2d42f56b370d087a63`.
+  `schema_migration` now holds **eighty-one rows**, its filenames matching
+  `ls db/migrations` exactly, and the six new rows carry the checksums above.
+- **The 22 policy files were re-applied in one call**, `policies_after_958`,
+  in path order inside a single `apply_migration` transaction whose query
+  opened with the same `app.reason = 'policies'` stamp the runner's own
+  `applyPolicies` uses. It succeeded on the first try. `pg_policies` on
+  `public` now counts **155**, and the five rules the brief named stand
+  exactly where expected: `books_readers` on all five accounting tables
+  (`accounting_setting`, `account`, `fiscal_year`, `journal_entry`,
+  `journal_line`); `books_writers` on `account`, `journal_entry` and
+  `journal_line`; `account_amenders` on `account` alone; `books_owner_settings`
+  on `accounting_setting` and `fiscal_year` alone; `tenant_isolation` on all
+  five as the permissive floor beneath the four restrictive rules above.
+- **The rows the data steps wrote to the real practice.** The one `tenant`
+  row still stands alone (`tenant_count = 1`). 450's data step gave it
+  exactly one `accounting_setting` row with every default the brief named:
+  `year_end_month 12, year_end_day 31, locked_through null,
+  corporate_tax_rate_basis_points 900, corporate_tax_threshold_fils 37500000,
+  small_business_relief_elected true, small_business_relief_threshold_fils
+  300000000, next_entry_number 1` (`books_start_on` came out `2026-09-07`,
+  today). 451's data step gave it sixteen `account` rows with twelve distinct
+  roles, codes `1010` through `6200` exactly as `docs/SPEC/accounting.md`
+  section 4.1 lists (1010 bank, 1020 cash, 1030 link_clearing, 1200
+  receivable, 1500 no role, 2100 refunds_payable, 2400 contract_liability,
+  2500 vat_payable, 3000 no role, 3100 opening_balance, 4000
+  income_sessions, 4100 income_assessments, 4300 income_fees, 4400
+  income_expired, 6000 no role, 6200 no role). `audit_log` carries exactly
+  one row reasoned `migration 450_accounting_setting.sql` and sixteen
+  reasoned `migration 451_account.sql` — the insert and the sixteen inserts,
+  and nothing else this pass wrote to an audited table.
+- **`pg_get_functiondef('app.bootstrap_practice'::regproc)`** contains both
+  `('accounting_setting', '450_accounting_setting.sql')` and `('account',
+  '451_account.sql')` in the checked `values` block, confirmed by reading the
+  installed body back.
+- **The ten functions the brief named all exist** in schema `app`:
+  `check_journal_balanced`, `default_accounting_setting`,
+  `default_chart_of_accounts`, `default_chart_rows`, `fiscal_year_for`,
+  `guard_fiscal_year_overlap`, `guard_journal_entry`,
+  `guard_journal_immutable`, `next_journal_entry_number`,
+  `unposted_money_events`. `execute` on `app.unposted_money_events()` and
+  `app.fiscal_year_for(date)` is granted to `app_role` and to nobody else but
+  the owner (`proacl` reads `{postgres=X/postgres,app_role=X/postgres}` on
+  both).
+- **Row security and grants on the five accounting tables.** All five carry
+  `relrowsecurity = true` (`relforcerowsecurity = false`, the schema's usual
+  shape). `app_role`'s table grants are exactly what the brief specified:
+  `accounting_setting` select and update; `account` select, insert and
+  update; `fiscal_year` select and update; `journal_entry` and
+  `journal_line` select and insert; delete nowhere.
+- **The fingerprint**, against a fresh `pnpm db:reset && pnpm db:migrate` on
+  this checkout (already at `main`'s `dce3ca1`; the worktree carried only a
+  pre-existing, unrelated local edit to `docs/HANDOVER.md`, untouched by this
+  pass). Eighty-one migrations and twenty-two policy files applied cleanly to
+  an empty local database. The seven parts the brief asked for matched
+  staging exactly, count for count: columns in `information_schema.columns`
+  for `public` **1,280 = 1,280**; constraints in `pg_constraint` for `public`
+  **601 = 601**; indexes in `pg_indexes` for `public` **501 = 501**; policies
+  on `public` **155 = 155**; functions in schemas `app` and `public` together
+  **95 = 95**; triggers on `public` tables **240 = 240**; tables in `public`
+  with row security enabled **74 = 74**. The two known benign differences
+  earlier passes record did not surface at this count-level grain (they show
+  up only in a positional or grant-identity comparison, which this pass did
+  not run): Supabase's own `service_role` carries grants a fresh local build
+  has no such role to hold, and `schema_migration.checksum`'s physical column
+  slot differs by the history of which pass added which column, never by
+  name, type, nullability or default.
+- **The audit chain.** `select app.verify_audit_chain()` returned **null**
+  (the chain verifies) with `audit_log` standing at **986** rows. That is
+  consistent with the twelfth pass's own recorded 969 plus the seventeen
+  rows this pass's two data steps wrote (one `accounting_setting` insert,
+  sixteen `account` inserts) — the thirteenth pass's two DDL-only migrations
+  wrote no audited row, so 969 is what this pass inherited.
+- **What this pass deliberately did not do.** The poster was not run, no
+  journal entry was created (the books' tables — `fiscal_year`,
+  `journal_entry`, `journal_line` — sit empty), and production was never
+  touched: every call above named `ajjkvjtqxktkgrvcrzkh` and nothing else.
+  The staging app is still the build from before this pass; `POST
+  /api/accounting/post` and Books only become reachable once the app is
+  rebuilt from `main` (`pnpm exec vite build --mode staging`, section 6
+  below), which this pass leaves for the next one.
+- **How to read this in a fresh session.** This bullet list is the whole of
+  what changed: six migrations and one policy re-apply against
+  `ajjkvjtqxktkgrvcrzkh` only, nothing local except the fingerprint's
+  disposable `pnpm db:reset && pnpm db:migrate`. To confirm the state
+  independently, re-run the "before anything" check in the brief (`select
+  filename from schema_migration order by 1` against `ls db/migrations`) and
+  it should find nothing pending; `db/migrations/450_accounting_setting.sql`
+  through `454_unposted_money_events.sql` and `958_bootstrap_knows_the_books.sql`
+  are the files this pass added, `db/policies/accounting/access.sql` and
+  `db/policies/accounting/tenant_isolation.sql` are the two new policy files,
+  and this session's report sits at
+  `/private/tmp/claude-501/-Volumes-Storage-McWellness/fac94f8e-e3d7-43ee-954f-a7acaf7d0224/scratchpad/eleven-staging-report.md`.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
