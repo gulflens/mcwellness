@@ -109,7 +109,12 @@ export function SellPackageDrawer({
           ? {
               payment: {
                 method,
-                // The gross figure: what the family actually hands over.
+                // The gross figure: what the family actually hands over. The
+                // API's gross is what the practice charges today — the price
+                // plus VAT while it is registered for VAT, and the price
+                // itself while it is not (migration 406) — so this is the
+                // same figure as the invoice the same request creates, and a
+                // sale leaves nothing owed and nothing overpaid.
                 amountFils: price.grossFils,
                 reference: reference.trim() || null,
               },
