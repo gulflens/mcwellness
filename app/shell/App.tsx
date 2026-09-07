@@ -77,6 +77,14 @@ function RequireAuth({ children }: { children: (actor: Actor) => ReactNode }) {
  * design brief's own intent — 6.2 calls this "the one full-bleed screen — map
  * fills the viewport, practitioner list overlays left, no chrome competing
  * with it".
+ *
+ * And inside the page the same rule is kept by construction rather than by
+ * memory: `DayMapPage` wraps its whole tree, drawers included, in the
+ * `DocumentBoundary` of `app/admin/schedule/map/documentBoundary.tsx`, where a
+ * `BoundaryLink` renders a plain anchor. The call-off drawer's way through to
+ * Billing is shared with the Schedule page and was a client-side `Link`, which
+ * carried the rail and every screen behind it into this document (the re-check
+ * of that same pull request).
  */
 function RequireAuthDocument({ children }: { children: ReactNode }) {
   const { session } = useAuth();

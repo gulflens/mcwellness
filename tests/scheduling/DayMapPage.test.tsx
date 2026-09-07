@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { plainText } from './support';
 import { fakeGoogleMaps } from './fakeGoogleMaps';
@@ -114,8 +114,38 @@ function fetchImpl(): typeof fetch {
     if (url.startsWith('/api/routing/practice-day?')) {
       return new Response(JSON.stringify(practiceDay), { status: 200 });
     }
+    // What the call-off drawer needs to run all the way through, so the
+    // document boundary can be exercised where a coordinator really meets it.
+    if (url.startsWith('/api/appointments/settings')) {
+      return new Response(JSON.stringify({ noticeHours: 24, unfitFeeFils: 15000 }), {
+        status: 200,
+      });
+    }
+    if (url.endsWith('/cancel')) {
+      return new Response(
+        JSON.stringify({
+          id: confirmed.id,
+          status: 'cancelled',
+          reason: 'client_request',
+          noticeHours: 24,
+          callOutFeeNetFils: null,
+          callOutFeeVatFils: null,
+          callOutFeeGrossFils: null,
+          feeInvoiceId: null,
+        }),
+        { status: 200 },
+      );
+    }
     return new Response('not found', { status: 404 });
   }) as unknown as typeof fetch;
+}
+
+/** Reads back where the router thinks it is, so a test can prove it did not move. */
+let whereTheRouterIs = '';
+function LocationProbe() {
+  const location = useLocation();
+  whereTheRouterIs = `${location.pathname}${location.search}`;
+  return null;
 }
 
 function renderPage(
@@ -126,6 +156,7 @@ function renderPage(
   return render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchStub}>
       <MemoryRouter initialEntries={[`/admin/schedule/map?date=${DAY}`]}>
+        <LocationProbe />
         <DayMapPage
           browserKey={options.key === undefined ? 'a-restricted-browser-key' : options.key}
           loadMaps={loadMaps}
@@ -191,5 +222,52 @@ describe('DayMapPage', () => {
     renderPage(fetchImpl(), { key: 'k' });
     await screen.findByRole('button', { name: 'Iris Cliff' });
     expect(screen.queryByText('إيريس كليف')).toBeNull();
+  });
+
+  /**
+   * The boundary this document is (docs/SECURITY.md; the review of this pull
+   * request, finding B2, and the re-check of the first fix round).
+   *
+   * This page is served with the wider content security policy Google's map
+   * script needs. If anything inside it navigates **in place**, the screen it
+   * lands on is rendered in this document, under `'unsafe-eval'` and
+   * `'strict-dynamic'` — and from Billing the rail puts Clients, Books, Audit
+   * and Settings one click away for the rest of the session. So every way out
+   * has to be a fresh document load, and the way to be sure of that is to make
+   * it a property of the tree rather than of whoever wrote the link.
+   *
+   * The path below is the one a coordinator really walks: call a visit off
+   * from the map, and the drawer offers Billing beside Close.
+   */
+  it('does not navigate in place when a drawer inside it offers a way out', async () => {
+    renderPage(fetchImpl(), { key: 'k' });
+    fireEvent.click(await screen.findByRole('button', { name: /^Call off Iris Cliff/ }));
+
+    fireEvent.change(screen.getByLabelText('What happened?'), {
+      target: { value: 'The family called it off.' },
+    });
+    // The drawer will not act until it knows what the practice's own notice
+    // period costs, so this waits for that rather than clicking a dead button.
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Call off this visit' }) as HTMLButtonElement).disabled,
+      ).toBe(false),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Call off this visit' }));
+
+    const billing = await screen.findByRole('link', { name: 'Open Billing' });
+    // A plain anchor, which jsdom will not follow; a router Link would move
+    // the location below without ever loading a document.
+    expect(billing.getAttribute('href')).toBe('/admin/billing');
+    fireEvent.click(billing);
+    expect(whereTheRouterIs).toBe(`/admin/schedule/map?date=${DAY}`);
+  });
+
+  it('keeps the way back to the Schedule a fresh document too', async () => {
+    renderPage(fetchImpl(), { key: 'k' });
+    const schedule = await screen.findByRole('link', { name: 'Schedule' });
+    expect(schedule.getAttribute('href')).toBe(`/admin/schedule?date=${DAY}`);
+    fireEvent.click(schedule);
+    expect(whereTheRouterIs).toBe(`/admin/schedule/map?date=${DAY}`);
   });
 });

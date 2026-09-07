@@ -10,6 +10,7 @@ import { CancelAppointmentDrawer } from '../CancelAppointmentDrawer';
 import { MoveAppointmentDrawer } from '../MoveAppointmentDrawer';
 import { formatWindow, practiceDay } from '../windows';
 import { DayMap, formatDrive } from './DayMap';
+import { DocumentBoundary } from './documentBoundary';
 import { browserMapKey, loadGoogleMaps, type GoogleMaps } from './googleMaps';
 import { OptimiseDrawer } from './OptimiseDrawer';
 import './map.css';
@@ -216,159 +217,167 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
   const canOptimise = state.kind === 'ready' && rows.length >= 2 && movable > 0;
 
   return (
-    <section className="page daymap__page">
-      {maps !== null && current !== null ? (
-        <DayMap maps={maps} day={current} selectedId={selectedId} onSelect={setSelectedId} />
-      ) : (
-        <div className="daymap daymap--absent" />
-      )}
-      <aside className="daymap__panel" aria-label="The day">
-        <PageHeader title="Day map" aside={practitionerName ?? undefined} />
-        <div className="toolbar">
-          <Field
-            id="daymap-date"
-            className="schedule__date"
-            label="Date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-          {/* A plain anchor, not a Link: this document carries the map's own
-              policy and the Schedule page carries the strict one, so each is
-              entered as its own document (section 4.1). */}
-          <a className="link schedule__week-link" href={`/admin/schedule?date=${date}`}>
-            Schedule
-          </a>
-          {practitioners.length > 1 ? (
-            <Select
-              id="daymap-practitioner"
-              label="Practitioner"
-              value={current?.practitionerId ?? ''}
-              onChange={(e) => {
-                setShown(e.target.value);
-                setSelectedId(null);
+    /* Everything this page renders, drawers included, is inside the boundary:
+       this document carries the map's wider content security policy, so every
+       way out of it must be a fresh document load rather than a client-side
+       navigation that would render the next screen of the practice in here
+       (./documentBoundary.tsx, docs/SECURITY.md). Marking the tree rather than
+       each link is what makes the next link nobody thinks about safe too. */
+    <DocumentBoundary>
+      <section className="page daymap__page">
+        {maps !== null && current !== null ? (
+          <DayMap maps={maps} day={current} selectedId={selectedId} onSelect={setSelectedId} />
+        ) : (
+          <div className="daymap daymap--absent" />
+        )}
+        <aside className="daymap__panel" aria-label="The day">
+          <PageHeader title="Day map" aside={practitionerName ?? undefined} />
+          <div className="toolbar">
+            <Field
+              id="daymap-date"
+              className="schedule__date"
+              label="Date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+            {/* A plain anchor, not a Link: this document carries the map's own
+                policy and the Schedule page carries the strict one, so each is
+                entered as its own document (section 4.1). */}
+            <a className="link schedule__week-link" href={`/admin/schedule?date=${date}`}>
+              Schedule
+            </a>
+            {practitioners.length > 1 ? (
+              <Select
+                id="daymap-practitioner"
+                label="Practitioner"
+                value={current?.practitionerId ?? ''}
+                onChange={(e) => {
+                  setShown(e.target.value);
+                  setSelectedId(null);
+                }}
+              >
+                {practitioners.map((p) => (
+                  <option key={p.practitionerId} value={p.practitionerId}>
+                    {state.kind === 'ready'
+                      ? (state.appointments.find((row) => row.practitioner.id === p.practitionerId)
+                          ?.practitioner.displayName ?? 'Practitioner')
+                      : 'Practitioner'}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
+            <Button
+              variant="secondary"
+              disabled={!canOptimise}
+              onClick={() => {
+                setActing(null);
+                setApplied(null);
+                setOptimising(true);
               }}
             >
-              {practitioners.map((p) => (
-                <option key={p.practitionerId} value={p.practitionerId}>
-                  {state.kind === 'ready'
-                    ? (state.appointments.find((row) => row.practitioner.id === p.practitionerId)
-                        ?.practitioner.displayName ?? 'Practitioner')
-                    : 'Practitioner'}
-                </option>
-              ))}
-            </Select>
+              Optimise the day
+            </Button>
+          </div>
+          {mapNote ? <Note>{mapNote}</Note> : null}
+          {state.kind === 'loading' ? <Note>Loading the day.</Note> : null}
+          {state.kind === 'error' ? <Note tone="critical">{DAY_FAILED}</Note> : null}
+          {actionError ? <Note tone="critical">{actionError}</Note> : null}
+          {applied ? <Note>{applied}</Note> : null}
+          {state.kind === 'ready' && rows.length === 0 ? (
+            <Note>No appointments are booked for this day.</Note>
           ) : null}
-          <Button
-            variant="secondary"
-            disabled={!canOptimise}
-            onClick={() => {
-              setActing(null);
-              setApplied(null);
-              setOptimising(true);
-            }}
-          >
-            Optimise the day
-          </Button>
-        </div>
-        {mapNote ? <Note>{mapNote}</Note> : null}
-        {state.kind === 'loading' ? <Note>Loading the day.</Note> : null}
-        {state.kind === 'error' ? <Note tone="critical">{DAY_FAILED}</Note> : null}
-        {actionError ? <Note tone="critical">{actionError}</Note> : null}
-        {applied ? <Note>{applied}</Note> : null}
-        {state.kind === 'ready' && rows.length === 0 ? (
-          <Note>No appointments are booked for this day.</Note>
-        ) : null}
-        <ol className="daymap__rows">
-          {rows.map(({ row, index, leg }) => (
-            <li
-              key={row.id}
-              className="daymap__row"
-              aria-current={selectedId === row.id ? 'true' : undefined}
-            >
-              {index > 0 ? <p className="daymap__drive small muted">{formatDrive(leg)}</p> : null}
-              <div className="daymap__row-head">
-                <span className="daymap__row-number numeric">{index + 1}</span>
-                <span className="numeric">{formatWindow(row.windowStart, row.windowEnd)}</span>
-                <StatusChip
-                  label={APPOINTMENT_STATUS_LABELS[row.status]}
-                  tone={APPOINTMENT_STATUS_TONES[row.status]}
-                />
-              </div>
-              <button type="button" className="link" onClick={() => setSelectedId(row.id)}>
-                {row.client.givenName} {row.client.familyName}
-              </button>
-              <p className="small muted">
-                {row.serviceType.name}, {row.location.label}, {row.location.emirate}
-              </p>
-              {OPEN_STATUSES.includes(row.status) ? (
-                <span className="schedule__row-actions">
-                  {row.status === 'proposed' ? (
+          <ol className="daymap__rows">
+            {rows.map(({ row, index, leg }) => (
+              <li
+                key={row.id}
+                className="daymap__row"
+                aria-current={selectedId === row.id ? 'true' : undefined}
+              >
+                {index > 0 ? <p className="daymap__drive small muted">{formatDrive(leg)}</p> : null}
+                <div className="daymap__row-head">
+                  <span className="daymap__row-number numeric">{index + 1}</span>
+                  <span className="numeric">{formatWindow(row.windowStart, row.windowEnd)}</span>
+                  <StatusChip
+                    label={APPOINTMENT_STATUS_LABELS[row.status]}
+                    tone={APPOINTMENT_STATUS_TONES[row.status]}
+                  />
+                </div>
+                <button type="button" className="link" onClick={() => setSelectedId(row.id)}>
+                  {row.client.givenName} {row.client.familyName}
+                </button>
+                <p className="small muted">
+                  {row.serviceType.name}, {row.location.label}, {row.location.emirate}
+                </p>
+                {OPEN_STATUSES.includes(row.status) ? (
+                  <span className="schedule__row-actions">
+                    {row.status === 'proposed' ? (
+                      <Button
+                        variant="quiet"
+                        disabled={confirming !== null}
+                        aria-label={`Confirm ${row.client.givenName} ${row.client.familyName}'s appointment`}
+                        onClick={() => void confirm(row)}
+                      >
+                        {confirming === row.id ? 'Confirming…' : 'Confirm'}
+                      </Button>
+                    ) : null}
                     <Button
                       variant="quiet"
-                      disabled={confirming !== null}
-                      aria-label={`Confirm ${row.client.givenName} ${row.client.familyName}'s appointment`}
-                      onClick={() => void confirm(row)}
+                      aria-label={`Move ${row.client.givenName} ${row.client.familyName}'s appointment`}
+                      onClick={() => {
+                        setOptimising(false);
+                        setActing({ kind: 'move', row });
+                      }}
                     >
-                      {confirming === row.id ? 'Confirming…' : 'Confirm'}
+                      Move
                     </Button>
-                  ) : null}
-                  <Button
-                    variant="quiet"
-                    aria-label={`Move ${row.client.givenName} ${row.client.familyName}'s appointment`}
-                    onClick={() => {
-                      setOptimising(false);
-                      setActing({ kind: 'move', row });
-                    }}
-                  >
-                    Move
-                  </Button>
-                  <Button
-                    variant="quiet"
-                    aria-label={`Call off ${row.client.givenName} ${row.client.familyName}'s appointment`}
-                    onClick={() => {
-                      setOptimising(false);
-                      setActing({ kind: 'cancel', row });
-                    }}
-                  >
-                    Call off
-                  </Button>
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      </aside>
-      {acting?.kind === 'move' ? (
-        <MoveAppointmentDrawer
-          appointment={acting.row}
-          onClose={() => setActing(null)}
-          onMoved={() => {
-            setActing(null);
-            reload();
-          }}
-        />
-      ) : null}
-      {acting?.kind === 'cancel' ? (
-        <CancelAppointmentDrawer
-          appointment={acting.row}
-          onClose={() => setActing(null)}
-          onCancelled={reload}
-        />
-      ) : null}
-      {optimising && current !== null ? (
-        <OptimiseDrawer
-          date={date}
-          practitionerId={current.practitionerId}
-          stops={rows.map(({ row }) => row)}
-          onClose={() => setOptimising(false)}
-          onApplied={(message) => {
-            setOptimising(false);
-            setApplied(message);
-            reload();
-          }}
-        />
-      ) : null}
-    </section>
+                    <Button
+                      variant="quiet"
+                      aria-label={`Call off ${row.client.givenName} ${row.client.familyName}'s appointment`}
+                      onClick={() => {
+                        setOptimising(false);
+                        setActing({ kind: 'cancel', row });
+                      }}
+                    >
+                      Call off
+                    </Button>
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        </aside>
+        {acting?.kind === 'move' ? (
+          <MoveAppointmentDrawer
+            appointment={acting.row}
+            onClose={() => setActing(null)}
+            onMoved={() => {
+              setActing(null);
+              reload();
+            }}
+          />
+        ) : null}
+        {acting?.kind === 'cancel' ? (
+          <CancelAppointmentDrawer
+            appointment={acting.row}
+            onClose={() => setActing(null)}
+            onCancelled={reload}
+          />
+        ) : null}
+        {optimising && current !== null ? (
+          <OptimiseDrawer
+            date={date}
+            practitionerId={current.practitionerId}
+            stops={rows.map(({ row }) => row)}
+            onClose={() => setOptimising(false)}
+            onApplied={(message) => {
+              setOptimising(false);
+              setApplied(message);
+              reload();
+            }}
+          />
+        ) : null}
+      </section>
+    </DocumentBoundary>
   );
 }
