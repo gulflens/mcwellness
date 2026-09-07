@@ -709,7 +709,7 @@ nine and ten; see the records on pull requests 73 to 83).
    `tests/lint/console-is-english.test.ts` keeps them out. The record is
    `docs/CHANGE-REQUESTS/trunk-notes.md`, round 35, and the brief is
    `docs/superpowers/plans/2026-09-07-english-only-console.md`. Merged as
-   pull request (number to follow). Two abilities are deliberately gone with
+   pull request 114. Two abilities are deliberately gone with
    it: the practice's Arabic legal name and a package's Arabic name can no
    longer be typed in the app, though both are still stored and still
    printed.
