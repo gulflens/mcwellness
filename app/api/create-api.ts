@@ -40,6 +40,7 @@ import { mountClientRecord } from './clients/mount';
 import { mountDevSession, type DevSessionOptions } from './dev-session';
 import { mountPortal, mountPortalDoor, type AuthAdminProvider } from './portal/mount';
 import { mountPractice } from './practice/routes';
+import { mountPractitioners } from './practitioners/routes';
 import { mountReports } from './reports/routes';
 import { LOGO_ENVELOPE_ALLOWANCE_BYTES, MAX_LOGO_BASE64_LENGTH } from './practice/schema';
 import { mountKit } from './kit/routes';
@@ -434,6 +435,10 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   });
 
   mountPractice(api, deps.now);
+  // Who treats, and where each one's driving day starts. After the fence like
+  // every other group: a home base is a member of staff's own address
+  // (docs/SPEC/route-planning.md section 5.4).
+  mountPractitioners(api, deps.now);
   mountClients(api, deps.now);
   mountClientRecord(api, deps.now);
   mountTimeline(api, deps.now);
