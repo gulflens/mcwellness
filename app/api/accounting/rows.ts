@@ -264,6 +264,18 @@ export async function readEntries(
   return { entries: rows.slice(0, filter.limit).map(toEntryRow), truncated };
 }
 
+/**
+ * How many opening entries the practice has, which is nought or one
+ * (`mayPostOpening`). A count and not an existence check, because the rule is
+ * the domain's to state and this is the reading of it.
+ */
+export async function readOpeningCount(db: Db): Promise<number> {
+  const { rows } = await db.query<{ n: string }>(
+    "select count(*)::text as n from journal_entry where tenant_id = app.current_tenant_id() and kind = 'opening'",
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 export async function readEntry(
   db: Db,
   id: string,

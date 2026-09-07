@@ -36,6 +36,7 @@ const REFUSALS: Record<string, string> = {
   // closed year, which the drawer cannot know the bounds of.
   period_locked: 'The books are closed or locked on that day. Choose a later day.',
   opening_day: 'An opening entry is dated the day the books start, and no other.',
+  opening_exists: 'The opening balances have already been posted.',
   unknown_account: 'One of the accounts is no longer part of the chart. Reload and try again.',
   not_an_opening_entry: 'Only an opening entry can be levelled with opening balance equity.',
   reason_required: 'Say why this entry is being posted.',

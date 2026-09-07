@@ -10,6 +10,7 @@ import {
   cr,
   dr,
   mayArchive,
+  mayPostOpening,
   reversalOf,
 } from './journal';
 import type { ChartAccount } from './types';
@@ -116,5 +117,13 @@ describe('balanceWithOpeningEquity', () => {
   it('returns the lines unchanged when they already balance', () => {
     const lines = [dr(BANK.id, fils(5)), cr(OPENING.id, fils(5))];
     expect(balanceWithOpeningEquity(lines, CHART)).toEqual(lines);
+  });
+});
+
+describe('mayPostOpening', () => {
+  it('allows the opening balances while the books have none, and never again', () => {
+    expect(mayPostOpening(0)).toBe(true);
+    expect(mayPostOpening(1)).toBe(false);
+    expect(mayPostOpening(4)).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import {
   balanceWithOpeningEquity,
   landingDayFor,
   mayPostOn,
+  mayPostOpening,
   reversalOf,
   type DraftLine,
 } from '../../../domain/accounting';
@@ -13,7 +14,14 @@ import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { mayReadBooks, mayWriteBooks } from './access';
 import { requiredReason } from './reason';
-import { readChart, readEntry, readEntries, readSetting, readYears } from './rows';
+import {
+  readChart,
+  readEntry,
+  readEntries,
+  readOpeningCount,
+  readSetting,
+  readYears,
+} from './rows';
 import { CreateEntryInput, EntriesResponse, EntryResponse, IsoDate } from './schema';
 
 /**
@@ -165,8 +173,15 @@ export function mountEntryWrites(api: Hono<ApiEnv>, now: () => Date = () => new 
     if (input.balanceWithOpeningEquity && input.kind !== 'opening') {
       return c.json({ error: 'bad_request', code: 'not_an_opening_entry', requestId }, 400);
     }
-    if (input.kind === 'opening' && input.enteredOn !== setting.booksStartOn) {
-      return c.json({ error: 'bad_request', code: 'opening_day', requestId }, 400);
+    if (input.kind === 'opening') {
+      if (input.enteredOn !== setting.booksStartOn) {
+        return c.json({ error: 'bad_request', code: 'opening_day', requestId }, 400);
+      }
+      // The drawer hides the kind once the journal holds anything; this is what
+      // makes the rule true of anything that is not the drawer.
+      if (!mayPostOpening(await readOpeningCount(db))) {
+        return c.json({ error: 'conflict', code: 'opening_exists', requestId }, 409);
+      }
     }
     if (!mayPostOn(input.enteredOn, years, setting.lockedThrough)) {
       return c.json({ error: 'conflict', code: 'period_locked', requestId }, 409);

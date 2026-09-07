@@ -29,6 +29,7 @@ export {
   cr,
   dr,
   mayArchive,
+  mayPostOpening,
   reversalOf,
 } from './journal';
 export {

@@ -105,6 +105,17 @@ export function mayArchive(account: ChartAccount, balanceFils: Fils): boolean {
   return account.role === null && account.archivedAt === null && balanceFils === 0;
 }
 
+/**
+ * The opening balances are posted once. The spec speaks of "the opening
+ * entry" (docs/SPEC/accounting.md sections 4.2 and 5.2) and the drawer hides
+ * the kind once the journal holds anything, but hiding is not refusing: a
+ * second set of opening balances would be equity invented twice, and nothing
+ * in the journal would say which was meant.
+ */
+export function mayPostOpening(existingOpeningCount: number): boolean {
+  return existingOpeningCount === 0;
+}
+
 /** Rule 9: the lines plus one on the opening-balance account for the difference, or unchanged. */
 export function balanceWithOpeningEquity(
   lines: readonly DraftLine[],

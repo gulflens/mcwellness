@@ -227,6 +227,21 @@ describe('posting an entry by hand', () => {
     expect(body.lines[2]).toMatchObject({ accountCode: '3100', creditFils: 1_005_000 });
   });
 
+  it('takes the opening balances once and refuses a second set', async () => {
+    const again = {
+      kind: 'opening' as const,
+      enteredOn: booksStartOn,
+      memo: 'Opening balances, again',
+      lines: [
+        { accountId: idOf('1010'), debitFils: 100, creditFils: 0 },
+        { accountId: idOf('1020'), debitFils: 0, creditFils: 100 },
+      ],
+    };
+    const res = await h.call('POST', '/api/accounting/entries', SEEDED.owner, again, REASON);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: 'opening_exists' });
+  });
+
   it('refuses to level a manual entry with opening equity', async () => {
     const draft = { ...expense('2026-09-02'), balanceWithOpeningEquity: true };
     draft.lines[1]!.creditFils = 19_000;
