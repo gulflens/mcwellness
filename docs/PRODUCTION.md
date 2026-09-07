@@ -650,3 +650,87 @@ opened" one-press, and 107's sign-in options. Production is now level with
 IPv6-edge stall is still the CDN's and worth a line to Hostinger; and the deep
 security scan against the first release tag matters more now that the code is
 public.
+
+## What was done on 2026-09-07: the third live pass — the books' six migrations, and the process runs `main` again
+
+Between 18:28 and 18:50 on 7 September (Dubai), on the operator's word ("lets
+go live"), piece eleven's six migrations were applied to production and the
+live process was rebuilt from `main` at `727310e`, so app.mcwellnessuae.com
+now carries Books.
+
+**The six migrations, applied first** (project `ipiluvnlnzdbolbqwtpl`; staging
+had carried them since the afternoon's fourteenth pass). Before anything,
+`schema_migration` held seventy-five rows against eighty-one files on `main`,
+and the six missing were exactly `450_accounting_setting.sql`,
+`451_account.sql`, `452_fiscal_year.sql`, `453_journal.sql`,
+`454_unposted_money_events.sql` and `958_bootstrap_knows_the_books.sql`;
+`tenant` held one row and `audit_log` twenty-six. Each file went through
+Supabase's migration tool as one call: the runner's audit context
+(`app.reason` naming the file, a fresh `app.request_id`), the file's text
+unchanged, then the bookkeeping row `insert into schema_migration (filename,
+checksum) … on conflict do nothing` with the sha256 computed on the laptop
+(450 `daa3baa6…`, 451 `1e575bad…`, 452 `67273091…`, 453 `8c11bdad…`, 454
+`5d5657df…`, 958 `f6895f86…`, each identical to the staging record's). All six
+succeeded first time, in order; then the twenty-two policy files were
+re-applied in one transaction under `app.reason = 'policies'`, as the runner
+does. The pass ran on Sonnet from a written brief, about 0.23 million tokens.
+
+**What the two data steps wrote to the practice.** 450 gave the one practice
+its `accounting_setting` row: books start on 2026-09-07 (the day the practice
+was created), year end 31 December, no lock, corporate tax 9% above AED
+375,000, Small Business Relief elected with the AED 3,000,000 watch, next entry
+number 1. 451 gave it sixteen accounts with twelve roles, codes 1010 to 6200 as
+`docs/SPEC/accounting.md` section 4.1 lists. `audit_log` gained exactly
+seventeen rows — one reasoned `migration 450_accounting_setting.sql`, sixteen
+reasoned `migration 451_account.sql` — and stands at forty-three;
+`app.verify_audit_chain()` returns null (the chain verifies). No personal
+column was read at any point: every check was a count, a catalogue read, or a
+row of the two new tables, which name nobody.
+
+**The whole schema reconciled again.** `schema_migration` holds eighty-one rows
+on production, eighty-one on staging, eighty-one files on `main`; the digest
+`md5(string_agg(filename || ' ' || checksum, E'\n' order by filename collate
+"C"))` is `ddb7a8c2056ba457c1892537b5bb66bc` in all three places. The catalogue
+fingerprint of production equals staging's count for count: 1,280 columns, 601
+constraints, 501 indexes, 155 policies, 95 functions in `app` and `public`, 240
+triggers, 74 tables with row security. The ten new `app` functions exist;
+`execute` on `app.unposted_money_events()` and `app.fiscal_year_for(date)` is
+held by `app_role` and the owner only; the five accounting tables have row
+security on and the five policies where the spec puts them, and `app_role` may
+delete from none of them. `app.bootstrap_practice` now names both new
+per-practice defaults.
+
+**The process was rebuilt from `main`.** An archive of `origin/main` at
+`727310e` (`git archive --prefix=mcwellness/`, tracked source only, 5.6 MB) was
+uploaded over TUS as `mcwellness-727310e-npm.tar.gz` and built with the stored
+settings (root `mcwellness`, output `.`, entry `app/api/start.mjs`, npm, Node
+24, `build:production`). The first start request came back as a 500 from
+Hostinger's API and created no build; the archive was confirmed present and
+readable (the host's own settings detection read its `package.json`), and the
+second request created build `01a07c56`, which completed in fifty-five seconds
+(18:47:39 to 18:48:34). The served bundle changed from `index-CaQ0rorp.js` to
+`index-CW0A6csP.js` eighteen seconds later; `GET /api/health` and
+`/api/health/deep` answer `{"ok":true}`; the runtime log shows the start-up
+lines for three cold starts, no error and nobody's data. The new bundle carries
+the Books page and its call to `POST /api/accounting/post`. Every API path
+refuses an anonymous caller with 401 before routing, so no unauthenticated
+probe can tell a mounted route from an absent one; the route's presence rests
+on the merged code and its tests, which is the same footing every earlier
+route stood on.
+
+**What happens next, by design.** The books on production are empty. The first
+time the owner opens Books, the page asks the API once to post everything
+billing already holds — every issued invoice, payment, and credit consumed,
+waived or expired — into the journal under the posting rules of
+`docs/SPEC/accounting.md` section 7. The books start on 7 September, the
+practice's own first day, so nothing predates them and the start day needs no
+change. The nightly catch-up (`pnpm job:post-books`) is not scheduled on
+Hostinger; the page's own posting covers a practice with one owner until a cron
+job is added.
+
+**Still to do on this pass.** The three the second live pass left: the
+Hostinger vendor row awaits the operator's tick; the IPv6-edge stall is the
+CDN's and worth a line to Hostinger; the deep security scan against the first
+release tag. New: a cron job for the nightly poster, and the tax adviser's
+confirmation of the Small Business Relief election (`docs/HANDOVER.md`,
+section 8).
