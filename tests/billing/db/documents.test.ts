@@ -104,11 +104,11 @@ describe('rendering an invoice', () => {
 
     // The bytes are there by the time the caller was told the document exists.
     expect(await h.storage.exists(row.storage_key)).toBe(true);
-    const stored = await h.storage.read?.(row.storage_key);
+    const stored = await h.storage.get?.(row.storage_key);
     if (!stored) throw new Error('The store holds nothing at that key.');
     // And they are the bytes the row's hash names.
     expect(createHash('sha256').update(stored).digest('hex')).toBe(row.sha256.toString('hex'));
-    expect(stored.subarray(0, 8).toString('latin1')).toBe('%PDF-1.7');
+    expect(Buffer.from(stored.subarray(0, 8)).toString('latin1')).toBe('%PDF-1.7');
   });
 
   it('renders what the invoice says, in both languages', async () => {
@@ -119,7 +119,7 @@ describe('rendering an invoice', () => {
       'select storage_key from document where id = $1',
       [body.document.id],
     );
-    const bytes = await h.storage.read?.(rows[0]?.storage_key ?? '');
+    const bytes = await h.storage.get?.(rows[0]?.storage_key ?? '');
     if (!bytes) throw new Error('The store holds nothing at that key.');
     const page = extractAll(new Uint8Array(bytes));
 
@@ -209,7 +209,7 @@ describe('rendering a receipt', () => {
       'select storage_key from document where id = $1',
       [body.document.id],
     );
-    const bytes = await h.storage.read?.(rows[0]?.storage_key ?? '');
+    const bytes = await h.storage.get?.(rows[0]?.storage_key ?? '');
     if (!bytes) throw new Error('The store holds nothing at that key.');
     const page = extractAll(new Uint8Array(bytes));
 
@@ -280,7 +280,7 @@ describe('opening a document', () => {
     // document row's hash names: the renderer reads no clock and no random
     // source, so the same row always produces the same bytes.
     expect(await h.storage.exists(key)).toBe(true);
-    const stored = await h.storage.read?.(key);
+    const stored = await h.storage.get?.(key);
     if (!stored) throw new Error('The store holds nothing at that key.');
     expect(createHash('sha256').update(stored).digest('hex')).toBe(rows[0]?.sha256.toString('hex'));
   });
@@ -454,7 +454,7 @@ describe('a receipt takes the practice from the invoice it settles', () => {
       'select storage_key from document where id = $1',
       [documentId],
     );
-    const bytes = await h.storage.read?.(rows[0]?.storage_key ?? '');
+    const bytes = await h.storage.get?.(rows[0]?.storage_key ?? '');
     if (!bytes) throw new Error('The store holds nothing at that key.');
     return extractAll(new Uint8Array(bytes));
   }

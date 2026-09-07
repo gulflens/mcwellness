@@ -137,6 +137,25 @@ export function supabaseStorage(options: SupabaseStorageOptions): ServerStorageP
       return { sha256: createHash('sha256').update(bytes).digest('hex'), size: bytes.byteLength };
     },
 
+    async get(key: string): Promise<Uint8Array | null> {
+      assertValidStorageKey(key);
+      const response = await call(`object/${bucket}/${key}`, { method: 'GET' });
+      // Absent is an answer, not an outage — and the vendor spells it two ways
+      // (see isNoSuchKey), so both are asked about here exactly as `exists`
+      // asks about them.
+      if (response.status === 404 || (await isNoSuchKey(response))) return null;
+      if (!response.ok) throw refused(response, 'read that document');
+      try {
+        return new Uint8Array(await response.arrayBuffer());
+      } catch (error) {
+        // The body stopped part way through: the store was reached and then
+        // was not, which is the same outage as never reaching it.
+        throw new StorageUnavailableError('The document store stopped part way through a read.', {
+          cause: error,
+        });
+      }
+    },
+
     async getSignedUrl(key: string, ttlSeconds: number): Promise<string> {
       assertValidStorageKey(key);
       const expiresIn = Math.min(Math.max(1, Math.floor(ttlSeconds)), MAX_SIGNED_URL_TTL_SECONDS);

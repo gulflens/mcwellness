@@ -128,7 +128,7 @@ export function mountLocalStorage(api: Hono<ApiEnv>, storage: ServerStorageProvi
     if (!storage.verifySigned({ key, expires, token })) {
       return c.json({ error: 'not_found', requestId: c.get('requestId') ?? null }, 404);
     }
-    const bytes = await storage.read(key);
+    const bytes = await storage.get(key);
     if (bytes === null) {
       return c.json({ error: 'not_found', requestId: c.get('requestId') ?? null }, 404);
     }

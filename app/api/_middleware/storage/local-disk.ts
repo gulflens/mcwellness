@@ -169,7 +169,7 @@ export function localDiskStorage(
     },
 
     /** The bytes, or null when nothing is stored there — a missing file is not an outage. */
-    async read(key: string): Promise<Buffer | null> {
+    async get(key: string): Promise<Uint8Array | null> {
       const path = pathFor(root, key);
       try {
         // Where the path really leads, before a byte is read from it.

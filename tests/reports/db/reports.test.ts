@@ -451,10 +451,10 @@ describe('issuing', () => {
 
     // The bytes are there by the time the caller was told the report exists.
     expect(await h.storage.exists(filed.storage_key)).toBe(true);
-    const stored = await h.storage.read?.(filed.storage_key);
+    const stored = await h.storage.get?.(filed.storage_key);
     if (!stored) throw new Error('The store holds nothing at that key.');
     expect(createHash('sha256').update(stored).digest('hex')).toBe(filed.sha256.toString('hex'));
-    expect(stored.subarray(0, 8).toString('latin1')).toBe('%PDF-1.7');
+    expect(Buffer.from(stored.subarray(0, 8)).toString('latin1')).toBe('%PDF-1.7');
   });
 
   it('renders what the report says, with both standing sentences and the draft line', async () => {
@@ -463,7 +463,7 @@ describe('issuing', () => {
       'select d.storage_key from report r join document d on d.id = r.document_id where r.id = $1',
       [id],
     );
-    const stored = await h.storage.read?.(rows[0]?.storage_key ?? '');
+    const stored = await h.storage.get?.(rows[0]?.storage_key ?? '');
     if (!stored) throw new Error('The store holds nothing at that key.');
     const text = extractAll(stored);
     expect(text).toContain('Progress report');
@@ -485,7 +485,7 @@ describe('issuing', () => {
     );
     const filed = rows[0];
     if (!filed) throw new Error('The report was not filed.');
-    const stored = await h.storage.read?.(filed.storage_key);
+    const stored = await h.storage.get?.(filed.storage_key);
     if (!stored) throw new Error('The store holds nothing at that key.');
 
     // Read the row back exactly as the repair path does, and render it again —

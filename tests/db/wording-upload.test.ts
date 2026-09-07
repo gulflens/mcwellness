@@ -55,7 +55,7 @@ describe('filing the consent wording behind the storage seam', () => {
     if (!isLocalStorage(storage)) throw new Error('The local implementation serves its own bytes.');
     for (const result of results) {
       const text = texts.find((t) => t.file === result.file);
-      const bytes = await storage.read(result.storageKey ?? '');
+      const bytes = await storage.get(result.storageKey ?? '');
       expect(bytes, result.file).not.toBeNull();
       // What is in the store is what the row fingerprints, byte for byte.
       expect(
@@ -96,7 +96,7 @@ describe('filing the consent wording behind the storage seam', () => {
     // And the bytes already in the store are the ones the row points at, still.
     const storage = store();
     if (!isLocalStorage(storage)) throw new Error('The local implementation serves its own bytes.');
-    const bytes = await storage.read(results[0]?.storageKey ?? '');
+    const bytes = await storage.get(results[0]?.storageKey ?? '');
     expect(
       createHash('sha256')
         .update(bytes ?? Buffer.alloc(0))
