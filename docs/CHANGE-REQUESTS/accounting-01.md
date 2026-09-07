@@ -37,8 +37,8 @@ Replace the last bullet (`invoice`, `invoice_line`, `payment`, `credit_note`,
 >   reason (408). `credit_note` was never built; a correction is a reversing
 >   journal entry.
 > - **The books** (`accounting.md`, migrations 450–454): `accounting_setting`
->   (one per practice: start day, year end, tax estimate settings, the entry
->   counter); `account` (the chart: four-digit `code`, `type`, an optional
+>   (one per practice: start day, year end, the lock date, the corporate-tax
+>   estimate and Small Business Relief settings, the entry counter); `account` (the chart: four-digit `code`, `type`, an optional
 >   unique `role` the poster finds accounts by); `fiscal_year` (a range and an
 >   `open`/`closed` status); `journal_entry` and `journal_line` (balanced,
 >   append-only, `unique (tenant_id, source_table, source_id, source_event)`
@@ -126,8 +126,10 @@ balances"); `fiscal_year` insert — "opened a financial year", update with
 `closed_at` newly set — "closed a financial year", with `reopened_at` newly
 set — "reopened a financial year"; `account` insert — "added an account",
 update — "renamed an account" or, with `archived_at` newly set, "archived an
-account"; `accounting_setting` update — "changed the books settings". Tests
-in `audit-narrative.test.ts` beside the existing ones.
+account"; `accounting_setting` update — "changed the books settings", or
+"locked the books through a date" when `locked_through` moved forward and
+"moved the books' lock back" when it moved backward. Tests in
+`audit-narrative.test.ts` beside the existing ones.
 
 ## 7. `package.json` — the job
 
