@@ -172,17 +172,10 @@ export function WeekPage() {
                       <span className="week__name">
                         {row.client.givenName} {row.client.familyName}
                       </span>
-                      {/* The Arabic name beneath the Latin one, exactly as the
-                          day view and the clients table render it. A week that
-                          dropped it would be the one screen in the console
-                          where a household written in Arabic is not
-                          (docs/DESIGN-BRIEF.md, and the compliance review of
-                          this pull request). */}
-                      {row.client.givenNameAr ? (
-                        <span className="small muted" lang="ar" dir="rtl">
-                          {row.client.givenNameAr} {row.client.familyNameAr}
-                        </span>
-                      ) : null}
+                      {/* The console is English only (operator's decision of
+                          7 September 2026, docs/DESIGN-BRIEF.md section 10
+                          item 4); the Arabic name stays on the wire for the
+                          portal and the documents. */}
                       {/* Stood down rather than dropped when the columns get
                           narrow: seven days side by side is the thing this
                           screen is for, and these two facts are a click away on
