@@ -2,8 +2,11 @@ import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mountAccountWrites, mountAccounts } from './accounts';
 import { mountEntries, mountEntryWrites } from './entries';
+import { mountExports } from './exports';
+import { mountOverview } from './overview';
 import { mountPosting } from './post';
 import { mountSettings, mountSettingsWrites } from './settings';
+import { mountStatements } from './statements';
 import { mountYearWrites, mountYears } from './years';
 
 /**
@@ -22,4 +25,7 @@ export function mountAccounting(api: Hono<ApiEnv>, now: () => Date = () => new D
   mountYearWrites(api, now);
   mountEntryWrites(api, now);
   mountPosting(api, now);
+  mountOverview(api, now);
+  mountStatements(api, now);
+  mountExports(api, now);
 }

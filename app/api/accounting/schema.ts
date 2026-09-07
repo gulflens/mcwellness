@@ -225,3 +225,80 @@ export const LockResponse = z.object({
   move: z.enum(['forward', 'backward', 'unchanged']),
 });
 export type LockResponse = z.infer<typeof LockResponse>;
+
+export const StatementRowSchema = z.object({
+  accountCode: z.string(),
+  accountName: z.string(),
+  accountType: z.enum(ACCOUNT_TYPES),
+  balanceFils: z.number().int(),
+});
+export type StatementRowSchema = z.infer<typeof StatementRowSchema>;
+
+export const TrialBalanceResponse = z.object({
+  asOf: IsoDate,
+  rows: z.array(
+    StatementRowSchema.extend({ debitFils: z.number().int(), creditFils: z.number().int() }),
+  ),
+  totalDebitFils: z.number().int(),
+  totalCreditFils: z.number().int(),
+});
+export type TrialBalanceResponse = z.infer<typeof TrialBalanceResponse>;
+
+export const ProfitAndLossResponse = z.object({
+  from: IsoDate,
+  to: IsoDate,
+  income: z.array(StatementRowSchema),
+  expenses: z.array(StatementRowSchema),
+  incomeFils: z.number().int(),
+  expenseFils: z.number().int(),
+  resultFils: z.number().int(),
+});
+export type ProfitAndLossResponse = z.infer<typeof ProfitAndLossResponse>;
+
+export const BalanceSheetResponse = z.object({
+  asOf: IsoDate,
+  assets: z.array(StatementRowSchema),
+  liabilities: z.array(StatementRowSchema),
+  equity: z.array(StatementRowSchema),
+  resultYearToDateFils: z.number().int(),
+  retainedEarningsFils: z.number().int(),
+  totalAssetsFils: z.number().int(),
+  totalLiabilitiesAndEquityFils: z.number().int(),
+});
+export type BalanceSheetResponse = z.infer<typeof BalanceSheetResponse>;
+
+export const CashFlowResponse = z.object({
+  from: IsoDate,
+  to: IsoDate,
+  byCategory: z.object({
+    fromHouseholds: z.number().int(),
+    forExpenses: z.number().int(),
+    toOwners: z.number().int(),
+    tax: z.number().int(),
+    other: z.number().int(),
+    transfers: z.number().int(),
+  }),
+  openingCashFils: z.number().int(),
+  netChangeFils: z.number().int(),
+  closingCashFils: z.number().int(),
+});
+export type CashFlowResponse = z.infer<typeof CashFlowResponse>;
+
+export const OverviewResponse = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  asOf: IsoDate,
+  fiscalYearStartsOn: IsoDate,
+  resultYearToDateFils: z.number().int(),
+  revenueYearToDateFils: z.number().int(),
+  cashPositionFils: z.number().int(),
+  cashAccounts: z.array(StatementRowSchema),
+  receivableFils: z.number().int(),
+  corporateTaxEstimateFils: z.number().int(),
+  reliefWatch: z.enum(['clear', 'approaching', 'exceeded']),
+  reliefThresholdFils: z.number().int(),
+  reliefElected: z.boolean(),
+  unpostedCount: z.number().int(),
+  unknownCount: z.number().int(),
+  recentEntries: z.array(EntryRow),
+});
+export type OverviewResponse = z.infer<typeof OverviewResponse>;
