@@ -568,3 +568,85 @@ tries IPv6 first and waits sees the stall. Nothing in the zone to change (the
 CDN overrides the `app` records it serves); worth a line to Hostinger. The name now resolves to
 Hostinger's CDN edge (`server: hcdn`), so the CDN is in the path again and
 `TRUSTED_PROXY_HOPS` is still to be measured with that in mind.
+
+## What was done on 2026-09-07: the second live pass — the trunk rounds land and the process runs `main`
+
+Between 02:50 and 13:12 on 7 September (Dubai), on the operator's
+instructions ("Make the repo public", then "lets finish whatever is opened",
+then "keep going with the migration"), the five pull requests that had been
+reviewed and waiting were merged, the two migrations they added were applied
+to production, `TRUSTED_PROXY_HOPS` was measured, and the process was rebuilt
+from `main`.
+
+**Why the merges had waited, and how they were freed.** Every GitHub check on
+the repository had been refused since 6 September 13:03 UTC — not a code fault
+but the account's 2,000 free Actions minutes, spent for the month. On the
+operator's instruction the repository was made public (public repositories get
+unlimited Actions), after the whole history was scanned for secrets and personal
+data first: 786 commits and 3,466 blobs, the project's own
+`scripts/audit-secrets.mjs` patterns, nothing live and no real personal data —
+every connection string a documentation placeholder, every licence and
+registration identifier synthetic. Checks ran again at once.
+
+**The five merged, in order, each on its own green run:** 103 (trunk round 33),
+104 (the evening hand-over), 106 (the hosted-start fix), 107 (the sign-in
+options), and 105 (trunk round 34). 105 was stacked on 103, so after 103 landed
+it was retargeted to `main` and rebased onto it — the reviewed `442f25c`
+replayed as `a5f128b`, fifteen commits with no conflict, pushed once with
+`--force-with-lease`, its own run green — before its merge. `main` is at
+`e6d08ae` and its own `verify` run is green; no pull requests remain open.
+
+**The two migrations these rounds added — 205 and 957 — applied to production**
+(project `ipiluvnlnzdbolbqwtpl`), staging taken first. Each was applied through
+Supabase's migration tool as the file's own DDL followed by its bookkeeping row
+`insert into schema_migration (filename, checksum) … on conflict do nothing`, so
+the runner records them exactly as `pnpm db:migrate` would:
+
+- `205_unfit_fee_is_the_call_out_fee.sql` — a `comment on column` on
+  `scheduling_setting.unfit_fee_fils`, bringing the note up to what migration
+  408 now charges. Checksum `84d44a08…`.
+- `957_vat_taxable_supplies_excludes_waived.sql` — `create or replace function
+  app.vat_taxable_supplies_fils(date)` with one added clause, `and i.waived_at
+  is null`, so a forgiven call-out fee no longer counts towards the AED 375,000
+  VAT registration threshold. Checksum `dd609894…`. `create or replace` keeps
+  953's grants; verified afterwards that the installed body carries the clause.
+
+Both are DDL only and wrote no data, so the practice's rows and
+`app.verify_audit_chain()` were untouched.
+
+**The whole schema was then reconciled, not just the two new files.**
+`schema_migration` holds **seventy-five rows** on production and seventy-five on
+staging — every migration on `main`, no gap and no extra. A single digest over
+all seventy-five `(filename, checksum)` pairs is
+`md5 = 8d3ce8c49bca45a65172baa25cca2bbd` on production, the same on staging, and
+the same computed from `main`'s files on the laptop. So every recorded checksum
+matches the committed file byte for byte in all three places: production,
+staging and `main` are in lockstep, and a later `pnpm db:migrate` against either
+database finds nothing pending and no mismatch.
+
+**`TRUSTED_PROXY_HOPS` was measured and stays `1`.** By the method this doc's
+first live pass named: a rate-limited route was drawn down from one address
+while watching the `RateLimit-Remaining` header, then again with a spoofed
+`X-Forwarded-For` and with a two-hop spoof. The spoof never bought a fresh
+budget (297, 296, 295, 294, 293 across the attempts), so the count is not too
+high; and the draw-down was exactly one per request with no other traffic
+interfering, so the limiter keys on the real client address and not a shared
+upstream, so it is not too low. One is right; nothing changed.
+
+**The process was rebuilt from `main`.** An archive was built with `git archive
+--prefix=mcwellness/ origin/main` (tracked source only, no `node_modules`, about
+5.2 MB), uploaded over TUS, and built with the proven settings (root
+`mcwellness`, output `.`, entry `app/api/start.mjs`, npm, Node 24, build
+`build:production`; Hostinger build `01a07b21`). `GET /api/health` and
+`/api/health/deep` answer `{"ok":true}`; `GET /` serves the app; the owner's app
+renders (Shauna, Owner; practice set up, no clients yet). The served bundle
+`index-CaQ0rorp.js` carries what the rounds added and the old bundle lacked: the
+five Arabic band names, the portal "Waived" line, the audit screen's "who has
+opened" one-press, and 107's sign-in options. Production is now level with
+`main`; the earlier note that it ran a side branch no longer holds.
+
+**Still to do on this pass.** The Hostinger vendor row in
+`docs/COMPLIANCE/approved-vendors.md` still waits for the operator's tick; the
+IPv6-edge stall is still the CDN's and worth a line to Hostinger; and the deep
+security scan against the first release tag matters more now that the code is
+public.

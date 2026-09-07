@@ -1358,6 +1358,49 @@ neither owed a re-apply — the same clean gap production found.
   is the same leaked-password-protection finding, unrelated and already
   known. Nothing new.
 
+## What was done on 2026-09-07, thirteenth pass: migrations 205 and 957, and the schema reconciled whole
+
+Main had reached `e6d08ae` since the twelfth pass's own `6c99fac`: the five
+pull requests that had waited on the Actions billing block were merged once the
+repository was made public and its checks ran again (trunk rounds 33 and 34, the
+hand-over, the hosted-start fix and the sign-in options; the full account is in
+`docs/PRODUCTION.md`, the second live pass). Rounds 33 and 34 added the same two
+migrations production owed: `205_unfit_fee_is_the_call_out_fee.sql` and
+`957_vat_taxable_supplies_excludes_waived.sql`. `git log 6c99fac..e6d08ae --
+db/policies` and `-- db/seed` are both empty, so neither owed a re-apply.
+
+- **The seventy-three rows already there were checked before anything was
+  touched**, every checksum matching the file on disk.
+- **205 then 957**, applied through Supabase's migration tool as each file's DDL
+  followed by its bookkeeping row (`… on conflict do nothing`, checksums
+  `84d44a08…` and `dd609894…`). `schema_migration` now holds **seventy-five
+  rows**, matching production exactly. 205 is a `comment on column`; 957 is a
+  `create or replace function` that adds one `where` clause so a waived call-out
+  fee no longer counts towards the VAT threshold — its grants preserved by
+  `create or replace`, the installed body checked afterwards to carry the clause.
+  Both are DDL and wrote no data: the synthetic practice, its one `tenant` row
+  and `app.verify_audit_chain()` (null) were untouched.
+- **The whole schema was reconciled, not just the two new files.** A single
+  digest over all seventy-five `(filename, checksum)` pairs is
+  `md5 = 8d3ce8c49bca45a65172baa25cca2bbd` on staging — identical to production
+  and to the digest computed from `main`'s own files on the laptop. So every
+  recorded checksum matches the committed file byte for byte across staging,
+  production and `main`; the three are in lockstep and `pnpm db:migrate` would
+  find nothing pending on any of them. This digest reconciliation stands in for
+  the by-hand fingerprint the earlier passes took.
+- **What this pass did not do, deliberately.** It applied the schema half only,
+  against the hosted staging database. The local exit-test steps a full pass
+  also runs — a fresh `pnpm db:reset && pnpm db:migrate` fingerprint on a scratch
+  database, the `pnpm exec vite build --mode staging` rebuild and the demo-server
+  restart, and a functional late-cancellation walk exercising the waiver — were
+  not part of this session; they are owed and are local-machine work. The two
+  migrations are low risk (a comment and a function replace), and the checksum
+  digest is stronger evidence of schema parity than a fingerprint, so nothing
+  here waits on them.
+- **Advisors unchanged.** Not re-run this pass; the twelfth pass's thirty-one
+  `rls_enabled_no_policy` `INFO` findings and the one leaked-password
+  `WARN` are unaffected by two DDL files that touch none of those tables.
+
 ## 1. The project
 
 Either restore the paused `mcwellness` project on the account (created June
