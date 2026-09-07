@@ -96,7 +96,17 @@ export function PracticeDrawer({
   useDrawer(drawerRef, closeRef, onClose);
 
   const [legalName, setLegalName] = useState(practice.legalName);
-  const [legalNameAr, setLegalNameAr] = useState(practice.legalNameAr ?? '');
+  // The console is English only (operator's decision of 7 September 2026,
+  // docs/DESIGN-BRIEF.md section 10 item 4), so there is no field for the
+  // Arabic legal name — but the practice's PATCH sends the whole form at once
+  // (docs/SPEC/00-data-model.md, round 20) and `legalNameAr` is required in
+  // the body: `optional(200)` in app/api/practice/schema.ts is
+  // `z.string().nullable()`, not `.optional()`, and the update writes
+  // `legal_name_ar = $2` every time (app/api/practice/routes.ts). Omitting it
+  // would be a 400 and sending '' would blank it, so the value the drawer
+  // loaded travels back unchanged and production's invoices keep their Arabic
+  // legal name.
+  const legalNameAr = practice.legalNameAr;
   const [licenceNumber, setLicenceNumber] = useState(practice.licenceNumber ?? '');
   const [licensingAuthority, setLicensingAuthority] = useState(practice.licensingAuthority ?? '');
   const [licenceExpiresOn, setLicenceExpiresOn] = useState(practice.licenceExpiresOn ?? '');
@@ -290,17 +300,6 @@ export function PracticeDrawer({
               clearFieldError('legalName');
             }}
             error={fieldErrors.legalName}
-          />
-
-          <Field
-            id="practice-legal-name-ar"
-            label="Legal name in Arabic (optional)"
-            type="text"
-            lang="ar"
-            dir="rtl"
-            maxLength={200}
-            value={legalNameAr}
-            onChange={(e) => setLegalNameAr(e.target.value)}
           />
 
           <Field

@@ -201,13 +201,6 @@ export function PracticePage() {
             <h2 className="practice__heading">Identity</h2>
             <dl className="practice__facts">
               <Fact label="Legal name">{practice.legalName}</Fact>
-              <Fact label="Legal name in Arabic">
-                {practice.legalNameAr ? (
-                  <span lang="ar" dir="rtl">
-                    {practice.legalNameAr}
-                  </span>
-                ) : null}
-              </Fact>
               <Fact label="Trade licence number">{text(practice.licenceNumber)}</Fact>
               <Fact label="Licensing authority">{text(practice.licensingAuthority)}</Fact>
               <Fact label="Licence expires">
