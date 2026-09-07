@@ -36,6 +36,7 @@ const SELECT_PRACTICE =
   'select t.legal_name, t.legal_name_ar, t.trn, t.licence_number, t.licensing_authority, ' +
   "to_char(t.licence_expires_on, 'YYYY-MM-DD') as licence_expires_on, " +
   't.vat_registered, t.vat_trn, t.whatsapp_number, t.default_emirate, t.timezone, ' +
+  't.contact_phone, t.contact_email, t.website, ' +
   'l.id as location_id, l.display_address, l.emirate, ' +
   'extensions.st_y(l.entrance_point::extensions.geometry) as latitude, ' +
   'extensions.st_x(l.entrance_point::extensions.geometry) as longitude ' +
@@ -52,6 +53,9 @@ type PracticeRow = {
   vat_registered: boolean;
   vat_trn: string | null;
   whatsapp_number: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  website: string | null;
   default_emirate: string;
   timezone: string;
   location_id: string | null;
@@ -101,6 +105,9 @@ function view(row: PracticeRow, supplies: { fils: number; asOf: string }): Pract
     vatTaxableSuppliesFils: supplies.fils,
     vatTaxableSuppliesAsOf: supplies.asOf,
     whatsappNumber: row.whatsapp_number,
+    contactPhone: row.contact_phone,
+    contactEmail: row.contact_email,
+    website: row.website,
     defaultEmirate: row.default_emirate,
     timezone: row.timezone,
     address:
@@ -180,7 +187,17 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     await db.query(
       'update tenant set legal_name = $1, legal_name_ar = $2, trn = $3, licence_number = $4, ' +
         'licensing_authority = $5, licence_expires_on = $6, vat_registered = $7, vat_trn = $8, ' +
-        'whatsapp_number = $9 where id = app.current_tenant_id()',
+        'whatsapp_number = $9, ' +
+        // Coalesced against what is already there rather than overwritten: the
+        // three are optional on this form (schema.ts) because the settings
+        // screen cannot edit them yet, and a body that never mentioned them
+        // must not clear them. `is not distinct from` is not needed — a null
+        // parameter here means "was not sent", and sending null deliberately
+        // is a decision for the round that puts them on the screen.
+        'contact_phone = coalesce($10, contact_phone), ' +
+        'contact_email = coalesce($11, contact_email), ' +
+        'website = coalesce($12, website) ' +
+        'where id = app.current_tenant_id()',
       [
         wanted.legalName,
         wanted.legalNameAr,
@@ -191,6 +208,9 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         wanted.vatRegistered,
         wanted.vatTrn,
         wanted.whatsappNumber,
+        wanted.contactPhone ?? null,
+        wanted.contactEmail ?? null,
+        wanted.website ?? null,
       ],
     );
 

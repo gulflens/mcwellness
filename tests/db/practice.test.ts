@@ -249,3 +249,63 @@ describe('PATCH /api/practice', () => {
     expect(rows[0]?.display_address).toBe('Unit 2, Synthetic Tower, Dubai');
   });
 });
+
+/**
+ * The three facts printed in the footer of every document the practice issues
+ * (migration 912, docs/SPEC/billing.md section 5.6).
+ *
+ * They are the only optional fields on this form, and that shape is the point
+ * of these tests: the settings screen cannot edit them yet, so a save it sends
+ * must leave them exactly as they are rather than clearing three columns it
+ * never showed anybody (docs/CHANGE-REQUESTS/billing-09.md item 6).
+ */
+describe('the practice’s contact details', () => {
+  it('are absent until somebody records them', async () => {
+    expect(await read(authIdOf(0))).toMatchObject({
+      contactPhone: null,
+      contactEmail: null,
+      website: null,
+    });
+  });
+
+  it('are saved, and then left alone by a save that does not mention them', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: "Putting the practice's own details on its documents.",
+      body: await form({
+        contactPhone: '+971 50 000 0011',
+        contactEmail: 'studio@example.com',
+        website: 'https://example.com',
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await read(authIdOf(0))).toMatchObject({
+      contactPhone: '+971 50 000 0011',
+      contactEmail: 'studio@example.com',
+      website: 'https://example.com',
+    });
+
+    // The settings screen's own body, which carries none of the three.
+    await call('PATCH', authIdOf(0), {
+      reason: 'An ordinary save from the settings screen.',
+      body: await form({ legalNameAr: 'استوديو العافية التجريبي' }),
+    });
+    expect(await read(authIdOf(0))).toMatchObject({
+      contactPhone: '+971 50 000 0011',
+      website: 'https://example.com',
+    });
+  });
+
+  it('refuse a value that is plainly in the wrong field', async () => {
+    for (const wrong of [
+      { website: 'example.com' },
+      { contactEmail: 'not an address' },
+      { contactPhone: 'ring the studio' },
+    ]) {
+      const res = await call('PATCH', authIdOf(0), {
+        reason: 'Trying a value the column would refuse.',
+        body: await form(wrong),
+      });
+      expect(res.status).toBe(400);
+    }
+  });
+});
