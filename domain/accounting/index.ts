@@ -59,8 +59,11 @@ export type { ReliefWatch } from './tax';
 export {
   ZOHO_ACCOUNT_HEADINGS,
   ZOHO_JOURNAL_HEADINGS,
+  amountCell,
+  escapeCell,
   filsToDecimal,
   toCsv,
   zohoAccountRows,
   zohoJournalRows,
 } from './csv';
+export type { AmountCell, CsvCell } from './csv';

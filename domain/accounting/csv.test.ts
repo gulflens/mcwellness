@@ -3,6 +3,8 @@ import { fils } from '../shared';
 import {
   ZOHO_ACCOUNT_HEADINGS,
   ZOHO_JOURNAL_HEADINGS,
+  amountCell,
+  escapeCell,
   filsToDecimal,
   toCsv,
   zohoAccountRows,
@@ -107,9 +109,42 @@ const CHART: ChartAccount[] = [
   },
 ];
 
+describe('escapeCell', () => {
+  it('opens a text field that would be a formula with a quotation of its own', () => {
+    for (const opener of ['=', '+', '-', '@', '\t', '\r']) {
+      expect(escapeCell(`${opener}SUM(A1)`, 'text')).toContain(`'${opener}`);
+    }
+    expect(escapeCell('=1+1', 'text')).toBe("'=1+1");
+    expect(escapeCell('@import', 'text')).toBe("'@import");
+  });
+
+  it('leaves an amount alone, however it begins', () => {
+    expect(escapeCell(filsToDecimal(-5), 'amount')).toBe('-0.05');
+    expect(escapeCell(filsToDecimal(-123_456), 'amount')).toBe('-1234.56');
+    expect(escapeCell(filsToDecimal(0), 'amount')).toBe('0.00');
+  });
+
+  it('leaves ordinary text where it is', () => {
+    expect(escapeCell('Bank, operating', 'text')).toBe('"Bank, operating"');
+    expect(escapeCell('General expenses', 'text')).toBe('General expenses');
+  });
+
+  it('quotes what it has guarded, when the field needs quoting too', () => {
+    expect(escapeCell('=1+1,2', 'text')).toBe('"\'=1+1,2"');
+    expect(escapeCell('\tone\ttwo', 'text')).toBe("'\tone\ttwo");
+  });
+});
+
 describe('toCsv', () => {
   it('separates rows with a carriage return and a line feed and ends with one', () => {
     expect(toCsv([['a', 'b'], ['c']])).toBe('a,b\r\nc\r\n');
+  });
+
+  it('guards a text field that would be a formula, and never an amount', () => {
+    expect(toCsv([['=cmd|calc', amountCell(-5)]])).toBe("'=cmd|calc,-0.05\r\n");
+    expect(toCsv([['-Reversed, by hand', amountCell(-123_456)]])).toBe(
+      '"\'-Reversed, by hand",-1234.56\r\n',
+    );
   });
 
   it('quotes a field holding a comma, a quotation mark or a line break', () => {
@@ -148,23 +183,23 @@ describe('zohoJournalRows', () => {
     ]);
   });
 
-  it('writes one row per line, the day as YYYY-MM-DD and both sides as decimals', () => {
+  it('writes one row per line, the day as YYYY-MM-DD and both sides as amounts', () => {
     expect(rows).toHaveLength(3);
     expect(rows[1]).toEqual([
       '2026-02-01',
       'JE-000001',
       'Supplies, tea and "biscuits"',
       'General expenses',
-      '200.00',
-      '0.00',
+      amountCell(20_000),
+      amountCell(0),
     ]);
     expect(rows[2]).toEqual([
       '2026-02-01',
       'JE-000001',
       'Supplies, tea and "biscuits"',
       'Bank, operating',
-      '0.00',
-      '200.00',
+      amountCell(0),
+      amountCell(20_000),
     ]);
   });
 

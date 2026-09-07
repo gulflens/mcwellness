@@ -1,13 +1,14 @@
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import {
+  amountCell,
   balanceSheet,
   cashFlow,
-  filsToDecimal,
   profitAndLoss,
   toCsv,
   trialBalance,
   yearBoundsContaining,
+  type CsvCell,
   type PostedLine,
 } from '../../../domain/accounting';
 import { isoDateIn } from '../../../domain/shared';
@@ -74,6 +75,12 @@ function typeWord(type: string): string {
   return TYPE_WORDS[type] ?? type;
 }
 
+/**
+ * A statement's rows as a file's rows. The account's name and the type's word
+ * are text and are guarded against being read as formulae; the balance is an
+ * amount and is not, because a negative one opens the way a formula does
+ * (domain/accounting/csv.ts).
+ */
 function statementRows(
   rows: readonly {
     accountCode: string;
@@ -81,12 +88,12 @@ function statementRows(
     accountType: string;
     balanceFils: number;
   }[],
-): string[][] {
+): CsvCell[][] {
   return rows.map((row) => [
     row.accountCode,
     row.accountName,
     typeWord(row.accountType),
-    filsToDecimal(row.balanceFils),
+    amountCell(row.balanceFils),
   ]);
 }
 
@@ -165,16 +172,16 @@ export function mountStatements(api: Hono<ApiEnv>, now: () => Date = () => new D
         row.accountCode,
         row.accountName,
         typeWord(row.accountType),
-        filsToDecimal(row.debitFils),
-        filsToDecimal(row.creditFils),
-        filsToDecimal(row.balanceFils),
+        amountCell(row.debitFils),
+        amountCell(row.creditFils),
+        amountCell(row.balanceFils),
       ]),
       [
         'Total',
         '',
         '',
-        filsToDecimal(statement.totalDebitFils),
-        filsToDecimal(statement.totalCreditFils),
+        amountCell(statement.totalDebitFils),
+        amountCell(statement.totalCreditFils),
         '',
       ],
     ];
@@ -199,9 +206,9 @@ export function mountStatements(api: Hono<ApiEnv>, now: () => Date = () => new D
       [...MONEY_HEADINGS],
       ...statementRows(statement.income),
       ...statementRows(statement.expenses),
-      ['Income', '', '', filsToDecimal(statement.incomeFils)],
-      ['Expenses', '', '', filsToDecimal(statement.expenseFils)],
-      ['Result', '', '', filsToDecimal(statement.resultFils)],
+      ['Income', '', '', amountCell(statement.incomeFils)],
+      ['Expenses', '', '', amountCell(statement.expenseFils)],
+      ['Result', '', '', amountCell(statement.resultFils)],
     ];
     return csvResponse(c, `profit-and-loss-${period.from}-${period.to}.csv`, toCsv(rows));
   });
@@ -225,10 +232,10 @@ export function mountStatements(api: Hono<ApiEnv>, now: () => Date = () => new D
       ...statementRows(sheet.assets),
       ...statementRows(sheet.liabilities),
       ...statementRows(sheet.equity),
-      ['Result for the year to date, computed', '', '', filsToDecimal(sheet.resultYearToDateFils)],
-      ['Retained earnings, computed', '', '', filsToDecimal(sheet.retainedEarningsFils)],
-      ['Total assets', '', '', filsToDecimal(sheet.totalAssetsFils)],
-      ['Total liabilities and equity', '', '', filsToDecimal(sheet.totalLiabilitiesAndEquityFils)],
+      ['Result for the year to date, computed', '', '', amountCell(sheet.resultYearToDateFils)],
+      ['Retained earnings, computed', '', '', amountCell(sheet.retainedEarningsFils)],
+      ['Total assets', '', '', amountCell(sheet.totalAssetsFils)],
+      ['Total liabilities and equity', '', '', amountCell(sheet.totalLiabilitiesAndEquityFils)],
     ];
     return csvResponse(c, `balance-sheet-${asOf}.csv`, toCsv(rows));
   });
@@ -249,15 +256,15 @@ export function mountStatements(api: Hono<ApiEnv>, now: () => Date = () => new D
     const flow = await cashFlowOf(c, period.from, period.to);
     const rows = [
       ['Heading', 'Amount AED'],
-      ['From households', filsToDecimal(flow.byCategory.fromHouseholds)],
-      ['For expenses and suppliers', filsToDecimal(flow.byCategory.forExpenses)],
-      ['To owners and shareholders', filsToDecimal(flow.byCategory.toOwners)],
-      ['Tax', filsToDecimal(flow.byCategory.tax)],
-      ['Other', filsToDecimal(flow.byCategory.other)],
-      ['Transfers between cash accounts', filsToDecimal(flow.byCategory.transfers)],
-      ['Opening cash', filsToDecimal(flow.openingCashFils)],
-      ['Net change', filsToDecimal(flow.netChangeFils)],
-      ['Closing cash', filsToDecimal(flow.closingCashFils)],
+      ['From households', amountCell(flow.byCategory.fromHouseholds)],
+      ['For expenses and suppliers', amountCell(flow.byCategory.forExpenses)],
+      ['To owners and shareholders', amountCell(flow.byCategory.toOwners)],
+      ['Tax', amountCell(flow.byCategory.tax)],
+      ['Other', amountCell(flow.byCategory.other)],
+      ['Transfers between cash accounts', amountCell(flow.byCategory.transfers)],
+      ['Opening cash', amountCell(flow.openingCashFils)],
+      ['Net change', amountCell(flow.netChangeFils)],
+      ['Closing cash', amountCell(flow.closingCashFils)],
     ];
     return csvResponse(c, `cash-flow-${period.from}-${period.to}.csv`, toCsv(rows));
   });

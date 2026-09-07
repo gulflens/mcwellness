@@ -5,16 +5,54 @@ import type { ChartAccount, PostedLine } from './types';
  * Zoho Books' import templates (docs/SPEC/accounting.md section 4.6). Nothing
  * is sent anywhere — the person downloads the file — and no row names a
  * household, because no journal line does.
+ *
+ * A cell is either text or an amount, and the difference matters when the file
+ * is opened: text that would read as a formula is guarded, and an amount never
+ * is (`escapeCell` below).
  */
 
 const NEEDS_QUOTING = /[",\r\n]/;
 
+/**
+ * What Excel and Google Sheets treat as the opening of a formula rather than
+ * as text. Memos, account names and `name_ar` are typed by the owner or by
+ * finance and open cells in all six files; a cell beginning with one of these
+ * would be executed when somebody opened the file.
+ */
+const STARTS_A_FORMULA = /^[=+\-@\t\r]/;
+
+/**
+ * A cell that is a figure and not text. `filsToDecimal` writes a negative
+ * balance as "-0.05", which begins exactly as a formula does: an amount is
+ * marked so it is never guarded, and a file of guarded figures would be a file
+ * of text no spreadsheet could add up.
+ */
+export type AmountCell = { readonly amount: string };
+export type CsvCell = string | AmountCell;
+
+/** An amount for a file, marked as one. */
+export function amountCell(amount: number): AmountCell {
+  return { amount: filsToDecimal(amount) };
+}
+
+/**
+ * One field, ready for the file: a text field that would be a formula is
+ * opened with a single quotation mark first, and then RFC 4180 quoting is
+ * applied to whatever came of it.
+ */
+export function escapeCell(value: string, kind: 'text' | 'amount'): string {
+  const guarded = kind === 'text' && STARTS_A_FORMULA.test(value) ? `'${value}` : value;
+  return NEEDS_QUOTING.test(guarded) ? `"${guarded.replaceAll('"', '""')}"` : guarded;
+}
+
 /** RFC 4180: quote a field holding a comma, a quotation mark or a line break; CRLF throughout. */
-export function toCsv(rows: readonly (readonly string[])[]): string {
+export function toCsv(rows: readonly (readonly CsvCell[])[]): string {
   return rows
     .map((row) =>
       row
-        .map((field) => (NEEDS_QUOTING.test(field) ? `"${field.replaceAll('"', '""')}"` : field))
+        .map((cell) =>
+          typeof cell === 'string' ? escapeCell(cell, 'text') : escapeCell(cell.amount, 'amount'),
+        )
         .join(','),
     )
     .map((line) => `${line}\r\n`)
@@ -53,7 +91,7 @@ export const ZOHO_JOURNAL_HEADINGS: readonly string[] = [
 ];
 
 /** One row per posted line, the headings first. */
-export function zohoJournalRows(lines: readonly PostedLine[]): string[][] {
+export function zohoJournalRows(lines: readonly PostedLine[]): CsvCell[][] {
   return [
     [...ZOHO_JOURNAL_HEADINGS],
     ...lines.map((line) => [
@@ -61,8 +99,8 @@ export function zohoJournalRows(lines: readonly PostedLine[]): string[][] {
       line.entryReference,
       line.memo,
       line.accountName,
-      filsToDecimal(line.debitFils),
-      filsToDecimal(line.creditFils),
+      amountCell(line.debitFils),
+      amountCell(line.creditFils),
     ]),
   ];
 }
