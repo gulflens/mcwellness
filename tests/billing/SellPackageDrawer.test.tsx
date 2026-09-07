@@ -154,7 +154,8 @@ describe('SellPackageDrawer', () => {
     // The stamped rate is the row's; the label says it only when the
     // registration makes it a charge (migration 406).
     mount();
-    expect(screen.getByText('10,325.00')).toBeTruthy();
+    // The price and the total are the same figure, so it appears twice.
+    expect(screen.getAllByText('10,325.00')).toHaveLength(2);
     expect(screen.getByText('VAT')).toBeTruthy();
     expect(screen.queryByText('VAT (5%)')).toBeNull();
   });
