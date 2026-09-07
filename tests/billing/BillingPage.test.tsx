@@ -31,28 +31,34 @@ const SERVICE_TYPES = {
   ],
 };
 
-// A practice registered for VAT: the rate is stamped on the row and it is
-// charged, so the total carries five per cent. The unregistered practice —
-// which is the real one — is PRICES_UNREGISTERED below.
-const PRICES = {
-  vatRegistered: true,
-  prices: [
-    {
-      id: '00000004-0000-4000-8000-000000000101',
-      serviceTypeId: NF_SESSION_ID,
-      serviceTypeCode: 'nf-session',
-      serviceTypeName: 'Neurofeedback session',
-      serviceTypeNameAr: 'جلسة التغذية الراجعة العصبية',
-      unitPriceFils: 90_000,
-      vatRateBasisPoints: 500,
-      vatFils: 4_500,
-      grossFils: 94_500,
-      validFrom: '2026-09-02',
-      supersedesId: null,
-      amendmentReason: 'Setting the launch price.',
-    },
-  ],
+const NF_PRICE = {
+  id: '00000004-0000-4000-8000-000000000101',
+  serviceTypeId: NF_SESSION_ID,
+  serviceTypeCode: 'nf-session',
+  serviceTypeName: 'Neurofeedback session',
+  serviceTypeNameAr: 'جلسة التغذية الراجعة العصبية',
+  unitPriceFils: 90_000,
+  vatRateBasisPoints: 500,
+  vatFils: 4_500,
+  grossFils: 94_500,
+  validFrom: '2026-09-02',
+  supersedesId: null,
+  amendmentReason: 'Setting the launch price.',
 };
+
+// A practice registered for VAT: the rate is stamped on the row and it is
+// charged, so the total carries five per cent.
+const PRICES = { vatRegistered: true, prices: [NF_PRICE] };
+
+// The practice as it actually is: not registered, so the same stamped rate
+// charges nothing and the total is the price (migration 406).
+const PRICES_UNREGISTERED = {
+  vatRegistered: false,
+  prices: [{ ...NF_PRICE, vatFils: 0, grossFils: 90_000 }],
+};
+
+const NO_VAT_NOTE =
+  'The practice is not registered for VAT, so no VAT is charged and the total is the price.';
 
 const CREATED_PRICE = {
   id: '00000004-0000-4000-8000-000000000102',
@@ -123,6 +129,25 @@ describe('BillingPage', () => {
     // (en-GB's short-month form for September is "Sept", not "Sep".)
     expect(screen.getByText('2 Sept 2026')).toBeTruthy();
     expect(screen.queryByText('2026-09-02')).toBeNull();
+  });
+
+  it('says in one line that no VAT is charged while the practice is not registered', async () => {
+    mount(OWNER, { body: PRICES_UNREGISTERED });
+    await screen.findByText('Neurofeedback session');
+    // One quiet sentence above the table, and the columns left as they are:
+    // a reader who sees nothing in the VAT column should not have to guess
+    // whether it is a zero or a missing figure.
+    expect(screen.getByText(NO_VAT_NOTE)).toBeTruthy();
+    expect(screen.getByText('VAT')).toBeTruthy();
+    expect(screen.getByText('0.00')).toBeTruthy();
+    expect(screen.getAllByText('900.00')).toHaveLength(2);
+  });
+
+  it('says nothing extra once the practice is registered for VAT', async () => {
+    mount(OWNER, { body: PRICES });
+    await screen.findByText('Neurofeedback session');
+    expect(screen.queryByText(NO_VAT_NOTE)).toBeNull();
+    expect(screen.getByText('45.00')).toBeTruthy();
   });
 
   it('names the currency once, on the unit price column', async () => {

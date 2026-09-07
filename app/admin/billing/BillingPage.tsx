@@ -230,6 +230,19 @@ export function BillingPage() {
           ) : null}
           {state.kind === 'loading' ? <Note>Loading the price list.</Note> : null}
           {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
+          {/*
+            One line, and only while it is true. The VAT column and the Total
+            beside it read as a five per cent that is not charged unless
+            something says the practice is outside the tax altogether
+            (migration 406); the columns stay as they are, because they are
+            right the day a registration is granted.
+          */}
+          {state.kind === 'ready' && !state.response.vatRegistered ? (
+            <p className="small muted">
+              The practice is not registered for VAT, so no VAT is charged and the total is the
+              price.
+            </p>
+          ) : null}
           {state.kind === 'ready' ? (
             <Table
               caption="Current prices"
