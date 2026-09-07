@@ -24,6 +24,7 @@
 
 export { measure, PAGE_HEIGHT, PAGE_WIDTH, renderPdf } from './pdf';
 export type { Align, DocumentImage, FontSet, FontSlot, ImageSet, Op, Page, Style } from './pdf';
+export { readPng } from './png';
 export { glyphFor, readFont, widthOf } from './truetype';
 export type { Font } from './truetype';
 export { forDrawing, isArabic, shape, toVisualOrder } from './arabic';

@@ -30,6 +30,7 @@ export {
   PAGE_HEIGHT,
   PAGE_WIDTH,
   readFont,
+  readPng,
   renderPdf,
   shape,
   toVisualOrder,
