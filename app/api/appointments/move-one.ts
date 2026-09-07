@@ -84,7 +84,8 @@ const CONSENTS_SQL =
 
 const RETIRE_SQL =
   "update appointment set status = 'rescheduled' where id = $1 " +
-  "and tenant_id = app.current_tenant_id() and status in ('proposed', 'confirmed')";
+  'and tenant_id = app.current_tenant_id() ' +
+  'and status = any($2::appointment_status[])';
 
 const INSERT_SQL =
   'insert into appointment (tenant_id, client_id, practitioner_id, service_type_id, location_id, ' +
@@ -151,6 +152,15 @@ function toExisting(rows: readonly OtherAppointmentRow[]): ExistingAppointment[]
   }));
 }
 
+/**
+ * The client's row was read to check the move and to answer with their name;
+ * logged exactly as app/api/clients/list.ts logs what it shows. One row per
+ * visit per action, written by the route that took the action.
+ */
+export async function logClientRead(db: Db, clientId: string): Promise<void> {
+  await logRead(db, 'client', clientId, clientId);
+}
+
 export async function readAppointment(db: Db, id: string): Promise<AppointmentDbRow | undefined> {
   const existing = await db.query<AppointmentDbRow>(APPOINTMENT_SQL, [id]);
   return existing.rows[0];
@@ -171,7 +181,20 @@ export type MoveContext = {
   on: IsoDate;
 };
 
-/** Everything the conflict check needs, read in the caller's own transaction. Null: the client is gone. */
+/**
+ * Everything the conflict check needs, read in the caller's own transaction.
+ * Null: the client is gone.
+ *
+ * **It writes no audit row, and the caller does.** The client's own row is
+ * read here, and reading it is a thing the trail records — but a reorder
+ * calls this twice for the same visit, once in phase one to decide and once
+ * per visit in phase two to check the new window against the rows already
+ * inserted. Logging inside meant two `read` rows per household for one
+ * action, where `docs/SPEC/route-planning.md` section 11 says a reorder
+ * writes what a move writes (the review of the day map's pull request, note
+ * N2). So `logClientRead` below is the caller's to call, once per visit per
+ * action.
+ */
 export async function readMoveContext(
   db: Db,
   appointment: AppointmentDbRow,
@@ -181,9 +204,6 @@ export async function readMoveContext(
   const clientResult = await db.query<ClientDbRow>(CLIENT_SQL, [clientId]);
   const client = clientResult.rows[0];
   if (!client) return null;
-  // The client's own row is read to check the move and to answer with their
-  // name; logged exactly as app/api/clients/list.ts logs what it shows.
-  await logRead(db, 'client', clientId, clientId);
 
   // The candidate's own date, in the practice's zone: a credential is judged
   // valid on the day of the visit, not on today.
@@ -229,15 +249,30 @@ export async function readMoveContext(
 }
 
 /**
- * `proposed` or `confirmed` becomes `rescheduled`, freeing its slot. False:
- * somebody else settled it first.
+ * One of `from` becomes `rescheduled`, freeing its slot. False: the row is no
+ * longer in any of those statuses, so somebody else settled it first.
  *
  * The status predicate is the second half of the check the routes make on the
  * row they read, now against the row as it stands at write time, so a visit
  * somebody else settled between the two cannot be moved out from under them.
+ *
+ * **The statuses are the caller's, and the two callers differ.** `move.ts`
+ * passes both, because moving a visit a household has agreed to is what that
+ * route exists for. `reorder.ts` passes `'proposed'` alone: it proves
+ * `proposed` in phase one, but under READ COMMITTED each statement takes a
+ * fresh snapshot, so a confirm committed between that read and this write
+ * would be visible here — and a predicate accepting `confirmed` would retire
+ * it, leaving a household told 09:00 with a proposed 14:00 and nobody
+ * informed. With `'proposed'` alone the confirm wins the race and the reorder
+ * is refused as stale, which is the right way round (the review of the day
+ * map's pull request, finding S1).
  */
-export async function retire(db: Db, id: string): Promise<boolean> {
-  const retired = await db.query(RETIRE_SQL, [id]);
+export async function retire(
+  db: Db,
+  id: string,
+  from: readonly AppointmentRow['status'][],
+): Promise<boolean> {
+  const retired = await db.query(RETIRE_SQL, [id, from]);
   return retired.rowCount === 1;
 }
 

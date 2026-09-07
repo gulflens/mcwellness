@@ -1,4 +1,5 @@
 import type { Context, Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
 import { canActor, hasRole } from '@domain/shared';
 import {
@@ -15,6 +16,7 @@ import {
   exclusionConflict,
   hasOpenSession,
   insertMoved,
+  logClientRead,
   readAppointment,
   readMoveContext,
   retire,
@@ -69,6 +71,31 @@ import {
 
 function badRequest(c: Context<ApiEnv>, requestId: string | null, code: MoveActionCode) {
   return c.json({ error: 'bad_request', code, requestId }, 400);
+}
+
+/**
+ * A refusal made after the first write must *raise*, never return.
+ *
+ * A `23P01` from the insert aborts the Postgres transaction, and
+ * `withRequestContext` runs a guard for exactly that case: it asks the
+ * connection for a `select 1`, which fails on an aborted transaction, and
+ * replaces the answer with `{"error":"internal"}` 500. So a returned 409 never
+ * reached the coordinator — the data was always safe, but the one refusal
+ * that says "that slot is taken" showed as an internal error instead. Raised,
+ * Hono's `compose` sets `context.error` before `onError` runs, `onError`
+ * returns the 409 unchanged, and `withRequestContext` rolls the transaction
+ * back while keeping that body. `reorder.ts` has always done it this way; this
+ * route never has (the review of the day map's pull request, finding S3 — a
+ * long-standing defect, fixed here because the refactor's docblock claims
+ * this route's behaviour is unchanged).
+ */
+function raise(status: 409, payload: unknown): never {
+  throw new HTTPException(status, {
+    res: new Response(JSON.stringify(payload), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    }),
+  });
 }
 
 export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -132,6 +159,12 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
     if (context === null) {
       return c.json({ error: 'not_found', code: 'appointment_not_found', requestId }, 404);
     }
+    // One `read` row for the household whose record this move looked at, in
+    // this route's own transaction. It used to be written inside
+    // `readMoveContext`; it moved out because the reorder calls that twice
+    // per visit and was writing two (review note N2). This route reads once
+    // and logs once, exactly as it always did.
+    await logClientRead(db, appointment.client_id);
 
     // The same credential-bound rule booking runs, against the new date. A
     // practitioner certified in September and not in October may not simply
@@ -190,8 +223,10 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
       );
     }
 
-    // Retire first, insert second: see the note at the top of this file.
-    if (!(await retire(db, appointmentId))) {
+    // Retire first, insert second: see the note at the top of this file. Both
+    // statuses, because moving a visit a household has agreed to is what this
+    // route is for; the reorder passes `proposed` alone.
+    if (!(await retire(db, appointmentId, ['proposed', 'confirmed']))) {
       return badRequest(c, requestId, 'appointment_settled');
     }
 
@@ -210,11 +245,14 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
     } catch (error) {
       // A booking that slipped in between the conflict read and this insert
       // is caught by the database's own exclusion constraints and answered
-      // the same way a checkConflicts refusal is, not as a raw 500. The
-      // transaction rolls back, so the retired row is not left retired.
+      // the same way a checkConflicts refusal is, not as a raw 500. Raised
+      // and not returned, so the aborted transaction is rolled back and this
+      // body survives it: see `raise` above. The retired row is not left
+      // retired either way.
       const code = exclusionConflict(error);
       if (code === null) throw error;
-      return c.json(
+      raise(
+        409,
         ConflictResponse.parse({
           error: 'conflict',
           issues: [
@@ -227,7 +265,6 @@ export function mountAppointmentMove(api: Hono<ApiEnv>, now: () => Date = () => 
           ],
           requestId,
         }),
-        409,
       );
     }
     if (!created) {

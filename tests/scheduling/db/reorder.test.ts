@@ -4,11 +4,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPool } from '@app/api/_middleware/db';
 import { createTokenVerifier } from '@app/api/_middleware/token-verifier';
 import { createApi } from '@app/api/create-api';
+import { retire } from '@app/api/appointments/move-one';
 import type { ReorderResponse } from '@app/api/appointments/schema';
 import {
   AUTH,
   IDS,
+  asApiRole,
   freshDatabase,
+  rolledBack,
   seedClient,
   seedContact,
   seedCredential,
@@ -395,5 +398,93 @@ describe('POST /api/appointments/reorder', () => {
   it('refuses a caller who is not the calendar', async () => {
     expect((await call(FINANCE_AUTH, validBody())).status).toBe(403);
     expect((await call(PRACTITIONER_AUTH, validBody())).status).toBe(403);
+  });
+
+  it('refuses a window that is not on the day the plan was computed for', async () => {
+    const before = await proposedWindows();
+    const body = validBody();
+    const res = await call(AUTH.ownerA, {
+      ...body,
+      // The day after, in the practice's own zone: a window the plan's own
+      // `date` never covered (review note N3).
+      moves: [
+        {
+          ...body.moves[0],
+          windowStart: new Date(new Date(iso('12:00')).getTime() + 24 * 60 * 60_000).toISOString(),
+        },
+      ],
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('invalid_request');
+    expect(await proposedWindows()).toEqual(before);
+  });
+
+  it('writes one read row per household, not two', async () => {
+    // `readMoveContext` is called twice per visit — once in phase one to
+    // decide and once in phase two to check the new window against the rows
+    // already inserted — and used to log inside itself, so a reorder narrated
+    // each household's record as read twice for one action (review note N2).
+    // A reason of its own, because the trail in this database carries every
+    // earlier case in this file too.
+    const reason = 'Day optimised on the map, counted';
+    const res = await call(AUTH.ownerA, validBody(), reason);
+    expect(res.status).toBe(200);
+    const { rows } = await owner.query<{ client_id: string; n: string }>(
+      "select client_id, count(*)::text as n from audit_log where action = 'read' " +
+        "and entity_type = 'client' and reason = $1 and client_id = any($2) " +
+        'group by client_id order by client_id',
+      [reason, [CLIENT_A, CLIENT_C]],
+    );
+    expect(rows.map((r) => r.n)).toEqual(['1', '1']);
+  });
+});
+
+/**
+ * The write-time half of "a reorder never moves a visit a household has been
+ * told about" (the review of this pull request, finding S1).
+ *
+ * The route proves `proposed` in phase one, but under READ COMMITTED each
+ * statement takes its own snapshot, so a confirm committed between that read
+ * and the write is visible to the write. `retire` used to accept `confirmed`
+ * whoever called it, so the write would have succeeded and a household told
+ * 09:00 would have had a proposed 14:00 with nobody informed. The window is
+ * narrow and cannot be forced open from outside a request, so the predicate
+ * itself is put under the light here, against a real Postgres.
+ */
+describe('retire, the write-time status predicate', () => {
+  const db = { query: (text: string, params?: unknown[]) => owner.query(text, params) };
+
+  it("leaves a confirmed visit alone when the caller says 'proposed' alone, as the reorder does", async () => {
+    await rolledBack(owner, async () => {
+      await asApiRole(owner, IDS.tenantA, async () => {
+        expect(await retire(db, APPT_CONFIRMED, ['proposed'])).toBe(false);
+        const { rows } = await owner.query<{ status: string }>(
+          'select status::text as status from appointment where id = $1',
+          [APPT_CONFIRMED],
+        );
+        expect(rows[0]?.status).toBe('confirmed');
+      });
+    });
+  });
+
+  it('retires a confirmed visit when the caller says so, as the move route does', async () => {
+    await rolledBack(owner, async () => {
+      await asApiRole(owner, IDS.tenantA, async () => {
+        expect(await retire(db, APPT_CONFIRMED, ['proposed', 'confirmed'])).toBe(true);
+        const { rows } = await owner.query<{ status: string }>(
+          'select status::text as status from appointment where id = $1',
+          [APPT_CONFIRMED],
+        );
+        expect(rows[0]?.status).toBe('rescheduled');
+      });
+    });
+  });
+
+  it('retires a proposed visit either way', async () => {
+    await rolledBack(owner, async () => {
+      await asApiRole(owner, IDS.tenantA, async () => {
+        expect(await retire(db, APPT_A, ['proposed'])).toBe(true);
+      });
+    });
   });
 });

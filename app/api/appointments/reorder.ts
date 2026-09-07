@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { canActor, hasRole } from '@domain/shared';
+import { canActor, hasRole, isoDateIn } from '@domain/shared';
 import {
   checkConflicts,
   windowFor,
@@ -15,10 +15,12 @@ import {
   exclusionConflict,
   hasOpenSession,
   insertMoved,
+  logClientRead,
   readAppointment,
   readMoveContext,
   retire,
   REASON_MAX,
+  PRACTICE_TIME_ZONE,
   type AppointmentDbRow,
   type MoveContext,
 } from './move-one';
@@ -53,6 +55,16 @@ import {
  * `proposed`, which is the whole of what the plan is allowed to reorder.
  * The households still have to be told nothing, because nobody has been told
  * anything: that is what `proposed` means (scheduling-manual.md section 3).
+ * That is now true at write time and not only at read time: `retire` is given
+ * `['proposed']` alone, so a confirm committed between the phase-one read and
+ * the write wins the race and this reorder is refused as stale (the review of
+ * this pull request, finding S1).
+ *
+ * **Every window belongs to the day the plan was computed for.** `date` is
+ * checked against every `windowStart` in the practice's own zone before a row
+ * is read. It is not an escalation to leave it out — the same actor can move a
+ * visit to any window through `/move` — but a field that is required and never
+ * read promises a check it does not make (review note N3).
  */
 
 function badRequest(c: Context<ApiEnv>, requestId: string | null, code: ReorderActionCode) {
@@ -90,17 +102,27 @@ export function mountAppointmentReorder(
     if (!body.success) {
       return badRequest(c, requestId, 'invalid_request');
     }
-    const { moves, practitionerId } = body.data;
+    const { date, moves, practitionerId } = body.data;
     if (new Set(moves.map((move) => move.appointmentId)).size !== moves.length) {
       // The same visit twice would retire it once and then insert two rows
       // against one retirement, which is not a reorder of anything.
       return badRequest(c, requestId, 'invalid_request');
     }
+    // A plan is one practitioner's one day, and `date` says which. Judged in
+    // the practice's own zone, so a window at 23:00 Dubai is that day and not
+    // the next one somewhere else.
+    if (moves.some((move) => isoDateIn(new Date(move.windowStart), PRACTICE_TIME_ZONE) !== date)) {
+      return badRequest(c, requestId, 'invalid_request');
+    }
 
     const db = c.get('db');
 
-    // Phase one, reads only. Every refusal that can be made is made here,
-    // where returning it rolls nothing back because nothing has been written.
+    // Phase one decides. Every refusal that can be made is made here, where
+    // returning it commits a transaction that has moved no visit: not "reads
+    // only" — one `read` row per household is written, and correctly so,
+    // because the reading did happen and a refusal returned after it must
+    // keep it (review note N1) — but no appointment row is touched until
+    // phase two.
     const planned: {
       move: (typeof moves)[number];
       appointment: AppointmentDbRow;
@@ -127,6 +149,11 @@ export function mountAppointmentReorder(
       if (context === null) {
         return c.json({ error: 'not_found', code: 'appointment_not_found', requestId }, 404);
       }
+      // One `read` row per household, here and nowhere else: phase two reads
+      // the same context again to check each new window against the rows
+      // already inserted, and a second row would say the record was looked at
+      // twice for one action (review note N2).
+      await logClientRead(db, appointment.client_id);
       if (
         !canActor(
           actor,
@@ -169,8 +196,13 @@ export function mountAppointmentReorder(
       });
     }
 
+    // `proposed` alone, and never `confirmed`: phase one proved the status,
+    // but each statement takes its own snapshot under READ COMMITTED, so a
+    // confirm committed since then is visible to this write. Refusing here
+    // means the confirm wins the race rather than losing it, and a household
+    // that has been told a time keeps it (review of this pull request, S1).
     for (const { move } of planned) {
-      if (!(await retire(db, move.appointmentId))) {
+      if (!(await retire(db, move.appointmentId, ['proposed']))) {
         raise(409, { error: 'conflict', code: 'stale_plan', requestId });
       }
     }
