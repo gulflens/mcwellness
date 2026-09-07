@@ -336,13 +336,14 @@ describe('the comparison', () => {
     expect(container).toBeTruthy();
   });
 
-  it('carries the fixed sentence in English and Arabic', async () => {
+  it('carries the fixed sentence in English, and nothing in Arabic', async () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Compare' }));
     expect(await screen.findByText(NOT_A_DIAGNOSIS.en)).toBeTruthy();
-    const arabic = screen.getByText(NOT_A_DIAGNOSIS.ar);
-    expect(arabic.getAttribute('lang')).toBe('ar');
-    expect(arabic.getAttribute('dir')).toBe('rtl');
+    // The console is English only (docs/DESIGN-BRIEF.md section 10 item 4).
+    // The Arabic half is still the constant's and still printed on a report a
+    // household reads (tests/reports/document.test.ts); it is not on screen.
+    expect(screen.queryByText(NOT_A_DIAGNOSIS.ar)).toBeNull();
   });
 
   it('attaches no word to a figure anywhere on the screen', async () => {

@@ -9,8 +9,11 @@ import type { AssessmentFileCondition, AssessmentFileRole } from '../../api/asse
  */
 
 /**
- * The fixed sentence, in English and Arabic, that sits on the comparison and
- * on anything printed from it (section 3.3).
+ * The fixed sentence. It sits on the comparison screen in English — the
+ * console is English only (operator's decision of 7 September 2026,
+ * docs/DESIGN-BRIEF.md section 10 item 4) — and both halves go on anything
+ * printed from it, which a household reads (section 3.3;
+ * tests/reports/document.test.ts proves the printed pair is this constant).
  *
  * **The second half is the consent's own wording**, word for word —
  * `docs/CONSENT/participation.en.md`: "It shows patterns of activity. It is
