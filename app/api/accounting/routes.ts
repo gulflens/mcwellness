@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mountAccounts } from './accounts';
 import { mountEntries } from './entries';
+import { mountPosting } from './post';
 import { mountSettings } from './settings';
 import { mountYears } from './years';
 
@@ -16,4 +17,5 @@ export function mountAccounting(api: Hono<ApiEnv>, now: () => Date = () => new D
   mountAccounts(api, now);
   mountYears(api, now);
   mountEntries(api, now);
+  mountPosting(api, now);
 }
