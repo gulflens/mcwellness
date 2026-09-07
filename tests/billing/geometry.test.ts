@@ -58,6 +58,9 @@ const SUPPLIER: SupplierSnapshot = {
   corporateTaxNumber: '000000000000000',
   vatRegistered: true,
   vatNumber: '100000000000003',
+  contactPhone: '+971 50 000 0011',
+  contactEmail: 'studio@example.com',
+  website: 'https://example.com',
 };
 
 /** Everything a household could plausibly make long, made long. */

@@ -44,6 +44,7 @@ const INVOICE_SQL =
   'i.client_id, i.supplier_legal_name, i.supplier_legal_name_ar, i.supplier_address, ' +
   'i.supplier_licence_number, i.supplier_licensing_authority, i.supplier_trn, ' +
   'i.supplier_vat_registered, i.supplier_vat_trn, ' +
+  'i.supplier_contact_phone, i.supplier_contact_email, i.supplier_website, ' +
   "c.mrn as client_mrn, c.given_name || ' ' || c.family_name as client_name " +
   'from invoice i join client c on c.id = i.client_id ' +
   'where i.tenant_id = app.current_tenant_id() and i.id = $1';
@@ -65,7 +66,8 @@ const PAYMENT_SQL =
 const SUPPLIER_COLUMNS =
   'supplier_legal_name, supplier_legal_name_ar, supplier_address, ' +
   'supplier_licence_number, supplier_licensing_authority, supplier_trn, ' +
-  'supplier_vat_registered, supplier_vat_trn';
+  'supplier_vat_registered, supplier_vat_trn, ' +
+  'supplier_contact_phone, supplier_contact_email, supplier_website';
 
 /** The snapshot on the invoice this payment settles. The first thing asked for. */
 const SETTLED_SUPPLIER_SQL =
@@ -91,6 +93,9 @@ type SupplierColumns = {
   supplier_trn: string | null;
   supplier_vat_registered: boolean | null;
   supplier_vat_trn: string | null;
+  supplier_contact_phone: string | null;
+  supplier_contact_email: string | null;
+  supplier_website: string | null;
 };
 
 function supplierOf(row: SupplierColumns): SupplierSnapshot {
@@ -105,6 +110,12 @@ function supplierOf(row: SupplierColumns): SupplierSnapshot {
     corporateTaxNumber: row.supplier_trn,
     vatRegistered: row.supplier_vat_registered,
     vatNumber: row.supplier_vat_trn,
+    // The footer band. Snapshotted at numbering time like everything above it
+    // (migration 959), so a practice that changes its telephone does not
+    // rewrite what it has already handed a family.
+    contactPhone: row.supplier_contact_phone,
+    contactEmail: row.supplier_contact_email,
+    website: row.supplier_website,
   };
 }
 

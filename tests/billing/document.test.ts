@@ -53,6 +53,9 @@ const UNREGISTERED: SupplierSnapshot = {
   corporateTaxNumber: '000000000000000',
   vatRegistered: false,
   vatNumber: null,
+  contactPhone: '+971 50 000 0011',
+  contactEmail: 'studio@example.com',
+  website: 'https://example.com',
 };
 
 const REGISTERED: SupplierSnapshot = {

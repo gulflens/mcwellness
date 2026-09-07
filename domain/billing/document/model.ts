@@ -35,6 +35,19 @@ export type SupplierSnapshot = {
   vatRegistered: boolean | null;
   /** The VAT registration number, present only while `vatRegistered` is true. */
   vatNumber: string | null;
+  /**
+   * The three facts the footer band is set from (migrations 912 and 959, and
+   * docs/SPEC/billing.md section 5.6): the telephone number a reader of this
+   * document rings, the address they write to, and the practice's website.
+   *
+   * Snapshotted like every other supplier fact, and null like every other one
+   * when the practice had not recorded it — a practice that has recorded none
+   * gets a footer with the legal name and the address on it and no second
+   * line, rather than a line of empty labels.
+   */
+  contactPhone: string | null;
+  contactEmail: string | null;
+  website: string | null;
 };
 
 /** Who the document is for. A household, which is a private individual. */

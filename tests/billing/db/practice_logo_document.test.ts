@@ -49,7 +49,7 @@ async function asOwner(): Promise<void> {
   );
 }
 
-async function file(hex: string, mimeType: string, as = SEEDED.owner): Promise<Response> {
+async function file(hex: string, mimeType: string, as: number = SEEDED.owner): Promise<Response> {
   return h.call('POST', '/api/practice/logo', as, {
     mimeType,
     bytesBase64: Buffer.from(hex, 'hex').toString('base64'),
