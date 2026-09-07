@@ -41,6 +41,13 @@ const PATCH_SQL =
 const LOCK_SQL =
   'update accounting_setting set locked_through = $1 where tenant_id = app.current_tenant_id()';
 
+/** Postgres: check_violation. Here, always a settings figure the row will not hold. */
+function isCheckViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23514'
+  );
+}
+
 /**
  * The books' settings and the lock date, both the owner's alone
  * (docs/SPEC/accounting.md section 5.5, rules 10 and 14). Finance keeps the
@@ -70,15 +77,30 @@ export function mountSettingsWrites(api: Hono<ApiEnv>, now: () => Date = () => n
     if (movesTheYearEnd && !mayChangeYearEnd(current.entryCount)) {
       return c.json({ error: 'conflict', code: 'journal_not_empty', requestId }, 409);
     }
-    await db.query(PATCH_SQL, [
-      input.booksStartOn ?? null,
-      input.yearEndMonth ?? null,
-      input.yearEndDay ?? null,
-      input.corporateTaxRateBasisPoints ?? null,
-      input.corporateTaxThresholdFils ?? null,
-      input.smallBusinessReliefElected ?? null,
-      input.smallBusinessReliefThresholdFils ?? null,
-    ]);
+    // A patch naming only one half of the year end -- the month, with the
+    // stored day too long for it -- is a day the calendar does not have that
+    // the schema had nothing to compare against. 450's own check answers it,
+    // and its refusal is a request that was wrong, not a fault: the savepoint
+    // is what lets this route say so, because a failed statement poisons the
+    // transaction otherwise and the transaction belongs to the middleware.
+    await db.query('savepoint settings_patch');
+    try {
+      await db.query(PATCH_SQL, [
+        input.booksStartOn ?? null,
+        input.yearEndMonth ?? null,
+        input.yearEndDay ?? null,
+        input.corporateTaxRateBasisPoints ?? null,
+        input.corporateTaxThresholdFils ?? null,
+        input.smallBusinessReliefElected ?? null,
+        input.smallBusinessReliefThresholdFils ?? null,
+      ]);
+    } catch (error) {
+      if (!isCheckViolation(error)) {
+        throw error;
+      }
+      await db.query('rollback to savepoint settings_patch');
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
     return c.json(SettingsResponse.parse(await readSetting(db)));
   });
 

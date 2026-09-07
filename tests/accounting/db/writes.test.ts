@@ -64,6 +64,68 @@ afterAll(async () => {
   await h.close();
 });
 
+/**
+ * Before anything is posted, because a year end may only move while the
+ * journal is empty (rule 10) and the answer to a day the calendar does not
+ * have must be a refusal the drawer has a sentence for, never a 500.
+ */
+describe('a year end the calendar has', () => {
+  it('refuses the thirtieth of February before it reaches the database', async () => {
+    const res = await h.call(
+      'PATCH',
+      '/api/accounting/settings',
+      SEEDED.owner,
+      { yearEndMonth: 2, yearEndDay: 30 },
+      { 'x-reason': 'The adviser suggested the end of February.' },
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'invalid_request' });
+    expect((await settings()).yearEndMonth).toBe(12);
+  });
+
+  it('refuses a month alone that the stored day outgrows, from the constraint itself', async () => {
+    // Only the month is sent, so the schema has nothing to compare it against;
+    // 450's own check answers, and the route turns its 23514 into the same
+    // coded refusal rather than an internal error.
+    const res = await h.call(
+      'PATCH',
+      '/api/accounting/settings',
+      SEEDED.owner,
+      { yearEndMonth: 2 },
+      { 'x-reason': 'The adviser suggested the end of February.' },
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'invalid_request' });
+    const after = await settings();
+    expect(after.yearEndMonth).toBe(12);
+    expect(after.yearEndDay).toBe(31);
+  });
+
+  it('takes a year end that every year has', async () => {
+    const res = await h.call(
+      'PATCH',
+      '/api/accounting/settings',
+      SEEDED.owner,
+      { yearEndMonth: 2, yearEndDay: 28 },
+      { 'x-reason': 'The adviser prefers a February year end.' },
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as SettingsResponse).toMatchObject({
+      yearEndMonth: 2,
+      yearEndDay: 28,
+    });
+    // Put back, so the year the rest of this file posts into is the calendar's.
+    const back = await h.call(
+      'PATCH',
+      '/api/accounting/settings',
+      SEEDED.owner,
+      { yearEndMonth: 12, yearEndDay: 31 },
+      { 'x-reason': 'The adviser prefers the calendar year after all.' },
+    );
+    expect(back.status).toBe(200);
+  });
+});
+
 describe('posting an entry by hand', () => {
   it('lets finance post a balanced entry and answers it with its lines', async () => {
     const res = await h.callAs(

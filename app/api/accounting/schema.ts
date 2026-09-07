@@ -206,15 +206,33 @@ export const PatchAccountInput = z.object({
 });
 export type PatchAccountInput = z.infer<typeof PatchAccountInput>;
 
-export const PatchSettingsInput = z.object({
-  booksStartOn: IsoDate.optional(),
-  yearEndMonth: z.number().int().min(1).max(12).optional(),
-  yearEndDay: z.number().int().min(1).max(31).optional(),
-  corporateTaxRateBasisPoints: z.number().int().min(0).max(10_000).optional(),
-  corporateTaxThresholdFils: z.number().int().nonnegative().optional(),
-  smallBusinessReliefElected: z.boolean().optional(),
-  smallBusinessReliefThresholdFils: z.number().int().nonnegative().optional(),
-});
+/**
+ * The longest day each month has in *every* year, which is 450's own
+ * `accounting_setting_year_end_is_a_day` said in TypeScript: February is 28,
+ * never 29, because a year end must fall in every year and not only in a leap
+ * one. The two are meant to agree; the constraint is the one that binds, and
+ * `settings.ts` turns its refusal into the same coded answer for a patch that
+ * names only one of the pair.
+ */
+const LONGEST_DAY_OF_MONTH: readonly number[] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+export const PatchSettingsInput = z
+  .object({
+    booksStartOn: IsoDate.optional(),
+    yearEndMonth: z.number().int().min(1).max(12).optional(),
+    yearEndDay: z.number().int().min(1).max(31).optional(),
+    corporateTaxRateBasisPoints: z.number().int().min(0).max(10_000).optional(),
+    corporateTaxThresholdFils: z.number().int().nonnegative().optional(),
+    smallBusinessReliefElected: z.boolean().optional(),
+    smallBusinessReliefThresholdFils: z.number().int().nonnegative().optional(),
+  })
+  .refine(
+    (input) =>
+      input.yearEndMonth === undefined ||
+      input.yearEndDay === undefined ||
+      input.yearEndDay <= (LONGEST_DAY_OF_MONTH[input.yearEndMonth - 1] ?? 31),
+    'A year end is a day the calendar has in every year.',
+  );
 export type PatchSettingsInput = z.infer<typeof PatchSettingsInput>;
 
 export const LockInput = z.object({ lockedThrough: IsoDate });
