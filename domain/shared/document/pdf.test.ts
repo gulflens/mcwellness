@@ -503,3 +503,21 @@ describe('a page that draws no image', () => {
     expect(Buffer.from(with_).equals(Buffer.from(without))).toBe(true);
   });
 });
+
+describe('a rule that is not horizontal', () => {
+  it('runs from where it starts to where its rise puts it', () => {
+    // The side of a totals box (docs/SPEC/billing.md section 5.6): the same op
+    // with no run and a rise.
+    const page: Page = { ops: [{ kind: 'rule', x: 300, y: 400, width: 0, dy: 60 }] };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toContain(
+      'q 0.50 w 0.80 G 300 400 m 300 460 l S Q',
+    );
+  });
+
+  it('leaves a rule with no rise exactly as it was', () => {
+    const page: Page = { ops: [{ kind: 'rule', x: 56, y: 690, width: 200 }] };
+    expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe(
+      'q 0.50 w 0.80 G 56 690 m 256 690 l S Q',
+    );
+  });
+});

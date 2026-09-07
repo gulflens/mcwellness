@@ -107,6 +107,14 @@ export type Op =
       x: number;
       y: number;
       width: number;
+      /**
+       * How far the rule rises over its run. Absent is 0 — a horizontal
+       * hairline, which is every rule on every document filed before the
+       * totals box on the practice's own design needed a side to it
+       * (docs/SPEC/billing.md section 5.6). A vertical rule is `width: 0` with
+       * the height here.
+       */
+      dy?: number;
       thickness?: number;
       grey?: number;
       /** As `Style.rgb`: when absent the rule is stroked in grey, unchanged. */
@@ -319,7 +327,7 @@ function contentOf(
         : `${num(op.grey ?? 0.8)} G`;
       out.push(
         `q ${num(op.thickness ?? 0.5)} w ${stroke} ` +
-          `${num(op.x)} ${num(op.y)} m ${num(op.x + op.width)} ${num(op.y)} l S Q`,
+          `${num(op.x)} ${num(op.y)} m ${num(op.x + op.width)} ${num(op.y + (op.dy ?? 0))} l S Q`,
       );
       continue;
     }
