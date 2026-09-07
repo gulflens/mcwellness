@@ -1,6 +1,6 @@
 # McWellness Pieces Seventeen and Eighteen: the day map and the week planner
 
-Written 7 September 2026 by Claude for the operator. **Not yet approved.**
+Written 7 September 2026 by Claude for the operator. **Approved by the operator on 7 September 2026 at 22:54** ("lets go"), with the four remaining decisions left at their defaults.
 
 On 7 September at 22:18 the operator asked for route planning and stop
 optimisation on the map, reusing the Google Maps key from the Flutter app,

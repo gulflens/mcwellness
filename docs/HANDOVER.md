@@ -713,9 +713,9 @@ nine and ten; see the records on pull requests 73 to 83).
    Flutter key becomes the browser map key; a week planner too). The
    plain-language plan is `docs/PLAN/route-planning.md` (pieces seventeen
    and eighteen, in the `scheduling` worktree) and the specification
-   `docs/SPEC/route-planning.md`. Nothing is built until the plan is
-   approved; the two keys are not touched until piece seventeen's staging
-   pass.
+   `docs/SPEC/route-planning.md`. **Approved at 22:54** ("lets go"),
+   defaults standing; piece seventeen builds next in the `scheduling`
+   worktree; the two keys are not touched until its staging pass.
 
 7. **Trunk round 35, the console in English only, is merged** (7 September,
    19:53 to 20:20): the operator's decision of 19:37 removed every Arabic
