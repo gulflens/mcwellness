@@ -8,6 +8,7 @@ import { ClientsPage } from '../admin/clients/ClientsPage';
 import { KitPage } from '../admin/kit/KitPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { WeekPage } from '../admin/schedule/WeekPage';
+import { DayMapPage } from '../admin/schedule/map/DayMapPage';
 import { PracticePage } from '../admin/settings/PracticePage';
 import { PortalAccessPage } from '../admin/portal/PortalAccessPage';
 import { AgreementsScreen } from '../client/AgreementsScreen';
@@ -111,6 +112,26 @@ export function App() {
               {(actor) =>
                 canOpenSchedule(actor, new Date()) ? (
                   <SchedulePage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        {/*
+          The day map (docs/SPEC/route-planning.md section 4.1). Reached by a
+          plain anchor rather than a Link, because it is served as its own
+          document with the wider content security policy a browser map needs;
+          the route is here so a reload of that address lands on the page.
+        */}
+        <Route
+          path="schedule/map"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenSchedule(actor, new Date()) ? (
+                  <DayMapPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )

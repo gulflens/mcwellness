@@ -1,0 +1,195 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { plainText } from './support';
+import { fakeGoogleMaps } from './fakeGoogleMaps';
+import { DayMapPage } from '../../app/admin/schedule/map/DayMapPage';
+import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
+import type { AuthProvider } from '../../app/shell/auth/types';
+
+afterEach(cleanup);
+
+const provider: AuthProvider = {
+  kind: 'development',
+  signIn: async () => undefined,
+  signOut: async () => undefined,
+  getAccessToken: async () => null,
+  onChange: () => () => undefined,
+};
+
+const DAY = '2026-09-10';
+const PRACTITIONER = '00000008-0000-4000-8000-000000000002';
+
+const confirmed = {
+  id: '00000008-0000-4000-8000-000000000101',
+  windowStart: '2026-09-10T05:00:00.000Z',
+  windowEnd: '2026-09-10T05:45:00.000Z',
+  status: 'confirmed' as const,
+  deliveryMode: 'home' as const,
+  client: {
+    id: '00000008-0000-4000-8000-000000000001',
+    givenName: 'Iris',
+    familyName: 'Cliff',
+    givenNameAr: 'إيريس',
+    familyNameAr: 'كليف',
+  },
+  practitioner: { id: PRACTITIONER, displayName: 'Cedar Ridge' },
+  serviceType: { id: '00000008-0000-4000-8000-000000000003', name: 'Standard session' },
+  location: { id: '00000008-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
+};
+
+const proposed = {
+  ...confirmed,
+  id: '00000008-0000-4000-8000-000000000102',
+  windowStart: '2026-09-10T07:00:00.000Z',
+  windowEnd: '2026-09-10T07:45:00.000Z',
+  status: 'proposed' as const,
+  client: {
+    id: '00000008-0000-4000-8000-000000000005',
+    givenName: 'Juniper',
+    familyName: 'Valley',
+    givenNameAr: null,
+    familyNameAr: null,
+  },
+  location: { id: '00000008-0000-4000-8000-000000000006', label: 'home', emirate: 'SHJ' },
+};
+
+const practiceDay = {
+  practitioners: [
+    {
+      practitionerId: PRACTITIONER,
+      homeBase: {
+        locationId: '00000008-0000-4000-8000-000000000009',
+        point: { lat: 25.2, lng: 55.27 },
+      },
+      stops: [
+        {
+          appointmentId: confirmed.id,
+          locationId: confirmed.location.id,
+          point: { lat: 25.3, lng: 55.3 },
+          windowStart: confirmed.windowStart,
+          windowEnd: confirmed.windowEnd,
+          status: 'confirmed',
+        },
+        {
+          appointmentId: proposed.id,
+          locationId: proposed.location.id,
+          point: { lat: 25.35, lng: 55.4 },
+          windowStart: proposed.windowStart,
+          windowEnd: proposed.windowEnd,
+          status: 'proposed',
+        },
+      ],
+      legs: [
+        {
+          toStopId: confirmed.id,
+          fromLocationId: '00000008-0000-4000-8000-000000000009',
+          toLocationId: confirmed.location.id,
+          departAt: confirmed.windowStart,
+          seconds: 900,
+          metres: 9000,
+          source: 'traffic' as const,
+        },
+        {
+          toStopId: proposed.id,
+          fromLocationId: confirmed.location.id,
+          toLocationId: proposed.location.id,
+          departAt: '2026-09-10T06:45:00.000Z',
+          seconds: 1500,
+          metres: 18000,
+          source: 'traffic' as const,
+        },
+      ],
+    },
+  ],
+};
+
+function fetchImpl(): typeof fetch {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith('/api/appointments?')) {
+      return new Response(JSON.stringify({ appointments: [confirmed, proposed] }), { status: 200 });
+    }
+    if (url.startsWith('/api/routing/practice-day?')) {
+      return new Response(JSON.stringify(practiceDay), { status: 200 });
+    }
+    return new Response('not found', { status: 404 });
+  }) as unknown as typeof fetch;
+}
+
+function renderPage(
+  fetchStub: typeof globalThis.fetch,
+  options: { key?: string | null; loadMaps?: () => Promise<typeof google.maps> } = {},
+) {
+  const loadMaps = options.loadMaps ?? (() => Promise.resolve(fakeGoogleMaps().maps));
+  return render(
+    <AuthProviderBoundary provider={provider} fetchImpl={fetchStub}>
+      <MemoryRouter initialEntries={[`/admin/schedule/map?date=${DAY}`]}>
+        <DayMapPage
+          browserKey={options.key === undefined ? 'a-restricted-browser-key' : options.key}
+          loadMaps={loadMaps}
+        />
+      </MemoryRouter>
+    </AuthProviderBoundary>,
+  );
+}
+
+describe('DayMapPage', () => {
+  it('lists the day beside the map, in window order, with the drive beneath each stop after the first', async () => {
+    renderPage(fetchImpl());
+    expect(await screen.findByRole('button', { name: 'Iris Cliff' })).toBeTruthy();
+    expect(screen.getByText('09:00–09:45', plainText)).toBeTruthy();
+    expect(screen.getByText('about 25 min, 18 km, estimate from traffic')).toBeTruthy();
+    // Nothing above the first stop: there is no drive before the day begins.
+    expect(screen.queryAllByText(/estimate from traffic/)).toHaveLength(1);
+  });
+
+  it('draws the map when the practice has a browser key', async () => {
+    renderPage(fetchImpl(), { key: 'a-restricted-browser-key' });
+    expect(await screen.findByRole('button', { name: 'Stop 1 on the map' })).toBeTruthy();
+    expect(screen.queryByText("The map needs the practice's browser key.")).toBeNull();
+  });
+
+  it('says the map needs a key, and still shows the whole day, when there is none', async () => {
+    renderPage(fetchImpl(), { key: null });
+    expect(await screen.findByText("The map needs the practice's browser key.")).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Optimise the day' })).toBeTruthy();
+  });
+
+  it('says how to reach a map that could not load on a page reached from another screen', async () => {
+    renderPage(fetchImpl(), { key: 'k', loadMaps: () => Promise.reject(new Error('blocked')) });
+    expect(
+      await screen.findByText(
+        'Open the day map from the Schedule page — a map cannot load on a screen you reached from another one.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('says plainly when the day could not be loaded', async () => {
+    renderPage((() =>
+      Promise.resolve(new Response('no', { status: 500 }))) as unknown as typeof fetch);
+    expect(await screen.findByText('The day could not be loaded. Try again.')).toBeTruthy();
+  });
+
+  it('picks a stop out when its pin is pressed, and shows the practitioner’s own name over the panel', async () => {
+    renderPage(fetchImpl(), { key: 'k' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop 2 on the map' }));
+    expect(screen.getByRole('listitem', { current: true })).toBeTruthy();
+    expect(screen.getByText('Cedar Ridge')).toBeTruthy();
+  });
+
+  it('offers Move and Call off on an open visit, and Confirm only on one nobody has been told about', async () => {
+    renderPage(fetchImpl(), { key: 'k' });
+    expect(await screen.findByRole('button', { name: /^Move Iris Cliff/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Confirm Juniper Valley/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Confirm Iris Cliff/ })).toBeNull();
+  });
+
+  it('is English throughout, whatever the wire carries', async () => {
+    renderPage(fetchImpl(), { key: 'k' });
+    await screen.findByRole('button', { name: 'Iris Cliff' });
+    expect(screen.queryByText('إيريس كليف')).toBeNull();
+  });
+});
