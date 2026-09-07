@@ -16,9 +16,11 @@ import {
 } from './Icons';
 
 /**
- * The admin console's fixed left rail: icon and label, no collapse toggle
- * (docs/DESIGN-BRIEF.md section 6.2). Sections that have not arrived are
- * listed as such, never as dead links.
+ * The admin console's left rail: icon and label, and a control that closes it
+ * to a strip of icons (docs/DESIGN-BRIEF.md section 6.2, reversed on the
+ * operator's instruction of 7 September 2026; docs/SPEC/responsive-console.md
+ * section 6). Sections that have not arrived are listed as such, never as dead
+ * links.
  */
 export type RailSection = { key: string; label: string; to?: string; icon: ReactNode };
 

@@ -74,7 +74,9 @@ Taken on 7 September 2026, each with the recommendation accepted.
 1. **On a phone the console is a zoomed-out desk view.** It lays itself out at
    a desk width and the browser scales the whole page to fit the screen; the
    person pinches to zoom and drags to pan. Nothing reflows and nothing is
-   hidden. Text starts small, which is the accepted trade.
+   hidden. Text starts small, which is the accepted trade; what that costs in
+   accessibility terms, and what a person who cannot work at that scale should
+   do instead, is written down in `docs/COMPLIANCE/accessibility.md`.
 2. **The closed sidebar is a strip of icons.** It starts closed on a tablet
    and a phone and open on a laptop, and the person's own choice is remembered
    on that device.

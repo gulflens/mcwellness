@@ -1,5 +1,19 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
+/** Every source a browser ends up running, tests excluded. */
+function sources(dir: string, found: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) {
+      sources(path, found);
+    } else if (/\.(?:css|ts|tsx)$/.test(entry) && !/\.test\.tsx?$/.test(entry)) {
+      found.push(path);
+    }
+  }
+  return found;
+}
 
 /**
  * The few rules the layout cannot lose without the console breaking somewhere
@@ -24,17 +38,27 @@ describe('layout tokens', () => {
     expect(tokens).toContain('--drawer: clamp(');
   });
 
-  it('never takes zooming away from anybody', () => {
+  it('never takes zooming away from anybody, anywhere in the app', () => {
     // A viewport that forbids zoom is the one thing the phone treatment must
     // never become: the console starts small there by design, and pinching in
-    // is how a person reads it. The viewport module is not read as text here —
-    // it names both words in its own comment explaining that it never writes
-    // them — and app/shell/viewport.test.ts asserts the same thing about every
-    // string it actually produces.
-    for (const source of [shell, tokens, html]) {
-      expect(source).not.toContain('user-scalable');
-      expect(source).not.toContain('maximum-scale=');
+    // is how a person reads it. Every source is read, not only the shell's,
+    // because any component could write a viewport element of its own.
+    //
+    // app/shell/viewport.ts is the one exemption: it names both words in the
+    // comment explaining that it never writes them, and
+    // app/shell/viewport.test.ts asserts it of every string it produces.
+    const offenders: string[] = [];
+    for (const path of [...sources('app'), 'index.html']) {
+      if (path === join('app', 'shell', 'viewport.ts')) {
+        continue;
+      }
+      const source = readFileSync(path, 'utf8');
+      if (source.includes('user-scalable') || source.includes('maximum-scale=')) {
+        offenders.push(path);
+      }
     }
+    expect(offenders).toEqual([]);
+    expect(html).not.toContain('user-scalable');
   });
 
   it('keeps the sections scrolling inside the rail', () => {
