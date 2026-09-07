@@ -2296,6 +2296,9 @@ three package names and five service names sit exactly where they were.
 household's own text, read and signed in its own language on the practice's
 screen. **No migration and no policy file**, and no schema, seed or data
 change: this round is a rendering decision and nothing a database enforces.
+Six test files under `tests/` proved the rendering that is gone and now prove
+its absence; every fixture keeps its Arabic name, because a fixture carrying
+one is the proof that Arabic data on the wire breaks nothing.
 
 Two consequences worth naming, because they are losses of an ability and not
 of a display. The Arabic **legal name** and a package's Arabic **name** can no
@@ -2311,17 +2314,21 @@ again is a small addition, not a repair.
 and `ContactForm.test.tsx`, `EnrolmentWizard.tsx` and `EnrolmentWizard.test.tsx`.
 
 **scheduling.** `app/admin/schedule/SchedulePage.tsx`, `WeekPage.tsx` and
-`ScheduleClientDrawer.tsx`; `app/therapist/today/TodayPage.tsx` and `today.css`.
+`ScheduleClientDrawer.tsx`; `app/therapist/today/TodayPage.tsx` and `today.css`;
+`tests/scheduling/SchedulePage.test.tsx`, `WeekPage.test.tsx` and
+`TodayPage.test.tsx`.
 
 **billing.** `app/admin/billing/BillingPage.tsx`, `BalancesSection.tsx`,
-`PackagesSection.tsx` and `PackageDrawer.tsx`.
+`PackagesSection.tsx` and `PackageDrawer.tsx`;
+`tests/billing/BillingPage.test.tsx` and `PackagesSection.test.tsx`.
 
 **assessment.** `app/admin/assessments/Comparison.tsx`, `copy.ts` (its doc
 comment only — the `ar` half of `NOT_A_DIAGNOSIS` is unchanged) and
 `AssessmentsTab.test.tsx`.
 
 **session-capture.** `app/therapist/session/CheckInPage.tsx`,
-`PreflightStep.tsx`, `Slider.tsx`, `SummaryStep.tsx` and `SessionRunner.css`.
+`PreflightStep.tsx`, `Slider.tsx`, `SummaryStep.tsx` and `SessionRunner.css`;
+`tests/session/CheckInPage.test.tsx`.
 
 **Practice settings**, which no stream's row owns:
 `app/admin/settings/PracticePage.tsx`, `PracticeDrawer.tsx` and
