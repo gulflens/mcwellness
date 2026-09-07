@@ -81,6 +81,11 @@ export type SeedServiceType = {
 export type SeedPrice = {
   id: string;
   serviceTypeId: string;
+  /** The figure before any discount. Equal to unitPriceFils when nothing is off it. */
+  listPriceFils: number;
+  discountFils: number;
+  discountBasisPoints: number | null;
+  /** What a family pays, net of VAT: the list figure less the discount. */
   unitPriceFils: number;
   vatRateBasisPoints: number;
   vatSettingVersion: number;
@@ -106,6 +111,10 @@ export type SeedPackage = {
   /** What it is selling for today, with the reason behind the figure. */
   price: {
     id: string;
+    /** The bundle's list price as it stood when the row was written. */
+    listPriceFils: number;
+    discountFils: number;
+    discountBasisPoints: number | null;
     amountFils: number;
     vatRateBasisPoints: number;
     vatSettingVersion: number;
@@ -429,9 +438,15 @@ const PRICES: readonly { code: string; fils: number; why: string }[] = [
 
 /**
  * The three programmes. The list price is what the contents come to one at a
- * time; the price now is the founder's own launch figure, and no discount
- * percentage is stored anywhere (docs/SPEC/billing.md section 2.3, and the
- * founder's decision of 2026-09-03).
+ * time; the price now is the founder's own launch figure.
+ *
+ * The founder's decision of 2026-09-03, that no discount percentage is stored
+ * anywhere, was amended by the operator on 2026-09-07 (docs/SPEC/billing.md
+ * section 2.4): a price now carries the gap between the two figures as a
+ * discount. These launch discounts are **sums, not percentages** — the
+ * founder named the price now, not a share off the list — so every figure
+ * seeded here is exactly what it was, and every test that pins one still
+ * pins it.
  */
 const LAUNCH_REASON = "Launch pricing, ends on the founder's word.";
 const PACKAGES: readonly {
@@ -676,6 +691,12 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
   const prices: SeedPrice[] = PRICES.map((row, i) => ({
     id: seedId('d0', i + 1),
     serviceTypeId: service(row.code).id,
+    // Nothing on the opening price list is discounted: the list figure is the
+    // price, which is what migration 409's backfill says of every price
+    // written before the discount existed.
+    listPriceFils: row.fils,
+    discountFils: 0,
+    discountBasisPoints: null,
     unitPriceFils: row.fils,
     vatRateBasisPoints: VAT_RATE_BASIS_POINTS,
     vatSettingVersion: VAT_SETTING_VERSION,
@@ -701,6 +722,9 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       })),
       price: {
         id: seedId('d3', i + 1),
+        listPriceFils: bundle.listFils,
+        discountFils: bundle.listFils - bundle.nowFils,
+        discountBasisPoints: null,
         amountFils: bundle.nowFils,
         vatRateBasisPoints: VAT_RATE_BASIS_POINTS,
         vatSettingVersion: VAT_SETTING_VERSION,
