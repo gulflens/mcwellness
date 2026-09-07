@@ -12,10 +12,12 @@ export type FakeMapsState = {
   maps: typeof google.maps;
   polylines: { path: { lat: number; lng: number }[] }[];
   fitted: number;
+  /** What the map was built with, so a test can hold the options to account. */
+  mapOptions: google.maps.MapOptions | null;
 };
 
 export function fakeGoogleMaps(): FakeMapsState {
-  const state: FakeMapsState = { maps: null as never, polylines: [], fitted: 0 };
+  const state: FakeMapsState = { maps: null as never, polylines: [], fitted: 0, mapOptions: null };
 
   class LatLngBounds {
     extend(): this {
@@ -31,6 +33,7 @@ export function fakeGoogleMaps(): FakeMapsState {
     constructor(element: HTMLElement, options: unknown) {
       this.element = element;
       this.options = options;
+      state.mapOptions = options as google.maps.MapOptions;
     }
     fitBounds(): void {
       state.fitted += 1;

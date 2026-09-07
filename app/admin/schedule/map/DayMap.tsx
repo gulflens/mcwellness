@@ -24,6 +24,20 @@ import { createProjectionBridge, type Projection } from './overlays';
 const DEFAULT_CENTRE = { lat: 25.2, lng: 55.27 };
 const DEFAULT_ZOOM = 11;
 
+/**
+ * How far in the coordinator may go, and why there is a limit at all.
+ *
+ * Google is told the map's viewport by the tile requests the browser makes,
+ * which is inside what `docs/COMPLIANCE/approved-vendors.md` discloses. But
+ * `fitBounds` on a day with one stop collapses the viewport onto that
+ * household's own coordinate, and at full zoom the tiles asked for would place
+ * a home to within a few metres — a household's address handed over by
+ * arithmetic rather than by decision (the review of this pull request, note
+ * N4). Sixteen shows a neighbourhood and its street pattern, which is what
+ * the coordinator needs to see where a visit sits, and no more.
+ */
+const MAX_ZOOM = 16;
+
 export type DayMapProps = {
   maps: GoogleMaps;
   day: PracticeDayPractitioner;
@@ -78,6 +92,7 @@ export function DayMap({ maps, day, selectedId, onSelect }: DayMapProps) {
     const created = new maps.Map(element, {
       center: places[0]?.point ?? DEFAULT_CENTRE,
       zoom: DEFAULT_ZOOM,
+      maxZoom: MAX_ZOOM,
       disableDefaultUI: true,
       clickableIcons: false,
       styles: mapStyle(document.documentElement),

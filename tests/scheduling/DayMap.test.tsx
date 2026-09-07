@@ -58,6 +58,17 @@ describe('DayMap', () => {
     expect(screen.getByText('H')).toBeTruthy();
   });
 
+  it('will not zoom close enough to place a single household', () => {
+    // `fitBounds` on a day with one stop collapses the viewport onto that
+    // household's own coordinate, and the tile requests that follow would tell
+    // Google where a home is to within a few metres. The viewport is disclosed
+    // in docs/COMPLIANCE/approved-vendors.md; a street to a few metres is
+    // another thing (the review of this pull request, note N4).
+    const state = fakeGoogleMaps();
+    render(<DayMap maps={state.maps} day={day} selectedId={null} onSelect={() => undefined} />);
+    expect(state.mapOptions?.maxZoom).toBe(16);
+  });
+
   it('draws one line per drive, through the places in order', () => {
     const state = fakeGoogleMaps();
     render(<DayMap maps={state.maps} day={day} selectedId={null} onSelect={() => undefined} />);

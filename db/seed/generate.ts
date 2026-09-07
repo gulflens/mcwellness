@@ -281,9 +281,10 @@ export type SeedConsent = {
 };
 /**
  * A visit on the planning day (docs/SPEC/route-planning.md section 14). Five
- * of them, in an order that crosses the country and back, so the day map has
- * something to draw and the optimiser something to improve; one of them
- * `confirmed`, because a plan that never met an anchor would prove nothing.
+ * of them, in an order that bounces between two neighbouring emirates instead
+ * of finishing one before starting the other, so the day map has something to
+ * draw and the optimiser something to improve; one of them `confirmed`,
+ * because a plan that never met an anchor would prove nothing.
  */
 export type SeedAppointment = {
   id: string;
@@ -1226,15 +1227,18 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
 
   /**
    * The planning day (docs/SPEC/route-planning.md section 14): five visits of
-   * one practitioner's, deliberately in the order that drives furthest — the
-   * far emirates first and last, the two Dubai households split apart — so
-   * "Optimise the day" has something to find. The third is `confirmed`, which
-   * makes it an anchor no plan may move.
+   * one practitioner's, deliberately in an order worse than the best — Dubai,
+   * then Sharjah, Ajman, Sharjah, Ajman, so the day crosses the same boundary
+   * three times where two would do — and "Optimise the day" has something
+   * real to find. **The second** (10:30, the first Sharjah visit) is
+   * `confirmed`, which makes it an anchor no plan may move and gives the
+   * drawer its "kept (confirmed)" row.
    *
    * The households are the active ones with a coordinate on file, taken in
-   * emirate order rather than at random, and the practitioner is the one whose
-   * `nf-session` credential is in date, so every visit here would pass the
-   * booking rule if it were made today.
+   * that emirate order rather than at random, and the practitioner is the
+   * first in the seed's own list, whose `nf-session` credential runs to 2029
+   * and so is in date — every visit here would pass the booking rule if it
+   * were made today.
    */
   const visitable = clients.filter((c) => c.status === 'active');
   const placeOf = (clientId: string): SeedLocation | undefined =>
