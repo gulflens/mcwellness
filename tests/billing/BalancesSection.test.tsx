@@ -190,6 +190,36 @@ describe('giving a family longer', () => {
     expect(await screen.findByText('Silver now runs to 1 Mar 2028.')).toBeTruthy();
   });
 
+  it('says what was given away on a sale, and why', async () => {
+    // The operator's purpose for the discount round (docs/SPEC/billing.md
+    // section 2.4): the books show what was given away and why. The share is
+    // the combined one the purchase carries; the reason is the extra
+    // discount's own.
+    const purchases = [
+      {
+        ...(balance().purchases[0] as Record<string, unknown>),
+        netFils: 972_000,
+        vatFils: 48_600,
+        grossFils: 1_020_600,
+        discountFils: 243_000,
+        discountBasisPoints: 2000,
+        discountReason: 'Two siblings on the same programme.',
+      },
+    ];
+    mount(balance({ purchases }));
+    await findClient();
+    expect(
+      await screen.findByText('Discount 20%. Two siblings on the same programme.'),
+    ).toBeTruthy();
+  });
+
+  it('says nothing about a discount on a sale that had no extra one', async () => {
+    mount(balance());
+    await findClient();
+    await screen.findByText('Silver');
+    expect(screen.queryByText(/^Discount /)).toBeNull();
+  });
+
   it('shows the date first agreed, and why it moved, once it has', async () => {
     const purchases = [
       {

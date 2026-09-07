@@ -12,7 +12,7 @@ import { Table, type Column } from '../../shell/components/Table';
 import { formatDate } from './BillingPage';
 import { ClientPicker } from './ClientPicker';
 import { ExtensionDrawer } from './ExtensionDrawer';
-import { formatFils } from './money';
+import { formatDiscount, formatFils } from './money';
 import { PaymentDrawer } from './PaymentDrawer';
 
 /**
@@ -251,6 +251,17 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                         // record should say so without being asked.
                         <span className="small muted">
                           Extended from {formatDate(purchase.expiresOn)}. {purchase.extensionReason}
+                        </span>
+                      ) : null}
+                      {purchase.discountReason ? (
+                        // What was given away on this sale, and why — the
+                        // operator's purpose for the discount round
+                        // (docs/SPEC/billing.md section 2.4). The share is the
+                        // combined one the purchase carries; the reason is the
+                        // extra discount's own, which is the part a person
+                        // decided.
+                        <span className="small muted">
+                          Discount {formatDiscount(purchase)}. {purchase.discountReason}
                         </span>
                       ) : null}
                     </span>
