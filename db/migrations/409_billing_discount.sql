@@ -39,9 +39,11 @@
 -- base, exactly as it was before. Nothing about the rate, the setting version
 -- or the registration switch (406) changes.
 --
--- Needs: 400 (price, vat_setting), 401 (package, package_price), 402
--- (invoice_line), 403 (package_purchase), 406 (app.charge_single_visit, the
--- version this replaces, and app.tenant_charges_vat).
+-- Needs: 000 (app.current_tenant_id, app.current_actor_id), 040
+-- (service_type), 400 (price, vat_setting), 401 (package, package_price), 402
+-- (invoice, invoice_line, app.next_invoice_number), 403 (package_purchase,
+-- entitlement), 406 (app.charge_single_visit, the version this replaces, and
+-- app.tenant_charges_vat).
 
 ------------------------------------------------------------------------------
 -- 1. price: the list figure, and the discount taken from it.
@@ -260,7 +262,7 @@ revoke execute on function app.charge_single_visit(uuid, uuid, uuid, date) from 
 --   ) returns uuid
 --   language plpgsql security definer
 --   set search_path = pg_catalog, pg_temp
---   as $fn$
+--   as $$
 --   declare
 --     v_tenant_id     uuid := app.current_tenant_id();
 --     v_actor_id      uuid := app.current_actor_id();
@@ -291,7 +293,7 @@ revoke execute on function app.charge_single_visit(uuid, uuid, uuid, date) from 
 --     -- registered to charge it. Unregistered: no rate, no VAT, and the gross is
 --     -- the net — prices are published net either way, so the family pays what the
 --     -- list said. This is the whole of this migration's behaviour change, and
---     -- domain/billing/vat.ts's resolveSaleVat is the same arithmetic in TypeScrip
+--     -- domain/billing/vat.ts's resolveSaleVat is the same arithmetic in TypeScript
 --     -- for the package-sale path.
 --     if app.tenant_charges_vat(v_tenant_id) then
 --       v_rate := v_price.vat_rate_basis_points;
@@ -335,5 +337,5 @@ revoke execute on function app.charge_single_visit(uuid, uuid, uuid, date) from 
 --
 --     return v_entitlement_id;
 --   end
---   $fn$;
+--   $$;
 --   revoke execute on function app.charge_single_visit(uuid, uuid, uuid, date) from public;
