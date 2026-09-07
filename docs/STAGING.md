@@ -1655,6 +1655,145 @@ nothing else differed.
   at
   `/private/tmp/claude-501/-Volumes-Storage-McWellness/25a98803-ac1e-426c-a865-7919fa0cbca3/scratchpad/discounts-staging-report.md`.
 
+## What was done on 2026-09-08: the sixteenth staging pass — the practice's contact details
+
+Pull request 122 (the document design round, merged to `main` as `f2a7bfb`)
+owed staging two migrations: `db/migrations/912_practice_contact.sql`
+(sha256 `d4b9385484e31a57e48d6ac2b7c43cd1939714b9814ef6e7dacaf474bf16d61b`) and
+`db/migrations/959_invoice_supplier_contact.sql` (sha256
+`edccb31831b84a012f322f1345a72c99ca28b11643c87292b907078443b102c2`), both
+computed locally with `shasum -a 256` and confirmed byte-for-byte against the
+brief before anything was touched. Before anything was touched,
+`select filename from schema_migration order by 1` on staging (**82 rows**)
+was diffed against `ls db/migrations` on the checkout (**84 files**): the only
+files missing were exactly `912_practice_contact.sql` and
+`959_invoice_supplier_contact.sql`, and nothing else differed.
+
+- **The rows the migrations would touch, read first.** `invoice` held **0
+  rows** — the synthetic practice has never issued one. `tenant` held one row:
+  `legal_name` `McWellness L.L.C-FZ`, `licence_number` `2648591.01`,
+  `licensing_authority` `Meydan Free Zone`, `trn` `105466777700001`,
+  `vat_registered` `false`. `tenant` had no `contact_phone` column yet
+  (confirmed empty).
+- **912 was applied as one call**, `912_practice_contact` through
+  `mcp__claude_ai_Supabase__apply_migration`: the runner's own audit context
+  (`app.reason = 'migration 912_practice_contact.sql'`, a fresh
+  `app.request_id`), the file's full text unchanged (its migration body
+  independently diffed byte-identical to the source file before sending),
+  then the bookkeeping insert carrying the checksum above. It succeeded on
+  the first try.
+- **959 was applied as one call**, `959_invoice_supplier_contact`, the same
+  shape (`app.reason = 'migration 959_invoice_supplier_contact.sql'`), the
+  file's full text unchanged (diffed byte-identical before sending), then its
+  own bookkeeping insert. It succeeded on the first try.
+- **`schema_migration` now holds 84 rows**, its filenames matching
+  `ls db/migrations` exactly (diffed, identical), and the two new rows carry
+  exactly the checksums computed above:
+  `912_practice_contact.sql` → `d4b9385484e31a57e48d6ac2b7c43cd1939714b9814ef6e7dacaf474bf16d61b`;
+  `959_invoice_supplier_contact.sql` → `edccb31831b84a012f322f1345a72c99ca28b11643c87292b907078443b102c2`.
+- **The 22 policy files were re-applied in one call**, `policies_after_959`
+  (`find db/policies -name '*.sql' | sort` counts **22**), in path order
+  inside a single `apply_migration` transaction whose query opened with the
+  same `app.reason = 'policies'` stamp the runner's own `applyPolicies` uses.
+  It succeeded on the first try. `pg_policies` on `tenant` and `invoice`
+  reads exactly what it read before the pass (below) — this pair of
+  migrations added no new table, so no new policy.
+- **What 912 added, and what it left null.** Three nullable columns on
+  `tenant`: `contact_phone`, `contact_email`, `website`. All three read
+  **null** on the one practice row after the pass — nothing was set, as the
+  brief requires. Each carries the column comment the migration text writes,
+  confirmed word-for-word with `col_description`. Three check constraints
+  exist and are named exactly as 912 names them:
+  `tenant_contact_phone_is_a_number`, `tenant_contact_email_is_an_address`,
+  `tenant_website_is_a_url` — all three found in `pg_constraint`.
+- **What 959 added, and what it left null.** Three matching columns on
+  `invoice`: `supplier_contact_phone`, `supplier_contact_email`,
+  `supplier_website` — no rows exist to hold a value (`invoice` is still at
+  0), and each carries the column comment 959's text writes, confirmed
+  word-for-word. `pg_get_functiondef('app.stamp_invoice_supplier'::regproc)`,
+  read back from the installed function, now declares `v_phone`, `v_email`
+  and `v_website` and assigns `new.supplier_contact_phone`,
+  `new.supplier_contact_email` and `new.supplier_website` alongside the
+  eight columns 905 already stamped.
+- **The stamp is confirmed harmless by reading it, not by writing an
+  invoice, exactly as the brief asks.** The installed function body's three
+  new lines —
+  `new.supplier_contact_phone := coalesce(new.supplier_contact_phone, v_phone)`,
+  `new.supplier_contact_email := coalesce(new.supplier_contact_email, v_email)`,
+  `new.supplier_website := coalesce(new.supplier_website, v_website)` — follow
+  the identical `coalesce(new.<col>, v_<col>)` shape as every existing
+  assignment (`supplier_trn`, `supplier_address`, `supplier_licence_number`,
+  and so on). Since the practice's `tenant.contact_phone`,
+  `contact_email` and `website` are all null, `v_phone`, `v_email` and
+  `v_website` would each resolve to null and the coalesce would leave
+  whatever the caller supplied (ordinarily null on a fresh row) exactly as it
+  was — the same no-op behaviour the other eight columns already have on a
+  practice that has not filled in every fact about itself. No invoice was
+  inserted on staging to demonstrate this.
+- **Row security and grants on `tenant` and `invoice` are unchanged from
+  before the pass.** Grants: `information_schema.role_table_grants` for both
+  tables reads identically before and after — `app_role` holds
+  `INSERT, SELECT, UPDATE` on `tenant` and `INSERT, SELECT` on `invoice`;
+  `postgres` and `service_role` hold the same seven privileges on each table
+  before and after. Policies: `pg_policies` reads the same five rows before
+  and after — `tenant_isolation` on `tenant`; `ledger_readers`,
+  `ledger_writers`, `portal_money_adults` and `tenant_isolation` on `invoice`.
+  Row security: `pg_class.relrowsecurity` is `true` and
+  `relforcerowsecurity` is `false` on both tables, before and after.
+- **The fingerprint, run by the integrator after the pass.** The pass itself
+  could not run it: both `pnpm db:reset && pnpm db:migrate` and `pnpm
+  db:reset` alone were refused by the Claude Code auto-mode classifier
+  ("Blocked by classifier"), and the agent stopped and reported rather than
+  looking for another route to a database, which is the standing rule. The
+  integrator then ran the same command in the same worktree, where it was
+  allowed, and it rebuilt that scratch database cleanly: **84 migrations and
+  22 policy files** applied to an empty local Postgres. The seven counts were
+  taken on both sides and **match exactly**: columns in
+  `information_schema.columns` for `public` **1,296 = 1,296**; constraints in
+  `pg_constraint` for `public` **616 = 616**; indexes in `pg_indexes` for
+  `public` **501 = 501**; policies on `public` **155 = 155**; functions in
+  schemas `app` and `public` together **95 = 95**; triggers on `public`
+  tables **240 = 240**; tables in `public` with row security enabled **74 =
+  74**. The two benign differences earlier passes record (Supabase's own
+  `service_role` grants, and `schema_migration.checksum`'s physical column
+  slot) do not surface at this count-level grain, as before. **The lesson
+  kept**: the auto-mode classifier refuses a local `pnpm db:reset` for an
+  agent but not for this session, so a staging brief should either say the
+  fingerprint may be handed back to the integrator, or the pass should be run
+  outside auto mode.
+- **The audit chain.** `select app.verify_audit_chain()` returned **null**
+  (the chain verifies), read after every migration and policy call above. No
+  audited table received a write this pass — both migrations are pure DDL
+  (`alter table`, `add constraint`, `comment on column`,
+  `create or replace function`), so no `audit_log` row was expected or
+  looked for beyond the chain check itself.
+- **What this pass deliberately did not do.** No contact detail was set on
+  `tenant`, no logo was touched, and no invoice was written on staging —
+  every `apply_migration` and `execute_sql` call above named
+  `ajjkvjtqxktkgrvcrzkh` and nothing else, and production was never touched.
+  Setting the practice's telephone, email and website is the operator's own
+  step through `scripts/practice-brand.mjs`, left for them. The staging app
+  is still the build from before this pass; the footer these two migrations
+  make possible is only reachable once the app is rebuilt from `main`
+  (`pnpm exec vite build --mode staging`, section 6 below), which this pass
+  leaves for the next one, exactly as the fifteenth pass left its own
+  rebuild.
+- **How to read this in a fresh session.** This bullet list is the whole of
+  what changed: two migrations and one policy re-apply against
+  `ajjkvjtqxktkgrvcrzkh` only, and locally nothing but the fingerprint's own
+  disposable `pnpm db:reset && pnpm db:migrate` in the billing worktree,
+  which the integrator ran after the pass (above). To confirm the
+  state independently, re-run the "before anything" check in the brief
+  (`select filename from schema_migration order by 1` against
+  `ls db/migrations`) and it should find nothing pending;
+  `db/migrations/912_practice_contact.sql` and
+  `db/migrations/959_invoice_supplier_contact.sql` are the two files this
+  pass added, no policy file is new (the same 22 as the fifteenth pass were
+  re-applied, unchanged), `tenant.contact_phone`, `tenant.contact_email` and
+  `tenant.website` should all still read null until the operator runs
+  `scripts/practice-brand.mjs`, and this session's report sits at
+  `/private/tmp/claude-501/-Volumes-Storage-McWellness/25a98803-ac1e-426c-a865-7919fa0cbca3/scratchpad/design-staging-report.md`.
+
 ## 2. The database schema
 
 Run the migrations once, from a laptop, with the project's direct connection

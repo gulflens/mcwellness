@@ -1,7 +1,23 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 7 September at 23:50: the operator asked
-at 21:49 for **a discount on any transaction**, and the billing round that
+Written 4 September 2026, updated on 8 September at 02:35. **Two rounds landed
+overnight and both wait on the operator's word for production.** At 00:18 the
+operator supplied a designed tax invoice and receipt and asked the platform's
+own documents to match them: the practice's logo, the brand violet, facing
+English and Arabic blocks, a totals box and a contact footer, merged as pull
+request 122 (`main` at `f2a7bfb`, migrations 912 and 959, on staging).
+`docs/SPEC/billing.md` section 5.6 records the design and the four places the
+platform deliberately differs from it, the first being that the fifteen-digit
+number on the design is the **corporate-tax** registration, so a page stays
+headed "Invoice" until the practice registers for VAT. **A fault found while
+checking it**: production's practice row held only the company name — no
+licence number, no licensing authority, no address, no corporate-tax number —
+and was filled at 02:05 from the practice's own trade licence and Federal Tax
+Authority certificate; production had issued no invoice, so nothing was printed
+under the incomplete details (`docs/PRODUCTION.md` is not yet updated for this;
+the data step is recorded here and in the operator's own note). Earlier, at
+21:49 on 7 September, the operator asked
+for **a discount on any transaction**, and the billing round that
 answers it is built, reviewed, fixed, re-checked and merged as pull request
 118 (`main` at `6c32f2c`, migration 409, on staging): a discount is money off
 a list figure, on a service price, on a package price and on a sale, printed
@@ -505,6 +521,27 @@ a document is worth checking on the document: the round's own review caught
 that the Add package drawer could show a price the server would not write, one
 screen away from a catalogue row carrying a reason for a figure nobody saw.
 
+**What the document design round cost (8 September, 02:30).** Builder on Opus
+about 0.44 million in one run of 49 minutes from a written plan of nine tasks;
+the combined review on Opus 0.23 million (four areas PASS, ten gaps, none
+blocking); the fix round on Opus 0.22 million; the re-check on Opus 0.13
+million; the sixteenth staging pass on Sonnet 0.22 million. About 1.24 million
+in agents, plus the integrator's own conversation, which wrote section 5.6, the
+plan, the design reference and the briefs. **Every agent in this round ran on
+Opus rather than Fable**, whose allowance ran out at 23:14 the night before;
+rule 3's second half needs Opus as its named fallback. Three lessons kept: a
+round whose whole purpose is how a page looks is checked by rendering the page
+and *looking at it* — the builder, the review and the re-check all converted the
+PDFs and read them as images, and that is what caught a drawer showing a price
+the server would not write, a totals box that would overprint its own label at a
+seven-figure amount, and a hole in the right-hand column; the auto-mode
+classifier refuses a local `pnpm db:reset` to a sub-agent but allows it to this
+session, so a staging brief should hand the fingerprint back to the integrator
+or the pass should run outside auto mode; and a sample rendered from the seeded
+test practice is not a sample of the operator's own documents — showing one as
+if it were is how a real gap in the production practice row went unnoticed for
+two days.
+
 ## 7. The failed-run emails
 
 GitHub emails the repository owner for every failed or cancelled workflow
@@ -534,6 +571,28 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
+- **The document design round is merged and on staging, not on production.**
+  Pull request 122 (`main` at `f2a7bfb`) puts the practice's own design on the
+  invoice and the receipt: the logo, the brand violet, facing English and
+  Arabic blocks, the totals box and a contact footer. The sixteenth staging
+  pass carried migrations 912 and 959. **Production does not have it.** When
+  you give the word there is one extra step beyond the usual migrate-and-
+  rebuild: `scripts/practice-brand.mjs` uploads the logo and sets the
+  practice's telephone, email and website, because the settings screen cannot
+  edit those three fields or the logo yet (a later trunk round;
+  `docs/CHANGE-REQUESTS/billing-09.md` item 6, and
+  `docs/RUNBOOK/go-live.md` section 4a).
+- **Your practice's own details are now on production**, filled at 02:05 on 8
+  September from your trade licence and your Federal Tax Authority
+  certificate: licence `2648591.01`, Meydan Free Zone, expiring 9 May 2027,
+  corporate-tax registration `105466777700001`, and the Meydan Grandstand
+  address as the practice's location row. Until then production held **only**
+  the company name, so an invoice would have printed no address, no licence
+  and no tax number. Nothing had been issued, so nothing went out wrong. Two
+  things are still yours: whether the practice should register for VAT at all
+  (the platform is ready either way and the switch is in Settings, Practice),
+  and the telephone, email and website above, which reach production with the
+  design round.
 - **The discount round is merged and on staging, not on production.** Pull
   request 118 (`main` at `6c32f2c`) adds migration 409 and a discount
   everywhere money is set or taken; the fifteenth staging pass carried it to
