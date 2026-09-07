@@ -40,3 +40,16 @@ export {
   MIN_TRAVEL_BUFFER_MINUTES,
   travelBufferFor,
 } from './buffer';
+export { MAX_PLAN_STOPS, MOVABLE_LEAD_MS, isMovable, optimiseDay } from './optimise';
+export type {
+  DayInput,
+  DayPlan,
+  Matrix,
+  PlanBase,
+  PlanRefusal,
+  PlanRefusalReason,
+  PlanSource,
+  PlanStop,
+  PlannedStop,
+  Totals,
+} from './optimise';
