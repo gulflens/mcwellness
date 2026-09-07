@@ -46,7 +46,13 @@ try {
           'Locally, pnpm seed --fresh rebuilds it.',
       );
     } else {
-      const data = generateSeed();
+      // Two days from the real day this laptop is seeded on, so the day map
+      // opens on visits that can still be moved. The rest of the seed keeps
+      // its own fixed "today", which is what makes it reproducible.
+      const planningDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(
+        new Date(Date.now() + 2 * 24 * 60 * 60_000),
+      );
+      const data = generateSeed({ planningDay });
       // The consent wording's bytes go in first, so no document row ever points
       // at a key with nothing behind it. Deliberately the local implementation
       // of the storage seam and not whatever STORAGE_PROVIDER says: seeding

@@ -174,6 +174,7 @@ export function assertSynthetic(data: SeedData): void {
     data.documents,
     data.consents,
     data.assessments,
+    data.appointments,
   ];
   for (const rows of collections) {
     for (const row of rows) {
@@ -566,6 +567,27 @@ export async function applySeed(
       });
     }
 
+    // The planning day (docs/SPEC/route-planning.md section 14): the visits
+    // the day map draws and the optimiser reorders. Last of the practice's
+    // rows, because an appointment names a client, a practitioner, a service
+    // and a place, and every one of them has to exist first.
+    for (const a of data.appointments) {
+      await insert('appointment', {
+        id: a.id,
+        tenant_id: t.id,
+        client_id: a.clientId,
+        practitioner_id: a.practitionerId,
+        service_type_id: a.serviceTypeId,
+        location_id: a.locationId,
+        delivery_mode: 'home',
+        window_start: a.windowStart,
+        window_end: a.windowEnd,
+        travel_buffer_minutes: a.travelBufferMinutes,
+        status: a.status,
+        created_by: owner,
+      });
+    }
+
     await client.query('commit');
   } catch (error) {
     await client.query('rollback');
@@ -593,6 +615,7 @@ export function describeSeed(counts: SeedCounts): string {
     'document',
     'consent',
     'assessment',
+    'appointment',
   ];
   const parts = order.filter((table) => counts[table]).map((table) => `${counts[table]} ${table}`);
   return `Seeded the synthetic practice: ${parts.join(', ')}.`;

@@ -256,4 +256,29 @@ describe('generateSeed', () => {
       data.credentials.filter((c) => c.validTo !== null && c.validTo < data.today),
     ).toHaveLength(1);
   });
+
+  it('books a day worth optimising: five visits in a deliberately poor order, one already agreed', () => {
+    const data = generateSeed();
+    expect(data.appointments).toHaveLength(5);
+    expect(data.appointments.every((a) => a.windowStart.startsWith(data.planningDay))).toBe(true);
+    expect(data.appointments.filter((a) => a.status === 'confirmed')).toHaveLength(1);
+    expect(data.appointments.filter((a) => a.status === 'proposed')).toHaveLength(4);
+    // Three emirates, so the order actually costs something.
+    const emirates = new Set(
+      data.appointments.map((a) => data.locations.find((l) => l.id === a.locationId)?.emirate),
+    );
+    expect(emirates.size).toBeGreaterThanOrEqual(3);
+    // Every household on it is one that may be visited.
+    for (const appointment of data.appointments) {
+      const client = data.clients.find((c) => c.id === appointment.clientId);
+      expect(client?.status).toBe('active');
+    }
+  });
+
+  it('takes the planning day from its option, so the seed itself stays the same every time', () => {
+    expect(generateSeed({ planningDay: '2026-10-01' }).appointments[0]?.windowStart).toContain(
+      '2026-10-01',
+    );
+    expect(generateSeed()).toEqual(generateSeed());
+  });
 });

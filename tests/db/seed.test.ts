@@ -40,6 +40,7 @@ const SEED_TABLES = [
   'document',
   'consent',
   'assessment',
+  'appointment',
 ];
 
 let owner: pg.Client;
@@ -88,12 +89,24 @@ describe('the synthetic seed', () => {
       document: data.documents.length,
       consent: data.consents.length,
       assessment: data.assessments.length,
+      appointment: data.appointments.length,
     };
     for (const [table, n] of Object.entries(expected)) {
       expect(await count(table), table).toBe(n);
       expect(counts[table], table).toBe(n);
     }
     expect(await isSeeded(owner)).toBe(true);
+  });
+
+  it('seeds a day the map can draw: every visit has a place with a coordinate and a practitioner who may deliver it', async () => {
+    const { rows } = await owner.query<{ n: string }>(
+      'select count(*)::text as n from appointment a ' +
+        'join location l on l.id = a.location_id ' +
+        'join credential c on c.practitioner_id = a.practitioner_id ' +
+        'and c.service_type_id = a.service_type_id and c.can_execute_session ' +
+        'where l.entrance_point is not null',
+    );
+    expect(Number(rows[0]?.n)).toBe(5);
   });
 
   it('gives every practitioner an amplifier in date, and leaves one overdue on the shelf', () => {

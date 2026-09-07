@@ -279,8 +279,28 @@ export type SeedConsent = {
   withdrawnAt: string | null;
   method: ConsentMethod;
 };
+/**
+ * A visit on the planning day (docs/SPEC/route-planning.md section 14). Five
+ * of them, in an order that crosses the country and back, so the day map has
+ * something to draw and the optimiser something to improve; one of them
+ * `confirmed`, because a plan that never met an anchor would prove nothing.
+ */
+export type SeedAppointment = {
+  id: string;
+  clientId: string;
+  practitionerId: string;
+  serviceTypeId: string;
+  locationId: string;
+  windowStart: string;
+  windowEnd: string;
+  travelBufferMinutes: number;
+  status: 'proposed' | 'confirmed';
+};
+
 export type SeedData = {
   today: string;
+  /** The day the map opens on; two days after `today` unless an option says otherwise. */
+  planningDay: string;
   tenant: SeedTenant;
   users: SeedUser[];
   roles: SeedRole[];
@@ -296,10 +316,18 @@ export type SeedData = {
   documents: SeedDocument[];
   consents: SeedConsent[];
   assessments: SeedAssessment[];
+  appointments: SeedAppointment[];
 };
 export type SeedOptions = {
   seed?: number;
   today?: string;
+  /**
+   * The day the map's own visits sit on. Its own option rather than a figure
+   * derived from `today`, so `generateSeed()` stays byte-for-byte
+   * deterministic and `pnpm seed` can still open on a day whose visits can
+   * still be moved.
+   */
+  planningDay?: string;
   /** The wording files. Read from docs/CONSENT unless a test hands its own in. */
   consentTexts?: ConsentText[];
 };
@@ -601,6 +629,7 @@ function fullName(given: Name, family: Name): string {
 
 export function generateSeed(options: SeedOptions = {}): SeedData {
   const today = options.today ?? SEED_TODAY;
+  const planningDay = options.planningDay ?? addDays(today, 2);
   const rng = seededRandom(options.seed ?? SEED_DEFAULT);
 
   const tenant: SeedTenant = {
@@ -1195,8 +1224,58 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     });
   }
 
+  /**
+   * The planning day (docs/SPEC/route-planning.md section 14): five visits of
+   * one practitioner's, deliberately in the order that drives furthest — the
+   * far emirates first and last, the two Dubai households split apart — so
+   * "Optimise the day" has something to find. The third is `confirmed`, which
+   * makes it an anchor no plan may move.
+   *
+   * The households are the active ones with a coordinate on file, taken in
+   * emirate order rather than at random, and the practitioner is the one whose
+   * `nf-session` credential is in date, so every visit here would pass the
+   * booking rule if it were made today.
+   */
+  const visitable = clients.filter((c) => c.status === 'active');
+  const placeOf = (clientId: string): SeedLocation | undefined =>
+    locations.find((l) => l.ownerType === 'client' && l.ownerId === clientId);
+  const spread = ['AUH', 'DXB', 'SHJ', 'RAK', 'DXB'];
+  const chosen: SeedClient[] = [];
+  for (const emirate of spread) {
+    const next = visitable.find((c) => !chosen.includes(c) && placeOf(c.id)?.emirate === emirate);
+    if (next) chosen.push(next);
+  }
+  // Whatever the emirate spread could not fill, from the rest, so the day is
+  // always five visits long.
+  for (const c of visitable) {
+    if (chosen.length >= 5) break;
+    if (!chosen.includes(c) && placeOf(c.id)) chosen.push(c);
+  }
+  const visitPractitioner = at(practitioners, 0);
+  const visitService = service('nf-session');
+  const VISIT_HOURS = ['09:00', '10:30', '12:00', '13:30', '15:00'];
+  const appointments: SeedAppointment[] = chosen.slice(0, 5).map((c, i) => {
+    const start = `${planningDay}T${at(VISIT_HOURS, i)}:00+04:00`;
+    const place = placeOf(c.id);
+    if (!place) throw new Error(`No home on file for ${c.id}.`);
+    return {
+      id: seedId('a', i + 1),
+      clientId: c.id,
+      practitionerId: visitPractitioner.id,
+      serviceTypeId: visitService.id,
+      locationId: place.id,
+      windowStart: start,
+      windowEnd: new Date(new Date(start).getTime() + 45 * 60_000).toISOString(),
+      travelBufferMinutes: 15,
+      // The middle one has been agreed with its household, so the optimiser
+      // has an anchor to plan around.
+      status: i === 2 ? 'confirmed' : 'proposed',
+    };
+  });
+
   return {
     today,
+    planningDay,
     tenant,
     users,
     roles,
@@ -1212,6 +1291,7 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
     documents,
     consents,
     assessments,
+    appointments,
   };
 }
 
