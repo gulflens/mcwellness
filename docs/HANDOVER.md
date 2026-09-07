@@ -1,15 +1,17 @@
 # Hand-over: how to pick this project up in a fresh session
 
-Written 4 September 2026, updated on 7 September at 17:45: **piece eleven,
+Written 4 September 2026, updated on 7 September at 18:55: **piece eleven,
 the books' ledger, was planned, approved, built, reviewed, fixed, re-checked
 and merged in one day** (pull request 109, `main` at `dce3ca1`), and the
-fourteenth staging pass carries its six migrations (`docs/STAGING.md`).
+fourteenth staging pass and the third live pass carry its six migrations to
+staging and production (`docs/STAGING.md`, `docs/PRODUCTION.md`).
 Earlier the same day the repository was made public to free GitHub's checks,
 pull requests 103 to 108 merged, migrations 205 and 957 reached staging and
 production, and the live process at app.mcwellnessuae.com was rebuilt from
-`main` at `e6d08ae` (`docs/PRODUCTION.md`, the second live pass). Production
-does **not** yet carry 450 to 454 and 958; that pass waits on the operator's
-word (section 8). This file exists so that the next Claude session,
+`main` at `e6d08ae` (`docs/PRODUCTION.md`, the second live pass). At 18:48,
+on the operator's word ("lets go live"), production received 450 to 454 and
+958 and the live process was rebuilt from `main` at `727310e`, so
+app.mcwellnessuae.com now carries Books (the third live pass). This file exists so that the next Claude session,
 started after the operator's usage limit resets, can continue without the
 old conversation. It records where the work stands, what is approved, how
 the work is done, and the cost rules the operator asked for. Update it at
@@ -424,7 +426,8 @@ in agents, plus the integrator's conversation.
 million in one run of 74 minutes, from a written implementation plan of
 sixteen tasks; combined review on Fable 0.35; fix round on Opus 0.34 (twelve
 findings, one blocking); re-check on Fable 0.15; the fourteenth staging pass
-on Sonnet, see its record. About 1.43 million in agents, plus the
+on Sonnet 0.30; the production pass on Sonnet 0.23. About 1.96 million in
+agents, plus the
 integrator's conversation, which wrote the spec, the operator's plan, the
 Zoho comparison and the implementation plan. Two lessons kept: a plan that
 gives the builder exact file names, signatures and test code lets one Opus
@@ -461,14 +464,14 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
-- **The books' production pass, on your word.** Migrations 450 to 454 and
-  958 (piece eleven) are on staging and not yet on production. The bundle a
-  person can run is `~/Documents/mcwellness-migrations-450-958.sql`
-  (staging first, then production; run once per database), or say so and a
-  session applies them through the Supabase tools as the second live pass
-  did. **Apply them before any rebuild of the live process from `main`**:
-  the code on Hostinger is `e6d08ae`, which has no Books; a rebuild from
-  today's `main` would open Books against a database without its tables.
+- **The books are live.** On your word ("lets go live", 18:28 on 7
+  September) migrations 450 to 454 and 958 were applied to production and the
+  live process was rebuilt from `main` at `727310e` (18:48; `docs/PRODUCTION.md`,
+  the third live pass). Books appears in the owner's rail. The first time it is
+  opened, the page posts every invoice, payment and credit billing already
+  holds into the journal; the books start on 7 September, the practice's first
+  day, so nothing predates them. The nightly poster is not scheduled on
+  Hostinger yet; the page's own posting covers it until a cron job is added.
 - **Two decisions the books need, neither urgent.** The day the books start
   defaults to the day the practice was created and can be changed in Books,
   Settings until the first entry is written; if the founder wants her books
@@ -591,7 +594,8 @@ kept its in
 `/private/tmp/claude-501/-Volumes-Storage-McWellness/fac94f8e-e3d7-43ee-954f-a7acaf7d0224/scratchpad/`:
 `eleven-builder-brief.md` and report, `eleven-review-brief.md` and report,
 `eleven-fix-brief.md` and report, `eleven-recheck-brief.md` and report,
-`eleven-staging-brief.md` and report, and `eleven-pr-record.md` (posted on
+`eleven-staging-brief.md` and report, `eleven-production-brief.md` and
+report, and `eleven-pr-record.md` (posted on
 pull request 109). All three directories are temporary; anything a later
 session needs from them is in the pull-request records or in this file.
 
@@ -656,10 +660,13 @@ nine and ten; see the records on pull requests 73 to 83).
    staging pass applied its six migrations (450 to 454, 958) and re-applied
    the policies; its record is in `docs/STAGING.md`. The `accounting`
    worktree is removed; the stream keeps its row in `OWNERSHIP.md` (range
-   450–499, ports 5443/3011/5184) for pieces twelve to sixteen.
-6. **Next, in order.** (a) The books' production pass, on the operator's
-   word (section 8, first item), then a rebuild of the live process from
-   `main`. (b) **Piece twelve, spending and VAT**: the next planning act is a
+   450–499, ports 5443/3011/5184) for pieces twelve to sixteen. On the
+   operator's word the six migrations reached production and the live process
+   was rebuilt from `main` at `727310e` at 18:48 (the third live pass,
+   `docs/PRODUCTION.md`): Books is live.
+6. **Next, in order.** (a) Done at 18:48 on 7 September: the books' production
+   pass and the rebuild of the live process from `main` at `727310e` (the
+   third live pass in `docs/PRODUCTION.md`). (b) **Piece twelve, spending and VAT**: the next planning act is a
    plain-language plan for the operator in `docs/PLAN/piece-twelve.md` and a
    spec, in the shape of piece eleven's, covering what
    `docs/SPEC/accounting.md` section 14 lists for it — suppliers, expenses
