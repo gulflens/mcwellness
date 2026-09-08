@@ -204,6 +204,7 @@ function InvitePageBody() {
     <div className="portal" lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       <header className="portal__header">
         <div className="portal__bar">
+          <img className="portal__logo" src="/brand/mark.png" alt="" width={384} height={410} />
           <span className="portal__mark">McWellness</span>
           <span className="portal__practice small">{say(WORDS.portal, locale)}</span>
         </div>

@@ -57,7 +57,19 @@ export function SignInPage() {
 
   return (
     <main className="signin">
-      <div className="signin__mark">McWellness</div>
+      {/*
+        The whole lockup, at a size that lets the tagline and the pulse rule be
+        read — which is why the rail shows the mark alone instead
+        (public/brand/README.md). The alt carries the name here, because unlike
+        the rail there is no text beside it.
+      */}
+      <img
+        className="signin__logo"
+        src="/brand/lockup.png"
+        alt="McWellness"
+        width={960}
+        height={402}
+      />
       <h1>Sign in</h1>
       <form className="signin__form" onSubmit={(e) => void submit(e)}>
         <Field

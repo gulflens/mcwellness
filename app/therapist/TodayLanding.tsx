@@ -34,6 +34,13 @@ export function TodayLanding() {
   return (
     <div className="ground" data-ground="dark">
       <main className="plain plain--instrument">
+        {/*
+          On this ground the mark's own circle is #380473 against #10191d, which
+          is 1.22 and would leave the linework floating, so it sits on a plate
+          (docs/SPEC/coloured-shell.md section 6). Decorative: the heading below
+          says where this is.
+        */}
+        <img className="today__logo" src="/brand/mark.png" alt="" width={384} height={410} />
         <h1>Today</h1>
         <div className="small muted">{roles}</div>
         <Note>

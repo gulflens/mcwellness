@@ -10,3 +10,19 @@
   inline-size: 100%;
   min-block-size: var(--tap);
 }
+
+/* The mark on the dark ground, plated. Its own violet circle measures 1.22
+   against this ground and would disappear; the plate gives the linework
+   something to sit on (docs/SPEC/coloured-shell.md section 6).
+
+   --brand-pale, not --surface: --surface inverts on this ground to #16242a and
+   the plate would have been as dark as what it sits on. --brand-pale is
+   declared once, in :root, and this ground does not override it, so it stays a
+   near-white violet tint here and measures 13.0 against the paper. */
+.today__logo {
+  inline-size: 40px;
+  block-size: auto;
+  padding: var(--s-1);
+  border-radius: 50%;
+  background: var(--brand-pale);
+}

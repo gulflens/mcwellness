@@ -304,9 +304,12 @@ a.rail__item.rail__item--active {
   cursor: pointer;
 }
 
+/* The one primary action on a page is the practice's colour, not the page's ink
+   (docs/SPEC/coloured-shell.md section 10). White on it measures 14.65. */
 .button--primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--surface);
 }
 
 .button--quiet {
@@ -432,9 +435,10 @@ a.rail__item.rail__item--active {
   gap: var(--s-6);
 }
 
-.signin__mark {
-  font-weight: var(--w-medium);
-  color: var(--ink-2);
+.signin__logo {
+  inline-size: 320px;
+  max-inline-size: 100%;
+  block-size: auto;
 }
 
 .signin__form {
@@ -662,8 +666,9 @@ a.rail__item.rail__item--active {
 /* Finish review, round one */
 
 /* Identity above the heading is separated by a rule, so it reads as a mark, not a kicker. */
-.signin__mark {
-  padding-block-end: var(--s-3);
+/* Identity above the heading is separated by a rule, so it reads as a mark, not a kicker. */
+.signin__logo {
+  padding-block-end: var(--s-6);
   border-block-end: var(--hairline) solid var(--rule);
 }
 
@@ -765,8 +770,17 @@ a.rail__item.rail__item--active:active {
   background: color-mix(in srgb, var(--ink) 6%, var(--surface));
 }
 
+/* The primary action moves within its own hue: lighter under the pointer,
+   deeper when pressed. --ink-2 is a grey-blue and read as a different control
+   entirely once the button became violet. */
 .button--primary:hover:not(:disabled) {
-  background: var(--ink-2);
+  background: var(--brand-lift);
+  border-color: var(--brand-lift);
+}
+
+.button--primary:active {
+  background: var(--brand-deep);
+  border-color: var(--brand-deep);
 }
 
 .signin__person:hover:not(:disabled) {
