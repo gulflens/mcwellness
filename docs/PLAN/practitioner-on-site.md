@@ -25,13 +25,19 @@ Three decisions were taken at 04:50:
 
 1. **Where: on the phone, at the client's home.** Not the console. The
    practitioner's app gains enrolment, consent, selling and taking payment.
-2. **How far a practitioner sees: the whole practice.** Told plainly that this
-   means a future hire can read every household on their first day, the
-   operator chose it over keeping today's narrower rule. Section "What you are
-   giving away" below sets out exactly what it opens, because it opens more
-   than the client list.
-3. **Who: every practitioner.** The role carries it. Nothing to set when you
-   hire.
+2. **Who may do what: a switch per person, and nothing on by default.**
+   *Revised by the operator at 14:28 on 8 September, replacing the first
+   answer, which gave every practitioner everything automatically.* You switch
+   each ability on for each practitioner: enrol and correct records, take a
+   consent, sell, take money, and see every client rather than only their own.
+   A practitioner added tomorrow arrives able to deliver sessions and see
+   their own day, and nothing more, until you say otherwise.
+3. **Location sharing is the practitioner's own switch, never yours.** It
+   belongs to the dispatcher plan (`docs/PLAN/dispatch.md`, piece
+   twenty-five), and it is deliberately the other way round from the switches
+   above: a permission the employer controls is access, and a permission the
+   subject controls is consent. Those are different things and the practice
+   needs both.
 
 That is two pieces, in this order:
 
@@ -45,17 +51,18 @@ This file is the plan for both. The specification it approves is
 lists what twenty-one will add. Piece twenty-one gets its own short plan when
 its turn comes.
 
-## What you are giving away, in plain words
+## The one switch to think hardest about
 
-This is the part to read twice, because it is the one decision here that is
-hard to take back.
+Four of the five switches are ordinary: a practitioner may enrol, correct a
+record, take a consent, sell, take money. The fifth is not, and it is worth
+reading twice.
 
 Today a practitioner sees a client's record only if that client is on their
 own schedule: a visit in the last ninety days or the next thirty, and only
 one the household has agreed to. One database rule decides this, and **nine
-other parts of the system ask it before they show anything**. Widening it does
-not only open the client list. It opens, for every practitioner, for every
-client of the practice:
+other parts of the system ask it before they show anything**. So the switch
+called *see every client* does not only open the client list. For the person
+you switch it on for, it opens:
 
 - the client's record, contacts, addresses and access notes;
 - their consents, and what they have withdrawn;
@@ -65,23 +72,22 @@ client of the practice:
 - their reports, drafts included;
 - their money: what they have bought, what they owe, what they have paid.
 
-For the practice as it stands — one practitioner, who is also the owner — this
-changes nothing at all. It changes everything the day a second practitioner is
-employed, because it applies from their first hour.
+None of that is on for anybody unless you switch it on for them by name, and
+the four ordinary switches work perfectly well without it: a practitioner can
+enrol the household in front of them and sell to the client whose living room
+they are standing in, on their own schedule, with this one left off. Switch it
+on for somebody you trust with the whole practice, and not as a matter of
+course.
 
-**What Claude would have recommended** is the narrower rule: a practitioner
-may enrol anybody and may work with anybody on their own schedule, which is
-enough to sell to the person in front of you and does not hand a new employee
-the whole practice. The operator chose the wider one with the consequence
-stated, and this plan builds what was chosen. It can be narrowed later, and
-narrowing is a one-line change to that same rule — but anything a practitioner
-has already read stays read, so the decision is worth being sure of before the
-first employee.
+It can be switched off again, and switching it off is immediate. What cannot
+be undone is what somebody has already read while it was on — which is the
+only reason this one is worth a moment's thought rather than a shrug.
 
-**One thing is not widened, and Claude has taken this as a default rather than
-asking:** forgiving a fee. Selling and taking money are a salesperson's;
-deciding a household owes nothing after a missed visit is the practice's, and
-it stays with the owner, an admin and finance. Say the word and it moves.
+**One thing is not on any switch, and Claude has taken this as a default
+rather than asking:** forgiving a fee. Selling and taking money are a
+salesperson's; deciding a household owes nothing after a missed visit is the
+practice's, and it stays with the owner, an admin and finance. Say the word
+and it becomes a sixth switch.
 
 ## What piece twenty is
 
@@ -107,8 +113,11 @@ shown in full, in the language the household reads, with a signature taken on
 the phone's own screen. The same evidence the console captures: the wording
 they were shown, the version, who signed, when, and how.
 
-**And the permission change** both pieces need, with its own record of what it
-opened and when it was decided.
+**And the switches themselves**, on the Practitioners page in Settings that
+pull request 126 has just added — the same screen that already carries each
+practitioner's home base. One row per person, five switches, each recording
+who granted it and when, and each revocable. No new screen, and nothing for
+you to remember when you hire: a new practitioner starts with all five off.
 
 ## What piece twenty-one is
 
@@ -141,6 +150,10 @@ Two were taken at 04:50 and are recorded above. Three remain, each with a
 default that stands until overruled:
 
 1. **Forgiving a fee** stays with the office (above). Default: unchanged.
+1a. **Who may work the switches.** Default: the owner and an admin, the same
+   pair who may already hand out a role. Not the lead practitioner: granting
+   somebody the ability to take money is an ownership act rather than a
+   clinical one.
 2. **What a practitioner may take on the phone.** Default: cash, bank transfer
    and a payment link — the three the practice already uses — with cash the
    one the screen offers first, because that is what happens at a door.
@@ -179,7 +192,8 @@ is new is the shape, and the shape is the practitioner ground of
 ## What approving this means
 
 Approving this file approves `docs/SPEC/practitioner-on-site.md` as written
-for piece twenty, the three defaults above as Claude's standing until you
-overrule them, and — explicitly — the widening set out in "What you are giving
-away". It approves nothing of piece twenty-one beyond its one-line
-description; that comes back to you with a plan of its own.
+for piece twenty and the defaults above as Claude's standing until you
+overrule them — including that a practitioner added tomorrow can deliver
+sessions and see their own day, and nothing else, until you switch something
+on. It approves nothing of piece twenty-one beyond its one-line description;
+that comes back to you with a plan of its own.

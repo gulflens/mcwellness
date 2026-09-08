@@ -16,8 +16,10 @@ phone, in the phone's own shape. And a practitioner who is not also the owner
 is allowed to, which is what makes it true the day the practice employs
 somebody.
 
-The operator's decisions of 8 September 2026, 04:50: on the phone, not the
-console; a practitioner sees the whole practice; every practitioner.
+The operator's decisions of 8 September 2026: on the phone and not the
+console (04:50); and, revising the first answer at 14:28, **a switch per
+practitioner per ability, with nothing on by default** rather than the
+whole set carried by the role.
 
 ## 2. What exists on `main`, and what this adds
 
@@ -36,11 +38,13 @@ this piece's job rather than a second copy's.
 The practitioner ground: `app/therapist/**`, the dark single column, the
 outbox, the installable worker.
 
-**Adds.** One widening of `app.client_visible_to_practitioner` and one line in
-`domain/shared/actor.ts`; a client search, a client record, an enrolment and a
-consent capture in the practitioner's own face; and nothing else. **No new
-table, no new column, no new route** — every screen here talks to a route that
-already exists and is already tested.
+**Adds.** One table of granted abilities and one migration for it; one
+condition inside `app.client_visible_to_practitioner`; the abilities in
+`domain/shared/actor.ts`; the switches on the Practitioners page that pull
+request 126 has just added; and a client search, a client record, an
+enrolment and a consent capture in the practitioner's own face. **Every
+screen still talks to a route that already exists and is already tested** —
+what changes is which callers those routes admit.
 
 ## 3. Who uses it
 
@@ -49,57 +53,82 @@ every other role's reach.
 
 ## Part A — piece twenty
 
-## 4. The widening, and exactly what it opens
+## 4. What a practitioner may do, and who says so
 
-**4.1 The rule.** `app.client_visible_to_practitioner(client_id)` (migration
-201) answers today: *this client has a visit with me, agreed by the household,
-in the last ninety days or the next thirty*. It becomes: *this caller is an
-active practitioner of this practice*. The client argument stays, because nine
-migrations and six policy files pass it and the signature must not move; the
-body stops reading `appointment` at all. A new migration in the trunk's
-`900–949` half replaces the body and carries, in its own comment, the
-operator's decision, its date, what it opens (4.2) and the one-line change
-that would narrow it again.
+**4.1 Five abilities, granted by name.** An ability is a row or it is absent;
+absence is the default and the answer for every practitioner the practice has
+never thought about:
 
-**4.2 What it opens, named.** Every read that consults the function opens for
-every practitioner, over every client of the practice. This list is the
-piece's own account of the decision and belongs in the migration's comment,
-in `docs/SECURITY.md` and in `docs/COMPLIANCE/`:
-
-| Where | What a practitioner may now read |
+| Ability | What it lets a practitioner do |
 |---|---|
-| `db/policies/client/readers.sql` | every client's record, contacts, addresses, access notes, goals and consents |
-| `db/policies/client/writers.sql` | and, with section 4.3, write them |
-| `db/policies/scheduling/appointment_access.sql` | every client's visits, past and future, whoever delivers them |
-| `db/migrations/301`, `304`, `305` | every session and what was recorded in it |
-| `db/policies/assessment/access.sql`, `500`, `501`, `503` | every brain map, every measurement, and the files behind them |
-| `db/policies/reports/reports.sql` | every report, drafts included |
-| `db/policies/billing/ledger.sql` | every client's purchases, balance and payments |
-| `db/migrations/203` | the diary rules that consult it |
+| `client.write` | enrol a client, and correct records, contacts, addresses and goals |
+| `consent.capture` | take a consent and file its evidence |
+| `billing.sell` | sell a package or a single session |
+| `billing.take_payment` | record money taken |
+| `client.see_all` | reach every client of the practice, not only their own schedule |
 
-**Nothing else changes.** The office's roles keep their reach; finance and a
-client contact are untouched; `app.client_erasure_gate` still hides an erased
-record from everybody.
+`billing.sell` and `billing.take_payment` are piece twenty-one's to use; they
+are declared here so the table and the screen are built once, and the piece
+that needs them switches nothing on by itself.
 
-**4.3 The action.** `client.write` in `domain/shared/actor.ts` gains
-`practitioner` and `lead_practitioner` beside the owner and an admin, with the
-decision written into the case. `client.list` and `client.read` already admit
-a practitioner and need no change; what changes is how far the rows reach.
-Every other action is untouched — in particular **`billing.waiver.write` stays
-with the office** (the plan's default) and the selling and payment actions are
-piece twenty-one's, not this one's.
+**4.2 Where they live.** `practitioner_ability`: `tenant_id`,
+`practitioner_id`, `ability`, `granted_at`, `granted_by`, unique on
+`(tenant_id, practitioner_id, ability)`, with the practice-bound
+`(tenant_id, id)` key every table carries. Granting inserts; revoking deletes,
+and the audit trigger records both, so the trail answers "who could do this,
+and between when and when". A migration in the trunk's `900–949` half —
+`practitioner` is a core table — declared `audited: no client`, because a row
+names a member of staff and an ability and no household.
 
-**4.4 The write policy.** `db/policies/client/writers.sql` admits a
+**4.3 The rule.** `domain/shared/actor.ts` gains
+`practitioner.ability.grant` (the owner and an admin, matching
+`user_role.grant`; deliberately not the lead practitioner, since granting
+somebody the ability to take money is an ownership act) and takes the acting
+practitioner's granted abilities in the action context, the way it already
+takes `assigneeCapabilities`. Each of the four actions this piece and the next
+one need reads: **an office role, or a practitioner holding the ability**.
+`client.write` is the one that changes in this piece.
+
+**4.4 How far they reach.** `app.client_visible_to_practitioner` (migration
+201) keeps its signature and its ninety-day window, and gains one arm in
+front: a practitioner holding `client.see_all` sees every client of the
+practice; every other practitioner is scoped exactly as they are today. This
+is the difference between this specification and the one it replaces — the
+reach is not widened for the role, it is widened for a person, by name, when
+somebody decides to.
+
+**4.5 What `client.see_all` opens, named.** Nine migrations and six policy
+files consult that function, so the switch reaches further than the client
+list. For the practitioner it is switched on for, it opens every client's
+record, contacts and addresses; their consents; their visits; their sessions;
+their assessments and the files behind them; their reports, drafts included;
+and their balances and payments. This list belongs in the migration's own
+comment, in `docs/SECURITY.md` and in `docs/COMPLIANCE/`, and the switch's own
+label on the screen says it in one line rather than making somebody find it
+here.
+
+**4.6 The screen.** Settings → Practitioners, which pull request 126 built and
+which already lists each practitioner and their home base. It gains five
+switches per row, each showing when it was granted and by whom on hover, and
+each writing through `PUT /api/practitioners/:id/abilities` with `X-Reason`.
+`client.see_all` carries its sentence beside it. A practitioner sees their own
+row and their own switches read-only: knowing what one may do is not the same
+as being able to change it.
+
+**4.7 The write policy.** `db/policies/client/writers.sql` admits a
 practitioner to the writes this piece needs — the client row, contacts,
-locations, goals and consents — and to no others: no status change, no
-erasure request, no consent withdrawal, no document unlink. Those stay the
-office's, and the piece's tests prove each refusal.
+locations, goals and consents — **and only where the ability is held**, which
+the row policy asks through a security-definer lookup in the shape
+`app.own_practitioner_id()` already uses. No status change, no erasure
+request, no consent withdrawal, no document unlink: those stay the office's,
+and the piece's tests prove each refusal.
 
-**4.5 What the trail records.** Nothing new. Every route these screens call
-already writes its own audit row, and the widened rule changes who may read,
-never what is recorded. One thing is worth pinning with a test: a practitioner
-reading a client they have no visit with now writes a `read` row exactly as
-the office's does, so the trail shows the widening being used.
+**4.8 What the trail records.** Granting and revoking, by the table's own
+audit trigger. Nothing else is new: every route these screens call already
+writes its own row. One thing is worth pinning with a test — a practitioner
+holding `client.see_all` reading a client they have no visit with writes a
+`read` row exactly as the office's does, so the trail shows the switch being
+used.
 
 ## 5. The screens
 
@@ -158,11 +187,16 @@ record a practitioner may open, and it lives in `domain/shared/actor.ts`.
 
 ## 7. Data
 
-No new table, no new column, no new index.
+One table, `practitioner_ability` (4.2), and its migration. No column on any
+existing table, and no index beyond the two unique keys.
 
 ## 8. API
 
-No new route. The screens call, unchanged: `GET /api/clients?q=`,
+One new route — `PUT /api/practitioners/:id/abilities`, the owner and an admin,
+`X-Reason` required, taking the whole set for that practitioner so a grant and
+a revocation in the same breath are one act — and `GET /api/practitioners`
+(pull request 126) gains each practitioner's abilities. Every other screen
+calls, unchanged: `GET /api/clients?q=`,
 `POST /api/clients`, `GET/PATCH /api/clients/:id`, the contacts, locations,
 goals and consents routes beneath it, `GET /api/clients/consent-wording`,
 `GET /api/clients/consent-witnesses`, `GET /api/clients/goal-categories`.
@@ -176,13 +210,24 @@ taken.
 
 ## 9. Permissions and row security
 
-Section 4. One migration, one policy file edited, one action widened. The
-piece's own tests drive `app_role` directly and prove, with the policy in
-place and again with it removed: a practitioner reads and writes a client they
-have no visit with; a practitioner is refused a status change, an erasure
-request, a consent withdrawal and `billing.waiver.write`; finance and a client
-contact reach exactly what they reached before; and another practice reaches
-none of it.
+Section 4. One migration, one new table, one policy file edited, one function
+given an arm, one action added. The piece's own tests drive `app_role`
+directly and prove, each confirmed to fail with the policy or the migration
+reverted:
+
+- a practitioner **without** `client.write` is refused every write this piece
+  offers, and one **with** it is admitted;
+- a practitioner **without** `client.see_all` reaches exactly the clients they
+  reach today — the ninety-day window, unchanged — and one **with** it reaches
+  every client of the practice;
+- revoking an ability takes the reach away in the same transaction, with no
+  cache and no session to wait for;
+- every practitioner is refused a status change, an erasure request, a consent
+  withdrawal and `billing.waiver.write`, held or not;
+- only the owner and an admin may grant or revoke, and a practitioner may
+  read their own abilities and not write them;
+- finance and a client contact reach exactly what they reached before, and
+  another practice reaches none of it.
 
 ## 10. Audit, erasure, retention
 
@@ -200,10 +245,11 @@ decision of 7 September.
 
 ## 12. Decisions taken by default
 
-1. *The widening is one function, not nine policies.* Changing the rule the
-   policies already consult keeps every policy honest and reversible in one
-   line; editing nine policy files would leave the practice unable to narrow
-   it again without a second round of the same size.
+1. *The reach is one arm in one function, not nine policies.* Adding the
+   condition to the rule the policies already consult keeps every policy
+   honest and the switch reversible in one place; editing nine policy files
+   would leave the practice unable to change its mind without a second round
+   of the same size.
 2. *The signature is the pad first.* The three methods stay, and the pad is
    what the screen offers, because a phone in the hand is the reason this
    piece exists.
@@ -211,7 +257,13 @@ decision of 7 September.
    left open on a phone in a client's home, is a disclosure nobody asked for.
 4. *A record opens one section at a time.* The phone's rule is one decision per
    screen; four sections stacked open is the console's shape on a small screen.
-5. *`billing.waiver.write` stays with the office.* The plan's default.
+5. *`billing.waiver.write` stays with the office.* The plan's default, and
+   not one of the five: forgiving a fee is not a sale.
+7. *An ability is a row, and absence is the answer.* A boolean column per
+   ability would need a migration for the sixth; a row named by a string
+   does not, and the set will grow.
+8. *A practitioner reads their own switches and cannot move them.* Knowing
+   what one may do is not the same as being able to change it.
 6. *No offline queue for any of this.* 5.5.
 
 ## 13. Seed, tests, done when
@@ -249,10 +301,13 @@ balance a stop card already shows.
 ## 15. Change requests to the shared zone
 
 `docs/CHANGE-REQUESTS/practitioner-onsite-01.md`, riding in the piece's own
-pull request by the precedent of pieces seven to nineteen: the migration in the
-trunk's `900–949` half; `domain/shared/actor.ts`'s `client.write`;
-`db/policies/client/writers.sql` and `readers.sql` (the client-record
-stream's); the routes in `app/shell/App.tsx`; the worker's exclusions in
-`app/shell/sw.ts`; and `docs/SECURITY.md`, `docs/COMPLIANCE/`,
-`docs/SPEC/practitioner-phone.md`, `docs/SPEC/client-record.md` and
-`docs/SPEC/OWNERSHIP.md`.
+pull request by the precedent of pieces seven to nineteen: the migration for
+`practitioner_ability` and the arm on `app.client_visible_to_practitioner`,
+both in the trunk's `900–949` half; `domain/shared/actor.ts`'s `client.write`
+and `practitioner.ability.grant`; `db/policies/client/writers.sql` and
+`readers.sql` (the client-record stream's); `app/api/practitioners/**` and
+`app/admin/settings/PractitionersPage.tsx`, which pull request 126 built and
+this piece extends; the routes in `app/shell/App.tsx`; the worker's exclusions
+in `app/shell/sw.ts`; and `docs/SECURITY.md`, `docs/COMPLIANCE/`,
+`docs/SPEC/practitioner-phone.md`, `docs/SPEC/client-record.md`,
+`docs/SPEC/route-planning.md` and `docs/SPEC/OWNERSHIP.md`.
