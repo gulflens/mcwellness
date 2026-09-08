@@ -52,15 +52,28 @@
 .rail__head {
   display: flex;
   align-items: center;
-  gap: var(--s-1);
+  gap: var(--s-2);
   margin-block-end: var(--s-6);
 }
 
+/* The intrinsic width and height are on the element so the row does not jump
+   while the file loads; the size it is actually drawn at is here. */
+.rail__logo {
+  flex: none;
+  inline-size: 28px;
+  block-size: auto;
+}
+
+/* The name sits at body size, not the h3 it was before the mark arrived. An
+   open rail is 220px, and once the mark and the control have taken theirs the
+   name has 108px: "McWellness" wants about 115 at 20px and truncated. With a
+   symbol beside it the name is identification rather than a headline, so the
+   smaller size is also the better lockup. */
 .rail__mark {
   font-weight: var(--w-medium);
-  font-size: var(--t-h3);
-  line-height: var(--lh-h3);
-  padding-inline-start: var(--s-2);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  padding-inline-start: 0;
   color: var(--surface);
   min-inline-size: 0;
   overflow: hidden;
@@ -115,7 +128,8 @@
    of six candidates measured 1.99 -- so the section you are on inverts
    instead: a white pill at 16.67, with the brand's own violet on it at 14.65
    (docs/SPEC/coloured-shell.md section 4.2). */
-.rail__item--active {
+.rail__item--active,
+a.rail__item.rail__item--active {
   color: var(--brand);
   background: var(--surface);
   font-weight: var(--w-medium);
@@ -509,8 +523,16 @@
   margin-inline-start: 0;
 }
 
+/* The strip is 64px and the mark and the toggle together want 80, so closed
+   they stack: the mark identifies the strip, the control sits beneath it. */
 .admin[data-rail='closed'] .rail__head {
+  flex-direction: column;
   justify-content: center;
+  gap: var(--s-2);
+}
+
+.admin[data-rail='closed'] .rail__logo {
+  inline-size: 32px;
 }
 
 .admin[data-rail='closed'] .rail__person {

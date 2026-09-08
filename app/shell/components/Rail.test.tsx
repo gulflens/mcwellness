@@ -82,4 +82,36 @@ describe('Rail', () => {
     expect(screen.getByRole('link', { name: 'Billing' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
   });
+
+  it("shows the practice's mark without announcing it a second time", () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    const logo = document.querySelector('.rail__logo');
+    expect(logo?.getAttribute('src')).toBe('/brand/mark.png');
+    // The name is in text beside it, so the image is decorative and silent.
+    expect(logo?.getAttribute('alt')).toBe('');
+    expect(screen.getByText('McWellness')).toBeTruthy();
+  });
+
+  it('keeps the mark on the strip, where it is the only thing naming the place', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open={false}
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('.rail__logo')).toBeTruthy();
+  });
 });

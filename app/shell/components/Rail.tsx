@@ -71,6 +71,14 @@ export function Rail({
   return (
     <nav className="rail" aria-label="Sections">
       <div className="rail__head">
+        {/*
+          The alt is empty on purpose: the practice's name is in text beside
+          it, and a screen reader that announced both would say it twice. The
+          mark is the product's own and bundled (public/brand/README.md), not
+          the practice's uploaded logo, because it has to render before any
+          practice has loaded.
+        */}
+        <img className="rail__logo" src="/brand/mark.png" alt="" width={384} height={410} />
         <div className="rail__mark rail__label">McWellness</div>
         <button
           type="button"
