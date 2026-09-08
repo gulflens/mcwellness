@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -187,6 +187,80 @@ describe('the policy the document carries', () => {
           where,
         ).toEqual(meta);
       }
+    }
+  });
+});
+
+/** A shell the stamping cannot reach, written as a build might produce it. */
+function buildWith(html: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'mcw-dist-'));
+  mkdirSync(join(root, 'assets'));
+  writeFileSync(join(root, 'index.html'), html);
+  return root;
+}
+
+describe('the boot check', () => {
+  it('refuses a shell the policy cannot land first in, rather than serving it', () => {
+    const shapes: readonly [why: string, html: string][] = [
+      ['no head at all', '<!doctype html><html><body><div id="root"></div></body></html>'],
+      // The one the guard used to miss: the word is there, the head is not.
+      [
+        'a head only inside a comment',
+        '<!doctype html><html><!-- <head> --><body><script src="/a.js"></script></body></html>',
+      ],
+      [
+        'a script before the head',
+        '<!doctype html><html><script src="/a.js"></script><head></head><body></body></html>',
+      ],
+    ];
+    for (const [why, html] of shapes) {
+      expect(() => mountApp(createApi(deps), buildWith(html)), why).toThrow(
+        /content security policy/,
+      );
+    }
+  });
+
+  it('accepts the shell this app is built with', () => {
+    expect(() => mountApp(createApi(deps), build())).not.toThrow();
+  });
+});
+
+/**
+ * The shell this repository actually builds, rather than the fixture above.
+ *
+ * The fixture's head begins with a `<title>`; Vite's begins with a charset
+ * declaration and carries comments, and it is the one production serves. What
+ * needs pinning is not the stamping — the tests above do that — but that this
+ * particular head still lets the policy land first: a banner comment above
+ * `<html>`, an inline bootstrap script, or a Vite release that reorders the
+ * head would each move it, and the boot check would then fail a deploy that
+ * nobody could explain (the review of pull request 129, finding F2).
+ *
+ * It skips cleanly on a tree with no `dist/`, because `pnpm verify` runs
+ * before `pnpm build` and on checkouts that never build at all.
+ */
+const BUILT_SHELL = 'dist/index.html';
+
+describe.skipIf(!existsSync(BUILT_SHELL))('the shell this repository builds', () => {
+  const withMap = { ...deps, mapDocumentPaths: ['/admin/schedule/map'] };
+
+  it('puts the policy first in its head, before every script, charset still early', async () => {
+    const api = createApi({ ...withMap, supabaseUrl: 'https://abcdefghij.supabase.co' });
+    mountApp(api, 'dist');
+    for (const path of ['/', '/admin/clients', '/admin/schedule/map']) {
+      const html = await (await api.request(path)).text();
+      expect(html, path).toMatch(/<head[^>]*>\s*<meta http-equiv="Content-Security-Policy"/);
+      const policy = html.indexOf('http-equiv="Content-Security-Policy"');
+      const script = html.indexOf('<script');
+      // Not vacuous: the built shell does load a script, and it comes after.
+      expect(script, path).toBeGreaterThan(-1);
+      expect(script, path).toBeGreaterThan(policy);
+      // A browser reads the first 1024 bytes for a charset declaration. The
+      // HTTP Content-Type says UTF-8 too and outranks this, so a longer policy
+      // would cost nothing; the assertion is here to notice, not to protect.
+      const charset = /<meta\s+charset=[^>]*>/i.exec(html);
+      expect(charset, path).not.toBeNull();
+      expect((charset?.index ?? 0) + (charset?.[0].length ?? 0), path).toBeLessThan(1024);
     }
   });
 });

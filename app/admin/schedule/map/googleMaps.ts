@@ -3,10 +3,24 @@
  * (docs/SPEC/route-planning.md section 4.6). One script per document, pinned
  * to a version channel, asking for nothing it does not draw.
  *
- * **The nonce is copied from the shell's own script tag.** The map document
- * is served with `'strict-dynamic'` and a per-response nonce (section 8), so
- * a tag without it is refused by the browser and nothing is said out loud.
- * Google's own loader does the same thing internally for what it injects.
+ * **What actually lets this script run is `'strict-dynamic'`, not the nonce
+ * copied below.** The map document is served with `'strict-dynamic'` and a
+ * per-response nonce (section 8), and `'strict-dynamic'` trusts whatever a
+ * trusted script injects — this module is loaded by a nonced tag, so the tag
+ * it appends is trusted onwards whether or not it carries a nonce of its own.
+ * The copy is kept because it is harmless and because it is what makes the
+ * local development server work, where no policy is enforced at all.
+ *
+ * **And in production the copy does nothing at all.** When a document's
+ * policy arrives in a **header**, the browser empties the
+ * `nonce` content attribute on insertion and keeps the value only in the
+ * element's internal slot, reachable as the `.nonce` property — so the
+ * `getAttribute('nonce')` read below returns `""` and nothing is copied.
+ * Production always has a header-delivered policy: Hostinger's
+ * `upgrade-insecure-requests` today, and this app's own on the day the edge
+ * stops replacing it (the review of pull request 129, finding F3). The
+ * presence check in DayMapPage still works, because the attribute is emptied
+ * and not removed.
  *
  * **The key is a browser key and is meant to be readable.** It is restricted
  * to this one product and to the practice's own address, which is what makes
@@ -71,6 +85,8 @@ export function loadGoogleMaps(key: string, doc: Document = document): Promise<G
     // Origin only, never the path: the key is restricted by referrer and a
     // request with none is refused (section 8.3).
     script.referrerPolicy = 'strict-origin-when-cross-origin';
+    // Empty in production, where the policy arrives in a header; the load
+    // rests on `'strict-dynamic'` either way. See the note at the top.
     const nonce = doc.querySelector('script[nonce]')?.getAttribute('nonce');
     if (nonce) script.setAttribute('nonce', nonce);
     script.addEventListener('error', () => {

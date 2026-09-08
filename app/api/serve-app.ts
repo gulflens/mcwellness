@@ -87,14 +87,48 @@ function stamp(html: string, nonce: string | undefined, policy: string | undefin
   return out;
 }
 
+/** Not a policy anything would honour: it exists to be looked for. */
+const BOOT_PROBE = 'boot-check';
+
+/**
+ * The boot check, and it asserts the outcome rather than the precondition.
+ *
+ * In production the document is the only place the policy reaches a browser,
+ * so a shell the stamping cannot reach is a shell served with no policy at
+ * all — and that has to fail the deploy rather than the visitor, quietly.
+ * Asking merely whether the file contains a `<head>` would not do it: a
+ * comment carrying the word satisfies that and still takes the meta with it.
+ * So the shell is stamped once, here, and the result is read — the policy is
+ * in the document, it is not inside a comment, and no script stands in front
+ * of it, because a policy that arrives after a script does not govern that
+ * script (the review of pull request 129, finding F1).
+ */
+function assertThePolicyLands(html: string): void {
+  const stamped = stamp(html, undefined, BOOT_PROBE);
+  const policy = stamped.indexOf(`content="${BOOT_PROBE}"`);
+  if (policy === -1) {
+    throw new Error(
+      'the built shell has nowhere the content security policy can be stamped: no reachable <head>',
+    );
+  }
+  // An unclosed comment ahead of it is a policy a parser never sees.
+  const before = stamped.slice(0, policy);
+  if (before.lastIndexOf('<!--') > before.lastIndexOf('-->')) {
+    throw new Error(
+      'the built shell put the content security policy inside a comment, where no browser reads it',
+    );
+  }
+  const script = stamped.indexOf('<script');
+  if (script !== -1 && script < policy) {
+    throw new Error(
+      'the built shell puts a script before the content security policy, which would not govern it',
+    );
+  }
+}
+
 export function mountApp(api: Hono<ApiEnv>, root = 'dist'): void {
   const index = readFileSync(join(root, 'index.html'), 'utf8');
-  // A shell with nowhere to put the policy is a shell served without one, and
-  // in production that is the only place the policy reaches a browser: this
-  // fails the deploy rather than the visitor.
-  if (!HEAD_OPEN.test(index)) {
-    throw new Error('the built shell has no <head>: the content security policy has nowhere to go');
-  }
+  assertThePolicyLands(index);
   for (const [path, { type, cacheControl }] of Object.entries(ROOT_FILES)) {
     api.get(path, (c) => {
       let body: string;
