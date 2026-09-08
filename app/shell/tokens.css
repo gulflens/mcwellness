@@ -44,6 +44,26 @@
   --attention: #8a6a1e;
   --critical: #94382e;
 
+  /* The practice's own violet, sampled from the mark rather than chosen
+     (docs/SPEC/coloured-shell.md section 4). #380473 is the mark's own circle,
+     and the same value domain/billing/document/render.ts already prints on
+     every invoice. One hue throughout, the mark's 268deg; only lightness moves.
+
+     The active section is a white pill and not a tinted row because no violet
+     ground reaches the 3.0 a state needs against --brand-deep — the best of six
+     candidates measured 1.99 (section 4.2). tests/lint/brand-contrast.test.ts
+     computes every pairing from these values, so a colour edited to something
+     illegible fails the build instead of shipping. */
+  --brand: #380473;
+  --brand-deep: #2b0359;
+  --brand-lift: #480594;
+  --brand-pale: #eadff6;
+  --brand-wash: #f6f1fb;
+  /* The brain's pink, so the mark's second colour is written down where its
+     first is. Used nowhere yet, and a guard test keeps it that way until
+     something needs it. */
+  --brand-magenta: #d81c7c;
+
   /* One family, designed with Arabic from the start. Bundled; no outside server. */
   --font: 'IBM Plex Sans', 'IBM Plex Sans Arabic', system-ui, sans-serif;
 
@@ -105,7 +125,9 @@
 
   /* Depth: one soft, offset shadow for the drawer and menus. */
   --shadow: 0 8px 24px color-mix(in srgb, var(--ink) 14%, transparent);
-  --focus: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink);
+  /* Attention is the practice's colour: the ring that says "you are here" is
+     the same violet as the thing you are about to press. */
+  --focus: 0 0 0 2px var(--paper), 0 0 0 4px var(--brand);
   --selection: color-mix(in srgb, var(--ink) 16%, var(--paper));
 }
 
@@ -125,6 +147,14 @@
   --ok: #5f9f83;
   --attention: #c0a04e;
   --critical: #c9705f;
+  /* #380473 is 1.22 against this ground — invisible. Mixing towards white
+     passes the floor at 45% but yields #a58ec0, a lilac that stops reading as
+     the practice's colour, so the lift holds saturation instead: L 68%, S 80%,
+     the mark's hue kept (docs/SPEC/coloured-shell.md section 4.3). It measures
+     5.16 here and 5.16 for this ground's own ink laid on it, so one token
+     serves both a link and a filled control. --brand is the only one of the six
+     this ground overrides; the other five describe a rail it does not have. */
+  --brand: #a96cef;
   --t-h1: 40px;
   --lh-h1: 44px;
   --t-h2: 31px;
