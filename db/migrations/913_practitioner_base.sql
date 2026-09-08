@@ -42,8 +42,9 @@
 -- where policies belong (090's own note), together with a narrowing of who
 -- may read a practitioner-owned location at all.
 --
--- Needs 030 (location), 050 (practitioner), 095 (app.actor_has_role),
--- 100 (app.current_actor_id, app.guard_location_notes).
+-- Needs: 000 (schema app, app.current_tenant_id, the extensions schema's
+-- PostGIS functions), 030 (location), 050 (practitioner), 095
+-- (app.actor_has_role), 100 (app.current_actor_id, app.guard_location_notes).
 
 ------------------------------------------------------------------------------
 -- 1. The caller's own practitioner row, read directly.
@@ -88,9 +89,20 @@ grant execute on function app.own_practitioner_id() to app_role;
 --
 --    `display_address` and `access_notes` are deliberately not in that list.
 --    This is a person's home: the practice keeps the coordinate and nothing
---    else, and an update that tried to write an address on to a base row
---    would be refused here even though the same actor may write one on to a
---    household's location.
+--    else, so a practitioner who tried to write an address on to their own
+--    base row would be refused here even though the same actor may write
+--    access notes on to a household's location.
+--
+--    **The office is not refused it, and never was.** The first branch below
+--    returns `new` unconditionally for an owner, an admin and the lead
+--    practitioner — the shape 100_client_record.sql gave this trigger, which
+--    this migration does not change and should not. What stops an address
+--    reaching a base row from the office is the route: no route offers the
+--    field, and `app/api/clients/locations.ts` scopes every write it does
+--    offer to `owner_type = 'client'`. The guard is the practitioner's
+--    boundary, not the practice's. (Corrected in the fix round of 2026-09-08
+--    on the review of pull request 126, finding 7: the sentence here claimed
+--    the refusal held for everyone, and it holds for two thirds of the roles.)
 --
 --    Nothing outside app.set_practitioner_base() below can reach this arm:
 --    db/policies/client/writers.sql still refuses a practitioner's direct
@@ -246,10 +258,57 @@ revoke execute on function app.set_practitioner_base(uuid, double precision, dou
 grant execute on function app.set_practitioner_base(uuid, double precision, double precision, public.emirate) to app_role;
 
 -- rollback:
+--   -- **Order matters, and this is the order.** `practitioner_base_is_private`
+--   -- (db/policies/core/practitioner_base.sql) holds a hard catalogue
+--   -- dependency on app.own_practitioner_id(), so dropping the function first
+--   -- raises "cannot drop function ... because other objects depend on it" and
+--   -- the rollback stops there. Deleting the policy file from the tree does not
+--   -- drop the policy from a database that already has it; the statement does.
+--   -- Delete the file as well, in the same step, or the runner re-applies it on
+--   -- the next migrate and re-creates the dependency.
+--   --
+--   -- Run on 2026-09-08 against a database with this migration applied, inside
+--   -- a transaction that was then rolled back: in this order the block reaches
+--   -- the end and leaves both functions dropped, all three policies gone and
+--   -- app.guard_location_notes() back to 100's body. With the function drops
+--   -- first it stops at the second statement with SQLSTATE 2BP01, "cannot drop
+--   -- function app.own_practitioner_id() because other objects depend on it".
+--
+--   drop policy if exists practitioner_base_is_private on public.location;
+--   drop policy if exists practitioner_row_update_writers on public.practitioner;
+--   drop policy if exists practitioner_row_writers on public.practitioner;
+--
 --   drop function if exists app.set_practitioner_base(uuid, double precision, double precision, public.emirate);
 --   drop function if exists app.own_practitioner_id();
+--
 --   -- app.guard_location_notes() goes back to 100_client_record.sql's body,
---   -- which is the arm above removed and nothing else; it is a create or
---   -- replace either way, and the trigger on public.location is untouched.
---   -- db/policies/core/practitioner_base.sql must be deleted in the same
---   -- step: its policies call app.own_practitioner_id().
+--   -- restated here verbatim the way 904 and 908 restate theirs: a rollback
+--   -- comment is read when something has already gone wrong, and one that sends
+--   -- the reader to another file to reconstruct a function by hand is not there
+--   -- when it is needed. It is a create or replace either way, and the trigger
+--   -- on public.location is untouched.
+--   create or replace function app.guard_location_notes() returns trigger
+--   language plpgsql
+--   set search_path = pg_catalog, pg_temp
+--   as $$
+--   begin
+--     if app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner') then
+--       return new;
+--     end if;
+--
+--     if nullif(current_setting('app.actor_roles', true), '') is null then
+--       return new;
+--     end if;
+--
+--     if (to_jsonb(new) - array['access_notes', 'updated_at'])
+--        is distinct from (to_jsonb(old) - array['access_notes', 'updated_at'])
+--     then
+--       raise exception 'only access_notes may be changed here'
+--         using errcode = 'insufficient_privilege',
+--               hint    = 'A practitioner may add access notes to a location, and nothing else on it.';
+--     end if;
+--
+--     return new;
+--   end
+--   $$;
+--   revoke execute on function app.guard_location_notes() from public;
