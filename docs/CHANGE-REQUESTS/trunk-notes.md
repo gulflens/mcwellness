@@ -2652,3 +2652,28 @@ or enum changes. Section 2 already describes `practitioner.home_base_location_id
 as "where their day starts" and `location`'s `'base'` label as "a practitioner's
 home base"; migration 913 adds two functions and one trigger arm, and that
 document lists neither.
+
+
+### Round 36, owed onward: the three location columns the trail still keeps
+
+Migration 914 stops `app.audit_redact` recording `location`'s three coordinate
+columns, on the argument that the erasure act clears them from the row and the
+immutable trail must not outlive an erasure (`docs/SPEC/audit.md` section 8).
+
+The re-check of pull request 126 found that argument incomplete. The same
+erasure statement clears `makani_number`, `display_address` and `access_notes`
+(migrations 100, 102, 105, 107), the trail keeps all three from before it, and
+a Makani number resolves a door to a few metres — so a household's address
+survives an erasure in the log in every way but the geometry.
+
+**Not taken in round 36, deliberately.** These are the client record's own
+columns; dropping them changes what the trail says about households rather
+than about a member of staff, and the round that found it was closing a
+practitioner's base. It wants its own round, its own review and a word from
+the operator on whether an address written into the trail before an erasure is
+something the practice means to keep.
+
+**What a later round would do:** add the three keys to `app.audit_redact`'s
+drop list in a trunk migration of the `900–949` half, confirm `changed_fields`
+still names each column, and amend `docs/SPEC/audit.md` and 914's own header,
+both of which now carry a paragraph saying this is outstanding.
