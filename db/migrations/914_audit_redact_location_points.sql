@@ -38,6 +38,19 @@
 -- `checked_out_point` are already on this list for that reason and no other;
 -- these three belong beside them.
 --
+-- **What this migration does not do, said here so nothing reads it as more
+-- than it is.** `location` has three further columns the erasure act clears
+-- in the same statement as the coordinates -- `makani_number`,
+-- `display_address` and `access_notes` -- and the trail keeps all three from
+-- before an erasure, which is the very retention argued against above. A
+-- Makani number in particular resolves a door to a few metres, so "no
+-- coordinate in the trail" is a narrower promise than it sounds. They are not
+-- dropped here because they are the client record's own columns, and dropping
+-- them changes what the trail says about households rather than about a
+-- member of staff -- which deserves its own round and its own review rather
+-- than riding on the one that noticed it (the re-check of pull request 126).
+-- The request is `docs/CHANGE-REQUESTS/trunk-notes.md`, round 36.
+--
 -- **What the trail still says.** That a location was created or changed, by
 -- whom, when, with what reason, and — through `changed_fields`, which
 -- `app.audit_row` computes from the raw rows before this function is called —
