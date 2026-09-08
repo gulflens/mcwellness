@@ -112,6 +112,40 @@ credential); every read and write of a record is logged, hash-chained.
    the Schedule still navigates in place; and `app/shell/sw.test.ts` asserts
    the shell cache is untouched by a successful navigation to the map and still
    updated by one to any other screen.
+
+   **The header does not reach a browser in production, so the document
+   carries the policy too** (measured on the live site 2026-09-08, amended
+   here the same day). Every answer from `https://app.mcwellnessuae.com`
+   arrives with `Content-Security-Policy: upgrade-insecure-requests` and
+   nothing else — on `/admin/schedule/map`, on `/admin/clients` and on
+   `/api/health` alike — so in production there was no `script-src 'self'`,
+   no `object-src 'none'`, no `base-uri 'self'`, and equally no widened policy
+   on the day map. It is not the app: every other protective header arrives,
+   and arrives per document, `Referrer-Policy` included, which is the map
+   branch's own value. Nor is it the content delivery network, which was the
+   first guess: asked directly at the origin, bypassing the edge entirely
+   (`server: LiteSpeed` rather than `hcdn`), the answer is the same. The
+   replacement happens on Hostinger's shared web server, in front of the Node
+   process, and `docs/SPEC/hosting.md` section 2.3 records what was tried.
+
+   So the shell stamps the same policy into its own `<head>`, as the first
+   child, before any script — `app/api/serve-app.ts`'s `stamp`, from the
+   object the header was built from, never a second policy
+   (`app/api/_middleware/security.ts` builds it once; `policyText` renders
+   it). A browser enforces a `<meta http-equiv>` policy as it enforces a
+   header, and enforces both when both arrive. Two consequences, neither of
+   them a weakening. `frame-ancestors` is left out of the document's copy
+   because a meta policy ignores that directive — the specification, not a
+   bug — and framing is refused by `X-Frame-Options: DENY`, which does reach
+   the browser. API answers carry no meta, because a JSON body is not a
+   document and executes nothing; `nosniff` and `Cache-Control: no-store`
+   already cover them. **The header is still sent, unchanged, and is still
+   the right thing**: the day the edge stops replacing it, it simply becomes
+   redundant. `tests/security/headers.test.ts` still pins it exactly as
+   before, and `tests/security/static.test.ts` pins the document's copy —
+   including one test that builds both renderings from the same input and
+   compares them directive for directive, so the two can never drift into two
+   policies.
 3. **Rate limits** (`app/api/_middleware/rate-limit.ts`), per minute, from
    the environment: `RATE_LIMIT_PER_MINUTE` per address (300),
    `RATE_LIMIT_ACTOR_PER_MINUTE` per signed-in person (600),
