@@ -7,8 +7,8 @@ import {
   canOpenKit,
   canOpenPortalAccess,
   canOpenSchedule,
-  canOpenSettings,
   canOpenToday,
+  settingsHomeFor,
 } from './adminAccess';
 import type { Actor } from './auth/AuthContext';
 import { useAuth } from './auth/AuthContext';
@@ -23,25 +23,40 @@ function store(): Storage | undefined {
 
 /**
  * The sections this actor may open, in `ADMIN_SECTIONS`' own order. Reads
- * the same `canOpenBilling`/`canOpenSchedule`/`canOpenSettings` rules the routes enforce
+ * the same `canOpenBilling`/`canOpenSchedule`/`settingsHomeFor` rules the routes enforce
  * (adminAccess.ts), so the rail never shows a link a route would bounce
  * the person straight back out of — a finance account sees Billing but not
  * Schedule, and only someone who treats sees Today. `clients` is
  * unconditional, having no per-role gate of its own yet, and `sessions` still
  * carries no `to` at all, so it renders as "Arriving" regardless of role.
+ *
+ * **Settings is the one entry whose destination depends on who is reading.**
+ * Two screens sit under it with different audiences — Practice is the owner's
+ * and an admin's, Practitioners is theirs and every practitioner's — so the
+ * entry is shown to anyone who may open either and points at the first one
+ * they may actually open. `ADMIN_SECTIONS`' own `to` is therefore not the whole
+ * answer for that row, and it is overridden here, where the actor is already in
+ * hand, rather than by making the rail itself role-aware. Until the fix round
+ * of 2026-09-08 the entry was gated on `practice.settings.write` alone, so the
+ * screen a practitioner records their own home base on had no door at all and
+ * could only be reached by typing its address (the review of pull request 126,
+ * finding B1).
  */
 function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
+  const settingsHome = settingsHomeFor(actor, now);
   return ADMIN_SECTIONS.filter((section) => {
     if (section.key === 'billing') return canOpenBilling(actor, now);
     if (section.key === 'books') return canOpenBooks(actor, now);
     if (section.key === 'schedule') return canOpenSchedule(actor, now);
     if (section.key === 'today') return canOpenToday(actor);
-    if (section.key === 'settings') return canOpenSettings(actor, now);
+    if (section.key === 'settings') return settingsHome !== null;
     if (section.key === 'portal') return canOpenPortalAccess(actor, now);
     if (section.key === 'kit') return canOpenKit(actor, now);
     if (section.key === 'audit') return canOpenAudit(actor, now);
     return true;
-  });
+  }).map((section) =>
+    section.key === 'settings' && settingsHome ? { ...section, to: settingsHome } : section,
+  );
 }
 
 /** The ledger: rail on the inline start, content beside it. */

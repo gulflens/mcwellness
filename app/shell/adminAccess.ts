@@ -114,3 +114,24 @@ export function canOpenAudit(actor: Actor, now: Date): boolean {
 export function canOpenToday(actor: Pick<Actor, 'roles'>): boolean {
   return actor.roles.includes('practitioner') || actor.roles.includes('lead_practitioner');
 }
+
+/**
+ * Where the rail's single Settings entry should land this person: the first
+ * settings screen they may actually open, or null when there is none.
+ *
+ * There are two screens under Settings and their audiences differ — Practice
+ * is the owner's and an admin's, Practitioners is theirs and every
+ * practitioner's — so one fixed destination cannot serve both. `ADMIN_SECTIONS`
+ * has no actor in hand and so cannot answer this; `AdminLayout.visibleSections`
+ * does, and asks here (the review of pull request 126, finding B1: the
+ * capability the round exists for was built and had no door, because the rail's
+ * entry was gated on `practice.settings.write` and pointed at Practice alone).
+ *
+ * Practice first, so nobody who may open both is moved off the screen the rail
+ * has always landed on.
+ */
+export function settingsHomeFor(actor: Actor, now: Date): string | null {
+  if (canOpenSettings(actor, now)) return '/admin/settings/practice';
+  if (canOpenPractitioners(actor, now)) return '/admin/settings/practitioners';
+  return null;
+}

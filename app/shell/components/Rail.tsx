@@ -36,9 +36,11 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
   // The practice's whole trail, and who has read one record. AdminLayout shows
   // it only to the three oversight roles (adminAccess.ts).
   { key: 'audit', label: 'Audit', to: '/admin/audit', icon: <AuditIcon /> },
-  // The practice's own details. AdminLayout shows it only to an owner or an
-  // admin (adminAccess.ts), the two who may change what an invoice says the
-  // supplier is.
+  // The practice's own details, and the practitioners' home bases. Two screens
+  // with two audiences, so this is the one row whose destination AdminLayout
+  // replaces per actor (`settingsHomeFor`, adminAccess.ts): Practice for an
+  // owner or an admin, Practitioners for anyone else who may set a base. The
+  // `to` here is the office's, and the default when there is no actor.
   { key: 'settings', label: 'Settings', to: '/admin/settings/practice', icon: <SettingsIcon /> },
   // Who can open a household's own record. AdminLayout shows it only to an
   // owner or an admin (adminAccess.ts), the two who may hand access out.

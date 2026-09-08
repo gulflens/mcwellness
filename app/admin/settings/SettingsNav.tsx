@@ -5,10 +5,12 @@ import { canOpenPractitioners, canOpenSettings } from '../../shell/adminAccess';
 /**
  * The links between the settings screens.
  *
- * The rail keeps one Settings entry, which lands on Practice; from 8 September
- * 2026 there are two screens under it, so each carries this small set and one
- * is reachable from the other. Two links is a strip of text, not a second
- * rail: no icons, no counts, nothing that competes with the page beneath it.
+ * The rail keeps one Settings entry, which lands on the first of these screens
+ * the person may open (`settingsHomeFor`, app/shell/adminAccess.ts); from
+ * 8 September 2026 there are two screens under it, so each carries this small
+ * set and one is reachable from the other. Two links is a strip of text, not a
+ * second rail: no icons, no counts, nothing that competes with the page beneath
+ * it.
  *
  * A link is offered only where the route would let this person in, which is
  * `AdminLayout`'s own rule for the rail — "never shows a link a route would

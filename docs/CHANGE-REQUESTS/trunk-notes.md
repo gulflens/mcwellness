@@ -2445,8 +2445,11 @@ as requests.
   row, and who may read a practitioner-owned `location`.
 - `app/api/practitioners/routes.ts` and `schema.ts`, mounted in
   `app/api/create-api.ts`.
-- `app/shell/adminAccess.ts`: `canOpenPractitioners`.
+- `app/shell/adminAccess.ts`: `canOpenPractitioners` and `settingsHomeFor`.
 - `app/shell/App.tsx`: the route `settings/practitioners`.
+- `app/shell/AdminLayout.tsx` and `app/shell/components/Rail.tsx`: the rail's
+  Settings entry, shown to anyone who may open either settings screen and
+  landing on the first one they may open.
 - `app/shell/components/CoordinateFields.tsx`, its test and
   `app/shell/components/geolocation.ts`, moved here from
   `app/admin/clients/` (see request 1), with the component's own styles added

@@ -279,10 +279,12 @@ export function App() {
         />
         {/*
           The second settings screen, and the one with a wider audience than
-          the rail's single Settings entry: a practitioner records their own
-          home base here (docs/SPEC/route-planning.md section 5.4). The rail
-          still shows Settings to the owner and an admin alone, and the two
-          screens link to each other (SettingsNav.tsx).
+          the first: a practitioner records their own home base here
+          (docs/SPEC/route-planning.md section 5.4). The rail's single Settings
+          entry is shown to anyone who may open either screen and lands on the
+          first one they may actually open (`settingsHomeFor`,
+          app/shell/adminAccess.ts), and the two screens link to each other
+          (SettingsNav.tsx).
         */}
         <Route
           path="settings/practitioners"

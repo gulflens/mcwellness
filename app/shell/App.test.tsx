@@ -279,9 +279,9 @@ describe('App — /admin/settings/practice', () => {
 
 describe('App — /admin/settings/practitioners', () => {
   // The second settings screen, and the one with a wider audience than the
-  // rail's Settings entry: a practitioner records their own home base
+  // first: a practitioner records their own home base
   // (docs/SPEC/route-planning.md section 5.4, migration 913).
-  it('lets a practitioner reach it, though the rail never offers it to them', async () => {
+  it('lets a practitioner reach it', async () => {
     mount(PRACTITIONER, '/admin/settings/practitioners');
     expect(await screen.findByRole('heading', { name: 'Practitioners' })).toBeTruthy();
   });
@@ -309,6 +309,60 @@ describe('App — /admin/settings/practitioners', () => {
     mount(OWNER, '/admin/settings/practice');
     expect(await screen.findByRole('link', { name: 'Practice' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Practitioners' })).toBeTruthy();
+  });
+});
+
+/**
+ * The door. The operator asked for this round in one sentence — "every
+ * practioner can add their own address" — and until the fix round of
+ * 2026-09-08 the rail's Settings entry was gated on `practice.settings.write`
+ * and pointed at Practice, so the only people who could navigate to the screen
+ * were the owner and an admin: the two who could always have had the office set
+ * anybody's base (the review of pull request 126, finding B1). These cases pin
+ * the promise the round is for, not the shape of the rail.
+ */
+describe('App — the rail offers Settings to everyone who may open a settings screen', () => {
+  it('offers a practitioner Settings, and it lands on Practitioners', async () => {
+    mount(PRACTITIONER, '/admin/settings/practitioners');
+    expect(await screen.findByRole('link', { name: 'Settings' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/settings/practitioners'),
+    );
+  });
+
+  it('offers a lead practitioner the same door, landing on the same screen', async () => {
+    mount(LEAD_PRACTITIONER, '/admin/clients');
+    expect(await screen.findByRole('link', { name: 'Settings' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/settings/practitioners'),
+    );
+  });
+
+  it('still lands the office on Practice, which they may open', async () => {
+    mount(OWNER, '/admin/clients');
+    expect(await screen.findByRole('link', { name: 'Settings' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/settings/practice'),
+    );
+  });
+
+  it('offers a practitioner no way to the Practice screen, and no way in by address', async () => {
+    mount(PRACTITIONER, '/admin/settings/practitioners');
+    await screen.findByRole('link', { name: 'Practitioners' });
+    // Not in the strip of settings links, and not in the rail either: the rail's
+    // Settings entry is their own screen, never the practice's.
+    expect(screen.queryByRole('link', { name: 'Practice' })).toBeNull();
+    cleanup();
+    // And typing the address still bounces them to their own day.
+    mount(PRACTITIONER, '/admin/settings/practice');
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Practice' })).toBeNull();
+  });
+
+  it('offers finance no Settings entry at all: they may open neither screen', async () => {
+    mount(FINANCE, '/admin/clients');
+    await screen.findByRole('link', { name: 'Billing' });
+    expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
   });
 });
 
