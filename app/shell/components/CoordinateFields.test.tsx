@@ -8,7 +8,8 @@ afterEach(cleanup);
 /**
  * "Verify pin" without a map library (task brief item 4): latitude and
  * longitude, "Use my current position" (never blocking on refusal), and
- * "Open in Google Maps" once a point exists.
+ * "Open in Google Maps" once a point exists — unless the caller says not to,
+ * which the practitioner base drawer does.
  */
 describe('CoordinateFields', () => {
   it('fills the fields from the current position, and never blocks when it is refused', async () => {
@@ -86,5 +87,23 @@ describe('CoordinateFields', () => {
       ),
     ).toBeTruthy();
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('CoordinateFields — offerMapLink', () => {
+  // A member of staff's home is not a household the practitioner is driving to,
+  // and docs/COMPLIANCE/approved-vendors.md's Google Maps row is written
+  // entirely about households (the review of pull request 126, finding 6).
+  it('omits the Google Maps link, and keeps the current-position button', () => {
+    render(<CoordinateFields lat={25.2} lng={55.27} onChange={vi.fn()} offerMapLink={false} />);
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Use my current position' })).toBeTruthy();
+  });
+
+  it('still offers it by default, which is what the client forms want', () => {
+    render(<CoordinateFields lat={25.2} lng={55.27} onChange={vi.fn()} />);
+    expect(
+      screen.getByRole('link', { name: 'Open in Google Maps, opens in a new tab' }),
+    ).toBeTruthy();
   });
 });

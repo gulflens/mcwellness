@@ -27,7 +27,9 @@ import { EMIRATE_LABELS } from './emirates';
  * (app/shell/components/CoordinateFields.tsx): "Use my current position" is
  * exactly the right control here — a practitioner standing at their own front
  * door taps it once — and the client record's verify-pin form needs the same
- * three things.
+ * boxes. It is used here with `offerMapLink={false}`: the third control that
+ * form carries hands a coordinate to Google, which the vendor listing approves
+ * for households and does not describe for a member of staff's home.
  *
  * A reason is required, as it is on the practice's own address: this is a move
  * (docs/SPEC/audit.md section 6), and the trail records it against the row.
@@ -149,6 +151,14 @@ export function PractitionerBaseDrawer({
 
           <CoordinateFields
             idPrefix="base-coordinates"
+            // No "Open in Google Maps" here. The vendor listing approves that
+            // hand-off for a household's coordinates on the practitioner's own
+            // tap (docs/COMPLIANCE/approved-vendors.md); a member of staff's
+            // home is a category of personal data it does not describe, and the
+            // note directly above this form promises the practice keeps the
+            // coordinate and nothing else. "Use my current position" stays: it
+            // reaches the browser and nobody else.
+            offerMapLink={false}
             lat={point.lat}
             lng={point.lng}
             onChange={(next) => {

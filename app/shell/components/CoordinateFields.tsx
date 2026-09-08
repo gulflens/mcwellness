@@ -27,6 +27,16 @@ import { googleMapsUrl, requestCurrentPosition } from './geolocation';
  * kept in `parse` instead, and what was typed stays on screen while it is
  * being typed — a box that blanked itself at the third character of "255"
  * would be worse than the spinner.
+ *
+ * **`offerMapLink` is not a preference.** `docs/COMPLIANCE/approved-vendors.md`
+ * approves Google Maps Platform for coordinates, and every sentence of that row
+ * is written about households: "a client's entrance coordinates only on the
+ * practitioner's deliberate tap", "the day's stop coordinates in order". A
+ * member of staff's home is a category of personal data that row does not
+ * describe, so the base drawer passes `false` and the link is not rendered
+ * there (the review of pull request 126, finding 6). "Use my current position"
+ * stays wherever this component is used: it reaches the browser and nobody
+ * else.
  */
 
 const BOUNDS = { lat: 90, lng: 180 } as const;
@@ -51,6 +61,7 @@ export function CoordinateFields({
   lng,
   onChange,
   error,
+  offerMapLink = true,
 }: {
   /** Unique per instance on screen, so two open at once never share an id. */
   idPrefix?: string;
@@ -58,6 +69,12 @@ export function CoordinateFields({
   lng: number | null;
   onChange: (point: { lat: number | null; lng: number | null }) => void;
   error?: string;
+  /**
+   * Whether to offer "Open in Google Maps" for the point in the boxes. True for
+   * a household the practitioner is driving to, which is what the vendor row
+   * approves; false for a member of staff's own home, which it does not.
+   */
+  offerMapLink?: boolean;
 }) {
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
@@ -140,7 +157,7 @@ export function CoordinateFields({
         >
           {locating ? 'Locating…' : 'Use my current position'}
         </Button>
-        {lat !== null && lng !== null ? (
+        {offerMapLink && lat !== null && lng !== null ? (
           <a
             className="link"
             href={googleMapsUrl(lat, lng)}

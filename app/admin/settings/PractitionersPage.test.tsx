@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FAMILY_NAMES, GIVEN_NAMES } from '../../../db/seed/names';
@@ -191,6 +191,21 @@ describe('Settings › Practitioners — the drawer', () => {
       String(POINT.entrance.lat),
     );
     expect((screen.getByLabelText('Emirate') as HTMLSelectElement).value).toBe(POINT.emirate);
+  });
+
+  it('never offers to open a member of staff’s home in Google Maps', async () => {
+    // The note above the form says the practice keeps the coordinate and
+    // nothing else, and docs/COMPLIANCE/approved-vendors.md's Google Maps row
+    // is written entirely about households — "a client's entrance coordinates
+    // only on the practitioner's deliberate tap". A staff home is a category
+    // that row does not describe (the review of pull request 126, finding 6).
+    mount({ list: json({ practitioners: [PRACTITIONERS.withBase], scope: null }) });
+    await openTheDrawer('Change the home base');
+    const drawer = screen.getByRole('dialog', { name: 'Set the home base' });
+    expect(within(drawer).queryByRole('link')).toBeNull();
+    expect(drawer.innerHTML).not.toContain('google.com');
+    // The control that reaches nobody but the browser stays.
+    expect(within(drawer).getByRole('button', { name: 'Use my current position' })).toBeTruthy();
   });
 
   it('sends the point, the emirate and the reason, and reads the row back', async () => {
