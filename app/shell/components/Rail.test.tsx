@@ -101,6 +101,105 @@ describe('Rail', () => {
     expect(screen.getByText('McWellness')).toBeTruthy();
   });
 
+  it('offers no pin on a desk, where the rail is already a column', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: 'Keep sections open' })).toBeNull();
+  });
+
+  it('hides the pin on the strip, where there is room for one control', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open={false}
+          onToggle={vi.fn()}
+          onTogglePin={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: 'Keep sections open' })).toBeNull();
+  });
+
+  it('says whether it is pinned, and offers to change it', () => {
+    const onTogglePin = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+          pinned
+          onTogglePin={onTogglePin}
+        />
+      </MemoryRouter>,
+    );
+    const pin = screen.getByRole('button', { name: 'Keep sections open' });
+    expect(pin.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(pin);
+    expect(onTogglePin).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the layout when a section is chosen, so it may put itself away', () => {
+    const onChoose = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+          onChoose={onChoose}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'Billing' }));
+    expect(onChoose).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes on Escape while it is covering the page', () => {
+    const onToggle = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={onToggle}
+          covering
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves Escape alone when it is a column beside the page', () => {
+    const onToggle = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={onToggle}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   it('keeps the mark on the strip, where it is the only thing naming the place', () => {
     render(
       <MemoryRouter initialEntries={['/admin/clients']}>

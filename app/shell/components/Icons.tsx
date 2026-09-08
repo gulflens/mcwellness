@@ -148,3 +148,11 @@ export const RailIcon = (p: IconProps) => (
     <path d="M7.75 3.75v12.5" />
   </Icon>
 );
+
+/** A drawing pin, for the control that keeps the sections open over the page. */
+export const PinIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M7.5 2.75h5l-.75 4.5 2.5 2.5v1.5h-9v-1.5l2.5-2.5-.75-4.5Z" />
+    <path d="M10 11.25v6" />
+  </Icon>
+);

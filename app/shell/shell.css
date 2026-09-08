@@ -542,6 +542,92 @@ a.rail__item.rail__item--active {
   padding-inline: 0;
 }
 
+/* Covering: the rail floats over the page rather than squeezing it, and the
+   grid still reserves the strip beneath it so the content does not jump when
+   the rail opens (docs/SPEC/coloured-shell.md section 7). */
+.admin[data-rail-mode='overlay'] {
+  --rail: var(--rail-closed);
+}
+
+.admin[data-rail-mode='overlay'] .rail {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: var(--rail-open);
+  z-index: 2;
+  box-shadow: var(--shadow);
+}
+
+/* Covering, the labels are shown whatever data-rail says: the attribute means
+   "the labels are out", and over the page they always are. These undo the
+   strip's own hiding, which would otherwise still apply on the way open. */
+.admin[data-rail-mode='overlay'] .rail__label,
+.admin[data-rail-mode='overlay'] .rail__later {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  clip-path: none;
+}
+
+.admin[data-rail-mode='overlay'] .rail__item,
+.admin[data-rail-mode='overlay'] .rail__signout {
+  justify-content: flex-start;
+  padding-inline: var(--s-3);
+}
+
+.admin[data-rail-mode='overlay'] .rail__head {
+  flex-direction: row;
+  justify-content: flex-start;
+}
+
+.admin[data-rail-mode='overlay'] .rail__logo {
+  inline-size: 28px;
+}
+
+.admin[data-rail-mode='overlay'] .rail__person {
+  padding-inline: var(--s-3);
+}
+
+/* The page behind a covering rail. useDrawer has already made it inert; this
+   is what says so to the eye. */
+.admin__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--ink) 44%, transparent);
+  cursor: pointer;
+}
+
+/* The pin sits beside the toggle and only appears below the desk, where the
+   rail covers the page and being held open means something. */
+.rail__pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--row);
+  min-block-size: var(--row);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--brand-pale);
+  cursor: pointer;
+}
+
+.rail__pin:hover {
+  color: var(--surface);
+}
+
+/* Pressed, it is filled rather than merely brighter: a pin that is in reads
+   as a state, not as a hover that stuck. */
+.rail__pin[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--brand);
+}
+
 /* The tablet tier. */
 @media (min-width: 768px) {
   .admin__main {
