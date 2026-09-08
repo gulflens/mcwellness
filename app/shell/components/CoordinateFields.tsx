@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Field, Note } from '../../shell/components/Controls';
+import { Button, Field, Note } from './Controls';
 import { googleMapsUrl, requestCurrentPosition } from './geolocation';
 
 /**
@@ -10,12 +10,33 @@ import { googleMapsUrl, requestCurrentPosition } from './geolocation';
  * LocationForm's entrance point and the standalone "Verify pin" action on an
  * existing location.
  *
+ * **Where it lives, and why it moved.** It began in `app/admin/clients/`,
+ * where "verify pin" was the only screen that needed it. From 8 September
+ * 2026 a practitioner sets their own home base on
+ * `/admin/settings/practitioners` — standing at their own front door, tapping
+ * "Use my current position" — which is the second module to need exactly this
+ * form. `docs/SPEC/OWNERSHIP.md`'s own rule for a thing two modules share is
+ * that it moves here, whole and unforked, and both import it: the alternative
+ * is two copies of a coordinate box drifting apart, and a coordinate box is
+ * not a thing to have two opinions about. `geolocation.ts` came with it,
+ * being the browser API half of the same component.
+ *
  * Text with a decimal keypad, never `type="number"`: a spinner or a scroll
  * wheel over a coordinate box moves where a practitioner drives, and does it
  * without anyone meaning to. The bounds a number input would have carried are
  * kept in `parse` instead, and what was typed stays on screen while it is
  * being typed — a box that blanked itself at the third character of "255"
  * would be worse than the spinner.
+ *
+ * **`offerMapLink` is not a preference.** `docs/COMPLIANCE/approved-vendors.md`
+ * approves Google Maps Platform for coordinates, and every sentence of that row
+ * is written about households: "a client's entrance coordinates only on the
+ * practitioner's deliberate tap", "the day's stop coordinates in order". A
+ * member of staff's home is a category of personal data that row does not
+ * describe, so the base drawer passes `false` and the link is not rendered
+ * there (the review of pull request 126, finding 6). "Use my current position"
+ * stays wherever this component is used: it reaches the browser and nobody
+ * else.
  */
 
 const BOUNDS = { lat: 90, lng: 180 } as const;
@@ -40,6 +61,7 @@ export function CoordinateFields({
   lng,
   onChange,
   error,
+  offerMapLink = true,
 }: {
   /** Unique per instance on screen, so two open at once never share an id. */
   idPrefix?: string;
@@ -47,6 +69,12 @@ export function CoordinateFields({
   lng: number | null;
   onChange: (point: { lat: number | null; lng: number | null }) => void;
   error?: string;
+  /**
+   * Whether to offer "Open in Google Maps" for the point in the boxes. True for
+   * a household the practitioner is driving to, which is what the vendor row
+   * approves; false for a member of staff's own home, which it does not.
+   */
+  offerMapLink?: boolean;
 }) {
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
@@ -129,7 +157,7 @@ export function CoordinateFields({
         >
           {locating ? 'Locating…' : 'Use my current position'}
         </Button>
-        {lat !== null && lng !== null ? (
+        {offerMapLink && lat !== null && lng !== null ? (
           <a
             className="link"
             href={googleMapsUrl(lat, lng)}

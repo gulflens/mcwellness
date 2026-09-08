@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
@@ -7,7 +8,9 @@ import { PracticePage } from './PracticePage';
 
 /**
  * The Practice settings screen: what it shows, what it refuses to send, and
- * what it sends when it does. Synthetic throughout (.claude/rules/testing.md);
+ * what it sends when it does. Inside a MemoryRouter since 8 September 2026:
+ * the page carries the strip of links to the other settings screen
+ * (SettingsNav.tsx), and a NavLink needs a router around it. Synthetic throughout (.claude/rules/testing.md);
  * the practice's real identity is entered on staging by the operator and is
  * never written into a fixture.
  */
@@ -97,9 +100,11 @@ function mount(answer: (call: Call) => Response = () => json({ practice: PRACTIC
   }) as unknown as typeof fetch;
 
   render(
-    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <PracticePage />
-    </AuthProviderBoundary>,
+    <MemoryRouter>
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <PracticePage />
+      </AuthProviderBoundary>
+    </MemoryRouter>,
   );
   return { calls };
 }
@@ -149,9 +154,11 @@ describe('Practice settings — what it shows', () => {
         : json({ practice: bare }),
     ) as unknown as typeof fetch;
     render(
-      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <PracticePage />
-      </AuthProviderBoundary>,
+      <MemoryRouter>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <PracticePage />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
     expect(await screen.findByText('Synthetic Wellness Studio')).toBeTruthy();
     expect(screen.getAllByText('Not recorded').length).toBeGreaterThan(2);
@@ -172,9 +179,11 @@ describe('Practice settings — the gate', () => {
         : json({ error: 'forbidden', requestId: null }, 403),
     ) as unknown as typeof fetch;
     render(
-      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <PracticePage />
-      </AuthProviderBoundary>,
+      <MemoryRouter>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <PracticePage />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
     expect(await screen.findByText(/These details are the owner/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Edit details' })).toHaveProperty('disabled', true);
@@ -282,9 +291,11 @@ describe('Practice settings — the address', () => {
         : json({ practice: bare });
     }) as unknown as typeof fetch;
     render(
-      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <PracticePage />
-      </AuthProviderBoundary>,
+      <MemoryRouter>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <PracticePage />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
 
     await openTheDrawer();
@@ -314,9 +325,11 @@ describe('Practice settings — the address', () => {
         : json({ practice: bare });
     }) as unknown as typeof fetch;
     render(
-      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <PracticePage />
-      </AuthProviderBoundary>,
+      <MemoryRouter>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <PracticePage />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
 
     await openTheDrawer();
@@ -399,9 +412,11 @@ describe('Practice settings — the VAT switch', () => {
       return json({ practice: { ...registered, vatRegistered: false, vatTrn: null } });
     }) as unknown as typeof fetch;
     render(
-      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <PracticePage />
-      </AuthProviderBoundary>,
+      <MemoryRouter>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <PracticePage />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
 
     await openTheDrawer();
@@ -434,9 +449,11 @@ describe('Practice settings — the VAT threshold watch', () => {
       return json({ practice });
     }) as unknown as typeof fetch;
     render(
-      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <PracticePage />
-      </AuthProviderBoundary>,
+      <MemoryRouter>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <PracticePage />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
     );
   }
 

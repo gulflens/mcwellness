@@ -145,6 +145,32 @@ describe('the audit trail', () => {
     });
   });
 
+  it('keeps no coordinate from a location, and still names the column that moved', async () => {
+    // Through the trigger rather than by calling the function, because this is
+    // the path a real write takes: migration 914 drops the three geography
+    // columns, and `changed_fields` is computed from the raw rows before the
+    // redaction runs, so the trail still says which column changed.
+    await rolledBack(client, async () => {
+      await setAuditContext(client, IDS.ownerA, 'the household corrected their pin');
+      await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
+      await seedLocation(client, IDS.tenantA, IDS.locationA, IDS.clientA, IDS.ownerA);
+      await client.query(
+        "update location set entrance_point = extensions.st_geogfromtext('SRID=4326;POINT(55.28 25.21)') " +
+          'where id = $1',
+        [IDS.locationA],
+      );
+
+      const rows = await rowsFor(IDS.locationA);
+      const update = rows.find((row) => row.action === 'update');
+      expect(update?.changed_fields).toContain('entrance_point');
+      expect(Object.keys(update?.new_values ?? {})).not.toContain('entrance_point');
+      expect(Object.keys(update?.old_values ?? {})).not.toContain('entrance_point');
+      // Not anywhere in the row's text either, whatever it is called.
+      expect(JSON.stringify(rows)).not.toContain('0101000020');
+      expect(update?.reason).toBe('the household corrected their pin');
+    });
+  });
+
   it('logs a write without an actor as a system action', async () => {
     await rolledBack(client, async () => {
       await seedClient(client, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
@@ -400,6 +426,25 @@ describe('app.audit_redact drops a fixed set of keys outright (audit.md section 
         status: 'recorded',
       }),
     ).toEqual({ reason: 'The household asked in writing.', status: 'recorded' });
+  });
+
+  it('drops every coordinate a location has, whoever owns the row', async () => {
+    // migration 914. `location` is audited, `app.audit_row` writes to_jsonb(row),
+    // and the geography columns came through whole and decodable — so the trail
+    // accrued a household's real entrance from before an erasure moved it, and,
+    // from migration 913, a history of every home a member of staff has had, in
+    // a table nothing can be taken out of (the review of pull request 126,
+    // finding 5).
+    expect(
+      await redact({
+        entrance_point: '0101000020E6100000C3F5285C8FA24B403333333333333940',
+        parking_point: '0101000020E6100000C3F5285C8FA24B403333333333333940',
+        community_gate: '0101000020E6100000C3F5285C8FA24B403333333333333940',
+        owner_type: 'practitioner',
+        label: 'base',
+        emirate: 'DXB',
+      }),
+    ).toEqual({ owner_type: 'practitioner', label: 'base', emirate: 'DXB' });
   });
 
   it('drops the requester\u2019s number beside the coordinates and the Emirates ID columns', async () => {

@@ -669,3 +669,64 @@ describe('measurements', () => {
     }
   });
 });
+
+describe('a practitioner’s home base', () => {
+  // docs/SPEC/route-planning.md section 5.4 and decision 14, overturned by the
+  // operator on 8 September 2026: "This is Shauna's home, every practioner can
+  // add their own address." A base is where somebody's driving day starts, and
+  // the coordinate is their front door — so the rule is narrower than any
+  // other write in this file: your own, or the office's, and nobody else's.
+  const PRACTITIONER = '00000005-0000-4000-8000-000000000002';
+  const OTHER_PRACTITIONER = '00000005-0000-4000-8000-000000000003';
+
+  /** Setting `practitionerId`'s base while standing in `ownPractitionerId`'s shoes. */
+  function setBase(practitionerId: string, ownPractitionerId: string | null): Action {
+    return { type: 'practitioner.base.write', practitionerId, ownPractitionerId };
+  }
+
+  it('lets a practitioner set their own base', () => {
+    const them = actor(['practitioner']);
+    expect(canActor(them, setBase(PRACTITIONER, PRACTITIONER), {}, NOW)).toBe(true);
+  });
+
+  it('refuses a practitioner another practitioner’s base', () => {
+    const them = actor(['practitioner']);
+    expect(canActor(them, setBase(OTHER_PRACTITIONER, PRACTITIONER), {}, NOW)).toBe(false);
+  });
+
+  it('refuses a practitioner who has no practitioner record of their own', () => {
+    // The route resolves ownPractitionerId from the database on every request.
+    // Null means "this user is not a practitioner", and null must never match
+    // a practitioner id — least of all by comparing null with null.
+    const them = actor(['practitioner']);
+    expect(canActor(them, setBase(PRACTITIONER, null), {}, NOW)).toBe(false);
+  });
+
+  it('lets the owner, an admin and the lead practitioner set anyone’s', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), setBase(PRACTITIONER, null), {}, NOW), role).toBe(true);
+      expect(
+        canActor(actor([role]), setBase(OTHER_PRACTITIONER, PRACTITIONER), {}, NOW),
+        role,
+      ).toBe(true);
+    }
+  });
+
+  it('refuses finance and a client contact, even for a base that would be their own', () => {
+    for (const role of ['finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), setBase(PRACTITIONER, PRACTITIONER), {}, NOW), role).toBe(
+        false,
+      );
+      expect(canActor(actor([role]), setBase(PRACTITIONER, null), {}, NOW), role).toBe(false);
+    }
+    expect(canActor(actor([]), setBase(PRACTITIONER, PRACTITIONER), {}, NOW)).toBe(false);
+  });
+
+  it('answers every role, allow and deny, for a base that is not the caller’s own', () => {
+    const someoneElse = setBase(OTHER_PRACTITIONER, PRACTITIONER);
+    const office: readonly Role[] = ['owner', 'admin', 'lead_practitioner'];
+    for (const role of ROLES) {
+      expect(canActor(actor([role]), someoneElse, {}, NOW), role).toBe(office.includes(role));
+    }
+  });
+});

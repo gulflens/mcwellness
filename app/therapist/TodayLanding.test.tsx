@@ -17,6 +17,9 @@ const ME = {
   capabilities: [],
 };
 
+const PRACTITIONER = { ...ME, roles: ['practitioner'] };
+const CLIENT_CONTACT = { ...ME, roles: ['client_contact'] };
+
 const provider: AuthProvider = {
   kind: 'development',
   signIn: async () => undefined,
@@ -25,9 +28,9 @@ const provider: AuthProvider = {
   onChange: () => () => undefined,
 };
 
-function mount() {
+function mount(me: unknown = ME) {
   const fetchImpl = vi.fn(
-    async () => new Response(JSON.stringify(ME), { status: 200 }),
+    async () => new Response(JSON.stringify(me), { status: 200 }),
   ) as unknown as typeof fetch;
   return render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
@@ -44,5 +47,31 @@ describe('TodayLanding', () => {
     await screen.findByText(/There is no day of visits for this account/);
     expect(screen.queryByRole('button', { name: 'Check in' })).toBeNull();
     expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
+  });
+
+  /**
+   * The door to the base screen (the fix round of 2026-09-08; the operator's
+   * instruction was "every practioner can add their own address"). As App.tsx
+   * routes today a practitioner never reaches this screen — `canOpenToday`
+   * sends them to the day sheet — so this is the same condition written on both
+   * faces of `/today`, so neither loses the door if that routing changes.
+   */
+  it('offers someone who may set a base the way to it, and no console button', async () => {
+    mount(PRACTITIONER);
+    expect(await screen.findByRole('button', { name: 'Your home base' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Admin console' })).toBeNull();
+  });
+
+  it('offers an admin the console alone, never a second door beside it', async () => {
+    mount();
+    expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Your home base' })).toBeNull();
+  });
+
+  it('offers a client contact neither door: no base to set, and no console', async () => {
+    mount(CLIENT_CONTACT);
+    await screen.findByText(/There is no day of visits for this account/);
+    expect(screen.queryByRole('button', { name: 'Your home base' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Admin console' })).toBeNull();
   });
 });

@@ -48,6 +48,30 @@ export function canOpenSettings(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `practitioner.base.write` (app/api/practitioners/routes.ts) — who
+ * may open Settings › Practitioners.
+ *
+ * The question a screen guard can ask is "is there a base this person may
+ * set?", so the same id is passed on both sides of the action: a base that is
+ * the caller's own. The office roles pass whatever id it is, a practitioner
+ * passes because it is theirs, and finance and a client contact never pass —
+ * which is exactly the audience. The browser does not know which
+ * `practitioner` row belongs to the person reading, and does not need to: the
+ * route resolves that from the database on every request and scopes the answer
+ * to one row, and `db/policies/core/practitioner_base.sql` refuses the rest
+ * beneath it.
+ */
+export function canOpenPractitioners(actor: Actor, now: Date): boolean {
+  const theirOwn = actor.userId;
+  return canActor(
+    actor,
+    { type: 'practitioner.base.write', practitionerId: theirOwn, ownPractitionerId: theirOwn },
+    {},
+    now,
+  );
+}
+
+/**
  * Matches `portal.access.manage` (app/api/portal/access.ts) — who may open
  * Settings › Portal. Handing out access to a household's own record is the
  * same class of act as granting a role, so the audience is the owner and an
@@ -89,4 +113,25 @@ export function canOpenAudit(actor: Actor, now: Date): boolean {
  */
 export function canOpenToday(actor: Pick<Actor, 'roles'>): boolean {
   return actor.roles.includes('practitioner') || actor.roles.includes('lead_practitioner');
+}
+
+/**
+ * Where the rail's single Settings entry should land this person: the first
+ * settings screen they may actually open, or null when there is none.
+ *
+ * There are two screens under Settings and their audiences differ — Practice
+ * is the owner's and an admin's, Practitioners is theirs and every
+ * practitioner's — so one fixed destination cannot serve both. `ADMIN_SECTIONS`
+ * has no actor in hand and so cannot answer this; `AdminLayout.visibleSections`
+ * does, and asks here (the review of pull request 126, finding B1: the
+ * capability the round exists for was built and had no door, because the rail's
+ * entry was gated on `practice.settings.write` and pointed at Practice alone).
+ *
+ * Practice first, so nobody who may open both is moved off the screen the rail
+ * has always landed on.
+ */
+export function settingsHomeFor(actor: Actor, now: Date): string | null {
+  if (canOpenSettings(actor, now)) return '/admin/settings/practice';
+  if (canOpenPractitioners(actor, now)) return '/admin/settings/practitioners';
+  return null;
 }

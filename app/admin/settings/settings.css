@@ -199,3 +199,36 @@
   justify-content: flex-start;
   gap: var(--s-3);
 }
+
+/*
+  The strip of links between the two settings screens (SettingsNav.tsx). Text
+  and a rule under the current one: two links are a strip, not a second rail,
+  so there is no box, no fill and no icon competing with the page heading
+  beneath them.
+*/
+.settings-nav {
+  display: flex;
+  gap: var(--s-4);
+  margin-block-end: var(--s-3);
+}
+
+.settings-nav__link {
+  color: var(--ink-2);
+  text-decoration: none;
+  padding-block: var(--s-1);
+  border-block-end: var(--hairline) solid transparent;
+}
+
+.settings-nav__link:hover {
+  color: var(--ink);
+}
+
+.settings-nav__link:focus-visible {
+  box-shadow: var(--focus);
+  border-radius: var(--r-1);
+}
+
+.settings-nav__link--current {
+  color: var(--ink);
+  border-block-end-color: var(--ink);
+}

@@ -2418,3 +2418,262 @@ and this is the one it caught.
 operator's decision that the household's screens reflow rather than being shown
 zoomed out. It had no comment saying so, and the guard test requires every
 exception to state itself, so one was added. No rule changed.
+
+---
+
+## Round 36, 2026-09-08 (a practitioner records their own home base)
+
+Branch `practitioner-base`. The operator, at 03:16 Dubai, answering where the
+founder's driving day starts: *"This is Shauna's home, every practioner can
+add their own address."* The first half was already done — her practitioner
+record and her base are on production, written by an audited data step. This
+round is the second half: a practitioner sets their own base in the app, and
+the office sets anybody's. It overturns `docs/SPEC/route-planning.md`
+decision 14, which said the field would only ever be filled by a data step.
+
+Almost all of it is inside the shared zone. Every file the round touched is
+named below; two of them are outside the trunk's own paths and are recorded
+as requests.
+
+### The trunk's own files
+
+- `domain/shared/actor.ts` and its test: the new action
+  `practitioner.base.write`.
+- `db/migrations/913_practitioner_base.sql`: `app.own_practitioner_id()`, one
+  narrow arm on `app.guard_location_notes()`, and `app.set_practitioner_base()`.
+- `db/migrations/914_audit_redact_location_points.sql`: `entrance_point`,
+  `parking_point` and `community_gate` join the keys `app.audit_redact` drops
+  outright, so a `location` keeps no coordinate in the audit trail — see below.
+- `tests/db/audit.test.ts`: the three keys, and a location write proving the
+  trail names the column and not the point.
+- `db/policies/core/practitioner_base.sql`: who may write a `practitioner`
+  row, and who may read a practitioner-owned `location`.
+- `app/api/practitioners/routes.ts` and `schema.ts`, mounted in
+  `app/api/create-api.ts`.
+- `app/shell/adminAccess.ts`: `canOpenPractitioners` and `settingsHomeFor`.
+- `app/shell/App.tsx`: the route `settings/practitioners`.
+- `app/shell/AdminLayout.tsx` and `app/shell/components/Rail.tsx`: the rail's
+  Settings entry, shown to anyone who may open either settings screen and
+  landing on the first one they may open.
+- `app/therapist/today/TodayPage.tsx` and `app/therapist/TodayLanding.tsx`,
+  with their tests: "Your home base", the door from the practitioner's own face.
+- `app/shell/components/CoordinateFields.tsx`, its test and
+  `app/shell/components/geolocation.ts`, moved here from
+  `app/admin/clients/` (see request 1), with the component's own styles added
+  to `app/shell/shell.css`.
+- `app/shell/App.test.tsx`: the new screen's route cases.
+- `app/admin/settings/PractitionersPage.tsx` and its test,
+  `PractitionerBaseDrawer.tsx`, `SettingsNav.tsx`, `settings.css`, and
+  `PracticePage.tsx` and its test, which gain the strip of links.
+- `tests/db/practitioners.test.ts`.
+- `docs/SPEC/route-planning.md` (section 5.4, decision 14 and section 16),
+  `docs/SPEC/audit.md` section 8, `docs/SPEC/OWNERSHIP.md`, and this file.
+
+### What the database turned out to need, and what it did not
+
+Checked against the running database before anything was written, and the
+result is worth recording because three of the four findings were not what a
+reading of the schema would suggest.
+
+- **No grant was missing.** `app_role` already holds `select, insert, update`
+  on both `practitioner` and `location` (090).
+- **`location`'s insert was refused outright.** `client_record_writers`
+  (`db/policies/client/writers.sql`) is restrictive and admits an insert only
+  to an owner, an admin or the lead practitioner: a practitioner creating
+  their own base row got SQLSTATE 42501.
+- **`location`'s update was worse than refused.** Its update twin admits a
+  practitioner only where `owner_type = 'client'`, so a practitioner moving
+  their own base updated no rows and was told nothing. On top of that,
+  `app.guard_location_notes` (100) narrows any non-office update to
+  `access_notes` alone.
+- **`practitioner` had nothing in front of it at all.** The table carried the
+  permissive `tenant_isolation` policy and no other, so every role in the
+  practice — finance and a client contact included — could update every
+  practitioner row.
+
+A restrictive policy can only narrow, so admitting a practitioner to their
+own base through the ordinary path would have meant editing the
+client-record stream's own policy file, which the trunk does not do. The act
+instead takes the shape `app.erase_client()` already has for a write the
+ordinary policies deliberately refuse: one security definer function that
+states the rule and writes exactly two rows, with one narrow arm added to
+`app.guard_location_notes` so its own update reaches the row. That arm is
+unreachable from outside the function, because the policies above still
+refuse a practitioner's direct update.
+
+### The fix round, 8 September 2026
+
+The combined review of pull request 126 said do not merge. Two blocking
+findings and five smaller ones, all addressed on this branch before it merged;
+the security definer function itself was not one of them — the review went at it
+seriously and could not reach another practitioner's base, another practice's
+rows, the studio or a household's home through it, and it is unchanged.
+
+1. **A practitioner could not reach the screen the round exists for.** The
+   rail's single Settings entry was gated on `practice.settings.write` and
+   pointed at Practice, so the only people who could navigate to
+   `/admin/settings/practitioners` were the owner and an admin — the two who
+   could always have had the office set anybody's base. `settingsHomeFor`
+   (`app/shell/adminAccess.ts`) answers the first settings screen a person may
+   open, and `AdminLayout.visibleSections` shows the entry when that is not null
+   and replaces its destination with it. The round's own test said "the rail
+   never offers it to them"; it now pins the promise instead.
+2. **The policy floor had no test.** Every database test went through the route,
+   which refuses what the policies refuse, so `db/policies/core/practitioner_base.sql`
+   could be deleted and the whole file went on passing. Fourteen cases in
+   `tests/db/practitioners.test.ts` now drive `app_role` directly; six of them
+   fail with the file removed, which was checked before they were kept.
+3. **`practitioner_row_update_writers` was wider than its own comment.** An
+   `update` policy cannot name a column, so the arm admitting a practitioner to
+   their own row granted `status`, `vehicle` and the rest with it. Nothing used
+   it — the definer function bypasses row security and no route writes
+   `practitioner` through `app_role` — so it is gone and the function is the only
+   path.
+4. **913's rollback block did not run**, the policies holding a catalogue
+   dependency on `app.own_practitioner_id()`. The policy drops are in the block
+   now, before the function drops, and the prior body of
+   `app.guard_location_notes()` is restated verbatim rather than pointed at.
+   Both orders were run against a database with the migration applied.
+5. **The coordinate reached the audit trail** — item 3 below.
+6. **"Open in Google Maps" is not offered on a base.** `CoordinateFields` gains
+   `offerMapLink`, true by default; the base drawer passes false. The vendor row
+   in `docs/COMPLIANCE/approved-vendors.md` is written entirely about
+   households, and a member of staff's home is a category it does not describe.
+   The review offered a sentence in the vendors table or dropping the link; the
+   link was dropped, and the table is unchanged.
+7. **One comment in 913 overstated what the guard refuses.**
+   `app.guard_location_notes()` returns `new` unconditionally for the office, so
+   an address on a base row is refused for a practitioner and not for an owner,
+   an admin or the lead practitioner. What keeps it off the row from the office
+   is the route, and the comment says so.
+
+**And the other half of that door, on the practitioner's own face.** The rail
+entry above serves a lead practitioner and anyone already standing in the
+console; a practitioner whose only screen is `/today` still had no way across,
+`homeFor` sending them there and nothing under `app/therapist/**` linking to
+`/admin`. That was left as a question for the operator and then decided: it is
+not a new decision about what the phone face carries, it is the original
+one-sentence instruction still unmet. **"Your home base"** now sits beside
+"Sign out" in the account controls of `app/therapist/today/TodayPage.tsx` and
+`app/therapist/TodayLanding.tsx` and goes to `/admin/settings/practitioners`.
+
+It is a second control, not a widening of "Admin console": that button means the
+console is your workplace and goes on meaning it, while this one means "set
+where your day starts". It is shown to whoever `canOpenPractitioners` admits and
+who does **not** already have the console button, so nobody is offered two doors
+to one place — an owner, an admin and a lead practitioner see the console button
+alone and reach the screen through the rail. Six cases cover it; three fail with
+the control removed and three fail if the gate is widened to drop that second
+condition.
+
+Sending a practitioner into the console is reasonable on two counts, and both
+are why this is acceptable rather than a jolt: the console lays out at phone
+widths (`docs/SPEC/responsive-console.md`, piece nineteen), so a practitioner
+tapping it on a phone gets a usable screen and not a desk one; and a home base
+is one field a person sets once, not a flow they live in.
+
+### 1. `CoordinateFields` has moved to the shell
+
+**Who.** `client-record`.
+
+**What.** `app/admin/clients/CoordinateFields.tsx`, its test and
+`app/admin/clients/geolocation.ts` are now
+`app/shell/components/CoordinateFields.tsx`, `CoordinateFields.test.tsx` and
+`geolocation.ts`. `LocationForm.tsx` and `VerifyPinForm.tsx` import it from
+there; nothing else about either file changed, and the component and its test
+moved unaltered.
+
+**Why.** Two modules need it now — the client record's verify-pin form and a
+practitioner setting their own home base — which is `docs/SPEC/OWNERSHIP.md`'s
+own rule for a thing two modules share. Forking it was the alternative, and a
+coordinate box is not a thing to have two opinions about.
+
+**What is left for that stream, and it is optional.** The component's styles
+were added to `app/shell/shell.css`, scoped to `.coordinate-fields`, so
+`app/admin/clients/clients.css` was not touched: its `.field-row` is still
+used by `ContactForm.tsx` and `FormAtoms.tsx` and must stay, and its
+`.coordinate-fields` and `.coordinate-fields__actions` rules are now dead.
+They are identical to the shell's, so nothing renders differently either way;
+delete them whenever that stream is next in the file. Same reasoning as
+`app/shell/components/useDrawer.ts`, which left billing's copy where it was.
+
+### 2. A practitioner's base is no longer readable by every practitioner
+
+**Who.** `client-record`, for its own record rather than for an action.
+
+**What.** `db/policies/client/readers.sql` says of `location` that "a tenant-
+or practitioner-owned location (the studio, a home base) is operational, not
+client-sensitive", and gives every non-client location to all four staff
+roles. That is true of the studio and false of a home base: it is the
+coordinate of a colleague's front door. `practitioner_base_is_private` in
+`db/policies/core/practitioner_base.sql` narrows **only** `owner_type =
+'practitioner'` rows — the office reads all, a practitioner reads their own —
+and answers `true` for every other owner type, so `client_record_readers`
+still decides the studio's and every household's exactly as it did. Nothing
+in that file needs to change; the comment there is now half true and the
+narrowing lives beside it rather than in it.
+
+
+### 3. The audit trail keeps no coordinate for a `location`
+
+**Who.** The trunk's own decision, recorded here because it changes what the
+trail holds for every stream that writes a `location`, the client record's
+above all.
+
+**What.** `app.audit_redact` (the list lives in the trunk's migration range,
+`docs/SPEC/audit.md` section 8) now drops `entrance_point`, `parking_point` and
+`community_gate` as well, in `db/migrations/914_audit_redact_location_points.sql`.
+
+**Why, and why it is this round's.** This round is the first thing in the
+platform that sends a member of staff's home coordinate down that path from the
+application, and the round's own header claimed the practice holds the
+coordinate "in four places rather than remembered in one" while a fifth quietly
+kept it — `audit_log`, which is append-only, kept for five years, and has no
+erasure path for staff at all, erasure being `app.erase_client()`'s. Every move
+of a base would have recorded the previous home in `old_values` beside the new
+one in `new_values`: a history of every address a practitioner has ever had.
+
+The narrowing is not confined to a practitioner's base, because the same was
+already true of a household's: the erasure act clears `parking_point` and
+`community_gate` and moves `entrance_point` to its emirate's centre, and the
+trail was keeping the real one from before it — exactly the retention those
+statements exist to end, and exactly what section 8 already said of
+`checked_in_point`. What the trail still records is that a location changed, by
+whom, when, with what reason, and which column moved: `changed_fields` is
+computed from the raw rows before the redaction runs. The row itself holds
+where, under the rules that decide who may read it.
+
+No existing test asserted a coordinate in the trail; three assert its absence
+(`tests/session/db/run.test.ts`, `tests/session/db/photo_and_routing.test.ts`),
+and those still pass.
+
+`docs/SPEC/00-data-model.md` is deliberately **not** edited: no table, column
+or enum changes. Section 2 already describes `practitioner.home_base_location_id`
+as "where their day starts" and `location`'s `'base'` label as "a practitioner's
+home base"; migration 913 adds two functions and one trigger arm, and that
+document lists neither.
+
+
+### Round 36, owed onward: the three location columns the trail still keeps
+
+Migration 914 stops `app.audit_redact` recording `location`'s three coordinate
+columns, on the argument that the erasure act clears them from the row and the
+immutable trail must not outlive an erasure (`docs/SPEC/audit.md` section 8).
+
+The re-check of pull request 126 found that argument incomplete. The same
+erasure statement clears `makani_number`, `display_address` and `access_notes`
+(migrations 100, 102, 105, 107), the trail keeps all three from before it, and
+a Makani number resolves a door to a few metres — so a household's address
+survives an erasure in the log in every way but the geometry.
+
+**Not taken in round 36, deliberately.** These are the client record's own
+columns; dropping them changes what the trail says about households rather
+than about a member of staff, and the round that found it was closing a
+practitioner's base. It wants its own round, its own review and a word from
+the operator on whether an address written into the trail before an erasure is
+something the practice means to keep.
+
+**What a later round would do:** add the three keys to `app.audit_redact`'s
+drop list in a trunk migration of the `900–949` half, confirm `changed_fields`
+still names each column, and amend `docs/SPEC/audit.md` and 914's own header,
+both of which now carry a paragraph saying this is outstanding.

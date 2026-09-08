@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { IdResponse, type Location } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
-import { CoordinateFields } from './CoordinateFields';
+import { CoordinateFields } from '../../shell/components/CoordinateFields';
 
 const GENERIC_ERROR = 'The pin could not be verified. Try again.';
 const FORBIDDEN_ERROR = "You don't have permission to change this client's locations.";

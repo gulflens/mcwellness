@@ -8,7 +8,7 @@ import {
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { Checkbox, Textarea } from './FormAtoms';
-import { CoordinateFields } from './CoordinateFields';
+import { CoordinateFields } from '../../shell/components/CoordinateFields';
 
 const EMIRATE_LABELS: Record<string, string> = {
   DXB: 'Dubai',
