@@ -614,7 +614,17 @@ appears and "Use this time" fills the start.
     production stands; what changes is that it is no longer the only way. The
     practice keeps the coordinate and the emirate and nothing else: no address,
     no access notes, no Makani number, because a base is a member of staff's own
-    home rather than a household the practice visits.
+    home rather than a household the practice visits — and, from migration 914,
+    not in the audit trail either, which keeps the fact of the change and not
+    the point. The rail's Settings entry is offered to anyone who may open
+    either settings screen and lands on the first one they may open
+    (`settingsHomeFor`, `app/shell/adminAccess.ts`), so a lead practitioner and
+    a practitioner standing in the console have a door to it and not only an
+    address they could type. **A practitioner whose only screen is `/today` has
+    no way across into the console at all** — `homeFor` sends them there and
+    `app/therapist/**` offers no link back — which is a question for the
+    operator about what the practitioner's own face carries, not a thing this
+    round decided.
 15. *The week planner looks fourteen days ahead*, at most twenty-eight.
 
 ## 16. Deliberately left out

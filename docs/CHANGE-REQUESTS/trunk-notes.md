@@ -2464,8 +2464,8 @@ as requests.
   `PractitionerBaseDrawer.tsx`, `SettingsNav.tsx`, `settings.css`, and
   `PracticePage.tsx` and its test, which gain the strip of links.
 - `tests/db/practitioners.test.ts`.
-- `docs/SPEC/route-planning.md` (decision 14 and section 16),
-  `docs/SPEC/OWNERSHIP.md`, and this file.
+- `docs/SPEC/route-planning.md` (section 5.4, decision 14 and section 16),
+  `docs/SPEC/audit.md` section 8, `docs/SPEC/OWNERSHIP.md`, and this file.
 
 ### What the database turned out to need, and what it did not
 
@@ -2498,6 +2498,60 @@ states the rule and writes exactly two rows, with one narrow arm added to
 `app.guard_location_notes` so its own update reaches the row. That arm is
 unreachable from outside the function, because the policies above still
 refuse a practitioner's direct update.
+
+### The fix round, 8 September 2026
+
+The combined review of pull request 126 said do not merge. Two blocking
+findings and five smaller ones, all addressed on this branch before it merged;
+the security definer function itself was not one of them — the review went at it
+seriously and could not reach another practitioner's base, another practice's
+rows, the studio or a household's home through it, and it is unchanged.
+
+1. **A practitioner could not reach the screen the round exists for.** The
+   rail's single Settings entry was gated on `practice.settings.write` and
+   pointed at Practice, so the only people who could navigate to
+   `/admin/settings/practitioners` were the owner and an admin — the two who
+   could always have had the office set anybody's base. `settingsHomeFor`
+   (`app/shell/adminAccess.ts`) answers the first settings screen a person may
+   open, and `AdminLayout.visibleSections` shows the entry when that is not null
+   and replaces its destination with it. The round's own test said "the rail
+   never offers it to them"; it now pins the promise instead.
+2. **The policy floor had no test.** Every database test went through the route,
+   which refuses what the policies refuse, so `db/policies/core/practitioner_base.sql`
+   could be deleted and the whole file went on passing. Fourteen cases in
+   `tests/db/practitioners.test.ts` now drive `app_role` directly; six of them
+   fail with the file removed, which was checked before they were kept.
+3. **`practitioner_row_update_writers` was wider than its own comment.** An
+   `update` policy cannot name a column, so the arm admitting a practitioner to
+   their own row granted `status`, `vehicle` and the rest with it. Nothing used
+   it — the definer function bypasses row security and no route writes
+   `practitioner` through `app_role` — so it is gone and the function is the only
+   path.
+4. **913's rollback block did not run**, the policies holding a catalogue
+   dependency on `app.own_practitioner_id()`. The policy drops are in the block
+   now, before the function drops, and the prior body of
+   `app.guard_location_notes()` is restated verbatim rather than pointed at.
+   Both orders were run against a database with the migration applied.
+5. **The coordinate reached the audit trail** — item 3 below.
+6. **"Open in Google Maps" is not offered on a base.** `CoordinateFields` gains
+   `offerMapLink`, true by default; the base drawer passes false. The vendor row
+   in `docs/COMPLIANCE/approved-vendors.md` is written entirely about
+   households, and a member of staff's home is a category it does not describe.
+   The review offered a sentence in the vendors table or dropping the link; the
+   link was dropped, and the table is unchanged.
+7. **One comment in 913 overstated what the guard refuses.**
+   `app.guard_location_notes()` returns `new` unconditionally for the office, so
+   an address on a base row is refused for a practitioner and not for an owner,
+   an admin or the lead practitioner. What keeps it off the row from the office
+   is the route, and the comment says so.
+
+**Left for the operator, deliberately undecided here.** A practitioner whose
+only screen is `/today` still has no way into the console: `homeFor` sends them
+there and nothing under `app/therapist/**` links to `/admin`. The rail door
+above serves a lead practitioner, and a practitioner who is already in the
+console; whether the practitioner's own phone face should carry a way across is
+a decision about what that face is, and it goes to the operator rather than
+being taken in a fix round.
 
 ### 1. `CoordinateFields` has moved to the shell
 
