@@ -112,6 +112,13 @@
      sections 4 and 6). */
   --rail-open: 220px;
   --rail-closed: 64px;
+  /* Covering the page, the rail is a wider object than the column: its head
+     carries a second control, the pin, and 220px left the practice's name 64px
+     and truncated it. The vw term keeps a strip of the page showing behind it
+     on the narrowest phone, so it always reads as something laid over the
+     ledger rather than as a new screen (docs/SPEC/coloured-shell.md
+     section 7). */
+  --rail-covering: min(280px, 78vw);
   --rail: var(--rail-open);
   /* Never much more than half the screen, so the ledger stays readable beside
      an open drawer on a tablet. */

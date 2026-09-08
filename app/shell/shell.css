@@ -553,7 +553,7 @@ a.rail__item.rail__item--active {
   position: fixed;
   inset-block: 0;
   inset-inline-start: 0;
-  inline-size: var(--rail-open);
+  inline-size: var(--rail-covering);
   z-index: 2;
   box-shadow: var(--shadow);
 }
