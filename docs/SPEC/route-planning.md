@@ -620,11 +620,18 @@ appears and "Use this time" fills the start.
     either settings screen and lands on the first one they may open
     (`settingsHomeFor`, `app/shell/adminAccess.ts`), so a lead practitioner and
     a practitioner standing in the console have a door to it and not only an
-    address they could type. **A practitioner whose only screen is `/today` has
-    no way across into the console at all** — `homeFor` sends them there and
-    `app/therapist/**` offers no link back — which is a question for the
-    operator about what the practitioner's own face carries, not a thing this
-    round decided.
+    address they could type. And a practitioner whose only screen is `/today`
+    has one on that screen: **"Your home base"**, beside "Sign out" in the
+    account controls of both `app/therapist/today/TodayPage.tsx` and
+    `app/therapist/TodayLanding.tsx`, going to `/admin/settings/practitioners`.
+    It is shown to whoever `canOpenPractitioners` admits and who does not
+    already have the "Admin console" button, so nobody is offered two doors to
+    the same place, and "Admin console" goes on meaning "the console is your
+    workplace" rather than being widened to mean something else. Sending a
+    practitioner into the console is reasonable on two counts: it lays out at
+    phone widths (`docs/SPEC/responsive-console.md`, piece nineteen), so a
+    phone gets a usable screen and not a desk one; and a home base is one field
+    a person sets once, not a flow they live in.
 15. *The week planner looks fourteen days ahead*, at most twenty-eight.
 
 ## 16. Deliberately left out

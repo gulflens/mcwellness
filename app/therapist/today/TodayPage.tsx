@@ -16,6 +16,7 @@ import { RoutingDayResponse, type DayLegRow } from '../../api/routing/schema';
 import { StopBalanceResponse } from '../../api/billing/document-schema';
 import { formatFils } from '../../admin/billing/money';
 import { requestPersistentStorage } from '../session/outbox/store';
+import { canOpenPractitioners } from '../../shell/adminAccess';
 import { useAuth, type ApiFetch } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ChevronIcon } from '../../shell/components/Icons';
@@ -673,6 +674,20 @@ export function TodayPage() {
   // An owner or lead practitioner also has a desk on the admin side; offer the
   // way back so the two faces are one app, not two sign-ins (round 10).
   const hasConsole = session.status === 'signed-in' && homeFor(session.actor).startsWith('/admin');
+  // Where this person's driving day starts and ends, which they set themselves
+  // (docs/SPEC/route-planning.md section 5.4, decision 14). A practitioner's
+  // home is `/today` and nothing here linked into the console, so the screen
+  // built for them was reachable only by typing its address — the operator's
+  // instruction was "every practioner can add their own address", and this is
+  // the door. Deliberately a second control rather than a wider "Admin
+  // console": that button means the console is your workplace and goes on
+  // meaning it; this one means "set where your day starts". Not shown beside
+  // it — an owner or a lead practitioner has the rail, and the rail carries
+  // Settings.
+  const canSetOwnBase =
+    session.status === 'signed-in' &&
+    !hasConsole &&
+    canOpenPractitioners(session.actor, new Date());
   const stops = state.kind === 'ready' ? state.stops : [];
   const legsByStop = new Map((drives?.legs ?? []).map((leg) => [leg.toStopId, leg]));
   const installNote =
@@ -794,6 +809,11 @@ export function TodayPage() {
         <div className="today__account">
           {hasConsole ? (
             <Button onClick={() => navigate('/admin/clients')}>Admin console</Button>
+          ) : null}
+          {canSetOwnBase ? (
+            <Button onClick={() => navigate('/admin/settings/practitioners')}>
+              Your home base
+            </Button>
           ) : null}
           <Button variant="quiet" onClick={() => void signOut()}>
             Sign out

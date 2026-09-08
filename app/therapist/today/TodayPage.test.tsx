@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
@@ -96,10 +96,15 @@ const PICTURE = new Uint8Array([137, 80, 78, 71]);
  * back the fetch it was given so a test can ask what was actually requested
  * and with which headers.
  */
-function mount(routing: unknown, stops: unknown = STOPS, pictureGate?: Promise<unknown>) {
+function mount(
+  routing: unknown,
+  stops: unknown = STOPS,
+  pictureGate?: Promise<unknown>,
+  me: unknown = ME,
+) {
   const fetchImpl = vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
-    if (url === '/api/me') return json(ME);
+    if (url === '/api/me') return json(me);
     if (url.startsWith('/api/appointments')) return json({ appointments: stops });
     // Before the day itself: the picture's path begins with the day's.
     if (url.startsWith('/api/routing/day-picture')) {
@@ -279,5 +284,68 @@ describe('the offline band', () => {
     mount(FALLBACK);
     expect(await screen.findByText('Rowan M.')).toBeTruthy();
     expect(screen.queryByText(/You are offline/)).toBeNull();
+  });
+});
+
+/**
+ * The way from a practitioner's own screen to the one console screen they may
+ * open. Until the fix round of 2026-09-08 there was none: `homeFor` sends a
+ * practitioner to `/today`, nothing here linked into `/admin`, and the screen
+ * built for the operator's instruction — "every practioner can add their own
+ * address" — could only be reached by typing its address.
+ *
+ * Two things make it a reasonable place to send somebody. The console lays out
+ * at phone widths (docs/SPEC/responsive-console.md, piece nineteen), so a
+ * practitioner tapping this on a phone gets a usable screen and not a desk one;
+ * and a home base is one field a person sets once, not a flow they live in.
+ */
+describe('the way to your own home base', () => {
+  const LEAD = { ...ME, roles: ['lead_practitioner'] };
+  const OWNER = { ...ME, roles: ['owner', 'lead_practitioner'] };
+
+  /** The day sheet with somewhere to arrive, so the destination is asserted. */
+  function mountWithDestination(me: unknown) {
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url === '/api/me') return json(me);
+      if (url.startsWith('/api/appointments')) return json({ appointments: STOPS });
+      if (url.startsWith('/api/routing/day')) return json(FALLBACK);
+      return json({ error: 'not_found' }, 404);
+    });
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <MemoryRouter initialEntries={['/today']}>
+          <Routes>
+            <Route path="/today" element={<TodayPage />} />
+            <Route path="/admin/settings/practitioners" element={<h1>Practitioners</h1>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProviderBoundary>,
+    );
+  }
+
+  it('offers a practitioner the door, and it lands on the base screen', async () => {
+    mountWithDestination(ME);
+    fireEvent.click(await screen.findByRole('button', { name: 'Your home base' }));
+    expect(await screen.findByRole('heading', { name: 'Practitioners' })).toBeTruthy();
+  });
+
+  it('does not offer it beside the console button an owner already has', async () => {
+    mount(FALLBACK, STOPS, undefined, OWNER);
+    expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
+    // They have the rail, and the rail carries Settings (app/shell/AdminLayout.tsx).
+    expect(screen.queryByRole('button', { name: 'Your home base' })).toBeNull();
+  });
+
+  it('does not offer it to a lead practitioner either, for the same reason', async () => {
+    mount(FALLBACK, STOPS, undefined, LEAD);
+    expect(await screen.findByRole('button', { name: 'Admin console' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Your home base' })).toBeNull();
+  });
+
+  it('keeps "Admin console" meaning what it meant, and never both at once', async () => {
+    mount(FALLBACK);
+    await screen.findByRole('button', { name: 'Your home base' });
+    expect(screen.queryByRole('button', { name: 'Admin console' })).toBeNull();
   });
 });

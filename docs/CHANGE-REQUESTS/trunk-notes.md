@@ -2455,6 +2455,8 @@ as requests.
 - `app/shell/AdminLayout.tsx` and `app/shell/components/Rail.tsx`: the rail's
   Settings entry, shown to anyone who may open either settings screen and
   landing on the first one they may open.
+- `app/therapist/today/TodayPage.tsx` and `app/therapist/TodayLanding.tsx`,
+  with their tests: "Your home base", the door from the practitioner's own face.
 - `app/shell/components/CoordinateFields.tsx`, its test and
   `app/shell/components/geolocation.ts`, moved here from
   `app/admin/clients/` (see request 1), with the component's own styles added
@@ -2545,13 +2547,30 @@ rows, the studio or a household's home through it, and it is unchanged.
    an admin or the lead practitioner. What keeps it off the row from the office
    is the route, and the comment says so.
 
-**Left for the operator, deliberately undecided here.** A practitioner whose
-only screen is `/today` still has no way into the console: `homeFor` sends them
-there and nothing under `app/therapist/**` links to `/admin`. The rail door
-above serves a lead practitioner, and a practitioner who is already in the
-console; whether the practitioner's own phone face should carry a way across is
-a decision about what that face is, and it goes to the operator rather than
-being taken in a fix round.
+**And the other half of that door, on the practitioner's own face.** The rail
+entry above serves a lead practitioner and anyone already standing in the
+console; a practitioner whose only screen is `/today` still had no way across,
+`homeFor` sending them there and nothing under `app/therapist/**` linking to
+`/admin`. That was left as a question for the operator and then decided: it is
+not a new decision about what the phone face carries, it is the original
+one-sentence instruction still unmet. **"Your home base"** now sits beside
+"Sign out" in the account controls of `app/therapist/today/TodayPage.tsx` and
+`app/therapist/TodayLanding.tsx` and goes to `/admin/settings/practitioners`.
+
+It is a second control, not a widening of "Admin console": that button means the
+console is your workplace and goes on meaning it, while this one means "set
+where your day starts". It is shown to whoever `canOpenPractitioners` admits and
+who does **not** already have the console button, so nobody is offered two doors
+to one place — an owner, an admin and a lead practitioner see the console button
+alone and reach the screen through the rail. Six cases cover it; three fail with
+the control removed and three fail if the gate is widened to drop that second
+condition.
+
+Sending a practitioner into the console is reasonable on two counts, and both
+are why this is acceptable rather than a jolt: the console lays out at phone
+widths (`docs/SPEC/responsive-console.md`, piece nineteen), so a practitioner
+tapping it on a phone gets a usable screen and not a desk one; and a home base
+is one field a person sets once, not a flow they live in.
 
 ### 1. `CoordinateFields` has moved to the shell
 

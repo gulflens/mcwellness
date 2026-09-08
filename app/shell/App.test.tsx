@@ -379,10 +379,27 @@ describe('App — the way across to the practitioner side', () => {
     expect(screen.queryByRole('link', { name: 'Today' })).toBeNull();
   });
 
-  it('shows a practitioner-only account no way into the console from Today', async () => {
+  it('shows a practitioner-only account the base door and no console button', async () => {
     mount(PRACTITIONER, '/today');
     await screen.findByText('Nothing is booked for you today.');
+    // The console is not their workplace, and that button goes on meaning that.
     expect(screen.queryByRole('button', { name: 'Admin console' })).toBeNull();
+    // One screen inside it is theirs, though, and from the fix round of
+    // 2026-09-08 they have a way to it: the operator asked that every
+    // practitioner be able to add their own address, and until then the only
+    // way in was to type it.
+    expect(screen.getByRole('button', { name: 'Your home base' })).toBeTruthy();
+  });
+
+  it('takes them there, into the console proper, with the rail and the strip', async () => {
+    mount(PRACTITIONER, '/today');
+    fireEvent.click(await screen.findByRole('button', { name: 'Your home base' }));
+    expect(await screen.findByRole('heading', { name: 'Practitioners' })).toBeTruthy();
+    // And the rail's own Settings entry is there once they have arrived.
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/settings/practitioners'),
+    );
   });
 
   it('offers a lead practitioner the way back to the console from Today', async () => {
