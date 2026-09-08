@@ -187,6 +187,13 @@ optimiseDay(day: DayInput, matrix: Matrix): DayPlan | PlanRefusal
   a return leg from the last stop to base is counted in the sum and in the
   day's end. Today draws no return leg and this does not change that.
 
+  **Where a base comes from, from 2026-09-08:** Settings › Practitioners
+  (`app/admin/settings/PractitionersPage.tsx`, `PUT
+  /api/practitioners/:id/base`, migration 913). A practitioner sets their own
+  and the office sets anybody's; before that round the only way was a data
+  step (decision 14, overturned). Nothing in the arithmetic above changes: a
+  day with no base still has no first leg and no return.
+
   **Amended in the build, 2026-09-07:** the day ends at the **last stop's
   departure** — its planned arrival plus the service's own length — and not
   at the arrival home. The return leg still counts in the driving sum. With
@@ -598,13 +605,24 @@ appears and "Use this time" fills the start.
 13. *The referrer policy on the map document is origin-only*, so the key can
     be referrer-restricted.
 14. *The home base reaches production by a data step*, not a settings field.
+    **Overturned on the operator's instruction, 2026-09-08 03:16 Dubai:** *"This
+    is Shauna's home, every practioner can add their own address."* The field
+    exists — Settings › Practitioners, `PUT /api/practitioners/:id/base`,
+    migration 913 — and a practitioner sets their own base while the owner, an
+    admin and the lead practitioner set anyone's (`domain/shared/actor.ts`,
+    `practitioner.base.write`). The data step that put the founder's own base on
+    production stands; what changes is that it is no longer the only way. The
+    practice keeps the coordinate and the emirate and nothing else: no address,
+    no access notes, no Makani number, because a base is a member of staff's own
+    home rather than a household the practice visits.
 15. *The week planner looks fourteen days ahead*, at most twenty-eight.
 
 ## 16. Deliberately left out
 
 A live map on Today; moving confirmed visits; Salik, parking and time-cost
 terms (`docs/SPEC/navigation.md` section 4); working hours and Ramadan
-tables; re-optimising on a cancellation; a settings field for the base;
+tables; re-optimising on a cancellation; **(built 2026-09-08: a settings
+field for the base, on the operator's instruction — decision 14)**;
 `planned_arrival`; road geometry on the lines; several vehicles; recurring
 bookings; an interactive map for households; any tile, script or style from a
 third party on any document but the map's.

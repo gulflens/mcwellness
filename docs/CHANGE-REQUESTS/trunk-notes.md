@@ -2418,3 +2418,123 @@ and this is the one it caught.
 operator's decision that the household's screens reflow rather than being shown
 zoomed out. It had no comment saying so, and the guard test requires every
 exception to state itself, so one was added. No rule changed.
+
+---
+
+## Round 36, 2026-09-08 (a practitioner records their own home base)
+
+Branch `practitioner-base`. The operator, at 03:16 Dubai, answering where the
+founder's driving day starts: *"This is Shauna's home, every practioner can
+add their own address."* The first half was already done — her practitioner
+record and her base are on production, written by an audited data step. This
+round is the second half: a practitioner sets their own base in the app, and
+the office sets anybody's. It overturns `docs/SPEC/route-planning.md`
+decision 14, which said the field would only ever be filled by a data step.
+
+Almost all of it is inside the shared zone. Every file the round touched is
+named below; two of them are outside the trunk's own paths and are recorded
+as requests.
+
+### The trunk's own files
+
+- `domain/shared/actor.ts` and its test: the new action
+  `practitioner.base.write`.
+- `db/migrations/913_practitioner_base.sql`: `app.own_practitioner_id()`, one
+  narrow arm on `app.guard_location_notes()`, and `app.set_practitioner_base()`.
+- `db/policies/core/practitioner_base.sql`: who may write a `practitioner`
+  row, and who may read a practitioner-owned `location`.
+- `app/api/practitioners/routes.ts` and `schema.ts`, mounted in
+  `app/api/create-api.ts`.
+- `app/shell/adminAccess.ts`: `canOpenPractitioners`.
+- `app/shell/App.tsx`: the route `settings/practitioners`.
+- `app/shell/components/CoordinateFields.tsx`, its test and
+  `app/shell/components/geolocation.ts`, moved here from
+  `app/admin/clients/` (see request 1), with the component's own styles added
+  to `app/shell/shell.css`.
+- `app/shell/App.test.tsx`: the new screen's route cases.
+- `app/admin/settings/PractitionersPage.tsx` and its test,
+  `PractitionerBaseDrawer.tsx`, `SettingsNav.tsx`, `settings.css`, and
+  `PracticePage.tsx` and its test, which gain the strip of links.
+- `tests/db/practitioners.test.ts`.
+- `docs/SPEC/route-planning.md` (decision 14 and section 16),
+  `docs/SPEC/OWNERSHIP.md`, and this file.
+
+### What the database turned out to need, and what it did not
+
+Checked against the running database before anything was written, and the
+result is worth recording because three of the four findings were not what a
+reading of the schema would suggest.
+
+- **No grant was missing.** `app_role` already holds `select, insert, update`
+  on both `practitioner` and `location` (090).
+- **`location`'s insert was refused outright.** `client_record_writers`
+  (`db/policies/client/writers.sql`) is restrictive and admits an insert only
+  to an owner, an admin or the lead practitioner: a practitioner creating
+  their own base row got SQLSTATE 42501.
+- **`location`'s update was worse than refused.** Its update twin admits a
+  practitioner only where `owner_type = 'client'`, so a practitioner moving
+  their own base updated no rows and was told nothing. On top of that,
+  `app.guard_location_notes` (100) narrows any non-office update to
+  `access_notes` alone.
+- **`practitioner` had nothing in front of it at all.** The table carried the
+  permissive `tenant_isolation` policy and no other, so every role in the
+  practice — finance and a client contact included — could update every
+  practitioner row.
+
+A restrictive policy can only narrow, so admitting a practitioner to their
+own base through the ordinary path would have meant editing the
+client-record stream's own policy file, which the trunk does not do. The act
+instead takes the shape `app.erase_client()` already has for a write the
+ordinary policies deliberately refuse: one security definer function that
+states the rule and writes exactly two rows, with one narrow arm added to
+`app.guard_location_notes` so its own update reaches the row. That arm is
+unreachable from outside the function, because the policies above still
+refuse a practitioner's direct update.
+
+### 1. `CoordinateFields` has moved to the shell
+
+**Who.** `client-record`.
+
+**What.** `app/admin/clients/CoordinateFields.tsx`, its test and
+`app/admin/clients/geolocation.ts` are now
+`app/shell/components/CoordinateFields.tsx`, `CoordinateFields.test.tsx` and
+`geolocation.ts`. `LocationForm.tsx` and `VerifyPinForm.tsx` import it from
+there; nothing else about either file changed, and the component and its test
+moved unaltered.
+
+**Why.** Two modules need it now — the client record's verify-pin form and a
+practitioner setting their own home base — which is `docs/SPEC/OWNERSHIP.md`'s
+own rule for a thing two modules share. Forking it was the alternative, and a
+coordinate box is not a thing to have two opinions about.
+
+**What is left for that stream, and it is optional.** The component's styles
+were added to `app/shell/shell.css`, scoped to `.coordinate-fields`, so
+`app/admin/clients/clients.css` was not touched: its `.field-row` is still
+used by `ContactForm.tsx` and `FormAtoms.tsx` and must stay, and its
+`.coordinate-fields` and `.coordinate-fields__actions` rules are now dead.
+They are identical to the shell's, so nothing renders differently either way;
+delete them whenever that stream is next in the file. Same reasoning as
+`app/shell/components/useDrawer.ts`, which left billing's copy where it was.
+
+### 2. A practitioner's base is no longer readable by every practitioner
+
+**Who.** `client-record`, for its own record rather than for an action.
+
+**What.** `db/policies/client/readers.sql` says of `location` that "a tenant-
+or practitioner-owned location (the studio, a home base) is operational, not
+client-sensitive", and gives every non-client location to all four staff
+roles. That is true of the studio and false of a home base: it is the
+coordinate of a colleague's front door. `practitioner_base_is_private` in
+`db/policies/core/practitioner_base.sql` narrows **only** `owner_type =
+'practitioner'` rows — the office reads all, a practitioner reads their own —
+and answers `true` for every other owner type, so `client_record_readers`
+still decides the studio's and every household's exactly as it did. Nothing
+in that file needs to change; the comment there is now half true and the
+narrowing lives beside it rather than in it.
+
+
+`docs/SPEC/00-data-model.md` is deliberately **not** edited: no table, column
+or enum changes. Section 2 already describes `practitioner.home_base_location_id`
+as "where their day starts" and `location`'s `'base'` label as "a practitioner's
+home base"; migration 913 adds two functions and one trigger arm, and that
+document lists neither.
