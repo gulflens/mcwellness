@@ -83,3 +83,110 @@ describe('serving the built app', () => {
     expect(plain).not.toContain('nonce=');
   });
 });
+
+/** The policy a document actually carries, read back out of its `<head>`. */
+function documentPolicy(html: string): string | null {
+  const found = /<meta http-equiv="Content-Security-Policy" content="([^"]*)"\s*\/?>/.exec(html);
+  if (found === null) return null;
+  return (found[1] ?? '')
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+const directivesOf = (policy: string): string[] =>
+  policy
+    .split(';')
+    .map((directive) => directive.trim())
+    .filter(Boolean);
+
+/**
+ * The header does not reach a browser in production: Hostinger's origin
+ * replaces `Content-Security-Policy` with `upgrade-insecure-requests` on
+ * every answer the app produces (docs/SPEC/hosting.md section 2.3). So the
+ * document carries the policy too, and these tests hold the two renderings to
+ * one policy.
+ */
+describe('the policy the document carries', () => {
+  const withMap = { ...deps, mapDocumentPaths: ['/admin/schedule/map'] };
+
+  it('puts the strict policy first in the head of every ordinary document', async () => {
+    const api = createApi(withMap);
+    mountApp(api, build());
+    for (const path of ['/', '/admin/clients', '/sign-in', '/nothing-here']) {
+      const html = await (await api.request(path)).text();
+      // First child of <head>: a policy that arrives after a script does not
+      // govern that script.
+      expect(html, path).toMatch(/<head[^>]*>\s*<meta http-equiv="Content-Security-Policy"/);
+      const directives = directivesOf(documentPolicy(html) ?? '');
+      expect(directives, path).toContain("script-src 'self'");
+      expect(directives, path).toContain("object-src 'none'");
+      expect(directives, path).toContain("base-uri 'self'");
+      expect(directives, path).toContain("img-src 'self' data: blob:");
+      expect(directives.join('; '), path).not.toContain('unsafe-eval');
+    }
+  });
+
+  it('gives the day map its own meta, with the nonce its header was minted with', async () => {
+    const api = createApi(withMap);
+    mountApp(api, build());
+    const res = await api.request('/admin/schedule/map');
+    const header = res.headers.get('content-security-policy') ?? '';
+    const nonce = /'nonce-([A-Za-z0-9+/=]+)'/.exec(header)?.[1];
+    expect(nonce, header).toBeTruthy();
+    const html = await res.text();
+    expect(html).toMatch(/<head[^>]*>\s*<meta http-equiv="Content-Security-Policy"/);
+    const meta = documentPolicy(html) ?? '';
+    expect(meta).toContain(`'nonce-${nonce}'`);
+    expect(directivesOf(meta)).toContain('frame-src *.google.com');
+    expect(directivesOf(meta)).toContain("worker-src 'self' blob:");
+    // Directive for directive, the header without the one a meta cannot carry.
+    expect(directivesOf(header).filter((d) => !d.startsWith('frame-ancestors'))).toEqual(
+      directivesOf(meta),
+    );
+  });
+
+  it('omits frame-ancestors from the meta, which ignores it, and keeps it in the header', async () => {
+    const api = createApi(withMap);
+    mountApp(api, build());
+    for (const path of ['/admin/clients', '/admin/schedule/map']) {
+      const res = await api.request(path);
+      expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'");
+      expect(documentPolicy(await res.text()) ?? '', path).not.toContain('frame-ancestors');
+      // What actually refuses the frame, and it does reach the browser.
+      expect(res.headers.get('x-frame-options'), path).toBe('DENY');
+    }
+  });
+
+  it('carries no meta on an API answer, which is not a document', async () => {
+    const api = createApi(withMap);
+    mountApp(api, build());
+    const res = await api.request('/api/health');
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(documentPolicy(await res.text())).toBeNull();
+  });
+
+  it('renders one policy two ways, and nothing about the input can make them disagree', async () => {
+    const root = build();
+    for (const supabaseUrl of [undefined, 'https://abcdefghij.supabase.co/', 'not a url']) {
+      const api = createApi({ ...withMap, supabaseUrl });
+      mountApp(api, root);
+      for (const path of ['/', '/admin/clients', '/admin/schedule/map']) {
+        const where = `${String(supabaseUrl)} ${path}`;
+        const res = await api.request(path);
+        const header = directivesOf(res.headers.get('content-security-policy') ?? '');
+        const meta = directivesOf(documentPolicy(await res.text()) ?? '');
+        expect(header.length, where).toBeGreaterThan(1);
+        expect(
+          header.some((directive) => directive.startsWith('frame-ancestors')),
+          where,
+        ).toBe(true);
+        expect(
+          header.filter((directive) => !directive.startsWith('frame-ancestors')),
+          where,
+        ).toEqual(meta);
+      }
+    }
+  });
+});

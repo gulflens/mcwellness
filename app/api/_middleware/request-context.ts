@@ -78,6 +78,14 @@ export type ApiEnv = {
      * response's answer: they carry the strict policy and stamp nothing.
      */
     cspNonce: string | undefined;
+    /**
+     * The same response's policy, rendered as the document itself carries it
+     * — because in production the header does not reach a browser at all
+     * (docs/SPEC/hosting.md section 2.3). Set on every response by
+     * ./security.ts, read only by the one handler that answers with the shell
+     * (../serve-app.ts); an API answer is not a document and stamps nothing.
+     */
+    cspDocumentPolicy: string | undefined;
   };
 };
 

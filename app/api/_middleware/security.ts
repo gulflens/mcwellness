@@ -14,6 +14,133 @@ import type { ApiEnv } from './request-context';
 export const MAP_DOCUMENT_PATHS: readonly string[] = ['/admin/schedule/map'];
 
 /**
+ * A content security policy, as the directives that make it up.
+ *
+ * One value, rendered twice and never written twice: `hono/secure-headers`
+ * turns it into the response header, and `policyText` turns the same object
+ * into the string the document carries in its own `<meta>`. A test builds
+ * both from one input and compares them directive for directive, so the two
+ * renderings cannot drift into two policies (tests/security/static.test.ts).
+ */
+export type CspPolicy = Record<string, string[]>;
+
+/**
+ * The origins a browser may open a connection to: the app's own, and the
+ * Supabase project it signs in against directly (a vendor in the register),
+ * which is the one connection allowed beyond `'self'`.
+ */
+export function connectSources(supabaseUrl: string | undefined): string[] {
+  const sources = ["'self'"];
+  if (supabaseUrl) {
+    try {
+      sources.push(new URL(supabaseUrl).origin);
+    } catch {
+      // An unparseable URL adds nothing; sign-in then fails visibly, never silently.
+    }
+  }
+  return sources;
+}
+
+/**
+ * The policy on every answer but one: only the app's own scripts and styles,
+ * so injected code cannot run even if some text slipped through unescaped.
+ */
+export function strictPolicy(connectSrc: string[]): CspPolicy {
+  return {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'"],
+    styleSrc: ["'self'"],
+    // `blob:` beside `data:` for the pictures the app fetches itself: the
+    // day's map and the last sensor placement are asked for through
+    // `apiFetch`, because every route below the fence authenticates on a
+    // bearer header, and the bytes are then shown from a revocable object
+    // URL. A `blob:` URL can be created only by this app's own scripts, so
+    // this admits nothing third-party (docs/SPEC/practitioner-phone.md
+    // section 3.6, amended in the second round).
+    imgSrc: ["'self'", 'data:', 'blob:'],
+    fontSrc: ["'self'"],
+    connectSrc,
+    frameAncestors: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    objectSrc: ["'none'"],
+  };
+}
+
+/**
+ * The day map's own policy (docs/SPEC/route-planning.md section 8.3):
+ * Google's own strict list, plus what this app already needs. Three of its
+ * grants are ones the console would rather not make — `'strict-dynamic'`,
+ * `'unsafe-eval'` and `https:` for scripts — and they reach exactly one
+ * page. The nonce is what makes `'strict-dynamic'` safe: only the shell's
+ * own tags carry it, and only what they load is trusted onwards.
+ */
+export function mapDocumentPolicy(nonce: string, connectSrc: string[]): CspPolicy {
+  return {
+    defaultSrc: ["'self'"],
+    scriptSrc: [`'nonce-${nonce}'`, "'strict-dynamic'", 'https:', "'unsafe-eval'", 'blob:'],
+    styleSrc: ["'self'", `'nonce-${nonce}'`, 'https://fonts.googleapis.com'],
+    imgSrc: [
+      "'self'",
+      'data:',
+      'blob:',
+      'https://*.googleapis.com',
+      'https://*.gstatic.com',
+      '*.google.com',
+      '*.googleusercontent.com',
+    ],
+    fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+    connectSrc: [
+      ...connectSrc,
+      'https://*.googleapis.com',
+      '*.google.com',
+      'https://*.gstatic.com',
+      'data:',
+      'blob:',
+    ],
+    frameSrc: ['*.google.com'],
+    workerSrc: ["'self'", 'blob:'],
+    frameAncestors: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    objectSrc: ["'none'"],
+  };
+}
+
+/**
+ * The one directive a document's own copy leaves out. `frame-ancestors` is
+ * ignored in a `<meta>` policy — that is the specification, not a bug — so
+ * printing it there would only look like protection. Nothing is lost:
+ * framing is refused by `X-Frame-Options: DENY`, which does reach the
+ * browser, and the directive stays in the header for the day the edge stops
+ * replacing it.
+ */
+const NOT_IN_A_DOCUMENT: readonly string[] = ['frameAncestors'];
+
+/**
+ * The policy as a browser reads it. The kebab-casing and the joining are
+ * `hono/secure-headers`' own, character for character, which is what lets the
+ * header and the document be held to one policy by a test rather than by
+ * hope.
+ */
+export function policyText(policy: CspPolicy, omit: readonly string[] = []): string {
+  return Object.entries(policy)
+    .filter(([directive]) => !omit.includes(directive))
+    .map(([directive, values]) => `${kebab(directive)} ${values.join(' ')}`)
+    .join('; ');
+}
+
+const kebab = (directive: string): string =>
+  directive.replace(/[A-Z]+(?![a-z])|[A-Z]/g, (match: string, offset: number) =>
+    offset > 0 ? `-${match.toLowerCase()}` : match.toLowerCase(),
+  );
+
+/** The same policy, as the document itself carries it (see `stamp` in ../serve-app.ts). */
+export function documentPolicyText(policy: CspPolicy): string {
+  return policyText(policy, NOT_IN_A_DOCUMENT);
+}
+
+/**
  * The protective headers on every answer (docs/SECURITY.md). The content
  * security policy allows only the app's own scripts and styles, so injected
  * code cannot run even if some text slipped through unescaped; nothing may
@@ -24,6 +151,12 @@ export const MAP_DOCUMENT_PATHS: readonly string[] = ['/admin/schedule/map'];
  * docs/SPEC/route-planning.md): the coordinator's day map, whose browser map
  * needs directives this policy refuses and should go on refusing. It is chosen
  * by an exact path match on a GET, and it carries a nonce minted per response.
+ *
+ * Whichever policy a response gets, the same object is also rendered onto the
+ * context as `cspDocumentPolicy`, for the shell to carry in its `<head>`:
+ * in production this header does not reach a browser at all, because
+ * Hostinger's origin replaces it (docs/SPEC/hosting.md section 2.3). The
+ * header is still sent, and is still the right thing.
  */
 export function securityHeaders(
   appEnv: string | undefined,
@@ -33,16 +166,7 @@ export function securityHeaders(
     mapDocumentPaths?: readonly string[];
   } = {},
 ): MiddlewareHandler {
-  // The browser signs in against the Supabase project directly (a vendor in the
-  // register), so its origin is the one connection allowed beyond the app's own.
-  const connectSrc = ["'self'"];
-  if (options.supabaseUrl) {
-    try {
-      connectSrc.push(new URL(options.supabaseUrl).origin);
-    } catch {
-      // An unparseable URL adds nothing; sign-in then fails visibly, never silently.
-    }
-  }
+  const connectSrc = connectSources(options.supabaseUrl);
   const shared = {
     referrerPolicy: 'no-referrer' as const,
     strictTransportSecurity:
@@ -56,85 +180,34 @@ export function securityHeaders(
     permissionsPolicy: { camera: [], microphone: [], geolocation: ['self'] },
   };
 
-  const strict = secureHeaders({
-    ...shared,
-    contentSecurityPolicy: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'"],
-      // `blob:` beside `data:` for the pictures the app fetches itself: the
-      // day's map and the last sensor placement are asked for through
-      // `apiFetch`, because every route below the fence authenticates on a
-      // bearer header, and the bytes are then shown from a revocable object
-      // URL. A `blob:` URL can be created only by this app's own scripts, so
-      // this admits nothing third-party (docs/SPEC/practitioner-phone.md
-      // section 3.6, amended in the second round).
-      imgSrc: ["'self'", 'data:', 'blob:'],
-      fontSrc: ["'self'"],
-      connectSrc,
-      frameAncestors: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"],
-      objectSrc: ["'none'"],
-    },
-  });
+  const strictDirectives = strictPolicy(connectSrc);
+  const strictDocument = documentPolicyText(strictDirectives);
+  const strict = secureHeaders({ ...shared, contentSecurityPolicy: strictDirectives });
 
   /**
-   * The day map's own document (docs/SPEC/route-planning.md section 8.3):
-   * Google's own strict list, plus what this app already needs. Three of its
-   * grants are ones the console would rather not make — `'strict-dynamic'`,
-   * `'unsafe-eval'` and `https:` for scripts — and they reach exactly one
-   * page. The nonce is what makes `'strict-dynamic'` safe: only the shell's
-   * own tags carry it, and only what they load is trusted onwards.
-   *
    * The referrer is the origin rather than nothing, because the browser key
    * is restricted by HTTP referrer and Google refuses a request that carries
    * none. Only the origin crosses; no address of this app names a person
    * (.claude/rules/ui.md).
    */
-  const mapDocument = (nonce: string): MiddlewareHandler =>
+  const mapDocument = (policy: CspPolicy): MiddlewareHandler =>
     secureHeaders({
       ...shared,
       referrerPolicy: 'strict-origin-when-cross-origin',
-      contentSecurityPolicy: {
-        defaultSrc: ["'self'"],
-        scriptSrc: [`'nonce-${nonce}'`, "'strict-dynamic'", 'https:', "'unsafe-eval'", 'blob:'],
-        styleSrc: ["'self'", `'nonce-${nonce}'`, 'https://fonts.googleapis.com'],
-        imgSrc: [
-          "'self'",
-          'data:',
-          'blob:',
-          'https://*.googleapis.com',
-          'https://*.gstatic.com',
-          '*.google.com',
-          '*.googleusercontent.com',
-        ],
-        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-        connectSrc: [
-          ...connectSrc,
-          'https://*.googleapis.com',
-          '*.google.com',
-          'https://*.gstatic.com',
-          'data:',
-          'blob:',
-        ],
-        frameSrc: ['*.google.com'],
-        workerSrc: ["'self'", 'blob:'],
-        frameAncestors: ["'none'"],
-        baseUri: ["'self'"],
-        formAction: ["'self'"],
-        objectSrc: ["'none'"],
-      },
+      contentSecurityPolicy: policy,
     });
 
   const mapPaths = new Set(options.mapDocumentPaths ?? []);
   return createMiddleware<ApiEnv>(async (c, next) => {
     if (c.req.method !== 'GET' || !mapPaths.has(c.req.path)) {
+      c.set('cspDocumentPolicy', strictDocument);
       return strict(c, next);
     }
     const nonce = randomBytes(16).toString('base64');
+    const policy = mapDocumentPolicy(nonce, connectSrc);
     c.set('cspNonce', nonce);
-    return mapDocument(nonce)(c, next);
+    c.set('cspDocumentPolicy', documentPolicyText(policy));
+    return mapDocument(policy)(c, next);
   });
 }
 
