@@ -12,12 +12,21 @@
 */
 
 :root {
-  /* Interface neutrals: a hue-bearing near-black on cool mineral paper. */
-  --ink: #16242a;
-  --ink-2: #3e5058;
-  --slate: #6b7c82;
-  --rule: #cbd5d6;
-  --paper: #eef2f1;
+  /* Interface neutrals, re-cast onto the mark's own hue on 2026-09-08
+     (docs/SPEC/harmonised-neutrals.md). They were a cool mineral green at hue
+     165, chosen when the interface had no accent; against a violet rail at
+     hue 268 that is a hundred degrees of disagreement, and the eye reads it as
+     green-against-violet rather than paper-against-brand. Every lightness is
+     kept but the ground, which drops from 94.1% to 91.5% so that a white
+     surface has something to lift off: at the old lightness white sat 1.15
+     from paper and no shadow could be seen against it, which is why depth had
+     to be drawn in hairlines. tests/lint/neutrals-share-the-hue.test.ts holds
+     the family together. */
+  --ink: #1f152b;
+  --ink-2: #4a4056;
+  --slate: #756c81;
+  --rule: #d0cbd6;
+  --paper: #e9e7ec;
   --surface: #ffffff;
 
   /* The band spectrum, slow to fast, cool to warm. Charts, chips, ribbons, figures. Nowhere else. */
@@ -98,13 +107,17 @@
   --s-5: 20px;
   --s-6: 24px;
   --s-8: 32px;
+  --s-10: 40px;
   --s-12: 48px;
   --s-16: 64px;
 
   /* Shape and structure. */
+  /* Two steps of softness and one of them is the default. 4px read as
+     unconsidered at this ground's contrast; 6px is the smallest radius that
+     looks chosen. */
   --r-1: 2px;
-  --r-2: 4px;
-  --r-3: 8px;
+  --r-2: 6px;
+  --r-3: 10px;
   --hairline: 1px;
   --row: 44px;
   /* The rail at its two sizes. shell.css picks one from data-rail; the tier
@@ -131,8 +144,21 @@
   --motion-ribbon: 400ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
 
-  /* Depth: one soft, offset shadow for the drawer and menus. */
-  --shadow: 0 8px 24px color-mix(in srgb, var(--ink) 14%, transparent);
+  /* Depth: three levels, each meaning one thing (DESIGN.md "Elevation &
+     Depth"). Level 0 is flat and has no token — the ledger itself, its rows
+     and its tables. Level 1 is raised but still part of the page. Level 2
+     floats over it.
+
+     Both carry an offset and a soft blur, and both are two shadows: a tight
+     contact shadow that says the surface is resting on something, and a wider
+     ambient one that says how far above. A single blur reads as a sticker; a
+     zero-offset halo is decoration rather than depth. */
+  --lift-1:
+    0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent),
+    0 4px 10px color-mix(in srgb, var(--ink) 6%, transparent);
+  --lift-2:
+    0 2px 6px color-mix(in srgb, var(--ink) 10%, transparent),
+    0 8px 24px color-mix(in srgb, var(--ink) 14%, transparent);
   /* Attention is the practice's colour: the ring that says "you are here" is
      the same violet as the thing you are about to press. */
   --focus: 0 0 0 2px var(--paper), 0 0 0 4px var(--brand);
@@ -141,12 +167,15 @@
 
 /* The practitioner app: ink and paper invert, bands lift ~12% lightness, every type step up one. */
 [data-ground='dark'] {
-  --ink: #eef2f1;
-  --ink-2: #c6d1d4;
-  --slate: #8fa0a6;
-  --rule: #2b3b41;
-  --paper: #10191d;
-  --surface: #16242a;
+  /* The same re-cast, so the practitioner's app and the console are one
+     family rather than two. Lightnesses are unchanged but the paper, which
+     drops a little for the same reason the light ground does. */
+  --ink: #f0edf3;
+  --ink-2: #ccc6d4;
+  --slate: #9990a5;
+  --rule: #342a42;
+  --paper: #150f1e;
+  --surface: #1f162a;
   --delta: color-mix(in srgb, var(--delta-base) 84%, white);
   --theta: color-mix(in srgb, var(--theta-base) 84%, white);
   --alpha: color-mix(in srgb, var(--alpha-base) 84%, white);
@@ -175,7 +204,14 @@
   --lh-small: 24px;
   --t-micro: 14px;
   --lh-micro: 20px;
-  --shadow: 0 8px 24px color-mix(in srgb, black 40%, transparent);
+  /* On a dark ground a shadow is not a darker patch; the eye reads depth from
+     the ambient occlusion instead, so both levels lean harder on black. */
+  --lift-1:
+    0 1px 2px color-mix(in srgb, black 30%, transparent),
+    0 4px 10px color-mix(in srgb, black 24%, transparent);
+  --lift-2:
+    0 2px 6px color-mix(in srgb, black 34%, transparent),
+    0 8px 24px color-mix(in srgb, black 40%, transparent);
   --selection: color-mix(in srgb, var(--ink) 22%, var(--paper));
 }
 

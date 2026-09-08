@@ -173,14 +173,17 @@ a.rail__item.rail__item--active {
   color: var(--brand-pale);
 }
 
-/* Page furniture */
+/* Page furniture. The rhythm between blocks opened on 2026-09-08: a heading
+   and the toolbar beneath it were 24px apart and read as one undifferentiated
+   stack. Groups stay tight and the separations grew, which is the whole of the
+   change (docs/SPEC/harmonised-neutrals.md). */
 .page__header {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--s-4);
   row-gap: var(--s-2);
-  margin-block-end: var(--s-6);
+  margin-block-end: var(--s-8);
 }
 
 /* The page's one primary action, vertically centred and pushed to the far end
@@ -195,7 +198,7 @@ a.rail__item.rail__item--active {
   flex-wrap: wrap;
   gap: var(--s-4);
   align-items: end;
-  margin-block-end: var(--s-6);
+  margin-block-end: var(--s-8);
 }
 
 .toolbar .field {
@@ -305,11 +308,22 @@ a.rail__item.rail__item--active {
 }
 
 /* The one primary action on a page is the practice's colour, not the page's ink
-   (docs/SPEC/coloured-shell.md section 10). White on it measures 14.65. */
+   (docs/SPEC/coloured-shell.md section 10). White on it measures 14.65.
+
+   It is also the only thing on the ledger that is raised: level 1 of three, so
+   the page has exactly one object standing above it and the level means
+   something (docs/SPEC/harmonised-neutrals.md). */
 .button--primary {
   background: var(--brand);
   border-color: var(--brand);
   color: var(--surface);
+  box-shadow: var(--lift-1);
+}
+
+/* Pressed, it settles onto the page: the shadow is the affordance, so taking
+   it away is what "pressed" means. */
+.button--primary:active {
+  box-shadow: none;
 }
 
 .button--quiet {
@@ -559,7 +573,7 @@ a.rail__item.rail__item--active {
   inset-inline-start: 0;
   inline-size: var(--rail-covering);
   z-index: 2;
-  box-shadow: var(--shadow);
+  box-shadow: var(--lift-2);
 }
 
 /* Covering, the labels are shown whatever data-rail says: the attribute means
@@ -646,7 +660,7 @@ a.rail__item.rail__item--active {
 /* The desk tier. */
 @media (min-width: 1200px) {
   .admin__main {
-    padding: var(--s-8) var(--s-8) var(--s-16);
+    padding: var(--s-8) var(--s-10) var(--s-16);
   }
 
   .rail {
@@ -846,7 +860,7 @@ a.rail__item.rail__item--active:active {
   flex-direction: column;
   background: var(--surface);
   border-inline-start: var(--hairline) solid var(--rule);
-  box-shadow: var(--shadow);
+  box-shadow: var(--lift-2);
   z-index: 2;
   transition:
     translate var(--motion) var(--ease),

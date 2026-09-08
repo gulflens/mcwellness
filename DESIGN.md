@@ -228,14 +228,16 @@ The system has three grounds that share one token set. The ledger (light, dense,
 
 ## Colors
 
-The palette is a hue-bearing near-black on cool mineral paper, with hue permitted only where it means something.
+The palette is a hue-bearing near-black on a violet-cast paper, with hue permitted where it means something and one accent that says whose practice this is.
+
+**The neutrals were re-cast on 8 September 2026.** They had been a cool mineral green at hue 165 — correct for the interface of 2 September, which had no accent colour at all. When the rail took the practice's violet at hue 268 the greys were suddenly a hundred degrees away from it, and the eye read green-against-violet rather than paper-against-brand. Every neutral now sits within 30 degrees of the mark's own hue, which `tests/lint/neutrals-share-the-hue.test.ts` holds. Lightnesses were kept, except the ground's: see Elevation.
 
 ### Neutral
-- **Mineral Ink** (#16242a): primary text, the primary button's fill, the focus ring's outer band, the link and its underline, and the surface colour on the dark ground. Tinted, never #111; a neutral black is a tell.
-- **Second Ink** (#3e5058): secondary text (field labels, table headers, the count beside a heading, notes), placeholder text, the chevron on a select, sections that have not yet arrived in the rail, the drawer's close control at rest, and in the timeline the day headings, a read or system sentence, the roles-and-time line and the reason line. Also the primary button's hover fill. The lowest tone allowed for running text.
-- **Slate** (#6b7c82): marks and rules only: the default status dot, the icon on a not-yet-arrived rail section. Never body or label text; it sits below the contrast floor for small type.
-- **Rule** (#cbd5d6): every hairline: table rules, the rail's edge, field borders, the line under the sign-in mark, the scrollbar thumb, the drawer's inline-start edge and the rule under its header, and the rule beneath each timeline event.
-- **Cool Mineral Paper** (#eef2f1): the app ground, the rail, sticky table headers, the primary button's text, and the close control's hover fill.
+- **Mineral Ink** (#1f152b): primary text, the primary button's fill, the focus ring's outer band, the link and its underline, and the surface colour on the dark ground. Tinted, never #111; a neutral black is a tell.
+- **Second Ink** (#4a4056): secondary text (field labels, table headers, the count beside a heading, notes), placeholder text, the chevron on a select, sections that have not yet arrived in the rail, the drawer's close control at rest, and in the timeline the day headings, a read or system sentence, the roles-and-time line and the reason line. Also the primary button's hover fill. The lowest tone allowed for running text.
+- **Slate** (#756c81): marks and rules only: the default status dot, the icon on a not-yet-arrived rail section. Never body or label text; it sits below the contrast floor for small type.
+- **Rule** (#d0cbd6): every hairline: table rules, the rail's edge, field borders, the line under the sign-in mark, the scrollbar thumb, the drawer's inline-start edge and the rule under its header, and the rule beneath each timeline event.
+- **Violet-cast Paper** (#e9e7ec): the app ground, the rail, sticky table headers, the primary button's text, and the close control's hover fill.
 - **Surface** (#ffffff): inputs, secondary buttons, the active rail item, the hover state of rail items, and the drawer (including the sticky day headings inside it, so events pass under them).
 - **Surface, hovered** (#f1f2f2) and **Surface, pressed** (#e8e9ea): instant feedback on secondary buttons and rail items. In code these are `color-mix` of ink at 6% and 10% over surface, so they follow the ground.
 - **Selection** (#cbd1d1): text selection; ink at 16% over paper in code.
@@ -322,16 +324,27 @@ On a phone the console is not folded at all. It declares a 1024px layout width (
 
 ## Elevation & Depth
 
-The system is flat at rest. No surface on the ledger carries a shadow, at rest or on interaction; depth is conveyed by tone (surface white on paper for inputs, buttons and the active rail item), by hairline rules, and by the sticky positioning of the rail, the table header and the timeline's day headings. One surface is lifted: the drawer, which sits over the ledger and takes the single soft offset shadow (`0 8px 24px` of ink at 14%, black at 40% on the dark ground) together with a hairline at its inline-start edge, so its edge is drawn as well as cast. The shadow token exists for surfaces that sit over the ledger (the drawer today; menus when they arrive) and for nothing on the ledger itself.
+**Three levels, each meaning one thing** (revised 8 September 2026, replacing a flat system).
+
+- **Level 0 — on the ledger.** Flat, no token. Rows, tables, headings, fields: everything the page is made of. Depth here is still tone and hairline rule, as it always was.
+- **Level 1 — raised** (`--lift-1`). Exactly one thing on a page takes it: the single primary action. Because only one object on the ledger is ever raised, the level carries information rather than decoration. Pressing it removes the shadow, so the affordance is what settles.
+- **Level 2 — floating** (`--lift-2`). A surface that sits over the page and takes its attention: the drawer, the covering rail on a phone or tablet, menus when they arrive. Always paired with a hairline edge, so the edge is drawn as well as cast.
+
+**Why this became possible on 8 September and not before.** The old ground was 94.1% lightness, which put white only 1.15:1 away from it — a shadow had nothing to fall on and genuinely could not be seen, so depth *had* to be drawn in hairlines. Re-casting the neutrals dropped the ground to 91.5%, and at that distance the same three shadows read as three distinct heights. The rule below was a consequence of a number, not a principle, and the number changed.
+
+Every level carries an offset and a soft blur, and each is two shadows: a tight contact shadow saying the surface rests on something, and a wider ambient one saying how far above. A single blur reads as a sticker; a zero-offset halo is decoration rather than depth.
 
 The focus ring is the one treatment that lifts a control: a 2px band of paper inside a 2px band of ink (`0 0 0 2px paper, 0 0 0 4px ink`), on a 4px radius, applied to any `:focus-visible` element. It reads on both grounds because both bands swap with the ground.
 
 ### Shadow Vocabulary
-- **Drawer lift** (`box-shadow: 0 8px 24px color-mix(in srgb, var(--ink) 14%, transparent)`; `0 8px 24px` black at 40% on the dark ground): the drawer, always paired with a hairline edge. Menus, when built, take the same.
+- **Level 1, raised** (`--lift-1`: `0 1px 2px` ink at 8%, `0 4px 10px` ink at 6%; black at 30% and 24% on the dark ground): the page's one primary action, and nothing else on the ledger.
+- **Level 2, floating** (`--lift-2`: `0 2px 6px` ink at 10%, `0 8px 24px` ink at 14%; black at 34% and 40% on the dark ground): the drawer, the covering rail, menus when built. Always paired with a hairline edge.
 - **Focus ring** (`box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink)`): every `:focus-visible` element.
 
 ### Named Rules
-**The Flat Ledger Rule.** Surfaces are flat. Depth is tone and rule, never a drop shadow, with one exception: a surface that sits over the ledger (the drawer; menus when they arrive) takes the one soft offset shadow and a hairline at its edge. Nothing on the ledger itself carries a shadow, and nothing gains one on hover.
+**The Three Levels Rule** (replacing the Flat Ledger Rule, 8 September 2026). Depth is a scale of exactly three and every level means one thing: flat on the ledger, raised for the page's one primary action, floating for a surface that sits over the page. Nothing gains a shadow on hover, nothing invents a fourth level, and a shadow that is not one of these two tokens is decoration. The ledger itself — rows, tables, headings — stays flat, which is the half of the old rule that was always right.
+
+**The Hue Family Rule.** Every neutral sits within 30 degrees of the mark's hue. A grey that argues with the brand is not neutral, whatever its saturation.
 
 ## Shapes
 
