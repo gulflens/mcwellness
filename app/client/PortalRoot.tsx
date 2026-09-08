@@ -1,7 +1,17 @@
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { NavLink, Outlet } from 'react-router';
 import { HomeResponse } from '../api/portal/schema';
 import { useAuth } from '../shell/auth/AuthContext';
+import { MenuIcon } from '../shell/components/Icons';
+import { useDrawer } from '../shell/components/useDrawer';
 import { Note } from '../shell/components/Controls';
 import { PortalLanguage, WORDS, say, usePortalLanguage, useWords } from './i18n';
 import { usePortalRead, type Loaded } from './usePortal';
@@ -12,11 +22,18 @@ import './portal.css';
  * (docs/SPEC/client-portal.md section 3, and Reports from
  * docs/SPEC/reports-v1.md section 7.3).
  *
- * **One column and no rail.** The wordmark, the practice's name, the language
- * switch, the person's name and sign out across the top, then the screens' own
- * nav, then the column at the 68-character measure. Below 720px the same
- * column at full width; nothing collapses into a drawer, because there is
- * nothing here that needs one.
+ * **A sidebar and a column** (rebuilt 8 September 2026, replacing a header of
+ * two wrapping rows). The six screens live in a sidebar on the inline start,
+ * and the language switch, the person's name and sign out live in its foot.
+ * Beside it, a slim top bar and the column at the 68-character measure.
+ *
+ * On a phone the sidebar is not there at all until a menu button asks for it,
+ * and then it covers the page. It is hidden rather than collapsed to a strip of
+ * icons the way the console's rail is: the console's sections have drawn icons
+ * and the portal's are words, and six invented icons would be a worse answer
+ * than a menu. What it cost before was two rows of wrapping chrome — the bar
+ * broke across two lines and the six tabs across two more — which on a 390px
+ * screen was most of the first view.
  *
  * **The direction is declared once, here.** Every rule in `portal.css` is
  * written in logical properties, so setting `dir="rtl"` on this element is what
@@ -73,20 +90,50 @@ export function moneyIsShown(home: Loaded<HomeResponse> | null): boolean {
   return home?.kind === 'ready' && home.data.clients.some((client) => client.moneyVisible);
 }
 
-function Header({ practiceName }: { practiceName: string | null }) {
+function Sidebar({
+  onChoose,
+  covering,
+  onClose,
+}: {
+  onChoose: () => void;
+  covering: boolean;
+  onClose: () => void;
+}) {
   const words = useWords();
   const { locale, setLocale } = usePortalLanguage();
   const { session, signOut } = useAuth();
   const person = session.status === 'signed-in' ? session.actor.displayName : '';
   const home = useContext(HomeCtx);
   const tabs = PORTAL_TABS.filter((tab) => tab.key !== 'money' || moneyIsShown(home));
+  const rail = useRef<HTMLElement | null>(null);
+  const first = useRef<HTMLAnchorElement | null>(null);
 
   return (
-    <header className="portal__header">
-      <div className="portal__bar">
+    <nav className="portal__rail" aria-label={say(WORDS.portal, locale)} ref={rail}>
+      {/* Covering the page, the sidebar owes it what any drawer owes it:
+          focus held inside, everything behind inert, Escape to close. The
+          console's rail borrows the same hook rather than a second copy. */}
+      {covering ? <Covering rail={rail} first={first} onClose={onClose} /> : null}
+      <div className="portal__brand">
         <img className="portal__logo" src="/brand/mark.png" alt="" width={384} height={410} />
         <span className="portal__mark">McWellness</span>
-        <span className="portal__practice small">{practiceName ?? ''}</span>
+      </div>
+      <ul className="portal__sections">
+        {tabs.map((tab, index) => (
+          <li key={tab.key}>
+            <NavLink
+              to={tab.to}
+              end={tab.end}
+              onClick={onChoose}
+              ref={index === 0 ? first : undefined}
+            >
+              {words.t(tab.key)}
+            </NavLink>
+          </li>
+        ))}
+      </ul>
+      <div className="portal__foot">
+        <span className="portal__person small">{person}</span>
         <div className="portal__languages" role="group" aria-label={words.t('language')}>
           {(['en', 'ar'] as const).map((option) => (
             <button
@@ -103,20 +150,26 @@ function Header({ practiceName }: { practiceName: string | null }) {
             </button>
           ))}
         </div>
-        <span className="portal__person small">{person}</span>
         <button type="button" className="button button--quiet" onClick={() => void signOut()}>
           {words.t('signOut')}
         </button>
       </div>
-      <nav className="portal__nav" aria-label={say(WORDS.portal, locale)}>
-        {tabs.map((tab) => (
-          <NavLink key={tab.key} to={tab.to} end={tab.end}>
-            {words.t(tab.key)}
-          </NavLink>
-        ))}
-      </nav>
-    </header>
+    </nav>
   );
+}
+
+/** A hook cannot be called conditionally, so the covering behaviour is a child. */
+function Covering({
+  rail,
+  first,
+  onClose,
+}: {
+  rail: React.RefObject<HTMLElement | null>;
+  first: React.RefObject<HTMLElement | null>;
+  onClose: () => void;
+}) {
+  useDrawer(rail, first, onClose);
+  return null;
 }
 
 /**
@@ -132,6 +185,12 @@ export function PortalShell({
   children?: ReactNode;
 }) {
   const { locale } = usePortalLanguage();
+  const words = useWords();
+  // Shut on arrival. On a screen wide enough the stylesheet shows the sidebar
+  // regardless, and this only ever describes the covering state.
+  const [open, setOpen] = useState(false);
+  // Stable, because useDrawer holds it in an effect's dependency list.
+  const close = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     // The document itself, so the scrollbar, the selection and anything else
@@ -150,8 +209,47 @@ export function PortalShell({
 
   return (
     <div className="portal" lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>
-      <Header practiceName={practiceName} />
-      <main className="portal__main">{children ?? <Outlet />}</main>
+      <div className="portal__shell" data-nav={open ? 'open' : 'closed'}>
+        <Sidebar covering={open} onClose={close} onChoose={() => setOpen(false)} />
+        {open ? (
+          // A press anywhere on the page closes the menu. Not announced and not
+          // in the tab order: Escape and the button are the announced ways out,
+          // and useDrawer has already made everything behind inert.
+          <button
+            type="button"
+            className="portal__scrim"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={close}
+          />
+        ) : null}
+        <div className="portal__body">
+          <header className="portal__top">
+            <button
+              type="button"
+              className="portal__menu"
+              onClick={() => setOpen((was) => !was)}
+              aria-expanded={open}
+            >
+              <MenuIcon />
+              <span className="visually-hidden">{words.t('menu')}</span>
+            </button>
+            {/* With the menu shut on a phone the sidebar is not there to carry
+                the mark, so the bar does. Above the tablet tier the sidebar is
+                always showing and the stylesheet hides this one, rather than
+                the household seeing it twice. */}
+            <img
+              className="portal__top-logo"
+              src="/brand/mark.png"
+              alt="McWellness"
+              width={384}
+              height={410}
+            />
+            <span className="portal__practice small">{practiceName ?? ''}</span>
+          </header>
+          <main className="portal__main">{children ?? <Outlet />}</main>
+        </div>
+      </div>
     </div>
   );
 }

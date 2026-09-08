@@ -22,9 +22,11 @@ const TIERS = [767, 768, 1200];
 const EXCEPTIONS = new Map([
   // Whether seven columns still fit their own content, not which tier we are in.
   ['app/admin/schedule/schedule.css', [1100]],
-  // The household's portal keeps its own phone layout by the operator's
-  // decision: a parent reading at night should not have to pinch and pan.
-  ['app/client/portal.css', [720]],
+  // app/client/portal.css held one at 720 until 8 September 2026. It was kept
+  // because the console was shown zoomed out on a phone and the portal never
+  // was; the console now lays itself out at the phone's real width too, so the
+  // reason went and the portal joined the tiers
+  // (docs/SPEC/portal-app-shell.md).
 ]);
 
 /**

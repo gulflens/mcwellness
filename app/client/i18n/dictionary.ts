@@ -32,6 +32,7 @@ export const WORDS = {
   money: t('Money', 'الحساب'),
   family: t('Family', 'العائلة'),
   agreements: t('Agreements', 'الموافقات'),
+  menu: t('Menu', 'القائمة'),
   signOut: t('Sign out', 'تسجيل الخروج'),
   language: t('Language', 'اللغة'),
   english: t('English', 'الإنجليزية'),
