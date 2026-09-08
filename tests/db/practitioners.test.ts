@@ -12,7 +12,14 @@ import type {
 import { applySeed } from '../../db/seed/apply';
 import { generateSeed } from '../../db/seed/generate';
 import { deriveIdentityKeys } from '../../domain/shared/identity';
-import { freshDatabase, seedUser } from './helpers';
+import {
+  asApiRole,
+  freshDatabase,
+  rejectsWith,
+  rolledBack,
+  seedUser,
+  setAuditContext,
+} from './helpers';
 
 /**
  * `GET /api/practitioners` and `PUT /api/practitioners/:id/base` against a
@@ -325,5 +332,262 @@ describe('PUT /api/practitioners/:id/base', () => {
       [practitionerId(2)],
     );
     expect(rows[0]?.reason).toBe(reason);
+  });
+});
+
+/**
+ * The floor beneath the function: `db/policies/core/practitioner_base.sql`,
+ * driven as `app_role` directly rather than through a route.
+ *
+ * Everything above this point goes through `api.request(...)`, and the route
+ * refuses what the policies refuse — so the whole of this file went on passing
+ * with the policy file deleted from the tree, and nothing would have noticed
+ * if it disappeared (the review of pull request 126, finding B2). `db/policies/**`
+ * is re-applied by the runner on every migrate, one of the neighbouring files
+ * belongs to another stream, and the round's central argument is that a
+ * security definer function's own checks are the only checks there are. The
+ * other half of that boundary is proved here.
+ *
+ * Two shapes of refusal, and they are not the same thing. A restrictive
+ * `using` clause on `update` **filters**: the row is not visible to the
+ * statement, so nothing is written and nothing is raised — the silent nothing
+ * migration 913's own header calls worse than a refusal. A `with check` clause
+ * raises 42501. Both arms here carry the same expression, so a refused update
+ * writes no row and says nothing, and that is what is asserted: the count, and
+ * then the row itself, read back as the owner.
+ */
+describe('db/policies/core/practitioner_base.sql — the row rules themselves', () => {
+  /** The seeded studio, which is `owner_type = 'tenant'` and narrowed by nothing. */
+  let studioId: string;
+  /** A base row of practitioner 1's own, and one of practitioner 2's. */
+  let baseOfOne: string;
+  let baseOfTwo: string;
+
+  /**
+   * Gives a practitioner a base row of their own if the tests above have not
+   * already, so this block does not depend on the order they ran in. Written
+   * as the owner, from the seed's own lattice: no coordinate is invented here
+   * any more than it is anywhere else in this file.
+   */
+  async function ownBase(
+    practitionerRowId: string,
+    point: { lat: number; lng: number },
+    emirate: string,
+  ): Promise<string> {
+    const existing = await owner.query<{ id: string }>(
+      "select id from location where owner_type = 'practitioner' and owner_id = $1 limit 1",
+      [practitionerRowId],
+    );
+    const found = existing.rows[0]?.id;
+    if (found) return found;
+    const { rows } = await owner.query<{ id: string }>(
+      'insert into location (tenant_id, owner_type, owner_id, label, emirate, entrance_point, is_primary) ' +
+        "values ($1, 'practitioner', $2, 'base', $3, " +
+        'extensions.st_setsrid(extensions.st_makepoint($4, $5), 4326)::extensions.geography, true) ' +
+        'returning id',
+      [data.tenant.id, practitionerRowId, emirate, point.lng, point.lat],
+    );
+    const id = rows[0]?.id;
+    if (!id) throw new Error('No base row was written.');
+    await owner.query('update practitioner set home_base_location_id = $1 where id = $2', [
+      id,
+      practitionerRowId,
+    ]);
+    return id;
+  }
+
+  /** As `app_role`, with a tenant, a set of roles and an actor, inside a transaction. */
+  async function as<T>(roles: string, actorId: string | null, fn: () => Promise<T>): Promise<T> {
+    return rolledBack(owner, () =>
+      asApiRole(
+        owner,
+        data.tenant.id,
+        async () => {
+          if (actorId) await setAuditContext(owner, actorId, 'a database test');
+          return fn();
+        },
+        roles,
+      ),
+    );
+  }
+
+  function userId(index: number): string {
+    const user = data.users[index];
+    if (!user) throw new Error(`No seeded user ${index}.`);
+    return user.id;
+  }
+
+  /** How many `location` rows this caller can see with the given id. */
+  async function visible(id: string): Promise<number> {
+    const { rows } = await owner.query<{ n: string }>(
+      'select count(*)::text as n from location where id = $1',
+      [id],
+    );
+    return Number(rows[0]?.n ?? 0);
+  }
+
+  beforeAll(async () => {
+    const studio = await owner.query<{ id: string }>(
+      'select location_id as id from tenant where id = $1',
+      [data.tenant.id],
+    );
+    const found = studio.rows[0]?.id;
+    if (!found) throw new Error('The seeded practice has no studio.');
+    studioId = found;
+    baseOfOne = await ownBase(practitionerId(1), FIRST.entrance, FIRST.emirate);
+    baseOfTwo = await ownBase(practitionerId(2), SECOND.entrance, SECOND.emirate);
+
+    // One visit on practitioner 1's own schedule, so the day sheet's read of a
+    // household's location is exercised by a practitioner-only account and not
+    // by an office role that could read it either way. The seed's own five
+    // visits all belong to practitioner 0, whose user holds every office role.
+    await owner.query(
+      'insert into appointment (tenant_id, client_id, practitioner_id, service_type_id, ' +
+        "location_id, delivery_mode, window_start, window_end, status) values ($1, $2, $3, $4, $5, 'home', " +
+        "$6::timestamptz, $6::timestamptz + interval '45 minutes', 'confirmed')",
+      [
+        data.tenant.id,
+        FIRST.ownerId,
+        practitionerId(1),
+        data.serviceTypes[0]?.id,
+        FIRST.id,
+        `${data.planningDay}T17:00:00+04:00`,
+      ],
+    );
+  });
+
+  describe('practitioner_row_update_writers', () => {
+    async function tryUpdate(roles: string, actorId: string | null): Promise<number> {
+      return as(roles, actorId, async () => {
+        const res = await owner.query(
+          'update practitioner set home_base_location_id = $1 where id = $2',
+          [studioId, practitionerId(1)],
+        );
+        return res.rowCount ?? 0;
+      });
+    }
+
+    it('writes nothing for finance, the hole migration 913 calls the worst of four', async () => {
+      expect(await tryUpdate('finance', FINANCE_USER)).toBe(0);
+      expect((await baseRow(practitionerId(1)))?.location_id).toBe(baseOfOne);
+    });
+
+    it('writes nothing for a client contact either', async () => {
+      expect(await tryUpdate('client_contact', null)).toBe(0);
+      expect((await baseRow(practitionerId(1)))?.location_id).toBe(baseOfOne);
+    });
+
+    it('writes nothing for a practitioner, not even their own row', async () => {
+      // Narrowed in the fix round of 2026-09-08 (finding 3): an `update`
+      // policy cannot say "this column", so an arm admitting a practitioner to
+      // their own row would have handed them `status` and `vehicle` with it.
+      expect(await tryUpdate('practitioner', userId(1))).toBe(0);
+      expect((await baseRow(practitionerId(1)))?.location_id).toBe(baseOfOne);
+    });
+
+    it('lets the office write one, as it always could', async () => {
+      expect(await tryUpdate('admin', userId(3))).toBe(1);
+    });
+
+    it('refuses a practitioner an insert of a practitioner row outright', async () => {
+      // Creating a practitioner is the office's act. The row is written for the
+      // seeded admin, who has no `practitioner` row of their own, so nothing but
+      // the policy stands between this statement and a new practitioner: with
+      // the file removed it succeeds, and `with check` is what raises here.
+      await rolledBack(owner, () =>
+        asApiRole(
+          owner,
+          data.tenant.id,
+          async () => {
+            await setAuditContext(owner, userId(1), 'a database test');
+            await rejectsWith(
+              owner,
+              '42501',
+              'insert into practitioner (tenant_id, user_id) values ($1, $2)',
+              [data.tenant.id, userId(3)],
+            );
+          },
+          'practitioner',
+        ),
+      );
+    });
+
+    it('still lets the definer function set a practitioner’s own base', async () => {
+      // The narrowing above must not have closed the one path that is meant to
+      // work: app.set_practitioner_base is security definer and passes over
+      // this policy entirely, which is the point of it.
+      const moved = await as('practitioner', userId(1), async () => {
+        const { rows } = await owner.query<{ id: string }>(
+          'select app.set_practitioner_base($1, $2, $3, $4::emirate) as id',
+          [practitionerId(1), SECOND.entrance.lng, SECOND.entrance.lat, SECOND.emirate],
+        );
+        return rows[0]?.id;
+      });
+      expect(moved).toBe(baseOfOne);
+    });
+  });
+
+  describe('practitioner_base_is_private', () => {
+    it('hides a colleague’s base from a practitioner, and keeps their own', async () => {
+      await as('practitioner', userId(1), async () => {
+        expect(await visible(baseOfTwo)).toBe(0);
+        expect(await visible(baseOfOne)).toBe(1);
+      });
+    });
+
+    it('hides it the other way round too, so it is the row and not the reader', async () => {
+      await as('practitioner', userId(2), async () => {
+        expect(await visible(baseOfOne)).toBe(0);
+        expect(await visible(baseOfTwo)).toBe(1);
+      });
+    });
+
+    it('shows the office every base, which is what the day map draws from', async () => {
+      for (const [roles, actor] of [
+        ['owner', userId(0)],
+        ['admin', userId(3)],
+        ['lead_practitioner', userId(0)],
+      ] as const) {
+        await as(roles, actor, async () => {
+          expect(await visible(baseOfOne), roles).toBe(1);
+          expect(await visible(baseOfTwo), roles).toBe(1);
+        });
+      }
+    });
+
+    it('shows finance no base, as client_record_readers already said', async () => {
+      await as('finance', FINANCE_USER, async () => {
+        expect(await visible(baseOfOne)).toBe(0);
+      });
+    });
+
+    it('leaves the studio exactly where it was: one owner type is narrowed, not two', async () => {
+      // The address every invoice is issued from, and the base the seed gives
+      // every practitioner. A policy that reached it would take the practice's
+      // own address off the day map.
+      for (const [roles, actor] of [
+        ['practitioner', userId(1)],
+        ['owner', userId(0)],
+        ['admin', userId(3)],
+        ['lead_practitioner', userId(0)],
+      ] as const) {
+        await as(roles, actor, async () => {
+          expect(await visible(studioId), roles).toBe(1);
+        });
+      }
+    });
+
+    it('leaves a household’s home to the day sheet’s own reader', async () => {
+      // app/api/routing/day.ts reads the locations of the caller's own visits.
+      // A practitioner reads a client's home through client_record_readers and
+      // app.client_visible_to_practitioner, and this policy answers true for
+      // every owner type that is not 'practitioner', so that read is untouched.
+      await as('practitioner', userId(1), async () => {
+        expect(await visible(FIRST.id)).toBe(1);
+      });
+      await as('owner', userId(0), async () => {
+        expect(await visible(FIRST.id)).toBe(1);
+      });
+    });
   });
 });
