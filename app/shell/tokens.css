@@ -132,6 +132,10 @@
      ledger rather than as a new screen (docs/SPEC/coloured-shell.md
      section 7). */
   --rail-covering: min(280px, 78vw);
+  /* The household's portal has a sidebar of its own and a wider one: its
+     sections are words in two languages rather than icons, and "الموافقات"
+     beside "Agreements" needs the room (docs/SPEC/portal-app-shell.md). */
+  --portal-rail: 240px;
   --rail: var(--rail-open);
   /* Never much more than half the screen, so the ledger stays readable beside
      an open drawer on a tablet. */

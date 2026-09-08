@@ -16,49 +16,184 @@
   color: var(--ink);
 }
 
-.portal__header {
-  border-block-end: var(--hairline) solid var(--rule);
-  background: var(--surface);
+/* The shell: a sidebar on the inline start and the column beside it. On a
+   phone the sidebar is not in the flow at all and the menu button asks for it
+   (docs/SPEC/portal-app-shell.md). This replaced a header of two wrapping rows
+   that took most of a 390px screen before any of the record showed. */
+.portal__shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-block-size: 100dvh;
 }
 
-.portal__bar {
-  max-inline-size: var(--measure);
-  margin-inline: auto;
-  padding: var(--s-4) var(--s-6);
+.portal__rail {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: 2;
+  inline-size: min(var(--portal-rail), 82vw);
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-3) var(--s-4);
+  flex-direction: column;
+  gap: var(--s-6);
+  padding: var(--s-6) var(--s-4);
+  background: var(--brand-deep);
+  color: var(--brand-pale);
+  box-shadow: var(--lift-2);
+  /* Off the inline start until asked for. `visibility` rather than `display`
+     so the slide has something to animate, and so nothing inside is focusable
+     while it is away. */
+  transform: translateX(-101%);
+  visibility: hidden;
+  transition:
+    transform var(--motion) var(--ease),
+    visibility var(--motion) var(--ease);
 }
 
-/* The practice's mark beside its name. Decorative, because the name is in text
-   next to it (docs/brand-assets.md). The gap here is the bar's own, so the
-   pair mirrors for Arabic without a rule of its own. */
+:dir(rtl) .portal__rail {
+  transform: translateX(101%);
+}
+
+.portal__shell[data-nav='open'] .portal__rail {
+  transform: none;
+  visibility: visible;
+}
+
+.portal__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding-inline: var(--s-3);
+}
+
 .portal__logo {
   flex: none;
-  inline-size: 32px;
+  inline-size: 28px;
   block-size: auto;
-  margin-inline-end: calc(-1 * var(--s-2));
 }
 
 .portal__mark {
   font-weight: var(--w-medium);
+  color: var(--surface);
 }
 
-/* A household reads this page; the one thing it is asked to press, and every
-   link in it, is the practice's colour (docs/SPEC/coloured-shell.md
-   section 10). The grounds do not change: the portal is calm by brief. */
-.portal a:not(.button) {
+/* The sections scroll on their own, so the foot can never be pushed out of
+   reach on a short screen. */
+.portal__sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.portal__sections a {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--tap);
+  padding-inline: var(--s-3);
+  border-radius: var(--r-2);
+  color: var(--brand-pale);
+  text-decoration: none;
+}
+
+.portal__sections a:hover {
+  background: var(--brand-lift);
+  color: var(--surface);
+}
+
+/* The screen you are on inverts to a pale plate, as the console's rail does:
+   no violet ground reaches the 3.0 a state needs against this one
+   (docs/SPEC/coloured-shell.md section 4.2). */
+.portal__sections a[aria-current='page'] {
+  background: var(--surface);
   color: var(--brand);
+  font-weight: var(--w-medium);
+}
+
+/* Who you are, your language and the way out. In the foot rather than across
+   the top, which is what stops the chrome wrapping. */
+.portal__foot {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-4) var(--s-3) 0;
+  border-block-start: var(--hairline) solid var(--brand-lift);
+}
+
+.portal__person {
+  color: var(--brand-pale);
+}
+
+.portal__foot .button--quiet {
+  padding-inline: 0;
+  color: var(--brand-pale);
+}
+
+.portal__foot .button--quiet:hover:not(:disabled) {
+  background: none;
+  color: var(--surface);
+}
+
+.portal__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--ink) 44%, transparent);
+  cursor: pointer;
+}
+
+.portal__body {
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* A slim bar: the way into the menu, and whose practice this is. */
+.portal__top {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-block-end: var(--hairline) solid var(--rule);
+  background: var(--surface);
+}
+
+.portal__menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--tap);
+  min-block-size: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.portal__menu:hover {
+  background: var(--brand-wash);
+}
+
+.portal__top-logo {
+  flex: none;
+  inline-size: 26px;
+  block-size: auto;
 }
 
 .portal__practice {
   color: var(--ink-2);
-  flex: 1 1 auto;
-}
-
-.portal__person {
-  color: var(--ink-2);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The language switch: two buttons, the standing one marked, no flag and no
@@ -68,43 +203,23 @@
   gap: var(--s-1);
 }
 
+/* On the rail's violet the pressed language is a pale plate, not a tinted box:
+   the same reasoning as the active section. */
 .portal__language {
   min-block-size: var(--tap);
   padding-inline: var(--s-3);
   border: var(--hairline) solid transparent;
   border-radius: var(--r-2);
   background: transparent;
+  color: var(--brand-pale);
   cursor: pointer;
 }
 
 .portal__language[aria-pressed='true'] {
-  border-color: var(--rule);
-  background: var(--paper);
+  border-color: transparent;
+  background: var(--surface);
+  color: var(--brand);
   font-weight: var(--w-medium);
-}
-
-.portal__nav {
-  max-inline-size: var(--measure);
-  margin-inline: auto;
-  padding: 0 var(--s-6) var(--s-2);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-4);
-}
-
-.portal__nav a {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: var(--tap);
-  color: var(--ink-2);
-  text-decoration: none;
-  border-block-end: 2px solid transparent;
-}
-
-.portal__nav a[aria-current='page'] {
-  color: var(--ink);
-  font-weight: var(--w-medium);
-  border-block-end-color: var(--ink);
 }
 
 .portal__main {
@@ -206,14 +321,12 @@
   overflow-x: auto;
 }
 
-/* Kept deliberately, at the portal's own width rather than the console's
-   tiers: the household's screens are phone-first and reflow, and are never
-   shown zoomed out the way the console is on a phone. A parent reading this at
-   eleven at night should not have to pinch and pan
-   (docs/SPEC/responsive-console.md sections 9 and 11). */
-@media (max-width: 720px) {
-  .portal__bar,
-  .portal__nav,
+/* Below the tablet tier: the column takes the whole width, and the facts stack.
+   This was the portal's own 720px until 8 September 2026, kept then because the
+   console was shown zoomed out on a phone and the portal never was. The console
+   now lays itself out at the phone's real width too, so the reason is gone and
+   the portal joins the one vocabulary (docs/SPEC/portal-app-shell.md). */
+@media (max-width: 767px) {
   .portal__main {
     max-inline-size: none;
     padding-inline: var(--s-4);
@@ -226,5 +339,42 @@
 
   .portal__facts dt {
     padding-block-start: var(--s-3);
+  }
+}
+
+/* The tablet tier and up: the sidebar stops covering and becomes a column the
+   page sits beside, always there. The menu button and the scrim have nothing
+   left to do at this width, so neither is shown. */
+@media (min-width: 768px) {
+  .portal__shell {
+    grid-template-columns: var(--portal-rail) minmax(0, 1fr);
+  }
+
+  .portal__rail {
+    position: sticky;
+    inset-block-start: 0;
+    block-size: 100dvh;
+    inline-size: auto;
+    z-index: auto;
+    box-shadow: none;
+    transform: none;
+    visibility: visible;
+    transition: none;
+  }
+
+  :dir(rtl) .portal__rail {
+    transform: none;
+  }
+
+  .portal__menu,
+  .portal__scrim,
+  .portal__top-logo {
+    display: none;
+  }
+
+  /* With the sidebar carrying the identity, the bar holds only whose practice
+     this is; it keeps its height so the column starts on a consistent line. */
+  .portal__top {
+    padding-inline: var(--s-6);
   }
 }

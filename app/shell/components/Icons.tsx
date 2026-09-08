@@ -149,6 +149,13 @@ export const RailIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** Three rules: the control that asks for the portal's sidebar on a phone. */
+export const MenuIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3 5.5h14M3 10h14M3 14.5h14" />
+  </Icon>
+);
+
 /** A drawing pin, for the control that keeps the sections open over the page. */
 export const PinIcon = (p: IconProps) => (
   <Icon {...p}>
