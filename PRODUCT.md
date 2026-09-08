@@ -156,11 +156,17 @@ goals, and the product makes their progress visible.
   English; no emoji; plain-language copy first with the measurement on tap; no
   gamification, streaks or nagging.
 - Owner-supplied visual direction: `docs/DESIGN-BRIEF.md` in this repository
-  (colour is signal, the band spectrum, no accent colour, one typeface family,
-  tables not cards, the session ribbon as the signature element; a wellness
-  business whose product reads as measurement). It disagrees with the
-  inherited violet accent on one point; the visual-world step must settle that
-  with the owner. Recorded here, not resolved here.
+  (colour is signal, the band spectrum, one typeface family, tables not cards,
+  the session ribbon as the signature element; a wellness business whose
+  product reads as measurement). It disagreed with the inherited violet accent
+  on one point. **Settled by the owner on 8 September 2026: the violet is the
+  accent.** The interface takes `#380473`, sampled from the mark itself and the
+  same value already printed on every invoice, for the rail, the primary
+  action, links, the active section and the focus ring; the band spectrum and
+  the three status states keep the inside of every figure to themselves. The
+  founding `#4B1173` from the QEEG report tool is superseded by the sampled
+  value, so one number describes the practice everywhere. See
+  `docs/SPEC/coloured-shell.md`.
 
 ## Evidence on Hand
 - mcwellnessuae.com, live in English and Arabic: services, the founder's

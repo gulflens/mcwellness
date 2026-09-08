@@ -69,7 +69,7 @@ Three, and they are deliberately desaturated so they never compete with band dat
 --critical   #94382E
 ```
 
-**No accent colour.** There is no brand blue, no primary purple. Emphasis comes from weight, size, and space — not from a highlight hue. This is the single most important constraint and the fastest way to tell whether someone has actually followed the system.
+**One accent colour, and one only** (revised 2026-09-08, reversing "no accent colour"). The practice's own violet `#380473`, sampled from its mark, is the interface's accent: the rail's ground, the primary action, links, the active section and the focus ring. There is no brand blue and no second hue, and emphasis still comes chiefly from weight, size and space. The constraint that matters is now the separation: the accent never enters a chart's plotting area and no band hue is ever used for chrome, which is the fastest way to tell whether someone has actually followed the system. See `docs/SPEC/coloured-shell.md`.
 
 ### 3.4 Dark mode is functional, not optional
 
@@ -234,7 +234,7 @@ Repository note (2026-09-01): this repository is a single package (ADR 0001), so
 ## Visual system
 Read docs/DESIGN-BRIEF.md before writing any UI.
 - Colour comes only from packages/ui/tokens. No hex literals in components.
-- Hue is reserved for EEG band data and three status states. There is no accent colour.
+- Hue inside a figure is reserved for EEG band data and three status states. The practice's violet is the chrome's one accent (2026-09-08), and the two never meet.
 - One typeface family. Tabular figures for all numerals. Never monospace for data.
 - No ALL-CAPS labels, no `→` in buttons, no `·`-joined metadata, no single-word
   colour accents in headings.

@@ -71,18 +71,23 @@ section 9.
 
 Taken on 7 September 2026, each with the recommendation accepted.
 
-1. **On a phone the console is a zoomed-out desk view.** It lays itself out at
-   a desk width and the browser scales the whole page to fit the screen; the
-   person pinches to zoom and drags to pan. Nothing reflows and nothing is
-   hidden. Text starts small, which is the accepted trade; what that costs in
-   accessibility terms, and what a person who cannot work at that scale should
-   do instead, is written down in `docs/COMPLIANCE/accessibility.md`.
+1. ~~**On a phone the console is a zoomed-out desk view.**~~ **Superseded on
+   8 September 2026** by `docs/SPEC/coloured-shell.md` section 8: the console
+   now lays itself out at the phone's own width and the sidebar covers the page
+   rather than being zoomed out with it. The operator reversed this when asking
+   for a sidebar that works on a phone, which a zoomed-out page cannot give.
+   The original decision read: it lays itself out at a desk width and the
+   browser scales the whole page to fit; nothing reflows and nothing is hidden,
+   and text starts small, which was the accepted trade.
 2. **The closed sidebar is a strip of icons.** It starts closed on a tablet
    and a phone and open on a laptop, and the person's own choice is remembered
    on that device.
 3. **A wide display is used for tables, not for prose.** Tables, the schedule
    and the books fill the display; paragraphs, consent wording and settings
-   keep their 68-character measure.
+   keep their 68-character measure. **The 1600px cap this originally carried
+   was removed on 8 September 2026** (`docs/SPEC/coloured-shell.md` section 9):
+   the content now fills any display. The half of the decision that mattered —
+   prose keeps its measure — stands unchanged.
 4. **A table too wide for its space pins its first column and scrolls.**
    Every column stays reachable; no column is dropped and none is hidden. The
    operator chose this as "pin the first columns"; section 8 records why it
@@ -108,6 +113,13 @@ The compact tier is what a laptop window dragged narrow gets, and what the
 console falls back to if the viewport module in section 5 does not run.
 
 ## 5. The console on a phone
+
+> **Superseded, 8 September 2026.** This whole section describes the
+> zoomed-out treatment, which `docs/SPEC/coloured-shell.md` section 8 withdrew
+> along with `app/shell/viewport.ts` and its test. A phone now takes the
+> compact tier for real. Kept because section 4's note about the compact tier
+> never being reached in practice only makes sense beside it, and because a
+> decision reversed is worth being able to read.
 
 **The mechanism.** `index.html` keeps
 `width=device-width, initial-scale=1` as the document's own viewport, which is
@@ -186,6 +198,8 @@ pixels of its own.
 | `--measure` | `68ch`, unchanged | The cap for prose |
 
 The content cap rises from 1200px to 1600px and applies to `.admin__main`.
+**Removed entirely on 8 September 2026**; the table row below is kept as the
+record of what it was.
 Prose keeps `--measure`, so a paragraph on a 1920px display is still 68
 characters wide while the table beside it is not. Screens that are prose
 rather than data, chiefly Settings and the consent wording, keep the measure

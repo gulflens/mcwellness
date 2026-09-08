@@ -210,7 +210,9 @@ components:
 
 McWellness is a wellness practice whose product must read as measurement, closer to a good laboratory instrument than to a spa, and its console is a ledger, not a dashboard. Rows, hairline rules and figures carry the practice. The category default of cards, hero metrics and an accent button is refused: a client is a row, a count is a number beside the heading, and the primary action on the first viewport is a search field. The coordinator sees the practice's people at a glance and finds one in seconds.
 
-The chrome is silent. Every interface surface is achromatic: hue-bearing mineral ink on cool mineral paper, structure drawn in hairline rules, one typeface family (IBM Plex Sans with its matched Arabic) at two weights, tabular figures wherever a numeral appears. Colour is signal: it is reserved for the five EEG bands and the three status states, and it appears only where it carries meaning from the data. There is no accent colour. Emphasis comes from weight, size and space. The inherited McWellness violet lives in the logo image and nowhere in the interface (owner's decision, 2026-09-02).
+The chrome carries the practice and the figures carry the data. Hue-bearing mineral ink on cool mineral paper, structure drawn in hairline rules, one typeface family (IBM Plex Sans with its matched Arabic) at two weights, tabular figures wherever a numeral appears. The practice's own violet, `#380473`, sampled from its mark, is the interface's accent: the rail's ground, the primary action, links, the active section and the focus ring. Inside a figure, colour is still signal and nothing else — the five EEG bands and the three status states, appearing only where they carry meaning from the data. The two never meet, which is what keeps a band hue meaningful: the brand never enters a plotting area and no band hue is ever used for chrome (`tests/lint/colour-keeps-its-meaning.test.ts`).
+
+**This reverses the achromatic chrome of 2026-09-02.** That decision held for six days and was taken back by the owner on 2026-09-08, who asked for "a more attractive simple coloured design" and for the practice's logo to appear in the interface. The reasoning for the original rule is not withdrawn — it is narrowed to the place it was actually earning its keep, which is the figure. `docs/SPEC/coloured-shell.md` carries the decision, the sampled palette and the measurements.
 
 The system has three grounds that share one token set. The ledger (light, dense, the admin console) is the reference surface and the only one fully built. The instrument (dark, `[data-ground='dark']`, the practitioner's phone) inverts ink and paper, lifts the band and status hues, and steps every type size up one so it reads at arm's length in a dim room. The record (light, calm, the client portal) uses the same tokens at a 68-character measure and low density. Sampled at the finish review on 2026-09-02: paper #EEF2F1, ink #16242A, hairline #CBD5D6 rules, 44px rows, tabular figures, status in words with a 6px dot, and an ink-on-paper primary button; no hue, no cards, no accent. Sampled again after PR 6: a record's detail opens in a 480px drawer at the inline end, surface white on a hairline edge with the one soft shadow and no scrim, and its history is a list of sentences on 12px-stepped hairline rules; the ledger stays readable beside it.
 
@@ -251,7 +253,9 @@ The five EEG bands, slow to fast, cool to warm: **Delta** (#3b4a87, deep indigo)
 `[data-ground='dark']` redefines the same custom properties rather than adding a theme: ink becomes #eef2f1, second ink #c6d1d4, slate #8fa0a6, rule #2b3b41, paper #10191d, surface #16242a; ok #5f9f83, attention #c0a04e, critical #c9705f. Components never reference a `-dark` token by name; they reference `--ink` and `--paper` and let the ground decide.
 
 ### Named Rules
-**The Silent Chrome Rule.** Interface chrome is achromatic. Hue comes only from band data and the three status states. There is no accent colour, no brand blue, no primary violet; emphasis is weight, size and space. The fastest test of a new screen is whether any colour on it is not a band or a status.
+**The One Accent Rule** (replacing the Silent Chrome Rule, 2026-09-08). The interface has exactly one accent, the practice's own violet, and no other. There is no brand blue and no second hue; emphasis is still weight, size and space, with the violet reserved for the rail, the one primary action, links, the active section and the focus ring. The fastest test of a new screen is whether any colour on it is the brand, a band or a status — anything else is wrong.
+
+**The Separation Rule.** The brand never appears inside a chart's plotting area, and no band hue ever appears in chrome. `--delta-base` is an indigo and measures 1.76 against the brand; the two are told apart by where they are allowed to be, not by how they look.
 
 **The Status-in-Words Rule.** Status is written as a word in ink; a 6px dot beside it carries the hue (ok, attention, critical). The default dot is slate, a lead is a hollow ring in second ink, and the word is never coloured.
 
@@ -428,7 +432,8 @@ A client's history as sentences on rules: the ledger's vocabulary turned to time
 - **Do** write history as sentences on hairline rules at a 12px block step: a change or creation in medium ink, a read or system row in regular second ink, roles and a tabular time in micro beneath.
 
 ### Don't:
-- **Don't** add an accent colour. There is no brand blue or violet in the interface; the inherited violet lives in the logo image only.
+- **Don't** add a *second* accent colour. The practice's violet is the one accent (2026-09-08); there is no brand blue and no third hue.
+- **Don't** put the brand violet inside a chart, or a band hue anywhere in the chrome. A guard test refuses both.
 - **Don't** use a band hue outside band data (charts, protocol chips, the session ribbon, report figures); never as a wash, a button or decoration.
 - **Don't** put homogeneous data in cards, hero metrics or tiles; it is a table.
 - **Don't** set labels, headers or micro text in all-caps, or add an eyebrow or kicker above a heading.
