@@ -31,7 +31,7 @@ pnpm dev · pnpm test · pnpm test:db · pnpm verify (includes the secrets scan)
 ## Visual system
 Read docs/DESIGN-BRIEF.md before writing any UI.
 - Colour comes only from app/shell/tokens.css. No hex literals in components.
-- Hue is reserved for EEG band data and three status states. Whether the inherited McWellness violet is an accent is an open decision (PRODUCT.md, Brand Commitments); until it is taken, there is no accent colour.
+- Hue inside a figure is reserved for EEG band data and three status states. Alongside them the inherited McWellness violet IS the interface's accent: the owner took that open decision on 2026-09-08, reversing the "no accent colour" of 2026-09-02 (docs/SPEC/coloured-shell.md). It is `--brand`, and it never enters a chart's plotting area, as no band hue is ever used for chrome.
 - One typeface family. Tabular figures for all numerals. Never monospace for data.
 - No ALL-CAPS labels, no arrows appended to button text, no middle-dot-joined metadata, no single-word colour accents in headings.
 - Tables for homogeneous data. Cards only for heterogeneous content.

@@ -44,14 +44,11 @@ describe('layout tokens', () => {
     // is how a person reads it. Every source is read, not only the shell's,
     // because any component could write a viewport element of its own.
     //
-    // app/shell/viewport.ts is the one exemption: it names both words in the
-    // comment explaining that it never writes them, and
-    // app/shell/viewport.test.ts asserts it of every string it produces.
+    // There are no exemptions. The one there was, app/shell/viewport.ts, went
+    // with the phone's zoomed-out treatment on 8 September 2026
+    // (docs/SPEC/coloured-shell.md section 8), so the rule is now absolute.
     const offenders: string[] = [];
     for (const path of [...sources('app'), 'index.html']) {
-      if (path === join('app', 'shell', 'viewport.ts')) {
-        continue;
-      }
       const source = readFileSync(path, 'utf8');
       if (source.includes('user-scalable') || source.includes('maximum-scale=')) {
         offenders.push(path);

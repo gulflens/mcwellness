@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router';
 import {
   canOpenAudit,
@@ -13,7 +13,15 @@ import {
 import type { Actor } from './auth/AuthContext';
 import { useAuth } from './auth/AuthContext';
 import { ADMIN_SECTIONS, Rail, type RailSection } from './components/Rail';
-import { readRail, writeRail } from './railState';
+import {
+  closesOnChoice,
+  railMode,
+  readPinned,
+  readRail,
+  tierOf,
+  writePinned,
+  writeRail,
+} from './railState';
 import { describeRoles } from './routing';
 
 /** The browser's own store, where there is one; a test environment may have none. */
@@ -65,6 +73,19 @@ export function AdminLayout({ actorName }: { actorName: string }) {
   // Open on a desk, closed to icons on anything smaller, and whatever this
   // person last chose beats both (docs/SPEC/responsive-console.md section 6).
   const [railOpen, setRailOpen] = useState(() => readRail(store(), window.innerWidth));
+  // Whether the rail is held open across navigation (docs/SPEC/coloured-shell.md
+  // section 7). A second remembered fact, not a second state of the first.
+  const [pinned, setPinned] = useState(() => readPinned(store()));
+  // The tier follows the window, because a person rotates a tablet and drags a
+  // laptop's window narrow, and the rail must answer both without a reload.
+  const [width, setWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const tier = tierOf(width);
+  const mode = railMode(tier, railOpen, pinned);
   const toggleRail = () => {
     setRailOpen((wasOpen) => {
       const open = !wasOpen;
@@ -72,18 +93,53 @@ export function AdminLayout({ actorName }: { actorName: string }) {
       return open;
     });
   };
+  const togglePin = () => {
+    setPinned((wasPinned) => {
+      const next = !wasPinned;
+      writePinned(store(), next);
+      return next;
+    });
+  };
+  // Choosing a section clears the view where the rail was covering it: one
+  // press goes and puts the rail away, rather than leaving the page behind it.
+  const chooseSection = () => {
+    if (closesOnChoice(tier, pinned)) {
+      setRailOpen(false);
+      writeRail(store(), false);
+    }
+  };
   const roles = session.status === 'signed-in' ? describeRoles(session.actor.roles) : '';
   const sections =
     session.status === 'signed-in' ? visibleSections(session.actor, new Date()) : ADMIN_SECTIONS;
   return (
-    <div className="admin" data-rail={railOpen ? 'open' : 'closed'}>
+    // data-rail stays: shell.css and tests/lint/layout-tokens.test.ts both read
+    // it, and it still says whether the labels are showing. data-rail-mode says
+    // how the rail is standing, which is the thing the three tiers differ on.
+    <div className="admin" data-rail={railOpen ? 'open' : 'closed'} data-rail-mode={mode}>
       <Rail
         person={{ name: actorName, roles }}
         sections={sections}
         onSignOut={() => void signOut()}
         open={railOpen}
         onToggle={toggleRail}
+        covering={mode === 'overlay'}
+        pinned={pinned}
+        onTogglePin={tier === 'desk' ? undefined : togglePin}
+        onChoose={chooseSection}
       />
+      {mode === 'overlay' ? (
+        // A press anywhere on the page closes the rail. It is not announced and
+        // not reachable by keyboard: Escape and the toggle are the announced
+        // ways out, and useDrawer has already made everything behind inert, so
+        // a second stop in the tab order would be noise.
+        <button
+          type="button"
+          className="admin__scrim"
+          aria-hidden="true"
+          tabIndex={-1}
+          onClick={toggleRail}
+        />
+      ) : null}
       <main className="admin__main">
         <Outlet />
       </main>

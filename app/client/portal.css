@@ -27,12 +27,29 @@
   padding: var(--s-4) var(--s-6);
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: var(--s-3) var(--s-4);
+}
+
+/* The practice's mark beside its name. Decorative, because the name is in text
+   next to it (docs/brand-assets.md). The gap here is the bar's own, so the
+   pair mirrors for Arabic without a rule of its own. */
+.portal__logo {
+  flex: none;
+  inline-size: 32px;
+  block-size: auto;
+  margin-inline-end: calc(-1 * var(--s-2));
 }
 
 .portal__mark {
   font-weight: var(--w-medium);
+}
+
+/* A household reads this page; the one thing it is asked to press, and every
+   link in it, is the practice's colour (docs/SPEC/coloured-shell.md
+   section 10). The grounds do not change: the portal is calm by brief. */
+.portal a:not(.button) {
+  color: var(--brand);
 }
 
 .portal__practice {

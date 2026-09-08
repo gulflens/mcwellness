@@ -79,10 +79,11 @@ describe('one set of breakpoints', () => {
   });
 
   it('keeps the widths written in TypeScript in step with the tiers', () => {
-    // The shell decides three things in TypeScript that the stylesheet decides
-    // in CSS, and nothing but this test stops the two drifting apart: the
-    // screen below which the console is shown zoomed out, the width it lays
-    // itself out at there, and the tier at which the rail opens by itself.
+    // The shell decides in TypeScript what the stylesheet decides in CSS, and
+    // nothing but this test stops the two drifting apart. Both boundaries now
+    // live in one module: app/shell/viewport.ts held two more of them until
+    // the phone's zoomed-out treatment was withdrawn on 8 September 2026
+    // (docs/SPEC/coloured-shell.md section 8).
     const named = (source: string, constant: string): number => {
       const match = new RegExp(`(?:const|export const) ${constant}(?::[^=]+)? = (\\d+)`).exec(
         source,
@@ -90,16 +91,11 @@ describe('one set of breakpoints', () => {
       expect(match, `${constant} is declared`).not.toBeNull();
       return Number(match?.[1]);
     };
-    const viewport = readFileSync('app/shell/viewport.ts', 'utf8');
     const rail = readFileSync('app/shell/railState.ts', 'utf8');
-    // The tablet tier: below it the console is shown whole and zoomed out.
-    expect(named(viewport, 'SMALL_SCREEN')).toBe(768);
-    // The desk tier: at it the rail opens itself.
+    // The tablet tier: below it a pinned rail covers rather than pushes.
+    expect(named(rail, 'TABLET')).toBe(768);
+    // The desk tier: at it the rail opens itself and pinning stops meaning anything.
     expect(named(rail, 'DESK')).toBe(1200);
-    // The width a phone lays the console out at. Not a tier, but it must stay
-    // at or above the tablet tier or the zoomed-out page would render the
-    // compact tier and defeat the point.
-    expect(named(viewport, 'DESK_WIDTH')).toBeGreaterThanOrEqual(768);
   });
 
   it('states each exception in the stylesheet that takes it', () => {

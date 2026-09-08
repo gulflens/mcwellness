@@ -36,8 +36,12 @@ export const plugins = [
     manifest: false,
     injectManifest: {
       // The fonts are the reason the precache matters: an Arabic subset never
-      // fetched online is a screen with no Arabic in it, in a basement.
-      globPatterns: ['**/*.{js,css,html,woff2,svg}'],
+      // fetched online is a screen with no Arabic in it, in a basement. `png`
+      // joined them on 8 September 2026 for the same reason: the practice's
+      // mark (public/brand/) is drawn on the practitioner's landing and on
+      // sign-in, and a mark fetched only when there was signal is a blank space
+      // in that same basement. The two files add about 69KB to the precache.
+      globPatterns: ['**/*.{js,css,html,woff2,svg,png}'],
       // Except the page itself. The precache route is cache-first and is
       // registered before the worker's own fetch listener, and it answers a
       // directory address by appending `index.html` — so precaching the page

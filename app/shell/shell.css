@@ -25,12 +25,18 @@
   --rail: var(--rail-closed);
 }
 
+/* No cap: the console fills whatever display it is opened on (the operator's
+   decision of 8 September 2026, docs/SPEC/coloured-shell.md section 9). Prose
+   keeps --measure through its own rules, so a paragraph does not stretch when
+   a table does. */
 .admin__main {
   min-inline-size: 0;
   padding: var(--s-4) var(--s-4) var(--s-12);
-  max-inline-size: var(--content-max);
 }
 
+/* The rail carries the practice's colour (docs/SPEC/coloured-shell.md
+   section 5). It loses its end hairline with the change: a rule divides two
+   surfaces that look alike, and these two no longer do. */
 .rail {
   position: sticky;
   inset-block-start: 0;
@@ -38,8 +44,8 @@
   display: flex;
   flex-direction: column;
   padding: var(--s-4) var(--s-2);
-  border-inline-end: var(--hairline) solid var(--rule);
-  background: var(--paper);
+  background: var(--brand-deep);
+  color: var(--brand-pale);
   overflow: hidden;
 }
 
@@ -49,15 +55,29 @@
 .rail__head {
   display: flex;
   align-items: center;
-  gap: var(--s-1);
+  gap: var(--s-2);
   margin-block-end: var(--s-6);
 }
 
+/* The intrinsic width and height are on the element so the row does not jump
+   while the file loads; the size it is actually drawn at is here. */
+.rail__logo {
+  flex: none;
+  inline-size: 28px;
+  block-size: auto;
+}
+
+/* The name sits at body size, not the h3 it was before the mark arrived. An
+   open rail is 220px, and once the mark and the control have taken theirs the
+   name has 108px: "McWellness" wants about 115 at 20px and truncated. With a
+   symbol beside it the name is identification rather than a headline, so the
+   smaller size is also the better lockup. */
 .rail__mark {
   font-weight: var(--w-medium);
-  font-size: var(--t-h3);
-  line-height: var(--lh-h3);
-  padding-inline-start: var(--s-3);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  padding-inline-start: 0;
+  color: var(--surface);
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -76,12 +96,12 @@
   border: 0;
   border-radius: var(--r-2);
   background: none;
-  color: var(--ink-2);
+  color: var(--brand-pale);
   cursor: pointer;
 }
 
 .rail__toggle:hover {
-  color: var(--ink);
+  color: var(--surface);
 }
 
 /* The sections scroll on their own, so a long list can never push the person's
@@ -104,17 +124,18 @@
   padding-inline: var(--s-3);
   border-radius: var(--r-2);
   text-decoration: none;
-  color: var(--ink-2);
+  color: var(--brand-pale);
 }
 
-.rail__item--active {
-  color: var(--ink);
+/* No violet ground reaches the 3.0 a state needs against the rail -- the best
+   of six candidates measured 1.99 -- so the section you are on inverts
+   instead: a white pill at 16.67, with the brand's own violet on it at 14.65
+   (docs/SPEC/coloured-shell.md section 4.2). */
+.rail__item--active,
+a.rail__item.rail__item--active {
+  color: var(--brand);
   background: var(--surface);
   font-weight: var(--w-medium);
-}
-
-.rail__item--later {
-  color: var(--slate);
 }
 
 .rail__later {
@@ -125,7 +146,7 @@
   flex: none;
   margin-block-start: var(--s-4);
   padding: var(--s-4) var(--s-3) 0;
-  border-block-start: var(--hairline) solid var(--rule);
+  border-block-start: var(--hairline) solid var(--brand-lift);
 }
 
 .rail__name {
@@ -141,8 +162,15 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ink-2);
+  color: var(--brand-pale);
   cursor: pointer;
+}
+
+/* The roles line renders .micro, which is --ink-2 and invisible here. Its
+   violet equivalent #9b69d3 measures 4.25 and fails, so it takes the same pale
+   as every label and is separated by size alone (spec section 5). */
+.rail__person .micro {
+  color: var(--brand-pale);
 }
 
 /* Page furniture */
@@ -276,9 +304,12 @@
   cursor: pointer;
 }
 
+/* The one primary action on a page is the practice's colour, not the page's ink
+   (docs/SPEC/coloured-shell.md section 10). White on it measures 14.65. */
 .button--primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--surface);
 }
 
 .button--quiet {
@@ -404,9 +435,10 @@
   gap: var(--s-6);
 }
 
-.signin__mark {
-  font-weight: var(--w-medium);
-  color: var(--ink-2);
+.signin__logo {
+  inline-size: 320px;
+  max-inline-size: 100%;
+  block-size: auto;
 }
 
 .signin__form {
@@ -498,12 +530,106 @@
   margin-inline-start: 0;
 }
 
+/* The strip is 64px and the mark and the toggle together want 80, so closed
+   they stack: the mark identifies the strip, the control sits beneath it. */
 .admin[data-rail='closed'] .rail__head {
+  flex-direction: column;
   justify-content: center;
+  gap: var(--s-2);
+}
+
+.admin[data-rail='closed'] .rail__logo {
+  inline-size: 32px;
 }
 
 .admin[data-rail='closed'] .rail__person {
   padding-inline: 0;
+}
+
+/* Covering: the rail floats over the page rather than squeezing it, and the
+   grid still reserves the strip beneath it so the content does not jump when
+   the rail opens (docs/SPEC/coloured-shell.md section 7). */
+.admin[data-rail-mode='overlay'] {
+  --rail: var(--rail-closed);
+}
+
+.admin[data-rail-mode='overlay'] .rail {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: var(--rail-covering);
+  z-index: 2;
+  box-shadow: var(--shadow);
+}
+
+/* Covering, the labels are shown whatever data-rail says: the attribute means
+   "the labels are out", and over the page they always are. These undo the
+   strip's own hiding, which would otherwise still apply on the way open. */
+.admin[data-rail-mode='overlay'] .rail__label,
+.admin[data-rail-mode='overlay'] .rail__later {
+  position: static;
+  inline-size: auto;
+  block-size: auto;
+  clip-path: none;
+}
+
+.admin[data-rail-mode='overlay'] .rail__item,
+.admin[data-rail-mode='overlay'] .rail__signout {
+  justify-content: flex-start;
+  padding-inline: var(--s-3);
+}
+
+.admin[data-rail-mode='overlay'] .rail__head {
+  flex-direction: row;
+  justify-content: flex-start;
+}
+
+.admin[data-rail-mode='overlay'] .rail__logo {
+  inline-size: 28px;
+}
+
+.admin[data-rail-mode='overlay'] .rail__person {
+  padding-inline: var(--s-3);
+}
+
+/* The page behind a covering rail. useDrawer has already made it inert; this
+   is what says so to the eye. */
+.admin__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--ink) 44%, transparent);
+  cursor: pointer;
+}
+
+/* The pin sits beside the toggle and only appears below the desk, where the
+   rail covers the page and being held open means something. */
+.rail__pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--row);
+  min-block-size: var(--row);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--brand-pale);
+  cursor: pointer;
+}
+
+.rail__pin:hover {
+  color: var(--surface);
+}
+
+/* Pressed, it is filled rather than merely brighter: a pin that is in reads
+   as a state, not as a hover that stuck. */
+.rail__pin[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--brand);
 }
 
 /* The tablet tier. */
@@ -540,8 +666,9 @@
 /* Finish review, round one */
 
 /* Identity above the heading is separated by a rule, so it reads as a mark, not a kicker. */
-.signin__mark {
-  padding-block-end: var(--s-3);
+/* Identity above the heading is separated by a rule, so it reads as a mark, not a kicker. */
+.signin__logo {
+  padding-block-end: var(--s-6);
   border-block-end: var(--hairline) solid var(--rule);
 }
 
@@ -550,17 +677,15 @@
   color: var(--ink-2);
 }
 
-/* Live sections in ink, arriving ones in ink-2 with a slate icon: two colours, both legible. */
+/* Live sections and arriving ones are told apart by weight of colour, not by a
+   second hue: both are the pale label, the arriving one held back. */
 a.rail__item {
-  color: var(--ink);
+  color: var(--brand-pale);
 }
 
 .rail__item--later {
-  color: var(--ink-2);
-}
-
-.rail__item--later svg {
-  color: var(--slate);
+  color: var(--brand-pale);
+  opacity: 0.62;
 }
 
 /* The search field is the primary action: wider, and the status select sits beside it. */
@@ -617,10 +742,25 @@ input[type='search']::-webkit-search-results-button {
 
 /* Feedback on controls, instant: the brief forbids transitions, not response. */
 a.rail__item:hover {
-  background: var(--surface);
+  background: var(--brand-lift);
+  color: var(--surface);
 }
 
-a.rail__item:active,
+/* Pressed, on the rail's own ground rather than the page's: mixing towards ink
+   here would darken a colour that is already dark and show nothing. */
+a.rail__item:active {
+  background: color-mix(in srgb, var(--surface) 18%, var(--brand-lift));
+  color: var(--surface);
+}
+
+/* The active pill keeps its white ground under the pointer; only its weight of
+   colour would otherwise change as the hover rule above lands on it. */
+a.rail__item.rail__item--active:hover,
+a.rail__item.rail__item--active:active {
+  background: var(--surface);
+  color: var(--brand);
+}
+
 .button:active,
 .signin__person:active {
   background: color-mix(in srgb, var(--ink) 10%, var(--surface));
@@ -630,8 +770,17 @@ a.rail__item:active,
   background: color-mix(in srgb, var(--ink) 6%, var(--surface));
 }
 
+/* The primary action moves within its own hue: lighter under the pointer,
+   deeper when pressed. --ink-2 is a grey-blue and read as a different control
+   entirely once the button became violet. */
 .button--primary:hover:not(:disabled) {
-  background: var(--ink-2);
+  background: var(--brand-lift);
+  border-color: var(--brand-lift);
+}
+
+.button--primary:active {
+  background: var(--brand-deep);
+  border-color: var(--brand-deep);
 }
 
 .signin__person:hover:not(:disabled) {
@@ -639,7 +788,7 @@ a.rail__item:active,
 }
 
 .rail__signout:hover {
-  color: var(--ink);
+  color: var(--surface);
 }
 
 /* The column that says which row this is stays put while the rest of the row
