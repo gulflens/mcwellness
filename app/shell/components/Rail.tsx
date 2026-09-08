@@ -121,7 +121,7 @@ export function Rail({
         {/*
           The alt is empty on purpose: the practice's name is in text beside
           it, and a screen reader that announced both would say it twice. The
-          mark is the product's own and bundled (public/brand/README.md), not
+          mark is the product's own and bundled (docs/brand-assets.md), not
           the practice's uploaded logo, because it has to render before any
           practice has loaded.
         */}

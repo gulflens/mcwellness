@@ -194,8 +194,10 @@ profile:
 | `lockup.png` | (33, 95) – (1761, 819) | 960px wide | ≤ 120KB |
 
 If PNG cannot meet a budget, the asset ships as WebP with a PNG fallback
-through `<picture>`. `public/brand/README.md` records the source file, the date
-the operator supplied it, and these crop boxes, so a later cut can be
+through `<picture>`. `docs/brand-assets.md` records the source file, the date
+the operator supplied it, and these crop boxes — kept in `docs/` rather than
+beside the files, because everything in `public/` is served and a provenance
+note is not a page on the practice's domain — so a later cut can be
 reproduced rather than guessed — the same habit `public/icon.svg` and
 `public/manifest.webmanifest` already keep for their copied token values.
 

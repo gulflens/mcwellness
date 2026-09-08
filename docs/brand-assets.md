@@ -1,5 +1,9 @@
 # The practice's mark
 
+*The files themselves are in `public/brand/`. This note lives here rather than
+beside them because everything in `public/` is served: at `public/brand/` it
+was a page on the practice's own domain.*
+
 Cut from `logo.png` — 1794 by 876 with transparency, supplied by the operator
 on 8 September 2026. Both files below come from that one source; nothing here
 was redrawn, and the crop boxes are recorded so a later cut is reproducible

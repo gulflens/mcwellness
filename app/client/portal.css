@@ -32,7 +32,7 @@
 }
 
 /* The practice's mark beside its name. Decorative, because the name is in text
-   next to it (public/brand/README.md). The gap here is the bar's own, so the
+   next to it (docs/brand-assets.md). The gap here is the bar's own, so the
    pair mirrors for Arabic without a rule of its own. */
 .portal__logo {
   flex: none;

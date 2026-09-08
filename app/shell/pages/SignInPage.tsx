@@ -60,7 +60,7 @@ export function SignInPage() {
       {/*
         The whole lockup, at a size that lets the tagline and the pulse rule be
         read — which is why the rail shows the mark alone instead
-        (public/brand/README.md). The alt carries the name here, because unlike
+        (docs/brand-assets.md). The alt carries the name here, because unlike
         the rail there is no text beside it.
       */}
       <img
