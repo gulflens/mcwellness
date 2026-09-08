@@ -3,9 +3,12 @@
   size, spacing step, radius and timing a screen needs is a variable here. No
   component carries a literal; the lint rule refuses one.
 
-  Hue is reserved for the five EEG bands and three status states. There is no
-  accent colour (owner's decision, 2026-09-02): emphasis comes from weight,
-  size and space.
+  Hue inside a figure is reserved for the five EEG bands and three status
+  states. Alongside them the practice's own violet is the interface's accent —
+  the owner took that open decision on 2026-09-08, reversing the "no accent
+  colour" of 2026-09-02 (docs/SPEC/coloured-shell.md). The two never meet: the
+  brand never enters a chart's plotting area and no band hue is ever used for
+  chrome, which tests/lint/colour-keeps-its-meaning.test.ts holds.
 */
 
 :root {
@@ -115,8 +118,6 @@
   --drawer: clamp(320px, 55vw, 480px);
   --tap: 48px;
   --measure: 68ch;
-  /* Tables and the schedule may fill a wide display; prose keeps --measure. */
-  --content-max: 1600px;
 
   /* Motion answers an action: 160ms, ease-out. Nothing else moves. */
   --motion: 160ms;

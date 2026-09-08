@@ -25,10 +25,13 @@
   --rail: var(--rail-closed);
 }
 
+/* No cap: the console fills whatever display it is opened on (the operator's
+   decision of 8 September 2026, docs/SPEC/coloured-shell.md section 9). Prose
+   keeps --measure through its own rules, so a paragraph does not stretch when
+   a table does. */
 .admin__main {
   min-inline-size: 0;
   padding: var(--s-4) var(--s-4) var(--s-12);
-  max-inline-size: var(--content-max);
 }
 
 /* The rail carries the practice's colour (docs/SPEC/coloured-shell.md
