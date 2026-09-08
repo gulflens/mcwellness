@@ -102,6 +102,7 @@ function mount(me: unknown, path = '/today/check-in', auth: AuthProvider = provi
     if (url.startsWith('/api/clients')) return json({ clients: [], note: null });
     if (url === '/api/billing/prices') return json({ prices: [], vatRegistered: false });
     if (url === '/api/practice') return json({ practice: PRACTICE });
+    if (url === '/api/practitioners') return json({ practitioners: [], scope: null });
     if (url.startsWith('/api/routing/practice-day')) return json({ practitioners: [] });
     if (url.startsWith('/api/appointments')) return json({ appointments: [] });
     return json({ error: 'not_found', requestId: null }, 404);
@@ -273,6 +274,41 @@ describe('App — /admin/settings/practice', () => {
     mount(FINANCE, '/admin/clients');
     await screen.findByRole('link', { name: 'Billing' });
     expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
+  });
+});
+
+describe('App — /admin/settings/practitioners', () => {
+  // The second settings screen, and the one with a wider audience than the
+  // rail's Settings entry: a practitioner records their own home base
+  // (docs/SPEC/route-planning.md section 5.4, migration 913).
+  it('lets a practitioner reach it, though the rail never offers it to them', async () => {
+    mount(PRACTITIONER, '/admin/settings/practitioners');
+    expect(await screen.findByRole('heading', { name: 'Practitioners' })).toBeTruthy();
+  });
+
+  it('lets an admin reach it', async () => {
+    mount(ADMIN, '/admin/settings/practitioners');
+    expect(await screen.findByRole('heading', { name: 'Practitioners' })).toBeTruthy();
+  });
+
+  it('sends finance to their own desk instead', async () => {
+    mount(FINANCE, '/admin/settings/practitioners');
+    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Practitioners' })).toBeNull();
+  });
+
+  it('offers a practitioner the one settings screen they may open', async () => {
+    mount(PRACTITIONER, '/admin/settings/practitioners');
+    expect(await screen.findByRole('link', { name: 'Practitioners' })).toBeTruthy();
+    // Practice is the owner's and an admin's, so it is not offered to somebody
+    // the route would bounce straight back out of it.
+    expect(screen.queryByRole('link', { name: 'Practice' })).toBeNull();
+  });
+
+  it('offers the office both, from either screen', async () => {
+    mount(OWNER, '/admin/settings/practice');
+    expect(await screen.findByRole('link', { name: 'Practice' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Practitioners' })).toBeTruthy();
   });
 });
 

@@ -11,6 +11,7 @@ import { Button, Note, PageHeader } from '../../shell/components/Controls';
 import { EMIRATE_LABELS } from './emirates';
 import { PracticeDrawer } from './PracticeDrawer';
 import { PracticeLogo } from './PracticeLogo';
+import { SettingsNav } from './SettingsNav';
 import './settings.css';
 
 /**
@@ -164,6 +165,7 @@ export function PracticePage() {
 
   return (
     <section className="page">
+      <SettingsNav />
       <PageHeader
         title="Practice"
         aside="What the practice is called, licensed as and registered for. Invoices copy it as it stands on the day they are issued."

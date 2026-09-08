@@ -48,6 +48,30 @@ export function canOpenSettings(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `practitioner.base.write` (app/api/practitioners/routes.ts) — who
+ * may open Settings › Practitioners.
+ *
+ * The question a screen guard can ask is "is there a base this person may
+ * set?", so the same id is passed on both sides of the action: a base that is
+ * the caller's own. The office roles pass whatever id it is, a practitioner
+ * passes because it is theirs, and finance and a client contact never pass —
+ * which is exactly the audience. The browser does not know which
+ * `practitioner` row belongs to the person reading, and does not need to: the
+ * route resolves that from the database on every request and scopes the answer
+ * to one row, and `db/policies/core/practitioner_base.sql` refuses the rest
+ * beneath it.
+ */
+export function canOpenPractitioners(actor: Actor, now: Date): boolean {
+  const theirOwn = actor.userId;
+  return canActor(
+    actor,
+    { type: 'practitioner.base.write', practitionerId: theirOwn, ownPractitionerId: theirOwn },
+    {},
+    now,
+  );
+}
+
+/**
  * Matches `portal.access.manage` (app/api/portal/access.ts) — who may open
  * Settings › Portal. Handing out access to a household's own record is the
  * same class of act as granting a role, so the audience is the owner and an

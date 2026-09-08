@@ -10,6 +10,7 @@ import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { WeekPage } from '../admin/schedule/WeekPage';
 import { DayMapPage } from '../admin/schedule/map/DayMapPage';
 import { PracticePage } from '../admin/settings/PracticePage';
+import { PractitionersPage } from '../admin/settings/PractitionersPage';
 import { PortalAccessPage } from '../admin/portal/PortalAccessPage';
 import { AgreementsScreen } from '../client/AgreementsScreen';
 import { FamilyScreen } from '../client/FamilyScreen';
@@ -29,6 +30,7 @@ import {
   canOpenBooks,
   canOpenKit,
   canOpenPortalAccess,
+  canOpenPractitioners,
   canOpenSchedule,
   canOpenSettings,
   canOpenToday,
@@ -268,6 +270,27 @@ export function App() {
               {(actor) =>
                 canOpenSettings(actor, new Date()) ? (
                   <PracticePage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        {/*
+          The second settings screen, and the one with a wider audience than
+          the rail's single Settings entry: a practitioner records their own
+          home base here (docs/SPEC/route-planning.md section 5.4). The rail
+          still shows Settings to the owner and an admin alone, and the two
+          screens link to each other (SettingsNav.tsx).
+        */}
+        <Route
+          path="settings/practitioners"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenPractitioners(actor, new Date()) ? (
+                  <PractitionersPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )
