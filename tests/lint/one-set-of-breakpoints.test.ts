@@ -92,6 +92,8 @@ describe('one set of breakpoints', () => {
       return Number(match?.[1]);
     };
     const rail = readFileSync('app/shell/railState.ts', 'utf8');
+    // The tablet tier: below it a pinned rail covers rather than pushes.
+    expect(named(rail, 'TABLET')).toBe(768);
     // The desk tier: at it the rail opens itself and pinning stops meaning anything.
     expect(named(rail, 'DESK')).toBe(1200);
   });
