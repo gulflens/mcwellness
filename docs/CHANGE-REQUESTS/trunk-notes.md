@@ -2441,6 +2441,11 @@ as requests.
   `practitioner.base.write`.
 - `db/migrations/913_practitioner_base.sql`: `app.own_practitioner_id()`, one
   narrow arm on `app.guard_location_notes()`, and `app.set_practitioner_base()`.
+- `db/migrations/914_audit_redact_location_points.sql`: `entrance_point`,
+  `parking_point` and `community_gate` join the keys `app.audit_redact` drops
+  outright, so a `location` keeps no coordinate in the audit trail — see below.
+- `tests/db/audit.test.ts`: the three keys, and a location write proving the
+  trail names the column and not the point.
 - `db/policies/core/practitioner_base.sql`: who may write a `practitioner`
   row, and who may read a practitioner-owned `location`.
 - `app/api/practitioners/routes.ts` and `schema.ts`, mounted in
@@ -2535,6 +2540,39 @@ still decides the studio's and every household's exactly as it did. Nothing
 in that file needs to change; the comment there is now half true and the
 narrowing lives beside it rather than in it.
 
+
+### 3. The audit trail keeps no coordinate for a `location`
+
+**Who.** The trunk's own decision, recorded here because it changes what the
+trail holds for every stream that writes a `location`, the client record's
+above all.
+
+**What.** `app.audit_redact` (the list lives in the trunk's migration range,
+`docs/SPEC/audit.md` section 8) now drops `entrance_point`, `parking_point` and
+`community_gate` as well, in `db/migrations/914_audit_redact_location_points.sql`.
+
+**Why, and why it is this round's.** This round is the first thing in the
+platform that sends a member of staff's home coordinate down that path from the
+application, and the round's own header claimed the practice holds the
+coordinate "in four places rather than remembered in one" while a fifth quietly
+kept it — `audit_log`, which is append-only, kept for five years, and has no
+erasure path for staff at all, erasure being `app.erase_client()`'s. Every move
+of a base would have recorded the previous home in `old_values` beside the new
+one in `new_values`: a history of every address a practitioner has ever had.
+
+The narrowing is not confined to a practitioner's base, because the same was
+already true of a household's: the erasure act clears `parking_point` and
+`community_gate` and moves `entrance_point` to its emirate's centre, and the
+trail was keeping the real one from before it — exactly the retention those
+statements exist to end, and exactly what section 8 already said of
+`checked_in_point`. What the trail still records is that a location changed, by
+whom, when, with what reason, and which column moved: `changed_fields` is
+computed from the raw rows before the redaction runs. The row itself holds
+where, under the rules that decide who may read it.
+
+No existing test asserted a coordinate in the trail; three assert its absence
+(`tests/session/db/run.test.ts`, `tests/session/db/photo_and_routing.test.ts`),
+and those still pass.
 
 `docs/SPEC/00-data-model.md` is deliberately **not** edited: no table, column
 or enum changes. Section 2 already describes `practitioner.home_base_location_id`

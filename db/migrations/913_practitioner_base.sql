@@ -176,6 +176,14 @@ $$;
 --    to hide it. `makani_number` likewise: a Makani is how a household is
 --    found, and a practitioner's base is not somewhere anybody is sent.
 --
+--    The coordinate this does write reaches the audit trail like every other
+--    column, and there it would have stayed for the trail's own five years,
+--    with a history of every previous home beside it and no erasure path for a
+--    member of staff. Migration 914 drops `entrance_point`, `parking_point` and
+--    `community_gate` from what `app.audit_redact` keeps, so the trail says a
+--    location changed and stops short of saying where (the review of this pull
+--    request, finding 5).
+--
 --    The audit trail is the row triggers' own (080_audit_triggers.sql): they
 --    fire here as they do anywhere, and they read the actor, the roles and
 --    the reason off the transaction's settings, which security definer does

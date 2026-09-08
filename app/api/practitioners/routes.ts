@@ -31,6 +31,17 @@ import {
  * (`app.set_practitioner_base`), and `app.guard_location_notes` refuses an
  * update that touches anything but the point and the emirate.
  *
+ * **And a fourth place, which is the one nothing can be taken out of again.**
+ * `audit_log` records `to_jsonb(row)` for every write, so recording a base put
+ * the coordinate into an append-only table kept for five years, and every later
+ * move put the previous home in `old_values` beside the new one in
+ * `new_values`. There is no erasure path for a member of staff: erasure is
+ * `app.erase_client()`'s, and a practitioner is not a client. Migration 914
+ * adds `entrance_point`, `parking_point` and `community_gate` to the keys
+ * `app.audit_redact` drops outright, so the trail records that a location
+ * changed, who changed it, when, why and which column moved, and never where
+ * (the review of pull request 126, finding 5; docs/SPEC/audit.md section 8).
+ *
  * **Who.** `practitioner.base.write` (domain/shared/actor.ts): the owner, an
  * admin and the lead practitioner for anybody; a practitioner for their own
  * row; finance and a client contact never. The list is admitted on the same
