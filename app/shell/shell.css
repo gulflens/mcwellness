@@ -31,6 +31,9 @@
   max-inline-size: var(--content-max);
 }
 
+/* The rail carries the practice's colour (docs/SPEC/coloured-shell.md
+   section 5). It loses its end hairline with the change: a rule divides two
+   surfaces that look alike, and these two no longer do. */
 .rail {
   position: sticky;
   inset-block-start: 0;
@@ -38,8 +41,8 @@
   display: flex;
   flex-direction: column;
   padding: var(--s-4) var(--s-2);
-  border-inline-end: var(--hairline) solid var(--rule);
-  background: var(--paper);
+  background: var(--brand-deep);
+  color: var(--brand-pale);
   overflow: hidden;
 }
 
@@ -57,7 +60,8 @@
   font-weight: var(--w-medium);
   font-size: var(--t-h3);
   line-height: var(--lh-h3);
-  padding-inline-start: var(--s-3);
+  padding-inline-start: var(--s-2);
+  color: var(--surface);
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -76,12 +80,12 @@
   border: 0;
   border-radius: var(--r-2);
   background: none;
-  color: var(--ink-2);
+  color: var(--brand-pale);
   cursor: pointer;
 }
 
 .rail__toggle:hover {
-  color: var(--ink);
+  color: var(--surface);
 }
 
 /* The sections scroll on their own, so a long list can never push the person's
@@ -104,17 +108,17 @@
   padding-inline: var(--s-3);
   border-radius: var(--r-2);
   text-decoration: none;
-  color: var(--ink-2);
+  color: var(--brand-pale);
 }
 
+/* No violet ground reaches the 3.0 a state needs against the rail -- the best
+   of six candidates measured 1.99 -- so the section you are on inverts
+   instead: a white pill at 16.67, with the brand's own violet on it at 14.65
+   (docs/SPEC/coloured-shell.md section 4.2). */
 .rail__item--active {
-  color: var(--ink);
+  color: var(--brand);
   background: var(--surface);
   font-weight: var(--w-medium);
-}
-
-.rail__item--later {
-  color: var(--slate);
 }
 
 .rail__later {
@@ -125,7 +129,7 @@
   flex: none;
   margin-block-start: var(--s-4);
   padding: var(--s-4) var(--s-3) 0;
-  border-block-start: var(--hairline) solid var(--rule);
+  border-block-start: var(--hairline) solid var(--brand-lift);
 }
 
 .rail__name {
@@ -141,8 +145,15 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ink-2);
+  color: var(--brand-pale);
   cursor: pointer;
+}
+
+/* The roles line renders .micro, which is --ink-2 and invisible here. Its
+   violet equivalent #9b69d3 measures 4.25 and fails, so it takes the same pale
+   as every label and is separated by size alone (spec section 5). */
+.rail__person .micro {
+  color: var(--brand-pale);
 }
 
 /* Page furniture */
@@ -550,17 +561,15 @@
   color: var(--ink-2);
 }
 
-/* Live sections in ink, arriving ones in ink-2 with a slate icon: two colours, both legible. */
+/* Live sections and arriving ones are told apart by weight of colour, not by a
+   second hue: both are the pale label, the arriving one held back. */
 a.rail__item {
-  color: var(--ink);
+  color: var(--brand-pale);
 }
 
 .rail__item--later {
-  color: var(--ink-2);
-}
-
-.rail__item--later svg {
-  color: var(--slate);
+  color: var(--brand-pale);
+  opacity: 0.62;
 }
 
 /* The search field is the primary action: wider, and the status select sits beside it. */
@@ -617,10 +626,25 @@ input[type='search']::-webkit-search-results-button {
 
 /* Feedback on controls, instant: the brief forbids transitions, not response. */
 a.rail__item:hover {
-  background: var(--surface);
+  background: var(--brand-lift);
+  color: var(--surface);
 }
 
-a.rail__item:active,
+/* Pressed, on the rail's own ground rather than the page's: mixing towards ink
+   here would darken a colour that is already dark and show nothing. */
+a.rail__item:active {
+  background: color-mix(in srgb, var(--surface) 18%, var(--brand-lift));
+  color: var(--surface);
+}
+
+/* The active pill keeps its white ground under the pointer; only its weight of
+   colour would otherwise change as the hover rule above lands on it. */
+a.rail__item.rail__item--active:hover,
+a.rail__item.rail__item--active:active {
+  background: var(--surface);
+  color: var(--brand);
+}
+
 .button:active,
 .signin__person:active {
   background: color-mix(in srgb, var(--ink) 10%, var(--surface));
@@ -639,7 +663,7 @@ a.rail__item:active,
 }
 
 .rail__signout:hover {
-  color: var(--ink);
+  color: var(--surface);
 }
 
 /* The column that says which row this is stays put while the rest of the row
