@@ -2,11 +2,17 @@
 -- lives (docs/SPEC/route-planning.md section 5.4, migration 913).
 -- Declarative and idempotent: the runner re-applies this file on every migrate.
 --
--- Both policies are **restrictive**, so each narrows what the permissive
--- `tenant_isolation` policy on the same table already allows and neither
--- widens anything. Both call `app.own_practitioner_id()` (migration 913),
--- which is security definer and reads `practitioner` directly, so a policy on
--- `location` never asks `practitioner`'s own policies to answer it.
+-- Every policy here is **restrictive**, so each narrows what the permissive
+-- `tenant_isolation` policy on the same table already allows and none widens
+-- anything. The one on `location` calls `app.own_practitioner_id()` (migration
+-- 913), which is security definer and reads `practitioner` directly, so a
+-- policy on `location` never asks `practitioner`'s own policies to answer it.
+--
+-- These are the whole floor beneath `app.set_practitioner_base()`, and they are
+-- proved directly, as `app_role`, in tests/db/practitioners.test.ts — not
+-- through the route, which refuses the same things for its own reasons and
+-- would go on passing if this file were deleted (the review of pull request
+-- 126, finding B2).
 
 ------------------------------------------------------------------------------
 -- 1. practitioner — writing the row.
@@ -18,11 +24,25 @@
 --    change another's. Nothing in the API did so, which is why it had gone
 --    unnoticed; the floor is not the API's to keep.
 --
---    The rule is `practitioner.base.write` in domain/shared/actor.ts, stated
---    here as the boundary: the office roles write any row, a practitioner
---    writes their own, nobody else writes at all. `app.set_practitioner_base`
---    (913) runs as the tables' owner and so passes over this, which is the
---    point of it — it asks the same question itself before it writes.
+--    The boundary here is the office and nobody else: an owner, an admin or
+--    the lead practitioner writes a practitioner row through the ordinary
+--    path, and every other role — finance, a client contact and a
+--    practitioner alike — writes none.
+--
+--    **A practitioner is not admitted to their own row, deliberately.** The
+--    rule this file serves is `practitioner.base.write` (domain/shared/actor.ts),
+--    which is about a home base; an `update` policy cannot say "this column"
+--    and so an arm admitting a practitioner to their own row would grant them
+--    `status`, `vehicle`, `display_name_ar` and `created_by` as well — a
+--    deactivated practitioner setting `status` back to `'active'`, for
+--    instance. Nothing needs it: `app.set_practitioner_base` (913) is security
+--    definer, owned by the tables' owner, and `practitioner` is not
+--    `force row level security`, so the function passes over this policy
+--    entirely, and no route in the platform writes `practitioner` through
+--    `app_role`. The function is the only path, which is the point of it — it
+--    asks the whole question itself before it writes. (Narrowed in the fix
+--    round of 2026-09-08 on the review of pull request 126, finding 3: the arm
+--    was wider than the rule its own comment stated, and not load-bearing.)
 --
 --    Creating a practitioner is the office's act and nothing in the platform
 --    does it through the API yet; the insert arm says so rather than leaving
@@ -40,11 +60,9 @@ create policy practitioner_row_update_writers on public.practitioner as restrict
 using (
   app.actor_has_role('owner') or app.actor_has_role('admin')
   or app.actor_has_role('lead_practitioner')
-  or (app.actor_has_role('practitioner') and id = app.own_practitioner_id())
 ) with check (
   app.actor_has_role('owner') or app.actor_has_role('admin')
   or app.actor_has_role('lead_practitioner')
-  or (app.actor_has_role('practitioner') and id = app.own_practitioner_id())
 );
 
 ------------------------------------------------------------------------------
