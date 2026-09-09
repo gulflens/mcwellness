@@ -819,7 +819,7 @@ Production waits on the operator's word, as every previous round has. Do not see
 
 ### Task 13: The public legal pages
 
-**Files:** the live static site at `/home/u936187015/domains/mcwellnessuae.com/public_html` (Hostinger), pages `terms` and `privacy`.
+**Files:** the live static site at `the account's document root for that domain (the hosting username is not written in this public repository)` (Hostinger), pages `terms` and `privacy`.
 
 - [ ] **Step 1: Fetch both pages**
 

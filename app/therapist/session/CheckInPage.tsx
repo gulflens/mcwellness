@@ -91,6 +91,9 @@ const REASON_COPY: Record<CheckInResponseReason, string> = {
   consent_missing_minor_participation:
     "A guardian's consent is missing. Ask the practice to add it.",
   consent_missing_home_visit: 'Home-visit consent is missing. Ask the practice to add it.',
+  consent_missing_health_data:
+    'Consent for brain-map and neurofeedback information is missing or has been withdrawn. ' +
+    'Do not start a session. Ask the practice.',
   date_of_birth_unknown: 'Date of birth is not recorded. Ask the practice to add it.',
   already_checked_in: 'Already checked in on another device. Ask the practice if that was not you.',
   not_booked_today:

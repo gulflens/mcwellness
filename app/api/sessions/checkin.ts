@@ -45,7 +45,18 @@ import { mountServiceTypes } from './service-types';
  * goes out (session-capture.md section 8), never only the gate's.
  */
 
-const CONSENT_PURPOSES = ['participation', 'minor_participation', 'home_visit'] as const;
+// The same list as `CheckInConsentPurpose` in domain/session/types.ts, and it
+// must stay the same list: this narrows what the door returned to what the
+// gate understands, so a purpose missing here is silently dropped on the way
+// and `canCheckIn` never sees it. `health_data` was added on 2026-09-09 and
+// this was the fourth place that had to learn it, after the type, the gate
+// and `app.checkin_context` itself.
+const CONSENT_PURPOSES = [
+  'participation',
+  'minor_participation',
+  'home_visit',
+  'health_data',
+] as const satisfies readonly CheckInConsentPurpose[];
 
 function isConsentPurpose(value: string): value is CheckInConsentPurpose {
   return (CONSENT_PURPOSES as readonly string[]).includes(value);

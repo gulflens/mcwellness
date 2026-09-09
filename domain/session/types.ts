@@ -21,8 +21,17 @@ import type {
 /** A visit's delivery setting (00-data-model.md section 2). */
 export type DeliveryMode = 'home' | 'studio' | 'remote';
 
-/** The consent purposes the check-in gate reads (00-data-model.md section 3). */
-export type CheckInConsentPurpose = 'participation' | 'minor_participation' | 'home_visit';
+/**
+ * The consent purposes the check-in gate reads (00-data-model.md section 3).
+ *
+ * `health_data` joined them on 2026-09-09. It is read at the door and not only
+ * at activation because a household may withdraw it the day after they are
+ * activated, and the page they signed says sessions cannot continue if they
+ * do. Treating an active client as standing permission would be the cached
+ * "has consent" boolean `.claude/rules/compliance.md` forbids.
+ */
+export type CheckInConsentPurpose =
+  'participation' | 'minor_participation' | 'home_visit' | 'health_data';
 
 /** The full event vocabulary from session-capture.md section 2. */
 export const SESSION_EVENT_KINDS = [

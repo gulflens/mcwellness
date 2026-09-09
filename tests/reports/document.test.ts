@@ -8,6 +8,7 @@ import {
   COMPARISON_NOT_A_DIAGNOSIS,
   layout,
   NOT_A_CLINIC,
+  NOT_A_DIAGNOSIS,
   renderReport,
   WORDING_IS_DRAFT,
   WORDS,
@@ -210,7 +211,7 @@ describe('a rendered session report', () => {
 
   it('carries the two standing sentences, in the consent’s own words', () => {
     expect(text).toContain('We are a wellness practice, not a clinic.');
-    expect(text).toContain('It is not a diagnosis.');
+    expect(text).toContain('it shows patterns and is not a diagnosis.');
   });
 
   it('quotes the approved agreement word for word, so the two cannot drift', () => {
@@ -222,12 +223,15 @@ describe('a rendered session report', () => {
     // laid out by the renderer. Compared with whitespace flattened, so the
     // words are what must match and not where the lines happen to break.
     const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
-    expect(flat(readFileSync('docs/CONSENT/agreement.en.md', 'utf8'))).toContain(
-      flat(NOT_A_CLINIC.en),
-    );
-    expect(flat(readFileSync('docs/CONSENT/agreement.ar.md', 'utf8'))).toContain(
-      flat(NOT_A_CLINIC.ar),
-    );
+    const en = flat(readFileSync('docs/CONSENT/agreement.en.md', 'utf8'));
+    const ar = flat(readFileSync('docs/CONSENT/agreement.ar.md', 'utf8'));
+    // BOTH standing sentences, not one. The first was re-pointed to the
+    // approved agreement on 2026-09-09 and the second was missed, which a test
+    // reading only the first could not have caught.
+    expect(en).toContain(flat(NOT_A_CLINIC.en));
+    expect(ar).toContain(flat(NOT_A_CLINIC.ar));
+    expect(en).toContain(flat(NOT_A_DIAGNOSIS.en));
+    expect(ar).toContain(flat(NOT_A_DIAGNOSIS.ar));
   });
 
   it('carries no draft line, now that the wording is approved', () => {
@@ -290,7 +294,7 @@ describe('a rendered progress report', () => {
   });
 
   it('carries the not-a-diagnosis sentence beside the comparison as well as in the footer', () => {
-    expect(text.match(/It is not a diagnosis\./g)?.length).toBe(2);
+    expect(text.match(/is not a diagnosis\./g)?.length).toBe(2);
   });
 
   it('prints the comparison’s own sentence beneath the figures, in both languages', () => {
@@ -307,7 +311,7 @@ describe('a rendered progress report', () => {
     // And it is the screen's sentence, not merely one like it.
     expect(COMPARISON_NOT_A_DIAGNOSIS.en).toBe(SCREEN_SENTENCE.en);
     expect(COMPARISON_NOT_A_DIAGNOSIS.ar).toBe(SCREEN_SENTENCE.ar);
-    expect(text).toContain('A brain map (qEEG) is a measurement recorded the same way.');
+    expect(text).toContain('A brain map (qEEG) is a recording made the same way;');
   });
 
   it('draws the ribbon as one mark per session and empty marks for those remaining', () => {
@@ -397,7 +401,7 @@ describe('a rendered progress report', () => {
     expect(page).not.toContain('Frontal ratio');
     expect(page).not.toContain('Brain maps compared');
     // And the one standing sentence stays, because it is the footer's.
-    expect(page.match(/It is not a diagnosis\./g)?.length).toBe(1);
+    expect(page.match(/is not a diagnosis\./g)?.length).toBe(1);
   });
 });
 

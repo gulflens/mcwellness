@@ -8,6 +8,7 @@ export type CheckInBlockReason =
   | 'consent_missing_participation'
   | 'consent_missing_minor_participation'
   | 'consent_missing_home_visit'
+  | 'consent_missing_health_data'
   | 'date_of_birth_unknown'
   | 'kit_calibration_overdue';
 
@@ -87,6 +88,12 @@ export function canCheckIn(input: CheckInInput, now: Date): CheckInResult {
 
   if (input.deliveryMode === 'home' && !input.activeConsentPurposes.includes('home_visit')) {
     reasons.push('consent_missing_home_visit');
+  }
+
+  // Every visit, whatever the delivery: a session is training on a person's
+  // own brain activity, so there is no visit that collects no health data.
+  if (!input.activeConsentPurposes.includes('health_data')) {
+    reasons.push('consent_missing_health_data');
   }
 
   // The instruments, last: a household's consent is the more important thing

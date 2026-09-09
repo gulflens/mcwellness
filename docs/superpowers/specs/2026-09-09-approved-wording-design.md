@@ -171,7 +171,7 @@ the approved wording in the same commit, or the guarantee breaks silently.
 ## 5. The website
 
 The two legal pages on `mcwellnessuae.com` are static files on Hostinger under
-`/home/u936187015/domains/mcwellnessuae.com/public_html`. They are pulled,
+the account's document root for that domain (the hosting username is not written in this public repository). They are pulled,
 edited and redeployed.
 
 They take the corrections already tabulated in the lawyer pack's document 8,

@@ -126,15 +126,20 @@ export const NOT_A_CLINIC: Phrase = {
 };
 
 /**
- * The second, also the consent's own. It is what makes a measurement readable
- * as a measurement: this report describes training and measurement, and a
- * change between two days is a difference between two days.
+ * The second, also the consent's own, and from the same page as the first:
+ * `docs/CONSENT/agreement.en.md` section "What we do" and its Arabic twin. It
+ * is what makes a measurement readable as a measurement — this report
+ * describes training and measurement, and a change between two days is a
+ * difference between two days.
+ *
+ * Re-pointed on 2026-09-09 with `NOT_A_CLINIC` above it. Both are quoted from
+ * the approved agreement and both are guarded by the drift test in
+ * `tests/reports/document.test.ts`, which reads the file: the first was moved
+ * and the second was not, and only a test that reads both would have said so.
  */
 export const NOT_A_DIAGNOSIS: Phrase = {
-  en:
-    'A brain map (qEEG) is a measurement recorded the same way. It shows patterns of activity. ' +
-    'It is not a diagnosis.',
-  ar: 'خريطة الدماغ (qEEG) قياس يُسجَّل بالطريقة نفسها. تُظهر أنماط النشاط، وهي ليست تشخيصاً.',
+  en: 'A brain map (qEEG) is a recording made the same way; it shows patterns and is not a diagnosis.',
+  ar: 'وخريطة الدماغ (qEEG) تسجيل يُجرى بالطريقة نفسها؛ تُظهر أنماطًا وليست تشخيصًا.',
 };
 
 /**

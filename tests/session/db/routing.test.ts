@@ -160,6 +160,8 @@ async function seedVisit(
   const purposes = [
     'participation',
     'home_visit',
+    // Read at the door since 2026-09-09; without it no visit opens.
+    'health_data',
     ...(options.photoConsent ? ['photo_video'] : []),
   ];
   for (const [index, purpose] of purposes.entries()) {

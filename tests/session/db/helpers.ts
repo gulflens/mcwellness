@@ -74,7 +74,7 @@ export async function seedConsent(
     tenantId: string;
     clientId: string;
     givenByContactId: string;
-    purpose: 'participation' | 'minor_participation' | 'home_visit';
+    purpose: 'participation' | 'minor_participation' | 'home_visit' | 'health_data';
     textDocumentId: string;
     status?: 'active' | 'withdrawn' | 'expired' | 'superseded';
   },

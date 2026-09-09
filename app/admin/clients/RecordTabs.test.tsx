@@ -161,6 +161,12 @@ describe('ConsentTab', () => {
     };
     mount(<ConsentTab clientId={CLIENT_ID} record={held} onChanged={() => undefined} mayWrite />);
     expect(screen.getByText('Photographs and video')).toBeTruthy();
+
+    // Shown so it can be withdrawn — and only that. There is no way to take a
+    // NEW photo consent, because there is no longer anything it would permit.
+    // The four offered purposes each keep their button; this row has none.
+    expect(screen.getAllByRole('button', { name: /^Record$/ })).toHaveLength(4);
+    expect(screen.getByRole('button', { name: 'Withdraw' })).toBeTruthy();
   });
 });
 

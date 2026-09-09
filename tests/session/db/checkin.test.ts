@@ -248,7 +248,7 @@ beforeAll(async () => {
     id: string,
     clientId: string,
     contactId: string,
-    purpose: 'participation' | 'minor_participation' | 'home_visit',
+    purpose: 'participation' | 'minor_participation' | 'home_visit' | 'health_data',
   ) =>
     seedConsent(owner, {
       id,
@@ -319,6 +319,28 @@ beforeAll(async () => {
     CONTACT_NULL_DOB,
     'home_visit',
   );
+
+  // Every scenario gets health_data, because since 2026-09-09 the door reads
+  // it and no visit opens without it — so leaving it off would make every case
+  // below fail on that one reason and never reach the reason it is about
+  // (db/migrations/961_checkin_reads_health_data.sql). The test that this
+  // consent itself gates a visit is its own case, further down.
+  for (const [index, [client, contact]] of (
+    [
+      [CLIENT_ADULT, CONTACT_ADULT],
+      [CLIENT_NO_PARTICIPATION, CONTACT_NO_PARTICIPATION],
+      [CLIENT_MINOR_NO_GUARDIAN, CONTACT_MINOR_NO_GUARDIAN],
+      [CLIENT_MINOR_WITH_GUARDIAN, CONTACT_MINOR_WITH_GUARDIAN],
+      [CLIENT_NULL_DOB, CONTACT_NULL_DOB],
+    ] as const
+  ).entries()) {
+    await consent(
+      `00000000-0000-4000-8000-0000000041${String(index).padStart(2, '0')}`,
+      client,
+      contact,
+      'health_data',
+    );
+  }
 
   // app.checkin_context (db/migrations/301_checkin_context.sql) now finds a
   // client only when the caller's own practitioner row holds a booked
@@ -404,6 +426,12 @@ beforeAll(async () => {
     CONTACT_BY_MRN,
     'home_visit',
   );
+  await consent(
+    '00000000-0000-4000-8000-000000004120',
+    CLIENT_BY_MRN,
+    CONTACT_BY_MRN,
+    'health_data',
+  );
   await bookToday(APPOINTMENT_BY_MRN, CLIENT_BY_MRN, '13', MRN_PRACTITIONER);
 
   // The two-visit household. Both windows are placed against the database's
@@ -451,6 +479,12 @@ beforeAll(async () => {
     CLIENT_TWO_VISITS,
     CONTACT_TWO_VISITS,
     'home_visit',
+  );
+  await consent(
+    '00000000-0000-4000-8000-000000004121',
+    CLIENT_TWO_VISITS,
+    CONTACT_TWO_VISITS,
+    'health_data',
   );
   // The first visit opens the Dubai day; the second is the one this check-in
   // happens inside, ten minutes after its window opened — except in the first

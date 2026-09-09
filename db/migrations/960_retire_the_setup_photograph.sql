@@ -1,6 +1,7 @@
 -- 960_retire_the_setup_photograph.sql
--- Needs: 306 (the setup photograph's functions, its filing marker and the
---        closed-session trigger this file replaces)
+-- Needs: 098 (app.erasure_active, read by the body below), 302 (session,
+--        setup_photo_document_id and the guard this file replaces), 306 (the
+--        setup photograph's functions and its filing marker)
 --
 -- The practice takes no photographs.
 --
@@ -13,10 +14,13 @@
 -- guard somebody later mistakes for permission, which is why they go in the
 -- same round as the words rather than a tidier one of their own.
 --
--- **`session.setup_photo_document_id` stays.** A visit photographed before
--- today still names its picture, the three erasure functions (105, 106, 107)
--- unlink it by name when a household is erased, and a column a released
--- function names is not one to drop underneath it. It is read-only from here:
+-- **`session.setup_photo_document_id` stays, and must.** A visit photographed
+-- before today still names its picture, and `app.erase_client` — one function,
+-- whose released body is the one 954 installed, and which 105, 106 and 107 are
+-- earlier definitions of — sets that column to null by name when a household
+-- is erased. Its dynamic statement is guarded on the presence of `observations`
+-- and not on this column, so dropping it would not be skipped: it would break
+-- every erasure at runtime. It is read-only from here:
 -- nothing can set it, because nothing can file a photograph.
 --
 -- This is a trunk file in the 950–999 half rather than 900–949 because it
@@ -59,8 +63,9 @@ drop table if exists app.setup_photo_filing;
 -- rollback:
 --   -- Re-apply db/migrations/306_kit_and_setup_photo.sql from the line
 --   -- creating app.setup_photo_consent_active to the end of the file: it
---   -- creates the four functions, the marker table with its grants and row
---   -- level security, and the version of the trigger that admits a
+--   -- creates the four functions, the marker table with its revoke and its
+--   -- row level security — it grants nothing, which is the whole security
+--   -- argument for it — and the version of the trigger that admits a
 --   -- photograph's link on a closed visit.
 --   --
 --   -- Nothing needs undoing in `document` or in `session`: this file drops no

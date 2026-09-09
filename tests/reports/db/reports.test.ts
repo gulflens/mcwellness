@@ -468,7 +468,7 @@ describe('issuing', () => {
     const text = extractAll(stored);
     expect(text).toContain('Progress report');
     expect(text).toContain('We are a wellness practice, not a clinic.');
-    expect(text).toContain('It is not a diagnosis.');
+    expect(text).toContain('it shows patterns and is not a diagnosis.');
     // No draft line: the practice's legal advisor approved the wording on
     // 2026-09-09 (docs/CONSENT/README.md).
     expect(text).not.toContain('Draft wording');

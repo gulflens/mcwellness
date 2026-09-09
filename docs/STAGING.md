@@ -654,8 +654,9 @@ to `0c99ff2`: two further pull requests had merged behind the brief's back
   view or another function's body, and `session.kit_id` carries no default
   and no not-null. The grants were checked afterwards, as asked:
   `has_function_privilege` on the five callable functions 306 adds
-  (`checkin_context`, `setup_photo_consent_active`,
-  `file_setup_photo_document`, `file_setup_photo`, `previous_setup_photo`)
+  (`checkin_context`, and — until migration 960 retired them on 2026-09-09 —
+  `setup_photo_consent_active`, `file_setup_photo_document`,
+  `file_setup_photo`, `previous_setup_photo`)
   shows `app_role` holding execute and `public` holding none on every one;
   the sixth, the trigger function `session_refuse_update_after_close`, holds
   neither grant on either side, which is correct — a trigger function is
@@ -1150,7 +1151,7 @@ not it.
   tables every earlier pass already carries (`schema_migration`,
   `invoice_number_series`, the audit-log partitions and their default) and
   three `app`-schema tables reached only through security-definer functions
-  (`app.audit_chain`, `app.erasure_active`, `app.setup_photo_filing`), none
+  (`app.audit_chain`, `app.erasure_active`; `app.setup_photo_filing` until migration 960 dropped it on 2026-09-09), none
   of which this pass's migrations touch. `assessment`, `assessment_document`,
   `report`, `report_delivery`, `report_number_series`, `kit`,
   `drive_estimate`, `scheduling_setting`, `portal_invite` and

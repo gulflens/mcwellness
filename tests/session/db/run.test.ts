@@ -148,11 +148,13 @@ async function seedVisit(
       "values ($1, $2, $3, 'mother', true)",
     [contactId, IDS.tenantA, clientId],
   );
-  const purposes: Array<'participation' | 'home_visit' | 'photo_video'> = [
+  // health_data since 2026-09-09: the check-in door reads it, so a visit
+  // cannot be opened without it (db/migrations/961_checkin_reads_health_data.sql).
+  const purposes: Array<'participation' | 'home_visit' | 'health_data'> = [
     'participation',
     'home_visit',
+    'health_data',
   ];
-  if (options.photoConsent) purposes.push('photo_video');
   for (const [index, purpose] of purposes.entries()) {
     await seedConsent(owner, {
       id: id(scenario, 10 + index),
