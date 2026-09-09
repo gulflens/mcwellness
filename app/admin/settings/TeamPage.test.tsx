@@ -81,7 +81,7 @@ function mount(options: { inviteStatus?: number } = {}) {
         },
       ];
       return json(
-        { userId: '00000002-0000-4000-8000-000000000020', temporaryPassword: 'tmp-pass-0001' },
+        { userId: '00000002-0000-4000-8000-000000000020', temporaryPassword: '<shown-once-0001>' },
         201,
       );
     }
@@ -123,7 +123,7 @@ describe('TeamPage', () => {
     });
     fireEvent.click(screen.getByLabelText('Finance'));
     fireEvent.click(screen.getByRole('button', { name: 'Create sign-in' }));
-    expect(await screen.findByText('tmp-pass-0001')).toBeTruthy();
+    expect(await screen.findByText('<shown-once-0001>')).toBeTruthy();
     expect(posts).toEqual([
       {
         url: '/api/team',
