@@ -2924,3 +2924,26 @@ had the scheduler log an error's name and code and never its message.
 and caps, neither of which code can do; the "change my password" screen that
 the temporary-password choice owes; and whether the website keeps its dead
 admin.
+
+## Round 40 — change your password (2026-09-10)
+
+Round 39's Settings › Team hands a colleague a temporary password shown once,
+and owed them a way to replace it. This is it: `/account/password`, for
+whoever is signed in — a member of staff from the console's rail or the
+phone's Today screen, and a household from the same address, since the
+session itself is the proof of who is asking. It asks for the new password
+twice and nothing else. The rule for what a password may be is the
+practice's own (`domain/shared/password.ts`: twelve characters, four kinds,
+no space at either end; Supabase Auth keeps a lower floor beneath it), and
+the change goes through the sign-in provider's one new method,
+`updatePassword`, which the development door does not have — the page says
+so rather than pretending.
+
+**Every file is the trunk's**: `domain/shared/password.ts` with its test and
+the barrel; `app/shell/auth/types.ts`, `supabase-auth.ts`;
+`app/shell/pages/PasswordPage.tsx` with its test; `app/shell/App.tsx`,
+`components/Icons.tsx`, `components/Rail.tsx`; `app/therapist/today/TodayPage.tsx`
+(one button beside Sign out); `app/admin/settings/TeamPage.tsx` (one clause
+in the note that shows the temporary password). No migration, no policy, no
+API route: the password lives with the sign-in provider and never touches
+the practice's own tables.

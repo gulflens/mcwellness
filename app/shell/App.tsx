@@ -42,6 +42,7 @@ import {
 import { useAuth, type Actor } from './auth/AuthContext';
 import { Note } from './components/Controls';
 import { NoAccessPage } from './pages/NoAccessPage';
+import { PasswordPage } from './pages/PasswordPage';
 import { SignInPage } from './pages/SignInPage';
 import { homeFor } from './routing';
 
@@ -365,6 +366,10 @@ export function App() {
         <Route path="agreements" element={<AgreementsScreen />} />
       </Route>
       <Route path="/no-access" element={<RequireAuth>{() => <NoAccessPage />}</RequireAuth>} />
+      <Route
+        path="/account/password"
+        element={<RequireAuth>{() => <PasswordPage />}</RequireAuth>}
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

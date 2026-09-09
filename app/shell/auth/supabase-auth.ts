@@ -36,6 +36,16 @@ export function supabaseAuth(url: string, anonKey: string): AuthProvider {
       // Supabase removes the session through the store above, which clears both.
       await client.auth.signOut();
     },
+    async updatePassword(newPassword) {
+      // The session stays as it is: Supabase changes the password on the
+      // account and keeps this browser signed in. The rule for what a
+      // password may be is the page's (domain/shared/password.ts); this only
+      // carries it.
+      const { error } = await client.auth.updateUser({ password: newPassword });
+      if (error) {
+        throw new Error('The password could not be changed. Try again.');
+      }
+    },
     async getAccessToken() {
       const { data } = await client.auth.getSession();
       return data.session?.access_token ?? null;

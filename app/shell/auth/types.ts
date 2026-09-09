@@ -19,6 +19,11 @@ export type AuthProvider = {
   signInAs?(authId: string): Promise<void>;
   seededPeople?(): Promise<SeededPerson[]>;
   signOut(): Promise<void>;
+  /**
+   * A new password for the person who is signed in (app/shell/pages/PasswordPage.tsx).
+   * Absent on the development door, which has no passwords to change.
+   */
+  updatePassword?(newPassword: string): Promise<void>;
   getAccessToken(): Promise<string | null>;
   onChange(listener: () => void): () => void;
 };

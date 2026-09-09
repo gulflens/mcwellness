@@ -226,7 +226,7 @@ export function TeamPage() {
         <Note tone="attention">
           Temporary password for {created.name}:{' '}
           <code className="team__password">{created.password}</code> — hand it over in person or by
-          WhatsApp. It is shown once and not kept.
+          WhatsApp. It is shown once and not kept; they change it under Password once signed in.
         </Note>
       ) : null}
       {error ? <Note tone="critical">{error}</Note> : null}
