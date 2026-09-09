@@ -8,7 +8,9 @@ items — one token in `app/shell/tokens.css` and one icon in
 Status: **built 8 September 2026.** The operator opened
 `demo.mcwellnessuae.com` on a phone, said the navigation looked "really really
 ugly", and asked for "the navigation to be like a real app with a sidebar menu
-that can open and close, and a normal layout."
+that can open and close, and a normal layout." (That demo site was retired on
+9 September 2026 at the operator's direction; the address no longer resolves.
+The walk it prompted is what this document records.)
 
 ---
 
