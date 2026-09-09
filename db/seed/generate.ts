@@ -24,7 +24,13 @@ export type DeliveryMode = 'home' | 'studio' | 'remote';
 export type ClientStatus = 'lead' | 'active' | 'paused' | 'closed';
 export type Relationship = 'self' | 'mother' | 'father';
 export type ConsentPurpose =
-  'participation' | 'minor_participation' | 'home_visit' | 'photo_video' | 'research' | 'marketing';
+  | 'participation'
+  | 'minor_participation'
+  | 'home_visit'
+  | 'health_data'
+  | 'photo_video'
+  | 'research'
+  | 'marketing';
 export type ConsentMethod = 'app_signature' | 'paper_scan' | 'verbal_witnessed';
 
 export type SeedTenant = {
@@ -542,6 +548,7 @@ const CONSENT_PURPOSES: readonly ConsentPurpose[] = [
   'participation',
   'minor_participation',
   'home_visit',
+  'health_data',
   'photo_video',
   'research',
   'marketing',
@@ -550,8 +557,7 @@ const REFERRAL_SOURCES = ['website', 'word_of_mouth', 'instagram', 'school', 'co
 const ADULT_AGES = [22, 27, 31, 34, 38, 41, 44, 47, 50, 53, 56, 58] as const;
 const MINOR_AGES = [8, 9, 11, 12, 14, 15, 16, 17] as const;
 const ARABIC_FIRST = new Set([2, 5, 8, 11, 14, 17, 19, 20]);
-const PHOTO_CONSENT = new Set([5, 6, 17]);
-const WITHDRAWN_PHOTO_CONSENT = 7;
+const WITHDRAWN_HEALTH_CONSENT = 7;
 const SECOND_PARENT = new Set([13, 17, 19]);
 
 /**
@@ -1075,14 +1081,15 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       const givenAt = `${isoDate(Number(today.slice(0, 4)) - 1, rng.int(1, 12), rng.int(1, 28))}T09:00:00+04:00`;
       const method: ConsentMethod =
         n % 7 === 0 ? 'paper_scan' : n === 11 ? 'verbal_witnessed' : 'app_signature';
-      const purposes: ConsentPurpose[] = ['participation', 'home_visit'];
+      const purposes: ConsentPurpose[] = ['participation', 'home_visit', 'health_data'];
       if (minor) purposes.push('minor_participation');
-      if (PHOTO_CONSENT.has(n)) purposes.push('photo_video');
-      // One household changed its mind about photographs: an optional consent,
-      // given and then withdrawn, so the seed carries that shape too.
-      if (n === WITHDRAWN_PHOTO_CONSENT) purposes.push('photo_video');
+      // One household withdrew its agreement to the practice holding health
+      // data: a consent given and then taken back, so the seed carries that
+      // shape too. It used to be a household changing its mind about
+      // photographs; the practice takes none since 2026-09-09, and the shape
+      // is worth keeping against a purpose that still exists.
       for (const purpose of purposes) {
-        const withdrawn = n === WITHDRAWN_PHOTO_CONSENT && purpose === 'photo_video';
+        const withdrawn = n === WITHDRAWN_HEALTH_CONSENT && purpose === 'health_data';
         consents.push({
           id: seedId('b', ++consentCount),
           clientId,

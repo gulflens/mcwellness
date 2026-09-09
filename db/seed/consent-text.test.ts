@@ -8,7 +8,14 @@ import { loadConsentTexts, purposesOf } from './consent-text';
  * files and what a person signs.
  */
 
-const PURPOSES = ['home_visit', 'minor_participation', 'participation', 'photo_video'];
+/**
+ * The purposes the practice asks a household for, since the legal advisor's
+ * recommendations of 9 September 2026. `photo_video` is absent: no photograph
+ * is taken, so none is agreed to. Its superseded wording is kept under
+ * `docs/CONSENT/superseded/`, out of the loader's reach, because consents
+ * recorded on staging name it.
+ */
+const PURPOSES = ['health_data', 'home_visit', 'minor_participation', 'participation'];
 
 describe('the consent wording files', () => {
   const texts = loadConsentTexts();
@@ -22,11 +29,18 @@ describe('the consent wording files', () => {
     }
   });
 
+  it('offers no wording for a purpose the practice has retired', () => {
+    for (const retired of ['photo_video', 'research', 'marketing']) {
+      expect(texts.some((text) => text.purpose === retired)).toBe(false);
+    }
+  });
+
   it('reads the version and the status from the front matter of each file', () => {
     for (const text of texts) {
-      expect(text.version).toMatch(/^\d+\.\d+/);
-      // Drafts until the practice's lawyer approves them (docs/CONSENT/README.md).
-      expect(text.status).toBe('draft');
+      expect(text.version).toBe('1.0');
+      // Approved by the practice's legal advisor on 2026-09-09, subject to the
+      // four changes this round carries (docs/CONSENT/README.md).
+      expect(text.status).toBe('approved');
     }
   });
 
@@ -36,21 +50,22 @@ describe('the consent wording files', () => {
       expect(text.bytes.toString('utf8').startsWith('---\n')).toBe(true);
       expect(text.bytes.byteLength).toBeGreaterThan(200);
     }
-    // Eight different texts: no file is a copy of another.
-    expect(new Set(texts.map((text) => text.sha256Hex)).size).toBe(8);
+    // Four files behind eight texts: the agreement is one page shown for three
+    // purposes, so three of the eight share its bytes by design.
+    expect(new Set(texts.map((text) => text.sha256Hex)).size).toBe(4);
   });
 
   it('reads them in the same order every time, so the seeded ids never move', () => {
     expect(loadConsentTexts().map((text) => text.file)).toEqual(texts.map((text) => text.file));
     expect(texts.map((text) => text.file)).toEqual([
-      'home-visit.ar.md',
-      'home-visit.en.md',
-      'minor-participation.ar.md',
-      'minor-participation.en.md',
-      'participation.ar.md',
-      'participation.en.md',
-      'photo-video.ar.md',
-      'photo-video.en.md',
+      'agreement.ar.md',
+      'agreement.ar.md',
+      'agreement.ar.md',
+      'agreement.en.md',
+      'agreement.en.md',
+      'agreement.en.md',
+      'health-data.ar.md',
+      'health-data.en.md',
     ]);
   });
 

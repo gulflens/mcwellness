@@ -94,8 +94,16 @@ describe('ConsentText', () => {
 });
 
 describe('the practice’s own wording, as filed', () => {
-  /** The real file, not a fixture: this renderer exists for these words. */
-  const participation = readFileSync('docs/CONSENT/participation.en.md', 'utf8');
+  /**
+   * The real file, not a fixture: this renderer exists for these words.
+   *
+   * Superseded on 2026-09-09 by the approved agreement, and still read from
+   * `superseded/` deliberately. A consent names the text it was given against,
+   * so the wording a household signed is rendered back to them for as long as
+   * that consent stands — the renderer's job does not end when a version does,
+   * and the hard-wrapped bullets below are only in the older text.
+   */
+  const participation = readFileSync('docs/CONSENT/superseded/participation.en.md', 'utf8');
 
   it('keeps a hard-wrapped bullet in its list', () => {
     render(<ConsentText markdown={participation} />);

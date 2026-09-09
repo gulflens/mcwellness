@@ -1,3 +1,11 @@
+---
+purpose: participation, minor_participation, home_visit
+locale: en
+version: 1.0
+status: approved
+written: 2026-09-09
+---
+
 # Agreement to take part
 
 McWellness, Dubai. Plain-language version, September 2026. This page records
@@ -35,12 +43,6 @@ or attention; a skin condition or sensitivity on the scalp.
 How bookings, notice and packages work is on the page "Bookings and
 packages". How we look after your information is on the page "Your
 information". Both come with this agreement.
-
-## Photographs (optional)
-
-[ ] The practitioner may photograph the sensor placement at the start of a
-session, so the next one can match it. Never the face. Kept with my record,
-never shared, deleted when my record is.
 
 ## For a child under 18
 

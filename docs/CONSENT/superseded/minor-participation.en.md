@@ -6,6 +6,8 @@ status: draft
 written: 2026-09-03
 ---
 
+**Superseded on 9 September 2026 by the approved wording in the folder above. Kept because consents recorded on staging name this text.**
+
 # Agreement for a child or young person to take part
 
 **Draft wording, in use until the practice's lawyer approves a final version.**
