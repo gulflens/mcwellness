@@ -231,7 +231,7 @@ documentation files from 7 September, fell behind `main`.
 
 **The default in force.** Neither is built. Pull request 116's content is
 carried into `docs/PRODUCTION.md` by trunk round 41 and the pull request
-closed, so that part is done.
+closes when that round lands, so that part needs nothing from you.
 
 **Recommended.** Hold both until there is a second practitioner: the
 dispatcher is for a practice with more than one person on the road, and the
@@ -245,7 +245,7 @@ dispatcher".
 ### 12. Rotate the staging project's service key
 
 **What it is.** Owed since 6 September, when a shell redirection printed the
-staging project's service-role key into a session's own transcript. Staging
+staging project's service-role key into a working log. Staging
 holds synthetic data only; this is hygiene, not exposure.
 
 **What it blocks.** Nothing.
@@ -254,8 +254,8 @@ holds synthetic data only; this is hygiene, not exposure.
 
 **Recommended.** Rotate it now: Supabase dashboard, the staging project,
 Project Settings › API, "Generate new service role key". Five minutes. Then
-tell a session, and it places the new value in `.env.staging` on the laptop
-without printing it.
+say so, and the new value is placed in `.env.staging` on the laptop without
+being shown.
 
 **Reply.** "Done" when it is.
 
@@ -263,8 +263,8 @@ without printing it.
 
 1. **Pause the old app's Supabase project** (`gqvpapvdqcfjlifgwhpk`) from the
    dashboard, once real enquiries have landed through the new door — the API
-   refuses to pause a paid project, and a hook stops every session touching
-   it. Its `lodge_enquiry` is the revert path until then. Delete its two
+   refuses to pause a paid project, and a guard in the repository stops any
+   automated step touching it. Its `lodge_enquiry` is the revert path until then. Delete its two
    Firebase keys at the same time.
 2. **Sign up to Better Stack** for uptime alerts to your phone, if you want
    them; the GitHub probe already checks both health routes every five

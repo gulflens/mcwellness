@@ -36,8 +36,7 @@ function store(): Storage | undefined {
  * (adminAccess.ts), so the rail never shows a link a route would bounce
  * the person straight back out of — a finance account sees Billing but not
  * Schedule, and only someone who treats sees Today. `clients` is
- * unconditional, having no per-role gate of its own yet, and `sessions` still
- * carries no `to` at all, so it renders as "Arriving" regardless of role.
+ * unconditional, having no per-role gate of its own yet.
  *
  * **Settings is the one entry whose destination depends on who is reading.**
  * Two screens sit under it with different audiences — Practice is the owner's

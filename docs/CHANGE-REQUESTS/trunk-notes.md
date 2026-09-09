@@ -2993,8 +2993,10 @@ on the sheet.
 `RailSection.to` is required, the "Arriving" branch and its style and icon are
 deleted. The website's enquiry door answers with
 `Cross-Origin-Resource-Policy: cross-origin` on its preflight and its post,
-so a browser hands the reply to the page that posted rather than logging it
-as blocked; the exception lives in `securityHeaders` as an option the API
+so the browser completes the site's beacon reply quietly instead of discarding
+it and logging it as blocked (nothing new becomes readable: a fetch in CORS
+mode is governed by the CORS answer, and a beacon's reply is never exposed to
+the page); the exception lives in `securityHeaders` as an option the API
 factory sets for that one path, because `hono/secure-headers` writes after the
 handler and would overwrite a header the door set itself, and a GET on the
 path is the fence's refusal and stays `same-origin`. The form that changes a
@@ -3015,7 +3017,7 @@ rather than rebased: its fourth-live-pass record is in `docs/PRODUCTION.md`,
 followed by live passes five to eleven written in UTC from the sessions' notes
 (the restart-after-build lesson, the two-sessions hold, `SCHEDULER=off` on a
 second instance, the IPv6 edge), `billing-07.md` item 2 is marked applied, and
-116 is closed. `docs/HANDOVER.md` opens with the state as of 10 September and
+116 closes with this round's merge. `docs/HANDOVER.md` opens with the state as of 10 September and
 sections 2, 8 and 10 each say what moved. The twelve decisions are
 `docs/OPERATOR/2026-09-10-decisions.md`, each with what it blocks, the default
 in force, a recommendation and the line to reply with, then the four acts only

@@ -102,8 +102,10 @@ goals, and the product makes their progress visible.
   place.
 - Reports are the tangible product: bilingual PDFs signed by the lead
   practitioner, shared with whoever the family chooses.
-- Retention: 5 years after the last activity, then erasure or anonymisation on
-  request; financial records 5 years regardless.
+- Retention: a minimum of 5 years after the last activity, and kept after
+  that; nothing deletes on a timer, and erasure or anonymisation happens when
+  the client asks; financial records 5 years regardless (rule 8, operator
+  2026-09-09).
 - WhatsApp is the client channel (Phase 2); the website's booking form asks
   for a preferred contact method of phone, WhatsApp or email and a preferred
   time of morning, afternoon, evening or flexible. Email never carries client
@@ -121,7 +123,8 @@ goals, and the product makes their progress visible.
   treatment language; no real or realistic personal data anywhere in the repo;
   structured records; business rules as pure functions in `domain/`; every
   read and write of personal data audited; VAT never hand-entered;
-  append-only closed records; 5-year retention then erasure; the vendor
+  append-only closed records; a five-year minimum retention with erasure on
+  request and nothing deleted on a timer; the vendor
   register; the ownership map.
 - Terminology: client (the person receiving sessions), contact (parent or
   guardian, or the adult client), practitioner, lead practitioner, goal (what

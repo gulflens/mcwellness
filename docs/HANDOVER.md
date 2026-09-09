@@ -6,7 +6,8 @@ passes (`docs/PRODUCTION.md`), with 92 migrations and 26 policy files applied.
 Live on it: Books, the website's enquiry door and its office screen, Settings ›
 Team, the in-process scheduler (the books posted at 03:00 Dubai and the erasure
 sweep hourly; any second instance on the same database sets `SCHEDULER=off`),
-the change-password screens, the weekly off-site backup (`mcwellness-backups`,
+the change-password screen (the console's; the portal's is this round's),
+the weekly off-site backup (`mcwellness-backups`,
 Singapore), the GitHub uptime probe, the practice's identity, logo and contact
 details, the price list of 7 September, and the approved wording (versions
 1.0 and 1.1 in English, 1.1 and 1.2 in Arabic). The Google keys are restricted
@@ -18,8 +19,9 @@ round 41 closed the loose ends that were code or record
 **`docs/OPERATOR/2026-09-10-decisions.md`**, which is what waits on the
 operator now. **The next thing to build is piece twelve's plan** (section 10,
 step 12). Everything from here to section 1 is the state as it was written on
-8 September at 02:35, kept as the record of that night; sections 2, 8 and 10
-each open with a dated note saying what has moved since.
+8 September at 02:35, kept as the record of that night; sections 2 and 8
+open with a dated note saying what has moved since, and section 10 carries
+the steps as items 9 to 12.
 
 Written 4 September 2026, updated on 8 September at 02:35. **Two rounds landed
 overnight and both wait on the operator's word for production.** At 00:18 the
@@ -95,7 +97,8 @@ an unanswered decision. The next session's first act is section 10.
   (section 10, steps 9 to 11): 92 migrations and 26 policy files, production
   level with `main` after the eleventh live pass, nothing merged and waiting
   for production. Open pull requests: 127 and 128 (plans and specs awaiting
-  the operator's word, decision 11 on the sheet) and this round's own. The
+  the operator's word, decision 11 on the sheet), 116 (carried, closes with
+  this round's merge) and this round's own. The
   bullets below are the state on 6 to 8 September.
 - `main` is at `7d06cf8` plus this file's own pull request: seventy migrations
   and nineteen policy files. Every merged pull request through #89 carries
@@ -605,7 +608,7 @@ operator can do (pausing the old app's project, the Better Stack sign-up, a
 line to Hostinger about its IPv6 edge, the translation rule in the QEEG Report
 Builder), plus the kit register. Of the list below, written on 8 September: the
 design round, the discount round and the English-only console are on
-production; pull request 116 is carried into `docs/PRODUCTION.md` and closed;
+production; pull request 116 is carried into `docs/PRODUCTION.md` and closes with round 41's merge;
 the practice's details, logo and contact fields are on production; the Google
 key is restricted and capped; the restore rehearsal is done against a hosted
 target (`docs/RUNBOOK/restore.md` section 3); the off-site backup is live; the

@@ -106,7 +106,8 @@ async function bookAppointment(clientId: string, serviceCode = 'nf-session'): Pr
   const practitioner = h.data.practitioners[0];
   const client = h.data.clients.find((c) => c.id === clientId);
   // Each visit an hour after the last, so the no-overlap constraints hold;
-  // the first at 08:00 Dubai (04:00 UTC) on the day above.
+  // the first at 09:00 Dubai (05:00 UTC) on the day above, since the
+  // sequence is stepped before the offset is added.
   const start = new Date(
     new Date(`${visitDay}T04:00:00.000Z`).getTime() + appointmentSeq * 3_600_000,
   ).toISOString();

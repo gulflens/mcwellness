@@ -41,10 +41,12 @@ credential); every read and write of a record is logged, hash-chained.
    production the API serves the built app itself (`SERVE_APP=true`), so the
    same headers cover the screens. **One answer is meant to be read from
    another origin**: the website's enquiry door, `POST /api/enquiries` and its
-   preflight, carries `Cross-Origin-Resource-Policy: cross-origin` so a
-   browser hands the reply to the page that posted instead of logging it as
-   blocked (trunk round 41, 2026-09-10; `tests/security/headers.test.ts`
-   proves the door alone). A GET on that path is the fence's refusal and stays
+   preflight, carries `Cross-Origin-Resource-Policy: cross-origin` so the
+   browser completes the site's beacon reply quietly instead of discarding it
+   and logging it as blocked; nothing new becomes readable, since a fetch in
+   CORS mode is governed by the CORS answer and a beacon's reply is never
+   exposed to the page (trunk round 41, 2026-09-10;
+   `tests/security/headers.test.ts` proves the door alone). A GET on that path is the fence's refusal and stays
    `same-origin`.
 
    **One document is served with a wider policy, and only one**

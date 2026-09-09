@@ -278,7 +278,7 @@ A solo practice at 25 sessions a week generates roughly 300–600 audit rows a d
 create table audit_log (...) partition by range (occurred_at);
 ```
 
-If an archive beyond the retention period is ever wanted (it is not required), an object store with a retention lock is the place; the default is to drop.
+If an archive beyond the retention period is ever wanted (it is not required), an object store with a retention lock is the place; the partitions themselves stay (CLAUDE.md rule 8).
 
 ---
 
