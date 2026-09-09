@@ -61,7 +61,10 @@ export const WORDS = {
     'Changed. Use the new one from your next sign-in.',
     'تم التغيير. استخدم الجديدة من تسجيل دخولك القادم.',
   ),
-  passwordShort: t('Too short: at least twelve characters.', 'قصيرة جدًا: اثنا عشر حرفًا على الأقل.'),
+  passwordShort: t(
+    'Too short: at least twelve characters.',
+    'قصيرة جدًا: اثنا عشر حرفًا على الأقل.',
+  ),
   passwordLong: t('Too long: at most two hundred characters.', 'طويلة جدًا: مئتا حرف على الأكثر.'),
   passwordVariety: t(
     'More variety than that: at least four different characters.',

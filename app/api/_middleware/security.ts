@@ -220,7 +220,10 @@ export function securityHeaders(
     }
     // Only the answers the door itself gives, a preflight and a post: a GET on
     // the same path is the fence's refusal and keeps the strict policy.
-    if (crossOriginPaths.has(c.req.path) && (c.req.method === 'POST' || c.req.method === 'OPTIONS')) {
+    if (
+      crossOriginPaths.has(c.req.path) &&
+      (c.req.method === 'POST' || c.req.method === 'OPTIONS')
+    ) {
       c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
     }
   });

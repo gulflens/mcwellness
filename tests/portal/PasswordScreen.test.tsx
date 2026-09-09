@@ -25,7 +25,11 @@ afterEach(() => {
 
 /** A provider that can change a password, as the Supabase one can. */
 function canChange(updatePassword: (next: string, current: string) => Promise<void>) {
-  return { kind: 'supabase' as const, currentEmail: async () => 'hazel@example.com', updatePassword };
+  return {
+    kind: 'supabase' as const,
+    currentEmail: async () => 'hazel@example.com',
+    updatePassword,
+  };
 }
 
 const fill = (a: string, b: string, current = 'the old one, still right') => {
@@ -58,13 +62,18 @@ describe('the password screen, in Arabic', () => {
     await screen.findByLabelText('كلمة المرور الجديدة');
     fill('correct horse battery staple', 'correct horse battery staple');
     await waitFor(() =>
-      expect(update).toHaveBeenCalledWith('correct horse battery staple', 'the old one, still right'),
+      expect(update).toHaveBeenCalledWith(
+        'correct horse battery staple',
+        'the old one, still right',
+      ),
     );
     expect(
       await screen.findByText('تم التغيير. استخدم الجديدة من تسجيل دخولك القادم.'),
     ).toBeTruthy();
     expect(
-      calls.some((call) => call.path === '/api/me/password-changed' && call.init?.method === 'POST'),
+      calls.some(
+        (call) => call.path === '/api/me/password-changed' && call.init?.method === 'POST',
+      ),
     ).toBe(true);
   });
 
@@ -94,9 +103,7 @@ describe('the password screen, in Arabic', () => {
     mountPortal(<PasswordScreen />, { answers, locale: 'ar' });
     await screen.findByLabelText('كلمة المرور الجديدة');
     fill('correct horse battery staple', 'correct horse battery staple');
-    expect(
-      await screen.findByText('لا توجد كلمة مرور لتغييرها في طريقة الدخول هذه.'),
-    ).toBeTruthy();
+    expect(await screen.findByText('لا توجد كلمة مرور لتغييرها في طريقة الدخول هذه.')).toBeTruthy();
   });
 
   it('reads in English for a household that chose it', async () => {
