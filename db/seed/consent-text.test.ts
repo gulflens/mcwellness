@@ -37,7 +37,10 @@ describe('the consent wording files', () => {
 
   it('reads the version and the status from the front matter of each file', () => {
     for (const text of texts) {
-      expect(text.version).toBe('1.0');
+      // English at 1.0, Arabic at 1.1: the Arabic was corrected on the evening
+      // of 2026-09-09, after being filed, and a filed wording is never edited
+      // — the correction is a new version (docs/CONSENT/README.md).
+      expect(text.version).toBe(text.locale === 'ar' ? '1.1' : '1.0');
       // Approved by the practice's legal advisor on 2026-09-09, subject to the
       // four changes this round carries (docs/CONSENT/README.md).
       expect(text.status).toBe('approved');

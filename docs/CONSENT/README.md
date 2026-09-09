@@ -53,6 +53,24 @@ tax registration number or registered address appears in any of these files:
 this repository is public, and identity is rendered from owner settings, as it
 already is on an invoice, a report and the erasure letter.
 
+## The Arabic is at 1.1, and the English at 1.0
+
+Both were filed at 1.0 on 9 September 2026. The compliance review of the same
+day found the Arabic saying المعالج — from علاج, to treat — where the rest of
+the practice's software says الممارس, two lines after the same page says the
+practice treats nobody. The words were corrected the same evening, before any
+household had been shown either file.
+
+That correction is a new version and not an edit, because the database says so
+and is right to: `app.guard_document_write` refuses to change a filed wording
+("a correction is a new document, never an edit of the one already filed"), and
+`document_consent_text_version_idx` makes `(practice, purpose, language,
+version)` unique whether or not a row is retired — so a version, once filed, is
+spent. `agreement.ar.md` and `health-data.ar.md` are therefore version 1.1 and
+their English twins are still 1.0. That asymmetry is the truth: one text was
+corrected and the other was not, and a version belongs to a document rather
+than to a pair.
+
 ## Superseded
 
 `superseded/` holds the eight long drafts of 3 September, replaced by the
