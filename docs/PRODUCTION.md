@@ -821,4 +821,6 @@ line. Record it here as the fourth live pass.
 - The vendor register approves Hostinger, adds Web3Forms (the website's form-to-email path, kept by the operator's decision) and notes the GitHub uptime probe; Better Stack remains the recommended upgrade.
 - Settings › Team, the in-process scheduler (migration 917) and the uptime probe reach production with the next rebuild.
 
-**Left with the operator:** registering the amplifier, laptop and electrode set under Settings › Kit with the amplifier's calibration date; restricting the two Google keys and setting their daily caps in the Google console (`docs/SPEC/route-planning.md` section 8.5).
+**The Google keys, 02:55**, from the Google Cloud CLI signed in on the operator's laptop (`docs/SPEC/route-planning.md` section 8.5): the browser key admits the Maps JavaScript API from `https://app.mcwellnessuae.com/*` alone; the server key admits the Routes API and Maps Static, the two products `app/api/_middleware/routing/google.ts` calls, and no longer Geocoding (a request answers `REQUEST_DENIED`); the project's daily caps are 500 map loads (`maps-backend.googleapis.com/billable_default`) and 3,000 route-matrix elements (`routes.googleapis.com/compute_route_matrix_elements`), set as quota overrides. One route-matrix call and one static map answered on the server key afterwards. The two keys the old app's Firebase project created are untouched and belong to it.
+
+**Left with the operator:** registering the amplifier, laptop and electrode set under Settings › Kit with the amplifier's calibration date.
