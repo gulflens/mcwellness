@@ -299,12 +299,15 @@ describe('what is never cached, ever', () => {
       ['GET', '/api/me'],
       ['GET', '/api/kit'],
       ['GET', '/api/billing/clients/x/stop-balance'],
-      ['GET', '/api/sessions/00000000-0000-4000-8000-000000000001/photo'],
-      ['GET', '/api/sessions/photo/00000000-0000-4000-8000-0000000000f9/link'],
+      // A signed link: fetched fresh or not at all, because a cached one
+      // outlives its own expiry.
+      ['GET', '/api/assessments/file/00000000-0000-4000-8000-0000000000f9/link'],
       ['GET', '/api/audit/timeline'],
       ['POST', '/api/sessions/00000000-0000-4000-8000-000000000001/events'],
-      ['PUT', '/api/sessions/00000000-0000-4000-8000-000000000001/photo'],
       ['POST', '/api/sessions/00000000-0000-4000-8000-000000000001/close'],
+      // A path the API does not answer at all, which is the same answer: the
+      // worker handles what it names and nothing else.
+      ['GET', '/api/sessions/00000000-0000-4000-8000-000000000001/no-such-thing'],
     ] as const;
     for (const [method, path] of never) {
       const answer = await handleFetch(new Request(`${ORIGIN}${path}`, { method }));
