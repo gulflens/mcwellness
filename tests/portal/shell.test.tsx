@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { HomeScreen } from '../../app/client/HomeScreen';
 import { HOME } from './fixtures';
@@ -16,9 +16,22 @@ import { forgetLanguage, json, mountPortal } from './harness';
  */
 const answers = { '/api/portal/home': () => json(HOME) };
 
+/**
+ * jsdom opens at 1024, which is the tablet tier: there the sidebar is a column
+ * beside the page and covers nothing, so none of the covering behaviour
+ * applies. A test about a phone has to say so.
+ */
+function onAPhone(): void {
+  Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
+  act(() => {
+    window.dispatchEvent(new Event('resize'));
+  });
+}
+
 afterEach(() => {
   cleanup();
   forgetLanguage();
+  Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
 });
 
 describe('the portal shell', () => {
@@ -66,9 +79,35 @@ describe('the portal shell', () => {
   it('closes on Escape while it is covering the record', async () => {
     mountPortal(<HomeScreen />, { answers });
     const menu = await screen.findByRole('button', { name: 'Menu' });
+    onAPhone();
     fireEvent.click(menu);
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(menu.getAttribute('aria-expanded')).toBe('false'));
+  });
+
+  it('takes the parked sidebar out of the tab order, and puts it back', async () => {
+    // `inert` rather than `visibility: hidden`: a hidden element cannot take
+    // focus, so the focus call on opening landed on nothing and the person was
+    // left on the body. Found by driving the real browser on 9 September 2026;
+    // jsdom does not reject focus on hidden elements, so only this assertion
+    // keeps it fixed.
+    mountPortal(<HomeScreen />, { answers });
+    await screen.findByRole('button', { name: 'Menu' });
+    const rail = document.querySelector('.portal__rail');
+    // A tablet: the sidebar is a column and is never parked.
+    expect(rail?.hasAttribute('inert')).toBe(false);
+    onAPhone();
+    expect(rail?.hasAttribute('inert')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    expect(rail?.hasAttribute('inert')).toBe(false);
+  });
+
+  it('never parks the sidebar or covers the page above the compact tier', () => {
+    mountPortal(<HomeScreen />, { answers });
+    const rail = document.querySelector('.portal__rail');
+    expect(rail?.hasAttribute('inert')).toBe(false);
+    // No scrim at this width, whatever the menu button says.
+    expect(document.querySelector('.portal__scrim')).toBeNull();
   });
 
   it('names the menu in Arabic too, and mirrors the layout', async () => {
