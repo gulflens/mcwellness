@@ -2975,3 +2975,87 @@ the barrel; `app/shell/auth/types.ts`, `supabase-auth.ts`;
 in the note that shows the temporary password). No migration, no policy, no
 API route: the password lives with the sign-in provider and never touches
 the practice's own tables.
+
+## Round 41 — the loose ends (2026-09-10)
+
+The completeness audit of 10 September (session mcwellness-93) listed twelve
+decisions only the operator or the founder can take, nine roadmap areas each
+needing its own plan, and nine small loose ends. The operator chose the loose
+ends first, then the decisions as a sheet, then piece twelve's plan; and took
+two design choices on the way — the rail's Sessions entry is removed rather
+than given a page, and a household changes their password on a bilingual
+portal screen rather than through a link to the console's English one. This
+round is the loose ends that were code or record; the operator-only ones are
+on the sheet.
+
+**What the round builds.** The rail lists only sections it can open:
+`Sessions` had no page since the first build of the shell, and with it gone
+`RailSection.to` is required, the "Arriving" branch and its style and icon are
+deleted. The website's enquiry door answers with
+`Cross-Origin-Resource-Policy: cross-origin` on its preflight and its post,
+so the browser completes the site's beacon reply quietly instead of discarding
+it and logging it as blocked (nothing new becomes readable: a fetch in CORS
+mode is governed by the CORS answer, and a beacon's reply is never exposed to
+the page); the exception lives in `securityHeaders` as an option the API
+factory sets for that one path, because `hono/secure-headers` writes after the
+handler and would overwrite a header the door set itself, and a GET on the
+path is the fence's refusal and stays `same-origin`. The form that changes a
+password moves out of `PasswordPage` into one `PasswordForm` that takes its
+words from the page; the console keeps its English page at `/account/password`
+and the household gets `/portal/password`, every word from the dictionary, the
+rule's four sentences by key (`passwordProblemKey` beside `passwordProblem`)
+and the provider's refusals by reason, with a link in the sidebar's foot
+beside the person's name and the way out (`docs/SPEC/client-portal.md`
+section 3.9). Four fixture names from before the seed lists existed are now
+pairs from `db/seed/names.ts`.
+
+**What the round records.** The retention rule is stated once: three
+documents and two rules still described a five-year deletion job, and
+CLAUDE.md rule 8 governs (a minimum of five years, nothing deletes on a timer,
+erasure on request). Pull request 116, three days behind `main`, is carried
+rather than rebased: its fourth-live-pass record is in `docs/PRODUCTION.md`,
+followed by live passes five to eleven written in UTC from the sessions' notes
+(the restart-after-build lesson, the two-sessions hold, `SCHEDULER=off` on a
+second instance, the IPv6 edge), `billing-07.md` item 2 is marked applied, and
+116 closes with this round's merge. `docs/HANDOVER.md` opens with the state as of 10 September and
+sections 2, 8 and 10 each say what moved. The twelve decisions are
+`docs/OPERATOR/2026-09-10-decisions.md`, each with what it blocks, the default
+in force, a recommendation and the line to reply with, then the four acts only
+the operator can do and a draft to Hostinger.
+
+**What the gates found, and the round fixed.** `tests/billing/db/call_out_fee.test.ts`
+booked every visit on the literal day 2026-09-10, and migration 408 writes a
+null supply day when the visit is the day of issue, so its supply-day case
+failed everywhere — CI included — for the whole of 10 September in Dubai. The
+suite passed at 03:56 on the operator's clock and failed from 04:27, when
+Dubai's date rolled over; nothing merged that night touched it. The visit day
+is now read from the database's clock as tomorrow in Dubai, which is never
+today. Recorded here because it is the billing stream's file and a lesson for
+every suite that pins a calendar day against a trigger reading `now()`.
+
+**Every file this round touched.** The trunk's own: `domain/shared/password.ts`
+with its test and the barrel; `app/shell/components/PasswordForm.tsx` (new),
+`Rail.tsx` with its test, `Icons.tsx`, `app/shell/shell.css`,
+`app/shell/pages/PasswordPage.tsx`, `app/shell/App.tsx` and `App.test.tsx`;
+`app/api/_middleware/security.ts`, `app/api/create-api.ts`,
+`app/api/enquiries/door.ts`, `tests/security/headers.test.ts`;
+`app/admin/settings/PracticePage.test.tsx` (one fixture line);
+`app/shell/AdminLayout.tsx` (one comment, the fix round);
+`.claude/rules/compliance.md`, `.claude/skills/uae-compliance/SKILL.md`;
+`docs/SPEC/audit.md`, `client-record.md`, `client-portal.md`, `OWNERSHIP.md`,
+`docs/SEAMS.md`, `docs/SECURITY.md`, `docs/PRODUCTION.md`, `docs/HANDOVER.md`,
+`docs/CHANGE-REQUESTS/billing-07.md`, this file,
+`docs/OPERATOR/2026-09-10-decisions.md` (new), and — the fix round's retention
+sweep — `PRODUCT.md`, `docs/CONSENT/README.md` and
+`docs/ADR/0003-wellness-business-supabase-cloud.md`. Outside the trunk's paths, by
+the integrator's widening for one round (`docs/SPEC/OWNERSHIP.md`):
+`client-portal` — `app/client/PasswordScreen.tsx` (new), `PortalRoot.tsx`,
+`portal.css`, `i18n/dictionary.ts`, and `tests/portal/harness.tsx`,
+`shell.test.tsx`, `PasswordScreen.test.tsx` (new); `billing` —
+`tests/billing/db/call_out_fee.test.ts`. **No migration, no policy file, no
+API route, no schema change.**
+
+**Gates on the branch head, in the round's own worktree** (`mcwellness-loose-ends`,
+database on 5451): format, lint, typecheck, the secrets scan (1,477 files)
+and the migration audit clean; 2,421 unit tests passed and 1 skipped across
+210 files; 1,307 database tests passed across 94 files.

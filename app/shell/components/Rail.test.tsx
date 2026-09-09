@@ -7,7 +7,7 @@ import { Rail } from './Rail';
 afterEach(cleanup);
 
 describe('Rail', () => {
-  it('links the sections that exist, marks the rest as arriving, and signs out', () => {
+  it('links every section, lists none as arriving, and signs out', () => {
     const onSignOut = vi.fn();
     render(
       <MemoryRouter initialEntries={['/admin/clients']}>
@@ -39,9 +39,14 @@ describe('Rail', () => {
       'href',
       expect.stringContaining('/admin/audit'),
     );
-    // Sessions alone is still to come; Audit stopped being one in the trunk's
-    // round 31.
-    expect(screen.getAllByText('Arriving')).toHaveLength(1);
+    // Every section is a real destination: the last placeholder, Sessions,
+    // went in trunk round 41 (2026-09-10) rather than standing as a dead entry.
+    expect(screen.queryByText('Arriving')).toBeNull();
+    expect(screen.queryByText('Sessions')).toBeNull();
+    for (const item of document.querySelectorAll('.rail__item')) {
+      expect(item.tagName).toBe('A');
+      expect(item.getAttribute('aria-disabled')).toBeNull();
+    }
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });

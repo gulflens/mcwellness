@@ -38,6 +38,15 @@ const FEE_FILS = 15_000;
 const INSUFFICIENT_PRIVILEGE = '42501';
 
 let h: Harness;
+/**
+ * The day every visit here is booked on: tomorrow, in the practice's own time
+ * zone, read from the database's clock. The trigger writes a supply day only
+ * when it differs from the day of issue (406's rule: null means "the same
+ * day"), so a visit on a fixed calendar day proves nothing on that one day —
+ * this suite booked every visit on 2026-09-10 and failed all day on
+ * 2026-09-10 (trunk round 41). Tomorrow is never today.
+ */
+let visitDay = '';
 
 /**
  * Stamps the same transaction settings the request-context middleware would,
@@ -96,8 +105,12 @@ async function bookAppointment(clientId: string, serviceCode = 'nf-session'): Pr
   const id = `00000000-0000-4000-8000-00000000c${String(appointmentSeq).padStart(3, '0')}`;
   const practitioner = h.data.practitioners[0];
   const client = h.data.clients.find((c) => c.id === clientId);
-  // Each visit an hour after the last, so the no-overlap constraints hold.
-  const start = new Date(Date.UTC(2026, 8, 10, 4 + appointmentSeq, 0, 0)).toISOString();
+  // Each visit an hour after the last, so the no-overlap constraints hold;
+  // the first at 09:00 Dubai (05:00 UTC) on the day above, since the
+  // sequence is stepped before the offset is added.
+  const start = new Date(
+    new Date(`${visitDay}T04:00:00.000Z`).getTime() + appointmentSeq * 3_600_000,
+  ).toISOString();
   await h.owner.query(
     'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
       'location_id, delivery_mode, window_start, window_end, status) values ($1, $2, $3, $4, $5, $6, ' +
@@ -181,6 +194,11 @@ async function creditsFor(clientId: string, serviceCode = 'nf-session') {
 
 beforeAll(async () => {
   h = await startHarness(NOW);
+  const tomorrow = await h.owner.query<{ day: string }>(
+    "select to_char((now() at time zone 'Asia/Dubai')::date + 1, 'YYYY-MM-DD') as day",
+  );
+  visitDay = tomorrow.rows[0]?.day ?? '';
+  if (!visitDay) throw new Error('The database gave no day for the visits.');
   await setPracticePrices(h, SEED_TODAY);
   const created = await h.call(
     'POST',
@@ -262,7 +280,7 @@ describe('a visit called off inside the notice period', () => {
     // The trigger's own literals, tied to domain/billing/document/strings.ts:
     // the database is the only writer, so the words exist in both places and
     // this is what stops them drifting apart.
-    const words = callOutFeeDescription('2026-09-10');
+    const words = callOutFeeDescription(visitDay);
     expect(rows[0]?.description).toBe(words.en);
     expect(rows[0]?.description_ar).toBe(words.ar);
     expect(rows[0]?.quantity).toBe(1);
@@ -273,14 +291,16 @@ describe('a visit called off inside the notice period', () => {
 
   it('says the visit was the day of supply, not the day it was billed', async () => {
     // A trigger reads the database's clock, not the harness's, so the day of
-    // issue is whatever today is; the day of supply is the visit's, and that
-    // is the figure a UAE tax invoice has to carry separately (migration 406).
+    // issue is whatever today is; the day of supply is the visit's (tomorrow,
+    // so never the same day), and that is the figure a UAE tax invoice has to
+    // carry separately (migration 406).
     const { rows } = await h.owner.query<{ today: string }>(
       "select to_char((now() at time zone 'Asia/Dubai')::date, 'YYYY-MM-DD') as today",
     );
     const invoices = await feeInvoicesFor(appointmentId);
     expect(invoices[0]?.issued_on).toBe(rows[0]?.today);
-    expect(invoices[0]?.supplied_on).toBe('2026-09-10');
+    expect(invoices[0]?.supplied_on).toBe(visitDay);
+    expect(visitDay).not.toBe(rows[0]?.today);
   });
 
   it('leaves the family owing the fee, and takes nothing from the package', async () => {

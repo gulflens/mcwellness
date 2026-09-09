@@ -80,7 +80,7 @@ Admin action "Record erasure request" → reason, requested by (contact), date. 
 4. Writes `erasure_request` with what was anonymised and what was deleted.
 5. Generates a confirmation letter (Stage 2 template) for the contact.
 
-Audit rows written before the erasure keep the identifiers for the log's own 5-year retention; the lawyer confirms this exception under the personal-data law before the first erasure. The retention job drops partitions as they age out.
+Audit rows written before the erasure keep the identifiers for the log's own minimum of five years; the lawyer confirms this exception under the personal-data law before the first erasure. Nothing drops them on a timer (CLAUDE.md rule 8, operator 2026-09-09).
 
 ## 9. Audit
 

@@ -10,9 +10,9 @@ Build all three. They answer different questions and they have different shapes.
 
 | | Question it answers | Shape | Retention |
 |---|---|---|---|
-| **Audit log** | "Who accessed or changed client data?" | Append-only, immutable, one row per action | 5 years |
+| **Audit log** | "Who accessed or changed client data?" | Append-only, immutable, one row per action | 5 years minimum, then kept |
 | **Version history** | "What did this record look like before?" | Full snapshots per version of an entity | Same as the entity |
-| **Domain events** | "What happened in the business?" | Semantic events feeding analytics and workflow | 5 years, aggregated after |
+| **Domain events** | "What happened in the business?" | Semantic events feeding analytics and workflow | 5 years minimum, then kept |
 
 The audit log is a compliance artefact — you write it, you almost never read it, and the day you do read it matters enormously. Version history is an operational tool. Domain events drive dashboards.
 
@@ -24,7 +24,7 @@ The audit log is a compliance artefact — you write it, you almost never read i
 
 McWellness is a wellness business (founder's determination, 2026-09-02), so no health regulator inspects this log. The commitments come from the UAE personal-data law and from the trust the product asks of families:
 
-- Client data lives with the rest of the record, encrypted, under the same access controls, in the Supabase project the owner designates, and is kept **5 years** after the last activity.
+- Client data lives with the rest of the record, encrypted, under the same access controls, in the Supabase project the owner designates, and is kept **at least 5 years** after the last activity, and indefinitely after that: nothing deletes on a timer, and erasure happens when the client asks (CLAUDE.md rule 8, operator 2026-09-09).
 - A family may ask who has seen their child's record, and the answer must be complete and fast; unauthorised use must be demonstrable, not just forbidden.
 - Consent and access control are auditable.
 
@@ -272,13 +272,13 @@ Start with the last two. The others become useful when you have staff.
 
 A solo practice at 25 sessions a week generates roughly 300–600 audit rows a day, most of them reads. That's a few million rows a year — trivial for Postgres.
 
-**Partition by month** from day one. Five years of retention is 60 partitions, and dropping a partition older than five years is the retention mechanism: no row-by-row deletion, no exception to immutability.
+**Partition by month** from day one. Five years is 60 partitions. The partitions are the shape of the table, not a deletion schedule: nothing is dropped on a timer (CLAUDE.md rule 8, operator 2026-09-09), and if the practice ever decides to retire old partitions it is a decision of its own, taken as a whole partition and never as a row, so immutability keeps its exceptions at zero.
 
 ```sql
 create table audit_log (...) partition by range (occurred_at);
 ```
 
-If an archive beyond the retention period is ever wanted (it is not required), an object store with a retention lock is the place; the default is to drop.
+If an archive beyond the retention period is ever wanted (it is not required), an object store with a retention lock is the place; the partitions themselves stay (CLAUDE.md rule 8).
 
 ---
 
@@ -288,7 +288,7 @@ If an archive beyond the retention period is ever wanted (it is not required), a
 
 **Phase 2** — activity feed with filters, reason prompts on sensitive actions, break-glass workflow, weekly digest, per-client access report.
 
-**Phase 3** — anomaly alerting, the retention job that drops partitions older than 5 years, exportable access reports for a family's request.
+**Phase 3** — anomaly alerting, exportable access reports for a family's request. (A retention job that dropped partitions was listed here until 2026-09-10 and is withdrawn: nothing deletes on a timer, CLAUDE.md rule 8.)
 
 ---
 

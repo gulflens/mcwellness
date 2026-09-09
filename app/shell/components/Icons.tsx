@@ -46,12 +46,6 @@ export const TodayIcon = (p: IconProps) => (
   </Icon>
 );
 
-export const SessionsIcon = (p: IconProps) => (
-  <Icon {...p}>
-    <path d="M2.5 10h3l2-5 3 10 2.5-7 1.5 2h3" />
-  </Icon>
-);
-
 export const BillingIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M5 2.75h10v14.5l-2-1.25-2 1.25-2-1.25-2 1.25-2-1.25-2 1.25z" />

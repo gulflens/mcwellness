@@ -125,6 +125,22 @@
   color: var(--brand-pale);
 }
 
+/* The way to a new password: a plain link in the foot's pale ink, tall enough
+   to tap, lit like the quiet button beside it. */
+.portal__account {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--tap);
+  color: var(--brand-pale);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.portal__account:hover,
+.portal__account.active {
+  color: var(--surface);
+}
+
 .portal__foot .button--quiet {
   padding-inline: 0;
   color: var(--brand-pale);

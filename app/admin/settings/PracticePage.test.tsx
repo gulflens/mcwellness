@@ -171,7 +171,7 @@ describe('Practice settings — the gate', () => {
       String(input) === '/api/me'
         ? json({
             userId: '00000002-0000-4000-8000-000000000012',
-            displayName: 'Priya Nair',
+            displayName: 'Pearl Lagoon',
             tenantId: '00000001-0000-4000-8000-000000000001',
             roles: ['finance'],
             capabilities: [],

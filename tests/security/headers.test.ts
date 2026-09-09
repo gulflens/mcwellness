@@ -82,6 +82,34 @@ describe('protective headers', () => {
     expect(preflight.headers.get('access-control-allow-methods')).toBeNull();
   });
 
+  it("lets the website read the enquiry door's answer, and nothing else's", async () => {
+    // The door is the one answer another origin is meant to read: the site's
+    // form posts to it and a browser refuses to hand the reply to the page
+    // while the resource policy says same-origin (trunk round 41, 2026-09-10).
+    // The post here is empty, so the door refuses it as a form error before
+    // it reaches the pool; the header is what is under test, not the body.
+    const api = createApi(deps);
+    const origin = 'https://mcwellnessuae.com';
+    const preflight = await api.request('/api/enquiries', {
+      method: 'OPTIONS',
+      headers: { origin, 'access-control-request-method': 'POST' },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
+    const post = await api.request('/api/enquiries', {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/x-www-form-urlencoded' },
+      body: '',
+    });
+    expect(post.status).toBe(400);
+    expect(post.headers.get('cross-origin-resource-policy')).toBe('cross-origin');
+    // Every other answer keeps the strict policy, whatever origin asks.
+    const other = await api.request('/api/health', { headers: { origin } });
+    expect(other.headers.get('cross-origin-resource-policy')).toBe('same-origin');
+    const wrongMethod = await api.request('/api/enquiries', { headers: { origin } });
+    expect(wrongMethod.headers.get('cross-origin-resource-policy')).toBe('same-origin');
+  });
+
   it('answers an unknown path in the fixed refusal shape', async () => {
     const api = createApi(deps);
     const res = await api.request('/nothing-here');

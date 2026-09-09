@@ -19,6 +19,7 @@ import { FamilyScreen } from '../client/FamilyScreen';
 import { HomeScreen } from '../client/HomeScreen';
 import { InvitePage } from '../client/InvitePage';
 import { MoneyScreen } from '../client/MoneyScreen';
+import { PasswordScreen } from '../client/PasswordScreen';
 import { ReportsScreen } from '../client/ReportsScreen';
 import { PortalRoot } from '../client/PortalRoot';
 import { VisitsScreen } from '../client/VisitsScreen';
@@ -364,6 +365,9 @@ export function App() {
         <Route path="reports" element={<ReportsScreen />} />
         <Route path="family" element={<FamilyScreen />} />
         <Route path="agreements" element={<AgreementsScreen />} />
+        {/* The household's own password, in their language; the console's
+            English page at /account/password is the staff's. */}
+        <Route path="password" element={<PasswordScreen />} />
       </Route>
       <Route path="/no-access" element={<RequireAuth>{() => <NoAccessPage />}</RequireAuth>} />
       <Route

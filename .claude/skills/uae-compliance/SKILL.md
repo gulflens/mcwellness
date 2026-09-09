@@ -14,7 +14,7 @@ description: UAE personal-data, VAT, e-invoicing and positioning rules for McWel
 - Rights: access, correction, erasure, withdrawal of consent. Processing is limited to the stated purpose.
 - Minimisation: collect only what the service needs. Emirates ID is optional and never required to enrol; if collected (only to verify the adult who consents for a minor or who is refunded) it is encrypted plus a keyed hash, and no image of an identity document is ever stored.
 - Minors: a guardian consents.
-- Retention (product decision, aligned with tax record-keeping): 5 years after the last activity, then erasure or anonymisation on request. Financial records keep 5 years regardless. Audit rows written before an erasure keep the identifiers for the log's own 5 years: the lawyer confirms this exception before the first erasure.
+- Retention (product decision, aligned with tax record-keeping; CLAUDE.md rule 8, operator 2026-09-09): a minimum of 5 years after the last activity, and indefinitely after that; nothing deletes on a timer. Erasure or anonymisation happens when the client asks. Financial records keep 5 years regardless. Audit rows written before an erasure keep the identifiers for the log's own minimum of 5 years: the lawyer confirms this exception before the first erasure.
 - Hosting: Supabase Cloud in the region the owner chooses (decision of 2026-09-02, to be confirmed with the lawyer). Every vendor receiving personal data is listed in `docs/COMPLIANCE/approved-vendors.md`. No analytics SDKs, error trackers or font CDNs.
 
 ## VAT (FTA)
@@ -31,4 +31,4 @@ description: UAE personal-data, VAT, e-invoicing and positioning rules for McWel
 - No medical claims in advertising or in the product.
 
 ## Audit
-- Immutable, hash-chained audit log of every read and write of personal data, kept 5 years. See docs/SPEC/audit.md.
+- Immutable, hash-chained audit log of every read and write of personal data, kept at least 5 years and never dropped on a timer. See docs/SPEC/audit.md.

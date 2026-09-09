@@ -21,7 +21,7 @@ const PRACTITIONER = {
 
 const LEAD_PRACTITIONER = {
   userId: '00000002-0000-4000-8000-000000000011',
-  displayName: 'Sami Osei',
+  displayName: 'Sage Harbour',
   tenantId: TENANT_ID,
   roles: ['lead_practitioner'],
   capabilities: [],
@@ -37,7 +37,7 @@ const ADMIN = {
 
 const OWNER = {
   userId: '00000002-0000-4000-8000-000000000013',
-  displayName: 'Marlow Bay',
+  displayName: 'Cedar Orchard',
   tenantId: TENANT_ID,
   roles: ['owner'],
   capabilities: [],
@@ -45,7 +45,7 @@ const OWNER = {
 
 const FINANCE = {
   userId: '00000002-0000-4000-8000-000000000012',
-  displayName: 'Priya Nair',
+  displayName: 'Iris Valley',
   tenantId: TENANT_ID,
   roles: ['finance'],
   capabilities: [],

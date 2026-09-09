@@ -8,6 +8,6 @@ paths: ["db/**", "domain/**", "app/api/**", "jobs/**", "infra/**"]
 - Certification: check `credential` capability and validity dates at the moment of authorship or assignment.
 - Audit: every table holding personal data has the audit trigger; every request sets `app.actor_id`, `app.actor_roles`, `app.request_id`, `app.reason` and `app.tenant_id` via `set_config(..., true)` inside the request transaction, under `set local role app_role`.
 - VAT: computed by `domain/billing/resolveVat` from the standard-rate setting, stored per line with the setting version, immutable on an issued invoice. Never typed by hand.
-- Retention: 5 years after the last activity, then erasure or anonymisation on request; financial records 5 years regardless; audit partitions older than 5 years are dropped by the retention job.
+- Retention: a minimum of 5 years after the last activity, and indefinitely after that; nothing deletes on a timer. Erasure or anonymisation happens when the client asks; financial records keep 5 years regardless (CLAUDE.md rule 8, operator 2026-09-09).
 - Erasure: personal fields are anonymised and documents deleted from storage; invoices keep what tax law requires; the client row stays as `erased` so history reconciles.
 - Vendors: anything that receives personal data must be listed in `docs/COMPLIANCE/approved-vendors.md` first.
