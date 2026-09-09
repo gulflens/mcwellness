@@ -221,6 +221,14 @@ export function PracticePage() {
                   <span className="numeric">{practice.whatsappNumber}</span>
                 ) : null}
               </Fact>
+              {/* The three printed in the footer of every document (migration 912). */}
+              <Fact label="Telephone on documents">
+                {practice.contactPhone ? (
+                  <span className="numeric">{practice.contactPhone}</span>
+                ) : null}
+              </Fact>
+              <Fact label="Email on documents">{text(practice.contactEmail)}</Fact>
+              <Fact label="Website on documents">{text(practice.website)}</Fact>
             </dl>
           </section>
 

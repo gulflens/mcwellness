@@ -262,6 +262,37 @@ describe('Practice settings — the save', () => {
     expect(await screen.findByText('+971500000024')).toBeTruthy();
   });
 
+  it('saves the three contact details printed on documents, and refuses an address without @', async () => {
+    const { calls } = mount(() =>
+      json({
+        practice: {
+          ...PRACTICE,
+          contactPhone: '+971 4 000 0000',
+          contactEmail: 'hello@example.com',
+          website: 'https://example.com',
+        },
+      }),
+    );
+    await openTheDrawer();
+    type('Telephone on documents (optional)', '+971 4 000 0000');
+    type('Email on documents (optional)', 'not an address');
+    type('Website on documents (optional)', 'https://example.com');
+    type('Why this changes', 'The practice contact details are set.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(await screen.findByText('An email address is name@example.com.')).toBeTruthy();
+    expect(saves(calls)).toHaveLength(0);
+
+    type('Email on documents (optional)', 'hello@example.com');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({
+      contactPhone: '+971 4 000 0000',
+      contactEmail: 'hello@example.com',
+      website: 'https://example.com',
+    });
+    expect(await screen.findByText('hello@example.com')).toBeTruthy();
+  });
+
   it('will not save without a reason, and never reaches the API to find out', async () => {
     const { calls } = mount();
     await openTheDrawer();

@@ -1,0 +1,71 @@
+# Watches the live app and opens an issue when it stops answering
+# (docs/SPEC/hosting.md section 11 decision 5; the completeness audit of
+# 10 September 2026, item 3). GitHub is already on the vendor register and this
+# sends nothing but two GET requests; the issue it opens carries a status line
+# and no personal data. A hosted uptime service that can ring a phone is the
+# better watcher and can sit beside this one; until it does, this is the one
+# that exists. GitHub runs a five-minute schedule on a best-effort basis, so a
+# gap of a few minutes between probes is normal.
+name: uptime
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LABEL: uptime
+      APP: https://app.mcwellnessuae.com
+    steps:
+      - name: Ask the app, three times if it must
+        id: probe
+        run: |
+          set -u
+          ok=0
+          h=000
+          d=000
+          for attempt in 1 2 3; do
+            h=$(curl -4 --silent --max-time 25 --output /dev/null --write-out '%{http_code}' "$APP/api/health" || echo 000)
+            d=$(curl -4 --silent --max-time 25 --output /dev/null --write-out '%{http_code}' "$APP/api/health/deep" || echo 000)
+            echo "attempt $attempt: health $h, deep health $d"
+            if [ "$h" = "200" ] && [ "$d" = "200" ]; then ok=1; break; fi
+            sleep 20
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          echo "detail=health $h, deep health $d" >> "$GITHUB_OUTPUT"
+
+      - name: Open the issue, keep it current, or close it
+        if: always()
+        run: |
+          set -eu
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+          when=$(date --utc +%Y-%m-%dT%H:%MZ)
+          detail='${{ steps.probe.outputs.detail }}'
+          if [ '${{ steps.probe.outputs.ok }}' = '1' ]; then
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "Answering again at $when ($detail)."
+              gh issue close "$open" --repo "$GITHUB_REPOSITORY"
+            fi
+            exit 0
+          fi
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "Still not answering at $when ($detail)."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label "$LABEL" \
+              --title "app.mcwellnessuae.com is not answering" \
+              --body "Three probes in a row failed at $when: $detail. Restart the app (Hostinger: restart the Node.js application) and read the runtime log; docs/PRODUCTION.md has the recipe. This issue closes itself when the app answers again."
+          fi
+          exit 1
