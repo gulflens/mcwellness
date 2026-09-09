@@ -68,7 +68,24 @@ describe('the seeded consent wording', () => {
       // The practice's legal advisor approved the wording on 2026-09-09, and
       // the schema says so rather than a comment.
       expect(row.status).toBe('approved');
-      expect(row.version).toBe('1.0');
+      // Pinned per purpose and language, as db/seed/consent-text.test.ts pins
+      // them: a filed wording is never edited, so each correction made on
+      // 2026-09-09 is a new version, and the two sets are not the same number.
+      // CI caught this file lagging the unit test by two bumps, because
+      // `pnpm verify` does not run the database suite.
+      const expected: Record<string, string> = {
+        'participation.en': '1.0',
+        'participation.ar': '1.1',
+        'minor_participation.en': '1.0',
+        'minor_participation.ar': '1.1',
+        'home_visit.en': '1.0',
+        'home_visit.ar': '1.1',
+        'health_data.en': '1.1',
+        'health_data.ar': '1.2',
+      };
+      expect(row.version, `${row.purpose}.${row.locale}`).toBe(
+        expected[`${row.purpose}.${row.locale}`],
+      );
       expect(row.mime_type).toBe('text/markdown');
       // A practice document: it belongs to no one client, and is never rewritten.
       expect(row.client_id).toBeNull();
