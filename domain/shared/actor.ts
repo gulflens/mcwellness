@@ -86,6 +86,7 @@ export type Action =
   | { type: 'portal.request.handle' }
   | { type: 'portal.access.manage' }
   | { type: 'kit.manage' }
+  | { type: 'staff.manage' }
   | { type: 'kit.read'; assignedToSelf: boolean }
   | { type: 'routing.day.read'; scope: 'own' }
   | { type: 'routing.practiceDay.read' }
@@ -368,6 +369,12 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // admin, and nobody else: handing out access to a record is the same
       // class of act as granting a role, and db/policies/portal/access.sql
       // refuses the row underneath this.
+      return hasRole(actor, 'owner', 'admin');
+    // Who may add a member of staff, grant a working role or suspend a
+    // sign-in: the owner and an admin, which is what
+    // db/policies/core/role_guard.sql enforces beneath. Ownership itself is the
+    // owner's alone to grant, and no screen offers it (domain/shared/staff.ts).
+    case 'staff.manage':
       return hasRole(actor, 'owner', 'admin');
     case 'kit.manage':
       // The equipment register: listing it, adding an item, editing one,

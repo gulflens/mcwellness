@@ -5,6 +5,7 @@ import { limitsFromEnv, trustedProxyHopsFromEnv } from './_middleware/rate-limit
 import { routingFromEnv } from './_middleware/routing';
 import { MAP_DOCUMENT_PATHS } from './_middleware/security';
 import { storageFromEnv } from './_middleware/storage';
+import { startScheduler } from './scheduler';
 import { issuerFor, verifierFromEnv } from './_middleware/token-verifier';
 import { createApi } from './create-api';
 import { devSessionEnabled, isLoopback } from './dev-session';
@@ -66,6 +67,20 @@ const api = createApi({
   // the widening is visible where the process is assembled.
   mapDocumentPaths: MAP_DOCUMENT_PATHS,
 });
+
+// The two jobs that must run without anybody remembering to, from inside
+// this process (./scheduler.ts, migration 917). On in production unless
+// SCHEDULER=off; anywhere else only when SCHEDULER=on — a laptop started
+// against staging should not post its books unasked.
+const schedulerOn =
+  process.env.SCHEDULER === 'on' ||
+  (process.env.SCHEDULER !== 'off' && process.env.APP_ENV === 'production');
+if (schedulerOn) {
+  startScheduler({ pool, storage });
+  console.log('Scheduler: the books post at 03:00 Asia/Dubai, erasure files are swept hourly.');
+} else {
+  console.log('Scheduler: off (SCHEDULER=on turns it on outside production).');
+}
 
 // SERVE_APP=true: the built app (pnpm build) is served by this process too, so
 // the protective headers cover the screens as well as the data.

@@ -1,11 +1,14 @@
 import { useRef, useState, type FormEvent } from 'react';
 import {
+  CONTACT_EMAIL_MESSAGE,
+  CONTACT_PHONE_MESSAGE,
+  type Emirate,
   EMIRATES,
+  type Practice,
   PracticeResponse,
   VAT_TRN_DIGITS,
+  WEBSITE_MESSAGE,
   WHATSAPP_MESSAGE,
-  type Emirate,
-  type Practice,
 } from '../../api/practice/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
@@ -41,6 +44,9 @@ type FieldErrors = {
   taxRegistrationNumber?: string;
   vatTrn?: string;
   whatsappNumber?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  website?: string;
   displayAddress?: string;
   latitude?: string;
   longitude?: string;
@@ -52,6 +58,9 @@ const FIELD_IDS: Record<keyof FieldErrors, string> = {
   taxRegistrationNumber: 'practice-tax-registration',
   vatTrn: 'practice-vat-trn',
   whatsappNumber: 'practice-whatsapp-number',
+  contactPhone: 'practice-contact-phone',
+  contactEmail: 'practice-contact-email',
+  website: 'practice-website',
   displayAddress: 'practice-address',
   latitude: 'practice-latitude',
   longitude: 'practice-longitude',
@@ -116,6 +125,11 @@ export function PracticeDrawer({
   const [vatRegistered, setVatRegistered] = useState(practice.vatRegistered);
   const [vatTrn, setVatTrn] = useState(practice.vatTrn ?? '');
   const [whatsappNumber, setWhatsappNumber] = useState(practice.whatsappNumber ?? '');
+  // The three printed in the footer of every document (migration 912). Until
+  // 10 September 2026 only a script could set them (billing-09 item 6).
+  const [contactPhone, setContactPhone] = useState(practice.contactPhone ?? '');
+  const [contactEmail, setContactEmail] = useState(practice.contactEmail ?? '');
+  const [website, setWebsite] = useState(practice.website ?? '');
   const [displayAddress, setDisplayAddress] = useState(practice.address?.displayAddress ?? '');
   const [emirate, setEmirate] = useState<Emirate>(
     practice.address?.emirate ?? practice.defaultEmirate,
@@ -162,6 +176,20 @@ export function PracticeDrawer({
     const typedWhatsapp = whatsappNumber.replace(/[\s()-]/g, '');
     if (typedWhatsapp.length > 0 && !/^\+[1-9][0-9]{6,14}$/.test(typedWhatsapp)) {
       errors.whatsappNumber = WHATSAPP_MESSAGE;
+    }
+    // The same three checks app/api/practice/schema.ts makes, so the drawer
+    // says what the API would say, before the API has to.
+    const typedContactPhone = contactPhone.trim();
+    if (typedContactPhone.length > 0 && !/^[0-9+()\- ]{4,32}$/.test(typedContactPhone)) {
+      errors.contactPhone = CONTACT_PHONE_MESSAGE;
+    }
+    const typedContactEmail = contactEmail.trim();
+    if (typedContactEmail.length > 0 && !/^[^\s@]+@[^\s@]+$/.test(typedContactEmail)) {
+      errors.contactEmail = CONTACT_EMAIL_MESSAGE;
+    }
+    const typedWebsite = website.trim();
+    if (typedWebsite.length > 0 && !/^https?:\/\/\S+$/.test(typedWebsite)) {
+      errors.website = WEBSITE_MESSAGE;
     }
     const typedAddress = displayAddress.trim();
     if (hasAddressOnRecord && typedAddress.length === 0) {
@@ -223,6 +251,9 @@ export function PracticeDrawer({
           vatRegistered,
           vatTrn: vatRegistered ? typedVatTrn : '',
           whatsappNumber: typedWhatsapp,
+          contactPhone: typedContactPhone,
+          contactEmail: typedContactEmail,
+          website: typedWebsite,
           address,
         }),
       });
@@ -334,6 +365,51 @@ export function PracticeDrawer({
               clearFieldError('whatsappNumber');
             }}
             error={fieldErrors.whatsappNumber}
+          />
+
+          <Field
+            id={FIELD_IDS.contactPhone}
+            label="Telephone on documents (optional)"
+            hint="Printed in the footer of every invoice and receipt."
+            type="tel"
+            inputMode="tel"
+            maxLength={32}
+            value={contactPhone}
+            onChange={(e) => {
+              setContactPhone(e.target.value);
+              clearFieldError('contactPhone');
+            }}
+            error={fieldErrors.contactPhone}
+          />
+
+          <Field
+            id={FIELD_IDS.contactEmail}
+            label="Email on documents (optional)"
+            hint="Printed beside the telephone."
+            type="text"
+            inputMode="email"
+            maxLength={200}
+            value={contactEmail}
+            onChange={(e) => {
+              setContactEmail(e.target.value);
+              clearFieldError('contactEmail');
+            }}
+            error={fieldErrors.contactEmail}
+          />
+
+          <Field
+            id={FIELD_IDS.website}
+            label="Website on documents (optional)"
+            hint="Starts https://."
+            type="text"
+            inputMode="url"
+            maxLength={200}
+            value={website}
+            onChange={(e) => {
+              setWebsite(e.target.value);
+              clearFieldError('website');
+            }}
+            error={fieldErrors.website}
           />
 
           <Field

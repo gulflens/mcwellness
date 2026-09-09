@@ -807,3 +807,18 @@ from that call creates no build, call it again; watch the served bundle name
 flip with `curl -4`; then `/api/health` and `/api/health/deep`, and the
 clients table or the Settings page signed in as the founder to see no Arabic
 line. Record it here as the fourth live pass.
+
+## What was done on 2026-09-10: the enquiries live, and the completeness audit's fixes
+
+**The enquiries round** (pull request 135, `main` at `6387a30`): migration 916 applied at 16:43 UTC with its ledger row (sha256 `24dd1d11…`), the four `enquiry` policies applied, the process rebuilt (build `01a0870f`, served bundle `index-CAWv1yV5.js` with `index-ZBZu5Mhp.css`, the CSS hash matching a local build exactly), the door verified live — a preflight from the site's origin answered 204, a honeypot post answered `{"ok":true}` and wrote nothing, an unsigned GET met the fence with 401 — and the website's twenty-two pages redeployed with their `ENDPOINT` on `https://app.mcwellnessuae.com/api/enquiries`. One enquiry submitted through the live page in a browser landed as a `new` row within a second (a synthetic person, a reserved test number) and was left for the operator to dismiss from the screen. The old project's `lodge_enquiry` is untouched: it is the revert path until real submissions have landed.
+
+**The completeness audit's fixes, the same night**, each as an act on the live system and the rest as pull request 136:
+
+- The founder's account holds `lead_practitioner` alongside `owner` (one audited insert into `user_role` under her own id, reason recorded), so the practitioner side opens for her.
+- The practice's logo is filed and its telephone, email and website are set, through the API under her account (`scripts/practice-brand.mjs`); the three fields are now on Settings › Practice too.
+- The host's environment no longer holds `FOUNDER_EMAIL` and `FOUNDER_PASSWORD`, which the app never read; `go-live.py --env-only` now skips them, and the process was restarted with both health routes green.
+- The off-site weekly backup is live: project `mcwellness-backups` (`ap-southeast-1`), role `mcwellness_backup` on production, three repository secrets, first dump filed by hand (`docs/SPEC/hosting.md` section 6).
+- The vendor register approves Hostinger, adds Web3Forms (the website's form-to-email path, kept by the operator's decision) and notes the GitHub uptime probe; Better Stack remains the recommended upgrade.
+- Settings › Team, the in-process scheduler (migration 917) and the uptime probe reach production with the next rebuild.
+
+**Left with the operator:** registering the amplifier, laptop and electrode set under Settings › Kit with the amplifier's calibration date; restricting the two Google keys and setting their daily caps in the Google console (`docs/SPEC/route-planning.md` section 8.5).

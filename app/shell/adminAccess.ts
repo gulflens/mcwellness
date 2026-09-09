@@ -106,6 +106,15 @@ export function canOpenAudit(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `staff.manage` (app/api/team/routes.ts) — who may open Settings ›
+ * Team. The owner and an admin: the two `db/policies/core/role_guard.sql`
+ * lets write a colleague's row, and the same two the API admits.
+ */
+export function canOpenTeam(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'staff.manage' }, {}, now);
+}
+
+/**
  * Matches `enquiry.list` (app/api/enquiries/routes.ts) — who may open
  * Enquiries. The owner, an admin and the lead practitioner: the same three
  * who action one (`enquiry.action`), because a screen that shows a name and a

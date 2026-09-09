@@ -44,6 +44,7 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `db/policies/core/**` | RLS on core tables |
 | `db/seed/**` | Synthetic generators |
 | `app/shell/**`, `app/api/_middleware/**` | Auth, audit context, routing |
+| `app/api/team/**`, `app/api/scheduler.ts`, `app/admin/settings/**`, `.github/workflows/uptime.yml` | Who works at the practice (sign-ins and roles), the two jobs run from inside the process, the settings screens, and the uptime probe (trunk round 39, 2026-09-10, `docs/CHANGE-REQUESTS/trunk-notes.md`) |
 | `domain/enquiry/**`, `app/api/enquiries/**`, `app/admin/enquiries/**`, `db/policies/enquiry/**` | The website's enquiries: the one public write path, its quarantine table (migration `916`) and the office screen that actions it (trunk round 38, 2026-09-10, `docs/CHANGE-REQUESTS/trunk-notes.md`) |
 | `infra/**`, `package.json`, lockfile, CI config | Build and deploy |
 

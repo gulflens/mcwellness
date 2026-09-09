@@ -7,6 +7,7 @@ import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
 import { EnquiriesPage } from '../admin/enquiries/EnquiriesPage';
 import { KitPage } from '../admin/kit/KitPage';
+import { TeamPage } from '../admin/settings/TeamPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { WeekPage } from '../admin/schedule/WeekPage';
 import { DayMapPage } from '../admin/schedule/map/DayMapPage';
@@ -35,6 +36,7 @@ import {
   canOpenPractitioners,
   canOpenSchedule,
   canOpenSettings,
+  canOpenTeam,
   canOpenToday,
 } from './adminAccess';
 import { useAuth, type Actor } from './auth/AuthContext';
@@ -304,6 +306,20 @@ export function App() {
               {(actor) =>
                 canOpenPractitioners(actor, new Date()) ? (
                   <PractitionersPage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="settings/team"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenTeam(actor, new Date()) ? (
+                  <TeamPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )

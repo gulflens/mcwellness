@@ -2859,3 +2859,68 @@ seen in the screen, converted, and the lead erased; and only then is the old
 project safe to pause — the operator's call.
 
 **Nothing in those paths is the trunk's beyond this round.**
+
+## Round 39 — the completeness audit's fixes (2026-09-10)
+
+The operator asked for an audit of everything planned, built or deferred,
+then said "fix those" of its first ten items. This round is the code half;
+the live acts are recorded in `docs/PRODUCTION.md` under the same date.
+
+**What the round builds.** Settings › Team (`app/api/team/**`,
+`app/admin/settings/TeamPage.tsx`): the owner and an admin add a colleague
+with a temporary password shown once — the operator's decision of 10
+September, over an emailed invitation, because the app has no password-reset
+screen yet — grant the four working roles and suspend or reactivate a sign-in.
+Ownership is offered to nobody; `db/policies/core/role_guard.sql` already
+said so beneath, and `staff.manage` (domain/shared/actor.ts) says it above.
+The three contact details printed in every document's footer are on
+Settings › Practice (closing `billing-09.md` item 6). The two jobs run from
+inside the process (`app/api/scheduler.ts`, migration 917's one definer for
+the practice ids) rather than from a cron entry the host never had, with the
+owner's connection string nowhere. And `.github/workflows/uptime.yml` probes
+both health routes every five minutes and opens an issue when they fail.
+
+**What the audit also found and the round records.** The website posts every
+enquiry to Web3Forms as well as to the app, and had done since before the
+app existed; the operator chose to keep it and it is on the register. The
+website's own admin talks to a database project that no longer exists. The
+content security policy was already inside every document since 8
+September; the note that said otherwise was stale. The two founder secrets in
+the host's environment were the go-live script's, and are gone.
+
+**Every file this round touched is the trunk's**: `domain/shared/staff.ts`
+with its test, `actor.ts` with its test and the barrel; `app/api/team/**`,
+`app/api/scheduler.ts` with its test, `app/api/server.ts`,
+`app/api/create-api.ts`; `app/shell/adminAccess.ts`, `App.tsx`;
+`app/admin/settings/**`; `db/migrations/917_scheduled_tenants.sql` in the
+`900–949` half (it reads a core table) and `962_erasure_guard_admits_the_sweep.sql`
+in the `950–999` half (it replaces a function the client-record stream
+created); `tests/db/team.test.ts`,
+`tests/db/scheduler.test.ts`; `.github/workflows/uptime.yml`; `.env.example`;
+`docs/COMPLIANCE/approved-vendors.md`, `docs/SPEC/hosting.md`,
+`docs/SPEC/OWNERSHIP.md`, `docs/PRODUCTION.md`. No stream's path was edited.
+
+**Reviewed** by the three briefs. Schema (PASS) had 917's header name only
+what it depends on, both `user_role` inserts set `created_by`, and the test
+prove an admin cannot suspend the owner through the route. Security (PASS)
+closed six: nobody widens their own roles (`canGrantTo`), `archived` is the
+end of a sign-in at the API and not only on the screen, each scheduled job
+carries the least role that opens what it touches (finance for the books,
+admin for the sweep) rather than the owner's, the scheduler starts only in
+production unless asked, the uptime workflow reads its outputs through the
+environment, and a lost temporary password is replaced by
+`POST /api/team/:id/password`, logged as an act and never as a value.
+Compliance (FAIL, closed) found the one real defect: under the API role the
+erasure sweep's own bookkeeping was refused by the guard from migration 105,
+which admits nothing after the act but the letter — the CLI job had run on
+the owner's connection, where the guard steps aside. Migration 962 teaches the
+guard the sweep's three columns, each of which moves one way, and the
+scheduler's test now performs an erasure with a pending key and watches it
+cleared. It also put the backups project on the vendor register, completed
+the Web3Forms row, moved one telephone fixture onto the reserved range, and
+had the scheduler log an error's name and code and never its message.
+
+**Open, for the operator:** the kit register and the Google keys' restriction
+and caps, neither of which code can do; the "change my password" screen that
+the temporary-password choice owes; and whether the website keeps its dead
+admin.
