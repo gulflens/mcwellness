@@ -2743,3 +2743,80 @@ replaces the closed-visit guard created by 302; 961 replaces
 consent. 915 is in the `900–949` half because `consent` is a core table.
 
 **Nothing in those paths is the trunk's beyond this round.**
+
+## Round 38 — the enquiries (2026-09-10)
+
+The website's two forms — the enquiry and the discovery call — posted to
+`lodge_enquiry`, an edge function in the Flutter project that is being
+retired. This round gives them a home in the app
+(`docs/superpowers/specs/2026-09-09-enquiries-design.md`): a quarantine table
+`enquiry` (migration 916), a public door `POST /api/enquiries` mounted ahead
+of the fence, three routes for the office, and a screen at `/admin/enquiries`
+for the owner, an admin and the lead practitioner. The operator's decisions of
+9 September, taken whole: an enquiry becomes a lead; those three roles see it;
+it is kept in the system until it is actioned.
+
+**What an enquiry is, and is not.** It is not a client record. It is what a
+stranger typed into a form, held until somebody in the office decides. So it
+is the one table in the schema that the audit trigger does not watch — the
+operator's Option B, recorded in `.claude/rules/data-model.md`: a public write
+has no actor to name, the route logs every read under the person reading
+(`logReads`, entity `enquiry`), and the client a conversion creates is audited
+from its first byte, because it is created by `createLead` — the same path
+`POST /api/clients` takes. Once actioned, the row keeps nothing personal:
+`enquiry_actioned_is_scrubbed` refuses a converted or dismissed row that still
+carries a name, a number, an address, a message or the address hash, and what
+stays is the record of what happened, when, by whom, and for a conversion
+which client it became.
+
+**The door, ahead of the fence.** Form or JSON, the sender need not care. The
+honeypot answers `200 {ok:true}` and keeps nothing. A missing name or number
+is a 400; a refusing database a 503. CORS admits the apex and `www` by default
+and `ENQUIRY_ORIGINS` overrides them. Two throttles, neither of which keeps an
+address: the middleware's limiter admits ten posts a minute per address
+(`enquiryDoorPerMinute`, `RATE_LIMIT_ENQUIRY_DOOR_PER_MINUTE`) and is wrapped
+so it counts `POST` alone — a preflight is never refused; and
+`app.lodge_enquiry` refuses the sixth lodge in ten minutes from the same
+`ip_hash`, a SHA-256 of the address under a fixed prefix, with a random bucket
+when no address is known so that nothing shares a null key. The definer
+inserts only when the database holds exactly one tenant, which is what a
+public door with no tenant in the request can honestly do.
+
+**Nothing notifies anyone yet.** The screen is the inbox; it sorts new first
+and offers, on a new row only, *Convert to lead* and *Dismiss* with a reason.
+A converted row links to the client it became.
+
+**Every file this round touched outside the trunk's own paths:**
+
+- `client-record` — `app/api/clients/create-lead.ts` (new) and
+  `app/api/clients/record.ts`. The lead-creation half of `record.ts` — next
+  MRN, the `client` row as a lead, the primary contact, the Emirates ID sealed
+  and hashed — is lifted out as `createLead(db, tenantId, input)` so that the
+  enquiry route makes a lead by the one path rather than a second one.
+  `record.ts` calls it and behaves as before; its tests are untouched and
+  green. The stream owns `create-lead.ts` from here.
+- `app/api/create-api.ts` — the composition root: the door and the routes
+  mounted, the raw-upload exemption widened to the door so the JSON-only
+  fence does not refuse a form post, and the POST-only limiter.
+
+**The trunk's own half** is `domain/enquiry/**` (new: `parseEnquiry`,
+`toE164`, `leadFromEnquiry`, pure and tested); `domain/shared/actor.ts` with
+its test (`enquiry.list`, `enquiry.action`);
+`db/migrations/916_enquiry.sql`, in the `900–949` half because it creates a
+table of the trunk's own and builds on no stream's; `db/policies/enquiry/**`
+(new, the trunk's); `app/api/enquiries/**` (new);
+`app/api/_middleware/rate-limit.ts`; `app/shell/adminAccess.ts`,
+`AdminLayout.tsx`, `App.tsx`, `components/Rail.tsx` and `components/Icons.tsx`;
+`app/admin/enquiries/**` (new); `tests/db/enquiries.test.ts`,
+`enquiries-door.test.ts` and `enquiries-routes.test.ts`;
+`.claude/rules/data-model.md`; `docs/SPEC/00-data-model.md`;
+`docs/SPEC/OWNERSHIP.md`, which names the four new folders; and
+`docs/superpowers/**`.
+
+**What follows the merge**, in order: the website's pages point their
+`ENDPOINT` at the new door; migration 916 is applied to production with its
+ledger row; the app is rebuilt; one enquiry is lodged against the live door,
+seen in the screen, converted, and the lead erased; and only then is the old
+project safe to pause — the operator's call.
+
+**Nothing in those paths is the trunk's beyond this round.**
