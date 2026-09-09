@@ -1,12 +1,13 @@
 # Hand-over: how to pick this project up in a fresh session
 
 **As of 10 September 2026 (trunk round 41, this file's own pull request).**
-Production at app.mcwellnessuae.com runs `main` at `8c44acc` after eleven live
+Production at app.mcwellnessuae.com runs `main` at `05d5358` after twelve live
 passes (`docs/PRODUCTION.md`), with 92 migrations and 26 policy files applied.
 Live on it: Books, the website's enquiry door and its office screen, Settings ›
 Team, the in-process scheduler (the books posted at 03:00 Dubai and the erasure
 sweep hourly; any second instance on the same database sets `SCHEDULER=off`),
-the change-password screen (the console's; the portal's is this round's),
+the change-password screens (the console's and, since the twelfth pass, the
+portal's),
 the weekly off-site backup (`mcwellness-backups`,
 Singapore), the GitHub uptime probe, the practice's identity, logo and contact
 details, the price list of 7 September, and the approved wording (versions
@@ -95,7 +96,7 @@ an unanswered decision. The next session's first act is section 10.
 
 - **10 September:** `main` is at `8c44acc` after pull requests 119 to 138
   (section 10, steps 9 to 11): 92 migrations and 26 policy files, production
-  level with `main` after the eleventh live pass, nothing merged and waiting
+  level with `main` after the twelfth live pass, nothing merged and waiting
   for production. Open pull requests: 127 and 128 (plans and specs awaiting
   the operator's word, decision 11 on the sheet), 116 (carried, closes with
   this round's merge) and this round's own. The
@@ -1026,7 +1027,8 @@ nine and ten; see the records on pull requests 73 to 83).
     form; fixture names from the seed lists; the retention rule stated once;
     pull request 116 carried into `docs/PRODUCTION.md` with live passes four
     to eleven, then closed; this file; the decisions sheet
-    `docs/OPERATOR/2026-09-10-decisions.md`. **Next:** the operator answers
+    `docs/OPERATOR/2026-09-10-decisions.md`. Merged as `05d5358` and live as the
+    twelfth pass (21:24 UTC, 9 September). **Next:** the operator answers
     the sheet; then piece twelve's plan (`docs/PLAN/piece-twelve.md`) and its
     spec in piece eleven's shape, covering what `docs/SPEC/accounting.md`
     section 14 lists for it, and nothing of it built until that plan is
