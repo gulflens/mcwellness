@@ -69,13 +69,17 @@ const api = createApi({
 });
 
 // The two jobs that must run without anybody remembering to, from inside
-// this process (./scheduler.ts, migration 917). SCHEDULER=off keeps a second
-// instance, or a laptop, from posting alongside the one that should.
-if (process.env.SCHEDULER === 'off') {
-  console.log('Scheduler: off (SCHEDULER=off).');
-} else {
+// this process (./scheduler.ts, migration 917). On in production unless
+// SCHEDULER=off; anywhere else only when SCHEDULER=on — a laptop started
+// against staging should not post its books unasked.
+const schedulerOn =
+  process.env.SCHEDULER === 'on' ||
+  (process.env.SCHEDULER !== 'off' && process.env.APP_ENV === 'production');
+if (schedulerOn) {
   startScheduler({ pool, storage });
   console.log('Scheduler: the books post at 03:00 Asia/Dubai, erasure files are swept hourly.');
+} else {
+  console.log('Scheduler: off (SCHEDULER=on turns it on outside production).');
 }
 
 // SERVE_APP=true: the built app (pnpm build) is served by this process too, so

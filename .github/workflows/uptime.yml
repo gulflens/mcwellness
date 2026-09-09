@@ -38,8 +38,10 @@ jobs:
           h=000
           d=000
           for attempt in 1 2 3; do
-            h=$(curl -4 --silent --max-time 25 --output /dev/null --write-out '%{http_code}' "$APP/api/health" || echo 000)
-            d=$(curl -4 --silent --max-time 25 --output /dev/null --write-out '%{http_code}' "$APP/api/health/deep" || echo 000)
+            h=$(curl -4 --silent --max-time 25 --output /dev/null --write-out '%{http_code}' "$APP/api/health" || true)
+            d=$(curl -4 --silent --max-time 25 --output /dev/null --write-out '%{http_code}' "$APP/api/health/deep" || true)
+            h=${h:-000}
+            d=${d:-000}
             echo "attempt $attempt: health $h, deep health $d"
             if [ "$h" = "200" ] && [ "$d" = "200" ]; then ok=1; break; fi
             sleep 20
@@ -49,12 +51,16 @@ jobs:
 
       - name: Open the issue, keep it current, or close it
         if: always()
+        env:
+          # Through the environment, never interpolated into the script.
+          OK: ${{ steps.probe.outputs.ok }}
+          DETAIL: ${{ steps.probe.outputs.detail }}
         run: |
           set -eu
           open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label "$LABEL" --state open --json number --jq '.[0].number // empty')
           when=$(date --utc +%Y-%m-%dT%H:%MZ)
-          detail='${{ steps.probe.outputs.detail }}'
-          if [ '${{ steps.probe.outputs.ok }}' = '1' ]; then
+          detail="$DETAIL"
+          if [ "$OK" = "1" ]; then
             if [ -n "$open" ]; then
               gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "Answering again at $when ($detail)."
               gh issue close "$open" --repo "$GITHUB_REPOSITORY"

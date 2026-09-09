@@ -267,14 +267,14 @@ describe('Practice settings — the save', () => {
       json({
         practice: {
           ...PRACTICE,
-          contactPhone: '+971 4 000 0000',
+          contactPhone: '+971 50 000 0031',
           contactEmail: 'hello@example.com',
           website: 'https://example.com',
         },
       }),
     );
     await openTheDrawer();
-    type('Telephone on documents (optional)', '+971 4 000 0000');
+    type('Telephone on documents (optional)', '+971 50 000 0031');
     type('Email on documents (optional)', 'not an address');
     type('Website on documents (optional)', 'https://example.com');
     type('Why this changes', 'The practice contact details are set.');
@@ -286,7 +286,7 @@ describe('Practice settings — the save', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
     await waitFor(() => expect(saves(calls)).toHaveLength(1));
     expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({
-      contactPhone: '+971 4 000 0000',
+      contactPhone: '+971 50 000 0031',
       contactEmail: 'hello@example.com',
       website: 'https://example.com',
     });

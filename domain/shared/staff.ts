@@ -36,3 +36,19 @@ export const STAFF_ROLE_LABELS: Record<Role, string> = {
 export function canSuspend(actorUserId: string, targetUserId: string): boolean {
   return actorUserId !== targetUserId;
 }
+
+/**
+ * Nobody widens their own access. An admin may grant finance or lead
+ * practitioner to a colleague — and finance opens the books, lead
+ * practitioner opens erased records — so granting either to oneself would be
+ * one click past the two-person shape the roles are drawn in (the security
+ * review of trunk round 39, finding G1).
+ */
+export function canGrantTo(actorUserId: string, targetUserId: string): boolean {
+  return actorUserId !== targetUserId;
+}
+
+/** `archived` is the end of a sign-in; only `suspended` comes back. */
+export function canReactivate(status: 'active' | 'suspended' | 'archived'): boolean {
+  return status === 'suspended';
+}

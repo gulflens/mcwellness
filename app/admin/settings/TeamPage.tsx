@@ -108,6 +108,24 @@ export function TeamPage() {
     }
   }
 
+  async function resetPassword(row: TeamMember): Promise<void> {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await apiFetch(`/api/team/${row.id}/password`, { method: 'POST' });
+      const parsed = res.ok ? InviteResponse.safeParse(await res.json()) : null;
+      if (parsed?.success) {
+        setCreated({ name: row.displayName, password: parsed.data.temporaryPassword });
+      } else {
+        setError(ACTION_ERROR);
+      }
+    } catch {
+      setError(ACTION_ERROR);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function post(path: string, body: unknown): Promise<void> {
     setError(null);
     setBusy(true);
@@ -151,16 +169,23 @@ export function TeamPage() {
       header: '',
       render: (row) => (
         <span className="team__actions">
-          {STAFF_ROLES.filter((role) => !row.roles.includes(role)).map((role) => (
+          {row.isYou
+            ? null
+            : STAFF_ROLES.filter((role) => !row.roles.includes(role)).map((role) => (
             <Button
               key={role}
               variant="quiet"
               disabled={busy}
               onClick={() => void post(`/api/team/${row.id}/roles`, { role })}
             >
-              Add {roleLabel(role).toLowerCase()}
+                  Add {roleLabel(role).toLowerCase()}
+                </Button>
+              ))}
+          {row.status === 'active' ? (
+            <Button variant="quiet" disabled={busy} onClick={() => void resetPassword(row)}>
+              New temporary password
             </Button>
-          ))}
+          ) : null}
           {row.isYou || row.status === 'archived' ? null : row.status === 'active' ? (
             <Button
               variant="quiet"
@@ -188,7 +213,7 @@ export function TeamPage() {
       <SettingsNav />
       <PageHeader
         title="Team"
-        aside="Who works at the practice. A new sign-in is created with a temporary password shown once; suspending refuses a sign-in until it is reactivated."
+        aside="Who works at the practice. A new sign-in is created with a temporary password shown once — and a new one can be minted if it was lost; suspending refuses a sign-in until it is reactivated."
         action={
           adding ? null : (
             <Button variant="primary" onClick={() => setAdding(true)}>
@@ -199,7 +224,7 @@ export function TeamPage() {
       />
       {created ? (
         <Note tone="attention">
-          Sign-in created for {created.name}. Temporary password:{' '}
+          Temporary password for {created.name}:{' '}
           <code className="team__password">{created.password}</code> — hand it over in person or by
           WhatsApp. It is shown once and not kept.
         </Note>

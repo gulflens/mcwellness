@@ -85,6 +85,10 @@ function mount(options: { inviteStatus?: number } = {}) {
         201,
       );
     }
+    if (url.endsWith('/password')) {
+      posts.push({ url, body: null });
+      return json({ userId: ADMIN.id, temporaryPassword: '<shown-once-0002>' });
+    }
     if (url.endsWith('/status') || url.endsWith('/roles')) {
       posts.push({ url, body: JSON.parse(String(init?.body)) });
       if (url.endsWith('/status')) {
@@ -112,6 +116,21 @@ describe('TeamPage', () => {
     expect(screen.getByText('Owner')).toBeTruthy();
     // Two rows, one suspend button: the owner's own row has none.
     expect(screen.getAllByRole('button', { name: 'Suspend' })).toHaveLength(1);
+    // And no widening of your own access: the owner's row offers no "Add …",
+    // the admin's offers the three roles they lack.
+    expect(
+      screen.getAllByRole('button', {
+        name: /^Add (admin|finance|practitioner|lead practitioner)$/,
+      }),
+    ).toHaveLength(3);
+  });
+
+  it('mints a new temporary password for a colleague and shows it once', async () => {
+    const { posts } = mount();
+    const buttons = await screen.findAllByRole('button', { name: 'New temporary password' });
+    fireEvent.click(buttons[1] as HTMLElement);
+    expect(await screen.findByText('<shown-once-0002>')).toBeTruthy();
+    expect(posts).toEqual([{ url: `/api/team/${ADMIN.id}/password`, body: null }]);
   });
 
   it('creates a sign-in and shows the temporary password once', async () => {

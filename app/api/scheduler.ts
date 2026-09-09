@@ -41,6 +41,17 @@ export const JOB_REASONS: Record<JobName, string> = {
   'erasure-files': 'erasure file sweep',
 };
 
+/**
+ * The one role each job runs with — the least that opens what it touches.
+ * The books' policies admit finance; the erasure request's admit an admin.
+ * The CLI jobs stamped `owner` on the owner's own connection, where row
+ * security did not apply at all; here it does, and this is narrower still.
+ */
+export const JOB_ROLES: Record<JobName, string> = {
+  'post-books': 'finance',
+  'erasure-files': 'admin',
+};
+
 export const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 /** The posting runs on the first tick at or after this hour, local time. */
 export const POSTING_HOUR = 3;
@@ -100,7 +111,7 @@ export type SchedulerDeps = {
 
 const CONTEXT_SQL =
   "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', '', true), " +
-  "set_config('app.actor_roles', 'owner', true), set_config('app.request_id', $2, true), " +
+  "set_config('app.actor_roles', $4, true), set_config('app.request_id', $2, true), " +
   "set_config('app.reason', $3, true)";
 
 /** Runs one job across every practice, one transaction each. Never throws. */
@@ -128,7 +139,12 @@ export async function runJob(name: JobName, deps: SchedulerDeps): Promise<void> 
       try {
         await client.query('begin');
         await client.query('set local role app_role');
-        await client.query(CONTEXT_SQL, [tenantId, randomUUID(), JOB_REASONS[name]]);
+        await client.query(CONTEXT_SQL, [
+          tenantId,
+          randomUUID(),
+          JOB_REASONS[name],
+          JOB_ROLES[name],
+        ]);
         if (name === 'post-books') {
           const report = await postPendingEvents(client);
           await client.query('commit');
@@ -150,8 +166,10 @@ export async function runJob(name: JobName, deps: SchedulerDeps): Promise<void> 
   }
 }
 
+/** A driver's message can carry a row's values; its name and code cannot. */
 function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : 'The job did not run.';
+  const shape = (error ?? {}) as { name?: string; code?: string };
+  return [shape.name ?? 'Error', shape.code].filter(Boolean).join(' ');
 }
 
 export type SchedulerOptions = {

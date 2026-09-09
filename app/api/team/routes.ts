@@ -1,8 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { canActor, canSuspend } from '@domain/shared';
-import { logReads } from '../_middleware/audit';
+import { canActor, canGrantTo, canSuspend } from '@domain/shared';
+import { logAction, logReads } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isAuthAdminUnavailable, isEmailInUse, type AuthAdminProvider } from '../portal/auth-admin';
 import {
@@ -37,8 +37,11 @@ import {
  *
  * **Nothing is deleted.** A suspended sign-in is refused at the fence
  * (`app.resolve_actor` answers nobody for a status other than active) and can
- * be reactivated; the trail keeps both acts, because both tables carry the
- * audit trigger.
+ * be reactivated; an archived one cannot; the trail keeps every act, because
+ * both tables carry the audit trigger. Nobody suspends themselves and nobody
+ * widens their own roles (domain/shared/staff.ts). A temporary password that
+ * never reached the person, or was lost, is replaced by
+ * `POST /api/team/:id/password`, which mints another and logs that it did.
  */
 
 type Row = {
@@ -153,7 +156,10 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     } catch (error) {
       // The sign-in was made a moment ago and nothing else knows of it: take it
       // back so the address is free to try again, then fail as this would have.
-      await options.authAdmin.deleteUser(authId).catch(() => undefined);
+      await options.authAdmin.deleteUser(authId).catch(() => {
+        // Never the address. The next attempt answers 409 until it is removed.
+        console.warn('Team: a sign-in could not be taken back after its rows failed to write.');
+      });
       throw error;
     }
     return c.json(InviteResponse.parse({ userId, temporaryPassword: password }), 201);
@@ -170,6 +176,9 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     if (!id.success) return c.json({ error: 'not_found', requestId }, 404);
     const body = GrantBody.safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
+    if (!canGrantTo(actor.userId, id.data)) {
+      return c.json({ error: 'not_yourself', requestId }, 400);
+    }
     const target = await db.query(IS_STAFF_SQL, [id.data]);
     if (target.rowCount !== 1) return c.json({ error: 'not_found', requestId }, 404);
     await db.query(
@@ -195,13 +204,48 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
       return c.json({ error: 'not_yourself', requestId }, 400);
     }
     // Row security decides the rest: an admin cannot touch the owner's row
-    // (role_guard.sql), which answers here as nothing to update.
+    // (role_guard.sql), which answers here as nothing to update. An archived
+    // sign-in is the end of one and does not come back (canReactivate).
     const updated = await db.query(
       'update app_user set status = $2::user_status where id = $1 and tenant_id = app.current_tenant_id() ' +
+        "and status <> 'archived' " +
         "and exists (select 1 from user_role r where r.user_id = app_user.id and r.role <> 'client_contact')",
       [id.data, body.data.status],
     );
     if (updated.rowCount !== 1) return c.json({ error: 'not_found', requestId }, 404);
     return c.json({ ok: true });
+  });
+
+  api.post('/api/team/:id/password', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    if (!canActor(actor, { type: 'staff.manage' }, {}, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const id = z.uuid().safeParse(c.req.param('id'));
+    if (!id.success) return c.json({ error: 'not_found', requestId }, 404);
+    const target = await db.query<{ auth_id: string | null }>(
+      'select u.auth_id from app_user u where u.id = $1 and u.tenant_id = app.current_tenant_id() ' +
+        "and u.status = 'active' " +
+        "and exists (select 1 from user_role r where r.user_id = u.id and r.role <> 'client_contact')",
+      [id.data],
+    );
+    const authId = target.rows[0]?.auth_id ?? null;
+    if (target.rowCount !== 1 || authId === null) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    const password = temporaryPassword();
+    try {
+      await options.authAdmin.setPassword(authId, password);
+    } catch (error) {
+      if (isAuthAdminUnavailable(error)) {
+        return c.json({ error: 'sign_ins_unavailable', requestId }, 503);
+      }
+      throw error;
+    }
+    // The act is in the trail — who reset whose sign-in — and the password is not.
+    await logAction(db, 'password_reset', { type: 'app_user', id: id.data, clientId: null }, {});
+    return c.json(InviteResponse.parse({ userId: id.data, temporaryPassword: password }));
   });
 }

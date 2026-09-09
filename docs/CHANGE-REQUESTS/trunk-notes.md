@@ -2893,10 +2893,32 @@ with its test, `actor.ts` with its test and the barrel; `app/api/team/**`,
 `app/api/scheduler.ts` with its test, `app/api/server.ts`,
 `app/api/create-api.ts`; `app/shell/adminAccess.ts`, `App.tsx`;
 `app/admin/settings/**`; `db/migrations/917_scheduled_tenants.sql` in the
-`900–949` half (it reads a core table); `tests/db/team.test.ts`,
+`900–949` half (it reads a core table) and `962_erasure_guard_admits_the_sweep.sql`
+in the `950–999` half (it replaces a function the client-record stream
+created); `tests/db/team.test.ts`,
 `tests/db/scheduler.test.ts`; `.github/workflows/uptime.yml`; `.env.example`;
 `docs/COMPLIANCE/approved-vendors.md`, `docs/SPEC/hosting.md`,
 `docs/SPEC/OWNERSHIP.md`, `docs/PRODUCTION.md`. No stream's path was edited.
+
+**Reviewed** by the three briefs. Schema (PASS) had 917's header name only
+what it depends on, both `user_role` inserts set `created_by`, and the test
+prove an admin cannot suspend the owner through the route. Security (PASS)
+closed six: nobody widens their own roles (`canGrantTo`), `archived` is the
+end of a sign-in at the API and not only on the screen, each scheduled job
+carries the least role that opens what it touches (finance for the books,
+admin for the sweep) rather than the owner's, the scheduler starts only in
+production unless asked, the uptime workflow reads its outputs through the
+environment, and a lost temporary password is replaced by
+`POST /api/team/:id/password`, logged as an act and never as a value.
+Compliance (FAIL, closed) found the one real defect: under the API role the
+erasure sweep's own bookkeeping was refused by the guard from migration 105,
+which admits nothing after the act but the letter — the CLI job had run on
+the owner's connection, where the guard steps aside. Migration 962 teaches the
+guard the sweep's three columns, each of which moves one way, and the
+scheduler's test now performs an erasure with a pending key and watches it
+cleared. It also put the backups project on the vendor register, completed
+the Web3Forms row, moved one telephone fixture onto the reserved range, and
+had the scheduler log an error's name and code and never its message.
 
 **Open, for the operator:** the kit register and the Google keys' restriction
 and caps, neither of which code can do; the "change my password" screen that
