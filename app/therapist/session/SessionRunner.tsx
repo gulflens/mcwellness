@@ -8,7 +8,7 @@ import { PreflightStep } from './PreflightStep';
 import { RunStep } from './RunStep';
 import { SignalStep, meanQuality } from './SignalStep';
 import { SummaryStep } from './SummaryStep';
-import { Outbox, type PostEvents, type PostPhoto } from './outbox/outbox';
+import { Outbox, type PostEvents } from './outbox/outbox';
 import { useForgetDeviceOnSignOut } from './outbox/signed-out';
 import {
   PRUNE_AFTER_DAYS,
@@ -17,7 +17,6 @@ import {
   type OutboxRecord,
   type OutboxStore,
 } from './outbox/store';
-import { preparePhoto } from './photo';
 import {
   deltas,
   midpoint,
@@ -25,8 +24,6 @@ import {
   type Answers,
   type GeoPoint,
   type Observations,
-  type PhotoConsent,
-  type PhotoState,
   type Reading,
   type ServiceSettings,
   type SiteReading,
@@ -68,18 +65,6 @@ export type RunnerVisit = {
   number: number;
   of: number | null;
   serviceTypeId: string;
-  /**
-   * Whether the household has agreed to photographs — or, on a resume with
-   * no signal, that the device could not find out. Three answers, because
-   * "we cannot check" is not "they said no" (design review, item 5).
-   */
-  photoConsent: PhotoConsent;
-  /**
-   * The photograph on this client's most recent completed visit, or null. The
-   * pre-flight step shows a button and fetches it on the tap and never before
-   * (docs/SPEC/practitioner-phone.md section 4.5, decision 6).
-   */
-  previousSetupPhotoDocumentId: string | null;
   /** The last seq the server holds, so a resumed visit does not reuse one. */
   lastSeq: number;
   /** Whether the practitioner shared their position at the door (section 3.6). */
@@ -138,43 +123,6 @@ export function postEventsVia(apiFetch: ApiFetch, readPoint: () => GeoPoint | nu
   };
 }
 
-/**
- * How the photograph's bytes reach this API (docs/SPEC/practitioner-phone.md
- * section 4.3). The three answers are the device's whole decision, and each
- * status maps to exactly one of them:
- *
- * - 201 and 200 are both "filed": the second is an idempotent retry of a
- *   picture the server already holds.
- * - 409 `photo_event_pending` is the one conflict worth waiting on — the
- *   event that names this digest has not been acknowledged yet — and every
- *   other refusal is final: no consent, a retake that superseded it, a visit
- *   that already has one, a visit that is not this practitioner's.
- * - anything else is worth trying again.
- */
-export function postPhotoVia(apiFetch: ApiFetch): PostPhoto {
-  return async (blob) => {
-    let res: Response;
-    try {
-      res = await apiFetch(`/api/sessions/${blob.sessionId}/photo`, {
-        method: 'PUT',
-        headers: { 'content-type': blob.mimeType, 'x-photo-sha256': blob.sha256 },
-        body: blob.bytes,
-      });
-    } catch {
-      return 'retry';
-    }
-    if (res.ok) return 'filed';
-    if (res.status === 409) {
-      const body = (await res.json().catch(() => null)) as { detail?: string } | null;
-      return body?.detail === 'photo_event_pending' ? 'retry' : 'give-up';
-    }
-    if (res.status === 400 || res.status === 403 || res.status === 404 || res.status === 415) {
-      return 'give-up';
-    }
-    return 'retry';
-  };
-}
-
 /** A single position read, or null. A refusal is never a block (section 7). */
 function readPosition(): Promise<GeoPoint | null> {
   const geolocation = typeof navigator === 'undefined' ? undefined : navigator.geolocation;
@@ -216,8 +164,6 @@ export function SessionRunner({
 
   const [outbox, setOutbox] = useState<Outbox | null>(null);
   const [pending, setPending] = useState(0);
-  const [photosPending, setPhotosPending] = useState(0);
-  const [photo, setPhoto] = useState<PhotoState>({ kind: 'none' });
   const [durable, setDurable] = useState(true);
   const [step, setStep] = useState<Step>('preflight');
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -289,11 +235,9 @@ export function SessionRunner({
       const next = new Outbox(
         store,
         postEventsVia(apiFetch, () => pointRef.current),
-        postPhotoVia(apiFetch),
       );
       const unsubscribe = next.subscribe((state) => {
         setPending(state.pending);
-        setPhotosPending(state.photosPending);
         setDurable(state.durable);
       });
       const stopLoop = next.start();
@@ -378,42 +322,6 @@ export function SessionRunner({
   }, [step, write]);
 
   const setupQuality = useMemo(() => meanQuality(sites), [sites]);
-
-  /**
-   * The setup photograph (docs/SPEC/practitioner-phone.md section 4.2): the
-   * picture is shrunk and digested on the device, the `photo_captured` event
-   * is appended, and the bytes wait in the outbox behind it.
-   *
-   * Both writes go through the outbox and neither waits for the network. A
-   * photograph taken in a basement is kept exactly as a rating is, and a
-   * retake before check-out replaces the blob and appends a new event — the
-   * projection's `photo` is the last event's payload, so the server and the
-   * device agree about which picture is the one.
-   */
-  const takePhoto = useCallback(
-    async (file: File) => {
-      setPhoto({ kind: 'preparing' });
-      const prepared = await preparePhoto(file);
-      if (prepared === null) {
-        setPhoto({ kind: 'failed' });
-        return;
-      }
-      await write('photo_captured', {
-        mimeType: prepared.mimeType,
-        sizeBytes: prepared.sizeBytes,
-        sha256: prepared.sha256,
-      });
-      await outbox?.keepPhoto({
-        sessionId: visit.sessionId,
-        bytes: prepared.bytes,
-        mimeType: prepared.mimeType,
-        sha256: prepared.sha256,
-        deviceAt: new Date().toISOString(),
-      });
-      setPhoto({ kind: 'kept', sizeBytes: prepared.sizeBytes });
-    },
-    [outbox, visit.sessionId, write],
-  );
 
   const finishPreflight = useCallback(() => {
     void write('observation_recorded', {
@@ -608,7 +516,6 @@ export function SessionRunner({
               : pending === 1
                 ? '1 event waiting to sync'
                 : `${pending} events waiting to sync`}
-            {photosPending === 1 ? ' The photo goes when the visit has synced.' : null}
             {durable ? null : ' This device cannot keep it if the app is closed.'}
           </p>
         ) : null}
@@ -616,7 +523,6 @@ export function SessionRunner({
         {step === 'preflight' ? (
           <PreflightStep
             service={settings}
-            previousPhotoDocumentId={visit.previousSetupPhotoDocumentId}
             checked={checked}
             onToggle={(key, done) => setChecked((all) => ({ ...all, [key]: done }))}
             answers={preAnswers}
@@ -663,9 +569,6 @@ export function SessionRunner({
               setSummaryReading(next);
               setSummaryReadingTaken(true);
             }}
-            photoConsent={visit.photoConsent}
-            photo={photo}
-            onPhoto={(file) => void takePhoto(file)}
             onContinue={finishPost}
           />
         ) : null}

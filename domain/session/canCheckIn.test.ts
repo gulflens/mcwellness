@@ -35,7 +35,7 @@ function input(overrides: Partial<CheckInInput> = {}): CheckInInput {
     deliveryMode: 'home',
     hasDateOfBirth: true,
     isMinor: false,
-    activeConsentPurposes: ['participation', 'home_visit'],
+    activeConsentPurposes: ['health_data', 'participation', 'home_visit'],
     kitCalibrationOverdue: false,
     ...overrides,
   };
@@ -68,15 +68,29 @@ describe('canCheckIn', () => {
   });
 
   it('blocks missing participation consent', () => {
-    const result = canCheckIn(input({ activeConsentPurposes: ['home_visit'] }), NOW);
+    const result = canCheckIn(input({ activeConsentPurposes: ['health_data', 'home_visit'] }), NOW);
     expect(result.reasons).toEqual(['consent_missing_participation']);
+  });
+
+  it('blocks a household that has withdrawn its health-data consent', () => {
+    // Checked here and not only at activation. A household may withdraw the
+    // day after they are activated, and the page they signed says plainly
+    // that sessions cannot continue if they do — there would be nothing to
+    // train on (docs/CONSENT/health-data.en.md). Activation is a status, not
+    // a standing permission, and reading it as one would be the cached "has
+    // consent" boolean .claude/rules/compliance.md forbids.
+    const result = canCheckIn(
+      input({ activeConsentPurposes: ['participation', 'home_visit'] }),
+      NOW,
+    );
+    expect(result.reasons).toEqual(['consent_missing_health_data']);
   });
 
   it('blocks a minor without minor_participation consent', () => {
     const result = canCheckIn(
       input({
         isMinor: true,
-        activeConsentPurposes: ['participation', 'home_visit'],
+        activeConsentPurposes: ['health_data', 'participation', 'home_visit'],
       }),
       NOW,
     );
@@ -87,7 +101,12 @@ describe('canCheckIn', () => {
     const result = canCheckIn(
       input({
         isMinor: true,
-        activeConsentPurposes: ['participation', 'minor_participation', 'home_visit'],
+        activeConsentPurposes: [
+          'health_data',
+          'participation',
+          'minor_participation',
+          'home_visit',
+        ],
       }),
       NOW,
     );
@@ -101,20 +120,26 @@ describe('canCheckIn', () => {
     // — canCheckIn only ever acts on the isMinor boolean it is handed, and
     // this proves it never re-derives an age of its own to second-guess it.
     const result = canCheckIn(
-      input({ isMinor: false, activeConsentPurposes: ['participation', 'home_visit'] }),
+      input({
+        isMinor: false,
+        activeConsentPurposes: ['health_data', 'participation', 'home_visit'],
+      }),
       NOW,
     );
     expect(result).toEqual({ ok: true, reasons: [] });
   });
 
   it('blocks a home visit without home_visit consent', () => {
-    const result = canCheckIn(input({ activeConsentPurposes: ['participation'] }), NOW);
+    const result = canCheckIn(
+      input({ activeConsentPurposes: ['health_data', 'participation'] }),
+      NOW,
+    );
     expect(result.reasons).toEqual(['consent_missing_home_visit']);
   });
 
   it('does not require home_visit consent away from a home visit', () => {
     const result = canCheckIn(
-      input({ deliveryMode: 'studio', activeConsentPurposes: ['participation'] }),
+      input({ deliveryMode: 'studio', activeConsentPurposes: ['health_data', 'participation'] }),
       NOW,
     );
     expect(result).toEqual({ ok: true, reasons: [] });
@@ -145,6 +170,7 @@ describe('canCheckIn', () => {
     expect([...result.reasons].sort()).toEqual(
       [
         'not_authorised',
+        'consent_missing_health_data',
         'consent_missing_participation',
         'date_of_birth_unknown',
         'consent_missing_home_visit',
@@ -175,6 +201,7 @@ describe('canCheckIn and the equipment register', () => {
     expect(result.reasons).toEqual([
       'consent_missing_participation',
       'consent_missing_home_visit',
+      'consent_missing_health_data',
       'kit_calibration_overdue',
     ]);
   });

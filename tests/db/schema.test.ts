@@ -116,6 +116,10 @@ describe('core schema', () => {
       'closed',
       'erased',
     ]);
+    // In creation order, which is what the catalogue answers: `health_data`
+    // was appended by migration 915 and the three the practice retired on
+    // 2026-09-09 keep their places, because a value a consent row names is
+    // never dropped (docs/CONSENT/README.md).
     expect(await enumValues('consent_purpose')).toEqual([
       'participation',
       'minor_participation',
@@ -123,6 +127,7 @@ describe('core schema', () => {
       'photo_video',
       'research',
       'marketing',
+      'health_data',
     ]);
     expect(await enumValues('role_kind')).toEqual([
       'owner',

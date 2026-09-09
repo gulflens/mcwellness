@@ -2677,3 +2677,69 @@ something the practice means to keep.
 drop list in a trunk migration of the `900–949` half, confirm `changed_fields`
 still names each column, and amend `docs/SPEC/audit.md` and 914's own header,
 both of which now carry a paragraph saying this is outstanding.
+
+---
+
+## Round 37 — the approved wording (2026-09-09)
+
+The practice's legal advisor returned four recommendations: remove every
+reference to photographs, tell general and sensitive data apart, take a
+specific consent for neurofeedback and QEEG data, and say how the data will
+not be used. The wording in `docs/CONSENT` becomes version 1.0 approved in
+both languages, `health_data` becomes a consent purpose that gates both
+activation and check-in, and the setup photograph is retired.
+
+**Why one branch answered all four.** The photograph is the reason. The
+consent is what authorised the camera at runtime
+(`app.session_consent_active($1, 'photo_video')` at the door, and the
+`photo_captured` event refused without it), so deleting the wording without
+the capability would have left a live way to store photographs of clients
+with nothing signed to permit it — the worst of the two states, and one that
+would have existed for as long as the two halves were apart. As rounds 31–36
+did, and by the integrator's widening for one round, the wording and the
+capability move together.
+
+**Every file this round touched outside the trunk's own paths**, grouped by
+stream:
+
+- `session-capture` — deleted: `app/api/sessions/photo.ts`, `photo-link.ts`,
+  `photo-availability.ts`, `app/therapist/session/photo.ts` and
+  `tests/session/db/setup_photo.test.ts`; renamed:
+  `tests/session/db/photo_and_routing.test.ts` to `routing.test.ts`, having
+  lost the half about a capability that no longer exists; edited:
+  `app/api/sessions/checkin.ts`, `close.ts`, `events.ts`, `open.ts`,
+  `schema.ts`, `session-row.ts`, `app/therapist/session/CheckInPage.tsx`,
+  `PostStep.tsx`, `PreflightStep.tsx`, `SessionRunner.tsx`, `steps.ts`,
+  `domain/session/types.ts`, `canCheckIn.ts` with its test,
+  `tests/session/SessionRunner.test.tsx`, `tests/session/db/checkin.test.ts`
+  and `run.test.ts`; and the stream's own spec `docs/SPEC/practitioner-phone.md`,
+  whose section 4 is marked retired rather than deleted, because it is the
+  record of what was built.
+- `client-record` — `app/admin/clients/ConsentTab.tsx`,
+  `RecordConsentForm.tsx`, `activation.ts`, `EnrolmentWizard.test.tsx`,
+  `RecordTabs.test.tsx`, `ClientDrawer.test.tsx`, `ConsentText.test.tsx`,
+  and `tests/client/db/consent_documents.test.ts`.
+- `reports` — `domain/reports/document/strings.ts` and
+  `tests/reports/document.test.ts`, `tests/reports/db/reports.test.ts`: the
+  draft line off, and both standing sentences re-pointed at the approved
+  agreement they are quoted from.
+- `client-portal` — `app/client/i18n/dictionary.ts` and
+  `tests/portal/fixtures.ts`.
+- `assessment` — `tests/assessment/request-timeout.test.ts` alone, which
+  asserted the photograph's body limit.
+
+**The trunk's own half** is `db/migrations/915_health_data_consent.sql`,
+`960_retire_the_setup_photograph.sql` and
+`961_checkin_reads_health_data.sql`; `domain/client/**`;
+`domain/shared/audit-narrative.ts`; `db/seed/**`; `docs/CONSENT/**`;
+`docs/COMPLIANCE/approved-vendors.md`; `docs/SPEC/00-data-model.md`;
+`docs/STAGING.md`; `docs/PRODUCTION.md`; and `.claude/rules/data-model.md`.
+
+**Two migrations reach into a stream's objects, and both sit in the `950–999`
+half for it**, as `954_drop_invoice_document_id.sql` set the precedent: 960
+drops the four setup-photo functions and the filing marker created by 306 and
+replaces the closed-visit guard created by 302; 961 replaces
+`app.checkin_context` from 301 so the door can see a withdrawn health-data
+consent. 915 is in the `900–949` half because `consent` is a core table.
+
+**Nothing in those paths is the trunk's beyond this round.**

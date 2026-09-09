@@ -6,6 +6,8 @@ status: draft
 written: 2026-09-03
 ---
 
+**Superseded on 9 September 2026 by the approved wording in the folder above. Kept because consents recorded on staging name this text.**
+
 # الموافقة على الجلسات في المنزل
 
 **صياغة أولية، تُستخدم إلى أن يعتمد محامي المركز النسخة النهائية.**

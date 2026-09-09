@@ -148,11 +148,13 @@ async function seedVisit(
       "values ($1, $2, $3, 'mother', true)",
     [contactId, IDS.tenantA, clientId],
   );
-  const purposes: Array<'participation' | 'home_visit' | 'photo_video'> = [
+  // health_data since 2026-09-09: the check-in door reads it, so a visit
+  // cannot be opened without it (db/migrations/961_checkin_reads_health_data.sql).
+  const purposes: Array<'participation' | 'home_visit' | 'health_data'> = [
     'participation',
     'home_visit',
+    'health_data',
   ];
-  if (options.photoConsent) purposes.push('photo_video');
   for (const [index, purpose] of purposes.entries()) {
     await seedConsent(owner, {
       id: id(scenario, 10 + index),
@@ -698,21 +700,19 @@ describe('closing a visit', () => {
     ).rejects.toMatchObject({ code: '23001' });
   });
 
-  it('refuses a setup photo while there is nowhere to put the bytes, and files no document', async () => {
-    const visit = await seedVisit('15', { photoConsent: true });
+  it('refuses a photo_captured event outright, and files no document', async () => {
+    // Not consent, and not the store. The practice takes no photographs since
+    // its legal advisor's recommendation of 2026-09-09, so every one of these
+    // events is refused whatever the household agreed to and whatever the
+    // deployment could store: there is no route to send the bytes through and
+    // no function left to file them. A device still holding one in its outbox
+    // is told to stop asking, and everything else in the same batch lands.
+    const visit = await seedVisit('15');
     const flushed = (await (
       await flush(visit, wholeVisit(visit, { photo: true }))
     ).json()) as EventsResponse;
 
-    // Consent is not the refusal here: this household agreed. This file's own
-    // API is built with no document store — `createApi` above is given none —
-    // and a deployment with nowhere to put the bytes must not accept an event
-    // promising a photograph the device could never deliver
-    // (app/api/sessions/photo-availability.ts). So the event is refused by
-    // name, the device stops asking, and everything else in the same batch
-    // still lands. The other side of the same check, with a real store
-    // configured, is tests/session/db/photo_and_routing.test.ts.
-    expect(flushed.refused).toEqual([{ id: id('15', 38), reason: 'photo_storage_unavailable' }]);
+    expect(flushed.refused).toEqual([{ id: id('15', 38), reason: 'consent_missing_photo_video' }]);
     expect(flushed.acknowledged).toHaveLength(8);
 
     const body = (await (

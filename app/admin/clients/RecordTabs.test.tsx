@@ -119,13 +119,54 @@ describe('ConsentTab', () => {
     // taking part, and both are named in plain words.
     expect(await screen.findByText("Guardian's consent for a child")).toBeTruthy();
     expect(screen.getByText('Participation')).toBeTruthy();
-    expect(screen.getAllByText('Needed before this client can be activated').length).toBe(3);
-    // The optional purposes are listed too, below the required ones, so a
-    // person never has to wonder where photographs are recorded.
+    expect(screen.getAllByText('Needed before this client can be activated').length).toBe(4);
+    // The retired purposes are not listed on a record that has never held one:
+    // the practice takes no photographs, does no research and sends no
+    // marketing since 2026-09-09, and a screen offering all three invites
+    // somebody to ask a household for something the practice does not want.
+    expect(screen.queryByText('Photographs and video')).toBeNull();
+    expect(screen.queryByText('Research')).toBeNull();
+    expect(screen.queryByText('Marketing')).toBeNull();
+    // All four purposes are required for this minor, so nothing is optional
+    // and nothing says "Not recorded" without also saying it is needed.
+    expect(screen.queryAllByText('Not recorded').length).toBe(0);
+  });
+
+  it('still shows a retired purpose when this household actually agreed to one', () => {
+    // A household that agreed to photographs before 2026-09-09 agreed to them.
+    // The practice no longer asks anybody, but a consent screen that hides an
+    // agreement somebody gave is a screen that lies about them — and it is the
+    // screen the withdrawal is taken from.
+    const held: ClientRecordResponse = {
+      ...record,
+      consents: [
+        {
+          id: '00000008-0000-4000-8000-0000000000f1',
+          purpose: 'photo_video',
+          status: 'active',
+          givenByContactId: record.contacts[0]!.id,
+          givenAt: '2026-01-01T09:00:00+04:00',
+          withdrawnAt: null,
+          expiresAt: null,
+          method: 'app_signature',
+          signatureDocumentId: null,
+          textDocumentId: '00000008-0000-4000-8000-0000000000f2',
+          wordingVersion: '0.2-draft',
+          wordingStatus: 'draft',
+          witnessedByUserId: null,
+          witnessedByName: null,
+          withdrawalReason: null,
+        },
+      ],
+    };
+    mount(<ConsentTab clientId={CLIENT_ID} record={held} onChanged={() => undefined} mayWrite />);
     expect(screen.getByText('Photographs and video')).toBeTruthy();
-    // Three optional purposes, each saying nothing is on file without
-    // implying anything is owed.
-    expect(screen.getAllByText('Not recorded').length).toBe(3);
+
+    // Shown so it can be withdrawn — and only that. There is no way to take a
+    // NEW photo consent, because there is no longer anything it would permit.
+    // The four offered purposes each keep their button; this row has none.
+    expect(screen.getAllByRole('button', { name: /^Record$/ })).toHaveLength(4);
+    expect(screen.getByRole('button', { name: 'Withdraw' })).toBeTruthy();
   });
 });
 

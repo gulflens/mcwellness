@@ -259,7 +259,7 @@ one a bookkeeping or partition table carrying row level security by design
 and no policy on purpose: `schema_migration`, `invoice_number_series`, the
 twenty-five monthly `audit_log_*` partitions plus `audit_log_default`, and
 three `app`-schema tables reached only through security-definer functions
-(`app.audit_chain`, `app.erasure_active`, `app.setup_photo_filing`). This is
+(`app.audit_chain`, `app.erasure_active`). **From 2026-09-09 (migration 960) the setup-photograph objects are gone:** `app.setup_photo_filing`, `app.setup_photo_consent_active`, `app.file_setup_photo_document`, `app.file_setup_photo` and `app.previous_setup_photo`. A pass run after that migration should not expect to find them. This is
 the same list, for the same reason, every staging pass has carried. Nothing
 at `WARN` or above.
 

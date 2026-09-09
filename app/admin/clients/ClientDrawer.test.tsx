@@ -171,10 +171,12 @@ describe('ClientDrawer', () => {
     expect(screen.getByRole('button', { name: 'File document' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Consent' }));
-    // Every purpose, with the ones activation needs first and each saying
-    // where it stands.
+    // Every purpose the practice asks for, with the ones activation needs
+    // first and each saying where it stands. Photographs are not among them:
+    // the practice takes none since 2026-09-09.
     expect(await screen.findByText('Participation')).toBeTruthy();
-    expect(screen.getByText('Photographs and video')).toBeTruthy();
+    expect(screen.getByText('Brain-map and neurofeedback information')).toBeTruthy();
+    expect(screen.queryByText('Photographs and video')).toBeNull();
     expect(
       screen.getAllByText('Needed before this client can be activated').length,
     ).toBeGreaterThan(0);

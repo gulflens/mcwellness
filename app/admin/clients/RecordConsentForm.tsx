@@ -24,9 +24,11 @@ import { practiceToday, practiceTodayInWords } from './activation';
  * consent records that a person was shown a text and a text nobody reached the
  * bottom of was not shown.
  *
- * The draft line is not decoration. Every wording the practice holds today is
- * a draft awaiting its lawyer (docs/CONSENT/README.md), and the person signing
- * is told so — on screen here, and in the text's own first line.
+ * The draft line is not decoration, and it is conditional rather than removed.
+ * Since 2026-09-09 every wording the practice holds is approved
+ * (docs/CONSENT/README.md), so nobody signing sees it — but a wording filed as
+ * a draft would show it again, on screen here and in the text's own first
+ * line. A person signing is always told which they are reading.
  *
  * Two routes to the same rule. `app_signature` is the pad; `paper_scan` is a
  * photograph or a PDF of the form the person signed on paper. Whichever is
@@ -38,6 +40,7 @@ const PURPOSE_LABELS: Record<ConsentPurpose, string> = {
   participation: 'Participation',
   minor_participation: "Guardian's consent for a child",
   home_visit: 'Visits at home',
+  health_data: 'Brain-map and neurofeedback information',
   photo_video: 'Photographs and video',
   research: 'Research',
   marketing: 'Marketing',

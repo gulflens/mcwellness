@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { CONSENT_PURPOSES, requiredConsents, type ConsentPurpose } from '@domain/client';
+import { OFFERED_CONSENT_PURPOSES, requiredConsents, type ConsentPurpose } from '@domain/client';
 import {
   WithdrawConsentResponse,
   type ClientRecordResponse,
@@ -16,6 +16,7 @@ const PURPOSE_LABELS: Record<string, string> = {
   participation: 'Participation',
   minor_participation: "Guardian's consent for a child",
   home_visit: 'Visits at home',
+  health_data: 'Brain-map and neurofeedback information',
   photo_video: 'Photographs and video',
   research: 'Research',
   marketing: 'Marketing',
@@ -117,8 +118,9 @@ export function ConsentTab({
   erased?: boolean;
 }) {
   const today = practiceToday();
-  // As a set of plain strings: `requiredConsents` answers with the three
-  // purposes activation can ever ask for, and this list runs over all six.
+  // As a set of plain strings: `requiredConsents` answers with the purposes
+  // activation can ask for, and this list runs over those the practice offers
+  // plus any retired one this household still holds.
   const required = new Set<string>(requiredConsents(toActivationRecord(record), ['home'], today));
   const consenting = record.contacts.filter((contact) => contact.canConsent);
   const [recording, setRecording] = useState<ConsentPurpose | null>(null);
@@ -179,13 +181,24 @@ export function ConsentTab({
     }
   }
 
-  // Every purpose the practice can record, with the required ones first: the
+  // Every purpose the practice asks for, with the required ones first: the
   // list is the same on every record, so nothing has to be looked for twice,
   // and what this client still needs sits at the top.
-  const purposes = [...CONSENT_PURPOSES].sort((a, b) => {
-    const weight = (purpose: ConsentPurpose) => (required.has(purpose) ? 0 : 1);
-    return weight(a) - weight(b);
-  });
+  //
+  // Plus any purpose this household has actually agreed to, even one the
+  // practice has retired. `photo_video`, `research` and `marketing` are no
+  // longer offered to anybody (docs/CONSENT/README.md, 2026-09-09), but a
+  // household that agreed to one before then still did, and a consent screen
+  // that hides an agreement somebody gave is a screen that lies about them.
+  // They appear only where a row exists, so a fresh record shows four.
+  const held = new Set(record.consents.map((consent) => consent.purpose));
+  const offered = new Set<string>(OFFERED_CONSENT_PURPOSES);
+  const purposes = [...new Set<ConsentPurpose>([...OFFERED_CONSENT_PURPOSES, ...held])].sort(
+    (a, b) => {
+      const weight = (purpose: ConsentPurpose) => (required.has(purpose) ? 0 : 1);
+      return weight(a) - weight(b);
+    },
+  );
 
   return (
     <div className="tab-section">
@@ -268,17 +281,27 @@ export function ConsentTab({
               </div>
               {mayWrite ? (
                 <div className="record-row__actions">
-                  <Button
-                    variant="quiet"
-                    disabled={consenting.length === 0}
-                    onClick={() => {
-                      setRecording(purpose);
-                      setWithdrawing(null);
-                      setOutcome(null);
-                    }}
-                  >
-                    {active ? 'Record again' : 'Record'}
-                  </Button>
+                  {/* Recording is offered only for a purpose the practice still
+                      asks for. A retired one appears on this row because the
+                      household holds it and may withdraw it — but nothing may
+                      take a NEW consent for a capability that no longer
+                      exists, and staging still has photo-video wording loaded
+                      that would otherwise let somebody file one. Migration
+                      960's own reasoning: a guard with nothing left to guard
+                      is a guard somebody later mistakes for permission. */}
+                  {offered.has(purpose) ? (
+                    <Button
+                      variant="quiet"
+                      disabled={consenting.length === 0}
+                      onClick={() => {
+                        setRecording(purpose);
+                        setWithdrawing(null);
+                        setOutcome(null);
+                      }}
+                    >
+                      {active ? 'Record again' : 'Record'}
+                    </Button>
+                  ) : null}
                   {active ? (
                     <Button
                       variant="quiet"

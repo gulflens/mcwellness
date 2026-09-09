@@ -22,6 +22,7 @@ export const CONSENT_PURPOSES = [
   'participation',
   'minor_participation',
   'home_visit',
+  'health_data',
   'photo_video',
   'research',
   'marketing',

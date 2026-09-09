@@ -8,14 +8,12 @@ import {
 } from '@domain/session';
 import { hasRole } from '@domain/shared';
 import { logRefusal } from './audit';
-import type { ApiEnv, Db } from '../_middleware/request-context';
+import type { ApiEnv } from '../_middleware/request-context';
 import { appendEvents } from './events';
 import { mountClose } from './close';
 import { mountOpenSession } from './open';
 import { CheckInRequest, CheckInResponse, SessionEventsRequest } from './schema';
-import { previousSetupPhoto, resolvePractitioner } from './session-row';
-import { mountSessionPhoto } from './photo';
-import { mountSessionPhotoLink } from './photo-link';
+import { resolvePractitioner } from './session-row';
 import { mountServiceTypes } from './service-types';
 
 /**
@@ -47,27 +45,24 @@ import { mountServiceTypes } from './service-types';
  * goes out (session-capture.md section 8), never only the gate's.
  */
 
-const CONSENT_PURPOSES = ['participation', 'minor_participation', 'home_visit'] as const;
+// The same list as `CheckInConsentPurpose` in domain/session/types.ts, and it
+// must stay the same list: this narrows what the door returned to what the
+// gate understands, so a purpose missing here is silently dropped on the way
+// and `canCheckIn` never sees it. `health_data` was added on 2026-09-09 and
+// this was the fourth place that had to learn it, after the type, the gate
+// and `app.checkin_context` itself.
+const CONSENT_PURPOSES = [
+  'participation',
+  'minor_participation',
+  'home_visit',
+  'health_data',
+] as const satisfies readonly CheckInConsentPurpose[];
 
 function isConsentPurpose(value: string): value is CheckInConsentPurpose {
   return (CONSENT_PURPOSES as readonly string[]).includes(value);
 }
 
 const Params = z.object({ id: z.uuid() });
-
-/**
- * Whether the setup photo may be offered on this visit at all
- * (app/therapist/session): one boolean, from the definer door in
- * 304_session_reads.sql, so the runner never has to ask a second time and
- * never sees a consent row.
- */
-async function photoConsent(db: Db, sessionId: string): Promise<boolean> {
-  const { rows } = await db.query<{ active: boolean }>(
-    "select app.session_consent_active($1, 'photo_video') as active",
-    [sessionId],
-  );
-  return rows[0]?.active === true;
-}
 
 // How far a device's own clock may drift from the server's before its event
 // is refused rather than trusted as the visit's checked-in time.
@@ -97,8 +92,6 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
   mountServiceTypes(api, now);
   mountOpenSession(api);
   mountClose(api, now);
-  mountSessionPhoto(api, now);
-  mountSessionPhotoLink(api);
 
   api.post('/api/sessions/:id/events', async (c) => {
     const actor = c.get('actor');
@@ -195,8 +188,6 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
             status: 'checked_in',
             sessionId: existingRow.id,
             checkedInAt: existingRow.checked_in_at.toISOString(),
-            photoConsent: await photoConsent(db, sessionId),
-            previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
           }),
           200,
         );
@@ -462,8 +453,6 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
               status: 'checked_in',
               sessionId: row.id,
               checkedInAt: row.checked_in_at.toISOString(),
-              photoConsent: await photoConsent(db, sessionId),
-              previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
             }),
             200,
           );
@@ -487,8 +476,6 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         status: 'checked_in',
         sessionId,
         checkedInAt: projection.checkedInAt,
-        photoConsent: await photoConsent(db, sessionId),
-        previousSetupPhotoDocumentId: await previousSetupPhoto(db, sessionId),
       }),
       201,
     );

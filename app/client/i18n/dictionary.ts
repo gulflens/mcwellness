@@ -191,6 +191,11 @@ export const PURPOSES: Record<string, Phrase> = {
   participation: t('taking part in the programme', 'المشاركة في البرنامج'),
   minor_participation: t('taking part as a minor', 'مشاركة قاصر'),
   home_visit: t('sessions at home', 'الجلسات في المنزل'),
+  health_data: t(
+    'brain-map and neurofeedback information',
+    'معلومات خريطة الدماغ والارتجاع العصبي',
+  ),
+  // Retired on 2026-09-09; a household that agreed before then still sees it.
   photo_video: t('photos and video', 'الصور والفيديو'),
   research: t('research', 'البحث'),
   marketing: t('marketing', 'التسويق'),

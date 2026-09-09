@@ -4,13 +4,7 @@ import { replayEvents, sessionNumber, type SessionHistoryEntry } from '@domain/s
 import { logRead } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { OpenSessionResponse } from './schema';
-import {
-  lastSeqOf,
-  loadOpenSession,
-  previousSetupPhoto,
-  readEvents,
-  resolvePractitioner,
-} from './session-row';
+import { lastSeqOf, loadOpenSession, readEvents, resolvePractitioner } from './session-row';
 
 /**
  * GET /api/sessions/open — the visit this practitioner left open, if there
@@ -106,15 +100,6 @@ export function mountOpenSession(api: Hono<ApiEnv>): void {
       [],
     );
 
-    const photo = await db.query<{ active: boolean }>(
-      "select app.session_consent_active($1, 'photo_video') as active",
-      [session.id],
-    );
-    // The last placement, so a resumed visit's pre-flight offers the same
-    // button a fresh check-in does (docs/SPEC/practitioner-phone.md section
-    // 4.5). One id; nothing is fetched until somebody taps it.
-    const previousPhoto = await previousSetupPhoto(db, session.id);
-
     await logRead(db, 'session', session.id, session.client_id);
 
     return c.json(
@@ -131,8 +116,6 @@ export function mountOpenSession(api: Hono<ApiEnv>): void {
           number: count.number,
           of: count.of,
           lastSeq: lastSeqOf(events),
-          photoConsent: photo.rows[0]?.active === true,
-          previousSetupPhotoDocumentId: previousPhoto,
         },
       }),
     );

@@ -74,6 +74,7 @@ export const CHECK_IN_BLOCK_REASONS = [
   'consent_missing_participation',
   'consent_missing_minor_participation',
   'consent_missing_home_visit',
+  'consent_missing_health_data',
   'date_of_birth_unknown',
   'already_checked_in',
   'not_booked_today',
@@ -86,23 +87,6 @@ export const CheckInResponse = z.discriminatedUnion('status', [
     status: z.literal('checked_in'),
     sessionId: z.uuid(),
     checkedInAt: z.iso.datetime(),
-    /**
-     * Whether the household's `photo_video` consent is active right now
-     * (00-data-model.md section 3). The runner offers the setup photo only
-     * when it is, and says why when it is not — the server refuses one
-     * either way (app/api/sessions/events.ts), so this is a courtesy to the
-     * practitioner, never the boundary. Defaulted, so a device reading an
-     * older server's answer simply does not offer the camera.
-     */
-    photoConsent: z.boolean().default(false),
-    /**
-     * The photograph on this client's most recent completed visit, or null
-     * (docs/SPEC/practitioner-phone.md section 4.5). The pre-flight step shows
-     * a button and fetches the picture only on the tap, so nothing is read
-     * unasked; this is only the handle the button needs. An opaque document
-     * id, which is what `.claude/rules/ui.md` means by routing by ids alone.
-     */
-    previousSetupPhotoDocumentId: z.uuid().nullable().default(null),
   }),
   z.object({
     status: z.literal('blocked'),
@@ -244,10 +228,11 @@ export type SessionEventsRequest = z.infer<typeof SessionEventsRequest>;
 export const EVENT_REFUSAL_REASONS = [
   'duplicate_seq',
   'device_clock_out_of_range',
+  // Always the answer to a photo_captured event since 2026-09-09: the practice
+  // takes no photographs, so there is no consent that could permit one. Kept
+  // under its old name because a device offline since before that date may
+  // still be holding one to flush, and this is what tells it to stop.
   'consent_missing_photo_video',
-  // Nowhere to put a photograph's bytes yet — see ./photo-availability.ts.
-  // Temporary by design; it goes when the storage seam lands.
-  'photo_storage_unavailable',
   // A check-out coordinate on a visit the practitioner declined to share at
   // the door. Section 3.6's rule, held by the server rather than the device.
   'location_not_shared_at_check_in',
@@ -299,10 +284,6 @@ export const OpenSession = z.object({
   number: z.number().int().positive(),
   of: z.number().int().positive().nullable(),
   lastSeq: z.number().int().min(0),
-  /** As on the check-in response: whether the setup photo may be offered at all. */
-  photoConsent: z.boolean().default(false),
-  /** As on the check-in response: the last placement, for the pre-flight's own button. */
-  previousSetupPhotoDocumentId: z.uuid().nullable().default(null),
 });
 export type OpenSession = z.infer<typeof OpenSession>;
 
@@ -323,32 +304,6 @@ export const VisitActualsInput = z.object({
   accessIssues: z.string().max(1000).nullable().default(null),
 });
 export type VisitActualsInput = z.infer<typeof VisitActualsInput>;
-
-/**
- * `PUT /api/sessions/:id/photo` (app/api/sessions/photo.ts). 201 the first
- * time, 200 on an idempotent retry of the same digest; the body is the same
- * either way, because the device only wants to know it may drop the blob.
- */
-export const PhotoFiledResponse = z.object({
-  status: z.literal('filed'),
-  documentId: z.uuid(),
-});
-export type PhotoFiledResponse = z.infer<typeof PhotoFiledResponse>;
-
-/** `GET /api/sessions/photo/:documentId/link` (app/api/sessions/photo-link.ts). */
-export const PhotoLinkResponse = z.object({
-  url: z.string(),
-  /**
-   * The document's own media type. The pre-flight step fetches the bytes and
-   * shows them inline rather than opening a link (section 4.5), and a blob
-   * needs its type named: the local store answers `application/octet-stream`
-   * with `content-disposition: attachment`, which is a download, not a
-   * picture.
-   */
-  mimeType: z.string(),
-  expiresInSeconds: z.number().int().positive(),
-});
-export type PhotoLinkResponse = z.infer<typeof PhotoLinkResponse>;
 
 export const CloseRequest = z.object({ visitActuals: VisitActualsInput });
 export type CloseRequest = z.infer<typeof CloseRequest>;

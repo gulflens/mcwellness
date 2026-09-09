@@ -58,6 +58,27 @@ function required(fields: Record<string, string>, name: string, file: string): s
 }
 
 /**
+ * The purposes one file is shown for, from its `purpose:` front matter.
+ *
+ * The practice's plain agreement is a single page a person meets whether they
+ * are agreeing to take part, agreeing on behalf of their child, or agreeing to
+ * be visited at home, so a wording may name more than one purpose. Each still
+ * files its own document: a recorded consent names exactly one purpose, and
+ * the alternative — three copies of the same page — is three chances for the
+ * words a household signed to drift apart.
+ */
+export function purposesOf(field: string): string[] {
+  const purposes = field
+    .split(',')
+    .map((purpose) => purpose.trim())
+    .filter((purpose) => purpose.length > 0);
+  if (purposes.length === 0) {
+    throw new Error('A wording names at least one purpose; this one names none.');
+  }
+  return purposes;
+}
+
+/**
  * Every wording file, in a fixed order: purpose then language, so the seed's
  * document ids are the same on every machine and every run.
  */
@@ -66,7 +87,7 @@ export function loadConsentTexts(): ConsentText[] {
   const files = readdirSync(dir)
     .filter((name) => name.endsWith('.md') && name !== 'README.md')
     .sort();
-  const texts: ConsentText[] = files.map((file): ConsentText => {
+  const texts: ConsentText[] = files.flatMap((file): ConsentText[] => {
     const bytes = readFileSync(fileURLToPath(new URL(file, CONSENT_DIR)));
     const fields = frontMatter(bytes.toString('utf8'), file);
     const locale = required(fields, 'locale', file);
@@ -77,15 +98,24 @@ export function loadConsentTexts(): ConsentText[] {
     if (status !== 'draft' && status !== 'approved') {
       throw new Error(`${file} has status "${status}"; a wording is draft or approved.`);
     }
-    return {
+    const version = required(fields, 'version', file);
+    const sha256Hex = createHash('sha256').update(bytes).digest('hex');
+    let purposes: string[];
+    try {
+      purposes = purposesOf(required(fields, 'purpose', file));
+    } catch (error) {
+      // The pure function cannot know which file it was reading; say so here.
+      throw new Error(`${file}: ${(error as Error).message}`, { cause: error });
+    }
+    return purposes.map((purpose) => ({
       file,
-      purpose: required(fields, 'purpose', file),
+      purpose,
       locale,
       status,
-      version: required(fields, 'version', file),
+      version,
       bytes,
-      sha256Hex: createHash('sha256').update(bytes).digest('hex'),
-    };
+      sha256Hex,
+    }));
   });
   if (texts.length === 0) {
     throw new Error(

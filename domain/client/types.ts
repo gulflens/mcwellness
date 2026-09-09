@@ -14,11 +14,30 @@ export const CONSENT_PURPOSES = [
   'participation',
   'minor_participation',
   'home_visit',
+  'health_data',
   'photo_video',
   'research',
   'marketing',
 ] as const;
 export type ConsentPurpose = (typeof CONSENT_PURPOSES)[number];
+
+/**
+ * The purposes a screen may offer today.
+ *
+ * `photo_video`, `research` and `marketing` are absent deliberately: on the
+ * legal advisor's recommendation of 9 September 2026 the practice takes no
+ * photographs, and uses a household's information for nothing but that
+ * household's own sessions. They stay in `CONSENT_PURPOSES` above because
+ * consent rows already name them and history is not ours to rewrite — what
+ * changed is what the practice asks for, not what the column may hold.
+ */
+export const OFFERED_CONSENT_PURPOSES = [
+  'participation',
+  'minor_participation',
+  'home_visit',
+  'health_data',
+] as const satisfies readonly ConsentPurpose[];
+export type OfferedConsentPurpose = (typeof OFFERED_CONSENT_PURPOSES)[number];
 
 export const CONSENT_STATUSES = ['active', 'withdrawn', 'expired', 'superseded'] as const;
 export type ConsentStatus = (typeof CONSENT_STATUSES)[number];
@@ -36,7 +55,8 @@ export const DELIVERY_MODES = ['home', 'studio', 'remote'] as const;
 export type DeliveryMode = (typeof DELIVERY_MODES)[number];
 
 /** The purposes `canActivate` can ever require (docs/SPEC/client-record.md section 3). */
-export type RequiredConsentPurpose = 'participation' | 'minor_participation' | 'home_visit';
+export type RequiredConsentPurpose =
+  'participation' | 'minor_participation' | 'home_visit' | 'health_data';
 
 export type ClientRecordClient = {
   id: string;

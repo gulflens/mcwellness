@@ -9,39 +9,94 @@ new version with a new `version:` line, and the old file stays.
 
 | Purpose | Files | Who gives it |
 |---|---|---|
-| `participation` | `participation.en.md`, `participation.ar.md` | the client (18 or over) |
-| `minor_participation` | `minor-participation.en.md`, `minor-participation.ar.md` | a parent or legal guardian, for a client under 18 |
-| `home_visit` | `home-visit.en.md`, `home-visit.ar.md` | the client or guardian, when sessions happen at home |
-| `photo_video` | `photo-video.en.md`, `photo-video.ar.md` | the client or guardian; optional; needed before any setup photo |
+| `participation` | `agreement.en.md`, `agreement.ar.md` | the client (18 or over) |
+| `minor_participation` | `agreement.en.md`, `agreement.ar.md` | a parent or legal guardian, for a client under 18 |
+| `home_visit` | `agreement.en.md`, `agreement.ar.md` | the client or guardian, when sessions happen at home |
+| `health_data` | `health-data.en.md`, `health-data.ar.md` | the client or guardian; required before any session |
 
-## Status: DRAFT, pending the lawyer
+The agreement is **one page shown for three purposes**. A household meets a
+single document rather than three that repeat each other, and each purpose
+still files its own row, because a recorded consent names exactly one. The
+loader reads that from a `purpose:` line naming several (`db/seed/consent-text.ts`).
 
-Written by the trunk session on 2026-09-03 at the operator's request, to be
-used until the practice's lawyer approves a final wording. They are not legal
-advice. Every file carries `status: draft` in its front matter and a visible
-draft line at the top; the app shows that line to the person signing until a
-version with `status: approved` replaces it.
+`docs/CONSENT/notices/` holds what the practice publishes but nobody signs:
+`your-information.en.md` and its Arabic twin. They are not consent wording and
+are deliberately outside the loader's reach — `document.purpose` is typed as
+the `consent_purpose` enum, and a privacy notice is not a consent.
 
-**What the lawyer must confirm or fill in** (each marked `[square brackets]`
-in the texts):
+## Status: APPROVED, 9 September 2026
 
-1. The practice's legal name, trade licence number, tax registration number
-   and registered address (they live in owner settings; the texts show them).
-2. Where personal data is hosted and the lawful basis for that transfer under
-   the UAE Personal Data Protection Law (Federal Decree-Law 45 of 2021). The
-   staging database is in India (Mumbai); production's region is not yet
-   chosen. The texts say so plainly and the lawyer decides the wording.
-3. That the "wellness, not medical" wording is right for a practice with no
-   health-authority licence: no diagnosis, no treatment, no prescription,
-   keep seeing your doctor.
-4. Who may consent for a minor under UAE law, and whether the practice must
-   check a document.
-5. The cancellation, late-cancellation and unfit-to-attend fees, package
-   expiry, and refunds, which the texts reference as "the practice's current
-   terms" with amounts left in brackets.
-6. Governing law and the dispute route.
-7. The retention period (five years after the last activity, invoices as tax
-   law requires) and the erasure exception for invoices and the audit trail.
+The practice's legal advisor approved this wording, subject to four changes,
+which this round carries:
+
+1. **No photographs.** The practice does not photograph clients or their
+   sessions, so the photo consent is gone — and with it the capability, since
+   a consent is what authorised the camera at runtime.
+2. **Ordinary details and health information read apart**, in
+   `notices/your-information.en.md`.
+3. **A specific consent for neurofeedback and QEEG data**, `health-data.en.md`,
+   whose six sections are the advisor's six requirements: what is collected,
+   why, how it is used, who can see it, where it is kept, and what a person may
+   do about it.
+4. **A statement of how the data will not be used**: never sold, never for
+   advertising, never for research, never for anything unrelated.
+
+Two things the advisor's letter did not settle are stated on the practice's own
+authority rather than theirs: the hosting is named plainly as Mumbai, India, and
+the amounts and periods are the founder's own decision of 4 September 2026.
+`docs/superpowers/specs/2026-09-09-approved-wording-design.md` section 7 records
+that, and records that `health-data.en.md` is text the advisor asked for but has
+not yet read.
+
+**The practice's identity is never written here.** No legal name, trade licence,
+tax registration number or registered address appears in any of these files:
+this repository is public, and identity is rendered from owner settings, as it
+already is on an invoice, a report and the erasure letter.
+
+## The Arabic is at 1.1, and the English at 1.0
+
+Both were filed at 1.0 on 9 September 2026. The compliance review of the same
+day found the Arabic saying المعالج — from علاج, to treat — where the rest of
+the practice's software says الممارس, two lines after the same page says the
+practice treats nobody. The words were corrected the same evening, before any
+household had been shown either file.
+
+That correction is a new version and not an edit, because the database says so
+and is right to: `app.guard_document_write` refuses to change a filed wording
+("a correction is a new document, never an edit of the one already filed"), and
+`document_consent_text_version_idx` makes `(practice, purpose, language,
+version)` unique whether or not a row is retired — so a version, once filed, is
+spent. `agreement.ar.md` and `health-data.ar.md` are therefore version 1.1 and
+their English twins are still 1.0. That asymmetry is the truth: one text was
+corrected and the other was not, and a version belongs to a document rather
+than to a pair.
+
+## The five years are a floor, not a timer
+
+`notices/your-information.en.md` and `health-data.en.md` say the practice keeps
+records for **at least** five years after a household's last session or contact,
+may keep them for longer, and deletes nothing on a timer — a household asks, and
+then it is deleted.
+
+That is the operator's rule of 2026-09-09 and it matches what the practice
+already had written down: CLAUDE.md's absolute rule 8 and the `uae-compliance`
+skill both say five years after last activity, **then erasure or anonymisation
+on request**, with financial records kept five years regardless. The wording
+first promoted earlier that day said "then it is deleted", which read as a timer
+and was the only document out of step; it was corrected the same evening, before
+any household saw it.
+
+`retention_until` on a document is therefore the date the floor lifts — the
+earliest an erasure can take everything — and not a deletion date. Nothing
+sweeps it, deliberately.
+
+## Superseded
+
+`superseded/` holds the eight long drafts of 3 September, replaced by the
+wording above. They are kept, never deleted: consents recorded on staging name
+them, and a household is shown the text it actually signed for as long as that
+consent stands — `app/admin/clients/ConsentText.test.tsx` renders one to prove
+the renderer still can.
 
 ## Amendments
 

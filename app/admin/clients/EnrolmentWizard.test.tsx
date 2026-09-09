@@ -119,6 +119,26 @@ function completeRecord() {
         withdrawalReason: null,
       },
       {
+        // The agreement to take part is not an agreement to the practice
+        // holding what a person's brain is doing; that is a separate yes, and
+        // it separately gates activation.
+        id: '00000008-0000-4000-8000-000000000096',
+        purpose: 'health_data',
+        status: 'active',
+        givenByContactId: '00000008-0000-4000-8000-000000000091',
+        givenAt: '2026-01-01T09:00:00+04:00',
+        withdrawnAt: null,
+        expiresAt: null,
+        method: 'app_signature',
+        signatureDocumentId: null,
+        textDocumentId: '00000008-0000-4000-8000-000000000095',
+        wordingVersion: '1.0',
+        wordingStatus: 'approved',
+        witnessedByUserId: null,
+        witnessedByName: null,
+        withdrawalReason: null,
+      },
+      {
         id: '00000008-0000-4000-8000-000000000094',
         purpose: 'home_visit',
         status: 'active',

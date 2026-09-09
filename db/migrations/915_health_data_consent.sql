@@ -1,0 +1,32 @@
+-- 915_health_data_consent.sql
+-- Needs: 060 (consent_purpose)
+--
+-- A specific consent for brain-map and neurofeedback information.
+--
+-- **The practice's legal advisor, 2026-09-09.** Health information is to be
+-- consented to separately from the agreement to take part: what a person's
+-- brain is doing is more sensitive than their name and their address, and it
+-- deserves its own yes rather than being folded into a longer page somebody
+-- signs once. `docs/CONSENT/health-data.en.md` is the wording; the advisor's
+-- six requirements — what is collected, why, how it is used, who can see it,
+-- where it is kept and what a person may do about it — are its six sections.
+--
+-- **Added, never swapped.** `photo_video`, `research` and `marketing` stay
+-- legal values. Consent rows already name them, and a value a row names is not
+-- ours to remove: history is not rewritten because a practice changed its mind
+-- about what it asks for next. What changed is what the console offers, which
+-- is `OFFERED_CONSENT_PURPOSES` in domain/client/types.ts and not this column.
+--
+-- This is a core-range file (900–949) rather than the trunk's upper half
+-- because `consent` is a core table, per docs/SPEC/OWNERSHIP.md: a stream may
+-- need to build on this value, and nothing here builds on a stream's own table.
+alter type public.consent_purpose add value if not exists 'health_data';
+
+-- rollback:
+--   Postgres cannot remove a value from an enum, and this one must not be
+--   removed in any case once a household has agreed to it: a consent row
+--   naming 'health_data' is the evidence that they did. To undo the effect
+--   rather than the value, take 'health_data' out of the required list in
+--   domain/client/requiredConsents.ts and out of OFFERED_CONSENT_PURPOSES in
+--   domain/client/types.ts. The value then stands unused, which is what
+--   'photo_video' does from this round onward.

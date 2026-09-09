@@ -5,7 +5,6 @@ import {
   ASSESSMENT_FILE_TIMEOUT_MS,
   BODY_LIMIT_BYTES,
   LOGO_BODY_LIMIT_BYTES,
-  PHOTO_LIMIT_BYTES,
   REQUEST_TIMEOUT_MS,
   requestTimeoutMs,
 } from '../../app/api/create-api';
@@ -41,7 +40,6 @@ describe('the body cap', () => {
 
   it('leaves every other envelope exactly where it was', () => {
     expect(BODY_LIMIT_BYTES).toBe(64 * 1024);
-    expect(PHOTO_LIMIT_BYTES).toBe(1024 * 1024);
     // The logo's is the base64 envelope's own arithmetic and is not a number
     // this door has any business moving; what is asserted is that it is still
     // small, and nowhere near the one that grew.
@@ -78,6 +76,8 @@ describe('the request budget', () => {
       '/api/assessments/00000000-0000-4000-8000-000000000001/supersede',
       '/api/assessments/file/00000000-0000-4000-8000-000000000002/link',
       '/api/clients/00000000-0000-4000-8000-000000000003/assessments',
+      // The setup photograph's own door until 2026-09-09; the practice takes
+      // no photographs, so this is now an ordinary path like any other.
       '/api/sessions/00000000-0000-4000-8000-000000000004/photo',
       '/api/practice/logo',
       '/api/billing/documents',

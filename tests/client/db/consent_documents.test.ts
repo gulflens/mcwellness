@@ -58,6 +58,7 @@ const NO_HISTORY_CONTACT = '00000000-0000-4000-8000-000000000115';
 
 const WORDING_PARTICIPATION = '00000000-0000-4000-8000-000000000121';
 const WORDING_HOME_VISIT = '00000000-0000-4000-8000-000000000122';
+const WORDING_HEALTH_DATA = '00000000-0000-4000-8000-000000000128';
 const WORDING_RETIRED = '00000000-0000-4000-8000-000000000123';
 const WORDING_ARABIC = '00000000-0000-4000-8000-000000000124';
 const WORDING_MINOR = '00000000-0000-4000-8000-000000000125';
@@ -226,6 +227,7 @@ beforeAll(async () => {
 
   await seedWording(WORDING_PARTICIPATION, 'participation', 'en', '1.0', 'approved', false);
   await seedWording(WORDING_HOME_VISIT, 'home_visit', 'en', '1.0', 'approved', false);
+  await seedWording(WORDING_HEALTH_DATA, 'health_data', 'en', '1.0', 'approved', false);
   await seedWording(WORDING_MINOR, 'minor_participation', 'en', '1.0', 'approved', false);
   await seedWording(WORDING_RETIRED, 'participation', 'en', '0.9', 'approved', true);
   await seedWording(WORDING_ARABIC, 'participation', 'ar', '1.0', 'approved', false);
@@ -239,6 +241,7 @@ beforeAll(async () => {
   for (const id of [
     WORDING_PARTICIPATION,
     WORDING_HOME_VISIT,
+    WORDING_HEALTH_DATA,
     WORDING_MINOR,
     WORDING_RETIRED,
     WORDING_ARABIC,
@@ -1181,12 +1184,15 @@ describe('a client enrolled, signed and activated', () => {
     });
     expect(tooSoon.status).toBe(400);
     expect((await tooSoon.json()) as { missing: string[] }).toMatchObject({
-      missing: ['consent:home_visit', 'consent:participation'],
+      missing: ['consent:health_data', 'consent:home_visit', 'consent:participation'],
     });
 
     for (const [purpose, wording] of [
       ['participation', WORDING_PARTICIPATION],
       ['home_visit', WORDING_HOME_VISIT],
+      // Required since 2026-09-09: agreeing to take part is not agreeing to
+      // the practice holding what your brain is doing.
+      ['health_data', WORDING_HEALTH_DATA],
     ] as const) {
       const recorded = await request(ADMIN_AUTH, `/api/clients/${clientId}/consents`, {
         method: 'POST',

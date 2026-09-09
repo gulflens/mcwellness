@@ -52,27 +52,40 @@ afterAll(async () => {
 });
 
 describe('the seeded consent wording', () => {
-  it('files one document per purpose and language: eight, all drafts', () => {
+  it('files one document per purpose and language: eight, all approved', () => {
     expect(rows).toHaveLength(8);
     expect(rows.map((row) => `${row.purpose}.${row.locale}`).sort()).toEqual([
+      'health_data.ar',
+      'health_data.en',
       'home_visit.ar',
       'home_visit.en',
       'minor_participation.ar',
       'minor_participation.en',
       'participation.ar',
       'participation.en',
-      'photo_video.ar',
-      'photo_video.en',
     ]);
     for (const row of rows) {
-      // Not the lawyer's yet, and the schema says so rather than a comment.
-      expect(row.status).toBe('draft');
-      // Two of the four moved to 0.2-draft on 6 September 2026, when the
-      // health question began asking about a head injury at any time rather
-      // than only in the last year (the founder's review of 4 September).
-      const participation =
-        row.purpose === 'participation' || row.purpose === 'minor_participation';
-      expect(row.version).toBe(participation ? '0.2-draft' : '0.1-draft');
+      // The practice's legal advisor approved the wording on 2026-09-09, and
+      // the schema says so rather than a comment.
+      expect(row.status).toBe('approved');
+      // Pinned per purpose and language, as db/seed/consent-text.test.ts pins
+      // them: a filed wording is never edited, so each correction made on
+      // 2026-09-09 is a new version, and the two sets are not the same number.
+      // CI caught this file lagging the unit test by two bumps, because
+      // `pnpm verify` does not run the database suite.
+      const expected: Record<string, string> = {
+        'participation.en': '1.0',
+        'participation.ar': '1.1',
+        'minor_participation.en': '1.0',
+        'minor_participation.ar': '1.1',
+        'home_visit.en': '1.0',
+        'home_visit.ar': '1.1',
+        'health_data.en': '1.1',
+        'health_data.ar': '1.2',
+      };
+      expect(row.version, `${row.purpose}.${row.locale}`).toBe(
+        expected[`${row.purpose}.${row.locale}`],
+      );
       expect(row.mime_type).toBe('text/markdown');
       // A practice document: it belongs to no one client, and is never rewritten.
       expect(row.client_id).toBeNull();

@@ -1,4 +1,16 @@
-# The simple wording
+# The simple wording — superseded as a plan, kept as a record
+
+> **9 September 2026.** These pages were promoted to the approved wording and moved up
+> one level: `agreement.md` is now `docs/CONSENT/agreement.en.md` at version 1.0 with
+> the photographs section removed, and `your-information.md` is
+> `docs/CONSENT/notices/your-information.en.md`. Both have Arabic twins. What remains
+> in this folder is `for-review.md` and `bookings-and-packages.md`.
+>
+> **The table below is out of date on one point and it matters:** it says the agreement
+> carries "a box for photographs" and that `photo_video` points at it. The practice
+> takes no photographs since its legal advisor's recommendation of that date, the box is
+> gone from the approved page, and `photo_video` is offered to nobody. Read the table as
+> the history of a plan, not as an instruction.
 
 Written 4 September 2026 at the operator's direction: the practice is a very
 small starter business, will not be engaging a lawyer for now, and wants every

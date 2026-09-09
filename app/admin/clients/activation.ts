@@ -50,6 +50,7 @@ const MISSING_LABELS: Record<Missing, string> = {
   'consent:participation': 'Participation consent',
   'consent:minor_participation': "The guardian's consent for a minor",
   'consent:home_visit': 'Consent for home visits',
+  'consent:health_data': 'Consent for brain-map and neurofeedback information',
 };
 
 export function missingLabel(item: Missing): string {

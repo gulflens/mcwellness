@@ -53,7 +53,6 @@ const FAMILY_NAMES = ['Bay', 'Cliff', 'Creek', 'Dune', 'Harbour', 'Lagoon', 'Mea
 
 /** A one-pixel JPEG's worth of nothing. What matters is that it has a digest. */
 const PICTURE = new Uint8Array([255, 216, 255, 224, 0, 16, 74, 70, 73, 70]);
-const OTHER_PICTURE = new Uint8Array([255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 1]);
 const digestOf = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
 let owner: pg.Client;
@@ -104,26 +103,6 @@ async function post(path: string, authSub: string, body: unknown): Promise<Respo
 
 async function get(path: string, authSub: string): Promise<Response> {
   return api.request(path, { headers: { authorization: `Bearer ${await mint(authSub)}` } });
-}
-
-/** The photograph's own door, exactly as the device calls it. */
-async function putPhoto(
-  sessionId: string,
-  authSub: string,
-  bytes: Uint8Array,
-  options: { digest?: string; type?: string } = {},
-): Promise<Response> {
-  return api.request(`/api/sessions/${sessionId}/photo`, {
-    method: 'PUT',
-    headers: {
-      authorization: `Bearer ${await mint(authSub)}`,
-      'content-type': options.type ?? 'image/jpeg',
-      'x-photo-sha256': options.digest ?? digestOf(bytes),
-    },
-    // `BodyInit` is typed from the DOM lib, which does not know a Uint8Array
-    // over a plain ArrayBuffer is one. It is, and the runtime takes it.
-    body: bytes as unknown as BodyInit,
-  });
 }
 
 type Visit = {
@@ -181,6 +160,8 @@ async function seedVisit(
   const purposes = [
     'participation',
     'home_visit',
+    // Read at the door since 2026-09-09; without it no visit opens.
+    'health_data',
     ...(options.photoConsent ? ['photo_video'] : []),
   ];
   for (const [index, purpose] of purposes.entries()) {
@@ -265,220 +246,6 @@ afterAll(async () => {
   await pool?.end();
   await owner?.end();
   await rm(dir, { recursive: true, force: true });
-});
-
-describe('filing the setup photograph', () => {
-  it('files the row, the bytes and the link, and audits it with the document id alone', async () => {
-    const visit = await seedVisit('01', { photoConsent: true });
-    expect((await flushPhotoEvent(visit, PICTURE)).status).toBe(200);
-
-    const res = await putPhoto(visit.sessionId, visit.authSub, PICTURE);
-    expect(res.status).toBe(201);
-    const filed = (await res.json()) as { status: string; documentId: string };
-    expect(filed.status).toBe('filed');
-
-    const document = await owner.query<{
-      kind: string;
-      client_id: string;
-      sha256: Buffer;
-      storage_key: string;
-      is_immutable: boolean;
-    }>('select kind, client_id, sha256, storage_key, is_immutable from document where id = $1', [
-      filed.documentId,
-    ]);
-    expect(document.rows[0]?.kind).toBe('setup_photo');
-    expect(document.rows[0]?.client_id).toBe(visit.clientId);
-    expect(document.rows[0]?.sha256.toString('hex')).toBe(digestOf(PICTURE));
-    expect(document.rows[0]?.is_immutable).toBe(true);
-    // A key of ids alone: no session id, no record number, nothing that says
-    // whose file it is (docs/SEAMS.md).
-    expect(document.rows[0]?.storage_key).toBe(
-      `tenant/${IDS.tenantA}/client/${visit.clientId}/${filed.documentId}`,
-    );
-
-    const session = await owner.query<{ linked: string | null }>(
-      'select setup_photo_document_id as linked from session where id = $1',
-      [visit.sessionId],
-    );
-    expect(session.rows[0]?.linked).toBe(filed.documentId);
-
-    const trail = await owner.query<{ new_values: { documentId?: string } | null }>(
-      "select new_values from audit_log where action = 'session.photo_filed' and entity_id = $1",
-      [visit.sessionId],
-    );
-    expect(trail.rows).toHaveLength(1);
-    expect(trail.rows[0]?.new_values).toEqual({ documentId: filed.documentId });
-  });
-
-  it('is idempotent on the same digest and refuses a different one', async () => {
-    const visit = await seedVisit('02', { photoConsent: true });
-    await flushPhotoEvent(visit, PICTURE);
-    const first = (await (await putPhoto(visit.sessionId, visit.authSub, PICTURE)).json()) as {
-      documentId: string;
-    };
-
-    const again = await putPhoto(visit.sessionId, visit.authSub, PICTURE);
-    expect(again.status).toBe(200);
-    expect(await again.json()).toEqual({ status: 'filed', documentId: first.documentId });
-
-    // A filed evidence document is never replaced (docs/SEAMS.md).
-    const other = await putPhoto(visit.sessionId, visit.authSub, OTHER_PICTURE);
-    expect(other.status).toBe(409);
-    expect(await other.json()).toMatchObject({ detail: 'document_exists' });
-  });
-
-  it('waits for the event that names the digest, and drops a superseded one', async () => {
-    const visit = await seedVisit('03', { photoConsent: true });
-
-    // No event yet: retryable, and the device asks again after its next flush.
-    const pending = await putPhoto(visit.sessionId, visit.authSub, PICTURE);
-    expect(pending.status).toBe(409);
-    expect(await pending.json()).toMatchObject({ detail: 'photo_event_pending' });
-
-    // The event names a different picture: this one has been retaken.
-    await flushPhotoEvent(visit, OTHER_PICTURE);
-    const superseded = await putPhoto(visit.sessionId, visit.authSub, PICTURE);
-    expect(superseded.status).toBe(409);
-    expect(await superseded.json()).toMatchObject({ detail: 'photo_superseded' });
-  });
-
-  it('refuses bytes that do not match the digest the device declared', async () => {
-    const visit = await seedVisit('04', { photoConsent: true });
-    await flushPhotoEvent(visit, PICTURE);
-    const res = await putPhoto(visit.sessionId, visit.authSub, OTHER_PICTURE, {
-      digest: digestOf(PICTURE),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ detail: 'digest_mismatch' });
-  });
-
-  it('refuses a household that has not agreed, and audits the refusal', async () => {
-    const visit = await seedVisit('05');
-    // The event itself is refused for the same reason, so the picture reaches
-    // the door with nothing naming it. Consent is still the first question
-    // asked, so the answer is the consent's own and not "the event has not
-    // arrived yet" (spec section 4.3, section 13's forged PUT).
-    await flushPhotoEvent(visit, PICTURE);
-    const res = await putPhoto(visit.sessionId, visit.authSub, PICTURE);
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ detail: 'consent_missing_photo_video' });
-
-    const refusal = await owner.query<{ reason: string | null; client_id: string | null }>(
-      "select reason, client_id from audit_log where action = 'refused' " +
-        "and entity_type = 'session' and entity_id = $1",
-      [visit.sessionId],
-    );
-    expect(refusal.rows).toHaveLength(1);
-    expect(refusal.rows[0]?.reason).toBe('consent_missing_photo_video');
-    expect(refusal.rows[0]?.client_id).toBe(visit.clientId);
-
-    const documents = await owner.query<{ n: string }>(
-      "select count(*)::text as n from document where kind = 'setup_photo' and client_id = $1",
-      [visit.clientId],
-    );
-    expect(documents.rows[0]?.n).toBe('0');
-  });
-
-  it("refuses another practitioner's visit, without confirming it exists", async () => {
-    const mine = await seedVisit('06', { photoConsent: true, hour: '10' });
-    const theirs = await seedVisit('07', { photoConsent: true, hour: '12' });
-    await flushPhotoEvent(theirs, PICTURE);
-    const res = await putPhoto(theirs.sessionId, mine.authSub, PICTURE);
-    // A flat 404, not a 403: db/policies/session/practitioner_scope.sql shows
-    // a practitioner only their own visits, so somebody else's is simply not
-    // there — and an answer that said "forbidden" would confirm the id names a
-    // real visit.
-    expect(res.status).toBe(404);
-
-    const documents = await owner.query<{ n: string }>(
-      "select count(*)::text as n from document where kind = 'setup_photo' and client_id = $1",
-      [theirs.clientId],
-    );
-    expect(documents.rows[0]?.n).toBe('0');
-  });
-
-  it('refuses anything that is not one of the three image types', async () => {
-    const visit = await seedVisit('08', { photoConsent: true, hour: '14' });
-    await flushPhotoEvent(visit, PICTURE);
-    const res = await putPhoto(visit.sessionId, visit.authSub, PICTURE, {
-      type: 'application/pdf',
-    });
-    expect(res.status).toBe(415);
-  });
-
-  it('files after the visit has closed, which is when an offline day delivers', async () => {
-    const visit = await seedVisit('09', { photoConsent: true, hour: '16' });
-    await flushPhotoEvent(visit, PICTURE);
-    // Close the visit as the practitioner's own device would, with the
-    // check-out already in.
-    await post(`/api/sessions/${visit.sessionId}/events`, visit.authSub, {
-      events: [
-        {
-          id: id(visit.scenario, 40),
-          seq: 40,
-          kind: 'checked_out',
-          deviceAt: new Date().toISOString(),
-          payload: {},
-        },
-      ],
-    });
-    const closed = await post(`/api/sessions/${visit.sessionId}/close`, visit.authSub, {
-      visitActuals: {
-        driveSeconds: null,
-        walkSeconds: null,
-        salikCrossings: 0,
-        parkingCostFils: 0,
-        accessIssues: null,
-      },
-    });
-    expect(closed.status).toBe(200);
-
-    const res = await putPhoto(visit.sessionId, visit.authSub, PICTURE);
-    expect(res.status).toBe(201);
-    const filed = (await res.json()) as { documentId: string };
-    const session = await owner.query<{ linked: string | null }>(
-      'select setup_photo_document_id as linked from session where id = $1',
-      [visit.sessionId],
-    );
-    expect(session.rows[0]?.linked).toBe(filed.documentId);
-  });
-});
-
-describe('the link to a previous placement', () => {
-  it('signs a short-lived link and writes the read to the trail first', async () => {
-    const visit = await seedVisit('10', { photoConsent: true, hour: '18' });
-    await flushPhotoEvent(visit, PICTURE);
-    const filed = (await (await putPhoto(visit.sessionId, visit.authSub, PICTURE)).json()) as {
-      documentId: string;
-    };
-
-    const before = await owner.query<{ n: string }>(
-      "select count(*)::text as n from audit_log where action = 'read' and entity_id = $1",
-      [filed.documentId],
-    );
-    const res = await get(`/api/sessions/photo/${filed.documentId}/link`, visit.authSub);
-    expect(res.status).toBe(200);
-    const link = (await res.json()) as { url: string; expiresInSeconds: number };
-    expect(link.expiresInSeconds).toBeGreaterThan(0);
-    // The local implementation serves its own bytes, and they are the ones
-    // filed.
-    const bytes = await api.request(link.url);
-    expect(bytes.status).toBe(200);
-    expect(new Uint8Array(await bytes.arrayBuffer())).toEqual(PICTURE);
-
-    const after = await owner.query<{ n: string }>(
-      "select count(*)::text as n from audit_log where action = 'read' and entity_id = $1",
-      [filed.documentId],
-    );
-    expect(Number(after.rows[0]?.n)).toBe(Number(before.rows[0]?.n) + 1);
-  });
-
-  it('answers a document that is not a setup photo with a flat not-found', async () => {
-    const visit = await seedVisit('11', { hour: '20' });
-    // The consent wording is a real document this caller could otherwise read.
-    const res = await get(`/api/sessions/photo/${WORDING}/link`, visit.authSub);
-    expect(res.status).toBe(404);
-  });
 });
 
 describe("the day's drives, under the fallback", () => {
@@ -662,10 +429,17 @@ describe("the day's drives, asked for by the hour", () => {
 });
 
 describe('the events route and the store', () => {
-  it('takes a photo_captured event now that there is somewhere to put the bytes', async () => {
+  it('refuses a photo_captured event even where the store could hold the bytes', async () => {
+    // This file's API is built with a real document store, which is what once
+    // made the difference: the event was taken here and refused where there
+    // was nowhere to put a picture. Since 2026-09-09 the store is beside the
+    // point — the practice takes no photographs, and a deployment that could
+    // hold one still has nothing to hold, because nothing may make one.
     const visit = await seedVisit('16', { photoConsent: true, hour: '13' });
     const body = (await (await flushPhotoEvent(visit, PICTURE)).json()) as EventsResponse;
-    expect(body.refused).toEqual([]);
-    expect(body.acknowledged).toHaveLength(1);
+    expect(body.refused).toEqual([
+      { id: body.refused[0]!.id, reason: 'consent_missing_photo_video' },
+    ]);
+    expect(body.acknowledged).toHaveLength(0);
   });
 });
