@@ -18,7 +18,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { useDrawer } from '../../shell/components/useDrawer';
-import { BAND_LABELS, GATE_MESSAGES, REFUSAL_MESSAGES, UNIT_LABELS } from './copy';
+import { BAND_LABELS, COMING_SOON, GATE_MESSAGES, REFUSAL_MESSAGES, UNIT_LABELS } from './copy';
 
 /**
  * Recording a measurement (docs/SPEC/assessment.md section 3.2).
@@ -273,7 +273,12 @@ export function RecordDrawer({
             onChange={(e) => setInstrument(e.target.value as Instrument)}
           >
             <option value="qeeg">Brain map</option>
-            <option value="questionnaire.sample">Questionnaire</option>
+            {/* Coming soon, by the operator's decision of 10 September 2026
+                (decision 10): listed so the practice knows it is planned,
+                disabled so nobody records against the synthetic sample. */}
+            <option value="questionnaire.sample" disabled>
+              {COMING_SOON.questionnaire}
+            </option>
           </Select>
           <Field
             id="assessment-date"

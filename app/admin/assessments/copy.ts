@@ -188,3 +188,15 @@ export const COMPARISON_MESSAGES: Record<string, string> = {
   maximum_mismatch: 'Those two totals are scored out of different maximums.',
   out_of_order: 'Choose an earlier measurement and a later one.',
 };
+
+/**
+ * What the operator asked to be marked as coming soon rather than waited on
+ * (decision 10 of docs/OPERATOR/2026-09-10-decisions.md, trunk round 42): a
+ * licensed questionnaire, and reading the figures from the equipment's own
+ * export. The mechanism and its synthetic sample stay; the screens say so.
+ */
+export const COMING_SOON = {
+  questionnaire: 'Questionnaire (coming soon)',
+  exportReading:
+    "Reading the figures from the equipment's export is coming soon. For now they are typed from the software.",
+} as const;

@@ -9,7 +9,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { Table, type Column } from '../../shell/components/Table';
 import { Comparison } from './Comparison';
-import { COMPARISON_MESSAGES } from './copy';
+import { COMING_SOON, COMPARISON_MESSAGES } from './copy';
 import { ExportFiles } from './ExportFiles';
 import { RecordDrawer } from './RecordDrawer';
 import './assessments.css';
@@ -256,6 +256,9 @@ export function AssessmentsTab({ clientId }: { clientId: string }) {
         </Button>
         {pair ? <Button onClick={() => void compare()}>Compare</Button> : null}
       </div>
+      {/* Said on the screen rather than waited on (the operator's decision of
+          10 September 2026, decision 10). */}
+      <Note>{COMING_SOON.exportReading}</Note>
 
       {state.kind === 'loading' ? <Note>Loading the measurements.</Note> : null}
       {state.kind === 'refused' ? (

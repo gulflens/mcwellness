@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
 import { AssessmentsTab } from './AssessmentsTab';
-import { NOT_A_DIAGNOSIS } from './copy';
+import { COMING_SOON, NOT_A_DIAGNOSIS } from './copy';
 
 afterEach(() => {
   cleanup();
@@ -431,7 +431,21 @@ describe('recording one', () => {
     ).toBeTruthy();
   });
 
-  it('asks a questionnaire its own questions and shows the total it computes', async () => {
+  it('says the questionnaire and the reading of the export are coming soon, and offers neither', async () => {
+    // The operator's decision of 10 September 2026 (decision 10 of
+    // docs/OPERATOR/2026-09-10-decisions.md): said on the screen rather than
+    // waited on. The mechanism stays behind the disabled choice (next case).
+    mount();
+    expect(await screen.findByText(COMING_SOON.exportReading)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+    const option = screen.getByRole('option', {
+      name: COMING_SOON.questionnaire,
+    }) as HTMLOptionElement;
+    expect(option.disabled).toBe(true);
+    expect(screen.queryByRole('option', { name: 'Questionnaire' })).toBeNull();
+  });
+
+  it('keeps the questionnaire mechanism behind the disabled choice: its questions and the total it computes', async () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Record' }));
     fireEvent.change(screen.getByLabelText('Instrument'), {
