@@ -19,6 +19,10 @@ const ALLOWED_VALUES = [
   'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJlLXNpZ25hdHVyZQ',
   'postgresql://postgres:postgres@localhost:5432/postgres',
   'postgresql://mcwellness_api:mcwellness_api@localhost:5432/postgres',
+  // Settings › Team's screen test (app/admin/settings/TeamPage.test.tsx): the
+  // temporary password a stubbed API answers, shown once on the screen. A
+  // marked placeholder that signs in nowhere.
+  '<shown-once-0001>',
 ];
 // Test connection strings use these two passwords and nothing else.
 const TEST_PASSWORDS = new Set(['x', 'postgres']);
