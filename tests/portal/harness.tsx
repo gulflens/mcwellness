@@ -61,11 +61,14 @@ export function mountPortal(
     locale?: 'en' | 'ar';
     answers?: Record<string, () => Response>;
     actor?: Partial<MeResponse>;
+    /** What the sign-in provider can do beyond the development door's nothing. */
+    provider?: Partial<AuthProvider>;
   } = {},
 ) {
   const calls: Call[] = [];
   const answers = options.answers ?? {};
   const actor = { ...PORTAL_ACTOR, ...options.actor };
+  const signIn = { ...provider, ...options.provider } as AuthProvider;
 
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
@@ -78,7 +81,7 @@ export function mountPortal(
   }) as unknown as typeof fetch;
 
   const view = render(
-    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+    <AuthProviderBoundary provider={signIn} fetchImpl={fetchImpl}>
       <PortalLanguage initial={options.locale ?? 'en'}>
         <MemoryRouter>
           {/* The router's own composition, so a screen is tested inside the

@@ -39,7 +39,11 @@ describe('the portal shell', () => {
     mountPortal(<HomeScreen />, { answers });
     await waitFor(() => expect(screen.getByRole('navigation')).toBeTruthy());
     const sidebar = screen.getByRole('navigation');
-    const inTheSidebar = [...sidebar.querySelectorAll('a')].map((link) => link.textContent);
+    // The screens are the sections list; the foot holds the person's own
+    // things (the password link, the language, the way out), tested below.
+    const inTheSidebar = [...sidebar.querySelectorAll('.portal__sections a')].map(
+      (link) => link.textContent,
+    );
     expect(inTheSidebar).toEqual(['Home', 'Visits', 'Money', 'Reports', 'Family', 'Agreements']);
     // And nowhere else: the row across the top is gone, not merely restyled.
     expect(document.querySelector('.portal__nav')).toBeNull();
@@ -55,6 +59,20 @@ describe('the portal shell', () => {
     expect(foot).toBeTruthy();
     expect(foot?.querySelector('.portal__languages')).toBeTruthy();
     expect(foot?.textContent).toContain('Sign out');
+  });
+
+  it('offers to change the password from the foot, in either language', async () => {
+    // Account, not record: the way to a new password sits with the person's
+    // name and the way out, not among the screens (trunk round 41, 2026-09-10).
+    mountPortal(<HomeScreen />, { answers });
+    await waitFor(() => expect(screen.getByRole('navigation')).toBeTruthy());
+    const link = document.querySelector('.portal__foot a[href="/portal/password"]');
+    expect(link?.textContent).toBe('Change password');
+    cleanup();
+    mountPortal(<HomeScreen />, { answers, locale: 'ar' });
+    await waitFor(() => expect(screen.getByRole('navigation')).toBeTruthy());
+    const arabic = document.querySelector('.portal__foot a[href="/portal/password"]');
+    expect(arabic?.textContent).toBe('تغيير كلمة المرور');
   });
 
   it('offers a way to open the menu, and says whether it is open', async () => {

@@ -38,6 +38,44 @@ export const WORDS = {
   english: t('English', 'الإنجليزية'),
   arabic: t('Arabic', 'العربية'),
 
+  // The person's own sign-in (trunk round 41, 2026-09-10): the one form the
+  // console also uses, in the household's language. The four rule sentences
+  // match domain/shared/password.ts by key.
+  password: t('Your password', 'كلمة مرورك'),
+  passwordChange: t('Change password', 'تغيير كلمة المرور'),
+  passwordCurrent: t('Current password', 'كلمة المرور الحالية'),
+  passwordNew: t('New password', 'كلمة المرور الجديدة'),
+  passwordAgain: t('The same again', 'أعدها مرة أخرى'),
+  passwordHint: t('At least twelve characters.', 'اثنا عشر حرفًا على الأقل.'),
+  passwordCurrentFirst: t('Your current password first.', 'أدخل كلمة المرور الحالية أولًا.'),
+  passwordMismatch: t('The two do not match.', 'الكلمتان غير متطابقتين.'),
+  passwordNone: t(
+    'This sign-in has no password to change.',
+    'لا توجد كلمة مرور لتغييرها في طريقة الدخول هذه.',
+  ),
+  passwordFailed: t(
+    'The password could not be changed. Try again.',
+    'تعذّر تغيير كلمة المرور. حاول مرة أخرى.',
+  ),
+  passwordDone: t(
+    'Changed. Use the new one from your next sign-in.',
+    'تم التغيير. استخدم الجديدة من تسجيل دخولك القادم.',
+  ),
+  passwordShort: t('Too short: at least twelve characters.', 'قصيرة جدًا: اثنا عشر حرفًا على الأقل.'),
+  passwordLong: t('Too long: at most two hundred characters.', 'طويلة جدًا: مئتا حرف على الأكثر.'),
+  passwordVariety: t(
+    'More variety than that: at least four different characters.',
+    'تنوّع أكبر: أربعة أحرف مختلفة على الأقل.',
+  ),
+  passwordEdges: t('No space at the start or the end.', 'لا مسافة في البداية أو النهاية.'),
+  passwordWeak: t(
+    'That password is on a list of leaked passwords, or too short. Choose another.',
+    'كلمة المرور هذه واردة في قائمة كلمات مسرّبة أو قصيرة جدًا. اختر غيرها.',
+  ),
+  passwordSame: t('That is the password you already have.', 'هذه هي كلمة المرور الحالية نفسها.'),
+  passwordCurrentWrong: t('The current password is not right.', 'كلمة المرور الحالية غير صحيحة.'),
+  back: t('Back', 'رجوع'),
+
   // The three states every screen can be in.
   loading: t('Loading.', 'جارٍ التحميل.'),
   loadFailed: t('That could not be loaded. Try again.', 'تعذّر التحميل. حاول مرة أخرى.'),

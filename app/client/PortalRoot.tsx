@@ -146,6 +146,11 @@ function Sidebar({
       </ul>
       <div className="portal__foot">
         <span className="portal__person small">{person}</span>
+        {/* Account, not record: the way to a new password sits with the
+            person's name and the way out, not among the screens. */}
+        <NavLink to="/portal/password" className="portal__account small" onClick={onChoose}>
+          {words.t('passwordChange')}
+        </NavLink>
         <div className="portal__languages" role="group" aria-label={words.t('language')}>
           {(['en', 'ar'] as const).map((option) => (
             <button
