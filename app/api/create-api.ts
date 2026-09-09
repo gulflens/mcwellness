@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { ENQUIRY_DOOR_PATH, mountEnquiryDoor } from './enquiries/door';
+import { mountEnquiries } from './enquiries/routes';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import { timeout } from 'hono/timeout';
@@ -465,6 +466,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // (docs/CHANGE-REQUESTS/reports-01.md item 2).
   mountReports(api, deps.now);
   mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
+  mountEnquiries(api, deps.now ?? (() => new Date()));
 
   // An unknown route answers in the same shape as every other refusal.
   api.notFound((c) => c.json({ error: 'not_found', requestId: c.get('requestId') ?? null }, 404));

@@ -60,6 +60,9 @@ export type Action =
   | { type: 'report.deliver' }
   | { type: 'audit.read'; clientId: string }
   | { type: 'audit.activity' }
+  /** See the website's enquiries, and turn one into a lead or dismiss it (operator, 2026-09-09). */
+  | { type: 'enquiry.list' }
+  | { type: 'enquiry.action' }
   | { type: 'appointment.list'; scope: 'practice' | 'own' }
   | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
   | { type: 'appointment.move' }
@@ -251,6 +254,9 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     // reads money, never the trail.
     case 'audit.read':
     case 'audit.activity':
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    case 'enquiry.list':
+    case 'enquiry.action':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.list':
       if (action.scope === 'own') {

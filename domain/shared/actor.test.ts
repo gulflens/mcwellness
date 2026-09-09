@@ -105,6 +105,20 @@ describe('canActor', () => {
     expect(canActor(a, { type: 'audit.activity' }, {}, NOW)).toBe(false);
   });
 
+  it('lets the three oversight roles see and action enquiries, and nobody else', () => {
+    // The operator's decision of 2026-09-09: an enquiry is seen by admin and
+    // the lead practitioner (and the owner), and actioned by the same three.
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'enquiry.list' }, {}, NOW)).toBe(true);
+      expect(canActor(actor([role]), { type: 'enquiry.action' }, {}, NOW)).toBe(true);
+    }
+    for (const role of ['finance', 'practitioner', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'enquiry.list' }, {}, NOW)).toBe(false);
+      expect(canActor(actor([role]), { type: 'enquiry.action' }, {}, NOW)).toBe(false);
+    }
+    expect(canActor(actor([]), { type: 'enquiry.list' }, {}, NOW)).toBe(false);
+  });
+
   it('lets the three oversight roles read the practice’s whole trail, and nobody else', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
       expect(canActor(actor([role]), { type: 'audit.activity' }, {}, NOW)).toBe(true);
