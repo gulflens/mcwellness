@@ -71,6 +71,22 @@ their English twins are still 1.0. That asymmetry is the truth: one text was
 corrected and the other was not, and a version belongs to a document rather
 than to a pair.
 
+## The five years, and what keeps them
+
+`notices/your-information.en.md` and `health-data.en.md` both tell a household
+their records are kept for five years after their last session or contact and
+then deleted. `retention_until` is computed and stored when each document is
+filed, but until 2026-09-09 nothing ever read it back — so the five years could
+pass with nobody knowing, which made it a promise the practice had no way of
+keeping and no way of seeing it had missed.
+
+`pnpm job:retention-due` is the reading half: it says what is past its date and
+which household it belongs to, and changes nothing. Erasing stays a person's
+act through the record screen, which writes the audit trail and the
+confirmation letter — `.claude/rules/compliance.md` says erasure happens on
+request, and a job that quietly deleted households would be a worse answer than
+the gap it closed.
+
 ## Superseded
 
 `superseded/` holds the eight long drafts of 3 September, replaced by the

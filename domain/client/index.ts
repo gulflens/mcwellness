@@ -5,6 +5,8 @@ export type { ConsentGiver, ConsentRefusal, ConsentSubject } from './canGiveCons
 export { canTransition } from './canTransition';
 export { canViewClient } from './canViewClient';
 export { computeRetentionUntil } from './computeRetentionUntil';
+export { retentionDue } from './retentionDue';
+export type { RetainedDocument } from './retentionDue';
 export { KEPT_THROUGH_ERASURE_KINDS, isKeptThroughErasure } from './erasureKeeps';
 export {
   ERASURE_LETTER_KIND,
