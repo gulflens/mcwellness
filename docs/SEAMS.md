@@ -244,8 +244,9 @@ c.get('afterCommit')(async () => {
 
 Read it exactly as it is written: **this is the only correct way to delete
 bytes from the store after a database change**, and it is what the erasure
-deletion job, a withdrawal of `photo_video` consent and the retention job all
-use. Nothing else in this codebase may call `storage.delete` from a route.
+deletion job and a withdrawal of `photo_video` consent use (a retention job
+was named here too until 2026-09-10; nothing deletes on a timer, CLAUDE.md
+rule 8). Nothing else in this codebase may call `storage.delete` from a route.
 
 What the fence guarantees:
 
