@@ -67,6 +67,14 @@ export const BooksIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** An enquiry: a speech bubble with two lines of what was said. */
+export const EnquiriesIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3.25 4.25h13.5v8.5H8.75L5.5 15.75v-3H3.25z" />
+    <path d="M6.5 7.25h7M6.5 9.75h4.5" />
+  </Icon>
+);
+
 export const AuditIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M10 2.75 4 5v4.5c0 3.4 2.5 6.2 6 7.75 3.5-1.55 6-4.35 6-7.75V5z" />

@@ -168,6 +168,8 @@ export type RateLimits = {
    * 32-byte token pointless rather than merely hard.
    */
   inviteDoorPerMinute: number;
+  /** The website's enquiry door: public, and the one write a stranger can make. */
+  enquiryDoorPerMinute: number;
 };
 
 export const DEFAULT_LIMITS: RateLimits = {
@@ -176,6 +178,7 @@ export const DEFAULT_LIMITS: RateLimits = {
   authFailuresPerMinute: 20,
   devDoorPerMinute: 30,
   inviteDoorPerMinute: 10,
+  enquiryDoorPerMinute: 10,
 };
 
 function positiveInt(value: string | undefined, fallback: number): number {
@@ -199,6 +202,10 @@ export function limitsFromEnv(env: NodeJS.ProcessEnv): RateLimits {
     inviteDoorPerMinute: positiveInt(
       env.RATE_LIMIT_INVITE_DOOR_PER_MINUTE,
       DEFAULT_LIMITS.inviteDoorPerMinute,
+    ),
+    enquiryDoorPerMinute: positiveInt(
+      env.RATE_LIMIT_ENQUIRY_DOOR_PER_MINUTE,
+      DEFAULT_LIMITS.enquiryDoorPerMinute,
     ),
   };
 }

@@ -1,4 +1,6 @@
 import { Hono, type Context } from 'hono';
+import { ENQUIRY_DOOR_PATH, mountEnquiryDoor } from './enquiries/door';
+import { mountEnquiries } from './enquiries/routes';
 import { bodyLimit } from 'hono/body-limit';
 import { HTTPException } from 'hono/http-exception';
 import { timeout } from 'hono/timeout';
@@ -97,9 +99,13 @@ const ASSESSMENT_FILE_PATH = /^\/api\/assessments\/[^/]+\/file$/;
 function isAssessmentFileUpload(method: string, path: string): boolean {
   return method === 'PUT' && ASSESSMENT_FILE_PATH.test(path);
 }
-/** The two raw-body doors, which are the only paths exempt from `jsonOnly`. */
+/**
+ * The paths exempt from `jsonOnly`: the one raw-body door, and the website's
+ * enquiry door, which arrives form-encoded by `sendBeacon` because that is the
+ * one shape a browser sends without a preflight (app/api/enquiries/door.ts).
+ */
 function isRawUpload(method: string, path: string): boolean {
-  return isAssessmentFileUpload(method, path);
+  return isAssessmentFileUpload(method, path) || (method === 'POST' && path === ENQUIRY_DOOR_PATH);
 }
 export const REQUEST_TIMEOUT_MS = 10_000;
 /**
@@ -143,6 +149,8 @@ export type ApiOptions = RequestContextDeps & {
   devSession?: DevSessionOptions;
   now?: () => Date;
   appEnv?: string;
+  /** ENQUIRY_ORIGINS: the origins allowed to post an enquiry; the apex and www by default. */
+  enquiryOrigins?: string;
   /** The Supabase project the browser signs in against; named in the content security policy. */
   supabaseUrl?: string;
   /**
@@ -366,6 +374,27 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     });
   }
 
+  // The website's enquiry door: public, ahead of the fence, on its own budget
+  // (docs/superpowers/specs/2026-09-09-enquiries-design.md). The one write a
+  // stranger can make, and it lands in a quarantine table through a definer.
+  // POST only: a browser sends OPTIONS before every non-simple request, and a
+  // preflight that is throttled is a form that stops working for a real
+  // visitor after ten enquiries from their office. The budget is for writes.
+  const enquiryDoorLimit = rateLimit({
+    name: 'enquiry-door',
+    windowMs: MINUTE,
+    max: limits.enquiryDoorPerMinute,
+    keyOf: byAddress,
+  });
+  api.use(ENQUIRY_DOOR_PATH, (c, next) =>
+    c.req.method === 'POST' ? enquiryDoorLimit(c, next) : next(),
+  );
+  mountEnquiryDoor(api, {
+    pool: deps.pool,
+    origins: deps.enquiryOrigins,
+    addressOf: byAddress,
+  });
+
   api.use('/api/*', withRequestContext(deps));
   // After the fence, like identityKeys and unlike storage: no route ahead of
   // authentication asks how long a drive takes, and the seam's key must not be
@@ -437,6 +466,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // (docs/CHANGE-REQUESTS/reports-01.md item 2).
   mountReports(api, deps.now);
   mountPortal(api, deps.now, { publicAppUrl: deps.publicAppUrl, appEnv: deps.appEnv });
+  mountEnquiries(api, deps.now ?? (() => new Date()));
 
   // An unknown route answers in the same shape as every other refusal.
   api.notFound((c) => c.json({ error: 'not_found', requestId: c.get('requestId') ?? null }, 404));

@@ -126,6 +126,9 @@ describe('the API budgets', () => {
         // The portal's invitation door, which answers somebody with no session
         // (docs/CHANGE-REQUESTS/client-portal-05.md item 3).
         RATE_LIMIT_INVITE_DOOR_PER_MINUTE: '4',
+        // The website's enquiry door, the other route that answers a stranger
+        // (docs/CHANGE-REQUESTS/trunk-notes.md, round 38).
+        RATE_LIMIT_ENQUIRY_DOOR_PER_MINUTE: '3',
       }),
     ).toEqual({
       perMinute: 10,
@@ -133,8 +136,10 @@ describe('the API budgets', () => {
       authFailuresPerMinute: 20,
       devDoorPerMinute: 30,
       inviteDoorPerMinute: 4,
+      enquiryDoorPerMinute: 3,
     });
     expect(limitsFromEnv({}).inviteDoorPerMinute).toBe(10);
+    expect(limitsFromEnv({}).enquiryDoorPerMinute).toBe(10);
   });
 
   it('trusts X-Forwarded-For only for the configured number of proxies', async () => {

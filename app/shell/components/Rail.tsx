@@ -7,6 +7,7 @@ import {
   BillingIcon,
   BooksIcon,
   ClientsIcon,
+  EnquiriesIcon,
   KitIcon,
   PinIcon,
   PortalIcon,
@@ -29,6 +30,10 @@ export type RailSection = { key: string; label: string; to?: string; icon: React
 
 export const ADMIN_SECTIONS: readonly RailSection[] = [
   { key: 'clients', label: 'Clients', to: '/admin/clients', icon: <ClientsIcon /> },
+  // What the website's forms sent, until someone makes each one a lead or
+  // dismisses it. AdminLayout shows it only to the three roles that may action
+  // one (adminAccess.ts).
+  { key: 'enquiries', label: 'Enquiries', to: '/admin/enquiries', icon: <EnquiriesIcon /> },
   { key: 'schedule', label: 'Schedule', to: '/admin/schedule', icon: <ScheduleIcon /> },
   { key: 'sessions', label: 'Sessions', icon: <SessionsIcon /> },
   { key: 'billing', label: 'Billing', to: '/admin/billing', icon: <BillingIcon /> },

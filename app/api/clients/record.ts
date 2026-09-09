@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createLead } from './create-lead';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import {
@@ -382,60 +383,19 @@ export function mountClientRecordCore(api: Hono<ApiEnv>, now: () => Date = () =>
     // highest MRN is never missed just because the client who held it was later erased
     // (issue 12 of the third review round). The unique constraint on (tenant_id, mrn)
     // stays the backstop it always was.
-    const nextMrnRow = await db.query<{ next_mrn: string }>('select app.next_mrn($1) as next_mrn', [
+    const { clientId, mrn } = await createLead(
+      db,
       tenantId,
-    ]);
-    const mrn = nextMrnRow.rows[0]?.next_mrn;
-    if (!mrn) {
-      throw new Error('app.next_mrn returned no value.');
-    }
-
-    const clientId = randomUUID();
-    await db.query(
-      'insert into client (id, tenant_id, mrn, given_name, family_name, given_name_ar, ' +
-        'family_name_ar, date_of_birth, referral_source, status) ' +
-        "values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'lead')",
-      [
-        clientId,
-        tenantId,
-        mrn,
-        cleanText(body.data.givenName, 100),
-        cleanText(body.data.familyName, 100),
-        body.data.givenNameAr ? cleanText(body.data.givenNameAr, 100) : null,
-        body.data.familyNameAr ? cleanText(body.data.familyNameAr, 100) : null,
-        body.data.dateOfBirth ?? null,
-        body.data.referralSource ? cleanText(body.data.referralSource, 200) : null,
-      ],
-    );
-    await db.query(
-      'insert into contact (id, tenant_id, client_id, given_name, family_name, ' +
-        'given_name_ar, family_name_ar, relationship, is_legal_guardian, ' +
-        'can_consent, can_receive_reports, can_pay, phone, email, emirates_id_encrypted, ' +
-        'emirates_id_hash) ' +
-        'values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)',
-      [
-        contactId,
-        tenantId,
-        clientId,
-        body.data.contact.givenName ? cleanText(body.data.contact.givenName, 100) : null,
-        body.data.contact.familyName ? cleanText(body.data.contact.familyName, 100) : null,
-        body.data.contact.givenNameAr ? cleanText(body.data.contact.givenNameAr, 100) : null,
-        body.data.contact.familyNameAr ? cleanText(body.data.contact.familyNameAr, 100) : null,
-        body.data.contact.relationship,
-        body.data.contact.isLegalGuardian,
-        body.data.contact.canConsent,
-        body.data.contact.canReceiveReports,
-        body.data.contact.canPay,
-        body.data.contact.phone,
-        body.data.contact.email ?? null,
-        capture && capture.ok ? capture.sealed : null,
-        capture && capture.ok ? capture.hash : null,
-      ],
-    );
-    await db.query('update client set primary_contact_id = $1 where id = $2', [
+      {
+        ...body.data,
+        contact: {
+          ...body.data.contact,
+          emiratesIdSealed: capture && capture.ok ? capture.sealed : null,
+          emiratesIdHash: capture && capture.ok ? capture.hash : null,
+        },
+      },
       contactId,
-      clientId,
-    ]);
+    );
 
     return c.json(CreateClientResponse.parse({ id: clientId, mrn }), 201);
   });

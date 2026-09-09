@@ -4,6 +4,7 @@ import {
   canOpenAudit,
   canOpenBilling,
   canOpenBooks,
+  canOpenEnquiries,
   canOpenKit,
   canOpenPortalAccess,
   canOpenSchedule,
@@ -61,6 +62,7 @@ function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
     if (section.key === 'portal') return canOpenPortalAccess(actor, now);
     if (section.key === 'kit') return canOpenKit(actor, now);
     if (section.key === 'audit') return canOpenAudit(actor, now);
+    if (section.key === 'enquiries') return canOpenEnquiries(actor, now);
     return true;
   }).map((section) =>
     section.key === 'settings' && settingsHome ? { ...section, to: settingsHome } : section,

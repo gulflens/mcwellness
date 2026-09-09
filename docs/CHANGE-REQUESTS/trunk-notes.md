@@ -2743,3 +2743,119 @@ replaces the closed-visit guard created by 302; 961 replaces
 consent. 915 is in the `900–949` half because `consent` is a core table.
 
 **Nothing in those paths is the trunk's beyond this round.**
+
+## Round 38 — the enquiries (2026-09-10)
+
+The website's two forms — the enquiry and the discovery call — posted to
+`lodge_enquiry`, an edge function in the Flutter project that is being
+retired. This round gives them a home in the app
+(`docs/superpowers/specs/2026-09-09-enquiries-design.md`): a quarantine table
+`enquiry` (migration 916), a public door `POST /api/enquiries` mounted ahead
+of the fence, three routes for the office, and a screen at `/admin/enquiries`
+for the owner, an admin and the lead practitioner. The operator's decisions of
+9 September, taken whole: an enquiry becomes a lead; those three roles see it;
+it is kept in the system until it is actioned.
+
+**What an enquiry is, and is not.** It is not a client record. It is what a
+stranger typed into a form, held until somebody in the office decides. So it
+is the one table in the schema that the audit trigger does not watch — the
+operator's Option B, recorded in `.claude/rules/data-model.md`: a public write
+has no actor to name, the route logs every read under the person reading
+(`logReads`, entity `enquiry`) and writes an audit row for each conversion and
+dismissal under the person acting (`logAction`), and the client a conversion
+creates is audited from its first byte, because it is created by `createLead`
+— the same path `POST /api/clients` takes. Once actioned, the row keeps
+nothing personal: `enquiry_actioned_is_scrubbed` refuses a converted or
+dismissed row that still carries a name, a number, an address, a message, the
+tick or the address hash, and what stays is the record of what happened, when,
+by whom, and for a conversion which client it became. The dismissal's reason
+is the one free text that survives, so the route refuses a reason that carries
+a number or an address (`refuseContactDetails`, the audit trail's own guard).
+Every personal column states its need as a comment on the column.
+
+**The door, ahead of the fence.** Form or JSON, the sender need not care. The
+honeypot answers `200 {ok:true}` and keeps nothing. A missing name or number
+is a 400; a refusing database a 503. CORS admits the apex and `www` by default
+and `ENQUIRY_ORIGINS` overrides them. Two throttles, neither of which keeps an
+address: the middleware's limiter admits ten posts a minute per address
+(`enquiryDoorPerMinute`, `RATE_LIMIT_ENQUIRY_DOOR_PER_MINUTE`) and is wrapped
+so it counts `POST` alone — a preflight is never refused; and
+`app.lodge_enquiry` refuses the sixth lodge in ten minutes from the same
+`ip_hash`, a SHA-256 of the address under a fixed prefix, with a random bucket
+when no address is known so that nothing shares a null key. The definer
+inserts only when the database holds exactly one tenant, which is what a
+public door with no tenant in the request can honestly do.
+
+**Nothing notifies anyone yet.** The screen is the inbox; it sorts new first
+and offers, on a new row only, *Convert to lead* and *Dismiss* with a reason.
+A converted row links to the client it became.
+
+**Every file this round touched outside the trunk's own paths:**
+
+- `client-record` — `app/api/clients/create-lead.ts` (new) and
+  `app/api/clients/record.ts`. The lead-creation half of `record.ts` — next
+  MRN, the `client` row as a lead, the primary contact, the Emirates ID sealed
+  and hashed — is lifted out as `createLead(db, tenantId, input)` so that the
+  enquiry route makes a lead by the one path rather than a second one.
+  `record.ts` calls it and behaves as before; its tests are untouched and
+  green. The stream owns `create-lead.ts` from here.
+- `app/api/create-api.ts` — the composition root: the door and the routes
+  mounted, the raw-upload exemption widened to the door so the JSON-only
+  fence does not refuse a form post, and the POST-only limiter.
+
+**The trunk's own half** is `domain/enquiry/**` (new: `parseEnquiry`,
+`toE164`, `leadFromEnquiry`, pure and tested); `domain/shared/actor.ts` with
+its test (`enquiry.list`, `enquiry.action`);
+`db/migrations/916_enquiry.sql`, in the `900–949` half because it creates a
+table of the trunk's own and builds on no stream's; `db/policies/enquiry/**`
+(new, the trunk's); `app/api/enquiries/**` (new);
+`app/api/_middleware/rate-limit.ts`; `app/shell/adminAccess.ts`,
+`AdminLayout.tsx`, `App.tsx`, `components/Rail.tsx` and `components/Icons.tsx`;
+`app/admin/enquiries/**` (new); `tests/db/enquiries.test.ts`,
+`enquiries-door.test.ts` and `enquiries-routes.test.ts`;
+`.claude/rules/data-model.md`; `docs/SPEC/00-data-model.md`;
+`docs/SPEC/OWNERSHIP.md`, which names the four new folders; and
+`docs/superpowers/**`.
+
+**Reviewed** on 10 September by the three briefs, security (PASS), compliance
+and schema (both FAIL, both closed before merge). What they changed: the
+Supabase default-privilege revoke every table since 070 carries; `actioned_by`
+and `client_id` as composite keys on `(tenant_id, …)`; the throttle's index
+predicate made one the planner can use, an advisory lock per address so a
+burst cannot all pass the count, and the definer bounded on its input's size;
+`for update` on the row a conversion reads; ids that are not uuids answered as
+not found rather than as a database error; a strict request id at the door and
+a JSON body accepted only when it is an object; the number and the address
+shaped at the door to what a client record can hold, so a conversion cannot
+fail on the contact table's own check; audit rows for the conversion (with its
+one read logged) and the dismissal; the reason guarded against a number or an
+address; the tick scrubbed with the rest; every personal column's need stated
+as a comment, the four the screen did not show now shown; the `Needs` header
+corrected; indexes on both foreign keys; the cross-status constraints and the
+reason's length; `search_path` pinned to `pg_catalog, pg_temp`; a restrictive
+insert policy saying in the policy's own terms what the absent grant says; and
+four fixtures off the reserved ranges — written through the shell, which the
+repository's identifier hook does not see, so the diff was swept by hand with
+the hook's own patterns. Accepted as they stand: the address hash is unkeyed
+(pseudonymous, ten minutes' purpose, nulled on action), and the message is not
+carried to the lead — the client record has no notes field, the office reads
+it before pressing, and keeping it is a later round's question.
+
+**Open, for the operator — the enquiry nobody actions.** "Kept until
+actioned" answers the one that becomes a lead or is set aside. It does not
+answer the duplicate, the mistake, or the person who changed their mind: under
+that rule such a row holds a name and a number for as long as nobody presses a
+button, which sits awkwardly beside rule 8's minimisation and what the privacy
+notice says. Not built here, because nothing in this system deletes on a timer
+without the operator saying so; the two shapes are a stated period after which
+the screen shows the office what is older than it, to dismiss by hand, or a
+rule that dismisses them with a fixed reason (which scrubs). Either is a
+calm migration later. Raised by the peer session on 10 September.
+
+**What follows the merge**, in order: the website's pages point their
+`ENDPOINT` at the new door; migration 916 is applied to production with its
+ledger row; the app is rebuilt; one enquiry is lodged against the live door,
+seen in the screen, converted, and the lead erased; and only then is the old
+project safe to pause — the operator's call.
+
+**Nothing in those paths is the trunk's beyond this round.**
