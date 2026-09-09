@@ -169,6 +169,12 @@ const PURPOSE: Record<string, Text> = {
   participation: t('participation', 'المشاركة'),
   minor_participation: t("a minor's participation", 'مشاركة القاصر'),
   home_visit: t('home visit', 'الزيارة المنزلية'),
+  health_data: t(
+    'brain-map and neurofeedback information',
+    'معلومات خريطة الدماغ والارتجاع العصبي',
+  ),
+  // Retired on 2026-09-09 and kept here regardless: the trail has to narrate a
+  // consent recorded before then, and a withdrawal taken after it.
   photo_video: t('photo and video', 'الصور والفيديو'),
   research: t('research', 'البحث'),
   marketing: t('marketing', 'التسويق'),

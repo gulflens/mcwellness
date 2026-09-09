@@ -93,7 +93,7 @@ describe('GET /api/clients/:id/timeline', () => {
       `${ownerName} recorded participation consent, version 1, by signature in the app`,
     );
     expect(sentences).toContain(
-      `${ownerName} recorded photo and video consent, version 1, by signature in the app`,
+      `${ownerName} recorded brain-map and neurofeedback information consent, version 1, by signature in the app`,
     );
     expect(sentences).toContain(`${ownerName} set the primary contact`);
     const ids = body.events.map((e) => Number(e.id));

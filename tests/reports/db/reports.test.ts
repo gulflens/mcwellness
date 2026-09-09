@@ -467,9 +467,11 @@ describe('issuing', () => {
     if (!stored) throw new Error('The store holds nothing at that key.');
     const text = extractAll(stored);
     expect(text).toContain('Progress report');
-    expect(text).toContain('McWellness is a wellness provider, not a medical clinic');
+    expect(text).toContain('We are a wellness practice, not a clinic.');
     expect(text).toContain('It is not a diagnosis.');
-    expect(text).toContain("Draft wording, in use until the practice's lawyer approves");
+    // No draft line: the practice's legal advisor approved the wording on
+    // 2026-09-09 (docs/CONSENT/README.md).
+    expect(text).not.toContain('Draft wording');
     expect(text).toContain('It is not a tax number.');
     // Decision 4: no tax number on a report, in either direction.
     expect(text).not.toContain('TRN');

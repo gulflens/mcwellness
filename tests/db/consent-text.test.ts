@@ -52,27 +52,23 @@ afterAll(async () => {
 });
 
 describe('the seeded consent wording', () => {
-  it('files one document per purpose and language: eight, all drafts', () => {
+  it('files one document per purpose and language: eight, all approved', () => {
     expect(rows).toHaveLength(8);
     expect(rows.map((row) => `${row.purpose}.${row.locale}`).sort()).toEqual([
+      'health_data.ar',
+      'health_data.en',
       'home_visit.ar',
       'home_visit.en',
       'minor_participation.ar',
       'minor_participation.en',
       'participation.ar',
       'participation.en',
-      'photo_video.ar',
-      'photo_video.en',
     ]);
     for (const row of rows) {
-      // Not the lawyer's yet, and the schema says so rather than a comment.
-      expect(row.status).toBe('draft');
-      // Two of the four moved to 0.2-draft on 6 September 2026, when the
-      // health question began asking about a head injury at any time rather
-      // than only in the last year (the founder's review of 4 September).
-      const participation =
-        row.purpose === 'participation' || row.purpose === 'minor_participation';
-      expect(row.version).toBe(participation ? '0.2-draft' : '0.1-draft');
+      // The practice's legal advisor approved the wording on 2026-09-09, and
+      // the schema says so rather than a comment.
+      expect(row.status).toBe('approved');
+      expect(row.version).toBe('1.0');
       expect(row.mime_type).toBe('text/markdown');
       // A practice document: it belongs to no one client, and is never rewritten.
       expect(row.client_id).toBeNull();
