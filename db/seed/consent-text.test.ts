@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConsentTexts } from './consent-text';
+import { loadConsentTexts, purposesOf } from './consent-text';
 
 /**
  * The wording files themselves (docs/CONSENT). This test reads what is really
@@ -60,5 +60,33 @@ describe('the consent wording files', () => {
       expect(/[؀-ۿ]/.test(text.bytes.toString('utf8'))).toBe(true);
       expect(text.bytes.byteLength).toBeGreaterThan(1000);
     }
+  });
+});
+
+/**
+ * One page may be shown for several purposes: the practice's plain agreement
+ * is the text a person meets whether they are agreeing to take part, agreeing
+ * for their child, or agreeing to be visited at home. Each purpose still files
+ * its own document, because a recorded consent names exactly one.
+ */
+describe('the purposes a wording is shown for', () => {
+  it('reads a single purpose as a list of one', () => {
+    expect(purposesOf('participation')).toEqual(['participation']);
+  });
+
+  it('reads several purposes from one field', () => {
+    expect(purposesOf('participation, minor_participation, home_visit')).toEqual([
+      'participation',
+      'minor_participation',
+      'home_visit',
+    ]);
+  });
+
+  it('does not mind untidy spacing', () => {
+    expect(purposesOf('  participation ,home_visit  ')).toEqual(['participation', 'home_visit']);
+  });
+
+  it('refuses a field that names nothing', () => {
+    expect(() => purposesOf(' , ')).toThrow(/at least one/);
   });
 });
