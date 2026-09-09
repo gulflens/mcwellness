@@ -245,6 +245,10 @@ describe('CheckInPage', () => {
       'already_checked_in',
       'Already checked in on another device. Ask the practice if that was not you.',
     ],
+    // The operator's decision of 10 September 2026 (decision 5 of
+    // docs/OPERATOR/2026-09-10-decisions.md): a visit the household was never
+    // told about is the office's to fix, not the practitioner's to run.
+    ['visit_not_confirmed', 'This visit was not confirmed with the household. Call the office.'],
   ];
 
   it.each(REASONS)(
