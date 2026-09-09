@@ -272,6 +272,20 @@ out of the browser bundle (only the anon key is public, and the API never
 uses it); the database's connection pooler with the `mcwellness_api` role
 only.
 
+**Switched on, 10 September 2026, on both projects** (through the Management
+API, `PATCH /v1/projects/{ref}/config/auth`; there is no `config.toml` in
+this repository, so this paragraph and `docs/PRODUCTION.md` are the record):
+`password_min_length` 12 — the same floor as `domain/shared/password.ts`,
+now held server-side; `password_hibp_enabled` — a password that appears in a
+known breach is refused; `security_update_password_require_current_password`
+— a change needs the current password, so a session on an unattended device
+cannot set a new one; `mailer_notifications_password_changed_enabled` — the
+account holder is emailed when their password changes. Not switched on:
+`security_update_password_require_reauthentication`, which needs a code by
+email that `/account/password` does not yet collect. Production's `site_url`
+was also set to `https://app.mcwellnessuae.com` (it had been `localhost`).
+Still to switch on: multi-factor sign-in, the session lifetime.
+
 ## If a secret leaks
 
 Rotate it at the source (Supabase dashboard, the deployment's secret store),

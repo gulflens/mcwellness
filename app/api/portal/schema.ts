@@ -445,7 +445,9 @@ export const RevokeResponse = z.object({ contactId: z.uuid(), state: z.enum(ACCE
 // The door, which is the one route outside the fence.
 // ---------------------------------------------------------------------------
 
-export const PASSWORD_MIN_LENGTH = 12;
+// One floor, the practice's, shared with the page that changes a password.
+import { PASSWORD_MIN_LENGTH } from '../../../domain/shared/password';
+export { PASSWORD_MIN_LENGTH };
 
 export const RedeemInput = z.object({
   /** 32 random bytes in base64url: 43 characters, and never anything longer. */

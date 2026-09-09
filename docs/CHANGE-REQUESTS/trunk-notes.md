@@ -2939,19 +2939,33 @@ the change goes through the sign-in provider's one new method,
 `updatePassword`, which the development door does not have — the page says
 so rather than pretending.
 
-**What is recorded, and what is not.** A colleague's password reset by the
-office is in the trail (round 39, `password_reset`). A person changing their
-own is not, anywhere durable: Supabase Auth's own log of it is kept for days,
-not years, and the practice writes no row — by decision, because the actor
-and the subject are one person and the trail's question is who touched a
-household's data. Putting a trigger on Supabase's `auth.users` to write one
-was weighed and declined: a trigger on a vendor's table, a failure in which
-would block every password change. The review of this round asked for this
-paragraph rather than the trigger. Two smaller notes from the same review: a
-household contact who types the address reaches this page in English, since
-it sits in the console's shell rather than the portal's, and the portal
-offers no link to it yet; and `app/shell/App.test.tsx` carries three names
-from before the seed list existed, for a later tidy.
+**What the two reviews changed.** Security found the page took only the new
+password, so a session on an unattended device — and sessions are kept on
+the device by default — could set a new one and lock the real person out of
+every device at once; and that the practice's twelve-character rule lived
+only in the browser while both projects' own floor was six with
+leaked-password protection off. So: the page now asks for the current
+password too and the projects require it
+(`security_update_password_require_current_password`), both projects hold the
+floor of twelve and refuse a leaked password, the account holder is emailed
+when their password changes, production's `site_url` is its real address
+rather than `localhost`, and the portal's own floor is now imported from the
+one rule rather than declared twice (`docs/SECURITY.md`, "Switched on").
+The provider reads only an error's code and holds one sentence for each —
+leaked or short, the same as before, the current one wrong, the session gone
+(which signs the person out) — never Supabase's message. A hidden username
+field lets a password manager file the change against the right account.
+Compliance found the round note implying Supabase keeps a durable record of
+a self-service change; it does not (its log lasts days), so the page now
+records the act through `POST /api/me/password-changed` — one row in the
+practice's trail under the person's own id, no values — where round 39's
+office reset already sat. A trigger on Supabase's `auth.users` was weighed
+and declined: a vendor's table, a failure in which would block every change.
+Two smaller notes: a household contact who types the address reaches this
+page in English, since it sits in the console's shell rather than the
+portal's, and the portal offers no link to it yet; and
+`app/shell/App.test.tsx` carries three names from before the seed list
+existed, for a later tidy.
 
 **Every file is the trunk's**: `domain/shared/password.ts` with its test and
 the barrel; `app/shell/auth/types.ts`, `supabase-auth.ts`;
