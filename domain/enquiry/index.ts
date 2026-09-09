@@ -5,3 +5,4 @@
  */
 export { ENQUIRY_SOURCES, leadFromEnquiry, parseEnquiry, toE164 } from './parse';
 export type { EnquirySource, LeadFromEnquiry, LodgedEnquiry, ParseResult } from './parse';
+export { ENQUIRY_WAITING_AFTER_DAYS, enquiryWaitingDays } from './waiting';

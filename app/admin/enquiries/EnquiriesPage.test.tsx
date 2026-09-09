@@ -59,9 +59,9 @@ const CONVERTED: Enquiry = {
   clientId: '00000008-0000-4000-8000-000000000011',
 };
 
-function mount(options: { listStatus?: number } = {}) {
+function mount(options: { listStatus?: number; list?: Enquiry[] } = {}) {
   const posts: { url: string; body: unknown }[] = [];
-  let list: Enquiry[] = [NEW, CONVERTED];
+  let list: Enquiry[] = options.list ?? [NEW, CONVERTED];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') {
@@ -117,6 +117,30 @@ function json(body: unknown, status = 200): Response {
 }
 
 describe('EnquiriesPage', () => {
+  it('says how long an enquiry still new after thirty days has waited, and leaves Dismiss beside it', async () => {
+    // The operator's decision of 10 September 2026 (decision 3 of
+    // docs/OPERATOR/2026-09-10-decisions.md). The clock is the page's own
+    // reading of today; only Date is faked, so the page's fetches still run.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-10T08:00:00.000Z'));
+    try {
+      const waiting: Enquiry = {
+        ...NEW,
+        id: '0000000e-0000-4000-8000-000000000003',
+        receivedAt: '2026-08-01T08:00:00.000Z',
+        name: 'Cedar Orchard',
+      };
+      mount({ list: [NEW, waiting, CONVERTED] });
+      expect(await screen.findByText('Waiting 40 days')).toBeTruthy();
+      // The one received yesterday is simply new.
+      expect(screen.getAllByText('New')).toHaveLength(1);
+      // Two new rows, two Dismiss buttons: nothing dismisses itself.
+      expect(screen.getAllByRole('button', { name: 'Dismiss' })).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('lists what the forms sent, new first, with the first line of the message and a link for a lead', async () => {
     mount();
     expect(await screen.findByText('Hazel Harbour')).toBeTruthy();

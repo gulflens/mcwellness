@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { enquiryWaitingDays } from '@domain/enquiry';
 import { EnquiryListResponse, type Enquiry } from '../../api/enquiries/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader } from '../../shell/components/Controls';
+import { StatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
 import './enquiries.css';
 
@@ -186,7 +188,14 @@ export function EnquiriesPage() {
             </span>
           );
         }
-        return 'New';
+        // Still new after thirty days: surfaced, never dismissed by itself
+        // (domain/enquiry/waiting.ts, the operator's decision of 10 September).
+        const waiting = enquiryWaitingDays(row.status, row.receivedAt, new Date());
+        return waiting === null ? (
+          'New'
+        ) : (
+          <StatusChip label={`Waiting ${waiting} days`} tone="attention" />
+        );
       },
     },
     {
