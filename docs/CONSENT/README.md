@@ -71,21 +71,24 @@ their English twins are still 1.0. That asymmetry is the truth: one text was
 corrected and the other was not, and a version belongs to a document rather
 than to a pair.
 
-## The five years, and what keeps them
+## The five years are a floor, not a timer
 
-`notices/your-information.en.md` and `health-data.en.md` both tell a household
-their records are kept for five years after their last session or contact and
-then deleted. `retention_until` is computed and stored when each document is
-filed, but until 2026-09-09 nothing ever read it back — so the five years could
-pass with nobody knowing, which made it a promise the practice had no way of
-keeping and no way of seeing it had missed.
+`notices/your-information.en.md` and `health-data.en.md` say the practice keeps
+records for **at least** five years after a household's last session or contact,
+may keep them for longer, and deletes nothing on a timer — a household asks, and
+then it is deleted.
 
-`pnpm job:retention-due` is the reading half: it says what is past its date and
-which household it belongs to, and changes nothing. Erasing stays a person's
-act through the record screen, which writes the audit trail and the
-confirmation letter — `.claude/rules/compliance.md` says erasure happens on
-request, and a job that quietly deleted households would be a worse answer than
-the gap it closed.
+That is the operator's rule of 2026-09-09 and it matches what the practice
+already had written down: CLAUDE.md's absolute rule 8 and the `uae-compliance`
+skill both say five years after last activity, **then erasure or anonymisation
+on request**, with financial records kept five years regardless. The wording
+first promoted earlier that day said "then it is deleted", which read as a timer
+and was the only document out of step; it was corrected the same evening, before
+any household saw it.
+
+`retention_until` on a document is therefore the date the floor lifts — the
+earliest an erasure can take everything — and not a deletion date. Nothing
+sweeps it, deliberately.
 
 ## Superseded
 

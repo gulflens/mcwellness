@@ -1,7 +1,7 @@
 ---
 purpose: health_data
 locale: en
-version: 1.0
+version: 1.1
 status: approved
 written: 2026-09-09
 ---
@@ -52,7 +52,9 @@ each household can only ever see its own records.
 
 ## How long we keep it
 
-Five years after your last session or contact with us, and then it is deleted.
+At least five years after your last session or contact with us, and we may keep
+it for longer — we do not delete it on a timer. You can ask us to delete it at
+any time, and we will.
 
 ## What you can do about it
 

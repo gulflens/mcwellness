@@ -10,7 +10,7 @@ Home-delivered neurofeedback training for a wellness practice in Dubai. Single T
 5. Every read and write of personal data goes through the audit context middleware. Never log personal data to console, error trackers or APM.
 6. VAT is computed by `domain/billing` from the standard-rate setting, never typed per invoice.
 7. Closed sessions, signed reports, issued invoices, protocols and assessments get a new version, never an in-place edit.
-8. Retention is 5 years after a client's last activity, then erasure or anonymisation on request. Financial records keep 5 years regardless.
+8. Retention is a MINIMUM of 5 years after a client's last activity. Records may be kept indefinitely after that; nothing deletes on a timer. Erasure or anonymisation happens when the client asks for it, and financial records keep 5 years regardless (operator, 2026-09-09).
 9. Anything that receives personal data is listed in `docs/COMPLIANCE/approved-vendors.md` first. No analytics SDKs, error trackers or font CDNs.
 10. Edit only paths you own per `docs/SPEC/OWNERSHIP.md`. Shared-zone changes go in `docs/CHANGE-REQUESTS/`.
 
@@ -26,7 +26,7 @@ TypeScript everywhere. React + Vite app with three role areas (admin, practition
 - The owner is not a developer. When asked, explain changes in plain language.
 
 ## Commands
-pnpm dev · pnpm test · pnpm test:db · pnpm verify (includes the secrets scan) · pnpm audit:deps · pnpm db:migrate · pnpm db:reset · pnpm seed · pnpm job:erasure-files · pnpm job:retention-due · pnpm job:post-books · pnpm build · pnpm start
+pnpm dev · pnpm test · pnpm test:db · pnpm verify (includes the secrets scan) · pnpm audit:deps · pnpm db:migrate · pnpm db:reset · pnpm seed · pnpm job:erasure-files · pnpm job:post-books · pnpm build · pnpm start
 
 ## Visual system
 Read docs/DESIGN-BRIEF.md before writing any UI.

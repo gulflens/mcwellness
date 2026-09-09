@@ -37,7 +37,6 @@
     "seed:sql": "node --env-file-if-exists=.env --import tsx db/seed/render-cli.ts",
     "seed:wording": "node --env-file-if-exists=.env --import tsx scripts/upload-consent-wording.mjs",
     "job:erasure-files": "node --env-file-if-exists=.env --import tsx jobs/client/retry-erasure-deletions.ts",
-    "job:retention-due": "node --env-file-if-exists=.env --import tsx jobs/client/retention-due.ts",
     "job:post-books": "node --env-file-if-exists=.env --import tsx jobs/accounting/post-books.ts"
   },
   "dependencies": {

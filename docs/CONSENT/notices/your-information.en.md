@@ -31,8 +31,11 @@ will ask you first, separately, and you may say no.
 **Where it is kept.** Our system is hosted in Mumbai, India, by our hosting
 provider.
 
-**How long.** Five years after your last session or contact with us, then it
-is deleted. Invoices and receipts are kept as long as tax law requires.
+**How long.** We keep your records for at least five years after your last
+session or contact with us, and we may keep them for longer — we do not delete
+them on a timer. You can ask us to delete your information at any time, and we
+will delete everything the law allows us to: invoices and receipts must stay
+until their five years are up, as tax law requires.
 
 **Your choices.** Ask us at any time to see, correct or delete your
 information, or to withdraw an agreement. Deleting removes your personal

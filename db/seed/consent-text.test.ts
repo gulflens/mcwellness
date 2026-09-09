@@ -37,10 +37,26 @@ describe('the consent wording files', () => {
 
   it('reads the version and the status from the front matter of each file', () => {
     for (const text of texts) {
-      // English at 1.0, Arabic at 1.1: the Arabic was corrected on the evening
-      // of 2026-09-09, after being filed, and a filed wording is never edited
-      // — the correction is a new version (docs/CONSENT/README.md).
-      expect(text.version).toBe(text.locale === 'ar' ? '1.1' : '1.0');
+      // The versions are asymmetric and each step is recorded in
+      // docs/CONSENT/README.md. A filed wording is never edited, so every
+      // correction on 2026-09-09 — all of them before any household saw a
+      // word — is a new version: the Arabic was corrected once for saying
+      // المعالج where the practice says الممارس, and the health-data page
+      // again, in both languages, when the operator restated the retention
+      // rule as a floor rather than a timer.
+      const expected: Record<string, string> = {
+        'participation.en': '1.0',
+        'participation.ar': '1.1',
+        'minor_participation.en': '1.0',
+        'minor_participation.ar': '1.1',
+        'home_visit.en': '1.0',
+        'home_visit.ar': '1.1',
+        'health_data.en': '1.1',
+        'health_data.ar': '1.2',
+      };
+      expect(text.version, `${text.purpose}.${text.locale}`).toBe(
+        expected[`${text.purpose}.${text.locale}`],
+      );
       // Approved by the practice's legal advisor on 2026-09-09, subject to the
       // four changes this round carries (docs/CONSENT/README.md).
       expect(text.status).toBe('approved');
