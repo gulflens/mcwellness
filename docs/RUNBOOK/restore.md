@@ -202,3 +202,46 @@ gh api repos/gulflens/mcwellness/environments --jq '.environments[].name'
 
 The names the workflows expect are in `.github/workflows/release.yml` and
 `backup.yml`; the values are the operator's and never Claude's.
+
+---
+
+## 3. Rehearsal, 10 September 2026 — the first against a hosted target
+
+The dump was the real one: `weekly/mcwellness-2026-09-09.sql.gz`, 130 KB,
+filed by the first run of `backup.yml` earlier the same night, fetched from
+the `backups` bucket with the backups project's own key. The target was a
+scratch Supabase project, `mcwellness-restore-rehearsal`, created for the
+purpose in `ap-southeast-1` with the CLI (`supabase projects create … --size
+micro --db-password …`), reached through its session pooler, and deleted
+afterwards through the Management API (`DELETE /v1/projects/{ref}` with the
+CLI's own stored token; `supabase projects delete` cancels itself before it
+asks anything on this laptop, which is worth knowing before it matters).
+
+**The procedure held, with one hosted-target wrinkle.** Steps 3 to 5 as
+written: the four extensions into `extensions` (already present on a
+Supabase project; the statements are harmless), `app_role` and
+`mcwellness_api` with the membership between them, and `drop schema public
+cascade` — the dump does say `CREATE SCHEMA public`, so the drop is not
+optional. Step 6 ran for 104 seconds and stopped, `ON_ERROR_STOP` doing its
+job, on line 20,203 of 20,264: `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN
+SCHEMA public …`, which the hosted `postgres` role is not allowed to change.
+Every line before it had run — 78 tables, 246 triggers, 162 policies, 94
+functions in `app`, row security on 75 tables, 46 tables granted to
+`app_role` — and every line after it was another default-privilege
+statement. **On a hosted target, filter them out**:
+`gzip -dc <dump> | grep -v '^ALTER DEFAULT PRIVILEGES' | psql -v ON_ERROR_STOP=1 <target>`.
+They set what future objects would inherit and nothing a restore needs.
+
+**What was checked.** Row counts against production at the moment of the
+dump: `tenant` 1, `app_user` 1, `client` 2, `user_role` 2, `document` 10,
+`enquiry` 1, `audit_log` 288, `schema_migration` 90. `mcwellness_api` could
+connect and `set local role app_role`. Then the runner, as the procedure
+says: `DATABASE_URL=<target> MIGRATE_TARGET=scratch pnpm db:migrate` applied
+the two migrations production had gained since the dump (917 and 962) and
+re-applied all 26 policy files, which is the same thing a real restore would
+do the morning after. Ledger afterwards: 92 rows, newest 962.
+
+**Not rehearsed, still.** The sign-in accounts: this dump carries the
+platform's two schemas and not Supabase's `auth`, as section 1 says, so a
+real restore also needs the project's own snapshot or the accounts
+recreated. And the erasures raised since the dump, of which there were none.
