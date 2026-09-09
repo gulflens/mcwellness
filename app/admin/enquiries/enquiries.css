@@ -1,0 +1,21 @@
+/* The enquiries screen: a table and, per new row, two quiet actions. */
+/* A run of text measured in characters (never a viewport width: tests/lint/one-set-of-breakpoints). */
+.enquiries__message {
+  display: inline-block;
+  max-width: 44ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.enquiries__actions {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.enquiries__dismiss {
+  display: flex;
+  gap: var(--s-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}

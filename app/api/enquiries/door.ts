@@ -97,7 +97,8 @@ export function mountEnquiryDoor(api: Hono<ApiEnv>, options: EnquiryDoorOptions)
 
     // JSON or a classic form post; the sender should not have to care.
     const type = c.req.header('content-type') ?? '';
-    let body: Record<string, unknown> = {};
+    // Unreadable input is an empty form: refused below as incomplete.
+    let body: Record<string, unknown>;
     try {
       if (type.includes('application/json')) {
         body = (await c.req.json()) as Record<string, unknown>;

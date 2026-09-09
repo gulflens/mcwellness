@@ -106,6 +106,18 @@ export function canOpenAudit(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `enquiry.list` (app/api/enquiries/routes.ts) — who may open
+ * Enquiries. The owner, an admin and the lead practitioner: the same three
+ * who action one (`enquiry.action`), because a screen that shows a name and a
+ * number one may not then convert or dismiss would only be a leak.
+ * `db/policies/enquiry/readers.sql` refuses the rows beneath both this screen
+ * and the routes (docs/superpowers/specs/2026-09-09-enquiries-design.md).
+ */
+export function canOpenEnquiries(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'enquiry.list' }, {}, now);
+}
+
+/**
  * Matches the `/today/check-in` gate in App.tsx: who may cross to the
  * practitioner's side. An owner who also treats holds `lead_practitioner`
  * alongside owner, so the console offers them "Today"; an admin-only or

@@ -5,6 +5,7 @@ import { AuditPage } from '../admin/audit/AuditPage';
 import { BooksPage } from '../admin/accounting/BooksPage';
 import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
+import { EnquiriesPage } from '../admin/enquiries/EnquiriesPage';
 import { KitPage } from '../admin/kit/KitPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { WeekPage } from '../admin/schedule/WeekPage';
@@ -28,6 +29,7 @@ import {
   canOpenAudit,
   canOpenBilling,
   canOpenBooks,
+  canOpenEnquiries,
   canOpenKit,
   canOpenPortalAccess,
   canOpenPractitioners,
@@ -251,6 +253,20 @@ export function App() {
               {(actor) =>
                 canOpenAudit(actor, new Date()) ? (
                   <AuditPage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="enquiries"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenEnquiries(actor, new Date()) ? (
+                  <EnquiriesPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )
