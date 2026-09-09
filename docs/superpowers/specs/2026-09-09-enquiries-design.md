@@ -75,7 +75,10 @@ form-encoded and JSON, answers CORS for the apex and `www`, and 204s OPTIONS.
 
 Pausing the old project — reported as safe once the repoint is verified live,
 and left to the operator. A retention job for unactioned enquiries: the rule is
-"until actioned", by decision. Erasure: a converted enquiry holds no personal
+"until actioned", by decision. *Amended 2026-09-10 (the operator's decision 3
+of `docs/OPERATOR/2026-09-10-decisions.md`, trunk round 42): an enquiry still
+new after thirty days is shown as waiting, with the days, beside the same
+Dismiss; nothing dismisses it by itself (`domain/enquiry/waiting.ts`).* Erasure: a converted enquiry holds no personal
 data, so erasing the client leaves nothing behind it.
 
 ## Risks stated

@@ -10,6 +10,7 @@ export type CheckInBlockReason =
   | 'consent_missing_home_visit'
   | 'consent_missing_health_data'
   | 'date_of_birth_unknown'
+  | 'visit_not_confirmed'
   | 'kit_calibration_overdue';
 
 export type CheckInInput = {
@@ -32,6 +33,15 @@ export type CheckInInput = {
    * ships must not stop every visit in the practice.
    */
   kitCalibrationOverdue: boolean;
+  /**
+   * The status of the visit the practitioner is standing in front of, as the
+   * route resolved it (app/api/sessions/checkin.ts). A `proposed` visit is one
+   * the household was never told about, and is refused (the operator's
+   * decision of 10 September 2026, decision 5 of
+   * docs/OPERATOR/2026-09-10-decisions.md). Absent when the caller has no
+   * visit to name: that refusal is the route's own, not this gate's.
+   */
+  visitStatus?: 'proposed' | 'confirmed' | 'checked_in';
   timeZone?: string;
 };
 
@@ -94,6 +104,13 @@ export function canCheckIn(input: CheckInInput, now: Date): CheckInResult {
   // own brain activity, so there is no visit that collects no health data.
   if (!input.activeConsentPurposes.includes('health_data')) {
     reasons.push('consent_missing_health_data');
+  }
+
+  // A visit the household was never told about: the office's failure to
+  // surface, not a session to run. After the household's consents, which
+  // matter more, and before the instruments.
+  if (input.visitStatus === 'proposed') {
+    reasons.push('visit_not_confirmed');
   }
 
   // The instruments, last: a household's consent is the more important thing

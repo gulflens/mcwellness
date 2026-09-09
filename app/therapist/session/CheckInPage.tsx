@@ -95,6 +95,10 @@ const REASON_COPY: Record<CheckInResponseReason, string> = {
     'Consent for brain-map and neurofeedback information is missing or has been withdrawn. ' +
     'Do not start a session. Ask the practice.',
   date_of_birth_unknown: 'Date of birth is not recorded. Ask the practice to add it.',
+  // The operator's decision of 10 September 2026 (decision 5 of
+  // docs/OPERATOR/2026-09-10-decisions.md): a proposed visit is the office's
+  // to confirm, not the practitioner's to run.
+  visit_not_confirmed: 'This visit was not confirmed with the household. Call the office.',
   already_checked_in: 'Already checked in on another device. Ask the practice if that was not you.',
   not_booked_today:
     'This visit is not booked for you today. Check the record number, or ask the practice.',

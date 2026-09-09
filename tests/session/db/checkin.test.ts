@@ -83,10 +83,24 @@ const CONTACT_BY_MRN = '00000000-0000-4000-8000-000000900002';
 const SESSION_BY_MRN = '00000000-0000-4000-8000-000000900003';
 const EVENT_BY_MRN = '00000000-0000-4000-8000-000000900004';
 const APPOINTMENT_BY_MRN = '00000000-0000-4000-8000-000000900005';
+// A visit the household was never told about (status 'proposed'): refused at
+// the door since the operator's decision of 10 September 2026 (decision 5 of
+// docs/OPERATOR/2026-09-10-decisions.md).
+const CLIENT_PROPOSED = '00000000-0000-4000-8000-000000001006';
+const CONTACT_PROPOSED = '00000000-0000-4000-8000-000000002006';
+const SESSION_PROPOSED = '00000000-0000-4000-8000-00000000500b';
+const EVENT_PROPOSED = '00000000-0000-4000-8000-00000000600b';
+const APPOINTMENT_PROPOSED = '00000000-0000-4000-8000-000000008006';
+// A practitioner of its own for that case: every other practitioner here has
+// spent its one-open-visit slot by the time the case runs, and the refusal
+// under proof is the gate's, not the open-visit constraint's.
+const PROPOSED_PRACTITIONER_USER = '00000000-0000-4000-8000-000000900201';
+const PROPOSED_PRACTITIONER = '00000000-0000-4000-8000-000000900202';
+const PROPOSED_PRACTITIONER_AUTH = '00000000-0000-4000-8000-000000900203';
 // The adult's own booked visit, named because the check-in is expected to
-// mark it (db/migrations/305_appointment_checked_in.sql). Confirmed, unlike
-// every other fixture in this file, which stays at seedAppointment's own
-// 'proposed' default.
+// mark it (db/migrations/305_appointment_checked_in.sql). Every fixture in
+// this file books a confirmed visit since 10 September 2026, except the one
+// below that proves a proposed visit is refused at the door.
 const APPOINTMENT_ADULT = '00000000-0000-4000-8000-000000008001';
 // A practitioner of its own for the record-number check-in, rather than
 // practitionerA: practitionerA's own one-open-visit slot is already spent by
@@ -364,7 +378,10 @@ beforeAll(async () => {
     appointmentClientId: string,
     hour: string,
     practitionerId: string = MORE_IDS.practitionerA,
-    status: 'proposed' | 'confirmed' = 'proposed',
+    // Confirmed by default: since 10 September 2026 a proposed visit is
+    // refused at the door, and every fixture but the one that proves that
+    // books a visit the household was told about.
+    status: 'proposed' | 'confirmed' = 'confirmed',
   ) =>
     seedAppointment(owner, {
       id,
@@ -376,7 +393,7 @@ beforeAll(async () => {
       windowStart: at(hour),
       status,
     });
-  await bookToday(APPOINTMENT_ADULT, CLIENT_ADULT, '08', MORE_IDS.practitionerA, 'confirmed');
+  await bookToday(APPOINTMENT_ADULT, CLIENT_ADULT, '08', MORE_IDS.practitionerA);
   await bookToday('00000000-0000-4000-8000-000000008002', CLIENT_NO_PARTICIPATION, '09');
   await bookToday('00000000-0000-4000-8000-000000008003', CLIENT_MINOR_NO_GUARDIAN, '10');
   await bookToday('00000000-0000-4000-8000-000000008004', CLIENT_MINOR_WITH_GUARDIAN, '11');
@@ -433,6 +450,55 @@ beforeAll(async () => {
     'health_data',
   );
   await bookToday(APPOINTMENT_BY_MRN, CLIENT_BY_MRN, '13', MRN_PRACTITIONER);
+
+  // A practitioner and a clean client whose only visit today is one the
+  // household was never told about.
+  await seedUser(owner, {
+    id: PROPOSED_PRACTITIONER_USER,
+    tenantId: IDS.tenantA,
+    authId: PROPOSED_PRACTITIONER_AUTH,
+    displayName: 'Synthetic Proposed Practitioner',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, PROPOSED_PRACTITIONER, PROPOSED_PRACTITIONER_USER);
+  await seedCredential(owner, {
+    tenantId: IDS.tenantA,
+    practitionerId: PROPOSED_PRACTITIONER,
+    serviceTypeId: SERVICE_TYPE,
+    certification: 'bcia_bcn',
+    validFrom: '2020-01-01',
+    validTo: null,
+    canExecuteSession: true,
+  });
+  await seedClient(owner, IDS.tenantA, CLIENT_PROPOSED, IDS.ownerA, 'Proposed');
+  await owner.query('update client set date_of_birth = $1 where id = $2', [
+    '1990-01-01',
+    CLIENT_PROPOSED,
+  ]);
+  await owner.query(
+    'insert into contact (id, tenant_id, client_id, relationship, can_consent) ' +
+      "values ($1, $2, $3, 'mother', true)",
+    [CONTACT_PROPOSED, IDS.tenantA, CLIENT_PROPOSED],
+  );
+  await consent(
+    '00000000-0000-4000-8000-000000004130',
+    CLIENT_PROPOSED,
+    CONTACT_PROPOSED,
+    'participation',
+  );
+  await consent(
+    '00000000-0000-4000-8000-000000004131',
+    CLIENT_PROPOSED,
+    CONTACT_PROPOSED,
+    'home_visit',
+  );
+  await consent(
+    '00000000-0000-4000-8000-000000004132',
+    CLIENT_PROPOSED,
+    CONTACT_PROPOSED,
+    'health_data',
+  );
+  await bookToday(APPOINTMENT_PROPOSED, CLIENT_PROPOSED, '14', PROPOSED_PRACTITIONER, 'proposed');
 
   // The two-visit household. Both windows are placed against the database's
   // own clock rather than at a fixed hour, because the route picks the
@@ -658,15 +724,15 @@ describe('POST /api/sessions/:id/events', () => {
       practitioner_id: MRN_PRACTITIONER,
     });
 
-    // This one's appointment is only proposed, so the check-in goes ahead and
-    // the row keeps the status the coordinator gave it: 305 marks 'confirmed'
-    // and nothing else, and a practitioner at the door is never made to wait
-    // on a coordinator's click.
+    // A confirmed visit is marked checked in at the door (305). Until 10
+    // September 2026 this case booked a proposed visit and proved the check-in
+    // went ahead regardless; the operator's decision 5 reversed that, and the
+    // case below proves the refusal.
     const appointment = await owner.query<{ status: string }>(
       'select status::text as status from appointment where id = $1',
       [APPOINTMENT_BY_MRN],
     );
-    expect(appointment.rows[0]).toEqual({ status: 'proposed' });
+    expect(appointment.rows[0]).toEqual({ status: 'checked_in' });
   });
 
   it('stamps the visit the practitioner is standing in, not the earliest of the day', async () => {
@@ -892,6 +958,33 @@ describe('POST /api/sessions/:id/events', () => {
         reason: 'consent_missing_participation',
       },
     ]);
+  });
+
+  it("blocks a visit the household was never told about, writing nothing but the 'refused' row", async () => {
+    // The operator's decision of 10 September 2026 (decision 5): a proposed
+    // visit is the office's to confirm, not the practitioner's to run.
+    const res = await postCheckIn(SESSION_PROPOSED, PROPOSED_PRACTITIONER_AUTH, {
+      id: EVENT_PROPOSED,
+      clientId: CLIENT_PROPOSED,
+    });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ status: 'blocked', reasons: ['visit_not_confirmed'] });
+    const rows = await owner.query('select 1 from session where id = $1', [SESSION_PROPOSED]);
+    expect(rows.rowCount).toBe(0);
+    expect(await refusalsFor(SESSION_PROPOSED)).toEqual([
+      {
+        action: 'refused',
+        entity_type: 'session',
+        entity_id: SESSION_PROPOSED,
+        client_id: CLIENT_PROPOSED,
+        reason: 'visit_not_confirmed',
+      },
+    ]);
+    const appointment = await owner.query<{ status: string }>(
+      'select status::text as status from appointment where id = $1',
+      [APPOINTMENT_PROPOSED],
+    );
+    expect(appointment.rows[0]).toEqual({ status: 'proposed' });
   });
 
   it('blocks a minor without an active guardian consent', async () => {

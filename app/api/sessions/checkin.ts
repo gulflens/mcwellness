@@ -251,38 +251,9 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // same type narrowing isConsentPurpose always did, now over a shorter list.
     const activeConsentPurposes = contextRow.active_consent_purposes.filter(isConsentPurpose);
 
-    // canCheckIn (domain/session/canCheckIn.ts) takes hasDateOfBirth and
-    // isMinor directly, straight from app.checkin_context — it never sees an
-    // actual date of birth, only whether one is on file and whether it makes
-    // the client a minor today, judged in Asia/Dubai by that same function
-    // (canCheckIn's own PRACTICE_TIME_ZONE, so the two never disagree about
-    // which side of midnight "today" falls on).
-    const gate = canCheckIn(
-      {
-        actor,
-        serviceTypeId: started.payload.serviceTypeId,
-        deliveryMode: started.payload.deliveryMode,
-        hasDateOfBirth: contextRow.has_date_of_birth,
-        isMinor: contextRow.is_minor,
-        activeConsentPurposes,
-        // The sixth reason (docs/SPEC/practitioner-phone.md section 6.3).
-        // domain/session/kit.ts is the rule; app.checkin_context mirrors it in
-        // SQL and hands back the answer, so the screen and the door cannot
-        // disagree about whether an amplifier is in date.
-        kitCalibrationOverdue: contextRow.kit_calibration_overdue,
-      },
-      now(),
-    );
-    if (!gate.ok) {
-      // No session or session_event row exists for a refused check-in, but
-      // the refusal itself is audited (session-capture.md section 8: "every
-      // block reason"). The route's own transaction commits normally on a
-      // 4xx, so this row is not undone by the refusal it records.
-      await logRefusal(db, 'session', sessionId, clientId, gate.reasons);
-      return c.json(CheckInResponse.parse({ status: 'blocked', reasons: gate.reasons }), 422);
-    }
-
-    // Which booked visit this check-in belongs to. app.checkin_context (301)
+    // Which booked visit this check-in belongs to, read before the gate so the
+    // gate can refuse a visit the household was never told about (the
+    // operator's decision of 10 September 2026). app.checkin_context (301)
     // has already proved one exists — that is what its `found` means — but
     // it hands back no id, so the row is read here instead. An ordinary
     // select, not another definer door: a practitioner may read their own
@@ -318,6 +289,47 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     );
     const appointmentId = appointment.rows[0]?.id ?? null;
     const appointmentStatus = appointment.rows[0]?.status ?? null;
+
+    // The gate's own view of the visit: only the three statuses the query
+    // admits, so the type says what the SQL says.
+    const visitStatus =
+      appointmentStatus === 'proposed' ||
+      appointmentStatus === 'confirmed' ||
+      appointmentStatus === 'checked_in'
+        ? appointmentStatus
+        : undefined;
+
+    // canCheckIn (domain/session/canCheckIn.ts) takes hasDateOfBirth and
+    // isMinor directly, straight from app.checkin_context — it never sees an
+    // actual date of birth, only whether one is on file and whether it makes
+    // the client a minor today, judged in Asia/Dubai by that same function
+    // (canCheckIn's own PRACTICE_TIME_ZONE, so the two never disagree about
+    // which side of midnight "today" falls on).
+    const gate = canCheckIn(
+      {
+        actor,
+        serviceTypeId: started.payload.serviceTypeId,
+        deliveryMode: started.payload.deliveryMode,
+        hasDateOfBirth: contextRow.has_date_of_birth,
+        isMinor: contextRow.is_minor,
+        activeConsentPurposes,
+        // The sixth reason (docs/SPEC/practitioner-phone.md section 6.3).
+        // domain/session/kit.ts is the rule; app.checkin_context mirrors it in
+        // SQL and hands back the answer, so the screen and the door cannot
+        // disagree about whether an amplifier is in date.
+        kitCalibrationOverdue: contextRow.kit_calibration_overdue,
+        visitStatus,
+      },
+      now(),
+    );
+    if (!gate.ok) {
+      // No session or session_event row exists for a refused check-in, but
+      // the refusal itself is audited (session-capture.md section 8: "every
+      // block reason"). The route's own transaction commits normally on a
+      // 4xx, so this row is not undone by the refusal it records.
+      await logRefusal(db, 'session', sessionId, clientId, gate.reasons);
+      return c.json(CheckInResponse.parse({ status: 'blocked', reasons: gate.reasons }), 422);
+    }
 
     // No clientId, no point: those are recorded on the session row directly
     // below, never duplicated into the event's own payload (see

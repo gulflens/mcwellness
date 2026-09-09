@@ -3059,3 +3059,56 @@ API route, no schema change.**
 database on 5451): format, lint, typecheck, the secrets scan (1,477 files)
 and the migration audit clean; 2,421 unit tests passed and 1 skipped across
 210 files; 1,307 database tests passed across 94 files.
+
+## Round 42 — three of the operator's answers (2026-09-10)
+
+The operator answered the twelve decisions of `docs/OPERATOR/2026-09-10-decisions.md`
+at 05:47 on their clock (21:47 UTC on 9 September). Three answers are small
+enough to build in one trunk round without a plan of their own; the design
+was put to the operator in one message and approved as written.
+
+**What the round builds.** *Decision 5, confirmed visits only:* the check-in
+gate (`domain/session/canCheckIn.ts`) gains `visit_not_confirmed`, refused when
+the visit the practitioner is standing in front of is `proposed` — the
+household was never told — and admitted when it is `confirmed` or already
+open. The route (`app/api/sessions/checkin.ts`) resolves the visit before the
+gate now rather than after it and hands the gate its status; no migration,
+since the route already read the row. The phone says "This visit was not
+confirmed with the household. Call the office." The check-in fixtures book
+confirmed visits by default, the record-number case (which until now booked
+a proposed visit and proved the check-in went ahead regardless) books a
+confirmed one and expects it marked checked in, and a new case books a
+proposed visit for a practitioner of its own and proves a 422 with nothing
+written but the refusal's audit row. *Decision 3, thirty days:*
+`domain/enquiry/waiting.ts` names the days an enquiry still `new` has waited
+once thirty have passed; the Enquiries screen shows "Waiting 40 days" as an
+attention chip beside the same Dismiss, and nothing dismisses itself.
+*Decision 10, coming soon:* the record drawer lists "Questionnaire (coming
+soon)" disabled, and the Assessments tab says the figures are typed from the
+software until the equipment's export can be read; the mechanism and its
+synthetic sample stay, and the case that proved them now says it proves what
+sits behind the disabled choice.
+
+**What the round records.** `docs/SPEC/session-capture.md` section 3.1 (the
+eighth refusal), `docs/SPEC/assessment.md` section 10 decision 2 (the
+amendment), and the enquiries design's "Not in this round" (the thirty-day
+rule beside the "until actioned" decision it refines).
+
+**Every file this round touched.** The trunk's own: `domain/enquiry/waiting.ts`
+(new) with its test and the barrel; `app/admin/enquiries/EnquiriesPage.tsx`
+with its test; `docs/SPEC/session-capture.md`, `docs/SPEC/assessment.md`,
+`docs/superpowers/specs/2026-09-09-enquiries-design.md`, `docs/SPEC/OWNERSHIP.md`,
+`docs/HANDOVER.md`, this file. Outside the trunk's paths, by the integrator's
+widening for one round (`docs/SPEC/OWNERSHIP.md`): `session-capture` —
+`domain/session/canCheckIn.ts` with its test, `app/api/sessions/checkin.ts`
+and `schema.ts`, `app/therapist/session/CheckInPage.tsx`, and
+`tests/session/CheckInPage.test.tsx` and `tests/session/db/checkin.test.ts`;
+`assessment` — `app/admin/assessments/copy.ts`, `RecordDrawer.tsx`,
+`AssessmentsTab.tsx` and `AssessmentsTab.test.tsx`. **No migration, no policy
+file, no API route, no schema change, no data change.**
+
+**Gates on the branch head, in the round's worktree** (`mcwellness-loose-ends`,
+database on 5451): format, lint, typecheck, the secrets scan and the
+migration audit clean; 2,428 unit tests passed across 211 files; 1,308
+database tests passed across 94 files.
+

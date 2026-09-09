@@ -18,8 +18,8 @@ mcwellness-93) listed twelve decisions, nine roadmap areas and nine loose ends;
 round 41 closed the loose ends that were code or record
 (`docs/CHANGE-REQUESTS/trunk-notes.md`, round 41) and wrote the decisions as
 **`docs/OPERATOR/2026-09-10-decisions.md`**, which is what waits on the
-operator now. **The next thing to build is piece twelve's plan** (section 10,
-step 12). Everything from here to section 1 is the state as it was written on
+operator now. **The next thing to build is the dispatcher's board** (section 10,
+step 13), then the two billing plans and piece twelve's. Everything from here to section 1 is the state as it was written on
 8 September at 02:35, kept as the record of that night; sections 2 and 8
 open with a dated note saying what has moved since, and section 10 carries
 the steps as items 9 to 12.
@@ -1037,6 +1037,20 @@ nine and ten; see the records on pull requests 73 to 83).
     section 14 lists for it, and nothing of it built until that plan is
     approved; then the rest of the roadmap in the audit's order, each area
     with its own plan.
+13. **The twelve answers (10 September, 05:47 on the operator's clock) and
+    trunk round 42 (this pull request):** the answers are at the head of
+    `docs/OPERATOR/2026-09-10-decisions.md`; the books' start day is set on
+    production (15 September) and the staging app is off the leaked key (one
+    dashboard click left). Round 42 built the three small answers: check-in
+    admits confirmed visits only (decision 5), an enquiry still new after
+    thirty days is shown as waiting (3), and the questionnaire and the export's
+    reading are marked coming soon (10). **Next, in order:** the dispatcher's
+    board, piece twenty-two, from the plan and specification approved on 10
+    September (`docs/PLAN/dispatch.md`, `docs/SPEC/dispatch.md`, in a
+    `dispatch` worktree with migrations 210–249) — its implementation plan is
+    the next artefact; then two short billing plans for the operator's
+    approval, one takings figure for everyone (decision 4) and package expiry
+    with two three-month extensions (decision 9); then piece twelve's plan.
 
 ## 11. Where Claude's own memory lives
 

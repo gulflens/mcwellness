@@ -205,4 +205,18 @@ describe('canCheckIn and the equipment register', () => {
       'kit_calibration_overdue',
     ]);
   });
+  it('refuses a visit the household was never told about, and admits a confirmed or an open one', () => {
+    // The operator's decision of 10 September 2026 (decision 5 of
+    // docs/OPERATOR/2026-09-10-decisions.md): a practitioner at the door of a
+    // household that was never told is a failure to surface, not a session to
+    // run. The gate is told the visit's status by the route, which resolves
+    // the visit; no visit known is the route's own refusal, not this gate's.
+    expect(canCheckIn(input({ visitStatus: 'proposed' }), NOW)).toEqual({
+      ok: false,
+      reasons: ['visit_not_confirmed'],
+    });
+    expect(canCheckIn(input({ visitStatus: 'confirmed' }), NOW).ok).toBe(true);
+    expect(canCheckIn(input({ visitStatus: 'checked_in' }), NOW).ok).toBe(true);
+    expect(canCheckIn(input(), NOW).ok).toBe(true);
+  });
 });

@@ -76,6 +76,7 @@ export const CHECK_IN_BLOCK_REASONS = [
   'consent_missing_home_visit',
   'consent_missing_health_data',
   'date_of_birth_unknown',
+  'visit_not_confirmed',
   'already_checked_in',
   'not_booked_today',
   'kit_calibration_overdue',
