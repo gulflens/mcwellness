@@ -225,7 +225,7 @@ practitioner's live location designed consent-first and off by default) and
 the practitioner-on-site piece (every practitioner sees the whole practice's
 clients) were planned and specified on 8 September and sit as open pull
 requests 128 and 127; nothing of either is built. Pull request 116, three
-documentation files from 7 September, fell behind `main`.
+documentation files from 7 September, fell behind the current record.
 
 **What it blocks.** Both pieces.
 

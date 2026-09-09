@@ -3040,11 +3040,14 @@ with its test and the barrel; `app/shell/components/PasswordForm.tsx` (new),
 `app/api/_middleware/security.ts`, `app/api/create-api.ts`,
 `app/api/enquiries/door.ts`, `tests/security/headers.test.ts`;
 `app/admin/settings/PracticePage.test.tsx` (one fixture line);
+`app/shell/AdminLayout.tsx` (one comment, the fix round);
 `.claude/rules/compliance.md`, `.claude/skills/uae-compliance/SKILL.md`;
 `docs/SPEC/audit.md`, `client-record.md`, `client-portal.md`, `OWNERSHIP.md`,
 `docs/SEAMS.md`, `docs/SECURITY.md`, `docs/PRODUCTION.md`, `docs/HANDOVER.md`,
-`docs/CHANGE-REQUESTS/billing-07.md`, this file, and
-`docs/OPERATOR/2026-09-10-decisions.md` (new). Outside the trunk's paths, by
+`docs/CHANGE-REQUESTS/billing-07.md`, this file,
+`docs/OPERATOR/2026-09-10-decisions.md` (new), and — the fix round's retention
+sweep — `PRODUCT.md`, `docs/CONSENT/README.md` and
+`docs/ADR/0003-wellness-business-supabase-cloud.md`. Outside the trunk's paths, by
 the integrator's widening for one round (`docs/SPEC/OWNERSHIP.md`):
 `client-portal` — `app/client/PasswordScreen.tsx` (new), `PortalRoot.tsx`,
 `portal.css`, `i18n/dictionary.ts`, and `tests/portal/harness.tsx`,
