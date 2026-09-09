@@ -172,12 +172,12 @@ export function TeamPage() {
           {row.isYou
             ? null
             : STAFF_ROLES.filter((role) => !row.roles.includes(role)).map((role) => (
-            <Button
-              key={role}
-              variant="quiet"
-              disabled={busy}
-              onClick={() => void post(`/api/team/${row.id}/roles`, { role })}
-            >
+                <Button
+                  key={role}
+                  variant="quiet"
+                  disabled={busy}
+                  onClick={() => void post(`/api/team/${row.id}/roles`, { role })}
+                >
                   Add {roleLabel(role).toLowerCase()}
                 </Button>
               ))}
