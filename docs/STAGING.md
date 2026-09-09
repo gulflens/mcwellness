@@ -2023,3 +2023,23 @@ git tag trunk-v1 && git push origin trunk-v1
 - Extensions installed into Supabase's `extensions` schema.
 - The laptop sign-in door, which cannot open on staging: it needs a local
   database, a local Supabase URL and the development environment, all three.
+
+## What was done on 2026-09-10: the staging app off the leaked service-role key
+
+On the operator's answer to decision 12 of `docs/OPERATOR/2026-09-10-decisions.md`
+("do it for me"), at 21:54 UTC on 9 September: the staging project's
+current-style secret key (`sb_secret_…`, the one Supabase minted when the new
+keys were enabled) was placed in the laptop's `.env.staging` as
+`SUPABASE_STORAGE_KEY` by a script that read the signed-in CLI's key listing
+into a private file and wrote the value without showing it; the previous file
+is kept for a day at `~/.mcwellness-staging-env.bak-<stamp>` (mode 600). The
+staging server on port 3100 was stopped and the keep-alive script brought it
+back on the new key within forty seconds; `/api/health` and `/api/health/deep`
+answer 200, and the key opens `storage/v1/bucket` (the `documents` bucket).
+The legacy keys (`anon`, `service_role`) are still enabled on the project and
+the leaked one still valid: switching them off needs the management API,
+whose token the session could not read in its mode, or one click in the
+dashboard (Settings › API Keys, "Disable legacy API keys"). Nothing on staging
+uses them any more: the browser key is the publishable one, and the storage
+key is now the secret one.
+
