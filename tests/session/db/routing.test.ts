@@ -318,9 +318,13 @@ describe("the day's drives, under the fallback", () => {
   it('writes no coordinate to the audit trail', async () => {
     const visit = await seedVisit('15', { hour: '11' });
     await get(`/api/routing/day?date=${today}`, visit.authSub);
+    // The row's own timestamps are stripped before the substring test: they
+    // carry microseconds, so a row written at hh:mm:55.2xxxxx would otherwise
+    // match a longitude it does not hold (CI failed exactly so at 21:27:55 on
+    // 2026-09-09, about once in six hundred runs).
     const trail = await owner.query<{ n: string }>(
       "select count(*)::text as n from audit_log where entity_type = 'drive_estimate' " +
-        "and new_values::text like '%55.2%'",
+        "and (new_values - array['created_at', 'updated_at', 'fetched_at'])::text like '%55.2%'",
     );
     expect(trail.rows[0]?.n).toBe('0');
   });
