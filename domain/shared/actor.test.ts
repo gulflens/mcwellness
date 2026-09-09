@@ -119,6 +119,20 @@ describe('canActor', () => {
     expect(canActor(actor([]), { type: 'enquiry.list' }, {}, NOW)).toBe(false);
   });
 
+  it('lets the owner and an admin manage staff, and nobody else', () => {
+    for (const role of ['owner', 'admin'] as const) {
+      expect(canActor(actor([role]), { type: 'staff.manage' }, {}, NOW)).toBe(true);
+    }
+    for (const role of [
+      'lead_practitioner',
+      'finance',
+      'practitioner',
+      'client_contact',
+    ] as const) {
+      expect(canActor(actor([role]), { type: 'staff.manage' }, {}, NOW)).toBe(false);
+    }
+  });
+
   it('lets the three oversight roles read the practice’s whole trail, and nobody else', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
       expect(canActor(actor([role]), { type: 'audit.activity' }, {}, NOW)).toBe(true);

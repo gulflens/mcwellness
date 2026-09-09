@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { canOpenPractitioners, canOpenSettings } from '../../shell/adminAccess';
+import { canOpenPractitioners, canOpenSettings, canOpenTeam } from '../../shell/adminAccess';
 
 /**
  * The links between the settings screens.
@@ -34,6 +34,11 @@ export function SettingsNav() {
       to: '/admin/settings/practitioners',
       label: 'Practitioners',
       open: canOpenPractitioners(session.actor, now),
+    },
+    {
+      to: '/admin/settings/team',
+      label: 'Team',
+      open: canOpenTeam(session.actor, now),
     },
   ].filter((link) => link.open);
 
