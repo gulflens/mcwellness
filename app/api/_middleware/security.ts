@@ -164,6 +164,14 @@ export function securityHeaders(
     supabaseUrl?: string | undefined;
     /** Paths served with the map document's policy. Empty: nothing is widened. */
     mapDocumentPaths?: readonly string[];
+    /**
+     * Paths whose answer another origin is meant to read, so their resource
+     * policy is `cross-origin` rather than `same-origin`: the website's
+     * enquiry door and nothing else (trunk round 41, 2026-09-10). Set here
+     * because `secureHeaders` writes after the handler has answered and would
+     * overwrite a header the handler set itself.
+     */
+    crossOriginResourcePaths?: readonly string[];
   } = {},
 ): MiddlewareHandler {
   const connectSrc = connectSources(options.supabaseUrl);
@@ -198,16 +206,23 @@ export function securityHeaders(
     });
 
   const mapPaths = new Set(options.mapDocumentPaths ?? []);
+  const crossOriginPaths = new Set(options.crossOriginResourcePaths ?? []);
   return createMiddleware<ApiEnv>(async (c, next) => {
     if (c.req.method !== 'GET' || !mapPaths.has(c.req.path)) {
       c.set('cspDocumentPolicy', strictDocument);
-      return strict(c, next);
+      await strict(c, next);
+    } else {
+      const nonce = randomBytes(16).toString('base64');
+      const policy = mapDocumentPolicy(nonce, connectSrc);
+      c.set('cspNonce', nonce);
+      c.set('cspDocumentPolicy', documentPolicyText(policy));
+      await mapDocument(policy)(c, next);
     }
-    const nonce = randomBytes(16).toString('base64');
-    const policy = mapDocumentPolicy(nonce, connectSrc);
-    c.set('cspNonce', nonce);
-    c.set('cspDocumentPolicy', documentPolicyText(policy));
-    return mapDocument(policy)(c, next);
+    // Only the answers the door itself gives, a preflight and a post: a GET on
+    // the same path is the fence's refusal and keeps the strict policy.
+    if (crossOriginPaths.has(c.req.path) && (c.req.method === 'POST' || c.req.method === 'OPTIONS')) {
+      c.res.headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
   });
 }
 

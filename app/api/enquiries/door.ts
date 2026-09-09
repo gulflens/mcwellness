@@ -26,6 +26,10 @@ import { LodgeResponse } from './schema';
  * fallback that could send either. The `jsonOnly` fence exempts exactly this
  * path (app/api/create-api.ts). CORS answers the two origins that have
  * business here, the apex and `www`, which to a browser are different sites.
+ * The resource policy on this path alone is `cross-origin`, so a browser
+ * hands the reply to the page that posted rather than logging it as blocked;
+ * that is set by `securityHeaders` (app/api/_middleware/security.ts), which
+ * writes its headers after the handler and would overwrite one set here.
  */
 
 export const ENQUIRY_DOOR_PATH = '/api/enquiries';

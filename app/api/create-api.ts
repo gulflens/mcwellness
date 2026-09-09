@@ -243,6 +243,9 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
     securityHeaders(deps.appEnv, {
       supabaseUrl: deps.supabaseUrl,
       mapDocumentPaths: deps.mapDocumentPaths,
+      // The website reads the door's answer from its own origin; every other
+      // answer stays same-origin (app/api/enquiries/door.ts).
+      crossOriginResourcePaths: [ENQUIRY_DOOR_PATH],
     }),
   );
   // Ahead of the fence, unlike identityKeys: the local store's own signed-URL
