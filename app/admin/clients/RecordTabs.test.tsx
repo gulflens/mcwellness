@@ -119,7 +119,7 @@ describe('ConsentTab', () => {
     // taking part, and both are named in plain words.
     expect(await screen.findByText("Guardian's consent for a child")).toBeTruthy();
     expect(screen.getByText('Participation')).toBeTruthy();
-    expect(screen.getAllByText('Needed before this client can be activated').length).toBe(3);
+    expect(screen.getAllByText('Needed before this client can be activated').length).toBe(4);
     // The optional purposes are listed too, below the required ones, so a
     // person never has to wonder where photographs are recorded.
     expect(screen.getByText('Photographs and video')).toBeTruthy();

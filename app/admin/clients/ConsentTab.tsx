@@ -16,6 +16,7 @@ const PURPOSE_LABELS: Record<string, string> = {
   participation: 'Participation',
   minor_participation: "Guardian's consent for a child",
   home_visit: 'Visits at home',
+  health_data: 'Brain-map and neurofeedback information',
   photo_video: 'Photographs and video',
   research: 'Research',
   marketing: 'Marketing',

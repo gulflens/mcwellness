@@ -38,6 +38,7 @@ const PURPOSE_LABELS: Record<ConsentPurpose, string> = {
   participation: 'Participation',
   minor_participation: "Guardian's consent for a child",
   home_visit: 'Visits at home',
+  health_data: 'Brain-map and neurofeedback information',
   photo_video: 'Photographs and video',
   research: 'Research',
   marketing: 'Marketing',

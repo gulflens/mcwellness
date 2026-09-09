@@ -105,7 +105,7 @@ export function loadConsentTexts(): ConsentText[] {
       purposes = purposesOf(required(fields, 'purpose', file));
     } catch (error) {
       // The pure function cannot know which file it was reading; say so here.
-      throw new Error(`${file}: ${(error as Error).message}`);
+      throw new Error(`${file}: ${(error as Error).message}`, { cause: error });
     }
     return purposes.map((purpose) => ({
       file,

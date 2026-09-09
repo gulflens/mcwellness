@@ -54,7 +54,7 @@ function record(overrides: Partial<ClientRecord> = {}): ClientRecord {
     client: { id: 'client-1', status: 'lead', dateOfBirth: ADULT_DOB },
     contacts: [CONSENTING_CONTACT],
     locations: [VERIFIED_LOCATION],
-    consents: [consent('participation'), consent('home_visit')],
+    consents: [consent('health_data'), consent('participation'), consent('home_visit')],
     ...overrides,
   };
 }
@@ -101,15 +101,28 @@ describe('canActivate', () => {
     });
   });
 
+  it('is missing consent:health_data when the household has not agreed to it', () => {
+    // Every other condition met. A household that has agreed to take part has
+    // not thereby agreed to the practice holding what their brain is doing:
+    // the advisor asked for that to be a separate yes, so it separately gates.
+    expect(
+      canActivate(record({ consents: [consent('participation'), consent('home_visit')] }), TODAY),
+    ).toEqual({ ok: false, missing: ['consent:health_data'] });
+  });
+
   it('is missing consent:participation when that consent is absent', () => {
-    expect(canActivate(record({ consents: [consent('home_visit')] }), TODAY)).toEqual({
+    expect(
+      canActivate(record({ consents: [consent('health_data'), consent('home_visit')] }), TODAY),
+    ).toEqual({
       ok: false,
       missing: ['consent:participation'],
     });
   });
 
   it('is missing consent:home_visit only when the delivery includes a home visit', () => {
-    const consentsWithoutHomeVisit = { consents: [consent('participation')] };
+    const consentsWithoutHomeVisit = {
+      consents: [consent('health_data'), consent('participation')],
+    };
     expect(canActivate(record(consentsWithoutHomeVisit), TODAY)).toEqual({
       ok: false,
       missing: ['consent:home_visit'],
@@ -204,7 +217,13 @@ describe('canActivate', () => {
     for (const status of ['withdrawn', 'expired', 'superseded'] as const) {
       expect(
         canActivate(
-          record({ consents: [consent('participation', { status }), consent('home_visit')] }),
+          record({
+            consents: [
+              consent('health_data'),
+              consent('participation', { status }),
+              consent('home_visit'),
+            ],
+          }),
           TODAY,
         ),
       ).toEqual({ ok: false, missing: ['consent:participation'] });
@@ -213,7 +232,11 @@ describe('canActivate', () => {
 
   it('treats a consent expiring before or on today as not active, and after today as active', () => {
     const beforeToday = record({
-      consents: [consent('participation', { expiresAt: '2026-09-01' }), consent('home_visit')],
+      consents: [
+        consent('health_data'),
+        consent('participation', { expiresAt: '2026-09-01' }),
+        consent('home_visit'),
+      ],
     });
     expect(canActivate(beforeToday, TODAY)).toEqual({
       ok: false,
@@ -221,19 +244,31 @@ describe('canActivate', () => {
     });
 
     const onToday = record({
-      consents: [consent('participation', { expiresAt: TODAY }), consent('home_visit')],
+      consents: [
+        consent('health_data'),
+        consent('participation', { expiresAt: TODAY }),
+        consent('home_visit'),
+      ],
     });
     expect(canActivate(onToday, TODAY)).toEqual({ ok: false, missing: ['consent:participation'] });
 
     const afterToday = record({
-      consents: [consent('participation', { expiresAt: '2026-09-03' }), consent('home_visit')],
+      consents: [
+        consent('health_data'),
+        consent('participation', { expiresAt: '2026-09-03' }),
+        consent('home_visit'),
+      ],
     });
     expect(canActivate(afterToday, TODAY)).toEqual({ ok: true, missing: [] });
   });
 
   it('treats a null expiry as never expiring', () => {
     const neverExpires = record({
-      consents: [consent('participation', { expiresAt: null }), consent('home_visit')],
+      consents: [
+        consent('health_data'),
+        consent('participation', { expiresAt: null }),
+        consent('home_visit'),
+      ],
     });
     expect(canActivate(neverExpires, TODAY)).toEqual({ ok: true, missing: [] });
   });
@@ -251,6 +286,7 @@ describe('canActivate', () => {
         'date_of_birth',
         'verified_location',
         'consenting_contact',
+        'consent:health_data',
         'consent:home_visit',
         'consent:participation',
       ],

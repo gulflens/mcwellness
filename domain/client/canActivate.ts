@@ -8,7 +8,8 @@ export type Missing =
   | 'consenting_contact'
   | 'consent:participation'
   | 'consent:minor_participation'
-  | 'consent:home_visit';
+  | 'consent:home_visit'
+  | 'consent:health_data';
 
 const DEFAULT_DELIVERY_MODES: readonly DeliveryMode[] = ['home'];
 
