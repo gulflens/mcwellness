@@ -318,11 +318,23 @@ describe("the day's drives, under the fallback", () => {
   it('writes no coordinate to the audit trail', async () => {
     const visit = await seedVisit('15', { hour: '11' });
     await get(`/api/routing/day?date=${today}`, visit.authSub);
-    const trail = await owner.query<{ n: string }>(
-      "select count(*)::text as n from audit_log where entity_type = 'drive_estimate' " +
-        "and new_values::text like '%55.2%'",
+    // The promise is that the audited row is these twelve columns and nothing
+    // else, so a coordinate column of any type trips this however its value
+    // renders (a geography renders as hex and carries no "55.2"; and a
+    // substring search for "55.2" once matched a timestamp's own microseconds,
+    // CI at 21:27:55 on 2026-09-09). The trail must also hold at least one such
+    // row or the check proves nothing: this request writes none (one stop, no
+    // home base), so the rows are the earlier tests', in this file's database.
+    const trail = await owner.query<{ total: string; strangers: string }>(
+      'select count(*)::text as total, count(*) filter (where exists (' +
+        'select 1 from jsonb_object_keys(new_values) as k where k not in (' +
+        "'id', 'tenant_id', 'from_location_id', 'to_location_id', 'hour_bucket', " +
+        "'seconds', 'metres', 'source', 'fetched_at', 'created_at', 'updated_at', " +
+        "'created_by')))::text as strangers " +
+        "from audit_log where entity_type = 'drive_estimate'",
     );
-    expect(trail.rows[0]?.n).toBe('0');
+    expect(Number(trail.rows[0]?.total)).toBeGreaterThan(0);
+    expect(trail.rows[0]?.strangers).toBe('0');
   });
 });
 
