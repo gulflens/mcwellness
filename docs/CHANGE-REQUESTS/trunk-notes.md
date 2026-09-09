@@ -2761,13 +2761,17 @@ stranger typed into a form, held until somebody in the office decides. So it
 is the one table in the schema that the audit trigger does not watch — the
 operator's Option B, recorded in `.claude/rules/data-model.md`: a public write
 has no actor to name, the route logs every read under the person reading
-(`logReads`, entity `enquiry`), and the client a conversion creates is audited
-from its first byte, because it is created by `createLead` — the same path
-`POST /api/clients` takes. Once actioned, the row keeps nothing personal:
-`enquiry_actioned_is_scrubbed` refuses a converted or dismissed row that still
-carries a name, a number, an address, a message or the address hash, and what
-stays is the record of what happened, when, by whom, and for a conversion
-which client it became.
+(`logReads`, entity `enquiry`) and writes an audit row for each conversion and
+dismissal under the person acting (`logAction`), and the client a conversion
+creates is audited from its first byte, because it is created by `createLead`
+— the same path `POST /api/clients` takes. Once actioned, the row keeps
+nothing personal: `enquiry_actioned_is_scrubbed` refuses a converted or
+dismissed row that still carries a name, a number, an address, a message, the
+tick or the address hash, and what stays is the record of what happened, when,
+by whom, and for a conversion which client it became. The dismissal's reason
+is the one free text that survives, so the route refuses a reason that carries
+a number or an address (`refuseContactDetails`, the audit trail's own guard).
+Every personal column states its need as a comment on the column.
 
 **The door, ahead of the fence.** Form or JSON, the sender need not care. The
 honeypot answers `200 {ok:true}` and keeps nothing. A missing name or number
@@ -2812,6 +2816,30 @@ table of the trunk's own and builds on no stream's; `db/policies/enquiry/**`
 `.claude/rules/data-model.md`; `docs/SPEC/00-data-model.md`;
 `docs/SPEC/OWNERSHIP.md`, which names the four new folders; and
 `docs/superpowers/**`.
+
+**Reviewed** on 10 September by the three briefs, security (PASS), compliance
+and schema (both FAIL, both closed before merge). What they changed: the
+Supabase default-privilege revoke every table since 070 carries; `actioned_by`
+and `client_id` as composite keys on `(tenant_id, …)`; the throttle's index
+predicate made one the planner can use, an advisory lock per address so a
+burst cannot all pass the count, and the definer bounded on its input's size;
+`for update` on the row a conversion reads; ids that are not uuids answered as
+not found rather than as a database error; a strict request id at the door and
+a JSON body accepted only when it is an object; the number and the address
+shaped at the door to what a client record can hold, so a conversion cannot
+fail on the contact table's own check; audit rows for the conversion (with its
+one read logged) and the dismissal; the reason guarded against a number or an
+address; the tick scrubbed with the rest; every personal column's need stated
+as a comment, the four the screen did not show now shown; the `Needs` header
+corrected; indexes on both foreign keys; the cross-status constraints and the
+reason's length; `search_path` pinned to `pg_catalog, pg_temp`; a restrictive
+insert policy saying in the policy's own terms what the absent grant says; and
+four fixtures off the reserved ranges — written through the shell, which the
+repository's identifier hook does not see, so the diff was swept by hand with
+the hook's own patterns. Accepted as they stand: the address hash is unkeyed
+(pseudonymous, ten minutes' purpose, nulled on action), and the message is not
+carried to the lead — the client record has no notes field, the office reads
+it before pressing, and keeping it is a later round's question.
 
 **What follows the merge**, in order: the website's pages point their
 `ENDPOINT` at the new door; migration 916 is applied to production with its

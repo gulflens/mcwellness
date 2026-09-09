@@ -32,9 +32,9 @@ const NEW: Enquiry = {
   email: 'hazel@example.com',
   area: 'Jumeirah',
   message: 'I want to know more\nabout neurofeedback',
-  concern: null,
-  preferredTime: null,
-  contactMethod: null,
+  concern: 'Sleep Improvement',
+  preferredTime: 'Evenings',
+  contactMethod: 'WhatsApp',
   consent: true,
   actionedAt: null,
   actionedByName: null,
@@ -50,6 +50,9 @@ const CONVERTED: Enquiry = {
   email: null,
   area: null,
   message: null,
+  concern: null,
+  preferredTime: null,
+  contactMethod: null,
   consent: null,
   actionedAt: '2026-09-09T19:40:00.000Z',
   actionedByName: 'Iris Harbour',
@@ -120,6 +123,14 @@ describe('EnquiriesPage', () => {
     expect(screen.getByText('+971500000099')).toBeTruthy();
     expect(screen.getByText('I want to know more')).toBeTruthy();
     expect(screen.queryByText(/about neurofeedback/)).toBeNull();
+    for (const line of [
+      'Area: Jumeirah',
+      'Asked about: Sleep Improvement',
+      'Prefers: Evenings',
+      'Reach by: WhatsApp',
+    ]) {
+      expect(screen.getByText(line)).toBeTruthy();
+    }
     expect(screen.getByRole('link', { name: 'Lead' }).getAttribute('href')).toBe(
       `/admin/clients/${CONVERTED.clientId}`,
     );

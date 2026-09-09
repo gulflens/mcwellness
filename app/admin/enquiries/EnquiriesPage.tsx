@@ -150,6 +150,29 @@ export function EnquiriesPage() {
       ),
     },
     {
+      key: 'details',
+      header: 'Details',
+      render: (row) => {
+        // What the discovery-call form asked, so the call goes the way the
+        // person asked for it; the widget sends none of these.
+        const lines = [
+          row.area ? `Area: ${row.area}` : null,
+          row.concern ? `Asked about: ${row.concern}` : null,
+          row.preferredTime ? `Prefers: ${row.preferredTime}` : null,
+          row.contactMethod ? `Reach by: ${row.contactMethod}` : null,
+        ].filter((line): line is string => line !== null);
+        return lines.length === 0 ? (
+          '—'
+        ) : (
+          <span className="enquiries__details">
+            {lines.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </span>
+        );
+      },
+    },
+    {
       key: 'status',
       header: 'Status',
       render: (row) => {

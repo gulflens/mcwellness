@@ -65,19 +65,24 @@ function orNull(value: string): string | null {
  * The widget sends a dialling code and the number separately. The
  * discovery-call form sends one field, which people fill every way there is:
  * with the +971, with a trunk zero, with neither. Blindly prepending a country
- * code to a number that already carries one produced +971971501234567, which
+ * code to a number that already carries one produced +971971500000099, which
  * nobody can ring. So: an explicit plus is believed as given; otherwise a
  * leading country code is recognised and not doubled, and a trunk zero is
  * dropped. The recognition is guarded on length so a short local number that
  * happens to begin with the code's digits is not truncated into nonsense.
  */
+/** The shape the contact table insists on (060_client.sql): a plus, then 7 to 15 digits, no leading zero. */
+const E164 = /^\+[1-9][0-9]{6,14}$/;
+/** An address with one @ and a dot after it; anything else is kept as nothing rather than as a bad address. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function toE164(countryCode: string, phone: string): string {
   const raw = phone.trim();
   const code = (countryCode || '+971').replace(/\D/g, '') || '971';
 
   if (raw.startsWith('+')) {
     const digits = raw.replace(/\D/g, '');
-    return digits ? `+${digits}` : '';
+    return asE164(digits ? `+${digits}` : '');
   }
 
   let digits = raw.replace(/\D/g, '');
@@ -86,7 +91,16 @@ export function toE164(countryCode: string, phone: string): string {
   }
   digits = digits.replace(/^0+/, '');
   if (!digits) return '';
-  return `+${code}${digits}`;
+  return asE164(`+${code}${digits}`);
+}
+
+/** Empty unless it is a number a client record could hold: the door then answers "incomplete". */
+function asE164(candidate: string): string {
+  return E164.test(candidate) ? candidate : '';
+}
+
+function asEmail(candidate: string | null): string | null {
+  return candidate !== null && EMAIL.test(candidate) ? candidate : null;
 }
 
 function isHoneypotFilled(body: Record<string, unknown>): boolean {
@@ -124,7 +138,7 @@ export function parseEnquiry(body: Record<string, unknown>): ParseResult {
     enquiry: {
       name,
       whatsappE164,
-      email: orNull(clamp(body.email, LIMITS.email)),
+      email: asEmail(orNull(clamp(body.email, LIMITS.email))),
       area: orNull(clamp(body.area, LIMITS.area)),
       message: orNull(clamp(body.message, LIMITS.message)),
       concern: orNull(clamp(body.concern, LIMITS.concern)),

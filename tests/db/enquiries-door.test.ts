@@ -110,6 +110,17 @@ describe('the enquiry door', () => {
     expect(read).toEqual([{ source: 'discovery_call', concern: 'sleep' }]);
   });
 
+  it('treats a JSON body that is not an object as an empty form', async () => {
+    for (const body of ['null', '[]', '"hazel"']) {
+      const res = await api.request(DOOR, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: APEX },
+        body,
+      });
+      expect(res.status).toBe(400);
+    }
+  });
+
   it('answers a filled honeypot exactly as it answers a person, and keeps nothing', async () => {
     await owner.query('delete from enquiry');
     const res = await api.request(DOOR, form({ ...HAZEL, botcheck: 'on' }));

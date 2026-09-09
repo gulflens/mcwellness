@@ -19,3 +19,8 @@
   align-items: flex-end;
   flex-wrap: wrap;
 }
+.enquiries__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}

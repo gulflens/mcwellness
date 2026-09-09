@@ -1,7 +1,7 @@
 -- 916_enquiry.sql
--- Needs: 000 (tenant), 010 (app_user), 060 (client, app.set_updated_at),
---        090 (the API role's grants), 095 (app.actor_has_role,
---        app.current_tenant_id)
+-- Needs: 000 (app_role, app.set_updated_at), 010 (tenant), 020 (app_user),
+--        060 (client), 090 (app_role's usage on public), 099 (the
+--        tenant-scoped keys on app_user and client)
 --
 -- Where the website's enquiries land: the practice system's first public
 -- write path (docs/superpowers/specs/2026-09-09-enquiries-design.md).
@@ -50,45 +50,96 @@ create table enquiry (
   ip_hash         text,
   status          text not null default 'new' check (status in ('new', 'converted', 'dismissed')),
   actioned_at     timestamptz,
-  actioned_by     uuid references app_user (id),
-  client_id       uuid references client (id),
+  actioned_by     uuid,
+  client_id       uuid,
   dismiss_reason  text,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
-  -- A new enquiry is a person who can be rung.
+  -- A new enquiry is a person who can be rung, and nothing has been done yet.
   constraint enquiry_new_is_complete check (
-    status <> 'new' or (name is not null and whatsapp_e164 is not null and ip_hash is not null)
+    status <> 'new' or (
+      name is not null and whatsapp_e164 is not null and ip_hash is not null
+      and actioned_at is null and actioned_by is null and client_id is null and dismiss_reason is null
+    )
   ),
-  -- An actioned one keeps nothing about them.
+  -- An actioned one keeps nothing about them: not even the tick.
   constraint enquiry_actioned_is_scrubbed check (
     status = 'new' or (
       name is null and whatsapp_e164 is null and email is null and area is null
       and message is null and concern is null and preferred_time is null
-      and contact_method is null and ip_hash is null
+      and contact_method is null and consent is null and ip_hash is null
       and actioned_at is not null and actioned_by is not null
     )
   ),
   constraint enquiry_converted_names_client check (status <> 'converted' or client_id is not null),
+  constraint enquiry_converted_has_no_reason check (status <> 'converted' or dismiss_reason is null),
   constraint enquiry_dismissed_has_reason check (status <> 'dismissed' or dismiss_reason is not null),
+  constraint enquiry_dismissed_names_no_client check (status <> 'dismissed' or client_id is null),
+  constraint enquiry_reason_length check (dismiss_reason is null or length(dismiss_reason) between 1 and 200),
   -- The (tenant_id, id) key every tenant-scoped table carries (099), so a
   -- composite foreign key can one day name a row and its tenant together.
-  constraint enquiry_tenant_id_id_key unique (tenant_id, id)
+  constraint enquiry_tenant_id_id_key unique (tenant_id, id),
+  -- Bound to a person and a client of the same practice (099's keys), so a
+  -- cross-tenant id is refused at write time rather than filtered at read.
+  constraint enquiry_actioned_by_fkey foreign key (tenant_id, actioned_by) references app_user (tenant_id, id),
+  constraint enquiry_client_id_fkey foreign key (tenant_id, client_id) references client (tenant_id, id)
 );
 
 comment on table enquiry is
   'unaudited by decision: a public write with no actor (Option B, 2026-09-09); '
-  'reads are logged by the route, and the client a conversion creates is audited';
+  'reads and actions are logged by the route, and the client a conversion creates is audited';
+
+-- Each personal field, and why the practice keeps it until the row is actioned.
+comment on column enquiry.name is
+  'How the person asked to be addressed when the practice rings back. Required: an enquiry nobody can be rung about is not one.';
+comment on column enquiry.whatsapp_e164 is
+  'The number to ring or message back on, in E.164. Required, for the same reason.';
+comment on column enquiry.email is
+  'A second way to reply if the person gave one; the lead''s contact carries it forward. Optional.';
+comment on column enquiry.area is
+  'Where in the emirates they are, so the office can say whether a home visit reaches them before anyone is rung. Optional.';
+comment on column enquiry.message is
+  'What they asked, in their words, so the call answers it. Shown on the screen; not carried to the lead. Optional.';
+comment on column enquiry.concern is
+  'The discovery-call form''s "what brings you" choice, from its fixed list, so the caller opens with the right thing. Optional.';
+comment on column enquiry.preferred_time is
+  'When they asked to be rung, so the office rings then. Optional.';
+comment on column enquiry.contact_method is
+  'How they asked to be reached (call, WhatsApp, email), so the office does that and not another. Optional.';
+comment on column enquiry.consent is
+  'The website form''s tick: "By submitting, you agree to be contacted by McWellness about your enquiry." Records only that the box was ticked (true), left (null) or refused (false). It is not a consent row and no purpose is ever read from it; the practice''s consents are recorded on the client, from the wording filed as documents.';
+comment on column enquiry.ip_hash is
+  'SHA-256 of the sender''s address under a fixed prefix, for app.lodge_enquiry''s budget only; the address itself is never stored. Null once actioned.';
+comment on column enquiry.dismiss_reason is
+  'Why the office set it aside, in a few words. The route refuses a reason that carries a number or an address, so nothing personal returns to a scrubbed row.';
 
 create index enquiry_tenant_status_received_idx on enquiry (tenant_id, status, received_at desc);
-create index enquiry_ip_hash_received_idx on enquiry (ip_hash, received_at desc) where status = 'new';
+-- The throttle's own index: its predicate is implied by the function's
+-- `ip_hash = ...`, which is what lets the planner use it (an actioned row has
+-- no hash, so this is the same set of rows as "new").
+create index enquiry_ip_hash_received_idx on enquiry (ip_hash, received_at desc) where ip_hash is not null;
+create index enquiry_actioned_by_idx on enquiry (actioned_by) where actioned_by is not null;
+create index enquiry_client_idx on enquiry (client_id) where client_id is not null;
 
 create trigger set_updated_at before update on enquiry
   for each row execute function app.set_updated_at();
 
-alter table enquiry enable row level security;
--- Select and update only. There is no insert grant on purpose: the one way in
--- is the definer below, and the API role never inserts here directly.
-grant select, update on enquiry to app_role;
+do $$
+declare
+  has_api_roles boolean := exists (select 1 from pg_roles where rolname = 'anon')
+                       and exists (select 1 from pg_roles where rolname = 'authenticated');
+begin
+  execute 'alter table public.enquiry enable row level security';
+  execute 'revoke all on public.enquiry from public';
+  if has_api_roles then
+    -- Supabase: default privileges grant every new table in public to these roles.
+    execute 'revoke all on public.enquiry from anon, authenticated';
+  end if;
+  -- Select and update only. There is no insert grant on purpose: the one way
+  -- in is the definer below, and the API role never inserts here directly.
+  execute 'grant select, update on public.enquiry to app_role';
+end
+$$;
 
 -- The door. Resolves the practice — exactly one tenant, or nothing is lodged;
 -- refuses the sixth lodging from one address in ten minutes; inserts. It
@@ -97,18 +148,26 @@ grant select, update on enquiry to app_role;
 -- script what to change, and one that says "thank you" tells it nothing.
 create function app.lodge_enquiry(p jsonb) returns uuid
 language plpgsql security definer
-set search_path = pg_catalog, public, pg_temp
+set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_tenant uuid;
   v_recent integer;
   v_id     uuid;
 begin
+  -- The door clamps every field before it gets here; this makes the table's
+  -- own guarantee hold whoever the caller is.
+  if p is null or pg_column_size(p) > 16384 then
+    return null;
+  end if;
   if (select count(*) from public.tenant) <> 1 then
     return null;
   end if;
   select id into v_tenant from public.tenant limit 1;
 
+  -- One lodging at a time per address, so a burst cannot all pass the count
+  -- before any of them is written.
+  perform pg_advisory_xact_lock(hashtext(p->>'ip_hash'));
   select count(*) into v_recent
     from public.enquiry
    where ip_hash = p->>'ip_hash'

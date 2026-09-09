@@ -65,7 +65,7 @@ describe('the enquiries a person sees', () => {
 describe('actioning', () => {
   it('converts an enquiry into an audited lead, and keeps nothing personal on the row', async () => {
     await h.owner.query('delete from enquiry');
-    const id = await lodge('Hazel Rose Harbour');
+    const id = await lodge('Hazel Fern Harbour');
     const res = await h.callAs('POST', `/api/enquiries/${id}/convert`, PORTAL.adminAuth);
     expect(res.status).toBe(201);
     const { clientId, mrn } = (await res.json()) as { clientId: string; mrn: string };
@@ -77,7 +77,7 @@ describe('actioning', () => {
     );
     expect(client.rows[0]).toEqual({
       given_name: 'Hazel',
-      family_name: 'Rose Harbour',
+      family_name: 'Fern Harbour',
       status: 'lead',
       referral_source: 'website',
     });
@@ -95,7 +95,7 @@ describe('actioning', () => {
     ]);
 
     const enquiry = await h.owner.query(
-      'select status, client_id, name, whatsapp_e164, email, message, ip_hash, actioned_by from enquiry where id = $1',
+      'select status, client_id, name, whatsapp_e164, email, message, consent, ip_hash, actioned_by from enquiry where id = $1',
       [id],
     );
     expect(enquiry.rows[0]).toEqual({
@@ -105,9 +105,22 @@ describe('actioning', () => {
       whatsapp_e164: null,
       email: null,
       message: null,
+      consent: null,
       ip_hash: null,
       actioned_by: PORTAL.admin,
     });
+
+    // The enquiry's own trail: its personal fields were read once for the
+    // conversion, and the conversion itself is in the chain, both under the
+    // person who pressed the button.
+    const own = await h.owner.query<{ action: string; client_id: string | null }>(
+      "select action, client_id from audit_log where entity_type = 'enquiry' and entity_id = $1 and actor_id = $2 order by action",
+      [id, PORTAL.admin],
+    );
+    expect(own.rows).toEqual([
+      { action: 'convert', client_id: clientId },
+      { action: 'read', client_id: null },
+    ]);
 
     // Option B: the client is audited from its first byte, under the person who pressed the button.
     const trail = await h.owner.query<{ n: string }>(
@@ -124,9 +137,17 @@ describe('actioning', () => {
 
   it('dismisses with a reason and scrubs, and refuses a dismissal without one', async () => {
     await h.owner.query('delete from enquiry');
-    const id = await lodge('Basil Vale');
+    const id = await lodge('Basil Valley');
     expect(
       (await h.callAs('POST', `/api/enquiries/${id}/dismiss`, PORTAL.adminAuth, {})).status,
+    ).toBe(400);
+    // A reason that carries a number would put a person back on a scrubbed row.
+    expect(
+      (
+        await h.callAs('POST', `/api/enquiries/${id}/dismiss`, PORTAL.adminAuth, {
+          reason: 'Rang +971 50 000 0098, not now',
+        })
+      ).status,
     ).toBe(400);
     const res = await h.callAs('POST', `/api/enquiries/${id}/dismiss`, PORTAL.leadAuth, {
       reason: 'Not a client enquiry',
@@ -142,6 +163,11 @@ describe('actioning', () => {
       name: null,
       actioned_by: PORTAL.leadPractitioner,
     });
+    const trail = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where entity_type = 'enquiry' and entity_id = $1 and action = 'dismiss' and actor_id = $2",
+      [id, PORTAL.leadPractitioner],
+    );
+    expect(trail.rows[0]?.n).toBe('1');
   });
 
   it('refuses a practitioner the action, and answers not found for a stranger’s id', async () => {
@@ -159,6 +185,10 @@ describe('actioning', () => {
           { reason: 'x' },
         )
       ).status,
+    ).toBe(404);
+    // An id that is not one at all is the same answer, not a database error.
+    expect(
+      (await h.callAs('POST', '/api/enquiries/not-an-id/convert', PORTAL.adminAuth)).status,
     ).toBe(404);
   });
 });

@@ -1,7 +1,8 @@
 import type { Hono } from 'hono';
+import { z } from 'zod';
 import { canActor } from '@domain/shared';
 import { leadFromEnquiry, type LodgedEnquiry } from '@domain/enquiry';
-import { logReads } from '../_middleware/audit';
+import { logAction, logReads, refuseContactDetails } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { createLead } from '../clients/create-lead';
 import { ConvertResponse, DismissBody, EnquiryListResponse, type Enquiry } from './schema';
@@ -45,7 +46,7 @@ const COLUMNS =
 
 const SCRUB =
   'name = null, whatsapp_e164 = null, email = null, area = null, message = null, ' +
-  'concern = null, preferred_time = null, contact_method = null, ip_hash = null';
+  'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null';
 
 function toWire(row: Row): Enquiry {
   return {
@@ -99,10 +100,12 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
     if (!canActor(actor, { type: 'enquiry.action' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const id = c.req.param('id');
+    const idParam = z.uuid().safeParse(c.req.param('id'));
+    if (!idParam.success) return c.json({ error: 'not_found', requestId }, 404);
+    const id = idParam.data;
     const { rows } = await db.query<Row>(
       `select ${COLUMNS} from enquiry e left join app_user u on u.id = e.actioned_by ` +
-        "where e.id = $1 and e.status = 'new'",
+        "where e.id = $1 and e.status = 'new' for update of e",
       [id],
     );
     const row = rows[0];
@@ -122,6 +125,8 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
       consent: row.consent,
       source: row.source,
     };
+    // The one read of a row's personal fields outside the list, logged as one.
+    await logReads(db, 'enquiry', [{ id, clientId: null }], 'read');
     const lead = leadFromEnquiry(enquiry);
     const { clientId, mrn } = await createLead(db, actor.tenantId, lead);
     const updated = await db.query(
@@ -132,6 +137,8 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
     if (updated.rowCount !== 1) {
       throw new Error('The enquiry could not be marked converted after its lead was created.');
     }
+    // What happened to the enquiry, in the chain, under the person who did it.
+    await logAction(db, 'convert', { type: 'enquiry', id, clientId }, { source: row.source });
     return c.json(ConvertResponse.parse({ clientId, mrn }), 201);
   });
 
@@ -146,15 +153,30 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
     if (!body.success) {
       return c.json({ error: 'bad_request', field: 'reason', requestId }, 400);
     }
-    const id = c.req.param('id');
-    const updated = await db.query(
+    try {
+      // A number or an address in the reason would put a person back on a
+      // row that, by its own constraint, keeps nothing personal.
+      refuseContactDetails({ reason: body.data.reason });
+    } catch {
+      return c.json({ error: 'bad_request', field: 'reason', requestId }, 400);
+    }
+    const idParam = z.uuid().safeParse(c.req.param('id'));
+    if (!idParam.success) return c.json({ error: 'not_found', requestId }, 404);
+    const id = idParam.data;
+    const updated = await db.query<{ source: string }>(
       `update enquiry set status = 'dismissed', dismiss_reason = $2, actioned_at = now(), actioned_by = $3, ${SCRUB} ` +
-        "where id = $1 and status = 'new'",
+        "where id = $1 and status = 'new' returning source",
       [id, body.data.reason, actor.userId],
     );
     if (updated.rowCount !== 1) {
       return c.json({ error: 'not_found', requestId }, 404);
     }
+    await logAction(
+      db,
+      'dismiss',
+      { type: 'enquiry', id, clientId: null },
+      { source: updated.rows[0]?.source ?? '' },
+    );
     return c.json({ ok: true });
   });
 }

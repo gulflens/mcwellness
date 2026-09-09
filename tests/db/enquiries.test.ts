@@ -39,7 +39,7 @@ function lodging(overrides: Record<string, unknown> = {}): string {
 
 const SCRUB =
   'name = null, whatsapp_e164 = null, email = null, area = null, message = null, ' +
-  'concern = null, preferred_time = null, contact_method = null, ip_hash = null';
+  'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null';
 
 let owner: pg.Client;
 

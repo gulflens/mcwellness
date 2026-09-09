@@ -329,13 +329,26 @@ Recorded here so no later reader mistakes them for the spec's intent.
 
 The quarantine for the website's enquiry forms — the system's first public
 write path (`docs/superpowers/specs/2026-09-09-enquiries-design.md`). A row per
-lodging: `source`, the person's name and number, optional email, area and
-message, the discovery-call form's three answers, a three-valued `consent`, an
-`ip_hash` for the budget, and `status` `new` → `converted` | `dismissed` with
-`actioned_at`, `actioned_by`, `client_id` and `dismiss_reason`. Lodged only
-through `app.lodge_enquiry(jsonb)`, a definer that resolves the practice's one
-tenant and refuses the sixth lodging from one address in ten minutes. Read and
-actioned by owner, admin and lead practitioner. **Unaudited by decision**
-(Option B): no actor exists to name; the route logs every read, and the client a
-conversion creates is audited. Once actioned, every personal field is null —
-two check constraints enforce it — and the row keeps only what happened.
+lodging: `received_at` (when the form arrived; the row's `created_at` is the
+same instant today and stays as the bookkeeping column every table carries),
+`source`, and the personal fields each with its need stated as a column
+comment in migration 916 — the person's `name` and `whatsapp_e164` (required:
+the number to ring back on and what to call them), optional `email` (a second
+way to reply), `area` (whether a home visit reaches them), `message` (what
+they asked, so the call answers it), and the discovery-call form's `concern`,
+`preferred_time` and `contact_method` (so the call opens with the right thing,
+at the time and by the means they asked for) — a three-valued `consent` that
+records only whether the form's tick was ticked, never a purpose, an `ip_hash`
+for the budget, and `status` `new` → `converted` | `dismissed` with
+`actioned_at`, `actioned_by`, `client_id` and `dismiss_reason`. `actioned_by`
+and `client_id` are composite keys on `(tenant_id, …)` like every binding to a
+core row since 099. Lodged only through `app.lodge_enquiry(jsonb)`, a definer
+that resolves the practice's one tenant, refuses an oversized body and the
+sixth lodging from one address in ten minutes. Read and actioned by owner,
+admin and lead practitioner. **Unaudited by decision** (Option B): no actor
+exists to name at lodging; the route logs every read, writes an audit row for
+each conversion and dismissal under the person acting, and the client a
+conversion creates is audited. Once actioned, every personal field is null,
+the tick included, and the row keeps only what happened; a `new` row carries
+nothing of an action, a converted one no reason, a dismissed one no client —
+seven check constraints enforce all of it.

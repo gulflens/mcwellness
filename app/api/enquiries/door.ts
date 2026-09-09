@@ -44,8 +44,10 @@ export type EnquiryDoorOptions = {
   addressOf: (c: Context<ApiEnv>) => string | null;
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function requestIdOf(header: string | undefined): string {
-  return header && /^[0-9a-f-]{36}$/i.test(header) ? header : randomUUID();
+  return header !== undefined && UUID.test(header) ? header : randomUUID();
 }
 
 function originsFrom(override: string | undefined): string[] {
@@ -101,7 +103,11 @@ export function mountEnquiryDoor(api: Hono<ApiEnv>, options: EnquiryDoorOptions)
     let body: Record<string, unknown>;
     try {
       if (type.includes('application/json')) {
-        body = (await c.req.json()) as Record<string, unknown>;
+        const parsed: unknown = await c.req.json();
+        body =
+          parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? (parsed as Record<string, unknown>)
+            : {};
       } else {
         const form = await c.req.parseBody();
         body = Object.fromEntries(
