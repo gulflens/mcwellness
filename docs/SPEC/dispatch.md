@@ -4,8 +4,9 @@
 the upper half of scheduling's range. Entities: `appointment` (reassignment),
 and — in the later pieces — `day_change`, `practitioner_flag` and
 `practitioner_position`. Part A is piece twenty-two; parts B, C and D are
-listed in section 12 rather than specified. Approved by
-`docs/PLAN/dispatch.md` when the operator approves it.*
+listed in section 12 rather than specified. Approved with
+`docs/PLAN/dispatch.md` on 10 September 2026 (decision 11 of
+`docs/OPERATOR/2026-09-10-decisions.md`).*
 
 ## 1. Purpose
 
