@@ -138,10 +138,6 @@ a.rail__item.rail__item--active {
   font-weight: var(--w-medium);
 }
 
-.rail__later {
-  margin-inline-start: auto;
-}
-
 .rail__person {
   flex: none;
   margin-block-start: var(--s-4);
@@ -524,8 +520,7 @@ a.rail__item.rail__item--active {
 /* Closed: the icons stay and the words stand down. Every label is still in the
    markup and hidden the visually-hidden way, so a section closed to an icon
    keeps its accessible name. */
-.admin[data-rail='closed'] .rail__label,
-.admin[data-rail='closed'] .rail__later {
+.admin[data-rail='closed'] .rail__label {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
@@ -579,8 +574,7 @@ a.rail__item.rail__item--active {
 /* Covering, the labels are shown whatever data-rail says: the attribute means
    "the labels are out", and over the page they always are. These undo the
    strip's own hiding, which would otherwise still apply on the way open. */
-.admin[data-rail-mode='overlay'] .rail__label,
-.admin[data-rail-mode='overlay'] .rail__later {
+.admin[data-rail-mode='overlay'] .rail__label {
   position: static;
   inline-size: auto;
   block-size: auto;
@@ -691,15 +685,9 @@ a.rail__item.rail__item--active {
   color: var(--ink-2);
 }
 
-/* Live sections and arriving ones are told apart by weight of colour, not by a
-   second hue: both are the pale label, the arriving one held back. */
+/* A section's label is the pale ink on the rail's violet. */
 a.rail__item {
   color: var(--brand-pale);
-}
-
-.rail__item--later {
-  color: var(--brand-pale);
-  opacity: 0.62;
 }
 
 /* The search field is the primary action: wider, and the status select sits beside it. */

@@ -14,7 +14,6 @@ import {
   PortalIcon,
   RailIcon,
   ScheduleIcon,
-  SessionsIcon,
   SettingsIcon,
   SignOutIcon,
   TodayIcon,
@@ -24,10 +23,11 @@ import {
  * The admin console's left rail: icon and label, and a control that closes it
  * to a strip of icons (docs/DESIGN-BRIEF.md section 6.2, reversed on the
  * operator's instruction of 7 September 2026; docs/SPEC/responsive-console.md
- * section 6). Sections that have not arrived are listed as such, never as dead
- * links.
+ * section 6). Every section is a destination: the rail lists nothing it cannot
+ * open (the last placeholder, Sessions, was removed in trunk round 41,
+ * 2026-09-10, docs/CHANGE-REQUESTS/trunk-notes.md).
  */
-export type RailSection = { key: string; label: string; to?: string; icon: ReactNode };
+export type RailSection = { key: string; label: string; to: string; icon: ReactNode };
 
 export const ADMIN_SECTIONS: readonly RailSection[] = [
   { key: 'clients', label: 'Clients', to: '/admin/clients', icon: <ClientsIcon /> },
@@ -36,7 +36,6 @@ export const ADMIN_SECTIONS: readonly RailSection[] = [
   // one (adminAccess.ts).
   { key: 'enquiries', label: 'Enquiries', to: '/admin/enquiries', icon: <EnquiriesIcon /> },
   { key: 'schedule', label: 'Schedule', to: '/admin/schedule', icon: <ScheduleIcon /> },
-  { key: 'sessions', label: 'Sessions', icon: <SessionsIcon /> },
   { key: 'billing', label: 'Billing', to: '/admin/billing', icon: <BillingIcon /> },
   // The practice's own books. AdminLayout shows it only to the owner and
   // finance (adminAccess.ts): an admin records a household's money and does not
@@ -158,35 +157,21 @@ export function Rail({
         ) : null}
       </div>
       <ul className="rail__list">
-        {sections.map((section) =>
-          section.to ? (
-            <li key={section.key}>
-              <NavLink
-                to={section.to}
-                title={section.label}
-                onClick={onChoose}
-                className={({ isActive }) =>
-                  isActive ? 'rail__item rail__item--active' : 'rail__item'
-                }
-              >
-                {section.icon}
-                <span className="rail__label">{section.label}</span>
-              </NavLink>
-            </li>
-          ) : (
-            <li key={section.key}>
-              <span
-                className="rail__item rail__item--later"
-                aria-disabled="true"
-                title={section.label}
-              >
-                {section.icon}
-                <span className="rail__label">{section.label}</span>
-                <span className="rail__later micro">Arriving</span>
-              </span>
-            </li>
-          ),
-        )}
+        {sections.map((section) => (
+          <li key={section.key}>
+            <NavLink
+              to={section.to}
+              title={section.label}
+              onClick={onChoose}
+              className={({ isActive }) =>
+                isActive ? 'rail__item rail__item--active' : 'rail__item'
+              }
+            >
+              {section.icon}
+              <span className="rail__label">{section.label}</span>
+            </NavLink>
+          </li>
+        ))}
       </ul>
       <div className="rail__person">
         <div className="rail__name rail__label">{person.name}</div>
