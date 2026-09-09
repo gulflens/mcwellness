@@ -12,6 +12,7 @@ import { HomeResponse } from '../api/portal/schema';
 import { useAuth } from '../shell/auth/AuthContext';
 import { MenuIcon } from '../shell/components/Icons';
 import { useDrawer } from '../shell/components/useDrawer';
+import { tierOf } from '../shell/railState';
 import { Note } from '../shell/components/Controls';
 import { PortalLanguage, WORDS, say, usePortalLanguage, useWords } from './i18n';
 import { usePortalRead, type Loaded } from './usePortal';
@@ -93,10 +94,21 @@ export function moneyIsShown(home: Loaded<HomeResponse> | null): boolean {
 function Sidebar({
   onChoose,
   covering,
+  away,
   onClose,
 }: {
   onChoose: () => void;
+  /** Floating over the page: it owes the page a drawer's care. */
   covering: boolean;
+  /**
+   * Parked off the inline start on a phone with the menu shut. `inert` rather
+   * than `visibility: hidden`, which was the first answer and the wrong one: a
+   * hidden element cannot take focus, so `useDrawer`'s focus call landed on
+   * nothing and the person's focus stayed on the body. `inert` takes it out of
+   * the tab order just as completely and is an attribute, so it applies the
+   * moment React sets it rather than after a style recalculation.
+   */
+  away: boolean;
   onClose: () => void;
 }) {
   const words = useWords();
@@ -109,7 +121,7 @@ function Sidebar({
   const first = useRef<HTMLAnchorElement | null>(null);
 
   return (
-    <nav className="portal__rail" aria-label={say(WORDS.portal, locale)} ref={rail}>
+    <nav className="portal__rail" aria-label={say(WORDS.portal, locale)} ref={rail} inert={away}>
       {/* Covering the page, the sidebar owes it what any drawer owes it:
           focus held inside, everything behind inert, Escape to close. The
           console's rail borrows the same hook rather than a second copy. */}
@@ -186,9 +198,19 @@ export function PortalShell({
 }) {
   const { locale } = usePortalLanguage();
   const words = useWords();
-  // Shut on arrival. On a screen wide enough the stylesheet shows the sidebar
-  // regardless, and this only ever describes the covering state.
+  // Shut on arrival, and only ever meaningful while the sidebar covers.
   const [open, setOpen] = useState(false);
+  // The tier is known here rather than left to the stylesheet alone, because
+  // two things need it that CSS cannot do: taking the closed sidebar out of
+  // the tab order, and knowing whether opening it should trap focus. It
+  // follows the window, because a person rotates a tablet.
+  const [width, setWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const covering = tierOf(width) === 'compact';
   // Stable, because useDrawer holds it in an effect's dependency list.
   const close = useCallback(() => setOpen(false), []);
 
@@ -210,8 +232,13 @@ export function PortalShell({
   return (
     <div className="portal" lang={locale} dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       <div className="portal__shell" data-nav={open ? 'open' : 'closed'}>
-        <Sidebar covering={open} onClose={close} onChoose={() => setOpen(false)} />
-        {open ? (
+        <Sidebar
+          covering={covering && open}
+          away={covering && !open}
+          onClose={close}
+          onChoose={() => setOpen(false)}
+        />
+        {covering && open ? (
           // A press anywhere on the page closes the menu. Not announced and not
           // in the tab order: Escape and the button are the announced ways out,
           // and useDrawer has already made everything behind inert.

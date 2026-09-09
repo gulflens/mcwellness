@@ -39,14 +39,13 @@
   background: var(--brand-deep);
   color: var(--brand-pale);
   box-shadow: var(--lift-2);
-  /* Off the inline start until asked for. `visibility` rather than `display`
-     so the slide has something to animate, and so nothing inside is focusable
-     while it is away. */
+  /* Off the inline start until asked for. `transform` alone: `visibility:
+     hidden` was the first answer and it stopped the sidebar taking focus when
+     it opened, because a hidden element cannot be focused and the focus call
+     runs before the style is recalculated. What keeps it out of the tab order
+     while it is away is the `inert` attribute PortalRoot sets. */
   transform: translateX(-101%);
-  visibility: hidden;
-  transition:
-    transform var(--motion) var(--ease),
-    visibility var(--motion) var(--ease);
+  transition: transform var(--motion) var(--ease);
 }
 
 :dir(rtl) .portal__rail {
@@ -55,7 +54,6 @@
 
 .portal__shell[data-nav='open'] .portal__rail {
   transform: none;
-  visibility: visible;
 }
 
 .portal__brand {
@@ -358,7 +356,6 @@
     z-index: auto;
     box-shadow: none;
     transform: none;
-    visibility: visible;
     transition: none;
   }
 
