@@ -602,8 +602,11 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
-**As of 10 September the operator's open items are
-`docs/OPERATOR/2026-09-10-decisions.md`**: twelve decisions, each with what it
+**Answered on 10 September at 05:47 on the operator's clock**: the twelve
+answers and what follows from each are at the head of the sheet; the books'
+start day is set on production and the staging app is off the leaked key
+(one dashboard click left). **As of 10 September the operator's open items
+are `docs/OPERATOR/2026-09-10-decisions.md`**: twelve decisions, each with what it
 blocks, the default in force and a recommended answer, and four acts only the
 operator can do (pausing the old app's project, the Better Stack sign-up, a
 line to Hostinger about its IPv6 edge, the translation rule in the QEEG Report

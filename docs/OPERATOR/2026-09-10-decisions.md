@@ -13,6 +13,42 @@ recommended and why, and the one line to reply with. Where you agree with the
 recommendation, "as recommended" is a complete answer. At the end are four
 acts only you can do from your own accounts, and one draft ready to send.
 
+## Answered, 10 September 2026 at 05:47 (the operator's clock)
+
+The operator answered every item in one message. Each answer, and what
+follows from it:
+
+| # | Answer | What follows |
+|---|---|---|
+| 1 | The books start on **15 September 2026**; nothing said on the relief, so it stays elected pending the adviser | The start day is set on production under the founder's account, with the reason recorded; the first opening of Books posts nothing dated before it |
+| 2 | As recommended | Unregistered; the tax-point question goes to the adviser in writing; nothing built |
+| 3 | **30 days** | The Enquiries screen surfaces an enquiry still new after thirty days as waiting, with one press to dismiss; nothing dismisses itself. Built in the next trunk round |
+| 4 | As recommended | One takings figure for everyone, an erased household's money included. A billing round with its own short plan |
+| 5 | As recommended | Check-in admits confirmed visits only, refusing a proposed one with a plain sentence. Built in the next trunk round, in the session-capture stream's paths |
+| 6 | **Not until mid 2027** | No service type for Compassionate Inquiry until then; nothing built |
+| 7 | **Leave it off** | The certification gate stays off; nothing built |
+| 8 | As recommended | A progress report prints the practitioner's observation and no brain-map figure; nothing built |
+| 9 | As recommended, **with two three-month extensions** | Packages expire six months from purchase; up to two extensions of three months each on request, no charge; the notice period and fee stay 24 hours and AED 150. A billing round with its own short plan |
+| 10 | **Mark this feature as coming soon** | The questionnaire and the reading of the equipment's export are shown as coming soon on the assessment screens rather than waiting on a file; the practitioner keeps typing the figures. Built in the next trunk round |
+| 11 | **Build the dispatcher** | The plan and specification on pull request 128 are approved: the board first (piece twenty-two), then telling and hearing back, the notification, and live location last with its consent page. Pull request 127, the practitioner on site, stays open and unbuilt |
+| 12 | **Do it for me** | The staging project's leaked legacy service-role key is retired: a new secret key of the current kind is minted, placed in the laptop's staging settings without being shown, and the legacy keys are switched off, which invalidates the old one. Recorded below when done |
+
+## Done since the answers, the same hour
+
+- **Decision 1.** The books' start day on production is **15 September 2026**,
+  set at 21:53 UTC under the founder's account through the API with the
+  reason recorded, with the entry count read as zero before and after.
+  Small Business Relief stays elected; the adviser's line is still wanted.
+- **Decision 12, half.** The staging app no longer uses the leaked key: the
+  project's current-style secret key was placed in the laptop's staging
+  settings without being shown, the staging server restarted on it (health
+  and deep health green) and the key proved against the storage API. **The
+  leaked legacy key is still valid until the legacy keys are switched off**,
+  which the management API does with a token this session may not read in
+  its current mode. One click finishes it: Supabase dashboard, project
+  `mcwellness` (the staging one), Settings › API Keys, "Disable legacy API
+  keys". Nothing on staging still uses them.
+
 ## The twelve decisions
 
 ### 1. The day the books start, and Small Business Relief
