@@ -2939,6 +2939,20 @@ the change goes through the sign-in provider's one new method,
 `updatePassword`, which the development door does not have — the page says
 so rather than pretending.
 
+**What is recorded, and what is not.** A colleague's password reset by the
+office is in the trail (round 39, `password_reset`). A person changing their
+own is not, anywhere durable: Supabase Auth's own log of it is kept for days,
+not years, and the practice writes no row — by decision, because the actor
+and the subject are one person and the trail's question is who touched a
+household's data. Putting a trigger on Supabase's `auth.users` to write one
+was weighed and declined: a trigger on a vendor's table, a failure in which
+would block every password change. The review of this round asked for this
+paragraph rather than the trigger. Two smaller notes from the same review: a
+household contact who types the address reaches this page in English, since
+it sits in the console's shell rather than the portal's, and the portal
+offers no link to it yet; and `app/shell/App.test.tsx` carries three names
+from before the seed list existed, for a later tidy.
+
 **Every file is the trunk's**: `domain/shared/password.ts` with its test and
 the barrel; `app/shell/auth/types.ts`, `supabase-auth.ts`;
 `app/shell/pages/PasswordPage.tsx` with its test; `app/shell/App.tsx`,
