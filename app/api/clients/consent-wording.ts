@@ -20,8 +20,10 @@ import { ConsentWordingResponse } from './record-schema';
  * **Which wording is the current one.** The approved version if the practice
  * has one, and otherwise the latest draft, and the answer always says which:
  * `status` is on the response and the screen shows a draft line above the pad
- * (docs/CONSENT/README.md — every wording is a draft until the practice's
- * lawyer approves it, and the person signing is told so). Retired versions are
+ * (docs/CONSENT/README.md — the practice's legal advisor approved the wording
+ * on 2026-09-09, so the current texts are approved and no line shows; a draft
+ * filed later would show one again, and the person signing is told either
+ * way). Retired versions are
  * excluded outright: `retired_at` is what the practice sets when a newer
  * version replaces one, and migration 902's partial unique index already
  * guarantees at most one approved, non-retired wording per purpose and

@@ -11,16 +11,16 @@
  * neither supersedes the other.
  *
  * **The two standing sentences are the consent's own words**, taken from
- * `docs/CONSENT/participation.en.md` section 2 and its Arabic twin, so the
- * report and the document the household signed can never drift apart. They are
+ * `docs/CONSENT/agreement.en.md` and its Arabic twin, so the report and the
+ * document the household signed can never drift apart. They are
  * quoted rather than paraphrased for that reason, and they are the only place
  * in this folder where the word "diagnosis" appears at all.
  *
  * **And the draft line** (section 5, and section 10's decision 5): until the
- * practice's lawyer has approved the wording, every copy carries a visible
- * line saying so, exactly as every text in `docs/CONSENT` carries
- * `status: draft` today. It is removed by the pull request that carries the
- * approved wording, and by nothing else.
+ * practice's lawyer had approved the wording, every copy carried a visible
+ * line saying so. The advisor approved it on 2026-09-09 and this round is the
+ * pull request that carries the approved text, so the line is off and every
+ * wording in `docs/CONSENT` reads `status: approved`.
  *
  * British English throughout, and no word here belongs to the trade that built
  * it: a family reads "Report", never "document id" or "record".
@@ -105,19 +105,24 @@ export const REFERENCE_BASIS: Phrase = {
 };
 
 /**
- * The first standing sentence, word for word from
- * `docs/CONSENT/participation.en.md` section 2 and its Arabic twin.
+ * The first standing sentence, word for word from `docs/CONSENT/agreement.en.md`
+ * section "What we do" and its Arabic twin.
+ *
+ * Re-pointed on 2026-09-09, when the approved wording replaced the drafts this
+ * used to quote. The words changed because the document changed; the rule did
+ * not, and it is the whole reason this constant exists rather than a
+ * paraphrase — a report and the page a household actually signed say the same
+ * thing about what the practice is, or the guarantee is worthless. A test in
+ * this folder reads the file and fails if the two ever drift.
  */
 export const NOT_A_CLINIC: Phrase = {
   en:
-    'McWellness is a wellness provider, not a medical clinic. We do not diagnose or treat ' +
-    'medical or psychiatric conditions, and we do not prescribe or advise on medication. Our ' +
-    'services are not a substitute for care from your doctor or other health professional, and ' +
-    'you should keep seeing them.',
+    'We are a wellness practice, not a clinic. We do not diagnose or treat medical or ' +
+    'psychological conditions, and we are not an emergency service. Keep seeing your doctor. ' +
+    'People respond differently and we cannot promise a result.',
   ar:
-    'McWellness مقدّم خدمات عافية، وليس عيادة طبية. نحن لا نشخّص الحالات الطبية أو النفسية ولا ' +
-    'نعالجها، ولا نصف الأدوية ولا نقدّم مشورة بشأنها. خدماتنا ليست بديلاً عن رعاية طبيبك أو أي ' +
-    'مختص صحي آخر، وعليك الاستمرار في مراجعتهم.',
+    'نحن مركز عافية ولسنا عيادة. لا نشخّص ولا نعالج أي حالة طبية أو نفسية، ولسنا خدمة طوارئ. ' +
+    'استمر في مراجعة طبيبك. تختلف استجابة الأشخاص ولا يمكننا أن نعدك بنتيجة.',
 };
 
 /**
@@ -164,8 +169,14 @@ export const DRAFT_WORDING: Phrase = {
  * Whether the draft line is printed. A constant rather than a setting: the
  * wording is approved by a person, once, and the pull request that carries the
  * approved text is what turns this off. A column would let a screen turn it off.
+ *
+ * **Off since 2026-09-09.** The practice's legal advisor approved the wording,
+ * subject to four changes this same round carries
+ * (docs/CONSENT/README.md). `DRAFT_WORDING` above is kept rather than deleted,
+ * because this is a constant a future draft would turn back on and the
+ * sentence it prints should not have to be re-invented to do it.
  */
-export const WORDING_IS_DRAFT = true;
+export const WORDING_IS_DRAFT = false;
 
 const MONTHS = [
   'January',

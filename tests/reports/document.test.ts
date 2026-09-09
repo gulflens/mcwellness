@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import { NOT_A_DIAGNOSIS as SCREEN_SENTENCE } from '../../app/admin/assessments/copy';
@@ -6,7 +7,9 @@ import { extractAll, extractText, toVisualOrder } from '../../domain/shared/docu
 import {
   COMPARISON_NOT_A_DIAGNOSIS,
   layout,
+  NOT_A_CLINIC,
   renderReport,
+  WORDING_IS_DRAFT,
   WORDS,
 } from '../../domain/reports/document';
 import { BAND_RGB } from '../../domain/shared';
@@ -206,12 +209,32 @@ describe('a rendered session report', () => {
   });
 
   it('carries the two standing sentences, in the consent’s own words', () => {
-    expect(text).toContain('McWellness is a wellness provider, not a medical clinic');
+    expect(text).toContain('We are a wellness practice, not a clinic.');
     expect(text).toContain('It is not a diagnosis.');
   });
 
-  it('carries the draft line on every copy, until the wording is approved', () => {
-    expect(text).toContain("Draft wording, in use until the practice's lawyer approves");
+  it('quotes the approved agreement word for word, so the two cannot drift', () => {
+    // The whole reason NOT_A_CLINIC is a quotation rather than a paraphrase: a
+    // report and the page a household actually signed say the same thing about
+    // what the practice is. If somebody edits the wording without editing the
+    // report, this is what tells them.
+    // The markdown is hard-wrapped for a person reading a file; the report is
+    // laid out by the renderer. Compared with whitespace flattened, so the
+    // words are what must match and not where the lines happen to break.
+    const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
+    expect(flat(readFileSync('docs/CONSENT/agreement.en.md', 'utf8'))).toContain(
+      flat(NOT_A_CLINIC.en),
+    );
+    expect(flat(readFileSync('docs/CONSENT/agreement.ar.md', 'utf8'))).toContain(
+      flat(NOT_A_CLINIC.ar),
+    );
+  });
+
+  it('carries no draft line, now that the wording is approved', () => {
+    // The advisor approved it on 2026-09-09. Every text in docs/CONSENT reads
+    // status: approved, so no copy tells a household it is reading a draft.
+    expect(text).not.toContain('Draft wording');
+    expect(WORDING_IS_DRAFT).toBe(false);
   });
 
   it('says the reference is the practice’s own and not a tax number', () => {
@@ -225,13 +248,14 @@ describe('a rendered session report', () => {
   });
 
   it('makes no medical claim beyond the consent’s own two sentences', () => {
-    // Twice each, and every one is the consent's own. "diagnose or treat" in
-    // the line saying this is not a clinic, and "it is not a diagnosis" about
-    // a measurement; "not a medical clinic" and "medical or psychiatric
-    // conditions" in the same line. Counted rather than merely looked for, so
-    // a third occurrence from anywhere else fails here.
+    // Every one is the consent's own. "diagnose or treat" in the line saying
+    // this is not a clinic, and "it is not a diagnosis" about a measurement;
+    // "medical or psychological conditions" once, in that same line. Counted
+    // rather than merely looked for, so an occurrence from anywhere else fails
+    // here. The approved wording of 2026-09-09 says "clinic" where the draft
+    // said "medical clinic", which is why "medical" is one and not two.
     expect(text.match(/diagnos/gi)?.length).toBe(2);
-    expect(text.match(/medical/gi)?.length).toBe(2);
+    expect(text.match(/medical/gi)?.length).toBe(1);
     for (const forbidden of ['patient', 'treatment', 'therapy', 'cure', 'symptom']) {
       expect(text.toLowerCase()).not.toContain(forbidden);
     }

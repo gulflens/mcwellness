@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { CONSENT_PURPOSES, requiredConsents, type ConsentPurpose } from '@domain/client';
+import { OFFERED_CONSENT_PURPOSES, requiredConsents, type ConsentPurpose } from '@domain/client';
 import {
   WithdrawConsentResponse,
   type ClientRecordResponse,
@@ -180,13 +180,23 @@ export function ConsentTab({
     }
   }
 
-  // Every purpose the practice can record, with the required ones first: the
+  // Every purpose the practice asks for, with the required ones first: the
   // list is the same on every record, so nothing has to be looked for twice,
   // and what this client still needs sits at the top.
-  const purposes = [...CONSENT_PURPOSES].sort((a, b) => {
-    const weight = (purpose: ConsentPurpose) => (required.has(purpose) ? 0 : 1);
-    return weight(a) - weight(b);
-  });
+  //
+  // Plus any purpose this household has actually agreed to, even one the
+  // practice has retired. `photo_video`, `research` and `marketing` are no
+  // longer offered to anybody (docs/CONSENT/README.md, 2026-09-09), but a
+  // household that agreed to one before then still did, and a consent screen
+  // that hides an agreement somebody gave is a screen that lies about them.
+  // They appear only where a row exists, so a fresh record shows four.
+  const held = new Set(record.consents.map((consent) => consent.purpose));
+  const purposes = [...new Set<ConsentPurpose>([...OFFERED_CONSENT_PURPOSES, ...held])].sort(
+    (a, b) => {
+      const weight = (purpose: ConsentPurpose) => (required.has(purpose) ? 0 : 1);
+      return weight(a) - weight(b);
+    },
+  );
 
   return (
     <div className="tab-section">
