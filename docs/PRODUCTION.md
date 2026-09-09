@@ -383,7 +383,9 @@ function "The first practice" above describes and asks for.
   thirty-one `INFO` rows, counted directly against `pg_class` rather than
   assumed. Nothing at `WARN` or above on production; staging carries the
   same thirty-one plus its own already-known leaked-password-protection
-  `WARN`, unrelated to this pass.
+  `WARN`, unrelated to this pass. (Corrected 10 September 2026: the same
+  `WARN` was on production too, and both were closed that night by switching
+  leaked-password protection on — `docs/SECURITY.md`, "Switched on".)
 
 Still out of scope, still on purpose: no seed, no demo visit, no password
 set, no user created, and `app.bootstrap_practice` still uncalled. The door

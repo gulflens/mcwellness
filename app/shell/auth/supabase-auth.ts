@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { keptSessionStorage, writeSessionStore } from './session-storage';
-import type { AuthProvider } from './types';
+import { PasswordChangeError, type AuthProvider } from './types';
 
 /** The real sign-in: Supabase Auth, email and password, sessions refreshed by the client library. */
 export function supabaseAuth(url: string, anonKey: string): AuthProvider {
@@ -35,6 +35,44 @@ export function supabaseAuth(url: string, anonKey: string): AuthProvider {
     async signOut() {
       // Supabase removes the session through the store above, which clears both.
       await client.auth.signOut();
+    },
+    async updatePassword(newPassword, currentPassword) {
+      // Supabase verifies the current password (a project setting, on since
+      // 2026-09-10), applies its own floor and its leaked-password check, and
+      // keeps this browser signed in. The practice's own rule for what a
+      // password may be is the page's (domain/shared/password.ts). Only the
+      // error's code is read, never its message.
+      const { error } = await client.auth.updateUser({
+        password: newPassword,
+        current_password: currentPassword,
+      });
+      if (error) {
+        const code = (error as { code?: string }).code ?? '';
+        if (code === 'weak_password') {
+          throw new PasswordChangeError(
+            'weak',
+            'That password is on a list of leaked passwords, or too short. Choose another.',
+          );
+        }
+        if (code === 'same_password') {
+          throw new PasswordChangeError('same', 'That is the password you already have.');
+        }
+        if (code === 'invalid_credentials' || code === 'reauthentication_not_valid') {
+          throw new PasswordChangeError('current', 'The current password is not right.');
+        }
+        if (
+          code === 'session_not_found' ||
+          code === 'reauthentication_needed' ||
+          error.name === 'AuthSessionMissingError'
+        ) {
+          throw new PasswordChangeError('session', 'Sign in again, then change it.');
+        }
+        throw new PasswordChangeError('unknown', 'The password could not be changed. Try again.');
+      }
+    },
+    async currentEmail() {
+      const { data } = await client.auth.getSession();
+      return data.session?.user.email ?? null;
     },
     async getAccessToken() {
       const { data } = await client.auth.getSession();

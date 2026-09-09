@@ -74,6 +74,18 @@ describe('who works at the practice', () => {
     expect(again.status).toBe(409);
   });
 
+  it("records a person's own password change as an act under their id, and nothing else", async () => {
+    const res = await h.callAs('POST', '/api/me/password-changed', PORTAL.practitionerAuth);
+    expect(res.status).toBe(200);
+    const trail = await h.owner.query<{ n: string; values: string | null }>(
+      'select count(*)::text as n, max(new_values::text) as values from audit_log ' +
+        "where action = 'password_changed' and entity_type = 'app_user' and entity_id = $1 and actor_id = $1",
+      [PORTAL.practitioner],
+    );
+    expect(trail.rows[0]?.n).toBe('1');
+    expect(trail.rows[0]?.values ?? '{}').toBe('{}');
+  });
+
   it('never offers ownership, and refuses a body without a working role', async () => {
     for (const roles of [['owner'], ['client_contact'], []]) {
       const res = await h.callAs('POST', '/api/team', PORTAL.adminAuth, {

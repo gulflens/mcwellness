@@ -75,6 +75,14 @@ export const EnquiriesIcon = (p: IconProps) => (
   </Icon>
 );
 
+/** A key: the person's own password. */
+export const KeyIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="7" cy="10" r="3.25" />
+    <path d="M10.25 10h6.5M14 10v2.5M16.75 10v2" />
+  </Icon>
+);
+
 export const AuditIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M10 2.75 4 5v4.5c0 3.4 2.5 6.2 6 7.75 3.5-1.55 6-4.35 6-7.75V5z" />

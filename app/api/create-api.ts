@@ -34,6 +34,7 @@ import { isRoutingUnavailable, withRouting } from './_middleware/routing';
 import { mountAccounting } from './accounting/routes';
 import { mountAppointments } from './appointments/routes';
 import { mountAssessments } from './assessments/mount';
+import { logAction } from './_middleware/audit';
 import { mountActivity } from './audit/activity';
 import { mountTimeline } from './audit/timeline';
 import { mountBilling } from './billing/routes';
@@ -420,6 +421,20 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
       },
     }),
   );
+
+  // A person changed their own password with the sign-in provider: the act,
+  // never the value, in the practice's trail under their own id
+  // (app/shell/pages/PasswordPage.tsx; trunk round 40).
+  api.post('/api/me/password-changed', async (c) => {
+    const actor = c.get('actor');
+    await logAction(
+      c.get('db'),
+      'password_changed',
+      { type: 'app_user', id: actor.userId, clientId: null },
+      {},
+    );
+    return c.json({ ok: true });
+  });
 
   api.get('/api/me', async (c) => {
     const actor = c.get('actor');

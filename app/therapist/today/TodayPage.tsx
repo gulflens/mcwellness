@@ -815,6 +815,9 @@ export function TodayPage() {
               Your home base
             </Button>
           ) : null}
+          <Button variant="quiet" onClick={() => navigate('/account/password')}>
+            Password
+          </Button>
           <Button variant="quiet" onClick={() => void signOut()}>
             Sign out
           </Button>

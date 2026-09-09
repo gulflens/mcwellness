@@ -8,6 +8,7 @@ import {
   BooksIcon,
   ClientsIcon,
   EnquiriesIcon,
+  KeyIcon,
   KitIcon,
   PinIcon,
   PortalIcon,
@@ -190,6 +191,10 @@ export function Rail({
       <div className="rail__person">
         <div className="rail__name rail__label">{person.name}</div>
         <div className="micro rail__label">{person.roles}</div>
+        <NavLink to="/account/password" className="rail__signout" title="Password">
+          <KeyIcon />
+          <span className="rail__label">Password</span>
+        </NavLink>
         <button type="button" className="rail__signout" onClick={onSignOut} title="Sign out">
           <SignOutIcon />
           <span className="rail__label">Sign out</span>
