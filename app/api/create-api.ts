@@ -74,32 +74,13 @@ export const BODY_LIMIT_BYTES = 64 * 1024;
 const LOGO_PATH = '/api/practice/logo';
 export const LOGO_BODY_LIMIT_BYTES = MAX_LOGO_BASE64_LENGTH + LOGO_ENVELOPE_ALLOWANCE_BYTES;
 /**
- * The other one, and it is raw bytes rather than a form: the setup photograph,
- * compressed on the device to at most a megabyte
- * (app/therapist/session/photo.ts, docs/SPEC/practitioner-phone.md section
- * 4.3). There is no base64 envelope here because the body *is* the picture, so
- * the cap is the picture's own.
- */
-export const PHOTO_LIMIT_BYTES = 1024 * 1024;
-/** `PUT /api/sessions/:id/photo`, matched by shape because the id is in the path. */
-const PHOTO_PATH = /^\/api\/sessions\/[^/]+\/photo$/;
-/**
- * The method as well as the path. The photograph's door is a `PUT` and only a
- * `PUT`; every other method on that address is a 404 the router has not
- * reached yet, and matching on the path alone handed those a megabyte of room
- * and a pass out of `jsonOnly` for nothing.
- */
-function isPhotoUpload(method: string, path: string): boolean {
-  return method === 'PUT' && PHOTO_PATH.test(path);
-}
-/**
- * And the third, the largest, and raw for the same reason the photograph is:
+ * And the second, the largest, and raw because the body *is* the file:
  * the equipment's own export (docs/SPEC/assessment.md section 7.1,
  * docs/CHANGE-REQUESTS/assessment-01.md item 2 and assessment-02.md item 1).
  * The Documents tab cannot carry one — its envelope is 45 KB inside the 64 KB
  * body every other route keeps — so this path has a cap of its own and a pass
- * out of `jsonOnly`, matched by method and path together exactly as
- * `isPhotoUpload` is. The route itself accepts two declared media types,
+ * out of `jsonOnly`, matched by method and path together rather than by path
+ * alone. The route itself accepts two declared media types,
  * decides which of three kinds the bytes are from the bytes themselves, and
  * verifies the digest the browser declared (app/api/assessments/file.ts).
  *
@@ -118,7 +99,7 @@ function isAssessmentFileUpload(method: string, path: string): boolean {
 }
 /** The two raw-body doors, which are the only paths exempt from `jsonOnly`. */
 function isRawUpload(method: string, path: string): boolean {
-  return isPhotoUpload(method, path) || isAssessmentFileUpload(method, path);
+  return isAssessmentFileUpload(method, path);
 }
 export const REQUEST_TIMEOUT_MS = 10_000;
 /**
@@ -285,14 +266,12 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   // path, one method's worth of bytes, and not a raised floor for everything.
   const defaultBodyLimit = bodyLimit({ maxSize: BODY_LIMIT_BYTES, onError: payloadTooLarge });
   const logoBodyLimit = bodyLimit({ maxSize: LOGO_BODY_LIMIT_BYTES, onError: payloadTooLarge });
-  const photoBodyLimit = bodyLimit({ maxSize: PHOTO_LIMIT_BYTES, onError: payloadTooLarge });
   const assessmentFileLimit = bodyLimit({
     maxSize: ASSESSMENT_FILE_LIMIT_BYTES,
     onError: payloadTooLarge,
   });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
-    if (isPhotoUpload(c.req.method, c.req.path)) return photoBodyLimit(c, next);
     if (isAssessmentFileUpload(c.req.method, c.req.path)) return assessmentFileLimit(c, next);
     return defaultBodyLimit(c, next);
   });
@@ -306,10 +285,11 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
       ? assessmentFileTimeout(c, next)
       : ordinaryTimeout(c, next),
   );
-  // Two paths carry a file rather than JSON, and they are the only two: each
+  // One path carries a file rather than JSON, and it is the only one: the
   // route refuses any media type but the ones it names, checks the bytes
   // against the type, and verifies the digest the caller declared
-  // (app/api/sessions/photo.ts, app/api/assessments/file.ts).
+  // (app/api/assessments/file.ts). The setup photograph was the other until
+  // 2026-09-09; the practice takes none, so its door is gone with it.
   api.use('/api/*', async (c, next) =>
     isRawUpload(c.req.method, c.req.path) ? next() : jsonOnly(c, next),
   );

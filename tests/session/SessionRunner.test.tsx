@@ -64,8 +64,6 @@ const VISIT: RunnerVisit = {
   number: 12,
   of: 30,
   serviceTypeId: SERVICE_TYPE_ID,
-  photoConsent: 'refused',
-  previousSetupPhotoDocumentId: null,
   lastSeq: 1,
   shareLocation: false,
 };
@@ -95,19 +93,6 @@ function mount(
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
-    if (init?.method === 'PUT' && url.endsWith('/photo')) {
-      put.push({ url, type: init.headers ? new Headers(init.headers).get('content-type') : null });
-      return json({ status: 'filed', documentId: '00000000-0000-4000-8000-0000000000f9' }, 201);
-    }
-    if (url.includes('/api/sessions/photo/') && url.endsWith('/link')) {
-      // Same origin, as the local store's own signed links are, so the bytes
-      // below are asked for through apiFetch.
-      return json({
-        url: '/api/storage/a-signed-key',
-        mimeType: 'image/jpeg',
-        expiresInSeconds: 300,
-      });
-    }
     if (url.startsWith('/api/storage/')) {
       return new Response(new Uint8Array([255, 216, 255, 224]), {
         status: 200,
@@ -305,39 +290,18 @@ describe('ending the session', () => {
 });
 
 describe('after the session', () => {
-  it('never offers the camera, and says the household has not agreed when that is why', async () => {
+  it('offers no camera at all, and says nothing about photographs', async () => {
+    // The practice takes none since its legal advisor's recommendation of
+    // 2026-09-09, so this screen has no third section and no promise to make:
+    // there is no consent that could permit a photograph, no route to send one
+    // through, and nothing on the device that could prepare one.
     await reachRun();
     endSession();
     await screen.findByRole('heading', { name: 'After the session' });
 
-    expect(screen.queryByRole('button', { name: 'Take a photo' })).toBeNull();
-    expect(
-      screen.getByText(
-        'This household has not agreed to photographs, so no photo can be taken. The practice can ask them.',
-      ),
-    ).toBeTruthy();
-  });
-
-  it('says it cannot check, rather than that they refused, on a resume with no signal', async () => {
-    await reachRun({ visit: { photoConsent: 'unknown' } });
-    endSession();
-    await screen.findByRole('heading', { name: 'After the session' });
-
-    expect(
-      screen.getByText(
-        'This device cannot check whether the household has agreed to photographs until it is back online.',
-      ),
-    ).toBeTruthy();
-    expect(screen.queryByText(/has not agreed to photographs/)).toBeNull();
-  });
-
-  it('holds the practitioner to what the photo is for', async () => {
-    await reachRun({ visit: { photoConsent: 'given' } });
-    endSession();
-    expect(
-      await screen.findByText('The sensor placement only: not the face, and not the room.'),
-    ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Take a photo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /photo/i })).toBeNull();
+    expect(screen.queryByText(/photograph/i)).toBeNull();
+    expect(screen.queryByText('Setup photo')).toBeNull();
   });
 
   it('asks for one reading of the whole session when none was taken during it', async () => {
@@ -601,93 +565,3 @@ describe('what the outbox is given', () => {
  * appears only under an active consent, the bytes wait behind their own event,
  * and the pre-flight offers the last placement only when there is one.
  */
-describe('the setup photograph', () => {
-  /** A one-pixel file: `preparePhoto` needs a real decode, so this is stubbed. */
-  function stubPreparedPhoto(): void {
-    vi.stubGlobal(
-      'createImageBitmap',
-      vi.fn(async () => ({ width: 100, height: 80, close: () => undefined })),
-    );
-    // jsdom's canvas has no 2d context and no toBlob; both are stood in for.
-    const canvas = HTMLCanvasElement.prototype as unknown as {
-      getContext: unknown;
-      toBlob: unknown;
-    };
-    canvas.getContext = () => ({ drawImage: () => undefined });
-    canvas.toBlob = (callback: (blob: Blob | null) => void) => {
-      callback(new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }));
-    };
-  }
-
-  it('offers the camera when the household has agreed, and keeps what it takes', async () => {
-    stubPreparedPhoto();
-    const { posted, put, store } = await reachRun({ visit: { photoConsent: 'given' } });
-    endSession();
-    await screen.findByRole('heading', { name: 'After the session' });
-
-    const camera = screen.getByLabelText('Take the setup photo');
-    fireEvent.change(camera, {
-      target: { files: [new File([new Uint8Array([1, 2, 3, 4])], 'placement.jpg')] },
-    });
-
-    // The event names the digest; the bytes follow it.
-    await waitFor(() => expect(kinds(posted)).toContain('photo_captured'));
-    await waitFor(() => expect(put).toHaveLength(1));
-    expect(put[0]?.type).toBe('image/jpeg');
-    // Filed, so the device is done with it.
-    await waitFor(async () => expect(await store.blobs()).toEqual([]));
-    expect(screen.getByRole('button', { name: 'Take it again' })).toBeTruthy();
-  });
-
-  it('never offers the camera when the household has not agreed', async () => {
-    await reachRun({ visit: { photoConsent: 'refused' } });
-    endSession();
-    await screen.findByRole('heading', { name: 'After the session' });
-    expect(screen.queryByLabelText('Take the setup photo')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Take the photo' })).toBeNull();
-  });
-
-  it('offers the last placement only when there is one', async () => {
-    mount();
-    await screen.findByRole('heading', { name: 'Before you start' });
-    expect(screen.queryByRole('button', { name: 'Show last placement' })).toBeNull();
-
-    cleanup();
-    mount({ visit: { previousSetupPhotoDocumentId: '00000000-0000-4000-8000-0000000000f8' } });
-    await screen.findByRole('heading', { name: 'Before you start' });
-    expect(screen.getByRole('button', { name: 'Show last placement' })).toBeTruthy();
-  });
-
-  it('shows the last placement on this screen, and never opens or downloads it', async () => {
-    const opened = vi.spyOn(window, 'open').mockReturnValue(null);
-    mount({ visit: { previousSetupPhotoDocumentId: '00000000-0000-4000-8000-0000000000f8' } });
-    await screen.findByRole('heading', { name: 'Before you start' });
-    fireEvent.click(screen.getByRole('button', { name: 'Show last placement' }));
-
-    // An image on this screen, from an object URL — not a new tab, and not a
-    // file in the device's Downloads folder beyond forgetDevice's reach.
-    const picture = await screen.findByRole('img', { name: 'The sensor placement last time' });
-    expect(picture.getAttribute('src')).toMatch(/^blob:/);
-    expect(opened).not.toHaveBeenCalled();
-    expect(document.querySelector('a[download]')).toBeNull();
-
-    // Closing it puts the button back, and takes the picture away.
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-    await waitFor(() =>
-      expect(screen.queryByRole('img', { name: 'The sensor placement last time' })).toBeNull(),
-    );
-    expect(screen.getByRole('button', { name: 'Show last placement' })).toBeTruthy();
-    opened.mockRestore();
-  });
-
-  it('says the last placement needs a connection rather than failing at a door', async () => {
-    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
-    mount({ visit: { previousSetupPhotoDocumentId: '00000000-0000-4000-8000-0000000000f8' } });
-    await screen.findByRole('heading', { name: 'Before you start' });
-    fireEvent.click(screen.getByRole('button', { name: 'Show last placement' }));
-    expect(
-      await screen.findByText('The last placement is not available without a connection.'),
-    ).toBeTruthy();
-    online.mockRestore();
-  });
-});

@@ -14,24 +14,6 @@ export type ServiceSettings = {
 
 export type GeoPoint = { lat: number; lng: number };
 
-/**
- * Whether the household has agreed to photographs. Three answers, not two:
- * a visit resumed with no signal cannot ask, and telling the practitioner
- * the household refused when nobody has been asked is a lie about a person.
- */
-export type PhotoConsent = 'given' | 'refused' | 'unknown';
-
-/**
- * What became of the setup photograph on this device, for the one line the
- * post step shows about it. Never an alarm: a picture waiting to sync is the
- * ordinary case in a living room with no signal.
- */
-export type PhotoState =
-  | { kind: 'none' }
-  | { kind: 'preparing' }
-  | { kind: 'kept'; sizeBytes: number }
-  | { kind: 'failed' };
-
 export type SiteReading = { site: string; quality: number };
 
 /** A reading typed off the amplifier's own software (section 3.3, section 3.4). */

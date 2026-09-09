@@ -86,23 +86,6 @@ export const CheckInResponse = z.discriminatedUnion('status', [
     status: z.literal('checked_in'),
     sessionId: z.uuid(),
     checkedInAt: z.iso.datetime(),
-    /**
-     * Whether the household's `photo_video` consent is active right now
-     * (00-data-model.md section 3). The runner offers the setup photo only
-     * when it is, and says why when it is not — the server refuses one
-     * either way (app/api/sessions/events.ts), so this is a courtesy to the
-     * practitioner, never the boundary. Defaulted, so a device reading an
-     * older server's answer simply does not offer the camera.
-     */
-    photoConsent: z.boolean().default(false),
-    /**
-     * The photograph on this client's most recent completed visit, or null
-     * (docs/SPEC/practitioner-phone.md section 4.5). The pre-flight step shows
-     * a button and fetches the picture only on the tap, so nothing is read
-     * unasked; this is only the handle the button needs. An opaque document
-     * id, which is what `.claude/rules/ui.md` means by routing by ids alone.
-     */
-    previousSetupPhotoDocumentId: z.uuid().nullable().default(null),
   }),
   z.object({
     status: z.literal('blocked'),
@@ -299,10 +282,6 @@ export const OpenSession = z.object({
   number: z.number().int().positive(),
   of: z.number().int().positive().nullable(),
   lastSeq: z.number().int().min(0),
-  /** As on the check-in response: whether the setup photo may be offered at all. */
-  photoConsent: z.boolean().default(false),
-  /** As on the check-in response: the last placement, for the pre-flight's own button. */
-  previousSetupPhotoDocumentId: z.uuid().nullable().default(null),
 });
 export type OpenSession = z.infer<typeof OpenSession>;
 

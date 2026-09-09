@@ -193,8 +193,6 @@ function visitFromOpen(open: {
   number: number;
   of: number | null;
   lastSeq: number;
-  photoConsent: boolean;
-  previousSetupPhotoDocumentId: string | null;
 }): RunnerVisit {
   const initial = (open.clientFamilyInitial ?? '').trim();
   const name = open.clientGivenName.trim();
@@ -205,8 +203,6 @@ function visitFromOpen(open: {
     number: open.number,
     of: open.of,
     serviceTypeId: open.serviceTypeId,
-    photoConsent: open.photoConsent ? 'given' : 'refused',
-    previousSetupPhotoDocumentId: open.previousSetupPhotoDocumentId,
     lastSeq: open.lastSeq,
     // Conservative after a resume: the practitioner is told below that
     // sharing is off, rather than having a position taken they did not
@@ -331,11 +327,9 @@ export function CheckInPage() {
                 // The device could not ask. Not "they refused": the screen
                 // says it cannot check rather than putting words in a
                 // family's mouth (design review, item 5).
-                photoConsent: 'unknown',
                 // A resume with no signal cannot ask which placement came
                 // before, and the pre-flight says so rather than offering a
                 // button that could only fail.
-                previousSetupPhotoDocumentId: null,
                 // The device's own high-water mark: an offline resume cannot
                 // ask the server where it got to, so it picks up from what it
                 // last wrote rather than from one.
@@ -478,8 +472,6 @@ export function CheckInPage() {
           number: 1,
           of: null,
           serviceTypeId,
-          photoConsent: parsed.data.photoConsent ? 'given' : 'refused',
-          previousSetupPhotoDocumentId: parsed.data.previousSetupPhotoDocumentId,
           lastSeq: 1,
           shareLocation,
         });

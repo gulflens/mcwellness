@@ -21,7 +21,6 @@ import {
   type EventRefusalReason,
   type SessionEventWire,
 } from './schema';
-import { photoStorageAvailable } from './photo-availability';
 
 /**
  * The rest of the outbox's flush: every event after the one that opened the
@@ -41,11 +40,12 @@ import { photoStorageAvailable } from './photo-availability';
  *   they arrived, so a batch that reaches the server out of order, split
  *   across requests, or interleaved with a retry projects the same visit.
  *
- * Consent is checked here, at execution time, not cached on the device
- * (.claude/rules/compliance.md): a `photo_captured` event for a client with
- * no active `photo_video` consent is refused by name, and the practitioner's
- * screen never offered the camera in the first place. Belt and braces on
- * purpose — the screen is a courtesy, the server is the boundary.
+ * A `photo_captured` event is always refused. The practice takes no
+ * photographs since its legal advisor's recommendation of 2026-09-09, so
+ * there is no consent that could permit one; the kind survives only because
+ * events recorded before that date name it and a replay must still read them.
+ * The server is the boundary here, as it was when consent decided the answer:
+ * a device that still holds one in its outbox is told to stop retrying.
  */
 
 /** How far a device's clock may run ahead of the server's before its event is refused. */
@@ -119,10 +119,6 @@ export async function appendEvents(
   const stored: string[] = [];
   const nowMs = now().getTime();
   const checkedInMs = session.checked_in_at.getTime();
-  // Asked once per request, not once per event: a client's consent does not
-  // change inside a single transaction, and the door is a definer function.
-  let photoConsent: boolean | null = null;
-
   for (const event of events) {
     if (event.kind === 'session_started') {
       // Not reachable: ./checkin.ts sends a batch containing one only to its
@@ -141,28 +137,20 @@ export async function appendEvents(
     }
 
     if (event.kind === 'photo_captured') {
-      // Consent first, and it is the more important of the two refusals: a
-      // household that has not agreed to photographs must be told that,
-      // whatever the state of the storage seam.
-      photoConsent ??= await hasPhotoConsent(db, sessionId);
-      if (!photoConsent) {
-        await logRefusal(db, 'session_event', event.id, session.client_id, [
-          'consent_missing_photo_video',
-        ]);
-        refused.push({ id: event.id, reason: 'consent_missing_photo_video' });
-        continue;
-      }
-      if (!photoStorageAvailable(c.get('storage'))) {
-        // Nowhere to put the bytes (./photo-availability.ts). Accepting the
-        // event would mean promising a photograph the device could never
-        // deliver, which is a record of one that does not exist; refusing it
-        // is the honest answer and the device stops asking.
-        await logRefusal(db, 'session_event', event.id, session.client_id, [
-          'photo_storage_unavailable',
-        ]);
-        refused.push({ id: event.id, reason: 'photo_storage_unavailable' });
-        continue;
-      }
+      // Always refused, since 2026-09-09. The practice takes no photographs on
+      // its legal advisor's recommendation, so there is no longer a consent
+      // that could permit one and no door to put the bytes through: the
+      // capture routes are gone and the wording that authorised them is
+      // superseded. The kind itself stays in the event vocabulary because
+      // events recorded before that date name it and a replay must still read
+      // them — but nothing may produce another, and an old device still
+      // holding one in its outbox is told to stop retrying rather than left
+      // to try forever.
+      await logRefusal(db, 'session_event', event.id, session.client_id, [
+        'consent_missing_photo_video',
+      ]);
+      refused.push({ id: event.id, reason: 'consent_missing_photo_video' });
+      continue;
     }
 
     if (event.kind === 'checked_out' && point !== null) {
@@ -220,17 +208,6 @@ export async function appendEvents(
     }),
     200,
   );
-}
-
-async function hasPhotoConsent(db: Db, sessionId: string): Promise<boolean> {
-  // app.session_consent_active (304_session_reads.sql): a definer door that
-  // answers one boolean about one purpose for the caller's own session, and
-  // never hands back a consent row, a date or a name.
-  const { rows } = await db.query<{ active: boolean }>(
-    "select app.session_consent_active($1, 'photo_video') as active",
-    [sessionId],
-  );
-  return rows[0]?.active === true;
 }
 
 /**
