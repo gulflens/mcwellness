@@ -146,7 +146,7 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
       );
       for (const role of body.data.roles) {
         await db.query(
-          'insert into user_role (tenant_id, user_id, role, granted_by) values ($1, $2, $3::role_kind, $4)',
+          'insert into user_role (tenant_id, user_id, role, granted_by, created_by) values ($1, $2, $3::role_kind, $4, $4)',
           [actor.tenantId, userId, role, actor.userId],
         );
       }
@@ -173,7 +173,7 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     const target = await db.query(IS_STAFF_SQL, [id.data]);
     if (target.rowCount !== 1) return c.json({ error: 'not_found', requestId }, 404);
     await db.query(
-      'insert into user_role (tenant_id, user_id, role, granted_by) values ($1, $2, $3::role_kind, $4) ' +
+      'insert into user_role (tenant_id, user_id, role, granted_by, created_by) values ($1, $2, $3::role_kind, $4, $4) ' +
         'on conflict (user_id, role) do nothing',
       [actor.tenantId, id.data, body.data.role, actor.userId],
     );

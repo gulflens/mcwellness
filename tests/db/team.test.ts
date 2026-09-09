@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { IDS } from './helpers';
 import { PORTAL, startPortalHarness, type PortalHarness } from '../portal/db/support';
 
 /**
@@ -135,6 +136,21 @@ describe('who works at the practice', () => {
         .status,
     ).toBe(200);
     expect((await h.callAs('GET', '/api/me', authId)).status).toBe(200);
+
+    // An admin cannot touch the owner's row: row security keeps it the owner's
+    // (role_guard.sql), which answers here as nothing to update.
+    expect(
+      (
+        await h.callAs('POST', `/api/team/${IDS.ownerA}/status`, PORTAL.adminAuth, {
+          status: 'suspended',
+        })
+      ).status,
+    ).toBe(404);
+    const ownerStatus = await h.owner.query<{ status: string }>(
+      'select status::text as status from app_user where id = $1',
+      [IDS.ownerA],
+    );
+    expect(ownerStatus.rows[0]?.status).toBe('active');
 
     // A practitioner may do none of it.
     expect(

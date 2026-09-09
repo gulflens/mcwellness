@@ -1,5 +1,5 @@
 -- 917_scheduled_tenants.sql
--- Needs: 000 (app_role), 010 (tenant), 090 (app_role's usage on public)
+-- Needs: 000 (app_role and the app schema), 010 (tenant)
 --
 -- The in-process scheduler (app/api/scheduler.ts, trunk round 39, 2026-09-10)
 -- runs the two jobs that until now needed the owner's connection and a cron
