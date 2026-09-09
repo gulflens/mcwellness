@@ -2841,6 +2841,17 @@ the hook's own patterns. Accepted as they stand: the address hash is unkeyed
 carried to the lead — the client record has no notes field, the office reads
 it before pressing, and keeping it is a later round's question.
 
+**Open, for the operator — the enquiry nobody actions.** "Kept until
+actioned" answers the one that becomes a lead or is set aside. It does not
+answer the duplicate, the mistake, or the person who changed their mind: under
+that rule such a row holds a name and a number for as long as nobody presses a
+button, which sits awkwardly beside rule 8's minimisation and what the privacy
+notice says. Not built here, because nothing in this system deletes on a timer
+without the operator saying so; the two shapes are a stated period after which
+the screen shows the office what is older than it, to dismiss by hand, or a
+rule that dismisses them with a fixed reason (which scrubs). Either is a
+calm migration later. Raised by the peer session on 10 September.
+
 **What follows the merge**, in order: the website's pages point their
 `ENDPOINT` at the new door; migration 916 is applied to production with its
 ledger row; the app is rebuilt; one enquiry is lodged against the live door,
