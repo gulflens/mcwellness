@@ -69,7 +69,10 @@ create table enquiry (
     )
   ),
   constraint enquiry_converted_names_client check (status <> 'converted' or client_id is not null),
-  constraint enquiry_dismissed_has_reason check (status <> 'dismissed' or dismiss_reason is not null)
+  constraint enquiry_dismissed_has_reason check (status <> 'dismissed' or dismiss_reason is not null),
+  -- The (tenant_id, id) key every tenant-scoped table carries (099), so a
+  -- composite foreign key can one day name a row and its tenant together.
+  constraint enquiry_tenant_id_id_key unique (tenant_id, id)
 );
 
 comment on table enquiry is

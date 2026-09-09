@@ -164,11 +164,20 @@ describe('core schema', () => {
     // audited" but "everything in public is audited", except the log itself (an
     // audit_row trigger on audit_log would insert into audit_log, forever), its
     // partitions, the PostGIS reference table, and the runner's own bookkeeping.
+    // And `enquiry`, by the operator's Option B of 2026-09-09
+    // (.claude/rules/data-model.md): a public write with no actor to name, whose
+    // reads the route logs under the reader. The exemption is tied to the
+    // decision written on the table itself, so a table cannot slip in here by
+    // name alone.
     const { rows: tables } = await client.query<{ table_name: string }>(
       "select table_name from information_schema.tables where table_schema = 'public' " +
         "and table_type = 'BASE TABLE' and table_name not like 'audit_log_%' " +
-        "and table_name not in ('audit_log', 'schema_migration', 'spatial_ref_sys')",
+        "and table_name not in ('audit_log', 'schema_migration', 'spatial_ref_sys', 'enquiry')",
     );
+    const { rows: decided } = await client.query<{ comment: string | null }>(
+      "select obj_description('public.enquiry'::regclass, 'pg_class') as comment",
+    );
+    expect(decided[0]?.comment).toMatch(/^unaudited by decision/);
     const { rows: audited } = await client.query<{ table: string }>(
       'select c.relname as table from pg_trigger t join pg_class c on c.oid = t.tgrelid ' +
         "where t.tgname = 'audit_row' and not t.tgisinternal and c.relnamespace = 'public'::regnamespace",
