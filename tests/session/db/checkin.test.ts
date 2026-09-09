@@ -87,7 +87,7 @@ const APPOINTMENT_BY_MRN = '00000000-0000-4000-8000-000000900005';
 // the door since the operator's decision of 10 September 2026 (decision 5 of
 // docs/OPERATOR/2026-09-10-decisions.md).
 const CLIENT_PROPOSED = '00000000-0000-4000-8000-000000001006';
-const CONTACT_PROPOSED = '00000000-0000-4000-8000-000000700006';
+const CONTACT_PROPOSED = '00000000-0000-4000-8000-000000002006';
 const SESSION_PROPOSED = '00000000-0000-4000-8000-00000000500b';
 const EVENT_PROPOSED = '00000000-0000-4000-8000-00000000600b';
 const APPOINTMENT_PROPOSED = '00000000-0000-4000-8000-000000008006';
@@ -98,9 +98,9 @@ const PROPOSED_PRACTITIONER_USER = '00000000-0000-4000-8000-000000900201';
 const PROPOSED_PRACTITIONER = '00000000-0000-4000-8000-000000900202';
 const PROPOSED_PRACTITIONER_AUTH = '00000000-0000-4000-8000-000000900203';
 // The adult's own booked visit, named because the check-in is expected to
-// mark it (db/migrations/305_appointment_checked_in.sql). Confirmed, unlike
-// every other fixture in this file, which stays at seedAppointment's own
-// 'proposed' default.
+// mark it (db/migrations/305_appointment_checked_in.sql). Every fixture in
+// this file books a confirmed visit since 10 September 2026, except the one
+// below that proves a proposed visit is refused at the door.
 const APPOINTMENT_ADULT = '00000000-0000-4000-8000-000000008001';
 // A practitioner of its own for the record-number check-in, rather than
 // practitionerA: practitionerA's own one-open-visit slot is already spent by
@@ -393,7 +393,7 @@ beforeAll(async () => {
       windowStart: at(hour),
       status,
     });
-  await bookToday(APPOINTMENT_ADULT, CLIENT_ADULT, '08', MORE_IDS.practitionerA, 'confirmed');
+  await bookToday(APPOINTMENT_ADULT, CLIENT_ADULT, '08', MORE_IDS.practitionerA);
   await bookToday('00000000-0000-4000-8000-000000008002', CLIENT_NO_PARTICIPATION, '09');
   await bookToday('00000000-0000-4000-8000-000000008003', CLIENT_MINOR_NO_GUARDIAN, '10');
   await bookToday('00000000-0000-4000-8000-000000008004', CLIENT_MINOR_WITH_GUARDIAN, '11');
