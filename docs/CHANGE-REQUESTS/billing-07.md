@@ -75,9 +75,11 @@ contradict the switch's own help text as soon as item 1 landed.
 
 **The file.** `app/admin/settings/PracticePage.tsx`, the trunk's, and not this
 round's to edit: the widening covered the switch's help text and its test, and
-this is a different sentence in a different file. *Left for the trunk.*
+this is a different sentence in a different file. *Applied by the integrator on
+the branch before pull request 113 merged (7 September 2026, 20:21 Dubai):
+`app/admin/settings/PracticePage.test.tsx` proves the clause is gone. Recorded
+here by trunk round 41, carrying pull request 116's note.*
 
 ---
 
-**Neither blocks the round.** Item 1 is applied; item 2 is one paragraph, and
-the screen reads correctly on the control itself in the meantime.
+**Neither blocked the round.** Both items are applied.

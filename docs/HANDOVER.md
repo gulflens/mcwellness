@@ -1,5 +1,26 @@
 # Hand-over: how to pick this project up in a fresh session
 
+**As of 10 September 2026 (trunk round 41, this file's own pull request).**
+Production at app.mcwellnessuae.com runs `main` at `8c44acc` after eleven live
+passes (`docs/PRODUCTION.md`), with 92 migrations and 26 policy files applied.
+Live on it: Books, the website's enquiry door and its office screen, Settings ›
+Team, the in-process scheduler (the books posted at 03:00 Dubai and the erasure
+sweep hourly; any second instance on the same database sets `SCHEDULER=off`),
+the change-password screens, the weekly off-site backup (`mcwellness-backups`,
+Singapore), the GitHub uptime probe, the practice's identity, logo and contact
+details, the price list of 7 September, and the approved wording (versions
+1.0 and 1.1 in English, 1.1 and 1.2 in Arabic). The Google keys are restricted
+and capped. The operator closed the lawyer track on 9 September; the client's
+own approval is final. The completeness audit of 10 September (session
+mcwellness-93) listed twelve decisions, nine roadmap areas and nine loose ends;
+round 41 closed the loose ends that were code or record
+(`docs/CHANGE-REQUESTS/trunk-notes.md`, round 41) and wrote the decisions as
+**`docs/OPERATOR/2026-09-10-decisions.md`**, which is what waits on the
+operator now. **The next thing to build is piece twelve's plan** (section 10,
+step 12). Everything from here to section 1 is the state as it was written on
+8 September at 02:35, kept as the record of that night; sections 2, 8 and 10
+each open with a dated note saying what has moved since.
+
 Written 4 September 2026, updated on 8 September at 02:35. **Two rounds landed
 overnight and both wait on the operator's word for production.** At 00:18 the
 operator supplied a designed tax invoice and receipt and asked the platform's
@@ -70,6 +91,12 @@ an unanswered decision. The next session's first act is section 10.
 
 ## 2. Where things stand
 
+- **10 September:** `main` is at `8c44acc` after pull requests 119 to 138
+  (section 10, steps 9 to 11): 92 migrations and 26 policy files, production
+  level with `main` after the eleventh live pass, nothing merged and waiting
+  for production. Open pull requests: 127 and 128 (plans and specs awaiting
+  the operator's word, decision 11 on the sheet) and this round's own. The
+  bullets below are the state on 6 to 8 September.
 - `main` is at `7d06cf8` plus this file's own pull request: seventy migrations
   and nineteen policy files. Every merged pull request through #89 carries
   its review record as a comment or, for documentation, the integrator's
@@ -571,6 +598,24 @@ desktop app's own CI monitor will still tell a running session.
 
 ## 8. Open items that are the operator's
 
+**As of 10 September the operator's open items are
+`docs/OPERATOR/2026-09-10-decisions.md`**: twelve decisions, each with what it
+blocks, the default in force and a recommended answer, and four acts only the
+operator can do (pausing the old app's project, the Better Stack sign-up, a
+line to Hostinger about its IPv6 edge, the translation rule in the QEEG Report
+Builder), plus the kit register. Of the list below, written on 8 September: the
+design round, the discount round and the English-only console are on
+production; pull request 116 is carried into `docs/PRODUCTION.md` and closed;
+the practice's details, logo and contact fields are on production; the Google
+key is restricted and capped; the restore rehearsal is done against a hosted
+target (`docs/RUNBOOK/restore.md` section 3); the off-site backup is live; the
+nightly poster is the in-process scheduler. Still open, and on the sheet: the
+books' start day and Small Business Relief, VAT registration and the tax point,
+the certification gate, the brain-map comparison, piece ten's equipment and
+questionnaire, the staging key rotation, the package terms, the offline install
+check on a real phone, and the guardian field. The list below is kept as the
+record.
+
 - **The document design round is merged and on staging, not on production.**
   Pull request 122 (`main` at `f2a7bfb`) puts the practice's own design on the
   invoice and the receipt: the logo, the brand violet, facing English and
@@ -948,6 +993,42 @@ nine and ten; see the records on pull requests 73 to 83).
    live pass), which the auto-mode classifier refused at 20:25 at the upload
    step; run it outside auto mode, then record the pass there. No migration
    travels with it.
+
+9. **Done, 7 September 20:26 to 8 September 02:40 (Dubai):** the fourth live
+   pass (`52fc1a9`, recorded in `docs/PRODUCTION.md` by round 41); the
+   discount round's staging pass and hand-over (pull request 119); piece
+   nineteen, the console on any screen (120, `2875ef8`); piece seventeen, the
+   day map (121, `a22dd4d`; 124 its record); the money documents in the
+   practice's own design (122, `f2a7bfb`; 123 its staging pass and the
+   practice's own details on production); the practice's address stated once
+   in the footer (125); a practitioner's own home base (126, `27c3088`). The
+   plans and specs for the practitioner on site (127) and the dispatcher (128)
+   are open pull requests awaiting the operator's word.
+10. **Done, 8 September:** the content security policy carried in the document
+    because the host replaces the header (129, `308af3d`); piece twenty, the
+    coloured shell (130, `ba478fa`; the fifth live pass); the harmonised
+    neutrals (131) and the household's portal as an application shell (132,
+    `a44ae2d`; the sixth live pass, which hung after a green build and taught
+    the restart step).
+11. **Done, 9 September:** the compact tier walked (133, `df87023`; the seventh
+    live pass); the approved wording (134, `1eb7cf5`; migrations 915, 960 and
+    961, the storage bucket production never had, the eighth live pass); the
+    enquiries (135, `6387a30`; migration 916, the ninth); the completeness
+    audit's fixes, trunk round 39 (136, `6e2cd20`; migrations 917 and 962, the
+    scheduler in-process, the tenth); the Google keys recorded (137); change
+    your password, trunk round 40 (138, `8c44acc`; the eleventh).
+12. **Trunk round 41, the loose ends (10 September, this pull request):** the
+    Sessions rail entry removed; the enquiry door's resource policy; a
+    household's password screen in the portal, bilingual, over one shared
+    form; fixture names from the seed lists; the retention rule stated once;
+    pull request 116 carried into `docs/PRODUCTION.md` with live passes four
+    to eleven, then closed; this file; the decisions sheet
+    `docs/OPERATOR/2026-09-10-decisions.md`. **Next:** the operator answers
+    the sheet; then piece twelve's plan (`docs/PLAN/piece-twelve.md`) and its
+    spec in piece eleven's shape, covering what `docs/SPEC/accounting.md`
+    section 14 lists for it, and nothing of it built until that plan is
+    approved; then the rest of the roadmap in the audit's order, each area
+    with its own plan.
 
 ## 11. Where Claude's own memory lives
 

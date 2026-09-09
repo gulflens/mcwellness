@@ -808,7 +808,149 @@ script `build:production`, npm, Node 24, `source_type` archive) — a first 500
 from that call creates no build, call it again; watch the served bundle name
 flip with `curl -4`; then `/api/health` and `/api/health/deep`, and the
 clients table or the Settings page signed in as the founder to see no Arabic
-line. Record it here as the fourth live pass.
+line. Record it here as the fourth live pass. *(It was finished at 20:26 the
+same evening; the next section is its record, carried from pull request 116
+by trunk round 41.)*
+
+## What was done on 2026-09-07: the fourth live pass — VAT follows the registration on the Billing screens
+
+Between 19:23 and 20:26 on 7 September (Dubai), on the operator's instruction
+("toggle off the VAT … keep it in the build but toggled off", then "do it"), the
+practice's VAT position was confirmed and a defect found beside it was fixed,
+merged and deployed.
+
+**VAT was already off, by design.** `tenant.vat_registered` is false on
+production; every sale resolves VAT through `resolveSaleVat` from
+`app.tenant_charges_vat()` (migration 406), so an invoice carries no VAT, names
+no rate and shows one AED figure, and `app.guard_invoice_vat` refuses any
+invoice that says otherwise. The catalogue's prices are net; registering later
+adds five per cent on top of the same net prices and changes nothing already
+issued. The switch lives in Settings, Practice ("Registered for VAT"), and
+refuses to save without the fifteen-digit registration number.
+
+**The defect.** `app/api/billing/prices.ts` and `packages.ts` computed the
+`vatFils` and `grossFils` they returned at the row's stamped standard rate
+whatever the registration, and the Sell drawer sends the API's gross as the
+payment taken at the point of sale. Selling Silver with payment ticked would
+have recorded AED 10,841.25 against an invoice of AED 10,325 and left a five
+per cent overpayment on the family's balance. Beside it, the Billing page's
+price list and packages table showed a five per cent VAT column and a total
+including it, and two sentences in Settings said the switch "does not change
+what an invoice charges", untrue since 406.
+
+**The fix** (pull request 113, branch `billing-vat-display`, merged as
+`52fc1a9` at 20:21; the builder on Opus from a written brief, about 0.27
+million tokens; the integrator's review in conversation and three small
+commits of its own). `app/api/billing/supplier.ts` reads the registration once
+per request; both catalogue routes resolve the money with `resolveSaleVat` at
+the row's own stamped rate and return the stamp untouched; `PricesResponse` and
+`PackagesResponse` carry `vatRegistered`; both tables show one line while it is
+false ("The practice is not registered for VAT, so no VAT is charged and the
+total is the price"); the Sell drawer names its percentage only while something
+is charged at it; both Settings sentences now say what the switch decides
+(`docs/CHANGE-REQUESTS/billing-07.md`, both items applied before the merge).
+The proof: `tests/billing/db/packages.test.ts` sells Gold sending exactly the
+catalogue's gross and finds the payment equal to the invoice and the balance
+zero. Gates green on the builder's head, including the whole database suite
+(1,211 tests); the integrator's first test commit went up red because a piped
+`tail` hid the exit code, and a formatting miss followed — both corrected on
+the branch, checks green on the final head.
+
+**The process was rebuilt from `main`** at `52fc1a9`: archive
+`mcwellness-52fc1a9-npm.tar.gz` (5.7 MB) over TUS, build `01a07caf` with the
+stored settings, completed in two minutes two seconds (20:24:16 to 20:26:18);
+the served bundle changed from `index-CW0A6csP.js` to `index-BdMsUpd4.js` and
+carries the new sentence; `GET /api/health` and `/api/health/deep` answer
+`{"ok":true}`; the runtime log shows no error or warning. No migration in this
+round, so the database was not touched.
+
+**Left as a decision, not built.** `POST /api/billing/package-purchases`
+records whatever `payment.amountFils` it is sent; with this round the drawer's
+figure equals the invoice, but an API caller could still record an overpayment
+silently. Whether the route should refuse a mismatch, warn, or allow it (part
+payments would then need their own rule) is the operator's to decide;
+`tests/billing/db/idempotency.test.ts` still carries an overpayment fixture
+and is the natural place to prove whichever rule is chosen.
+
+## What was done on 2026-09-08 and 2026-09-09: live passes five to eleven
+
+Seven more rebuilds of the live process, recorded here by trunk round 41 from
+the sessions' own notes, because each was done by hand and none had been
+written into this file. **Times in this section are UTC**; Dubai is four
+hours ahead, and the operator's own clock (the one the sessions' timestamps
+and the headings dated 2026-09-10 below use) is eight hours ahead. The
+recipe was the third pass's every time: `git archive --prefix=mcwellness/
+origin/main | gzip -9`, TUS upload, `hosting_startNode_jsBuildV1` with the
+stored settings, then the served bundle name polled with `curl -4` until it
+flipped, then both health routes. Every migration named was applied to
+production before the build that needed it, one at a time with its ledger
+row, so a build that hung would have left a correct schema behind.
+
+- **Fifth, 8 September 11:28–11:31 UTC.** `main` at `ba478fa` (pull request
+  130, piece twenty: the practice's colour, the mark, the full-width console
+  and the pinning sidebar). Build `01a080c7`; bundle `index-BeqsYANG.js` with
+  `index-CqfcCS09.css`, the stylesheet hash matching a local `pnpm build`
+  exactly, which is the cheapest proof the right tree shipped. No migration.
+  Clean, and the first pass the auto-mode classifier did not refuse at the
+  upload step.
+- **Sixth, 8 September 12:54–13:02 UTC.** `main` at `a44ae2d` (pull requests
+  131 and 132: the harmonised neutrals and the household's portal as an
+  application shell). No migration. **The build completed and the site was
+  dead for six minutes**: every request timed out at 25 s while TCP connected
+  at once, the runtime log showed a clean start and nothing after it, and the
+  sibling site on the same account answered in under a second, which is what
+  placed the fault in this process rather than the network.
+  `hosting_restartNode_jsApplicationV1` cured it on the first poll. **A
+  completed build is not a serving app**: after every build, check health and
+  restart if it hangs. The origin's addresses had also moved since the morning;
+  re-resolve before any `--resolve`, because a stale address times out exactly
+  as a hung app does.
+- **Seventh, 9 September 05:50–05:56 UTC.** `main` at `df87023` (pull request
+  133, the compact tier walked). No migration, no restart needed; the bundle
+  took about 80 s to flip after the build, so poll the bundle name rather
+  than trusting a 200 from health, which can still be the previous build.
+- **Eighth, 9 September 15:20–15:27 UTC.** `main` at `1eb7cf5` (pull request
+  134, the approved wording: the advisor's four recommendations and the
+  photograph retired), by session mcwellness-93. Migrations 915, 960 and 961
+  first, each verified; then the `documents` storage bucket, which
+  **production had never had** (so every consent signature upload would have
+  failed since go-live; nothing was lost because no consent had been taken);
+  then the wording rows and bytes under the real practice; then the build.
+  Bundle `index-CwClJgCs.js` → `index-ByYGKqZl.js` about 65 s after the start
+  call; the stylesheet hash unchanged, as a round that touches schema and copy
+  and no styles should leave it. `schema_migration` 89 of 89. The origin's
+  addresses had moved again. A test enrolment was walked and erased.
+- **Ninth, 9 September 16:43–16:50 UTC.** `main` at `6387a30` (pull request
+  135, the enquiries). Recorded in the section headed 2026-09-10 below, which
+  is the same evening on the operator's clock: migration 916, the four
+  `enquiry` policies, build `01a0870f`, bundle `index-CAWv1yV5.js`.
+  `schema_migration` 90 of 90. **The count is the evidence, not the maximum
+  filename**: 916 sorts before 961, so `max(filename)` did not move.
+- **Tenth, 9 September 18:38–18:42 UTC.** `main` at `6e2cd20` (pull request
+  136, the completeness audit's fixes: Settings › Team, the contact details,
+  the in-process scheduler, the uptime probe). Migrations 917 and 962 with
+  their ledger rows, `schema_migration` 92 of 92. Build `01a08778`; bundle
+  `index-k3jZFJR_.js` with `index-C0329E7s.css`. **The process now runs the
+  scheduler** (`app/api/scheduler.ts`): the books posted at 03:00 Asia/Dubai
+  and the erasure sweep hourly, so any second instance on the same database
+  must set `SCHEDULER=off` (`docs/SPEC/hosting.md`). Verified from a second
+  session afterwards: both health routes 200 in about a third of a second, the
+  served bundle as named.
+- **Eleventh, 9 September 19:37–19:41 UTC.** `main` at `8c44acc` (pull
+  request 138, trunk round 40: change your password). No migration; ledger
+  still 92 of 92. Build `01a087ad`; bundle `index-DmtijWVz.js`. Both health
+  routes green.
+
+**Two sessions, one host.** Two of these passes were done while another
+session was working on the same repository. A build started while another's
+archive sits in `public_html` destroys that archive with no error and no log,
+so before every upload the deploying session lists the other sessions on the
+machine and sends a hold message, and releases it when the bundle has flipped.
+
+**The host's IPv6 edge does not answer.** A client that tries IPv6 first stalls
+about 150 s before falling back to IPv4; browsers cope, `curl` does not, so
+every probe here is `curl -4`. It is Hostinger's CDN and not this process; a
+line to Hostinger is the operator's to send (`docs/OPERATOR/2026-09-10-decisions.md`).
 
 ## What was done on 2026-09-10: the enquiries live, and the completeness audit's fixes
 
