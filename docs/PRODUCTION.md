@@ -968,3 +968,36 @@ line to Hostinger is the operator's to send (`docs/OPERATOR/2026-09-10-decisions
 **The Google keys, 02:55**, from the Google Cloud CLI signed in on the operator's laptop (`docs/SPEC/route-planning.md` section 8.5): the browser key admits the Maps JavaScript API from `https://app.mcwellnessuae.com/*` alone; the server key admits the Routes API and Maps Static, the two products `app/api/_middleware/routing/google.ts` calls, and no longer Geocoding (a request answers `REQUEST_DENIED`); the project's daily caps are 500 map loads (`maps-backend.googleapis.com/billable_default`) and 3,000 route-matrix elements (`routes.googleapis.com/compute_route_matrix_elements`), set as quota overrides. One route-matrix call and one static map answered on the server key afterwards. The two keys the old app's Firebase project created are untouched and belong to it.
 
 **Left with the operator:** registering the amplifier, laptop and electrode set under Settings › Kit with the amplifier's calibration date.
+
+## What was done on 2026-09-10: the twelfth live pass — trunk round 41, the loose ends
+
+At 21:23 UTC on 9 September (01:23 on 10 September in Dubai; 05:23 on the
+operator's clock), on the operator's word ("go live"), the live process was
+rebuilt from `main` at `05d5358` (pull request 139, trunk round 41). **No
+migration, no policy, no data change**; `schema_migration` stays at 92.
+
+**The recipe, as the third pass wrote it.** No other session was running, so
+the hold protocol needed no message. `git archive --prefix=mcwellness/
+origin/main | gzip -9` (6,139,977 bytes, sha256 `dc5e1b45…`); TUS create 201
+and PATCH 204 with the offset equal to the size; `hosting_startNode_jsBuildV1`
+with the stored settings, 200 first time: build `01a0880d`, created 21:23:12,
+completed 21:24:07. The served bundle flipped from `index-DmtijWVz.js` to
+`index-CYEXN7VE.js` at 21:24:09, with `index-Cuv2GmjJ.css`; the stylesheet
+hash matches a local `vite build --mode production` of the same tree exactly
+(the script hash does not, and is not expected to: the browser key and the
+Supabase address are baked in from the host's own environment). No restart
+needed: `/api/health` 200 in 0.30 s and `/api/health/deep` 200 in 0.70 s on
+the first poll after the flip.
+
+**What the served bundle proves.** Fetched at its own path (a nonsense asset
+path answers 404, so the 200 is evidence): no `rail__item--later`, no
+"Arriving", no Sessions icon; `/portal/password`, the Arabic "تغيير كلمة
+المرور" and "كلمة مرورك" present. **The door's header reaches the browser**: a
+preflight to `/api/enquiries` from `https://mcwellnessuae.com` answers 204 with
+`access-control-allow-origin` echoing the site and
+`cross-origin-resource-policy: cross-origin`, while `/api/health` still
+carries `same-origin`. The edge passes this header through, unlike the content
+security policy it replaces.
+
+**Left as it was.** The archive `mcwellness-05d5358.tar.gz` in `public_html`
+beside the earlier ones. Production is level with `main`.
