@@ -543,6 +543,21 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
     }
     case 'contact.update':
       return `${actor} ${joinClauses(contactClauses(event, fields, locale), locale)}`;
+    case 'appointment.insert': {
+      // A reassignment is inserted with the practitioner it was taken from
+      // (migration 210): one act, said as one (docs/SPEC/dispatch.md section
+      // 11), rather than as an addition beside an unexplained move.
+      if (scalar(event.newValues, 'reassigned_from_practitioner_id') !== null) {
+        return pick(
+          t(
+            `${actor} reassigned the appointment to another practitioner`,
+            `${actor} أعاد إسناد الموعد إلى ممارس آخر`,
+          ),
+          locale,
+        );
+      }
+      return pick(t(`${actor} added an appointment`, `${actor} أضاف الموعد`), locale);
+    }
     case 'consent.insert': {
       const purpose = label(PURPOSE, event.newValues?.purpose, locale) ?? pick(t('a', ''), locale);
       const version = scalar(event.newValues, 'version');
