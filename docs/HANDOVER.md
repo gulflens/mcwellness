@@ -1083,10 +1083,9 @@ nine and ten; see the records on pull requests 73 to 83).
     three more months would still be behind today, and a race between two
     requests for the same ordinal answered 409 `extended_by_someone_else`
     instead of as an internal error); the drawer that offers it, counts to
-    two and says so;
-    the term said above the Sell drawer's button and on the invoice's
-    package line in both languages; the Add package drawer's own default
-    moved to six; the seed's own three programmes moved to six months
+    two and says so; the term said above the Sell drawer's button and on the
+    invoice's package line in both languages; the Add package drawer's own
+    default moved to six; the seed's own three programmes moved to six months
     (`docs/CHANGE-REQUESTS/billing-10.md`, item 1). **Still owed:** the
     staging pass with migration 410, the production data step for the three
     live programmes (`docs/CHANGE-REQUESTS/billing-10.md`, item 2), and the

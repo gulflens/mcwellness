@@ -30,6 +30,8 @@ import { PaymentDrawer } from './PaymentDrawer';
  * complaint, not an accounting event.
  */
 
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+
 /**
  * What to say about an expiry, and how loudly.
  *
@@ -38,8 +40,6 @@ import { PaymentDrawer } from './PaymentDrawer';
  * nobody has to act on. Sixty and thirty days want noticing without being
  * wrong yet; a programme that has already run out is wrong now.
  */
-const PRACTICE_TIME_ZONE = 'Asia/Dubai';
-
 const WARNINGS: Record<string, { tone: 'attention' | 'critical'; say: (on: string) => string }> = {
   sixty_days: {
     tone: 'attention',

@@ -65,12 +65,12 @@ const INSERT_EXTENSION_SQL =
   'reason, created_by) ' +
   'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, app.current_actor_id())';
 
-// Aliased so the returning list can carry the count of extensions the same
-// way every other read of a purchase does, this transaction's new row
-// included.
 /** The key the two-per-programme guard is enforced by (migration 410). */
 const ORDINAL_CONSTRAINT = 'package_extension_purchase_id_ordinal_key';
 
+// Aliased so the returning list can carry the count of extensions the same
+// way every other read of a purchase does, this transaction's new row
+// included.
 /**
  * Postgres: unique_violation on that key, and on no other. It is a rival
  * request that reached the insert first with the same ordinal — the two
