@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { PoolLike } from '../../../app/api/_middleware/request-context';
 import type {
   BalanceResponse,
   ExtendPurchaseResponse,
@@ -31,6 +32,48 @@ import {
  */
 
 const NOW = () => new Date('2026-09-02T08:00:00.000Z');
+
+/**
+ * The one case below that has to force an interleaving arms this; every other
+ * case leaves it null and the pool behaves as it always does. It runs once,
+ * immediately after the route's read of the purchase, and then disarms
+ * itself.
+ *
+ * The rival in the last race case commits between two of the route's own
+ * statements. That window is a microsecond wide and no `setTimeout` can be
+ * aimed at it, so it is opened deliberately: the API's pool is wrapped, the
+ * statement that reads the purchase is recognised by its text, and the rival
+ * commits while the route waits. Everything else is real — two connections,
+ * two transactions, read committed, and the same route the console calls.
+ */
+let afterThePurchaseRead: (() => Promise<void>) | null = null;
+
+/** True of the route's read of the purchase, and of no other statement it issues. */
+function readsThePurchase(text: string): boolean {
+  return text.startsWith('select') && / from package_purchase\b/.test(text);
+}
+
+function pausingPool(pool: PoolLike): PoolLike {
+  return {
+    async connect() {
+      const client = await pool.connect();
+      return {
+        async query<R extends pg.QueryResultRow>(text: string, params?: unknown[]) {
+          const result = await client.query<R>(text, params);
+          if (afterThePurchaseRead && readsThePurchase(text)) {
+            const held = afterThePurchaseRead;
+            afterThePurchaseRead = null;
+            await held();
+          }
+          return result;
+        },
+        release(destroy?: Error | boolean) {
+          client.release(destroy);
+        },
+      };
+    },
+  };
+}
 
 let h: Harness;
 let silverId: string;
@@ -128,7 +171,7 @@ async function countExtensionsAs(roles: string, seededUser: number): Promise<num
 }
 
 beforeAll(async () => {
-  h = await startHarness(NOW);
+  h = await startHarness(NOW, pausingPool);
   await setPracticePrices(h, SEED_TODAY);
   const created = await h.call(
     'POST',
@@ -466,6 +509,92 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
       await pending;
       await rival.end();
     }
+  });
+
+  it('sees a rival that commits between the end it read and the count it read', async () => {
+    /**
+     * The end of a programme and the number of extensions it has had used to
+     * be two statements. Under read committed each takes its own snapshot, so
+     * a rival committing in between left this request holding a superseded
+     * end beside a fresh count: it computed the second extension from an end
+     * the rival had already moved past, wrote a second row covering the same
+     * three months as the first, and set `extended_to` to the date the
+     * programme already had. The family had then spent both of the extensions
+     * they are allowed for ever and gained three months, and nothing can give
+     * the second one back — the table grants no delete.
+     *
+     * The window is opened rather than waited for (see `afterThePurchaseRead`
+     * above): the rival's transaction is prepared and held, the route reads
+     * the purchase, the rival commits while the route waits, and the route
+     * carries on. With the end and the count in one statement the route now
+     * sees neither of the rival's rows, computes the first extension, and is
+     * refused by the unique key it shares with the rival — which is the
+     * answer a lost race deserves.
+     */
+    const racePurchase = await sellSilverTo(4);
+    const raceFrom = racePurchase.expiresOn;
+    const raceTo = expiryOn(raceFrom, 3);
+    const user = h.data.users[SEEDED.owner];
+    const rival = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await rival.connect();
+    let committed = false;
+    try {
+      await rival.query('begin');
+      await rival.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.actor_roles', 'owner', true), " +
+          "set_config('app.request_id', '00000000-0000-4000-8000-0000000000f2', true), " +
+          "set_config('app.reason', $3, true)",
+        [h.data.tenant.id, user?.id ?? null, 'The rival extension, granted first.'],
+      );
+      await rival.query(
+        'insert into package_extension (tenant_id, client_id, purchase_id, ordinal, from_on, to_on, ' +
+          'reason, created_by) values ($1, $2, $3, 1, $4, $5, $6, $7)',
+        [
+          h.data.tenant.id,
+          h.clientId(4),
+          racePurchase.id,
+          raceFrom,
+          raceTo,
+          'The rival extension, granted first.',
+          user?.id ?? null,
+        ],
+      );
+      // The rival is the same route, so it moves the purchase's own end too.
+      await rival.query(
+        'update package_purchase set extended_to = $2, extension_reason = $3 where id = $1',
+        [racePurchase.id, raceTo, 'The rival extension, granted first.'],
+      );
+
+      afterThePurchaseRead = async () => {
+        await rival.query('commit');
+        committed = true;
+      };
+      const res = await h.call(
+        'POST',
+        `/api/billing/package-purchases/${racePurchase.id}/extension`,
+        SEEDED.owner,
+        { reason: 'Racing the rival across the two reads.' },
+      );
+      expect(committed).toBe(true);
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { code: string }).code).toBe('extended_by_someone_else');
+    } finally {
+      afterThePurchaseRead = null;
+      if (!committed) {
+        await rival.query('rollback');
+      }
+      await rival.end();
+    }
+
+    // One extension, not two: the second was never spent, and the programme
+    // ends where the rival left it.
+    const { rows } = await h.owner.query<{ n: number; extended_to: string | null }>(
+      'select (select count(*)::int from package_extension where purchase_id = p.id) as n, ' +
+        'p.extended_to::text as extended_to from package_purchase p where p.id = $1',
+      [racePurchase.id],
+    );
+    expect(rows[0]).toEqual({ n: 1, extended_to: raceTo });
   });
 });
 

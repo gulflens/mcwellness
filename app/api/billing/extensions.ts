@@ -52,13 +52,23 @@ import { EXTENSIONS_USED_SQL, purchaseRow, type PurchaseDbRow } from './sales';
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
+/**
+ * The programme's end and the number of extensions it has had, in one
+ * statement and so from one snapshot.
+ *
+ * They were two reads once, and under read committed each took a snapshot of
+ * its own: a rival committing between them left this request holding a
+ * superseded end beside a fresh count, so it computed the second extension
+ * from an end the rival had already moved past and spent the family's last
+ * extension on three months they already had. Nothing refused it and nothing
+ * could give it back — the table grants no delete. One statement closes the
+ * window; the unique key on (purchase_id, ordinal) still answers the genuine
+ * lost race (tests/billing/db/extension.test.ts).
+ */
 const PURCHASE_SQL =
-  'select id, client_id, expires_on, extended_to, status from package_purchase ' +
-  'where tenant_id = app.current_tenant_id() and id = $1';
-
-const USED_SQL =
-  'select count(*)::int as n from package_extension ' +
-  'where tenant_id = app.current_tenant_id() and purchase_id = $1';
+  'select p.id, p.client_id, p.expires_on, p.extended_to, p.status, ' +
+  EXTENSIONS_USED_SQL +
+  ' from package_purchase p where p.tenant_id = app.current_tenant_id() and p.id = $1';
 
 const INSERT_EXTENSION_SQL =
   'insert into package_extension (tenant_id, client_id, purchase_id, ordinal, from_on, to_on, ' +
@@ -120,6 +130,7 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
       client_id: string;
       expires_on: string;
       extended_to: string | null;
+      extensions_used: number;
       status: PurchaseDbRow['status'];
     }>(PURCHASE_SQL, [purchaseId]);
     const purchase = found.rows[0];
@@ -138,13 +149,13 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
     // The count is the database's rather than a number kept on the purchase
     // row, so two coordinators asking at once cannot both be the second: the
     // unique key on (purchase_id, ordinal) refuses the loser (migration 410).
-    // Read committed hides an uncommitted rival's row from this count, so both
-    // requests can compute the same next ordinal; the savepoint below is what
-    // lets this one answer its refusal instead of losing the whole
-    // transaction to the insert that follows.
+    // Both facts come from the one statement above, so a rival cannot move
+    // the end between them. Read committed still hides an uncommitted rival's
+    // row from the count, so both requests can compute the same next ordinal;
+    // the savepoint below is what lets this one answer its refusal instead of
+    // losing the whole transaction to the insert that follows.
     const currentEnd = purchase.extended_to ?? purchase.expires_on;
-    const used = await db.query<{ n: number }>(USED_SQL, [purchaseId]);
-    const next = nextExtension(currentEnd, used.rows[0]?.n ?? 0);
+    const next = nextExtension(currentEnd, purchase.extensions_used);
     if (next === null) {
       return c.json({ error: 'conflict', code: 'extension_limit_reached', requestId }, 409);
     }

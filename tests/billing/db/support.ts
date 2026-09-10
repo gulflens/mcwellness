@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { SignJWT } from 'jose';
 import type pg from 'pg';
 import { createPool } from '../../../app/api/_middleware/db';
+import type { PoolLike } from '../../../app/api/_middleware/request-context';
 import { localDiskStorage } from '../../../app/api/_middleware/storage';
 import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
 import { createApi } from '../../../app/api/create-api';
@@ -80,8 +81,21 @@ async function mint(sub: string): Promise<string> {
     .sign(KEY);
 }
 
-/** A clean database holding the synthetic practice, and an API pointed at it. */
-export async function startHarness(now: () => Date): Promise<Harness> {
+/**
+ * A clean database holding the synthetic practice, and an API pointed at it.
+ *
+ * `wrapPool` hands the API a different view of the same pool. The default
+ * hands it back untouched, which is what every suite but one wants; the one
+ * exception wraps it so a rival's commit can be placed between two of a
+ * route's statements deliberately rather than hoped into a window a
+ * microsecond wide (tests/billing/db/extension.test.ts). The connections, the
+ * transactions and the database are the real ones either way — only the
+ * scheduling is forced.
+ */
+export async function startHarness(
+  now: () => Date,
+  wrapPool: (pool: PoolLike) => PoolLike = (pool) => pool,
+): Promise<Harness> {
   const data = generateSeed();
   const owner = await freshDatabase();
   await applySeed(owner, data, deriveIdentityKeys(Buffer.alloc(32, 7)));
@@ -94,7 +108,7 @@ export async function startHarness(now: () => Date): Promise<Harness> {
     signingSecret: Buffer.alloc(32, 5),
   });
   const api = createApi({
-    pool,
+    pool: wrapPool(pool),
     verifier: createTokenVerifier({ issuer: ISSUER, secret: SECRET }),
     now,
     storage,
