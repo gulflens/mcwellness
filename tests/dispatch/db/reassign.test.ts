@@ -120,6 +120,21 @@ async function call(
   });
 }
 
+/**
+ * How many `read` rows the trail holds for the household every visit in this
+ * file belongs to. `docs/SPEC/audit.md` rule 11: a refused attempt writes no
+ * row, so the refusals that come before the household is looked at are proved
+ * by counting either side of them rather than by reading the route.
+ */
+async function readsOfTheHousehold(): Promise<number> {
+  const { rows } = await owner.query<{ n: string }>(
+    "select count(*)::text as n from audit_log where action = 'read' " +
+      "and entity_type = 'client' and entity_id = $1",
+    [IDS.clientA],
+  );
+  return Number(rows[0]?.n);
+}
+
 async function seedAppointment(
   id: string,
   windowStart: Date,
@@ -471,6 +486,11 @@ describe('POST /api/appointments/:id/reassign', () => {
   });
 
   it('refuses a practitioner who is not certified for that service on that day, and one who is not free', async () => {
+    // The credential is asked about before the household is, so a refused
+    // reassignment opens nobody's record: the trail gains no `read` row for
+    // them, exactly as the `practitioner_not_found` refusal above gains none
+    // (docs/SPEC/audit.md rule 11).
+    const beforeUncertified = await readsOfTheHousehold();
     const uncertified = await call(
       AUTH.ownerA,
       'POST',
@@ -478,6 +498,7 @@ describe('POST /api/appointments/:id/reassign', () => {
       { practitionerId: PRACTITIONER_C },
     );
     expect(uncertified.status).toBe(403);
+    expect(await readsOfTheHousehold()).toBe(beforeUncertified);
     const clash = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_CLASH}/reassign`, {
       practitionerId: PRACTITIONER_B,
     });
@@ -566,14 +587,6 @@ describe('POST /api/appointments/:id/reassign', () => {
 
     // Nobody of that id in this practice — and the household is never looked
     // at to find that out, so the trail gains no `read` row for them either.
-    const readsOfTheHousehold = async (): Promise<number> => {
-      const { rows } = await owner.query<{ n: string }>(
-        "select count(*)::text as n from audit_log where action = 'read' " +
-          "and entity_type = 'client' and entity_id = $1",
-        [IDS.clientA],
-      );
-      return Number(rows[0]?.n);
-    };
     const before = await readsOfTheHousehold();
     const nobody = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_SAME}/reassign`, {
       practitionerId: PRACTITIONER_UNKNOWN,

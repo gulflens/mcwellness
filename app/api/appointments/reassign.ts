@@ -1,7 +1,7 @@
 import type { Context, Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { z } from 'zod';
-import { canActor, hasRole, type Capability } from '@domain/shared';
+import { canActor, hasRole, isoDateIn, type Capability } from '@domain/shared';
 import {
   checkConflicts,
   windowFor,
@@ -22,6 +22,7 @@ import {
   readMoveContext,
   retire,
   LIVE_STATUSES_EXCLUDED,
+  PRACTICE_TIME_ZONE,
   REASON_MAX,
 } from './move-one';
 import {
@@ -228,18 +229,21 @@ export function mountAppointmentReassign(
     const target = await readNewPractitioner(db, body.data.practitionerId);
     if (target === null) return badRequest(c, requestId, 'practitioner_not_found');
 
-    const context = await readMoveContext(db, appointment, windowStart);
-    if (context === null) {
-      return c.json({ error: 'not_found', code: 'appointment_not_found', requestId }, 404);
-    }
-    // One `read` row for the household this act looked at, in this route's
-    // own transaction, exactly as the move writes one.
-    await logClientRead(db, appointment.client_id);
-
     // The booking rule, for the practitioner the visit is going to: they must
     // hold a credential for this service that is valid on the day of the
     // visit. Handing a visit to somebody uncertified is the one thing a
     // reassignment could do that a move never can.
+    //
+    // **Above the household's read, and that is the point.** Everything this
+    // gate needs is already in hand — the target's credentials from the read
+    // just above, and the day, which is `isoDateIn(windowStart)` in the
+    // practice's zone and is the same value `readMoveContext` computes for
+    // its own `on`. So a refusal here writes no `read` row for the household
+    // (docs/SPEC/audit.md rule 11: a refused attempt leaves no trail row),
+    // where the first build opened their record and then said no.
+    // `move.ts` cannot do the same, because the credentials it judges arrive
+    // inside `readMoveContext`; here they do not.
+    const on = isoDateIn(windowStart, PRACTICE_TIME_ZONE);
     if (
       !canActor(
         actor,
@@ -247,7 +251,7 @@ export function mountAppointmentReassign(
           type: 'appointment.create',
           practitionerId: target.id,
           serviceTypeId: appointment.service_type_id,
-          on: context.on,
+          on,
         },
         { assigneeCapabilities: target.capabilities },
         now(),
@@ -255,6 +259,14 @@ export function mountAppointmentReassign(
     ) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
+
+    const context = await readMoveContext(db, appointment, windowStart);
+    if (context === null) {
+      return c.json({ error: 'not_found', code: 'appointment_not_found', requestId }, 404);
+    }
+    // One `read` row for the household this act looked at, in this route's
+    // own transaction, exactly as the move writes one.
+    await logClientRead(db, appointment.client_id);
 
     const report = checkConflicts(
       {

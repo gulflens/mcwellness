@@ -225,6 +225,16 @@ a refused attempt writes no row: a reassignment naming a practitioner who is
 not there refuses as `practitioner_not_found` before any household record is
 read at all.
 
+**Amended in the fix round, 2026-09-10:** and so does a reassignment naming
+one who is not certified. The credential gate sits between the target's own
+read and `readMoveContext`, judging the day as `isoDateIn(windowStart)` in the
+practice's zone — the value `readMoveContext` computes for itself — so a 403
+opens no household record either. Both of the reads the ordering above exists
+for still happen before the audit insert, because the target's calendar comes
+back with their credentials. `move.ts` keeps its own credential check where it
+is: the credentials it judges arrive inside `readMoveContext`, so it has
+nothing to move the check above.
+
 **Amended in the build, 2026-09-10:** the target's id is compared to the
 visit's own practitioner after lower-casing, so a UUID written in upper-case
 hex cannot walk past `same_practitioner` and retire a live row in favour of
