@@ -1054,8 +1054,8 @@ nine and ten; see the records on pull requests 73 to 83).
 14. **Piece twenty-two, the board (this pull request):** built from
     `docs/superpowers/plans/2026-09-10-dispatch-board.md` in the `dispatch`
     worktree; migration 210; the board at `/admin/schedule/board`; a
-    reassignment as two rows with a reason. Next: the whole-branch review,
-    then the pull request.
+    reassignment as two rows with a reason. Next: pieces twenty-three to
+    twenty-five with plans of their own, after the two billing plans.
 
 ## 11. Where Claude's own memory lives
 
