@@ -166,7 +166,16 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
       return c.json({ error: 'conflict', code: 'ended_too_long_ago', requestId }, 409);
     }
 
-    await db.query("select set_config('app.reason', $1, true)", [scrubReason(input.reason)]);
+    // One value, written everywhere the reason is written. `app.audit_redact`
+    // passes any string of 200 characters or fewer through verbatim and both
+    // columns are capped at 200, so a key pasted into the reason box and
+    // stored raw reaches `audit_log.new_values` intact — the one thing
+    // docs/SPEC/audit.md section 8 asks never to happen. Scrubbing the stamp
+    // and not the column would also leave the trail and the row disagreeing
+    // about what somebody typed.
+    const reason = scrubReason(input.reason);
+
+    await db.query("select set_config('app.reason', $1, true)", [reason]);
 
     await db.query('savepoint extension_attempt');
     try {
@@ -176,7 +185,7 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
         next.ordinal,
         next.fromOn,
         next.toOn,
-        input.reason,
+        reason,
       ]);
     } catch (error) {
       if (!isOrdinalConflict(error)) {
@@ -193,11 +202,7 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
     // The purchase keeps the latest extension's end and reason beside the
     // date it was sold with, which is what every reader of a programme's end
     // already reads (migration 410's header).
-    const updated = await db.query<PurchaseDbRow>(EXTEND_SQL, [
-      purchaseId,
-      next.toOn,
-      input.reason,
-    ]);
+    const updated = await db.query<PurchaseDbRow>(EXTEND_SQL, [purchaseId, next.toOn, reason]);
     const row = updated.rows[0];
     if (!row) {
       throw new Error('The extension updated no purchase.');

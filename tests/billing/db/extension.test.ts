@@ -429,6 +429,44 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
     expect(rows[0]).toEqual({ n: 0, extended_to: null });
   });
 
+  it('stores the reason scrubbed in the column, not only in the trail', async () => {
+    // A key pasted into the reason box by mistake. `app.audit_redact` passes
+    // any string of 200 characters or fewer through verbatim and the column is
+    // capped at 200, so a reason written raw reaches audit_log.new_values
+    // intact — which is the one thing docs/SPEC/audit.md section 8 asks never
+    // to happen. The scrub guarded the stamp on app.reason and neither column.
+    const pasted = 'Key pasted by mistake: ABCDEFGH1234567890abcdefghij123456';
+    const scrubbed = 'Key pasted by mistake: [redacted]';
+    const purchase = await sellSilverTo(5);
+
+    const res = await h.call(
+      'POST',
+      `/api/billing/package-purchases/${purchase.id}/extension`,
+      SEEDED.owner,
+      { reason: pasted },
+    );
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as ExtendPurchaseResponse).purchase.extensionReason).toBe(scrubbed);
+
+    const { rows } = await h.owner.query<{
+      extension_reason: string;
+      row_reason: string;
+      audited_reason: string;
+    }>(
+      'select p.extension_reason, x.reason as row_reason, ' +
+        "(select a.new_values->>'reason' from audit_log a where a.entity_type = 'package_extension' " +
+        'and a.entity_id = x.id order by a.id desc limit 1) as audited_reason ' +
+        'from package_purchase p join package_extension x on x.purchase_id = p.id ' +
+        'where p.id = $1',
+      [purchase.id],
+    );
+    expect(rows[0]).toEqual({
+      extension_reason: scrubbed,
+      row_reason: scrubbed,
+      audited_reason: scrubbed,
+    });
+  });
+
   it('records why in the audit trail, not only in the column', async () => {
     const { rows } = await h.owner.query<{ reason: string | null }>(
       "select reason from audit_log where entity_type = 'package_purchase' and action = 'update' " +
