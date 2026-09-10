@@ -40,8 +40,9 @@ pre-existing assertion of the old figure corrected alongside it.
 
 ## 2. To production: the three live programmes, by a data step at the live pass
 
-**What.** `update package set expiry_months = 6 where code in ('silver',
-'gold', 'platinum')`, run against production under the runner's audit context
+**What.** `update package set expiry_months = 6 where tenant_id = <the
+practice's id, read back first> and code in ('silver', 'gold', 'platinum')`,
+run against production under the runner's audit context
 (`app.actor_id`, `app.actor_roles`, `app.request_id`, `app.reason` and
 `app.tenant_id` set as every write to a billing row requires), on the
 operator's word — not part of this pull request, and not run by it.
@@ -63,12 +64,42 @@ to six months by a data step") and `docs/SPEC/billing.md` section 4.3.
 
 **The file.** Production's `package` table — not a file this round edits, and
 not a write this branch's pull request makes. *Owed at the live pass, on the
-operator's word, recorded in `docs/PRODUCTION.md`.* Production's own three
-codes are read back and confirmed to be exactly `silver`, `gold` and
-`platinum` before the update runs: a code typed once in a change-request note
-is not proof of what the live catalogue actually calls its own rows.
+operator's word, recorded in `docs/PRODUCTION.md` when it is run.*
+Production's own three codes are read back and confirmed to be exactly
+`silver`, `gold` and `platinum` before the update runs: a code typed once in a
+change-request note is not proof of what the live catalogue actually calls its
+own rows. The practice's own `tenant_id` is read back the same way and written
+into the statement before it runs, so the update names the practice it is
+meant for rather than every row in the table that happens to share a code.
 
 ---
 
 **Neither blocked the round.** Item 1 is applied; item 2 is owed and recorded,
 awaiting the operator's word at the live pass.
+
+---
+
+## Left for the billing stream
+
+Named here so nothing is lost, and left because each was weighed by the
+whole-branch review of this round and ruled harmless as it stands. None of
+them is a defect on this branch.
+
+- **`package_extension.client_id` is not tied to the purchase's own client.**
+  The foreign key points at `client (tenant_id, id)` alone, so the column
+  could in principle name a different household from the purchase it extends.
+  It matches `entitlement`, the nearer precedent, and the route never types
+  it: `app/api/billing/extensions.ts` takes it from the purchase row it has
+  just read. A composite key through `package_purchase (tenant_id, id,
+  client_id)` would make it structural, and that is a migration of its own.
+- **The new table's policies are the ledger pair copied out by hand.**
+  `db/policies/billing/ledger.sql` applies `ledger_readers` and
+  `ledger_writers` to five tables in one loop; `package_extension_readers` and
+  `package_extension_writers` repeat both clauses verbatim under their own
+  names, below that loop. The audience is identical, so the table belongs in
+  the array — a tidying, not a change of who may read or write.
+- **`set_updated_at` fires on a table nobody may update.** An extension is
+  written once: 410 grants `select, insert` and no update, and there is no
+  `ledger_amenders` for it. The trigger is therefore dead. It stays because
+  the standard-column rule wants `updated_at` on every table and the trigger
+  is what keeps that column honest if an update case ever appears.

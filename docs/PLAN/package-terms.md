@@ -76,4 +76,6 @@ Built on 10 September 2026 as the billing round on this branch: migration
 410; the domain rule in `domain/billing/extension.ts`; the extension route
 and the drawer that offers it; the sale sentence and the invoice line; the
 seed. The three live programmes move to six months by a data step at the
-live pass, on the operator's word, recorded in `docs/PRODUCTION.md`.
+live pass, on the operator's word: it is owed in
+`docs/CHANGE-REQUESTS/billing-10.md`, and it is recorded in
+`docs/PRODUCTION.md` when it is run.

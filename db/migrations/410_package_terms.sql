@@ -7,7 +7,9 @@
 -- sale) and changes its default from twelve to six. Programmes already sold
 -- keep the term they were sold with: expires_on was written at the sale and
 -- nothing here rewrites it. The three programmes on the live price list move
--- to six by a data step at the live pass, recorded in docs/PRODUCTION.md.
+-- to six by a data step at the live pass, owed in
+-- docs/CHANGE-REQUESTS/billing-10.md and recorded in docs/PRODUCTION.md when
+-- it is run.
 --
 -- **The extension.** Until now an extension was one open-ended date typed by
 -- the coordinator with a reason (403: extended_to, extension_reason). From

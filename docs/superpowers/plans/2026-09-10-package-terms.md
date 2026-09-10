@@ -20,7 +20,7 @@
 - Fixtures only from `db/seed/` generators; test ids in the billing tests' own reserved block (read `tests/billing/db/extension.test.ts` for the shape); names from `db/seed/names.ts`. Edit fixtures with the Edit tool so the identifier hook sees them.
 - Commit messages conventional, each ending `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 - Gates before the pull request: `pnpm verify`, `pnpm test:db` (with `DATABASE_URL` from this worktree's `.env`), `pnpm build`.
-- The trunk file this round touches is `db/seed/generate.ts` (the seed's term constant); it is recorded in `docs/CHANGE-REQUESTS/billing-08.md` (Task 7). Nothing else outside the billing stream's paths changes.
+- The trunk file this round touches is `db/seed/generate.ts` (the seed's term constant); it is recorded in `docs/CHANGE-REQUESTS/billing-10.md` (Task 7). Nothing else outside the billing stream's paths changes.
 
 ---
 
@@ -35,7 +35,7 @@
 - Modify `app/api/billing/sales.ts` — the purchase reads count extensions; the invoice's package line carries the term in both languages.
 - Modify `app/admin/billing/ExtensionDrawer.tsx`, `BalancesSection.tsx`, `SellPackageDrawer.tsx`, `PackageDrawer.tsx` — the copy and the count.
 - Modify `db/seed/generate.ts` — `PACKAGE_EXPIRY_MONTHS` 12 → 6.
-- Modify `docs/SPEC/billing.md`, `docs/PLAN/package-terms.md`, `docs/HANDOVER.md`; create `docs/CHANGE-REQUESTS/billing-08.md`.
+- Modify `docs/SPEC/billing.md`, `docs/PLAN/package-terms.md`, `docs/HANDOVER.md`; create `docs/CHANGE-REQUESTS/billing-10.md`.
 - Tests: `tests/billing/db/extension.test.ts` (rewritten cases), `tests/billing/db/packages.test.ts` (the default), `tests/billing/BalancesSection.test.tsx`, `tests/billing/SellPackageDrawer.test.tsx`, `app/admin/billing/PackageDrawer.test.tsx`, `db/seed/generate.test.ts`.
 
 ---
@@ -735,7 +735,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `docs/SPEC/billing.md` (section 4.3 "Expiry"), `docs/PLAN/package-terms.md` (a closing "Built" line), `docs/HANDOVER.md` section 10 (step 15)
-- Create: `docs/CHANGE-REQUESTS/billing-08.md` (read `billing-07.md` for the shape)
+- Create: `docs/CHANGE-REQUESTS/billing-10.md` (read `billing-07.md` for the shape). This plan said `billing-08.md` when it was written and the number moved to `billing-10.md` before it was executed, because `billing-08.md` and `billing-09.md` were taken by the discount round and the document-design round in the meantime.
 - Test: none new; the gates whole
 
 - [ ] **Step 1: The spec**
@@ -759,7 +759,7 @@ and the call-out fee are unchanged.
 
 `docs/PLAN/package-terms.md`: append `## Built` with two sentences: built on 10 September 2026 as the billing round on this branch (migration 410; `domain/billing/extension.ts`; the extension route and drawer; the sale sentence and the invoice line; the seed) — and that the three live programmes move to six months by a data step at the live pass, on the operator's word, recorded in `docs/PRODUCTION.md`.
 
-`docs/CHANGE-REQUESTS/billing-08.md`, in `billing-07.md`'s shape: item 1, `db/seed/generate.ts` — `PACKAGE_EXPIRY_MONTHS` 12 → 6 and its comment (trunk file, per OWNERSHIP); item 2, the data step the live pass owes: `update package set expiry_months = 6 where code in (<the three codes>)` on production, under the runner's audit context, on the operator's word — read the three codes from `db/seed/generate.ts` lines ~497–530 (`Silver`, `Gold`, `Platinum`) and say that production's codes are confirmed by a read before the update.
+`docs/CHANGE-REQUESTS/billing-10.md`, in `billing-07.md`'s shape: item 1, `db/seed/generate.ts` — `PACKAGE_EXPIRY_MONTHS` 12 → 6 and its comment (trunk file, per OWNERSHIP); item 2, the data step the live pass owes: `update package set expiry_months = 6 where code in (<the three codes>)` on production, under the runner's audit context, on the operator's word — read the three codes from `db/seed/generate.ts` lines ~497–530 (`Silver`, `Gold`, `Platinum`) and say that production's codes are confirmed by a read before the update.
 
 `docs/HANDOVER.md` section 10, after step 14: `15. **Package terms (decision 9, this pull request):** …` in the shape of 14 — migration 410, six months, two extensions of three; still owed: the staging pass with 410, the production data step for the three programmes, the live pass, all on the operator's word. Next: piece twelve's plan.
 
@@ -771,7 +771,7 @@ Expected: all green.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/SPEC/billing.md docs/PLAN/package-terms.md docs/CHANGE-REQUESTS/billing-08.md docs/HANDOVER.md
+git add docs/SPEC/billing.md docs/PLAN/package-terms.md docs/CHANGE-REQUESTS/billing-10.md docs/HANDOVER.md
 git commit -m "docs(billing): the term and its two extensions in the spec, the change request, and the hand-over
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
