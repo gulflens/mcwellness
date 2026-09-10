@@ -48,10 +48,13 @@ const PRACTITIONER_GONE = '00000000-0000-4000-8000-000000007009';
 const PRACTITIONER_GONE_USER = '00000000-0000-4000-8000-000000007010';
 const PRACTITIONER_LEFT = '00000000-0000-4000-8000-000000007011';
 const PRACTITIONER_LEFT_USER = '00000000-0000-4000-8000-000000007012';
+const LOCATION_OFF = '00000000-0000-4000-8000-000000007013';
 const APPT_CLOSED = '00000000-0000-4000-8000-000000007101';
 const APPT_OPEN = '00000000-0000-4000-8000-000000007102';
 const APPT_NEXT = '00000000-0000-4000-8000-000000007103';
 const APPT_LEFT = '00000000-0000-4000-8000-000000007104';
+const APPT_OFF = '00000000-0000-4000-8000-000000007105';
+const APPT_MOVED = '00000000-0000-4000-8000-000000007106';
 const SESSION_CLOSED = '00000000-0000-4000-8000-000000007201';
 const SESSION_OPEN = '00000000-0000-4000-8000-000000007202';
 
@@ -229,11 +232,23 @@ beforeAll(async () => {
     [LOCATION_FAR, IDS.tenantA, IDS.clientA, IDS.ownerA],
   );
 
+  // A third address of the same household, and the only place on the day that
+  // nobody is driving to: both visits at it are settled.
+  await owner.query(
+    'insert into location (id, tenant_id, owner_type, owner_id, label, emirate, entrance_point, created_by) ' +
+      "values ($1, $2, 'client', $3, 'home', 'DXB', " +
+      "extensions.st_geogfromtext('SRID=4326;POINT(55.40 25.30)'), $4)",
+    [LOCATION_OFF, IDS.tenantA, IDS.clientA, IDS.ownerA],
+  );
+
   // The day: one visit closed at 09:40, one checked in at 10:00 and still open
-  // at 10:50, one still to come at 11:00 — which cannot be reached in time.
+  // at 10:50, one still to come at 11:00 — which cannot be reached in time —
+  // and two the day is done with: one called off and one moved (spec 4.4).
   await seedAppointment(APPT_CLOSED, at('09:00'), 'completed');
   await seedAppointment(APPT_OPEN, at('10:00'), 'checked_in');
   await seedAppointment(APPT_NEXT, at('11:00'), 'confirmed', LOCATION_FAR);
+  await seedAppointment(APPT_OFF, at('12:00'), 'cancelled', LOCATION_OFF);
+  await seedAppointment(APPT_MOVED, at('13:00'), 'rescheduled', LOCATION_OFF);
   await seedAppointment(APPT_LEFT, at('14:00'), 'confirmed', IDS.locationA, PRACTITIONER_LEFT);
   await seedSession(SESSION_CLOSED, APPT_CLOSED, at('09:02'), at('09:40'));
   await seedSession(SESSION_OPEN, APPT_OPEN, at('10:03'), null);
@@ -274,6 +289,10 @@ describe('GET /api/appointments/board', () => {
       [APPT_CLOSED, 'finished'],
       [APPT_OPEN, 'at_the_door'],
       [APPT_NEXT, 'running_late'],
+      // The two the map's own status list leaves out, which is why the board
+      // asks for every status (spec 4.4).
+      [APPT_OFF, 'called_off'],
+      [APPT_MOVED, 'moved'],
     ]);
     const next = busy?.visits[2];
     expect(next?.lateness?.late).toBe(true);
@@ -302,8 +321,8 @@ describe('GET /api/appointments/board', () => {
     const beforeHousehold = await count(' and client_id = $1', [IDS.clientA]);
     const beforeAll = await count('', []);
     await get(AUTH.ownerA, `/api/appointments/board?date=${DATE}`);
-    expect((await count(' and client_id = $1', [IDS.clientA])) - beforeHousehold).toBe(4);
-    expect((await count('', [])) - beforeAll).toBe(4);
+    expect((await count(' and client_id = $1', [IDS.clientA])) - beforeHousehold).toBe(6);
+    expect((await count('', [])) - beforeAll).toBe(6);
   });
 
   it('answers without a routing seam, saying so rather than refusing the screen', async () => {
@@ -315,7 +334,13 @@ describe('GET /api/appointments/board', () => {
     expect(visits.map((v) => v.lateness)).toEqual(visits.map(() => null));
     // The facts still decide the states; only the lateness is unknown.
     const busy = body.practitioners.find((p) => p.practitionerId === MORE_IDS.practitionerA);
-    expect(busy?.visits.map((v) => v.state)).toEqual(['finished', 'at_the_door', 'agreed']);
+    expect(busy?.visits.map((v) => v.state)).toEqual([
+      'finished',
+      'at_the_door',
+      'agreed',
+      'called_off',
+      'moved',
+    ]);
   });
 
   it("lists the practice's current practitioners, and a leaver only while a visit is still theirs", async () => {
