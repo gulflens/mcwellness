@@ -30,6 +30,10 @@
  * Nothing here is called by a test of the page: the page takes its loader as
  * a prop, so a test hands it a fake namespace and no test ever reaches the
  * network.
+ *
+ * Since trunk round 43 this lives in the shell: the day map and the pin
+ * picker (`app/admin/clients/pin/PinPickerPage.tsx`) both load it, which is
+ * the ownership map's rule for a thing two modules share.
  */
 
 export type GoogleMaps = typeof google.maps;
@@ -52,7 +56,11 @@ export function resetGoogleMapsLoader(): void {
   pending = null;
 }
 
-export function loadGoogleMaps(key: string, doc: Document = document): Promise<GoogleMaps> {
+export function loadGoogleMaps(
+  key: string,
+  options: { libraries?: readonly 'places'[]; doc?: Document } = {},
+): Promise<GoogleMaps> {
+  const doc = options.doc ?? document;
   if (pending !== null) return pending;
   const already = (window as unknown as { google?: { maps?: GoogleMaps } }).google?.maps;
   if (already) {
@@ -80,6 +88,12 @@ export function loadGoogleMaps(key: string, doc: Document = document): Promise<G
       language: 'en',
       region: 'AE',
     });
+    // Only the pin picker asks for a library, and only for one: the day map
+    // draws its own pins and needs nothing beyond the map
+    // (docs/SPEC/route-planning.md section 4.6).
+    if (options.libraries && options.libraries.length > 0) {
+      parameters.set('libraries', options.libraries.join(','));
+    }
     script.src = `https://maps.googleapis.com/maps/api/js?${parameters.toString()}`;
     script.async = true;
     // Origin only, never the path: the key is restricted by referrer and a

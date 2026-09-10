@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PracticeDayPractitioner } from '../../../api/routing/schema';
-import type { GoogleMaps } from './googleMaps';
+import type { GoogleMaps } from '../../../shell/maps/googleMaps';
 import { mapStyle } from './mapStyle';
 import { createProjectionBridge, type Projection } from './overlays';
 

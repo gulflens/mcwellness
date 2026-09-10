@@ -4,7 +4,7 @@ import {
   loadGoogleMaps,
   MAPS_VERSION,
   resetGoogleMapsLoader,
-} from '../../app/admin/schedule/map/googleMaps';
+} from '../../app/shell/maps/googleMaps';
 
 afterEach(() => {
   resetGoogleMapsLoader();
@@ -23,6 +23,19 @@ describe('loadGoogleMaps', () => {
     expect(src).toContain('loading=async');
     expect(src).toContain('region=AE');
     expect(src).toContain('language=en');
+  });
+
+  it('asks for nothing it does not draw: no libraries unless told', () => {
+    void loadGoogleMaps('browser-key-under-test');
+    const src = document.head.querySelector('script')?.getAttribute('src') ?? '';
+    expect(new URL(src).searchParams.get('libraries')).toBeNull();
+    expect(new URL(src).searchParams.get('region')).toBe('AE');
+  });
+
+  it('asks for the places library when the picker needs it', () => {
+    void loadGoogleMaps('browser-key-under-test', { libraries: ['places'] });
+    const src = document.head.querySelector('script')?.getAttribute('src') ?? '';
+    expect(new URL(src).searchParams.get('libraries')).toBe('places');
   });
 
   it('copies the document’s nonce onto the script, so the map document’s policy admits it', () => {
