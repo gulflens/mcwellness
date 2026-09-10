@@ -3301,12 +3301,15 @@ list only while something required is still missing; choosing it replaces
 the list with the form, and the per-consent form underneath is untouched —
 a re-consent, a withdrawal, a paper form and a verbal re-confirmation at
 the door all still go through it exactly as before. The caption printed
-into the filed image names each purpose in fewer words than its on-screen
-heading, because `fillText` never wraps and the full labels for all four
-required purposes run past the image's 600px width; shortening a label on
-the evidence's own footer is not the same act as shortening what the
-household reads and signs against, which nothing here touches. Building
-the screen also found a real gap in `tests/lint/console-is-english.test.ts`
+into the filed image names each purpose in the same words its on-screen
+heading uses: `wrapCaption.ts` breaks the combined names onto as many lines
+as they need, measured against the real font, and the image grows downward
+to hold whatever that produces. A first attempt shortened the labels
+instead, to fit `fillText`'s single line — a fix round of 10 September 2026
+reversed that, because the evidence's own footer is the practice's record
+of what a household agreed to, and cannot say less than what it actually
+read and signed against. Building the screen also found a real gap in
+`tests/lint/console-is-english.test.ts`
 (round 35's own guard, trunk-owned): its allowlist named only
 `RecordConsentForm.tsx` as the one staff screen that may show the
 household's consent wording in Arabic, and `SignAllForm.tsx` needed to
@@ -3339,8 +3342,11 @@ still names its own, and that no version of any wording moved for it.
 the trunk's own paths, by the integrator's widening for one round
 (`docs/SPEC/OWNERSHIP.md`): `client-record` —
 `app/admin/clients/SignaturePad.tsx` with its test,
+`app/admin/clients/RecordConsentForm.tsx`,
 `app/admin/clients/ConsentTab.tsx`, `app/admin/clients/SignAllForm.tsx`
-(new) with its test, `app/admin/clients/clients.css`,
+(new) with its test, `app/admin/clients/consentPurposeLabels.ts` (new),
+`app/admin/clients/wrapCaption.ts` (new) with its test,
+`app/admin/clients/clients.css`,
 `app/api/clients/consents.ts`, `app/api/clients/record-schema.ts`,
 `domain/client/index.ts`, `domain/client/requiredConsents.ts` with its
 test, and `tests/client/db/consent_bundle.test.ts` (new); plus
@@ -3354,14 +3360,14 @@ a `verbal_witnessed` row with none.
 **Gates on the branch head, in this worktree** (`mcwellness-reports`,
 database on port 5438): format, lint, typecheck and the secrets scan (1,512
 tracked files) clean; 2,537 unit tests passed across 218 files; 1,356
-database tests passed across 99 files. The migration audit does not read
-clean here, for a reason this round did not create and cannot fix from
-inside it: this branch's base predates `db/migrations/410_package_terms.sql`,
-merged to `origin/main` afterwards by the billing stream's own round, so the
-audit reads it as a file missing locally rather than one this branch never
-had cause to carry. `db/migrations/` is untouched by every commit on this
-branch — the round adds no migration of its own — and the audit will read
-clean again the moment this branch is brought forward past that merge,
-which is the integrator's to do at the same time as everything else that
-touches `main`.
+database tests passed across 99 files. The migration audit did not read
+clean earlier in this round, for a reason this round did not create: this
+branch's base predated `db/migrations/410_package_terms.sql`, merged to
+`origin/main` afterwards by the billing stream's own round, so the audit
+read it as a file missing locally rather than one this branch never had
+cause to carry. Merge `f527f36` brought that file, and the rest of that
+round, in. The audit is green at this head — `pnpm audit:migrations`
+reports 95 migration files checked against `origin/main`, none edited,
+deleted or renamed after the merge — and `db/migrations/` remains untouched
+by every commit this round makes of its own.
 
