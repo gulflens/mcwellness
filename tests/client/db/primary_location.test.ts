@@ -123,4 +123,43 @@ describe('client.primary_location_id', () => {
     });
     expect(await primaryOf(IDS.clientA)).toBe(before);
   });
+
+  // Fix round 1 (task-5 review): unflagging the client's own current primary
+  // must clear the link too, not just the location's own flag — otherwise it
+  // names a location that no longer claims to be one.
+  it('clears the link when the current primary is unflagged', async () => {
+    const current = await primaryOf(IDS.clientA);
+    expect(current).not.toBeNull();
+    const res = await request(`/api/clients/${IDS.clientA}/locations/${current}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isPrimary: false }),
+    });
+    expect(res.status).toBe(200);
+    expect(await primaryOf(IDS.clientA)).toBeNull();
+  });
+
+  it('leaves the link alone when a non-primary location is unflagged', async () => {
+    const { rows: work } = await owner.query<{ id: string }>(
+      "select id from location where owner_id = $1 and label = 'work'",
+      [IDS.clientA],
+    );
+    const workId = work[0]?.id as string;
+    await request(`/api/clients/${IDS.clientA}/locations/${workId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isPrimary: true }),
+    });
+    expect(await primaryOf(IDS.clientA)).toBe(workId);
+
+    const { rows: other } = await owner.query<{ id: string }>(
+      "select id from location where owner_id = $1 and label = 'other'",
+      [IDS.clientA],
+    );
+    const otherId = other[0]?.id as string;
+    const res = await request(`/api/clients/${IDS.clientA}/locations/${otherId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isPrimary: false }),
+    });
+    expect(res.status).toBe(200);
+    expect(await primaryOf(IDS.clientA)).toBe(workId);
+  });
 });

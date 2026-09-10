@@ -28,14 +28,24 @@ const point = (lng: number, lat: number): string => `SRID=4326;POINT(${lng} ${la
  * (app/api/clients/list.ts), and until the walk of 10 September nothing but the
  * seed ever wrote it: every client enrolled through the app showed no emirate.
  * The flag on the location and the link on the client are set together so the
- * two can never disagree, and the other locations are demoted in the same
- * breath so "primary" keeps meaning one.
+ * two can never disagree, and the other locations are demoted before this one
+ * is promoted — never the reverse, and never as one statement spanning both
+ * rows. `location_one_primary_per_owner` (db/migrations/963_backfill_primary_location.sql)
+ * is a plain, non-deferrable unique index, and Postgres checks it as each row
+ * is written, not once at the end of the statement: a single UPDATE that sets
+ * this row true and another false in the same pass can still hold both true
+ * for an instant mid-statement, and the index refuses that even though the
+ * statement's own final state is fine. Demoting everyone else first (to
+ * false, which the index never restricts) and only then promoting this one
+ * means no instant ever has two.
  */
 async function makePrimary(db: Db, clientId: string, locationId: string): Promise<void> {
   await db.query(
-    "update location set is_primary = (id = $2) where owner_type = 'client' and owner_id = $1",
+    "update location set is_primary = false where owner_type = 'client' and owner_id = $1 " +
+      'and id <> $2 and is_primary',
     [clientId, locationId],
   );
+  await db.query('update location set is_primary = true where id = $1', [locationId]);
   await db.query('update client set primary_location_id = $2 where id = $1', [
     clientId,
     locationId,
@@ -78,10 +88,16 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
     }
 
     const locationId = randomUUID();
+    // Always inserted false, whatever the request asked. location_one_primary_per_owner
+    // (db/migrations/963_backfill_primary_location.sql) is a plain unique index, checked
+    // immediately: inserting this row already flagged true, while the client's existing
+    // primary is still flagged true too, would violate it before makePrimary ever ran.
+    // makePrimary below is what actually earns the flag, in the one statement that also
+    // demotes whichever location held it before.
     await db.query(
       'insert into location (id, tenant_id, owner_type, owner_id, label, emirate, ' +
         'makani_number, entrance_point, display_address, access_notes, is_primary) ' +
-        "values ($1, $2, 'client', $3, $4, $5, $6, extensions.st_geogfromtext($7), $8, $9, $10)",
+        "values ($1, $2, 'client', $3, $4, $5, $6, extensions.st_geogfromtext($7), $8, $9, false)",
       [
         locationId,
         actor.tenantId,
@@ -92,7 +108,6 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
         point(body.data.entranceLng, body.data.entranceLat),
         body.data.displayAddress ? cleanText(body.data.displayAddress, 400) : null,
         body.data.accessNotes ? cleanText(body.data.accessNotes, 1000) : null,
-        body.data.isPrimary,
       ],
     );
     if (body.data.isPrimary) {
@@ -162,13 +177,31 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
       push('display_address', d.displayAddress ? cleanText(d.displayAddress, 400) : null);
     if (d.accessNotes !== undefined)
       push('access_notes', d.accessNotes ? cleanText(d.accessNotes, 1000) : null);
-    if (d.isPrimary !== undefined) push('is_primary', d.isPrimary);
-    if (sets.length === 0) return c.json({ error: 'bad_request', requestId }, 400);
+    // isPrimary true is deliberately never in this generic column list: writing it here
+    // would flag this row true before the client's other locations are demoted, and
+    // location_one_primary_per_owner (db/migrations/963_backfill_primary_location.sql)
+    // refuses two flagged rows for the same owner even for an instant. makePrimary below
+    // is the one statement that flips this row true and every other false together.
+    // Flagging false carries no such risk, so it stays in the generic update.
+    if (d.isPrimary === false) push('is_primary', false);
+    if (sets.length === 0 && d.isPrimary === undefined) {
+      return c.json({ error: 'bad_request', requestId }, 400);
+    }
 
-    values.push(locationId);
-    await db.query(`update location set ${sets.join(', ')} where id = $${values.length}`, values);
+    if (sets.length > 0) {
+      values.push(locationId);
+      await db.query(`update location set ${sets.join(', ')} where id = $${values.length}`, values);
+    }
     if (d.isPrimary === true) {
       await makePrimary(db, clientId, locationId);
+    } else if (d.isPrimary === false) {
+      // Unflagging the client's current primary clears the link too, so it never points
+      // at a location whose own flag says it isn't one. Unflagging any other location — it
+      // was never the link's target — leaves client.primary_location_id exactly as it was.
+      await db.query(
+        'update client set primary_location_id = null where id = $1 and primary_location_id = $2',
+        [clientId, locationId],
+      );
     }
     return c.json(IdResponse.parse({ id: locationId }));
   });

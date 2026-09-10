@@ -215,6 +215,8 @@ export const MORE_IDS = {
   locationD: '00000000-0000-4000-8000-0000000000d5',
   locationE: '00000000-0000-4000-8000-0000000000d6',
   locationF: '00000000-0000-4000-8000-0000000000d7',
+  locationG: '00000000-0000-4000-8000-0000000000d8',
+  locationH: '00000000-0000-4000-8000-0000000000d9',
 } as const;
 
 export async function seedUser(
