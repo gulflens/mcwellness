@@ -6,6 +6,7 @@ import {
   MAX_EXTENSIONS,
   nextExtension,
   resolveSaleVat,
+  termWords,
   type AppliedDiscount,
   type PackageComponent,
 } from '../../../domain/billing';
@@ -451,11 +452,18 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     // The line stamps the rate that was *charged*, which is zero while the
     // practice is unregistered, not the rate the price row records. The
     // rendered document reads the line, so the two must not disagree.
+    //
+    // The term is said here too, in both languages: the operator's decision 9
+    // (docs/PLAN/package-terms.md) is that a programme's length is on the
+    // invoice, not only in the Sell drawer the family saw once.
+    const term = termWords(bundle.expiryMonths);
+    const description = `${bundle.name}, ${term.en}`;
+    const descriptionAr = bundle.nameAr ? `${bundle.nameAr}، ${term.ar}` : null;
     await db.query(INSERT_LINE_SQL, [
       invoiceId,
       input.clientId,
-      bundle.name,
-      bundle.nameAr,
+      description,
+      descriptionAr,
       bundle.id,
       applied.listFils,
       applied.discountFils,

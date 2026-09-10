@@ -21,7 +21,7 @@ const SILVER = {
   name: 'Silver',
   nameAr: 'الفضية',
   listPriceFils: 1_215_000,
-  expiryMonths: 12,
+  expiryMonths: 6,
   status: 'active' as const,
   components: [
     {
@@ -159,6 +159,15 @@ describe('SellPackageDrawer', () => {
     expect(screen.getByText('10,325.00')).toBeTruthy();
     expect(screen.getByText('VAT (5%)')).toBeTruthy();
     expect(screen.getByText('10,841.25')).toBeTruthy();
+  });
+
+  it('says the term and the two extensions above the button', async () => {
+    mount();
+    expect(
+      await screen.findByText(
+        'Runs 6 months from today. Two extensions of three months each on request.',
+      ),
+    ).toBeTruthy();
   });
 
   it('names no rate while nothing is charged at it', () => {

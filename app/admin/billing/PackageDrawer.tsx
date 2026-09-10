@@ -102,7 +102,7 @@ export function PackageDrawer({
   const [name, setName] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
   const [code, setCode] = useState('');
-  const [expiryMonths, setExpiryMonths] = useState('12');
+  const [expiryMonths, setExpiryMonths] = useState('6');
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [listPrice, setListPrice] = useState('');
   const [listPriceTouched, setListPriceTouched] = useState(false);
@@ -458,7 +458,7 @@ export function PackageDrawer({
             max={60}
             value={expiryMonths}
             onChange={(e) => setExpiryMonths(e.target.value)}
-            hint="How long a family has to use it. Twelve months unless the practice decides otherwise."
+            hint="How long a family has to use it. Six months unless the practice decides otherwise."
           />
 
           {formError ? <Note tone="critical">{formError}</Note> : null}

@@ -406,12 +406,22 @@ describe('selling a Silver package', () => {
       },
     ]);
 
-    const { rows: lines } = await h.owner.query<{ description: string; quantity: number }>(
-      'select l.description, l.quantity from invoice_line l join invoice i on i.id = l.invoice_id ' +
-        'where i.package_purchase_id = $1',
+    const { rows: lines } = await h.owner.query<{
+      description: string;
+      description_ar: string | null;
+      quantity: number;
+    }>(
+      'select l.description, l.description_ar, l.quantity from invoice_line l ' +
+        'join invoice i on i.id = l.invoice_id where i.package_purchase_id = $1',
       [purchaseId],
     );
-    expect(lines).toEqual([{ description: 'Silver', quantity: 1 }]);
+    // The term said on the invoice line, in both languages
+    // (docs/PLAN/package-terms.md): this suite's own Silver is built by
+    // silverInput() at twelve months, not the seed's new six, so the words
+    // are the fixture's own term and not the operator's headline figure.
+    expect(lines).toEqual([
+      { description: 'Silver, 12 months', description_ar: 'الفضية، 12 شهرًا', quantity: 1 },
+    ]);
 
     const { rows: payments } = await h.owner.query<{ method: string; amount_fils: number }>(
       'select p.method, p.amount_fils from payment p join invoice i on i.id = p.invoice_id ' +

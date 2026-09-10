@@ -76,6 +76,17 @@ function mount(onCreated: (row: unknown) => void = () => undefined) {
 }
 
 describe('PackageDrawer', () => {
+  it('starts a new programme at six months', async () => {
+    mount();
+    await screen.findByLabelText(/Brain map/);
+    expect((await screen.findByLabelText('Runs for (months)')).getAttribute('value')).toBe('6');
+    expect(
+      screen.getByText(
+        'How long a family has to use it. Six months unless the practice decides otherwise.',
+      ),
+    ).toBeTruthy();
+  });
+
   it("offers the contents' total as the list price, grouped as money is written", async () => {
     mount();
     await screen.findByLabelText(/Brain map/);
