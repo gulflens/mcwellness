@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { canGiveConsent, type ConsentPurpose } from '@domain/client';
+import { PURPOSE_LABELS } from './consentPurposeLabels';
 import {
   ConsentWitnessListResponse,
   ConsentWordingResponse,
@@ -35,16 +36,6 @@ import { practiceToday, practiceTodayInWords } from './activation';
  * used, the evidence goes with the consent in one request, so a consent
  * without evidence cannot be recorded at all.
  */
-
-const PURPOSE_LABELS: Record<ConsentPurpose, string> = {
-  participation: 'Participation',
-  minor_participation: "Guardian's consent for a child",
-  home_visit: 'Visits at home',
-  health_data: 'Brain-map and neurofeedback information',
-  photo_video: 'Photographs and video',
-  research: 'Research',
-  marketing: 'Marketing',
-};
 
 const REFUSALS: Record<string, string> = {
   wording_not_found: 'That wording is no longer on file. Reopen this form to load the current one.',
@@ -333,7 +324,7 @@ export function RecordConsentForm({
           node?.focus();
         }}
       >
-        Record {PURPOSE_LABELS[purpose].toLowerCase()}
+        Record {(PURPOSE_LABELS[purpose] ?? purpose).toLowerCase()}
       </h3>
 
       {consenting.length === 0 ? (
