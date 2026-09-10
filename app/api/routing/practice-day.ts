@@ -106,7 +106,7 @@ const BUCKETS_AFTER_LAST_DEPARTURE = 2;
 const MAX_BUCKETS = 12;
 const MINUTE_MS = 60_000;
 
-export function toHomeBase(row: BaseRow): HomeBase {
+function toHomeBase(row: BaseRow): HomeBase {
   return {
     id: row.location_id,
     entrancePoint: { lat: row.entrance_lat, lng: row.entrance_lng },
@@ -148,7 +148,7 @@ export async function readDay(
   return rows;
 }
 
-export async function readBases(db: Db): Promise<Map<string, BaseRow>> {
+async function readBases(db: Db): Promise<Map<string, BaseRow>> {
   const { rows } = await db.query<BaseRow>(BASES_SQL);
   return new Map(rows.map((row) => [row.practitioner_id, row]));
 }

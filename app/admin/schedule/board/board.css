@@ -108,8 +108,11 @@ button.board__block {
 }
 
 .board__block .status__dot {
-  /* Half a line, less half the dot's own 6px (the size `StatusChip` gives it,
-     app/shell/shell.css), so the dot sits on the centre of the first line. */
+  /* Half a line, less half the dot's own 6px, so the dot sits on the centre of
+     the first line. The 6px is `.status__dot`'s own width and height in
+     app/shell/shell.css, which is where it is set and the only place it may
+     be changed; it is a literal here because a shared component's size is not
+     a design token and there is nothing to read it from. */
   margin-block-start: calc((var(--lh-body) - 6px) / 2);
 }
 

@@ -26,15 +26,15 @@ own pull request under the integrator's widening for one piece.
 5. **`docs/SPEC/scheduling-manual.md`**: section 4.1 already says "drag
    between columns to reassign"; sections 8 and 10 said a dispatch board is
    out of scope, and now say it is piece twenty-two's.
-6. **Six exports from `app/api/routing/practice-day.ts`** (`readDay`,
-   `readBases`, `toHomeBase`, `toPlanStop`, `bucketsFor`, `placesFor`), so the
-   board prices its drives with the same reads the map uses rather than a
-   copy. Scheduling's file, edited under the same widening. What is true
-   today: the board uses four of the six. `readBases` and `toHomeBase` are
-   exported and unused by the board, because the matrix the lateness rule asks
-   for takes no home base (spec section 5, amended); both are still used
-   inside their own file by the day map. They are kept exported until the
-   final review rules on whether to un-export them.
+6. **Four exports from `app/api/routing/practice-day.ts`** (`readDay`,
+   `toPlanStop`, `bucketsFor`, `placesFor`), so the board prices its drives
+   with the same reads the map uses rather than a copy. Scheduling's file,
+   edited under the same widening. Four and not six: `readBases` and
+   `toHomeBase` were exported at first and never used by the board, because
+   the matrix the lateness rule asks for takes no home base (spec section 5,
+   amended). The whole-branch review ruled on them and they are
+   module-private again, still used inside their own file by the day map — so
+   this piece widens the file's surface by exactly what it consumes.
 7. **`insertMoved` in `app/api/appointments/move-one.ts`** takes the new
    practitioner and the new column, both optional, so a move is unchanged.
 8. **The seed** (`db/seed/generate.ts`, `apply.ts`, `tests/db/seed.test.ts`),

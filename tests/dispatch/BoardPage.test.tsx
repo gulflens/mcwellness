@@ -382,6 +382,15 @@ describe('the board grid', () => {
   it('gives an empty lane no rows at all', () => {
     expect(laneRows([])).toEqual([]);
   });
+
+  it('packs blocks that arrive out of order, and answers in the order it was given', () => {
+    // First fit is only the fewest rows for intervals read in start order, and
+    // the start order is a cross-file invariant (`readDay`'s own `order by`).
+    // Sorting here costs a line and means a lane can never staircase because
+    // something upstream changed its mind about ordering.
+    const hourly = ['11:00', '09:00', '10:00'].map((time) => runs(time, 105));
+    expect(laneRows(hourly)).toEqual([1, 1, 2]);
+  });
 });
 
 describe('BoardPage', () => {

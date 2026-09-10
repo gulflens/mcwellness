@@ -83,21 +83,29 @@ export function hourLabels(span: Span): { label: string; column: number }[] {
  * First fit, in start order: a block goes on the first row whose last block
  * ends at or before it starts — touching is not overlapping — and otherwise
  * opens a new one. For intervals sorted by start, that is the minimum number
- * of rows. Blocks must arrive in start order, which is the order the route
- * sends a practitioner's visits and the order they are drawn in, so a
- * later-starting block can never land above an earlier one.
+ * of rows, so the packing sorts by start itself rather than trusting the wire
+ * to have done it: the route does send a practitioner's visits in window
+ * order (`readDay`'s own `order by`), but that is an invariant kept in
+ * another file, and a lane that quietly staircases is not a failure anybody
+ * would see as one.
  *
  * Returns one 1-based row per block, in the order given. Pure.
  */
 export function laneRows(blocks: readonly Block[]): number[] {
   /** When the last block on each row so far ends. */
   const endsAt: number[] = [];
-  return blocks.map((block) => {
+  const rows: number[] = [];
+  const inStartOrder = blocks
+    .map((_, index) => index)
+    .sort((a, b) => blocks[a]!.start.getTime() - blocks[b]!.start.getTime());
+  for (const index of inStartOrder) {
+    const block = blocks[index]!;
     const found = endsAt.findIndex((end) => end <= block.start.getTime());
     const row = found === -1 ? endsAt.length : found;
     endsAt[row] = block.end.getTime();
-    return row + 1;
-  });
+    rows[index] = row + 1;
+  }
+  return rows;
 }
 
 /** A block spans its arrival window plus the service's own length (4.2). */

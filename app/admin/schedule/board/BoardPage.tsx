@@ -49,10 +49,12 @@ const STATE_LABELS: Record<BoardState, string> = {
 };
 
 /**
- * Hue is the practice's three status tones and nothing else (4.4): attention
- * is kept for the one state that asks the dispatcher to act now, and critical
- * for the one that has already cost the practice a visit. A day going to plan
- * carries no colour at all.
+ * Hue is the practice's three status tones and nothing else (4.4). A day going
+ * to plan reads `ok`: the practitioner is on the way, at the door, or finished.
+ * `attention` is kept for the one state that asks the dispatcher to act now,
+ * and `critical` for the one that has already cost the practice a visit.
+ * Everything still merely arranged — waiting, agreed — and everything the day
+ * is done with — called off, moved — carries no colour at all.
  */
 const STATE_TONES: Record<BoardState, StatusTone> = {
   waiting: 'neutral',
@@ -192,6 +194,9 @@ export function BoardPage() {
     for (const practitioner of board.practitioners) {
       for (const visit of practitioner.visits) {
         if (visit.appointmentId !== appointmentId) continue;
+        // Unreachable through the screen — only a movable block is draggable —
+        // but the drawer must never open on a visit the route would refuse.
+        if (!movable(visit)) return;
         if (practitioner.practitionerId === onto.practitionerId) return;
         setDrawer({ visit, from: practitioner, to: onto.practitionerId });
         return;
@@ -229,80 +234,85 @@ export function BoardPage() {
               </span>
             ))}
           </div>
-          {board.practitioners.map((practitioner) => (
-            <section
-              key={practitioner.practitionerId}
-              className="board__row"
-              aria-label={practitioner.displayName}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                pickUp(event.dataTransfer.getData('text/plain'), practitioner);
-              }}
-            >
-              <h2 className="board__name">{practitioner.displayName}</h2>
-              <div className="board__lane">
-                {practitioner.visits.length === 0 ? (
-                  <span className="board__idle small muted">Nothing on</span>
-                ) : null}
-                {/* Rows worked out for the whole lane before any of it is
-                    drawn, so blocks that overlap in time stack on the fewest
-                    rows that keep them apart rather than one each. The route
-                    sends a practitioner's visits in window order, which is
-                    the order `laneRows` needs and the order they are drawn. */}
-                {laneRows(practitioner.visits.map(blockOf)).map((row, index) => {
-                  const visit = practitioner.visits[index]!;
-                  const columns = gridColumns(span, blockOf(visit));
-                  const facts = (
-                    <>
-                      <span className="board__window numeric">
-                        {formatWindow(visit.windowStart, visit.windowEnd)}
-                      </span>
-                      <span className="board__client">
-                        {visit.client.givenName} {visit.client.familyName}
-                      </span>
-                      <span className="board__facts small muted">
-                        {visit.serviceType.name}, {visit.emirate}
-                      </span>
-                      <StatusChip label={stateLabel(visit)} tone={STATE_TONES[visit.state]} />
-                    </>
-                  );
-                  const className = `board__block board__block--${visit.state}`;
-                  const style = {
-                    '--block-start': columns.start,
-                    '--block-end': columns.end,
-                    '--block-row': row,
-                  } as CSSProperties;
-                  // A visit that has been checked in, delivered, missed, called
-                  // off or already moved cannot change hands, and a control
-                  // that does nothing when pressed is worse than no control:
-                  // it is a settled fact on the board, not a thing to take
-                  // hold of. Only a live visit is a button, and only a button
-                  // can be dragged.
-                  return movable(visit) ? (
-                    <button
-                      key={visit.appointmentId}
-                      type="button"
-                      className={className}
-                      style={style}
-                      draggable
-                      onDragStart={(event) =>
-                        event.dataTransfer.setData('text/plain', visit.appointmentId)
-                      }
-                      onClick={() => setDrawer({ visit, from: practitioner, to: null })}
-                      aria-label={`${visit.client.givenName} ${visit.client.familyName}, ${formatWindow(visit.windowStart, visit.windowEnd)}, ${stateLabel(visit)}`}
-                    >
-                      {facts}
-                    </button>
-                  ) : (
-                    <div key={visit.appointmentId} className={className} style={style}>
-                      {facts}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+          {board.practitioners.map((practitioner) => {
+            // One block per visit, worked out once for both things that need
+            // it: `laneRows` packs the whole lane before any of it is drawn,
+            // so blocks that overlap in time stack on the fewest rows that
+            // keep them apart rather than one each, and each block's own
+            // columns come from the same rectangle rather than a second
+            // reading of the same visit.
+            const blocks = practitioner.visits.map(blockOf);
+            const rows = laneRows(blocks);
+            return (
+              <section
+                key={practitioner.practitionerId}
+                className="board__row"
+                aria-label={practitioner.displayName}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  pickUp(event.dataTransfer.getData('text/plain'), practitioner);
+                }}
+              >
+                <h2 className="board__name">{practitioner.displayName}</h2>
+                <div className="board__lane">
+                  {practitioner.visits.length === 0 ? (
+                    <span className="board__idle small muted">Nothing on</span>
+                  ) : null}
+                  {practitioner.visits.map((visit, index) => {
+                    const row = rows[index]!;
+                    const columns = gridColumns(span, blocks[index]!);
+                    const facts = (
+                      <>
+                        <span className="board__window numeric">
+                          {formatWindow(visit.windowStart, visit.windowEnd)}
+                        </span>
+                        <span className="board__client">
+                          {visit.client.givenName} {visit.client.familyName}
+                        </span>
+                        <span className="board__facts small muted">
+                          {visit.serviceType.name}, {visit.emirate}
+                        </span>
+                        <StatusChip label={stateLabel(visit)} tone={STATE_TONES[visit.state]} />
+                      </>
+                    );
+                    const className = `board__block board__block--${visit.state}`;
+                    const style = {
+                      '--block-start': columns.start,
+                      '--block-end': columns.end,
+                      '--block-row': row,
+                    } as CSSProperties;
+                    // A visit that has been checked in, delivered, missed, called
+                    // off or already moved cannot change hands, and a control
+                    // that does nothing when pressed is worse than no control:
+                    // it is a settled fact on the board, not a thing to take
+                    // hold of. Only a live visit is a button, and only a button
+                    // can be dragged.
+                    return movable(visit) ? (
+                      <button
+                        key={visit.appointmentId}
+                        type="button"
+                        className={className}
+                        style={style}
+                        draggable
+                        onDragStart={(event) =>
+                          event.dataTransfer.setData('text/plain', visit.appointmentId)
+                        }
+                        onClick={() => setDrawer({ visit, from: practitioner, to: null })}
+                        aria-label={`${visit.client.givenName} ${visit.client.familyName}, ${formatWindow(visit.windowStart, visit.windowEnd)}, ${stateLabel(visit)}`}
+                      >
+                        {facts}
+                      </button>
+                    ) : (
+                      <div key={visit.appointmentId} className={className} style={style}>
+                        {facts}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })}
         </div>
       ) : null}
       {drawer && board ? (

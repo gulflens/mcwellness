@@ -48,14 +48,6 @@ import { BoardResponse, type BoardPractitioner, type BoardVisit } from './schema
  */
 
 /**
- * The rows down the side of the board (spec 4.2): the practice's current
- * practitioners, plus anyone who has left with a visit still against their
- * name that day. The second half is not politeness — the render loop is
- * driven by this list, so a leaver dropped from it takes their unreassigned
- * visits off the board with them, and a visit nobody can see is a visit
- * nobody drives to. `$1` is the day's own practitioners, read first.
- */
-/**
  * The day asked for. `z.iso.date()` and not a shape test: `2026-13-45` has the
  * right shape and is not a day, and handing that to `dayRange` makes an
  * Invalid Date that Postgres refuses — a 500 where the schedule's own route,
@@ -63,6 +55,18 @@ import { BoardResponse, type BoardPractitioner, type BoardVisit } from './schema
  */
 const Query = z.object({ date: z.iso.date() });
 
+/**
+ * The rows down the side of the board (spec 4.2): the practice's current
+ * practitioners, plus anyone who has left with a visit still against their
+ * name that day. The second half is not politeness — the render loop is
+ * driven by this list, so a leaver dropped from it takes their unreassigned
+ * visits off the board with them, and a visit nobody can see is a visit
+ * nobody drives to. `$1` is the day's own practitioners, read first.
+ *
+ * The status is selected as well as tested, because the two halves of the
+ * list are not the same thing to the screen: a leaver's row is drawn and is
+ * not a place a visit can be handed to (spec 6.2).
+ */
 const PRACTITIONERS_SQL =
   'select p.id, p.status::text as status, u.display_name ' +
   'from practitioner p join app_user u on u.id = p.user_id ' +
