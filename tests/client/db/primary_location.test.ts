@@ -162,4 +162,28 @@ describe('client.primary_location_id', () => {
     expect(res.status).toBe(200);
     expect(await primaryOf(IDS.clientA)).toBe(workId);
   });
+
+  // Fix round: re-saving a location already primary must not write two no-op
+  // rows through the audit triggers (app/api/clients/locations.ts, makePrimary).
+  it('writes nothing to the trail when a location already primary is saved primary again', async () => {
+    const current = await primaryOf(IDS.clientA);
+    expect(current).not.toBeNull();
+    const countRows = async (): Promise<number> =>
+      (
+        await owner.query<{ n: number }>(
+          "select count(*)::int as n from audit_log where action = 'update' " +
+            "and ((entity_type = 'location' and entity_id = $1) " +
+            "or (entity_type = 'client' and entity_id = $2))",
+          [current, IDS.clientA],
+        )
+      ).rows[0]?.n ?? -1;
+    const before = await countRows();
+    const res = await request(`/api/clients/${IDS.clientA}/locations/${current}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isPrimary: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(await primaryOf(IDS.clientA)).toBe(current);
+    expect(await countRows()).toBe(before);
+  });
 });

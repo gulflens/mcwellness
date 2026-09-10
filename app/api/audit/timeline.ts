@@ -47,7 +47,7 @@ const SQL =
   'where a.client_id = $1 and ($2::bigint is null or a.id < $2::bigint) ' +
   'order by a.id desc limit $3';
 
-function toEvent(row: Row): AuditEvent {
+function toEvent(row: Row, subjectErased: boolean): AuditEvent {
   return {
     id: row.id,
     occurredAt: row.occurred_at.toISOString(),
@@ -67,6 +67,7 @@ function toEvent(row: Row): AuditEvent {
     oldValues: row.old_values,
     newValues: row.new_values,
     reason: row.reason,
+    subjectErased,
   };
 }
 
@@ -100,7 +101,8 @@ export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
     // Opening an erased record is a sensitive action (client-record.md section 8):
     // it needs a typed reason, which the trail then carries with the read.
-    if (exists.rows[0]?.status === 'erased' && !(c.req.header('x-reason') ?? '').trim()) {
+    const subjectErased = exists.rows[0]?.status === 'erased';
+    if (subjectErased && !(c.req.header('x-reason') ?? '').trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const { limit, locale } = query.data;
@@ -116,7 +118,7 @@ export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // 1, Task 8: a name is not an identity).
     let previousActorId: string | null = null;
     for (const row of page) {
-      const event = toEvent(row);
+      const event = toEvent(row, subjectErased);
       const narration = narrate(event, locale);
       if (narration === null) continue;
       const previous = events[events.length - 1];

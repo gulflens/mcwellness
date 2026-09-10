@@ -166,6 +166,20 @@ describe('GET /api/audit/activity', () => {
       'The household asked what the record still held.',
     );
     expect(withReason.events.length).toBeGreaterThan(0);
+
+    // The reason that read needed is the whole point of the row
+    // (docs/SPEC/audit.md section 6): a second read narrowed to the same
+    // erased record shows the first read's own reason, rather than nulling
+    // it the way an ordinary read's reason is nulled.
+    const again = await feed(
+      `/api/audit/activity?clientId=${ERASED}&limit=50`,
+      AUTH.ownerA,
+      'Checking again before the letter goes out.',
+    );
+    const priorRead = again.events.find(
+      (event) => event.entityType === 'client' && event.kind === 'read',
+    );
+    expect(priorRead?.reason).toBe('The household asked what the record still held.');
   });
 
   it('keeps an erased household out of the unfiltered feed until a reason is typed', async () => {

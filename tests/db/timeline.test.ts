@@ -206,6 +206,23 @@ describe('GET /api/clients/:id/timeline', () => {
       },
     });
     expect(withReason.status).toBe(200);
+    // The reason a break-glass read is opened with is the whole point of the
+    // row (docs/SPEC/audit.md section 6): a second read, still with the
+    // record erased, shows the first read's own reason on the trail rather
+    // than nulling it as an ordinary read would.
+    const again = await api.request(`/api/clients/${client.id}/timeline`, {
+      headers: {
+        authorization: `Bearer ${await mint(authIdOf(0))}`,
+        'x-reason': 'Checking again before the letter goes out.',
+      },
+    });
+    expect(again.status).toBe(200);
+    const againBody = (await again.json()) as TimelineResponse;
+    const ownerName = data.users[0]?.displayName ?? '';
+    const priorRead = againBody.events.find(
+      (e) => e.sentence === `${ownerName} viewed this record` && e.kind === 'read',
+    );
+    expect(priorRead?.reason).toBe('Family asked what was held.');
     expect((await get(authIdOf(3), `/api/clients/${client.id}/timeline`)).status).toBe(404);
     await owner.query("update client set status = 'active' where id = $1", [client.id]);
     expect(

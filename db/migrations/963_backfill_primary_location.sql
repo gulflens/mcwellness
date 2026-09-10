@@ -16,7 +16,10 @@
 -- exactly one location and no flag gets that one, since it is the only place
 -- a practitioner could be sent. A client with several unflagged locations is
 -- left null: the office marks one, and the list shows no emirate until it
--- does, as today. Idempotent: only null links are written.
+-- does, as today. The `do $$` block below is idempotent: only null links are
+-- written. The `create unique index` after it is not (no `if not exists`),
+-- which is safe only because the runner records this file and never
+-- re-applies it.
 --
 -- The third statement then makes every location's flag agree with the link,
 -- for every client that has one — not only the ones this file just linked,

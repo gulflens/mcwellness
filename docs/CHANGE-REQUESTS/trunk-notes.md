@@ -3154,9 +3154,11 @@ birth had no way to be corrected short of erasing and re-enrolling. The
 form carries no Arabic-name fields: the console is English only, the
 operator's decision of 7 September (`tests/lint/console-is-english.test.ts`
 enforces it), a rule this round's own design spec first missed and the
-build corrected. The Overview's "Preferred language" row is gone with it —
-the client table has no such column, and the row's "English" was always a
-placeholder, never a real setting.
+build corrected. The Overview's "Preferred language" row was briefly removed
+in error, on the stated but false grounds that the client table had no such
+column — it does (`db/migrations/060_client.sql`), and it decides the
+language of a household's consent wording and erasure letter. It is
+restored, read-only: no screen can change the setting yet.
 
 `client.primary_location_id` is now written going forward, not only by the
 seed. Creating or patching a location with `isPrimary` demotes every other

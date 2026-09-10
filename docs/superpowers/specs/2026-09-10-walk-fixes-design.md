@@ -61,8 +61,9 @@ longer is refunded and sold again, which the existing refund path already suppor
   rule this spec first overlooked and execution corrected. Sent to `PATCH /api/clients/:id`, which
   already accepts every field and refuses anyone but owner and admin. Rendered from an Edit
   button on `OverviewTab.tsx` and from the wizard's Identity tab, which becomes a button once
-  the record exists. Preferred language stays read-only: the client table has no such column
-  and the screen's "English" is a placeholder the round removes.
+  the record exists. Preferred language stays read-only: the column is real
+  (`db/migrations/060_client.sql`) and decides a household's consent and letter language, but no
+  route accepts a write to it yet.
 - **Primary location.** `app/api/clients/locations.ts` sets `client.primary_location_id` when a
   location is created or patched with `isPrimary`, and demotes the other locations' flag in the
   same statement so one client has one primary. Migration `963_backfill_primary_location.sql`

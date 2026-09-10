@@ -81,4 +81,12 @@ describe('IdentityForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/permission/);
   });
+
+  // Preferred language is read-only (UpdateClientBody in record-schema.ts has
+  // no such field, so no route could accept it): this form offers no way to
+  // set it, on the client's own record or on this screen.
+  it('offers no control for preferred language', () => {
+    mount();
+    expect(screen.queryByLabelText(/preferred language/i)).toBeNull();
+  });
 });

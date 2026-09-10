@@ -136,6 +136,16 @@ export function OverviewTab({
             <dd>{record.sexAtBirth ? SEX_LABELS[record.sexAtBirth] : 'Not recorded'}</dd>
           </div>
           <div className="record-facts__row">
+            <dt>Preferred language</dt>
+            <dd>
+              {record.preferredLocale === 'ar' ? 'Arabic' : 'English'}
+              <p className="small muted">
+                Decides the language of this household&rsquo;s consent wording and erasure letters.
+                Cannot be changed from this screen yet.
+              </p>
+            </dd>
+          </div>
+          <div className="record-facts__row">
             <dt>Referral</dt>
             <dd>{record.referralSource ?? 'Not recorded'}</dd>
           </div>

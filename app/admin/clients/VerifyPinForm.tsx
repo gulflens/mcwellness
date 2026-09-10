@@ -8,7 +8,7 @@ const GENERIC_ERROR = 'The pin could not be verified. Try again.';
 const FORBIDDEN_ERROR = "You don't have permission to change this client's locations.";
 
 /**
- * "Verify pin" (docs/SPEC/client-record.md section 4.2; task brief item 4):
+ * "Check the pin" (docs/SPEC/client-record.md section 4.2; task brief item 4):
  * drag-the-marker becomes latitude and longitude, "Use my current
  * position", and "Open in Google Maps" so the person can eyeball the point
  * — no map library, no map key, both still absent from the web app

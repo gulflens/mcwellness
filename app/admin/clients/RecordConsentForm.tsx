@@ -12,7 +12,7 @@ import { Button, Note, Select } from '../../shell/components/Controls';
 import { ConsentText } from './ConsentText';
 import { SignaturePad, type SignatureResult } from './SignaturePad';
 import { compressToFit, type UploadFile } from './fileUpload';
-import { contactDisplayName, contactName, relationshipLabel } from './contactName';
+import { contactDisplayName, relationshipLabel, signatureName } from './contactName';
 import { practiceToday, practiceTodayInWords } from './activation';
 
 /**
@@ -142,13 +142,17 @@ export function RecordConsentForm({
 
   const giver = consenting.find((contact) => contact.id === givenByContactId) ?? null;
   // The typed name falls back to the contact's own where the record has one
-  // (db/migrations/101_contact_name.sql), and holds whatever was typed the
-  // moment anything is. Derived rather than copied into state by an effect:
-  // an effect would have to decide when the copy is stale, and the answer —
-  // "once the person has typed" — is exactly what `typedName` being non-null
-  // already says.
+  // (db/migrations/101_contact_name.sql), and to the client's own name for a
+  // self contact with no name of its own — the contact the enrolment wizard
+  // creates — and never to a relationship label standing in for a person's
+  // name (`signatureName`, contactName.tsx; the walk of 10 September found a
+  // self giver with no name signing as nobody). It holds whatever was typed
+  // the moment anything is. Derived rather than copied into state by an
+  // effect: an effect would have to decide when the copy is stale, and the
+  // answer — "once the person has typed" — is exactly what `typedName` being
+  // non-null already says.
   const [typedName, setTypedName] = useState<string | null>(null);
-  const signedName = typedName ?? contactName(giver) ?? '';
+  const signedName = typedName ?? (giver ? signatureName(giver, record) : '');
 
   // `verbal_witnessed` is a home-visit **re-confirmation** and nothing else
   // (section 7: never initial participation). So it is offered for that

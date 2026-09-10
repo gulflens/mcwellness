@@ -39,7 +39,7 @@ type FieldErrors = { emirate?: string; makani?: string; point?: string };
  * Add or edit one location (docs/SPEC/client-record.md section 4.2). A
  * location's emirate and entrance point are set once, at creation
  * (locations.ts does not let either move through the ordinary edit route —
- * the point moves only through "Verify pin", CoordinateFields.tsx), so edit
+ * the point moves only through "Check the pin", CoordinateFields.tsx), so edit
  * mode hides both and asks only for what the edit route accepts. Reused by
  * the drawer's Locations tab and the enrolment wizard's location step.
  */

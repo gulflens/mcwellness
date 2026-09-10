@@ -275,6 +275,36 @@ describe('narrate', () => {
     expect(change?.reason).toBe('Client asked for a morning slot');
   });
 
+  it('keeps the reason on a read of an erased record, and nulls it on an ordinary read', () => {
+    const ordinary = narrate(
+      event({ action: 'read', reason: 'Checking the household before a call.' }),
+      'en',
+    );
+    expect(ordinary?.reason).toBeNull();
+    const erased = narrate(
+      event({
+        action: 'read',
+        reason: 'A lapsed member asked what the practice still held.',
+        subjectErased: true,
+      }),
+      'en',
+    );
+    expect(erased?.reason).toBe('A lapsed member asked what the practice still held.');
+    // A change on an erased record's row is not the case this rule is about,
+    // and already kept its reason before this round — subjectErased makes no
+    // difference to it either way.
+    const change = narrate(
+      event({
+        action: 'update',
+        changedFields: ['status'],
+        reason: 'Reopened for a corrected return.',
+        subjectErased: true,
+      }),
+      'en',
+    );
+    expect(change?.reason).toBe('Reopened for a corrected return.');
+  });
+
   it('carries the reason on its own, never inside the sentence', () => {
     const withdrawn = CASES.find((c) => c.name === 'withdrawing consent');
     const narration = narrate(withdrawn?.event ?? event({}), 'en');

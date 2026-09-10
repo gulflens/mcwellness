@@ -110,6 +110,19 @@ describe('OverviewTab', () => {
     mount(<OverviewTab record={record} onChanged={vi.fn()} mayWrite={false} />);
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
   });
+
+  // A real column (db/migrations/060_client.sql), read-only here: it decides
+  // which language a household's consent wording and erasure letter come out
+  // in (app/api/clients/consents.ts, app/api/clients/erasure.ts), and it was
+  // briefly removed as a "placeholder" before being restored (round 43,
+  // fix wave).
+  it("shows a client's preferred language as text, not a control", async () => {
+    mount(
+      <OverviewTab record={{ ...record, preferredLocale: 'ar' }} onChanged={vi.fn()} mayWrite />,
+    );
+    expect(await screen.findByText('Arabic')).toBeTruthy();
+    expect(screen.queryByLabelText(/preferred language/i)).toBeNull();
+  });
 });
 
 describe('ConsentTab', () => {

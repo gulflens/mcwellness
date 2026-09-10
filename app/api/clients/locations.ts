@@ -45,11 +45,18 @@ async function makePrimary(db: Db, clientId: string, locationId: string): Promis
       'and id <> $2 and is_primary',
     [clientId, locationId],
   );
-  await db.query('update location set is_primary = true where id = $1', [locationId]);
-  await db.query('update client set primary_location_id = $2 where id = $1', [
-    clientId,
-    locationId,
-  ]);
+  // Guarded so that re-saving a location already primary writes nothing: a
+  // plain unconditional UPDATE here wrote a no-op row through the audit
+  // triggers every time, even when neither column actually changed.
+  await db.query(
+    'update location set is_primary = true where id = $1 and is_primary is distinct from true',
+    [locationId],
+  );
+  await db.query(
+    'update client set primary_location_id = $2 where id = $1 ' +
+      'and primary_location_id is distinct from $2',
+    [clientId, locationId],
+  );
 }
 
 export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -207,7 +214,7 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
   });
 
   // A distinct action from a general edit: dragging the marker to confirm
-  // exactly where the entrance is (client-record.md section 4.2, "verify pin").
+  // exactly where the entrance is (client-record.md section 4.2, "check the pin").
   api.post('/api/clients/:id/locations/:locationId/verify-pin', async (c) => {
     const actor = c.get('actor');
     const db = c.get('db');
