@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SIGNATURE_HEIGHT, SIGNATURE_WIDTH, SignaturePad } from './SignaturePad';
+import {
+  CAPTIONED_INK_HEIGHT,
+  SIGNATURE_HEIGHT,
+  SIGNATURE_WIDTH,
+  SignaturePad,
+} from './SignaturePad';
 
 /**
  * The signature pad (docs/SPEC/client-record.md section 7).
@@ -326,6 +331,107 @@ describe('SignaturePad', () => {
     // Only the name and the date: no absent-caption blank line, no shifted
     // band, nothing new in the image's shape.
     expect(fillText.mock.calls.map((call) => call[0])).toEqual(['Alpha Synthetic', TODAY]);
+  });
+
+  it('sets the visible pad to the ink area while a caption is present, and to the full height otherwise (finding 2, fix round of 10 September 2026: the drawable region must equal the clean region)', () => {
+    const { container, rerender } = render(
+      <SignaturePad
+        signedName=""
+        onSignedNameChange={vi.fn()}
+        onChange={vi.fn()}
+        today={TODAY}
+        caption="Signed for: Participation"
+      />,
+    );
+    const pad = container.querySelector('canvas') as HTMLCanvasElement;
+    // The band a caption reserves is spoken for, so the person can never draw
+    // into it in the first place — the pad itself is only as tall as the ink
+    // area while a caption exists.
+    expect(pad.style.aspectRatio).toBe(`${SIGNATURE_WIDTH} / ${CAPTIONED_INK_HEIGHT}`);
+
+    rerender(
+      <SignaturePad signedName="" onSignedNameChange={vi.fn()} onChange={vi.fn()} today={TODAY} />,
+    );
+    // RecordConsentForm.tsx never passes a caption: the pad stays the full
+    // height it always was, unchanged.
+    expect(pad.style.aspectRatio).toBe(`${SIGNATURE_WIDTH} / ${SIGNATURE_HEIGHT}`);
+  });
+
+  it('paints the caption band opaque before drawing it, so ink under it never shows through (finding 2, belt-and-braces)', () => {
+    const onChange = vi.fn();
+    const log: { method: string; args: unknown[] }[] = [];
+    const context = {
+      clearRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn((x: number, y: number) => log.push({ method: 'moveTo', args: [x, y] })),
+      lineTo: vi.fn((x: number, y: number) => log.push({ method: 'lineTo', args: [x, y] })),
+      stroke: vi.fn(),
+      fillRect: vi.fn((x: number, y: number, w: number, h: number) =>
+        log.push({ method: 'fillRect', args: [x, y, w, h] }),
+      ),
+      fillText: vi.fn((text: string) => log.push({ method: 'fillText', args: [text] })),
+      measureText: vi.fn((text: string) => ({ width: text.length * 10 })),
+      lineWidth: 0,
+      lineCap: 'round',
+      lineJoin: 'round',
+      strokeStyle: '',
+      fillStyle: '',
+      font: '',
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => context as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(PNG_DATA_URL);
+
+    const { container } = render(
+      <SignaturePad
+        signedName="Alpha Synthetic"
+        onSignedNameChange={vi.fn()}
+        onChange={onChange}
+        today={TODAY}
+        caption="Signed for: Participation"
+      />,
+    );
+    const pad = container.querySelector('canvas') as Element;
+    // Deep in what the caption band now reserves (180 and below) — the exact
+    // scenario that used to draw straight through "Signed for: …" while the
+    // drawable area still reached the old full 260. (Reaching this point at
+    // all is what the previous test proves a real pad no longer allows; this
+    // one proves the belt-and-braces holds even so — including the
+    // pre-existing collision with the name/date band this closes too.)
+    fireEvent.pointerDown(pad, { clientX: 100, clientY: 230, pointerId: 1 });
+    fireEvent.pointerMove(pad, { clientX: 150, clientY: 250, pointerId: 1 });
+    fireEvent.pointerUp(pad, { clientX: 150, clientY: 250, pointerId: 1 });
+
+    // The ink is kept, not dropped or clipped.
+    expect(onChange).toHaveBeenCalled();
+    const strokeIndices = log
+      .map((entry, i) => ({ entry, i }))
+      .filter(
+        ({ entry }) =>
+          (entry.method === 'moveTo' || entry.method === 'lineTo') && entry.args[1] === 250,
+      )
+      .map(({ i }) => i);
+    expect(strokeIndices.length).toBeGreaterThan(0);
+
+    // The band is painted opaque, after that ink and before the rule and the
+    // text that follow it, so whatever is above it is covered rather than
+    // showing through.
+    const fillRectIndex = log.findIndex(
+      (entry) =>
+        entry.method === 'fillRect' &&
+        entry.args[0] === 0 &&
+        entry.args[1] === CAPTIONED_INK_HEIGHT &&
+        entry.args[2] === SIGNATURE_WIDTH,
+    );
+    const firstCaptionTextIndex = log.findIndex(
+      (entry) => entry.method === 'fillText' && entry.args[0] === 'Signed for: Participation',
+    );
+    expect(fillRectIndex).toBeGreaterThan(Math.max(...strokeIndices));
+    expect(fillRectIndex).toBeLessThan(firstCaptionTextIndex);
+
+    // And the caption itself is still there to read.
+    expect(
+      log.some((e) => e.method === 'fillText' && e.args[0] === 'Signed for: Participation'),
+    ).toBe(true);
   });
 
   it('does not draw while it is disabled', () => {

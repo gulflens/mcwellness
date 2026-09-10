@@ -329,12 +329,15 @@
   gap: var(--s-2);
 }
 
-/* The drawing surface. The aspect ratio matches the PNG the pad renders
-   (600 by 260), so what is drawn is what is filed. `touch-action: none`
-   keeps a finger drawing a line instead of scrolling the drawer under it. */
+/* The drawing surface. `SignaturePad.tsx` sets its own aspect ratio inline,
+   not here: it is 600 by 260 (the full PNG the pad renders) while there is
+   no caption, or 600 by the ink area alone while there is one, so a person
+   can never draw where the caption is about to be filed (fix round of 10
+   September 2026, finding 2) — one static rule here could not hold both.
+   `touch-action: none` keeps a finger drawing a line instead of scrolling
+   the drawer under it. */
 .signature__pad {
   inline-size: 100%;
-  aspect-ratio: 600 / 260;
   touch-action: none;
   color: var(--ink);
   border: var(--hairline) solid var(--rule);
