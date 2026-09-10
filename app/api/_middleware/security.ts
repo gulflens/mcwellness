@@ -69,12 +69,13 @@ export function strictPolicy(connectSrc: string[]): CspPolicy {
 }
 
 /**
- * The day map's own policy (docs/SPEC/route-planning.md section 8.3):
- * Google's own strict list, plus what this app already needs. Three of its
- * grants are ones the console would rather not make — `'strict-dynamic'`,
- * `'unsafe-eval'` and `https:` for scripts — and they reach exactly one
- * page. The nonce is what makes `'strict-dynamic'` safe: only the shell's
- * own tags carry it, and only what they load is trusted onwards.
+ * The widened documents' shared policy (docs/SPEC/route-planning.md section
+ * 8.3): Google's own strict list, plus what this app already needs. Three of
+ * its grants are ones the console would rather not make — `'strict-dynamic'`,
+ * `'unsafe-eval'` and `https:` for scripts — and they reach exactly the pages
+ * `MAP_DOCUMENT_PATHS` names, the day map and the pin picker, and nowhere
+ * else. The nonce is what makes `'strict-dynamic'` safe: only the shell's own
+ * tags carry it, and only what they load is trusted onwards.
  */
 export function mapDocumentPolicy(nonce: string, connectSrc: string[]): CspPolicy {
   return {
@@ -148,10 +149,11 @@ export function documentPolicyText(policy: CspPolicy): string {
  * frame the app; nothing is sniffed; referrers stay home; HTTPS is pinned in
  * production only, where it exists.
  *
- * **One document is served differently, and only one** (section 8 of
- * docs/SPEC/route-planning.md): the coordinator's day map, whose browser map
- * needs directives this policy refuses and should go on refusing. It is chosen
- * by an exact path match on a GET, and it carries a nonce minted per response.
+ * **Two documents are served differently, and only these two**
+ * (`MAP_DOCUMENT_PATHS` above; section 8 of docs/SPEC/route-planning.md): the
+ * coordinator's day map and the pin picker, each needing directives this
+ * policy refuses and should go on refusing everywhere else. Each is chosen by
+ * an exact path match on a GET, and each carries a nonce minted per response.
  *
  * Whichever policy a response gets, the same object is also rendered onto the
  * context as `cspDocumentPolicy`, for the shell to carry in its `<head>`:
