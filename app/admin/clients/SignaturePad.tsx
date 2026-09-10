@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Button, Field, Note } from '../../shell/components/Controls';
+import { wrapCaption } from './wrapCaption';
 
 /**
  * Signing on screen (docs/SPEC/client-record.md section 7, method
@@ -19,13 +20,21 @@ import { Button, Field, Note } from '../../shell/components/Controls';
  * a typed name as `app_signature` would put a consent on the record attesting
  * to something that never happened.
  *
- * **Fixed size.** The visible canvas is scaled for the screen it is on, so a
- * stroke is not a staircase on a retina display; the PNG is composed
- * separately at exactly 600 by 260, so every signature the practice holds is
- * the same shape whatever device drew it. The printed name and the date are
- * drawn into the image beneath the stroke, the way they sit on a paper form —
- * which also means the name is inside the evidence rather than in a column
- * beside it.
+ * **Fixed size, except for how tall the caption makes it.** The visible
+ * canvas is scaled for the screen it is on, so a stroke is not a staircase on
+ * a retina display; the PNG is composed separately at exactly 600 wide, 260
+ * tall while there is no caption or a one-line one. The printed name and the
+ * date are drawn into the image beneath the stroke, the way they sit on a
+ * paper form — which also means the name is inside the evidence rather than
+ * in a column beside it.
+ *
+ * **The caption wraps rather than reword the evidence.** Signing once for
+ * several purposes at once (`SignAllForm.tsx`) means naming all of them in
+ * the caption, in the same words their headings use, and that can run wider
+ * than one `fillText` line ever holds. `wrapCaption.ts` breaks it into lines
+ * that fit, measured against the real font with `ctx.measureText`, and the
+ * image grows downward to hold whatever that produces — the space reserved
+ * above the caption band for the stroke itself never shrinks to make room.
  *
  * **The keyboard cannot draw**, and no arrangement of this control changes
  * that. The alternative is not a worse version of the same thing but a
@@ -43,6 +52,16 @@ export const SIGNATURE_WIDTH = 600;
 export const SIGNATURE_HEIGHT = 260;
 /** The band at the foot of the image holding the printed name and the date. */
 const CAPTION_HEIGHT = 60;
+/**
+ * How much room one line of the caption needs: the fixed extra the band has
+ * always grown by when a caption exists at all, the spacing between two
+ * wrapped lines, and — for a caption past the first line — how much taller
+ * the whole image grows to hold each one. One number for all three, because
+ * they are the same "one more line" the caption is asking for.
+ */
+const CAPTION_LINE_HEIGHT = 20;
+const CAPTION_FONT = '12px sans-serif';
+const NAME_FONT = '16px sans-serif';
 const STROKE_WIDTH = 2.5;
 
 export type SignatureResult = {
@@ -118,22 +137,40 @@ export function SignaturePad({
     }
   }, []);
 
-  /** The PNG, composed at the fixed size with the printed name beneath. */
+  /**
+   * The PNG, composed with the printed name beneath the stroke and the
+   * caption — wrapped into however many lines it needs — beneath that. The
+   * image grows downward to hold any line past the first; the space above
+   * the band, where the stroke itself lives, stays the size it has always
+   * been, whatever the caption says.
+   */
   const render = useCallback((): SignatureResult | null => {
     const source = canvasRef.current;
     if (!source || typeof document.createElement !== 'function') return null;
     const out = document.createElement('canvas');
     const ctx = context(out);
     if (!ctx || typeof out.toDataURL !== 'function') return null;
+
+    // Measured before anything is drawn: `measureText` answers for the
+    // caption's own font, so that font has to be set first, and how many
+    // lines wrapping produces decides how tall the image needs to be.
+    const captionLines = caption
+      ? (() => {
+          ctx.font = CAPTION_FONT;
+          return wrapCaption(caption, SIGNATURE_WIDTH - 48, (text) => ctx.measureText(text).width);
+        })()
+      : [];
+    const extraLines = Math.max(0, captionLines.length - 1);
+
     out.width = SIGNATURE_WIDTH;
-    out.height = SIGNATURE_HEIGHT;
+    out.height = SIGNATURE_HEIGHT + extraLines * CAPTION_LINE_HEIGHT;
     // Ink on paper, deliberately, and deliberately not the interface's own
     // colours: this is a filed document rather than a screen. A signature
     // rendered in a dark theme would be a white stroke on black, which is
     // wrong in every place a consent is ever looked at — printed, attached to
     // an email, opened years later by somebody who was not there.
     ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, SIGNATURE_WIDTH, SIGNATURE_HEIGHT);
+    ctx.fillRect(0, 0, out.width, out.height);
     ctx.strokeStyle = 'black';
     ctx.lineWidth = STROKE_WIDTH;
     ctx.lineCap = 'round';
@@ -147,23 +184,30 @@ export function SignaturePad({
       if (rest.length === 0) ctx.lineTo(first.x + 0.1, first.y);
       ctx.stroke();
     }
-    // A caption needs its own line, so the band grows to hold it rather than
-    // crowding the name and the date it sits beneath.
-    const captionTop = SIGNATURE_HEIGHT - (caption ? CAPTION_HEIGHT + 20 : CAPTION_HEIGHT);
+    // A caption needs its own lines, so the band grows to hold them rather
+    // than crowding the name and the date it sits beneath — pinned to the
+    // same offset from the top whether the caption is one line or four, so
+    // the stroke's own room above it never shrinks to make space.
+    const captionTop =
+      SIGNATURE_HEIGHT -
+      (captionLines.length > 0 ? CAPTION_HEIGHT + CAPTION_LINE_HEIGHT : CAPTION_HEIGHT);
     ctx.beginPath();
     ctx.moveTo(24, captionTop);
     ctx.lineTo(SIGNATURE_WIDTH - 24, captionTop);
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.fillStyle = 'black';
-    ctx.font = '16px sans-serif';
+    ctx.font = NAME_FONT;
     ctx.fillText(signedName, 24, captionTop + 26);
     ctx.fillText(today, 24, captionTop + 48);
-    if (caption) {
-      // Smaller than the name and the date: this line names what was agreed
-      // to, not who agreed to it, and must never read as a second signature.
-      ctx.font = '12px sans-serif';
-      ctx.fillText(caption, 24, captionTop + 66);
+    if (captionLines.length > 0) {
+      // Smaller than the name and the date: these lines name what was
+      // agreed to, not who agreed to it, and must never read as a second
+      // signature.
+      ctx.font = CAPTION_FONT;
+      captionLines.forEach((line, index) => {
+        ctx.fillText(line, 24, captionTop + 66 + index * CAPTION_LINE_HEIGHT);
+      });
     }
     const url = out.toDataURL('image/png');
     const comma = url.indexOf(',');

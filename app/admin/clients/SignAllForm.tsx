@@ -48,22 +48,6 @@ const PURPOSE_LABELS: Record<string, string> = {
   health_data: 'Brain-map and neurofeedback information',
 };
 
-/**
- * What the filed image's caption names each purpose as. Shorter than
- * `PURPOSE_LABELS`: the caption is one line on a 600px-wide PNG
- * (`SignaturePad.tsx`, `fillText` never wraps), and the full labels for all
- * four required purposes run too wide to fit without being cut off by the
- * canvas edge. The caption is evidence metadata rather than console copy, so
- * naming a purpose in fewer words here is not the same act as shortening a
- * wording.
- */
-const CAPTION_LABELS: Record<string, string> = {
-  participation: 'participation',
-  minor_participation: 'guardian consent',
-  home_visit: 'home visits',
-  health_data: 'health data',
-};
-
 const REFUSALS: Record<string, string> = {
   wording_not_found: 'One wording is no longer on file. Reopen this form to load the current ones.',
   wording_retired: 'One wording has been retired. Reopen this form for the current ones.',
@@ -229,9 +213,10 @@ export function SignAllForm({
     setScanWarning(prepared.warning ?? null);
   }
 
-  // What the filed image's own foot says it covers, kept short so it stays on
-  // the one line `fillText` ever draws (SignaturePad.tsx's `caption`).
-  const caption = `Signed for: ${purposes.map((p) => CAPTION_LABELS[p] ?? p).join(', ')}`;
+  // What the filed image's own foot says it covers, in the same words the
+  // headings above read: the spec requires it, and `SignaturePad.tsx` wraps
+  // whatever this comes to across as many lines as it needs.
+  const caption = `Signed for: ${purposes.map((p) => PURPOSE_LABELS[p] ?? p).join(', ')}`;
 
   async function submit(): Promise<void> {
     if (state.kind !== 'ready') return;

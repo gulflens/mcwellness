@@ -19,7 +19,12 @@ afterEach(() => {
 
 const TODAY = '2026-09-03';
 
-/** Everything the pad asks of a context, and nothing more. */
+/**
+ * Everything the pad asks of a context, and nothing more. `measureText`
+ * stands in for the browser's real font metrics at ten width-units per
+ * character — enough to make a caption's line breaks arithmetic in a test
+ * rather than a guess about how any particular font actually renders.
+ */
 function fakeContext(): CanvasRenderingContext2D {
   return {
     clearRect: vi.fn(),
@@ -29,6 +34,7 @@ function fakeContext(): CanvasRenderingContext2D {
     stroke: vi.fn(),
     fillRect: vi.fn(),
     fillText: vi.fn(),
+    measureText: vi.fn((text: string) => ({ width: text.length * 10 })),
     lineWidth: 0,
     lineCap: 'round',
     lineJoin: 'round',
@@ -183,6 +189,9 @@ describe('SignaturePad', () => {
     }) as unknown as CanvasRenderingContext2D['fillText'];
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => context as never);
 
+    // Wide enough, at ten units a character, to wrap onto a second line
+    // (SignaturePad's usable width is 552 units) — proving the caption still
+    // lands beneath the name and the date once it is more than one line.
     const { container } = render(
       <SignaturePad
         signedName="Alpha Synthetic"
@@ -195,25 +204,107 @@ describe('SignaturePad', () => {
     sign(container.querySelector('canvas') as Element);
 
     const fillText = context.fillText as unknown as ReturnType<typeof vi.fn>;
-    const texts = fillText.mock.calls.map((call) => call[0]);
+    const texts = fillText.mock.calls.map((call) => call[0] as string);
     expect(texts).toContain('Alpha Synthetic');
     expect(texts).toContain(TODAY);
-    expect(texts).toContain(
+    // The caption wraps to two lines under the fake ten-units-per-character
+    // measurer; rejoining them must reproduce exactly what was passed in.
+    const nameIndex = texts.indexOf('Alpha Synthetic');
+    const dateIndex = texts.indexOf(TODAY);
+    const captionLines = texts.slice(Math.max(nameIndex, dateIndex) + 1);
+    expect(captionLines.length).toBeGreaterThan(1);
+    expect(captionLines.join(' ')).toBe(
       'Signed for: participation, visits at home, brain-map and neurofeedback information',
     );
 
     // Beneath the name and the date, in a smaller face: this line names what
     // was agreed to, and must never read as a second signature.
-    const captionIndex = texts.indexOf(
-      'Signed for: participation, visits at home, brain-map and neurofeedback information',
-    );
-    const nameIndex = texts.indexOf('Alpha Synthetic');
-    const dateIndex = texts.indexOf(TODAY);
+    const captionIndex = texts.indexOf(captionLines[0] as string);
     expect(captionIndex).toBeGreaterThan(nameIndex);
     expect(captionIndex).toBeGreaterThan(dateIndex);
     const captionFontSize = parseInt(fontAtCall[captionIndex] ?? '', 10);
     const nameFontSize = parseInt(fontAtCall[nameIndex] ?? '', 10);
     expect(captionFontSize).toBeLessThan(nameFontSize);
+  });
+
+  it('wraps a caption needing three lines into three lines, in the headings’ own words, and grows the image to hold them', () => {
+    const onChange = vi.fn();
+    const context = fakeContext();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => context as never);
+    // The composed image is a second, off-screen canvas created inside
+    // `render()`; capturing `this` on `toDataURL` is the only way to read
+    // back the height it was actually given.
+    let composedHeight = -1;
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      composedHeight = this.height;
+      return PNG_DATA_URL;
+    });
+
+    // The four-purpose caption a household with a child actually signs
+    // beneath (SignAllForm.tsx), in the headings' own words — about 114
+    // characters, which at ten units a character needs three lines against
+    // the pad's 552-unit usable width.
+    const caption =
+      "Signed for: Brain-map and neurofeedback information, Visits at home, Guardian's consent for a child, Participation";
+    const { container } = render(
+      <SignaturePad
+        signedName="Alpha Synthetic"
+        onSignedNameChange={vi.fn()}
+        onChange={onChange}
+        today={TODAY}
+        caption={caption}
+      />,
+    );
+    sign(container.querySelector('canvas') as Element);
+
+    const fillText = context.fillText as unknown as ReturnType<typeof vi.fn>;
+    const texts = fillText.mock.calls.map((call) => call[0] as string);
+    expect(texts).toEqual([
+      'Alpha Synthetic',
+      TODAY,
+      'Signed for: Brain-map and neurofeedback information,',
+      "Visits at home, Guardian's consent for a child,",
+      'Participation',
+    ]);
+    // Three lines, not the old short words: "health data" and "guardian
+    // consent" must never appear — the filed image says what the headings said.
+    expect(texts.join(' ')).not.toContain('health data');
+    expect(texts.join(' ')).not.toContain('guardian consent');
+
+    // Two lines beyond the first, twenty pixels each: the band grows, the
+    // space reserved above it for the stroke itself does not.
+    expect(composedHeight).toBe(SIGNATURE_HEIGHT + 40);
+  });
+
+  it('keeps the image at today’s height when a caption still fits on one line', () => {
+    const onChange = vi.fn();
+    const context = fakeContext();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => context as never);
+    let composedHeight = -1;
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(function (
+      this: HTMLCanvasElement,
+    ) {
+      composedHeight = this.height;
+      return PNG_DATA_URL;
+    });
+
+    const { container } = render(
+      <SignaturePad
+        signedName="Alpha Synthetic"
+        onSignedNameChange={vi.fn()}
+        onChange={onChange}
+        today={TODAY}
+        caption="Signed for: Participation"
+      />,
+    );
+    sign(container.querySelector('canvas') as Element);
+
+    const fillText = context.fillText as unknown as ReturnType<typeof vi.fn>;
+    const texts = fillText.mock.calls.map((call) => call[0] as string);
+    expect(texts).toEqual(['Alpha Synthetic', TODAY, 'Signed for: Participation']);
+    expect(composedHeight).toBe(SIGNATURE_HEIGHT);
   });
 
   it('renders exactly as before when no caption is given', () => {

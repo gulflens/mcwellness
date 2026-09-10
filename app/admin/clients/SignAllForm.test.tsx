@@ -206,6 +206,10 @@ function stubCanvas(): void {
         stroke: vi.fn(),
         fillRect: vi.fn(),
         fillText: vi.fn(),
+        // The stack's caption is always more than a few words (every client
+        // needs at least three purposes' worth), so SignaturePad always
+        // measures it to decide how to wrap it (SignaturePad.tsx).
+        measureText: vi.fn((text: string) => ({ width: text.length * 10 })),
       }) as never,
   );
   vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(
@@ -320,6 +324,56 @@ describe('SignAllForm', () => {
     expect([...giver.options].map((option) => option.textContent)).toEqual([
       'Ember Dune — mother (legal guardian)',
     ]);
+  });
+
+  it('files the caption in the headings’ own words for a household with a child, not the old short ones', async () => {
+    stubHeights(1800, 500);
+    // A shared context, captured, rather than `stubCanvas`'s fresh object
+    // per call: the filed image is a second canvas composed inside
+    // `SignaturePad.tsx`, and this is the only way to read back what it drew.
+    const texts: string[] = [];
+    const capturingContext = {
+      clearRect: vi.fn(),
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fillRect: vi.fn(),
+      fillText: vi.fn((text: string) => {
+        texts.push(text);
+      }),
+      measureText: vi.fn((text: string) => ({ width: text.length * 10 })),
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () => capturingContext as never,
+    );
+
+    mount(
+      <SignAllForm
+        clientId={CHILD_CLIENT_ID}
+        record={childRecord}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    await screen.findByRole('heading', { name: "Guardian's consent for a child" });
+    fireEvent.scroll(screen.getByRole('region', { name: 'Consent wording' }), {
+      target: { scrollTop: 1300 },
+    });
+    await waitFor(() => {
+      expect(document.querySelector('canvas')?.getAttribute('aria-disabled')).toBeNull();
+    });
+    draw(document.querySelector('canvas'));
+
+    // The old short words this evidence used to print — "health data" and
+    // "guardian consent" — never appear now.
+    expect(texts.join(' ')).not.toContain('health data');
+    expect(texts.join(' ')).not.toContain('guardian consent');
+    // The four purposes are named in the exact words their headings on
+    // screen just used, wrapped across the lines they need.
+    expect(texts).toContain('Signed for: Brain-map and neurofeedback information,');
+    expect(texts).toContain("Visits at home, Guardian's consent for a child,");
+    expect(texts).toContain('Participation');
   });
 
   it('names the refusal when one wording has moved on', async () => {
