@@ -502,3 +502,30 @@ describe('App — the day map is a document of its own', () => {
     expect(await screen.findByRole('navigation', { name: 'Sections' })).toBeTruthy();
   });
 });
+
+/**
+ * The pin picker (trunk round 43, "the pin on a map") is the second and, for
+ * now, last document carrying the wider policy: reached the same way as the
+ * day map and for the same reason (`RequirePinDocument`). Unlike the day
+ * map it checks no permission of its own — `/admin/clients`, the screen it
+ * is opened from, has none either — so there is no "wrong role" case to
+ * cover here, only signed-in and signed-out.
+ */
+describe('App — the pin picker is a document of its own', () => {
+  it('renders the picker with no rail, so the wider policy reaches one screen', async () => {
+    mount(OWNER, '/admin/clients/pin');
+    expect(
+      await screen.findByRole('heading', { name: 'Where the practitioner should arrive' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Sections' })).toBeNull();
+  });
+
+  it('offers a signed-out person a plain anchor, never the sign-in form itself', async () => {
+    mount(null, '/admin/clients/pin', signedOutProvider);
+    expect(await screen.findByText('Sign in to open the pin picker.')).toBeTruthy();
+    const anchor = screen.getByRole('link', { name: 'Sign in' });
+    expect(anchor).toHaveProperty('href', expect.stringContaining('/sign-in'));
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Pin picker' })).toBeTruthy();
+  });
+});

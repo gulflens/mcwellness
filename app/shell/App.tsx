@@ -5,6 +5,7 @@ import { AuditPage } from '../admin/audit/AuditPage';
 import { BooksPage } from '../admin/accounting/BooksPage';
 import { BillingPage } from '../admin/billing/BillingPage';
 import { ClientsPage } from '../admin/clients/ClientsPage';
+import { PinPickerPage } from '../admin/clients/pin/PinPickerPage';
 import { EnquiriesPage } from '../admin/enquiries/EnquiriesPage';
 import { KitPage } from '../admin/kit/KitPage';
 import { TeamPage } from '../admin/settings/TeamPage';
@@ -129,6 +130,43 @@ function RequireAuthDocument({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * The same wait as `RequireAuthDocument`, for the pin picker's own widened
+ * document (`MAP_DOCUMENT_PATHS`, `app/api/_middleware/security.ts`). The
+ * mechanism is identical and for the identical reason (finding B2 above): a
+ * signed-out visitor is offered a plain anchor, never a `<Navigate>`, because
+ * this document too carries `'unsafe-eval'` and `'strict-dynamic'` and a
+ * client-side redirect would render the next screen inside it.
+ *
+ * **It carries no permission check of its own.** The screen this page is
+ * opened from, `/admin/clients`, admits every signed-in member of staff —
+ * unlike Schedule, Billing or Books it has no `canOpenX` gate in
+ * `adminAccess.ts` — so the picker's own bar is the same: being signed in,
+ * and nothing more.
+ */
+function RequirePinDocument({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
+  if (session.status === 'loading') {
+    return (
+      <main className="plain">
+        <Note>Checking who you are.</Note>
+      </main>
+    );
+  }
+  if (session.status === 'signed-out') {
+    return (
+      <main className="plain">
+        <h1>Pin picker</h1>
+        <Note>Sign in to open the pin picker.</Note>
+        <a className="link" href="/sign-in">
+          Sign in
+        </a>
+      </main>
+    );
+  }
+  return <>{children}</>;
+}
+
 export function App() {
   return (
     <Routes>
@@ -153,6 +191,25 @@ export function App() {
           <RequireAuthDocument>
             <DayMapPage />
           </RequireAuthDocument>
+        }
+      />
+      {/*
+        The pin picker (docs/SPEC/route-planning.md section 8; trunk round
+        43, "the pin on a map"), reached the same way and for the same reason
+        as the day map above: its own document, carrying the wider content
+        security policy Google's Maps JavaScript API needs, opened by a plain
+        anchor from a new tab rather than by the router. It renders no
+        `Link` of its own into any other screen — "Cancel" and "Use this
+        pin" close the tab or post a message and close it — so, unlike the
+        day map, it needs no `DocumentBoundary`: there is nothing inside it
+        for one to guard.
+      */}
+      <Route
+        path="/admin/clients/pin"
+        element={
+          <RequirePinDocument>
+            <PinPickerPage />
+          </RequirePinDocument>
         }
       />
       <Route
