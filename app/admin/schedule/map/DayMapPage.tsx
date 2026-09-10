@@ -225,7 +225,17 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
        each link is what makes the next link nobody thinks about safe too. */
     <DocumentBoundary>
       <section className="page daymap__page">
-        {maps !== null && current !== null ? (
+        {/*
+          The map is drawn as soon as Google's script is here, whether or not
+          anybody has a stop that day. It used to wait for a practitioner's day
+          as well, and `/api/routing/practice-day` returns a practitioner only
+          when they have a stop — so an empty day fell through to the plain
+          panel below, which is `--paper` and nothing else. On production,
+          where no visit had yet been booked, that meant the map had never once
+          been drawn and read as broken. An empty day now shows the city,
+          centred and with no pins, which is a true picture of an empty day.
+        */}
+        {maps !== null ? (
           <DayMap maps={maps} day={current} selectedId={selectedId} onSelect={setSelectedId} />
         ) : (
           <div className="daymap daymap--absent" />

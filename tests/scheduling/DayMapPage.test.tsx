@@ -141,6 +141,24 @@ function fetchImpl(): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
+/**
+ * A day with nothing booked. `/api/routing/practice-day` builds its list by
+ * looping over appointments, so an empty day names no practitioner at all —
+ * this is that answer, not an invented one.
+ */
+function fetchEmptyDay(): typeof fetch {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith('/api/appointments?')) {
+      return new Response(JSON.stringify({ appointments: [] }), { status: 200 });
+    }
+    if (url.startsWith('/api/routing/practice-day?')) {
+      return new Response(JSON.stringify({ practitioners: [] }), { status: 200 });
+    }
+    return new Response('not found', { status: 404 });
+  }) as unknown as typeof fetch;
+}
+
 /** Reads back where the router thinks it is, so a test can prove it did not move. */
 let whereTheRouterIs = '';
 function LocationProbe() {
@@ -181,6 +199,24 @@ describe('DayMapPage', () => {
     renderPage(fetchImpl(), { key: 'a-restricted-browser-key' });
     expect(await screen.findByRole('button', { name: 'Stop 1 on the map' })).toBeTruthy();
     expect(screen.queryByText("The map needs the practice's browser key.")).toBeNull();
+  });
+
+  it('draws the map on a day with nothing booked, centred on the city rather than blank', async () => {
+    // Production went live with no visit booked, and the day map showed a flat
+    // grey panel: the page waited for a practitioner as well as for Google's
+    // script, and `/api/routing/practice-day` names a practitioner only when
+    // they have a stop. A coordinator could not tell an empty day from a
+    // broken map.
+    const fake = fakeGoogleMaps();
+    renderPage(fetchEmptyDay(), { loadMaps: () => Promise.resolve(fake.maps) });
+
+    expect(await screen.findByText('No appointments are booked for this day.')).toBeTruthy();
+    // The map is real, not the placeholder panel.
+    await waitFor(() => expect(fake.mapOptions).not.toBeNull());
+    expect(fake.mapOptions?.center).toEqual({ lat: 25.2, lng: 55.27 });
+    // Nothing to fit a viewport around, so the default zoom stands.
+    expect(fake.fitted).toBe(0);
+    expect(screen.queryByRole('button', { name: /Stop \d+ on the map/ })).toBeNull();
   });
 
   it('says the map needs a key, and still shows the whole day, when there is none', async () => {
