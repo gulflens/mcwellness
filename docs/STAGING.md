@@ -2043,3 +2043,82 @@ dashboard (Settings › API Keys, "Disable legacy API keys"). Nothing on staging
 uses them any more: the browser key is the publishable one, and the storage
 key is now the secret one.
 
+## What was done on 2026-09-10: the seventeenth staging pass — nine migrations, the board
+
+Pull request 147 (piece twenty-two, the dispatcher's board, merged to `main`
+as `4f89a46` at 07:14 UTC) owed staging migration 210 — and the diff of
+`select filename from schema_migration order by 1` on staging (**84 rows**,
+last `959_invoice_supplier_contact.sql`) against `git ls-tree origin/main
+db/migrations` (**92 files**) showed that staging had not been passed since
+the sixteenth pass of 8 September: eight files were missing as well —
+`913_practitioner_base.sql`, `914_audit_redact_location_points.sql`,
+`915_health_data_consent.sql`, `916_enquiry.sql`, `917_scheduled_tenants.sql`,
+`960_retire_the_setup_photograph.sql`, `961_checkin_reads_health_data.sql`
+and `962_erasure_guard_admits_the_sweep.sql`. Nothing on staging was absent
+from `main`. So this pass carried nine, in file order, each as one
+`apply_migration` call in the runner's own shape (`db/runner/apply.ts`
+lines 64 and 178–181): the transaction-local audit context
+(`app.reason = 'migration <file>'`, a fresh `app.request_id`), the file's
+text, then the bookkeeping row `insert into schema_migration (filename,
+checksum)` carrying the file's sha256 computed locally with `shasum -a 256`.
+
+- **The rows the migrations would touch, read first:** practitioners 4,
+  appointments 34, consents 42, one tenant, no `enquiry` table yet (916
+  creates it), 155 policies in `pg_policies`.
+- **913 was applied first, and with two faults of the integrator's own,
+  both corrected in the same pass and recorded here so the next reader
+  trusts the row.** The text sent was the migration's statements with its
+  comment blocks and rollback block stripped — the objects it creates are
+  the file's (`app.own_practitioner_id`, `app.guard_location_notes` replaced
+  with the practitioner-base arm, `app.set_practitioner_base`, the revoke and
+  grants), verified afterwards by `to_regprocedure` and by reading the
+  guard's body — and the bookkeeping row's checksum was typed from a
+  truncated printout and completed from memory, which is wrong. The row was
+  corrected with `update schema_migration set checksum = '<the file's real
+  sha256>' where filename = '913_practitioner_base.sql'` before anything
+  else was applied. Every later migration was sent as the full file text
+  with the full 64-character hash read from `shasum`'s own output.
+- **914, 915, 916 and 917, then 960, 961, 962 and 210** were each applied as
+  one call, full text, first try. 915 adds the `health_data` value to
+  `consent_purpose`; 961 reads it in a later transaction, which is the order
+  Postgres needs.
+- **`schema_migration` now holds 93 rows** — `main`'s 92 and 210 — with no
+  null checksum, and the nine new rows' checksums match the local hashes
+  (each prefix read back and compared).
+- **Four policy files were re-applied in one call** (`policies_after_210`,
+  under `app.reason = 'policies'`, in the runner's path order):
+  `db/policies/core/practitioner_base.sql` and the three under
+  `db/policies/enquiry/` — the only policy files `git diff f2a7bfb..origin/main
+  -- db/policies` shows changed since the sixteenth pass. Earlier passes
+  re-sent every file; a declarative `drop policy if exists … create policy`
+  of an unchanged file is a no-op, so only the changed four were sent. After
+  the call `pg_policies` counts **162** (155 + 3 + 4) and all seven names
+  are present (`practitioner_row_writers`, `practitioner_row_update_writers`,
+  `practitioner_base_is_private`, `enquiry_readers`, `enquiry_no_direct_insert`,
+  `enquiry_actioners`, and `tenant_isolation` on `enquiry`).
+- **What was verified after the pass:** 210's partial index
+  `appointment_reassigned_from_practitioner_idx` and check constraint
+  `appointment_reassigned_implies_rescheduled` exist; `app.lodge_enquiry(jsonb)`
+  and `app.scheduled_tenants()` exist; `consent_purpose` carries
+  `health_data`; `app.setup_photo_filing` is gone.
+- **The bundle and the server.** `.env.staging` carries no `DATABASE_URL`, so
+  the runner could not do the pass from the laptop; and the laptop checkout
+  `/Volumes/Storage/McWellness/mcwellness` was on branch `change-password`
+  with an uncommitted change — somebody else's, not switched. The staging
+  bundle was therefore built in the `mcwellness-dispatch` worktree (at
+  `b3f80ed`, the merged content of `main` `4f89a46`) with
+  `pnpm exec vite build --mode staging` after symlinking the laptop's
+  `.env.staging` into it (git-ignored there), and the staging server was
+  restarted from that worktree: process 40623 stopped, then
+  `HOST=0.0.0.0 PORT=3100 SERVE_APP=true node --env-file=.env.staging --import
+  tsx app/api/server.ts` as process 7184. The served bundle is
+  `index-Byj8Mild.js`, the same as the build's; `/api/health` 200,
+  `/api/health/deep` answers ok; `GET /api/appointments/board?date=…` and
+  `POST /api/appointments/:id/reassign` answer 401 to a stranger, so the new
+  routes are served; the scheduler is off; drive estimates go through Google
+  Maps Platform. **Until the laptop checkout returns to `main`, the staging
+  server runs from the dispatch worktree, and that worktree must not be
+  removed while it does.**
+- **Still owed:** production runs `main` `05d5358` (twelve passes, 92
+  migrations); the thirteenth live pass — trunk round 42, the board and
+  migration 210 — waits on the operator's word (`docs/PRODUCTION.md`).

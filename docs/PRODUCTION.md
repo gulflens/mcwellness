@@ -1001,3 +1001,16 @@ security policy it replaces.
 
 **Left as it was.** The archive `mcwellness-05d5358.tar.gz` in `public_html`
 beside the earlier ones. Production is level with `main`.
+
+## What production owes as of 2026-09-10, 15:30 on the operator's clock: the thirteenth live pass
+
+Production runs `main` `05d5358` (the twelfth pass). `main` is now `4f89a46`:
+trunk round 42 (the enquiry "Waiting N days" chip, the check-in gate for a
+visit not yet confirmed, the assessments "coming soon" mark; no migration) and
+piece twenty-two, the dispatcher's board (pull request 147; **migration 210**,
+`appointment.reassigned_from_practitioner_id` with its check and partial
+index). The recipe is the one above; the migration goes to the production
+project through `apply_migration` in the seventeenth staging pass's shape
+(`docs/STAGING.md`), outside auto mode if the classifier refuses the write,
+then the archive, the upload, the build and the bundle poll, then a restart if
+the health check hangs. **Nothing here happens until the operator says so.**
