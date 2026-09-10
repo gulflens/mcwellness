@@ -9,8 +9,9 @@ import { useDrawer } from './useDrawer';
 import { formatDate } from './BillingPage';
 
 /**
- * "Give them longer" — the coordinator's discretion over a programme that has
- * run out of time, with the reason it always carries.
+ * "Extend" — the coordinator's discretion over a programme that has run out
+ * of time, with the reason it always carries. One name for one act: the
+ * button in the list, this heading and the confirm all say it.
  *
  * The reason is the field that matters. A family whose year ran out during a
  * hospital stay is not the same as one that simply did not book, and a year
@@ -127,7 +128,7 @@ export function ExtensionDrawer({
     >
       <header className="drawer__header">
         <div className="drawer__title">
-          <h2 id="extension-drawer-title">Give them longer</h2>
+          <h2 id="extension-drawer-title">Extend</h2>
           <p className="small muted">
             {purchase.packageName}, bought {formatDate(purchase.purchasedOn)}
           </p>

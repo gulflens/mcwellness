@@ -181,6 +181,18 @@ describe('giving a family longer', () => {
     expect(screen.queryByRole('button', { name: 'Extend' })).toBeNull();
   });
 
+  it('calls the act Extend from the list to the confirm', async () => {
+    // One name for one act. The button said Extend, the panel it opened was
+    // headed "Give them longer" and the confirm said "Extend by three
+    // months": three names for the same thing, and a coordinator counting
+    // whether they had arrived where they meant to.
+    mount(balance());
+    await findClient();
+    fireEvent.click(await screen.findByRole('button', { name: 'Extend' }));
+    expect(await screen.findByRole('heading', { name: 'Extend' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Extend by three months' })).toBeTruthy();
+  });
+
   it('will not take an extension without a reason', async () => {
     mount(balance());
     await findClient();
