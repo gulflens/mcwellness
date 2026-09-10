@@ -201,7 +201,7 @@ gh api repos/gulflens/mcwellness/environments --jq '.environments[].name'
 ```
 
 The names the workflows expect are in `.github/workflows/release.yml` and
-`backup.yml`; the values are the operator's and never Claude's.
+`backup.yml`; the values are the operator's alone.
 
 ---
 
