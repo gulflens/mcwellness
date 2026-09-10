@@ -1,6 +1,7 @@
 import { Suspense, lazy, type ComponentType, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import { hasRole } from '@domain/shared';
+import { PortalRoot } from '../client/PortalRoot';
 import { AdminLayout } from './AdminLayout';
 import {
   canOpenAudit,
@@ -18,6 +19,7 @@ import {
 } from './adminAccess';
 import { useAuth, type Actor } from './auth/AuthContext';
 import { Note } from './components/Controls';
+import { ScreenBoundary } from './ScreenBoundary';
 import { NoAccessPage } from './pages/NoAccessPage';
 import { PasswordPage } from './pages/PasswordPage';
 import { SignInPage } from './pages/SignInPage';
@@ -33,10 +35,20 @@ import { homeFor } from './routing';
  * Each screen named below becomes its own piece, so a person downloads their
  * own part and the parts they actually open.
  *
- * What stays in the first file, deliberately: the sign-in page, because it is
- * the first thing every person sees and a second round trip in front of it
- * would be slower, not faster; and `AdminLayout`, so the practice's own
- * navigation paints at once rather than after a fetch.
+ * What stays in the first file, deliberately, and what it costs. The sign-in
+ * page, because it is the first thing every person sees and a second round
+ * trip in front of it would be slower, not faster. And the two chromes —
+ * `AdminLayout` and `PortalRoot` — so the rail and the household's sidebar
+ * paint at once rather than after a fetch, and so the first screen inside
+ * them is one fetch away rather than two. `NoAccessPage` and `PasswordPage`
+ * ride along with them: both are a few lines and both are reached from a
+ * standing start.
+ *
+ * The cost is that everybody carries both chromes, including a household who
+ * will never open the console. That is the trade taken deliberately: the rail
+ * is small beside React and the sign-in library, which every person needs
+ * whoever they are, and blanking a person's own navigation to save it would
+ * be the wrong economy (the review of pull request 152, findings 1, 2 and 5).
  *
  * The screens are named exports, so each is unwrapped here into the default
  * export `lazy` expects.
@@ -79,7 +91,6 @@ const InvitePage = screen(() => import('../client/InvitePage'), 'InvitePage');
 const MoneyScreen = screen(() => import('../client/MoneyScreen'), 'MoneyScreen');
 const PasswordScreen = screen(() => import('../client/PasswordScreen'), 'PasswordScreen');
 const ReportsScreen = screen(() => import('../client/ReportsScreen'), 'ReportsScreen');
-const PortalRoot = screen(() => import('../client/PortalRoot'), 'PortalRoot');
 const VisitsScreen = screen(() => import('../client/VisitsScreen'), 'VisitsScreen');
 const CheckInPage = screen(() => import('../therapist/session/CheckInPage'), 'CheckInPage');
 const TodayPage = screen(() => import('../therapist/today/TodayPage'), 'TodayPage');
@@ -165,6 +176,23 @@ function RequireAuthDocument({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * What the practitioner waits on while their screen arrives.
+ *
+ * Their three screens are the one part of the app with no chrome around them
+ * — the design brief asks for "no chrome during a session" — so there is no
+ * rail to hold the ground while a screen loads, and the page underneath is
+ * the console's light paper (`app/shell/base.css`). Waiting on nothing there
+ * meant a white flash before the dark screen painted, on the one device most
+ * likely to be on poor signal (the review of pull request 152, finding 3).
+ *
+ * So the wait is the ground itself, empty: the same dark surface the screen
+ * is about to draw on, which is no flash at all.
+ */
+function DarkGround() {
+  return <div className="ground" data-ground="dark" />;
+}
+
 export function App() {
   return (
     // The outer wait, for the screens that stand on their own: the map, an
@@ -174,14 +202,17 @@ export function App() {
     // Nothing is drawn in the gap on purpose — a screen announces itself when
     // it has its data, and a second spinner in front of that would be one
     // loading state too many.
-    <Suspense fallback={null}>
-      <Routes>
-        <Route path="/sign-in" element={<SignInPage />} />
-        <Route
-          path="/"
-          element={<RequireAuth>{(actor) => <Navigate to={homeFor(actor)} replace />}</RequireAuth>}
-        />
-        {/*
+    <ScreenBoundary>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/sign-in" element={<SignInPage />} />
+          <Route
+            path="/"
+            element={
+              <RequireAuth>{(actor) => <Navigate to={homeFor(actor)} replace />}</RequireAuth>
+            }
+          />
+          {/*
         The day map (docs/SPEC/route-planning.md section 4.1), reached by a
         plain anchor rather than a Link because it is served as its own
         document with the wider policy a browser map needs. **Deliberately
@@ -191,79 +222,79 @@ export function App() {
         path is unchanged, so every link and the middleware's exact-match list
         stand as they were.
       */}
-        <Route
-          path="/admin/schedule/map"
-          element={
-            <RequireAuthDocument>
-              <DayMapPage />
-            </RequireAuthDocument>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <RequireAuth>{(actor) => <AdminLayout actorName={actor.displayName} />}</RequireAuth>
-          }
-        >
-          <Route index element={<Navigate to="/admin/clients" replace />} />
-          <Route path="clients" element={<ClientsPage />} />
           <Route
-            path="billing"
+            path="/admin/schedule/map"
             element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenBilling(actor, new Date()) ? (
-                    <BillingPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
+              <RequireAuthDocument>
+                <DayMapPage />
+              </RequireAuthDocument>
             }
           />
           <Route
-            path="books"
+            path="/admin"
             element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenBooks(actor, new Date()) ? (
-                    <BooksPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
+              <RequireAuth>{(actor) => <AdminLayout actorName={actor.displayName} />}</RequireAuth>
             }
-          />
-          <Route
-            path="schedule"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenSchedule(actor, new Date()) ? (
-                    <SchedulePage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="schedule/week"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenSchedule(actor, new Date()) ? (
-                    <WeekPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          {/*
+          >
+            <Route index element={<Navigate to="/admin/clients" replace />} />
+            <Route path="clients" element={<ClientsPage />} />
+            <Route
+              path="billing"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenBilling(actor, new Date()) ? (
+                      <BillingPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="books"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenBooks(actor, new Date()) ? (
+                      <BooksPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="schedule"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenSchedule(actor, new Date()) ? (
+                      <SchedulePage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="schedule/week"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenSchedule(actor, new Date()) ? (
+                      <WeekPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            {/*
           The dispatcher's board (docs/SPEC/dispatch.md section 4.1). An
           ordinary nested route inside the console, unlike the day map above:
           it loads no third-party script, so it carries the console's own
@@ -273,96 +304,96 @@ export function App() {
           which is why the link in the Schedule header is unconditional, but
           they are separate actions and either may narrow without the other.
         */}
-          <Route
-            path="schedule/board"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenBoard(actor, new Date()) ? (
-                    <BoardPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          {/*
+            <Route
+              path="schedule/board"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenBoard(actor, new Date()) ? (
+                      <BoardPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            {/*
           Who can open a household's own record (docs/SPEC/client-portal.md
           section 3.8). The same rule the route enforces, so the rail never
           offers a link a route would bounce the person straight out of.
         */}
-          <Route
-            path="portal"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenPortalAccess(actor, new Date()) ? (
-                    <PortalAccessPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="kit"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenKit(actor, new Date()) ? (
-                    <KitPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="audit"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenAudit(actor, new Date()) ? (
-                    <AuditPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="enquiries"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenEnquiries(actor, new Date()) ? (
-                    <EnquiriesPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="settings/practice"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenSettings(actor, new Date()) ? (
-                    <PracticePage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          {/*
+            <Route
+              path="portal"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenPortalAccess(actor, new Date()) ? (
+                      <PortalAccessPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="kit"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenKit(actor, new Date()) ? (
+                      <KitPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="audit"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenAudit(actor, new Date()) ? (
+                      <AuditPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="enquiries"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenEnquiries(actor, new Date()) ? (
+                      <EnquiriesPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="settings/practice"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenSettings(actor, new Date()) ? (
+                      <PracticePage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+            {/*
           The second settings screen, and the one with a wider audience than
           the first: a practitioner records their own home base here
           (docs/SPEC/route-planning.md section 5.4). The rail's single Settings
@@ -371,81 +402,86 @@ export function App() {
           app/shell/adminAccess.ts), and the two screens link to each other
           (SettingsNav.tsx).
         */}
-          <Route
-            path="settings/practitioners"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenPractitioners(actor, new Date()) ? (
-                    <PractitionersPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="settings/team"
-            element={
-              <RequireAuth>
-                {(actor) =>
-                  canOpenTeam(actor, new Date()) ? (
-                    <TeamPage />
-                  ) : (
-                    <Navigate to={homeFor(actor)} replace />
-                  )
-                }
-              </RequireAuth>
-            }
-          />
-        </Route>
-        <Route
-          path="/today"
-          element={
-            <RequireAuth>
-              {(actor) => (canOpenToday(actor) ? <TodayPage /> : <TodayLanding />)}
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/today/check-in"
-          element={
-            <RequireAuth>
-              {(actor) =>
-                hasRole(actor, 'practitioner', 'lead_practitioner') ? (
-                  <CheckInPage />
-                ) : (
-                  <Navigate to={homeFor(actor)} replace />
-                )
+            <Route
+              path="settings/practitioners"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenPractitioners(actor, new Date()) ? (
+                      <PractitionersPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
               }
-            </RequireAuth>
-          }
-        />
-        {/*
+            />
+            <Route
+              path="settings/team"
+              element={
+                <RequireAuth>
+                  {(actor) =>
+                    canOpenTeam(actor, new Date()) ? (
+                      <TeamPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              }
+            />
+          </Route>
+          <Route
+            path="/today"
+            element={
+              <Suspense fallback={<DarkGround />}>
+                <RequireAuth>
+                  {(actor) => (canOpenToday(actor) ? <TodayPage /> : <TodayLanding />)}
+                </RequireAuth>
+              </Suspense>
+            }
+          />
+          <Route
+            path="/today/check-in"
+            element={
+              <Suspense fallback={<DarkGround />}>
+                <RequireAuth>
+                  {(actor) =>
+                    hasRole(actor, 'practitioner', 'lead_practitioner') ? (
+                      <CheckInPage />
+                    ) : (
+                      <Navigate to={homeFor(actor)} replace />
+                    )
+                  }
+                </RequireAuth>
+              </Suspense>
+            }
+          />
+          {/*
         The invitation page is deliberately outside RequireAuth: the person on
         the other end of the link has no session yet, and getting one is what
         the page is for (docs/SPEC/client-portal.md section 3.7).
       */}
-        <Route path="/portal/invite/:token" element={<InvitePage />} />
-        <Route path="/portal" element={<RequireAuth>{() => <PortalRoot />}</RequireAuth>}>
-          <Route index element={<HomeScreen />} />
-          <Route path="visits" element={<VisitsScreen />} />
-          <Route path="money" element={<MoneyScreen />} />
-          <Route path="reports" element={<ReportsScreen />} />
-          <Route path="family" element={<FamilyScreen />} />
-          <Route path="agreements" element={<AgreementsScreen />} />
-          {/* The household's own password, in their language; the console's
+          <Route path="/portal/invite/:token" element={<InvitePage />} />
+          <Route path="/portal" element={<RequireAuth>{() => <PortalRoot />}</RequireAuth>}>
+            <Route index element={<HomeScreen />} />
+            <Route path="visits" element={<VisitsScreen />} />
+            <Route path="money" element={<MoneyScreen />} />
+            <Route path="reports" element={<ReportsScreen />} />
+            <Route path="family" element={<FamilyScreen />} />
+            <Route path="agreements" element={<AgreementsScreen />} />
+            {/* The household's own password, in their language; the console's
             English page at /account/password is the staff's. */}
-          <Route path="password" element={<PasswordScreen />} />
-        </Route>
-        <Route path="/no-access" element={<RequireAuth>{() => <NoAccessPage />}</RequireAuth>} />
-        <Route
-          path="/account/password"
-          element={<RequireAuth>{() => <PasswordPage />}</RequireAuth>}
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Suspense>
+            <Route path="password" element={<PasswordScreen />} />
+          </Route>
+          <Route path="/no-access" element={<RequireAuth>{() => <NoAccessPage />}</RequireAuth>} />
+          <Route
+            path="/account/password"
+            element={<RequireAuth>{() => <PasswordPage />}</RequireAuth>}
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </ScreenBoundary>
   );
 }
