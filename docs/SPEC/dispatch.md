@@ -166,13 +166,31 @@ its face that running late cannot be worked out here. It is the one place the
 board parts company with the day map: a map with no drives on it is nothing,
 a board with no lateness on it is still the day.
 
-**Amended in the build, 2026-09-10:** a household the erasure gate hides from
-whoever is reading keeps its place in the walk but not its events. Its window
-and its service's length still count towards what the stops after it can
-reach, and its check-in and its close do not reach the rule at all, so it can
-never be the anchor and "on the way" can never follow it. The gate is the
-erasure policy's and not this rule's; it is written down here rather than
-worked around.
+**Amended in the build, 2026-09-10:** what an erased household does to the
+walk depends on whose door it is. The gate is
+`db/policies/client/readers.sql`: it hides an erased household's client row
+**and the locations that household owns** from an admin, and hides neither
+from the owner or the lead practitioner.
+
+- **A home visit of an erased household, read by an admin.** The day's own
+  read joins the place (`STOPS_SQL`, `app/api/routing/practice-day.ts`), and
+  the place is not there, so the visit forms no row at all: nothing is drawn
+  for it and it takes no place in the walk. The stops after it are timed as
+  though it had never been arranged.
+- **A visit of that household at a place the practice owns** — the studio, a
+  home base — read by the same admin. That place is operational rather than
+  client-sensitive, so the stop survives the read and keeps its place in the
+  walk. What it loses is its facts: no names, no service, no check-in and no
+  close, and with no facts no block is drawn for it. What it keeps is its
+  **status**, and `checked_in` or `completed` still says something happened
+  at that door — the board falls back to the window's own start or end where
+  a session recorded nothing, so such a stop can be the anchor the walk
+  leaves from, timed from its window, and "on the way" can follow it.
+- **The owner and the lead practitioner** stand outside the gate and read the
+  day whole, so neither case arises for them.
+
+The gate is the erasure policy's and not this rule's; it is written down here
+rather than worked around.
 
 ## 6. Reassignment
 

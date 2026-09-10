@@ -49,12 +49,17 @@ const PRACTITIONER_GONE_USER = '00000000-0000-4000-8000-000000007010';
 const PRACTITIONER_LEFT = '00000000-0000-4000-8000-000000007011';
 const PRACTITIONER_LEFT_USER = '00000000-0000-4000-8000-000000007012';
 const LOCATION_OFF = '00000000-0000-4000-8000-000000007013';
+/** A second household, erased at its own request, and the home it owns. */
+const CLIENT_ERASED = '00000000-0000-4000-8000-000000007014';
+const LOCATION_ERASED = '00000000-0000-4000-8000-000000007015';
 const APPT_CLOSED = '00000000-0000-4000-8000-000000007101';
 const APPT_OPEN = '00000000-0000-4000-8000-000000007102';
 const APPT_NEXT = '00000000-0000-4000-8000-000000007103';
 const APPT_LEFT = '00000000-0000-4000-8000-000000007104';
 const APPT_OFF = '00000000-0000-4000-8000-000000007105';
 const APPT_MOVED = '00000000-0000-4000-8000-000000007106';
+/** The erased household's own visit, on a day of its own. */
+const APPT_ERASED = '00000000-0000-4000-8000-000000007107';
 const SESSION_CLOSED = '00000000-0000-4000-8000-000000007201';
 const SESSION_OPEN = '00000000-0000-4000-8000-000000007202';
 
@@ -62,6 +67,13 @@ const DATE = '2026-09-04';
 const at = (time: string) => new Date(`${DATE}T${time}:00+04:00`);
 // The clock the API runs on: 10:50 on the day, after the second door opened.
 const NOW = at('10:50');
+
+/**
+ * A later day, kept apart from the day above so the erased household's visit
+ * cannot change what any of the other cases read.
+ */
+const DATE_ERASED = '2026-09-05';
+const on = (date: string, time: string) => new Date(`${date}T${time}:00+04:00`);
 
 let owner: pg.Client;
 let pool: ReturnType<typeof createPool>;
@@ -94,6 +106,7 @@ async function seedAppointment(
   status: string,
   locationId: string = IDS.locationA,
   practitionerId: string = MORE_IDS.practitionerA,
+  clientId: string = IDS.clientA,
 ): Promise<void> {
   await owner.query(
     'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
@@ -102,7 +115,7 @@ async function seedAppointment(
     [
       id,
       IDS.tenantA,
-      IDS.clientA,
+      clientId,
       practitionerId,
       MORE_IDS.serviceTypeA,
       locationId,
@@ -211,6 +224,16 @@ beforeAll(async () => {
     displayName: 'Synthetic Contact',
     roles: ['client_contact'],
   });
+  // The admin: admitted to the board like the owner, but standing inside the
+  // erasure gate rather than outside it, which is what the erased household's
+  // case below turns on (spec 5, amended).
+  await seedUser(owner, {
+    id: MORE_IDS.adminUserA,
+    tenantId: IDS.tenantA,
+    authId: AUTH.adminA,
+    displayName: 'Synthetic Admin',
+    roles: ['admin'],
+  });
 
   await seedClient(owner, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Alpha');
   await owner.query(
@@ -252,6 +275,23 @@ beforeAll(async () => {
   await seedAppointment(APPT_LEFT, at('14:00'), 'confirmed', IDS.locationA, PRACTITIONER_LEFT);
   await seedSession(SESSION_CLOSED, APPT_CLOSED, at('09:02'), at('09:40'));
   await seedSession(SESSION_OPEN, APPT_OPEN, at('10:03'), null);
+
+  // A second household, erased at its own request, with a home of its own and
+  // one visit at that home on a day of its own. The erasure gate
+  // (db/policies/client/readers.sql) hides both the client row and the
+  // locations it owns from an admin, and shows them to the owner and the lead
+  // practitioner (spec 5, amended).
+  await seedClient(owner, IDS.tenantA, CLIENT_ERASED, IDS.ownerA, 'Dune');
+  await seedLocation(owner, IDS.tenantA, LOCATION_ERASED, CLIENT_ERASED, IDS.ownerA);
+  await seedAppointment(
+    APPT_ERASED,
+    on(DATE_ERASED, '10:00'),
+    'confirmed',
+    LOCATION_ERASED,
+    MORE_IDS.practitionerA,
+    CLIENT_ERASED,
+  );
+  await owner.query("update client set status = 'erased' where id = $1", [CLIENT_ERASED]);
 
   pool = createPool(process.env.API_DATABASE_URL ?? '');
   const verifier = createTokenVerifier({ issuer: ISSUER, secret: SECRET });
@@ -384,10 +424,30 @@ describe('GET /api/appointments/board', () => {
     ]);
   });
 
+  it("keeps an erased household's home visit off an admin's board and on the owner's", async () => {
+    // The gate hides the erased household's client row and the locations it
+    // owns from an admin; `readDay` joins `location`, so a home visit of that
+    // household forms no row at all and takes no place in the admin's walk.
+    // The owner is outside the gate and sees the day whole (spec 5, amended).
+    const adminBoard = (await (
+      await get(AUTH.adminA, `/api/appointments/board?date=${DATE_ERASED}`)
+    ).json()) as BoardResponse;
+    expect(adminBoard.practitioners.flatMap((p) => p.visits.map((v) => v.appointmentId))).toEqual(
+      [],
+    );
+
+    const ownerBoard = (await (
+      await get(AUTH.ownerA, `/api/appointments/board?date=${DATE_ERASED}`)
+    ).json()) as BoardResponse;
+    expect(ownerBoard.practitioners.flatMap((p) => p.visits.map((v) => v.appointmentId))).toEqual([
+      APPT_ERASED,
+    ]);
+  });
+
   it('admits the lead practitioner and refuses a practitioner, finance and a household', async () => {
-    // The seeded owner is also the lead practitioner in the helpers' fixture;
-    // the admitted cases are the owner above and the admin in the reassign
-    // file. Refusals are what this case proves.
+    // The seeded owner is also the lead practitioner in the helpers' fixture,
+    // and the admin is admitted by the erased-household case above.
+    // Refusals are what this case proves.
     for (const sub of [AUTH.practitionerA, AUTH_FINANCE, AUTH.contactA]) {
       const res = await get(sub, `/api/appointments/board?date=${DATE}`);
       expect(res.status).toBe(403);
