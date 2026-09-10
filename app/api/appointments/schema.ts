@@ -508,7 +508,15 @@ export type ReorderActionCode = (typeof REORDER_ACTION_CODES)[number];
  * replaced.
  */
 export const ReassignAppointmentRequest = z.object({
-  practitionerId: z.uuid(),
+  /**
+   * Lower-cased on the way in. `z.uuid()` accepts either case and Postgres
+   * normalises what it stores, so the route's own "is this already their
+   * visit?" test would compare a normalised id to raw text and let an
+   * upper-case one past — a visit reassigned to the practitioner who already
+   * holds it, as two rows, the new one naming itself as the one it was taken
+   * from. Normalised once here, so every reader of this body sees one form.
+   */
+  practitionerId: z.uuid().transform((id) => id.toLowerCase()),
   /** Omitted: the household keeps the window it was promised. */
   windowStart: z.iso.datetime().optional(),
 });

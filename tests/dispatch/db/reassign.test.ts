@@ -344,6 +344,45 @@ describe('POST /api/appointments/:id/reassign', () => {
     expect(((await open.json()) as { code: string }).code).toBe('session_open');
   });
 
+  it('refuses the same practitioner however the id is typed', async () => {
+    // A uuid is the same id in either case, and every lookup normalises it —
+    // so a gate that compares the raw text lets an upper-case id past and
+    // commits a reassignment of a visit to the practitioner who already has
+    // it: a retired row, and a replacement naming itself as the one it was
+    // taken from.
+    const countRows = async (): Promise<number> => {
+      const { rows } = await owner.query<{ n: string }>(
+        'select count(*)::text as n from appointment where client_id = $1',
+        [IDS.clientA],
+      );
+      return Number(rows[0]?.n);
+    };
+    const before = await countRows();
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_SAME}/reassign`, {
+      practitionerId: MORE_IDS.practitionerA.toUpperCase(),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('same_practitioner');
+    // And with a free window as well, which is the shape that would otherwise
+    // go all the way through: nothing on the day clashes with it, so only the
+    // gate itself stands between the request and a committed pair of rows.
+    const andMoved = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_SAME}/reassign`, {
+      practitionerId: MORE_IDS.practitionerA.toUpperCase(),
+      windowStart: at('20:00').toISOString(),
+    });
+    expect(andMoved.status).toBe(400);
+    expect(((await andMoved.json()) as { code: string }).code).toBe('same_practitioner');
+    expect(await countRows()).toBe(before);
+    const untouched = await owner.query<{ status: string; practitioner_id: string }>(
+      'select status::text as status, practitioner_id from appointment where id = $1',
+      [APPT_SAME],
+    );
+    expect(untouched.rows[0]).toEqual({
+      status: 'confirmed',
+      practitioner_id: MORE_IDS.practitionerA,
+    });
+  });
+
   it('refuses a practitioner who is not certified for that service on that day, and one who is not free', async () => {
     const uncertified = await call(
       AUTH.ownerA,
