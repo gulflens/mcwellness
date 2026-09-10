@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { DEFAULT_EXPIRY_MONTHS, termWords } from '@domain/billing';
 import { isoDateIn } from '@domain/shared/actor';
 import { PackageResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import {
@@ -102,7 +103,10 @@ export function PackageDrawer({
   const [name, setName] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
   const [code, setCode] = useState('');
-  const [expiryMonths, setExpiryMonths] = useState('6');
+  // The default term is the rule's, not a figure typed here: the field, the
+  // hint below and `DEFAULT_EXPIRY_MONTHS` are one fact
+  // (domain/billing/expiry.ts).
+  const [expiryMonths, setExpiryMonths] = useState(String(DEFAULT_EXPIRY_MONTHS));
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [listPrice, setListPrice] = useState('');
   const [listPriceTouched, setListPriceTouched] = useState(false);
@@ -458,7 +462,7 @@ export function PackageDrawer({
             max={60}
             value={expiryMonths}
             onChange={(e) => setExpiryMonths(e.target.value)}
-            hint="How long a family has to use it. Six months unless the practice decides otherwise."
+            hint={`How long a family has to use it. ${termWords(DEFAULT_EXPIRY_MONTHS).en} unless the practice decides otherwise.`}
           />
 
           {formError ? <Note tone="critical">{formError}</Note> : null}
