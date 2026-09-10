@@ -151,17 +151,19 @@ describe('PackagesSection', () => {
     expect(screen.getByText('516.25')).toBeTruthy();
   });
 
-  it('offers "Add package" and "Sell to a client" to the owner', async () => {
+  it('offers "Add package", "Sell to a client" and "Sell a session" to the owner', async () => {
     mount(OWNER, [SILVER]);
     expect(await screen.findByRole('button', { name: 'Add package' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sell to a client' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sell a session' })).toBeTruthy();
   });
 
-  it('offers neither to a lead practitioner, who reads the catalogue and does not sell', async () => {
+  it('offers none of the three to a lead practitioner, who reads the catalogue and does not sell', async () => {
     mount(LEAD_PRACTITIONER, [SILVER]);
     await screen.findByText('Silver');
     expect(screen.queryByRole('button', { name: 'Add package' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Sell to a client' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sell a session' })).toBeNull();
   });
 
   it('says why a package cannot be sold rather than hiding it', async () => {
@@ -215,6 +217,19 @@ describe('PackagesSection', () => {
     );
     // Eighteen credits: one consultation, two brain maps, fifteen sessions.
     expect(drawer.textContent).toContain('18');
+  });
+
+  it('opens the sell-a-session drawer beside the sell-a-package one', async () => {
+    mountWith(OWNER, <PackagesSection canWrite />, (url) => {
+      if (url === '/api/billing/packages') return json({ packages: [SILVER], vatRegistered: true });
+      if (url === '/api/billing/prices') return json({ prices: [], vatRegistered: true });
+      return null;
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Sell a session' }));
+    const drawer = await screen.findByRole('dialog');
+    expect(drawer.textContent).toContain('Sell a session');
+    // Selling one session does not touch the package catalogue: no reload.
+    expect(screen.getByText('Silver')).toBeTruthy();
   });
 
   it('says so when the practice has no packages yet', async () => {

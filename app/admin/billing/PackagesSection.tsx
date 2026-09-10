@@ -7,6 +7,7 @@ import { formatDate } from './BillingPage';
 import { formatDiscount, formatFils } from './money';
 import { PackageDrawer } from './PackageDrawer';
 import { SellPackageDrawer } from './SellPackageDrawer';
+import { SellSessionDrawer } from './SellSessionDrawer';
 
 /**
  * What the practice sells as a programme, beside what it sells as a single
@@ -49,6 +50,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [addOpen, setAddOpen] = useState(false);
   const [selling, setSelling] = useState<PackageRow | null>(null);
+  const [sellingSession, setSellingSession] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -193,6 +195,17 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
             Add package
           </Button>
         ) : null}
+        {canWrite ? (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setNote(null);
+              setSellingSession(true);
+            }}
+          >
+            Sell a session
+          </Button>
+        ) : null}
       </div>
 
       {note ? (
@@ -254,6 +267,16 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
             setSelling(null);
             setNote(summary);
             load();
+          }}
+        />
+      ) : null}
+
+      {sellingSession ? (
+        <SellSessionDrawer
+          onClose={() => setSellingSession(false)}
+          onSold={(summary) => {
+            setSellingSession(false);
+            setNote(summary);
           }}
         />
       ) : null}
