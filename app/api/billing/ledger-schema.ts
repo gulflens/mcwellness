@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_EXTENSIONS } from '../../../domain/billing';
 import { cleanText } from '../_middleware/text';
 import { DiscountInput, IsoDate, isRealText, MINIMUM_REASON } from './schema';
 
@@ -224,6 +225,16 @@ export const PurchaseRow = z.object({
   expiresOn: z.string(),
   extendedTo: z.string().nullable(),
   extensionReason: z.string().nullable(),
+  /** How many of the two extensions this programme has had. */
+  extensionsUsed: z.number().int().min(0).max(MAX_EXTENSIONS),
+  extensionsAllowed: z.literal(MAX_EXTENSIONS),
+  /**
+   * The end the next extension would reach; null once the programme has had
+   * its two. The screen shows the date it is offering before anybody asks
+   * for it, and the count is the database's rather than a drawer's arithmetic
+   * (docs/PLAN/package-terms.md, the operator's decision 9 of 2026-09-10).
+   */
+  extendsTo: z.string().nullable(),
   status: z.enum(['active', 'completed', 'expired', 'refunded', 'cancelled']),
   invoiceId: z.uuid().nullable(),
 });
@@ -402,13 +413,13 @@ export type RefundQuoteResponse = z.infer<typeof RefundQuoteResponse>;
 /**
  * Extending a programme's expiry: the coordinator's discretion, with a reason
  * (docs/SPEC/billing.md section 4.3, and the founder's decision of
- * 2026-09-03). The new date must be later than the one it replaces — an
- * "extension" that shortens the time a family has is not an extension, and
- * taking time away from a prepaid programme is not something a reason makes
- * acceptable.
+ * 2026-09-03). A reason and nothing else. The length is not the coordinator's
+ * to choose — an extension is always exactly three months from the current
+ * end, and a programme may have two (docs/PLAN/package-terms.md, the
+ * operator's decision 9 of 2026-09-10) — so there is no date on the wire for
+ * a screen to get wrong, and no shortening of a prepaid programme to refuse.
  */
 export const ExtendPurchaseInput = z.object({
-  extendedTo: IsoDate,
   reason: Reason,
 });
 export type ExtendPurchaseInput = z.infer<typeof ExtendPurchaseInput>;

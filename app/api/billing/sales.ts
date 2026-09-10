@@ -3,7 +3,10 @@ import {
   allocateEntitlements,
   combineDiscounts,
   expiryOn,
+  MAX_EXTENSIONS,
+  nextExtension,
   resolveSaleVat,
+  termWords,
   type AppliedDiscount,
   type PackageComponent,
 } from '../../../domain/billing';
@@ -86,11 +89,92 @@ const INSERT_PURCHASE_SQL =
 /** The practice opened in 2024; a sale before that is a mistyped year. */
 const EARLIEST_SALE_ON = '2024-01-01';
 
-/** Postgres: unique_violation. Here, always the idempotency key. */
+/** The key a repeated press collides with (migration 403's `unique (tenant_id, idempotency_key)`). */
+const PURCHASE_IDEMPOTENCY_CONSTRAINT = 'package_purchase_tenant_id_idempotency_key_key';
+
+/**
+ * Postgres: unique_violation on that key, and on no other — the same press
+ * arriving twice. Named rather than assumed: replaying the first answer is
+ * right only for the key, and a 23505 raised by anything else on the purchase
+ * insert is a fault to be raised rather than a sale to be reported as already
+ * made.
+ */
 function isDuplicateKey(error: unknown): boolean {
   return (
-    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: string }).code === '23505' &&
+    (error as { constraint?: string }).constraint === PURCHASE_IDEMPOTENCY_CONSTRAINT
   );
+}
+
+/**
+ * A programme as the database holds it, with the count of the extensions it
+ * has had. Every statement that reads a purchase selects these columns and
+ * this count — `EXTENSIONS_USED_SQL` below — and hands the row to
+ * `purchaseRow` rather than mapping it again: three copies of one mapping
+ * were three places for a new field to be forgotten.
+ */
+export type PurchaseDbRow = {
+  id: string;
+  client_id: string;
+  package_id: string;
+  package_name: string;
+  package_name_ar: string | null;
+  purchased_on: string;
+  net_fils: number;
+  vat_fils: number;
+  list_price_fils: number;
+  discount_basis_points: number | null;
+  discount_reason: string | null;
+  expires_on: string;
+  extended_to: string | null;
+  extension_reason: string | null;
+  extensions_used: number;
+  status: PurchaseRow['status'];
+  invoice_id: string | null;
+};
+
+/**
+ * The correlated count of a programme's extensions, for the select list of
+ * any statement that reads a purchase as `p`. Tenant-scoped like every other
+ * join in this module: row security would answer the same, and the predicate
+ * says so where a reader can see it.
+ */
+export const EXTENSIONS_USED_SQL =
+  '(select count(*)::int from package_extension x ' +
+  'where x.tenant_id = app.current_tenant_id() and x.purchase_id = p.id) as extensions_used';
+
+/** One programme, as every screen and every response says it. */
+export function purchaseRow(row: PurchaseDbRow): PurchaseRow {
+  const currentEnd = row.extended_to ?? row.expires_on;
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    packageId: row.package_id,
+    packageName: row.package_name,
+    packageNameAr: row.package_name_ar,
+    purchasedOn: row.purchased_on,
+    netFils: row.net_fils,
+    vatFils: row.vat_fils,
+    grossFils: row.net_fils + row.vat_fils,
+    listPriceFils: row.list_price_fils,
+    // The gap between the list figure and what was charged; both are on the
+    // row already, so the discount is never a third figure to keep right.
+    discountFils: Math.max(0, row.list_price_fils - row.net_fils),
+    discountBasisPoints: row.discount_basis_points,
+    discountReason: row.discount_reason,
+    expiresOn: row.expires_on,
+    extendedTo: row.extended_to,
+    extensionReason: row.extension_reason,
+    extensionsUsed: row.extensions_used,
+    extensionsAllowed: MAX_EXTENSIONS,
+    // The date the screen offers before anybody asks for it, and the null
+    // that tells it there is nothing left to offer.
+    extendsTo: nextExtension(currentEnd, row.extensions_used)?.toOn ?? null,
+    status: row.status,
+    invoiceId: row.invoice_id,
+  };
 }
 
 const REPLAY_SQL =
@@ -98,7 +182,8 @@ const REPLAY_SQL =
   'p.net_fils, p.vat_fils, p.list_price_fils, p.discount_basis_points, p.discount_reason, ' +
   'p.expires_on, p.extended_to, p.extension_reason, ' +
   'p.status, p.invoice_id, i.reference, ' +
-  '(select count(*)::int from entitlement e where e.package_purchase_id = p.id) as credits ' +
+  EXTENSIONS_USED_SQL +
+  ', (select count(*)::int from entitlement e where e.package_purchase_id = p.id) as credits ' +
   'from package_purchase p left join invoice i on i.id = p.invoice_id ' +
   'where p.tenant_id = app.current_tenant_id() and p.idempotency_key = $1';
 
@@ -112,53 +197,16 @@ async function replaySale(
   },
   key: string,
 ): Promise<SellPackageResponse | null> {
-  const found = await db.query<{
-    id: string;
-    client_id: string;
-    package_id: string;
-    package_name: string;
-    package_name_ar: string | null;
-    purchased_on: string;
-    net_fils: number;
-    vat_fils: number;
-    list_price_fils: number;
-    discount_basis_points: number | null;
-    discount_reason: string | null;
-    expires_on: string;
-    extended_to: string | null;
-    extension_reason: string | null;
-    status: PurchaseRow['status'];
-    invoice_id: string | null;
-    reference: string | null;
-    credits: number;
-  }>(REPLAY_SQL, [key]);
+  const found = await db.query<PurchaseDbRow & { reference: string | null; credits: number }>(
+    REPLAY_SQL,
+    [key],
+  );
   const row = found.rows[0];
   if (!row) {
     return null;
   }
   return SellPackageResponse.parse({
-    purchase: {
-      id: row.id,
-      clientId: row.client_id,
-      packageId: row.package_id,
-      packageName: row.package_name,
-      packageNameAr: row.package_name_ar,
-      purchasedOn: row.purchased_on,
-      netFils: row.net_fils,
-      vatFils: row.vat_fils,
-      grossFils: row.net_fils + row.vat_fils,
-      listPriceFils: row.list_price_fils,
-      // The gap between the list figure and what was charged; both are on the
-      // row already, so the discount is never a third figure to keep right.
-      discountFils: Math.max(0, row.list_price_fils - row.net_fils),
-      discountBasisPoints: row.discount_basis_points,
-      discountReason: row.discount_reason,
-      expiresOn: row.expires_on,
-      extendedTo: row.extended_to,
-      extensionReason: row.extension_reason,
-      status: row.status,
-      invoiceId: row.invoice_id,
-    },
+    purchase: purchaseRow(row),
     invoiceReference: row.reference ?? '',
     entitlements: row.credits,
   });
@@ -416,11 +464,18 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     // The line stamps the rate that was *charged*, which is zero while the
     // practice is unregistered, not the rate the price row records. The
     // rendered document reads the line, so the two must not disagree.
+    //
+    // The term is said here too, in both languages: the operator's decision 9
+    // (docs/PLAN/package-terms.md) is that a programme's length is on the
+    // invoice, not only in the Sell drawer the family saw once.
+    const term = termWords(bundle.expiryMonths);
+    const description = `${bundle.name}, ${term.en}`;
+    const descriptionAr = bundle.nameAr ? `${bundle.nameAr}، ${term.ar}` : null;
     await db.query(INSERT_LINE_SQL, [
       invoiceId,
       input.clientId,
-      bundle.name,
-      bundle.nameAr,
+      description,
+      descriptionAr,
       bundle.id,
       applied.listFils,
       applied.discountFils,
@@ -477,6 +532,11 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
           expiresOn,
           extendedTo: null,
           extensionReason: null,
+          // A programme sold a moment ago has had none of its two, so the
+          // first extension it could be given runs from the date above.
+          extensionsUsed: 0,
+          extensionsAllowed: MAX_EXTENSIONS,
+          extendsTo: nextExtension(expiresOn, 0)?.toOn ?? null,
           status: 'active',
           invoiceId,
         },

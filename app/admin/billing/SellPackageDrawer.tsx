@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
+import { termWords } from '@domain/billing';
 import { isoDateIn } from '@domain/shared/actor';
 import {
   PAYMENT_METHODS,
@@ -378,6 +379,11 @@ export function SellPackageDrawer({
           ) : null}
 
           {formError ? <Note tone="critical">{formError}</Note> : null}
+
+          <p className="sell__term">
+            Runs {termWords(bundle.expiryMonths).en} from today. Two extensions of three months each
+            on request.
+          </p>
 
           <div className="drawer__actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>

@@ -1,8 +1,10 @@
 /**
  * When a prepaid package runs out of time, and when to say so
- * (docs/SPEC/billing.md section 4.3; the founder's decision of 2026-09-03:
- * twelve months from purchase, extensions at the coordinator's discretion
- * with a reason, warnings at sixty and thirty days).
+ * (docs/SPEC/billing.md section 4.3; the operator's decision 9 of
+ * 2026-09-10, docs/PLAN/package-terms.md: a programme runs six months from
+ * purchase, extendable twice by exactly three months each with a reason;
+ * warnings at sixty and thirty days). The extension's arithmetic lives
+ * beside this file, in `extension.ts`.
  *
  * The warning thresholds are data, not a rule buried in a screen: the
  * numbers sit here as named constants, and the screens ask this file rather
@@ -13,8 +15,8 @@
 
 import type { IsoDate } from '../shared';
 
-/** Twelve months, the founder's decision of 2026-09-03. Changeable: it is a setting on the package. */
-export const DEFAULT_EXPIRY_MONTHS = 12;
+/** Six months from purchase — the operator's decision 9 of 2026-09-10 (docs/PLAN/package-terms.md); twelve until then. The package row carries its own term; this is the default a new one takes. */
+export const DEFAULT_EXPIRY_MONTHS = 6;
 
 /** The two moments the practice says something. Both counted in whole days remaining. */
 export const EXPIRY_WARNING_DAYS = { first: 60, second: 30 } as const;

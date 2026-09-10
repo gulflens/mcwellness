@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isoDateIn } from '@domain/shared/actor';
 import {
   BalanceResponse,
   type PurchaseRow,
@@ -28,6 +29,8 @@ import { PaymentDrawer } from './PaymentDrawer';
  * family who loses prepaid sessions to a date nobody mentioned is a
  * complaint, not an accounting event.
  */
+
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
 /**
  * What to say about an expiry, and how loudly.
@@ -160,6 +163,14 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
         .map((service) => `${service.remaining} × ${service.serviceTypeName}`)
         .join(', ')
     : '';
+  // The day the practice is on, for the one judgement this screen makes about
+  // a date of its own: whether an extension would land behind today. The
+  // three months are not counted here — `purchase.extendsTo` is
+  // `nextExtension`'s own answer, computed by the rule on the server
+  // (app/api/billing/sales.ts's `purchaseRow`) — so the screen offers the
+  // button on exactly the condition the route accepts, and never offers what
+  // it would refuse as `ended_too_long_ago`.
+  const today = isoDateIn(new Date(), PRACTICE_TIME_ZONE);
   const warningFor = balance ? WARNINGS[balance.expiryWarning] : undefined;
   const warning =
     balance && balance.nextExpiryOn && warningFor
@@ -253,6 +264,11 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                           Extended from {formatDate(purchase.expiresOn)}. {purchase.extensionReason}
                         </span>
                       ) : null}
+                      {purchase.extensionsUsed > 0 ? (
+                        <span className="small muted">
+                          {purchase.extensionsUsed} of {purchase.extensionsAllowed} extensions used
+                        </span>
+                      ) : null}
                       {purchase.discountReason ? (
                         // What was given away on this sale, and why — the
                         // operator's purpose for the discount round
@@ -269,15 +285,35 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                     {canWrite &&
                     purchase.status !== 'refunded' &&
                     purchase.status !== 'cancelled' ? (
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          setNote(null);
-                          setExtending(purchase);
-                        }}
-                      >
-                        Give them longer
-                      </Button>
+                      purchase.extendsTo !== null && purchase.extendsTo >= today ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setNote(null);
+                            setExtending(purchase);
+                          }}
+                        >
+                          Extend
+                        </Button>
+                      ) : purchase.extensionsUsed === 2 ? (
+                        <span className="small muted">
+                          This programme has had its two extensions.
+                        </span>
+                      ) : (
+                        // Fewer than two used and still no button, which
+                        // leaves one case: `extendsTo` is a date already
+                        // behind today, so three more months would buy the
+                        // family no day they can use and would spend one of
+                        // the two they are allowed for ever. The route
+                        // refuses it as `ended_too_long_ago`; these are the
+                        // drawer's own words for it, because a control that
+                        // is simply absent tells a coordinator nothing.
+                        <span className="small muted">
+                          This programme ended more than three months ago, so three more months
+                          would still be in the past. A programme that needs longer is a refund and
+                          a new sale.
+                        </span>
+                      )
                     ) : null}
                   </li>
                 ))}
