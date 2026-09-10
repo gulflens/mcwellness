@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { cleanText } from '../_middleware/text';
-import type { ApiEnv } from '../_middleware/request-context';
+import type { ApiEnv, Db } from '../_middleware/request-context';
 import { canWriteClientRecord } from './access';
 import { CreateLocationBody, IdResponse, UpdateLocationBody, VerifyPinBody } from './record-schema';
 import { logRefused } from './refused';
@@ -20,6 +20,27 @@ const ClientParams = z.object({ id: z.uuid() });
 const LocationParams = z.object({ id: z.uuid(), locationId: z.uuid() });
 
 const point = (lng: number, lat: number): string => `SRID=4326;POINT(${lng} ${lat})`;
+
+/**
+ * One client, one primary location, and the client row knows which.
+ *
+ * The list's Emirate column reads `client.primary_location_id`
+ * (app/api/clients/list.ts), and until the walk of 10 September nothing but the
+ * seed ever wrote it: every client enrolled through the app showed no emirate.
+ * The flag on the location and the link on the client are set together so the
+ * two can never disagree, and the other locations are demoted in the same
+ * breath so "primary" keeps meaning one.
+ */
+async function makePrimary(db: Db, clientId: string, locationId: string): Promise<void> {
+  await db.query(
+    "update location set is_primary = (id = $2) where owner_type = 'client' and owner_id = $1",
+    [clientId, locationId],
+  );
+  await db.query('update client set primary_location_id = $2 where id = $1', [
+    clientId,
+    locationId,
+  ]);
+}
 
 export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.post('/api/clients/:id/locations', async (c) => {
@@ -74,6 +95,9 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
         body.data.isPrimary,
       ],
     );
+    if (body.data.isPrimary) {
+      await makePrimary(db, clientId, locationId);
+    }
     return c.json(IdResponse.parse({ id: locationId }), 201);
   });
 
@@ -143,6 +167,9 @@ export function mountLocations(api: Hono<ApiEnv>, now: () => Date = () => new Da
 
     values.push(locationId);
     await db.query(`update location set ${sets.join(', ')} where id = $${values.length}`, values);
+    if (d.isPrimary === true) {
+      await makePrimary(db, clientId, locationId);
+    }
     return c.json(IdResponse.parse({ id: locationId }));
   });
 
