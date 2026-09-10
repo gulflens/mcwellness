@@ -7,6 +7,11 @@ own pull request under the integrator's widening for one piece.
 
 1. **The range.** `210–249`, carved from scheduling's upper half, and the
    ports `5444/3012/5185` — the `dispatch` rows in `docs/SPEC/OWNERSHIP.md`.
+   `docs/SPEC/00-data-model.md` section 5 is deliberately **not** edited: the
+   one column migration 210 adds is `docs/SPEC/dispatch.md` 6.3's, listed
+   there as `docs/CHANGE-REQUESTS/reports-01.md` R1 lists the `report`
+   entity's — written down in the piece's own specification and not applied
+   to the model, where 203's `rescheduled_from_id` is absent in the same way.
 2. **Two actions in `domain/shared/actor.ts`.** `appointment.reassign` and
    `appointment.board.read`, both owner, admin and lead practitioner — the
    three who may already move a visit (spec section 9).
