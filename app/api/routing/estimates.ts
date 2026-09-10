@@ -178,11 +178,21 @@ function bucketDeparture(date: string, hour: number): Date {
  * instant, filled from the cache and — for whatever is missing — from one
  * grid call per hour bucket (docs/SPEC/route-planning.md section 5.6).
  *
- * Never throws and never waits once it is built: the optimiser walks
- * thousands of orderings and must not touch the network inside the search.
- * A pair the vendor could not answer falls back to the practice's own
- * straight-line arithmetic, so a plan is always computable and the screen is
- * told which figures it is looking at.
+ * Never waits once it is built: the optimiser walks thousands of orderings
+ * and must not touch the network inside the search. A pair the vendor could
+ * not answer falls back to the practice's own straight-line arithmetic, and
+ * an hour it was not priced for is answered with the nearest hour it was, so
+ * a plan is always computable and the screen is told which figures it is
+ * looking at.
+ *
+ * **Total over the places it was given, and only those.** Asked about a
+ * location id that was never handed in, it throws naming that id rather than
+ * answering a drive of zero: there is no coordinate to draw a straight line
+ * from, and zero seconds would make a door nobody can reach read as
+ * comfortably on time. No honest caller can reach it — `readDay` inner-joins
+ * `location`, and the optimiser and the board both build `places` from every
+ * stop they will go on to ask about — so it surfaces a caller's bug and
+ * nothing else.
  */
 export async function fillMatrix(
   db: Db,
@@ -294,7 +304,16 @@ export async function fillMatrix(
     }
     const from = points.get(fromLocationId);
     const to = points.get(toLocationId);
-    if (!from || !to) return { seconds: 0, metres: 0, source: 'straight-line' };
+    // A place that was never handed in. Not a fallback case: with no
+    // coordinate there is no straight line to work out, and a drive of zero
+    // seconds is a lie that makes a door nobody can reach look comfortably on
+    // time. It is a caller that asked about a place it did not declare, so it
+    // is said out loud (docs/CHANGE-REQUESTS/dispatch-01.md item 9).
+    if (!from || !to) {
+      throw new Error(
+        `drive asked for a place the matrix was not given: ${from ? toLocationId : fromLocationId}`,
+      );
+    }
     return {
       ...straightLineSeconds(from, to, departAt, factors, PRACTICE_TIME_ZONE),
       source: 'straight-line' as const,

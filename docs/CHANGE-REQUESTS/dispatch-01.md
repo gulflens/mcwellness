@@ -45,3 +45,15 @@ own pull request under the integrator's widening for one piece.
    to admit `checked_in` and `completed`, which the seed had no visit in
    before. And the day now holds eight appointments rather than five, so the
    seed test's unfiltered count reads 8.
+9. **One throw in `app/api/routing/estimates.ts`.** `fillMatrix`'s returned
+   matrix answered `{ seconds: 0 }` for a pair whose location id was never
+   handed in — a figure that makes a door nobody can reach read as comfortably
+   on time, and one the matrix's two real fallbacks cannot stand in for,
+   because with no coordinate there is no straight line to work out. It now
+   throws naming that id, which surfaces a caller's bug loudly and can be
+   reached by no honest caller: `readDay` inner-joins `location`, and the
+   optimiser and the board both build `places` from every stop they go on to
+   ask about. Scheduling's file, edited under the same widening; the routing
+   suites under `tests/scheduling/db/` and `tests/dispatch/db/board.test.ts`
+   are what prove it unreachable, and `tests/dispatch/matrix.test.ts` is the
+   unit case for the throw itself.
