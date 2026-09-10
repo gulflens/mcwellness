@@ -41,12 +41,15 @@ const CEDAR = '00000008-0000-4000-8000-000000000002';
 const SAGE = '00000008-0000-4000-8000-000000000004';
 const FINISHED_VISIT = '00000008-0000-4000-8000-000000000101';
 const LATE_VISIT = '00000008-0000-4000-8000-000000000102';
+/** A second visit that can still change hands, so a drag can re-target the drawer. */
+const LIVE_VISIT = '00000008-0000-4000-8000-000000000104';
 const SERVICE = {
   id: '00000008-0000-4000-8000-000000000003',
   name: 'Neurofeedback session',
   durationMinutes: 45,
 };
 const REASON = 'Cedar is unwell this afternoon.';
+const OTHER_REASON = 'This one is nearer to Sage.';
 
 const BOARD: BoardResponse = {
   date: DATE,
@@ -89,6 +92,23 @@ const BOARD: BoardResponse = {
           checkedInAt: null,
           closedAt: null,
           lateness: { late: true, byMinutes: 20 },
+        },
+        {
+          appointmentId: LIVE_VISIT,
+          windowStart: at('14:00'),
+          windowEnd: at('14:45'),
+          status: 'proposed',
+          state: 'waiting',
+          client: {
+            id: '00000008-0000-4000-8000-000000000013',
+            givenName: 'Laurel',
+            familyName: 'Creek',
+          },
+          serviceType: SERVICE,
+          emirate: 'DXB',
+          checkedInAt: null,
+          closedAt: null,
+          lateness: { late: false, byMinutes: 0 },
         },
       ],
     },
@@ -304,6 +324,29 @@ describe('BoardPage', () => {
     expect(behind.map((each) => (each as HTMLElement).inert)).toEqual(behind.map(() => true));
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('starts a fresh drawer when it is re-targeted at another visit', async () => {
+    const onReassign = vi.fn(() => json(REASSIGNED, 201));
+    const { fetchImpl } = mount({ onReassign });
+    // Open on the late visit and say why that one is changing hands.
+    fireEvent.click(await screen.findByRole('button', { name: /Juniper Valley/ }));
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: REASON } });
+    // A drop of the other live visit re-targets the drawer. Nothing typed for
+    // the first visit may survive into the second: the reason is the audited
+    // record of why one particular promise changed hands.
+    fireEvent.drop(screen.getByRole('region', { name: 'Sage Harbour' }), {
+      dataTransfer: { getData: () => LIVE_VISIT },
+    });
+    const drawer = await screen.findByRole('dialog', { name: 'Reassign the visit' });
+    expect(within(drawer).getByText('Laurel Creek')).toBeTruthy();
+    expect((screen.getByLabelText('Why') as HTMLInputElement).value).toBe('');
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: OTHER_REASON } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reassign' }));
+    await waitFor(() => expect(onReassign).toHaveBeenCalledTimes(1));
+    const sent = fetchImpl.mock.calls.find((call) => String(call[0]).endsWith('/reassign'));
+    expect(String(sent?.[0])).toBe(`/api/appointments/${LIVE_VISIT}/reassign`);
+    expect(new Headers(sent?.[1]?.headers).get('x-reason')).toBe(OTHER_REASON);
   });
 
   it('leaves a visit where it is when it is dropped back on its own row', async () => {

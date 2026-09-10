@@ -260,7 +260,15 @@ export function BoardPage() {
         </div>
       ) : null}
       {drawer && board ? (
+        /*
+         * Keyed on the visit, so re-targeting the drawer at another block
+         * starts a fresh one. Without it `to` and `reason` are initialised
+         * once and survive the change of props: a reason typed for one
+         * household's visit would be posted as the audited record of why a
+         * different one changed hands (spec 11).
+         */
         <ReassignDrawer
+          key={drawer.visit.appointmentId}
           visit={drawer.visit}
           from={drawer.from}
           initialTo={drawer.to}
