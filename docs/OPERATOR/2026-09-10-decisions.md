@@ -23,12 +23,12 @@ follows from it:
 | 1 | The books start on **15 September 2026**; nothing said on the relief, so it stays elected pending the adviser | The start day is set on production under the founder's account, with the reason recorded; the first opening of Books posts nothing dated before it |
 | 2 | As recommended | Unregistered; the tax-point question goes to the adviser in writing; nothing built |
 | 3 | **30 days** | The Enquiries screen surfaces an enquiry still new after thirty days as waiting, with one press to dismiss; nothing dismisses itself. Built in the next trunk round |
-| 4 | As recommended | One takings figure for everyone, an erased household's money included. A billing round with its own short plan |
+| 4 | As recommended | **Already so.** Since trunk round 31 (migration 952, `app.practice_money_ledger`) the takings figure is read whole by a database function that names nobody, so it is the same whoever asks; the audit's item was stale. Nothing to build |
 | 5 | As recommended | Check-in admits confirmed visits only, refusing a proposed one with a plain sentence. Built in the next trunk round, in the session-capture stream's paths |
 | 6 | **Not until mid 2027** | No service type for Compassionate Inquiry until then; nothing built |
 | 7 | **Leave it off** | The certification gate stays off; nothing built |
 | 8 | As recommended | A progress report prints the practitioner's observation and no brain-map figure; nothing built |
-| 9 | As recommended, **with two three-month extensions** | Packages expire six months from purchase; up to two extensions of three months each on request, no charge; the notice period and fee stay 24 hours and AED 150. A billing round with its own short plan |
+| 9 | As recommended, **with two three-month extensions** | Packages expire six months from purchase; up to two extensions of three months each on request, no charge; the notice period and fee stay 24 hours and AED 150. The plan is `docs/PLAN/package-terms.md`, awaiting your go |
 | 10 | **Mark this feature as coming soon** | The questionnaire and the reading of the equipment's export are shown as coming soon on the assessment screens rather than waiting on a file; the practitioner keeps typing the figures. Built in the next trunk round |
 | 11 | **Build the dispatcher** | The plan and specification on pull request 128 are approved: the board first (piece twenty-two), then telling and hearing back, the notification, and live location last with its consent page. Pull request 127, the practitioner on site, stays open and unbuilt |
 | 12 | **Do it for me** | The staging project's leaked legacy service-role key is retired: a new secret key of the current kind is minted, placed in the laptop's staging settings without being shown, and the legacy keys are switched off, which invalidates the old one. Recorded below when done |
