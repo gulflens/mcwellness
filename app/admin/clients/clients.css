@@ -304,6 +304,20 @@
   color: var(--ink-2);
 }
 
+/* SignAllForm.tsx's own heading, naming which of the stacked consents this
+   is — a different thing from `.consent-text__heading` above, which is a
+   heading *inside* one wording's own markdown. Its own size (h3, not body)
+   carries that distinction visually, on top of the `<h3>` element itself
+   carrying it structurally, so four consents read as four rather than one
+   wording with three sub-headings (fix round of 10 September 2026,
+   finding 6). */
+.consent-text__part-heading {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--w-medium);
+  color: var(--ink);
+}
+
 .consent-text__list {
   padding-inline-start: var(--s-5);
   margin: 0;

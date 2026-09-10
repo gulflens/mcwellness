@@ -208,9 +208,19 @@ export function SignAllForm({
   }
 
   // What the filed image's own foot says it covers, in the same words the
-  // headings above read: the spec requires it, and `SignaturePad.tsx` wraps
-  // whatever this comes to across as many lines as it needs.
-  const caption = `Signed for: ${purposes.map((p) => PURPOSE_LABELS[p] ?? p).join(', ')}`;
+  // headings above read (fix round of 10 September 2026); `SignaturePad.tsx`
+  // wraps whatever this comes to across as many lines as it needs. Built
+  // from `state.wordings`, the same array the request body below is built
+  // from, not from `purposes` again — the two are provably equal today, but
+  // deriving the caption from a second array only argues that rather than
+  // making it structural, and the caption is the legal artefact. Empty
+  // until the wordings are loaded; nothing reads it before then, since it is
+  // only ever passed to `SignaturePad` inside the `state.kind === 'ready'`
+  // branch below.
+  const caption =
+    state.kind === 'ready'
+      ? `Signed for: ${state.wordings.map((w) => PURPOSE_LABELS[w.purpose] ?? w.purpose).join(', ')}`
+      : '';
 
   async function submit(): Promise<void> {
     if (state.kind !== 'ready') return;
@@ -328,7 +338,13 @@ export function SignAllForm({
           >
             {state.wordings.map((w) => (
               <section key={w.purpose} className="consent-text__part">
-                <h4 className="consent-text__heading">{PURPOSE_LABELS[w.purpose] ?? w.purpose}</h4>
+                {/* Its own class and its own level (h3, not h4): `.consent-text__heading`
+                    below is what a heading *inside* a wording's own markdown renders as
+                    (ConsentText.tsx), and a separator rule alone was carrying the whole
+                    burden of saying "a new consent starts here". */}
+                <h3 className="consent-text__part-heading">
+                  {PURPOSE_LABELS[w.purpose] ?? w.purpose}
+                </h3>
                 <p className="small muted">
                   Version <span className="numeric">{w.wording.version}</span>
                 </p>
@@ -374,7 +390,8 @@ export function SignAllForm({
               />
               <p className="small muted">
                 A photograph or a PDF. Photographs are made smaller here before they are sent; a PDF
-                is sent as it is.
+                is sent as it is. One scan is filed against every consent listed above, so the form
+                itself has to show agreement to all of them, not just one.
               </p>
               {scan ? <p className="small muted">Ready to file: {scan.name}</p> : null}
               {scanWarning ? <Note>{scanWarning}</Note> : null}
