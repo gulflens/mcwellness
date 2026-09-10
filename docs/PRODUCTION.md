@@ -1183,3 +1183,40 @@ restart needed: `/api/health` 200 in 1.32 s and `/api/health/deep` 200 in
 has yet been seen with a real stop on it; if it reads as washed out when the
 first visit is booked, that is a styling tune in `app/shell/maps/mapStyle.ts`
 and not this defect.
+
+## What was done on 2026-09-11: the sixteenth live pass — the basemap keeps Google's colours
+
+At 19:19 UTC on 10 September (03:19 on the operator's clock), on the operator's
+word, `main` at `6b07ce3` was built and served: pull request 157, the basemap's
+colours, and nothing else.
+
+**Why.** With the day map drawing at last (the fifteenth pass, above), the
+operator could see it, and asked for the original colours back.
+`app/shell/maps/mapStyle.ts` had painted every feature from the console's own
+tokens — all geometry `--paper` (`#e9e7ec`) and the roads `--rule` (`#d0cbd6`).
+Those sit about 1.2:1 apart, so the roads were very nearly invisible and the
+map read as an empty grey panel. The intent was the design brief's (a basemap
+that does not shout under the pins) and the execution took it far enough to
+stop being a map.
+
+**What changed.** Nothing is painted. Google's palette separates land, water and
+road legibly and is the one a coordinator already knows. Both browser maps —
+the day map and the pin picker — take it. What stays turned off is noise rather
+than colour: a shop, a bus route and an emirate's boundary are not what either
+map is for.
+
+Two consequences, stated rather than discovered later. The basemap no longer
+follows the console's dark mode, because Google's palette does not; a light map
+under a dark console is the ordinary trade. And the file now names no colour at
+all, from a token or otherwise, which is the plainest reading of
+`.claude/rules/ui.md`'s "never hardcode colours" — it used to have to argue with
+that rule. The test asserts the absence: no styler may carry a `color`, `hue`,
+`saturation` or `lightness`, so the next person who reaches for a token here
+meets a failing test rather than a comment.
+
+**The pass.** No migration. Hold protocol clear. Archive
+`mcwellness-6b07ce3.tar.gz` (6,435,203 bytes); TUS create 201 and PATCH 204 with
+the offset equal to the size; build `01a08cc2` with the stored settings. The
+served bundle flipped from `index-Bw4G3Mcz.js` to `index-ClUTgBuE.js`. No
+restart needed: `/api/health` 200 in 0.58 s and `/api/health/deep` 200 in
+0.66 s, and `/admin/schedule/map` still serves its widened policy.
