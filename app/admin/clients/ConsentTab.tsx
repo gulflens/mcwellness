@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { OFFERED_CONSENT_PURPOSES, requiredConsents, type ConsentPurpose } from '@domain/client';
+import { OFFERED_CONSENT_PURPOSES, requiredConsentsFor, type ConsentPurpose } from '@domain/client';
 import {
   WithdrawConsentResponse,
   type ClientRecordResponse,
@@ -7,7 +7,7 @@ import {
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
-import { practiceToday, toActivationRecord } from './activation';
+import { practiceToday } from './activation';
 import { contactDisplayName } from './contactName';
 import { DocumentLink } from './DocumentLink';
 import { RecordConsentForm } from './RecordConsentForm';
@@ -84,7 +84,7 @@ function isActiveOn(consent: Consent, today: string, purpose: ConsentPurpose): b
  * are the same job at two moments.
  *
  * Three parts: what this client needs before they can be activated, from
- * `requiredConsents` in domain/client, so a guardian's consent appears the
+ * `requiredConsentsFor` in domain/client, so a guardian's consent appears the
  * moment a date of birth makes the client a child; every purpose with what is
  * on file for it; and, for each, the way to record a new one or withdraw the
  * one standing.
@@ -118,10 +118,13 @@ export function ConsentTab({
   erased?: boolean;
 }) {
   const today = practiceToday();
-  // As a set of plain strings: `requiredConsents` answers with the purposes
-  // activation can ask for, and this list runs over those the practice offers
-  // plus any retired one this household still holds.
-  const required = new Set<string>(requiredConsents(toActivationRecord(record), ['home'], today));
+  // As a set of plain strings: `requiredConsentsFor` answers with the purposes
+  // activation can ask for, from the date of birth alone, and this list runs
+  // over those the practice offers plus any retired one this household still
+  // holds.
+  const required = new Set<string>(
+    requiredConsentsFor({ dateOfBirth: record.dateOfBirth }, ['home'], today),
+  );
   const consenting = record.contacts.filter((contact) => contact.canConsent);
   const [recording, setRecording] = useState<ConsentPurpose | null>(null);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);

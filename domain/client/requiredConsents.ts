@@ -32,3 +32,32 @@ export function requiredConsents(
 
   return purposes.sort();
 }
+
+/**
+ * The same question, answered from a client's date of birth alone.
+ *
+ * `requiredConsents` takes a full `ClientRecord` because `canActivate` reads
+ * the rest of it for its own three other gates. A caller that only needs the
+ * list of purposes — the bundle route (`POST /api/clients/:id/consents/bundle`
+ * in app/api/clients/consents.ts) and the Consent tab
+ * (app/admin/clients/ConsentTab.tsx) among them — has no contacts, locations
+ * or consent history to hand and no business inventing empty ones just to
+ * satisfy the wider shape. This delegates to `requiredConsents` itself rather
+ * than repeating its rule, so the two can never drift.
+ */
+export function requiredConsentsFor(
+  client: { dateOfBirth: IsoDate | null },
+  deliveryModes: readonly DeliveryMode[],
+  atDate: IsoDate,
+): RequiredConsentPurpose[] {
+  return requiredConsents(
+    {
+      client: { id: '', status: 'lead', dateOfBirth: client.dateOfBirth },
+      contacts: [],
+      locations: [],
+      consents: [],
+    },
+    deliveryModes,
+    atDate,
+  );
+}
