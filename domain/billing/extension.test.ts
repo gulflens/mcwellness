@@ -37,6 +37,11 @@ describe('nextExtension', () => {
     expect(EXTENSION_MONTHS).toBe(3);
     expect(MAX_EXTENSIONS).toBe(2);
   });
+
+  it('refuses a count of extensions that is not a whole number, zero or more', () => {
+    expect(() => nextExtension('2027-03-15', -1)).toThrow(RangeError);
+    expect(() => nextExtension('2027-03-15', 1.5)).toThrow(RangeError);
+  });
 });
 
 describe('termWords', () => {
@@ -48,5 +53,10 @@ describe('termWords', () => {
     expect(termWords(1)).toEqual({ en: '1 month', ar: 'شهر واحد' });
     expect(termWords(2)).toEqual({ en: '2 months', ar: 'شهران' });
     expect(termWords(12)).toEqual({ en: '12 months', ar: '12 شهرًا' });
+  });
+
+  it('refuses a term that is not a whole number of months, one or more', () => {
+    expect(() => termWords(0)).toThrow(RangeError);
+    expect(() => termWords(1.5)).toThrow(RangeError);
   });
 });

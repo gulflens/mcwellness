@@ -8,9 +8,11 @@ import {
 } from './expiry';
 
 /**
- * The specification for package expiry (docs/SPEC/billing.md section 4.3 and
- * the founder's decision of 2026-09-03: twelve months, warned at sixty days
- * and again at thirty).
+ * The specification for package expiry (docs/SPEC/billing.md section 4.3):
+ * six months from purchase, the operator's decision 9 of 10 September 2026
+ * (docs/PLAN/package-terms.md); twelve from the founder's decision of
+ * 3 September until then. The warnings at sixty and thirty days are
+ * unchanged.
  */
 
 describe('expiryOn', () => {
