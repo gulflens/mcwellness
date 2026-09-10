@@ -149,6 +149,26 @@ them is a defect on this branch.
   `ledger_amenders` for it. The trigger is therefore dead. It stays because
   the standard-column rule wants `updated_at` on every table and the trigger
   is what keeps that column honest if an update case ever appears.
+- **`EXTEND_SQL` names no tenant.** `app/api/billing/extensions.ts` updates
+  `package_purchase` on `p.id = $1` alone, where every other statement the
+  round writes repeats `app.current_tenant_id()`. Row security holds the line
+  and the purchase was read tenant-scoped a moment before, so this is depth
+  rather than a hole; it is the one place the module's own stated habit is not
+  kept, and it was carried over unchanged from the statement it replaces
+  (house review 1, S2). Left as it stands by the controller for this round.
+- **`app/api/billing/payments.ts` still tests a bare `23505`.** The narrowing
+  to a named constraint that this round made in `sales.ts` and
+  `extensions.ts` has not reached the third idempotent route of the same
+  module, where the broad test stands for the same reason and with the same
+  consequence: a unique violation from anywhere else would be reported as a
+  payment already recorded rather than raised as the fault it is. Named so it
+  is not lost; not this branch's file (house review 1, S3).
+- **`extended_by_someone_else` has no console case of its own.** Its sentence
+  is in `ExtensionDrawer`'s `MESSAGES` and its route case is proved by the
+  race tests in `tests/billing/db/extension.test.ts`, where its two siblings
+  — `extension_limit_reached` and `ended_too_long_ago` — each have a console
+  case as well. The behaviour exists and is tested at the route; only the
+  screen's rendering of it is unproved (house review 1, D4).
 - **`portal_money_adults` does not name `package_extension`.** Found while
   writing item 3 above, and the one place the new table is not exactly the
   purchase's equal: that policy narrows six tables by name, so a young
