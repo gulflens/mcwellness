@@ -59,10 +59,20 @@ import {
  * the tenant predicate, as the neighbouring routes do: row security is the
  * floor, and a join that does not say so is a join that stops saying so the
  * first time somebody reads it under a different role.
+ *
+ * **Active only.** A visit is handed to somebody who works here. The board
+ * still draws a leaver's row while they hold visits of their own that day
+ * (docs/SPEC/dispatch.md section 4.2), so that row is a place a block can be
+ * dragged to, and booking refuses an inactive practitioner outright
+ * (`app/api/appointments/create.ts`). Refusing here as `practitioner_not_found`
+ * rather than with a code of its own is the truthful answer, because the
+ * drawer's picker never offers a leaver in the first place: there is nobody
+ * of that id to hand this visit to.
  */
 const NEW_PRACTITIONER_SQL =
   'select p.id, u.display_name from practitioner p join app_user u on u.id = p.user_id ' +
-  'where p.id = $1 and p.tenant_id = app.current_tenant_id() and u.tenant_id = app.current_tenant_id()';
+  "where p.id = $1 and p.status = 'active' " +
+  'and p.tenant_id = app.current_tenant_id() and u.tenant_id = app.current_tenant_id()';
 
 const NEW_CREDENTIALS_SQL =
   'select service_type_id, can_execute_session, can_author_protocol, can_sign_report, ' +

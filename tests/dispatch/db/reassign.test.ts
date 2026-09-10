@@ -74,6 +74,10 @@ const APPT_RACE_RIVAL = '00000000-0000-4000-8000-000000007329';
 /** Well-shaped ids belonging to nothing, for the two "not found" refusals. */
 const APPT_UNKNOWN = '00000000-0000-4000-8000-000000007330';
 const PRACTITIONER_UNKNOWN = '00000000-0000-4000-8000-000000007331';
+/** A fourth who has left the practice, credential and all. */
+const PRACTITIONER_LEFT = '00000000-0000-4000-8000-000000007314';
+const PRACTITIONER_LEFT_USER = '00000000-0000-4000-8000-000000007315';
+const AUTH_PRACTITIONER_LEFT = '00000000-0000-4000-8000-000000007316';
 
 const DATE = '2026-09-04';
 const at = (time: string) => new Date(`${DATE}T${time}:00+04:00`);
@@ -170,7 +174,22 @@ beforeAll(async () => {
     roles: ['practitioner'],
   });
   await seedPractitioner(owner, IDS.tenantA, PRACTITIONER_C, PRACTITIONER_C_USER);
-  for (const practitionerId of [MORE_IDS.practitionerA, PRACTITIONER_B]) {
+  // A fourth who has left. Their credential is still on file and still valid,
+  // so the only thing standing between them and a visit is their standing in
+  // the practice — and the board still draws a leaver's row while they hold
+  // visits that day (spec 4.2), which makes that row a reachable drag target.
+  await seedUser(owner, {
+    id: PRACTITIONER_LEFT_USER,
+    tenantId: IDS.tenantA,
+    authId: AUTH_PRACTITIONER_LEFT,
+    displayName: 'Synthetic Practitioner Left',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, PRACTITIONER_LEFT, PRACTITIONER_LEFT_USER);
+  await owner.query("update practitioner set status = 'inactive' where id = $1", [
+    PRACTITIONER_LEFT,
+  ]);
+  for (const practitionerId of [MORE_IDS.practitionerA, PRACTITIONER_B, PRACTITIONER_LEFT]) {
     await seedCredential(owner, {
       tenantId: IDS.tenantA,
       practitionerId,
@@ -373,6 +392,25 @@ describe('POST /api/appointments/:id/reassign', () => {
     expect(andMoved.status).toBe(400);
     expect(((await andMoved.json()) as { code: string }).code).toBe('same_practitioner');
     expect(await countRows()).toBe(before);
+    const untouched = await owner.query<{ status: string; practitioner_id: string }>(
+      'select status::text as status, practitioner_id from appointment where id = $1',
+      [APPT_SAME],
+    );
+    expect(untouched.rows[0]).toEqual({
+      status: 'confirmed',
+      practitioner_id: MORE_IDS.practitionerA,
+    });
+  });
+
+  it('refuses a practitioner who has left the practice, credential or no credential', async () => {
+    // The booking route refuses an inactive practitioner outright
+    // (`practitioner_not_found` is the honest answer here, because the picker
+    // never offers a leaver): a visit is handed to somebody who works here.
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_SAME}/reassign`, {
+      practitionerId: PRACTITIONER_LEFT,
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe('practitioner_not_found');
     const untouched = await owner.query<{ status: string; practitioner_id: string }>(
       'select status::text as status, practitioner_id from appointment where id = $1',
       [APPT_SAME],
