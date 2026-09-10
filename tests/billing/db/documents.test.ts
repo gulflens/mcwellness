@@ -6,7 +6,10 @@ import type {
   DocumentLinkResponse,
   SendDocumentResponse,
 } from '../../../app/api/billing/document-schema';
-import type { RecordPaymentResponse, SellSessionResponse } from '../../../app/api/billing/ledger-schema';
+import type {
+  RecordPaymentResponse,
+  SellSessionResponse,
+} from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import { SEEDED, setPracticePrices, startHarness, type Harness } from './support';
 

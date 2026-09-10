@@ -255,7 +255,7 @@ describe('a session sold ahead of its visit posts like a package of one', () => 
     expect(Number(liability?.debit_fils)).toBe(0);
 
     const income = await h.owner.query<{ n: string }>(
-      "select count(*)::text as n from journal_line l " +
+      'select count(*)::text as n from journal_line l ' +
         'join journal_entry e on e.tenant_id = l.tenant_id and e.id = l.entry_id ' +
         'join account a on a.tenant_id = l.tenant_id and a.id = l.account_id ' +
         "where l.tenant_id = $1 and e.source_table = 'invoice' and e.source_id = $2 " +
