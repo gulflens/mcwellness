@@ -3264,3 +3264,142 @@ migration audit (94 files checked against `origin/main`) clean; 2,520 unit
 tests passed and 1 skipped across 217 files; 1,348 database tests passed
 across 98 files.
 
+## Round 43 — the walk's fixes, part two: the pin on a map (2026-09-10)
+
+Part one (above) built everything the walk found that needed no decision
+from the operator. This is the second of the remaining three pull requests,
+and it needed one: since the browser walk of 10 September, a household's
+entrance pin has been two text boxes, latitude and longitude, typed by
+whoever books the visit. That is what the walk found unusable — a
+coordinator does not carry a client's coordinates in their head, and typing
+one wrong digit sends a practitioner to the wrong door. The operator's
+decision the same day was to put the pin on a map.
+
+**What the round builds.** The Maps loader (`app/shell/maps/googleMaps.ts`,
+moved from the day map's own folder) now takes a list of libraries to ask
+Google for, so two documents can share one loader without either asking
+for more than it draws with. `mapStyle.ts` moved beside it for the same
+reason: it is the basemap both the day map and the new picker draw on, and
+a thing two modules share lives in the shell (`docs/SPEC/OWNERSHIP.md`).
+
+**The pin picker is its own document, not a panel inside the console.**
+Google's Maps JavaScript API needs a content security policy the console's
+own strict policy refuses — no third-party script host, ever, anywhere
+else — and that widening was built for piece seventeen's day map alone,
+confined to that one page on purpose. Opening a panel for the pin inside an
+ordinary console screen would have meant admitting Google's script on every
+page that screen could appear on, which undoes the confinement rather than
+keeping it. So the picker is a second page, `/admin/clients/pin`, admitted
+by name in the same two places the day map already was:
+`MAP_DOCUMENT_PATHS` (`app/api/_middleware/security.ts`) and
+`WIDENED_DOCUMENTS` (`app/shell/sw.ts`, so the offline shell never caches it
+as an ordinary page). The console opens it in a new tab. On it, a marker
+drags or a tap places it, centred on the point it was handed, or the
+client's emirate, or the UAE when neither is known; and Google's own
+address search — `PlaceAutocompleteElement` from the Places library,
+restricted to the UAE — moves the marker to whatever address is chosen and
+shows it underneath.
+
+**How the picker hands the pin back, and how it does not.** The chosen
+point travels to the tab that opened it by `postMessage`, addressed to this
+app's own origin and read only after the receiving side checks that origin
+again — a message from anywhere else is not a pin, silently. The message's
+shape, `{ type: 'mcwellness:pin', lat, lng, address }`, lives in its own
+module, `app/shell/maps/pinMessage.ts`, imported by both sides: the picker
+page pulls in the Places library, and if `CoordinateFields.tsx` — part of
+the console's own bundle — imported the shape from the page itself, the
+page and the library would ride along into every screen that renders a
+coordinate box.
+
+**The point itself never travels in a URL.** A new tab's address reaches
+whatever serves it — this app's own access log — and `.claude/rules/ui.md`
+line 10 forbids personal data in a URL or query string; a household's
+entrance coordinate is exactly that, decision or no decision to make. The
+plan called for the point to ride as the picker's own query string
+(`?lat=&lng=&emirate=&label=`); the controller ruled against it once this
+was noticed, mid-build. Instead, `CoordinateFields.openPicker` writes
+`{ lat, lng, emirate, label }` to `sessionStorage` — private to this
+browser, never sent to any server — under a fresh, random key, and opens
+the picker on `/admin/clients/pin?k=<key>` carrying only that key. The
+picker reads the item back by the same key and removes it at once, so it
+does not linger once read. A browser blocking site data throws on the
+write; the button reports that and does not open a tab it could not hand a
+point back through. "Pick on the map" itself appears on every coordinate
+box — the client's location form, "check the pin", and a practitioner's own
+home base — only when the practice's browser key is set; without one, the
+boxes work as they always have and a line says the map needs the practice's
+key.
+
+**The vendor register.** `docs/COMPLIANCE/approved-vendors.md`, the Google
+Maps Platform row, already said coordinates only, never names or
+identities. This round amends it, on the operator's decision of 10
+September: from trunk round 43 the picker's search box sends the address
+text a coordinator types — as it is typed, restricted to the UAE — to
+Google's Places service. That is the one address that leaves the practice,
+and it leaves only on the coordinator's own deliberate use of the search
+box, never carrying a name, a record number, a location id or a Makani
+number alongside it. A pin dragged or tapped into place by hand sends
+Google nothing but the map viewport, and the point being picked — typed,
+dragged or found by search — never reaches Google or this practice's own
+server through a URL. The approval column now also dates the address
+search itself: approved by the operator, 10 September 2026, for the pin
+picker alone.
+
+**What the round records.** `docs/COMPLIANCE/approved-vendors.md`, the
+Google Maps Platform row (the address search, and its own dated approval).
+`docs/SEAMS.md` (the picker named beside the day map's paragraph, sharing
+its loader). `docs/SPEC/route-planning.md` section 8 (two widened
+documents from trunk round 43, not one; `MAP_DOCUMENT_PATHS` lists both).
+`docs/SPEC/client-record.md`'s locations line ("check the pin" opens the
+picker in a new tab now; the coordinate boxes stay, for a coordinator who
+already has the numbers).
+
+**Every file this round touched.** The trunk's own, all under paths this
+document's shared zone already names (`app/shell/**`,
+`app/api/_middleware/**`, `app/admin/settings/**`):
+`app/shell/maps/googleMaps.ts` and `mapStyle.ts` (moved from
+`app/admin/schedule/map/`, with their tests moved to `tests/shell/`),
+`app/shell/maps/pinMessage.ts` (new),
+`app/shell/components/CoordinateFields.tsx` with its test, `app/api/_middleware/security.ts`,
+`app/shell/sw.ts` with its test, `app/shell/App.tsx` with its test,
+`tests/security/headers.test.ts`, and the
+`app/admin/settings/PractitionerBaseDrawer.tsx` line that hands the base
+drawer's own `mapPicker` prop through. Outside the trunk's own paths, by
+the integrator's widening for one round (`docs/SPEC/OWNERSHIP.md`):
+`client-record` — the new `app/admin/clients/pin/` (`PinPickerPage.tsx`
+with its test, `emirates.ts`, `pin.css`), and one import line each in
+`LocationForm.tsx` and `VerifyPinForm.tsx`; `scheduling` — the day map's
+own import lines in `DayMap.tsx`, `DayMapPage.tsx` and `overlays.ts`,
+unchanged otherwise. The documents: this file,
+`docs/COMPLIANCE/approved-vendors.md`, `docs/SEAMS.md`,
+`docs/SPEC/route-planning.md`, `docs/SPEC/client-record.md`. One
+correction unrelated to the pin rode on this branch alongside it:
+`docs/superpowers/plans/2026-09-10-walk-fixes-3-sell-session.md` and
+`docs/superpowers/specs/2026-09-10-walk-fixes-design.md`, part three's own
+plan, now read migration 411 rather than 410 — a concurrent piece of work
+(package terms) took 410 first and merged to `main` while part three's plan
+still named it. **No migration, no policy file, no API route, no schema
+change**: nothing this round decided is a database's to enforce, and the
+picker reads and writes nothing but `sessionStorage` and a message to its
+own opener.
+
+**Outside the repository, for the operator.** Two things this round cannot
+do from inside it: enable the Places API on the browser key's Google Cloud
+project, and confirm `VITE_GOOGLE_MAPS_BROWSER_KEY` is set on the
+production build. Without either, "Pick on the map" does not appear and the
+two boxes work exactly as they did before this round.
+
+**Gates on the branch head, in this worktree** (`mcwellness-accounting`,
+database 5443): format, lint, typecheck and the secrets scan (1,514 tracked
+files) clean; 2,555 unit tests passed across 218 files; 1,351 database
+tests passed across 98 files. The migration audit failed on one file
+neither this round nor this task touched:
+`db/migrations/410_package_terms.sql`, which a different piece of work
+(package terms, decision 9, pull request 151) merged to `main` at 16:22 on
+the operator's clock, after this stacked
+branch had already forked from it. The audit compares this branch's
+`db/migrations/` directly against `origin/main`'s, with no way to tell a
+long-lived stacked branch apart from one that deleted a merged file; it is
+not this task's place to merge `main` into a branch stacked under an open
+pull request, so the failure is recorded here rather than routed around.
+

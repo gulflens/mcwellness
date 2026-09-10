@@ -338,7 +338,10 @@ Maps JavaScript API in the browser under a separate **browser** key,
 practice's own address. It draws a basemap and nothing else: the pins and the
 lines are the app's own DOM, and no household coordinate is sent to Google by
 the map. The server key above never reaches a browser, and neither key is
-ever in this repository.
+ever in this repository. From trunk round 43 the pin picker
+(`/admin/clients/pin`) loads the same API through the same loader, asking
+also for the `places` library for its address search; it is the second, and
+so far the last, document widened to let Google's script run.
 
 **Chosen by `ROUTING_PROVIDER`**, `google` or `straight-line`, explicit
 outside development or the API refuses to start, exactly as `STORAGE_PROVIDER`
