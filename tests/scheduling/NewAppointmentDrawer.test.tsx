@@ -254,6 +254,51 @@ describe('NewAppointmentDrawer', () => {
     );
   });
 
+  it('disables submit and asks for a date when the date is cleared after everything else is chosen', async () => {
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+    );
+    await walkToStartTime(fetchImpl);
+
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '' } });
+
+    // Clearing the date also clears the practitioner choice (as any date
+    // change does); re-picking one here reproduces the actual bug — every
+    // other step is still filled in, only the date itself is missing.
+    await waitFor(() =>
+      expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).options).toHaveLength(2),
+    );
+    fireEvent.change(screen.getByLabelText('Practitioner'), { target: { value: practitioner.id } });
+
+    const submitButton = screen.getByRole('button', {
+      name: 'Book appointment',
+    }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    expect(screen.getByText('Choose a date.')).toBeTruthy();
+  });
+
+  it('clears the chosen practitioner when the date changes, and refetches options for the new day', async () => {
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+    );
+    await walkToStartTime(fetchImpl);
+
+    const practitionerSelect = screen.getByLabelText('Practitioner') as HTMLSelectElement;
+    expect(practitionerSelect.value).toBe(practitioner.id);
+
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-11' } });
+
+    // A practitioner certified on one day may be away on another: the choice
+    // is cleared the moment the date changes, not left showing a stale pick.
+    expect(practitionerSelect.value).toBe('');
+
+    await waitFor(() =>
+      expect(
+        fetchImpl.mock.calls.some(([input]) => String(input).includes('date=2026-09-11')),
+      ).toBe(true),
+    );
+  });
+
   it("renders every 409 issue as its own local sentence, never the server's own wording", async () => {
     const issues = [
       {

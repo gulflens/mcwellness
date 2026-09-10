@@ -11,7 +11,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { localConflictMessage } from './conflictMessages';
-import { composeWindowStart, windowEndForTime } from './windows';
+import { composeWindowStart, PRACTICE_UTC_OFFSET, windowEndForTime } from './windows';
 
 /**
  * The right-side "new appointment" drawer (docs/SPEC/scheduling-manual.md
@@ -224,6 +224,13 @@ export function NewAppointmentDrawer({
 
   const practitionerStepEnabled = Boolean(serviceType);
   const timeStepEnabled = Boolean(selectedLocationId && selectedPractitionerId);
+  // The date field carries no `required`, and submit is a plain button click
+  // (no form validation to lean on), so an emptied — or otherwise unparsable
+  // — date has to be caught here, the same way every other required choice
+  // already is, rather than only surfacing once composeWindowStart throws.
+  const bookingDateValid = Number.isFinite(
+    new Date(`${bookingDate}T00:00:00${PRACTICE_UTC_OFFSET}`).getTime(),
+  );
   const canSubmit =
     Boolean(
       selectedClient &&
@@ -231,12 +238,13 @@ export function NewAppointmentDrawer({
       selectedLocationId &&
       deliveryMode &&
       selectedPractitionerId &&
-      startTime,
+      startTime &&
+      bookingDateValid,
     ) && !submitting;
 
   async function handleSubmit() {
     if (!selectedClient || !selectedServiceTypeId || !selectedLocationId || !deliveryMode) return;
-    if (!selectedPractitionerId || !startTime) return;
+    if (!selectedPractitionerId || !startTime || !bookingDateValid) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -332,7 +340,8 @@ export function NewAppointmentDrawer({
                 // cleared and fetched again.
                 setSelectedPractitionerId(null);
               }}
-              hint="The visit is booked on this day."
+              hint={bookingDateValid ? 'The visit is booked on this day.' : undefined}
+              error={bookingDateValid ? undefined : 'Choose a date.'}
             />
           </div>
 
