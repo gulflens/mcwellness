@@ -26,9 +26,13 @@ import { BoardResponse, type BoardPractitioner, type BoardVisit } from './schema
  *
  * **Names are read, so the trail says so**: one `list` row per visit shown,
  * exactly as `GET /api/appointments` writes (`app/api/appointments/list.ts`),
- * because it is the same disclosure on a different screen. The row names the
- * household, in the shape `docs/SPEC/audit.md` rule 11 sets for a record that
- * appears in a list somebody fetched.
+ * because it is the same disclosure on a different screen. The row is the
+ * appointment and it names the household — `entity_type` `appointment`,
+ * `entity_id` the visit, `client_id` the household — which is the shape
+ * `docs/SPEC/audit.md` rule 11 sets for a record that appears in a list
+ * somebody fetched, and the shape that lets the timeline say *which* visits
+ * were on the screen rather than only that the household was. Nothing is
+ * written for an idle row, which discloses nobody.
  *
  * **The drives are the map's own, and only the ones the rule can ask for.**
  * The stops and their coordinates come from `practice-day.ts`'s reads and the
@@ -158,7 +162,7 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
 
     const factors = routing ? await readFactors(db) : null;
     const answer: BoardPractitioner[] = [];
-    /** Every household named on the board, one entry per block, for the trail. */
+    /** Every block drawn on the board, and the household it names, for the trail. */
     const shown: { id: string; clientId: string }[] = [];
     for (const practitioner of practitioners.rows) {
       const day = byPractitioner.get(practitioner.id) ?? [];
@@ -216,7 +220,7 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
       for (const [index, stop] of progress.entries()) {
         const fact = facts.get(stop.stopId);
         if (!fact) continue;
-        shown.push({ id: fact.client_id, clientId: fact.client_id });
+        shown.push({ id: stop.stopId, clientId: fact.client_id });
         const own = late.get(stop.stopId) ?? null;
         visits.push({
           appointmentId: stop.stopId,
@@ -251,7 +255,7 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
 
     // Before the answer leaves, never after: a name disclosed with no row in
     // the trail is the one thing this must not do.
-    await logReads(db, 'client', shown, 'list');
+    await logReads(db, 'appointment', shown, 'list');
 
     return c.json(
       BoardResponse.parse({

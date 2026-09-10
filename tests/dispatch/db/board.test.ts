@@ -347,13 +347,16 @@ describe('GET /api/appointments/board', () => {
     expect(busy?.visits[1]?.checkedInAt).toBe(at('10:03').toISOString());
   });
 
-  it('writes one list row per household shown, as the schedule does', async () => {
-    // Counted twice over: three rows against this household, and three rows
-    // in the whole trail — so the idle practitioner's empty row, which
-    // discloses nobody, writes nothing.
+  it('writes one list row per visit shown, as the schedule does', async () => {
+    // The row is the visit and it names the household, which is the shape
+    // `GET /api/appointments` already writes (spec 9): the board is the same
+    // disclosure on a different screen, so it leaves the same trail. Counted
+    // twice over — six rows against this household, and six rows in the whole
+    // trail — so the idle practitioner's empty row, which discloses nobody,
+    // writes nothing.
     const count = async (where: string, params: unknown[]): Promise<number> => {
       const { rows } = await owner.query<{ n: string }>(
-        `select count(*)::text as n from audit_log where action = 'list' and entity_type = 'client'${where}`,
+        `select count(*)::text as n from audit_log where action = 'list' and entity_type = 'appointment'${where}`,
         params,
       );
       return Number(rows[0]?.n);
@@ -363,6 +366,17 @@ describe('GET /api/appointments/board', () => {
     await get(AUTH.ownerA, `/api/appointments/board?date=${DATE}`);
     expect((await count(' and client_id = $1', [IDS.clientA])) - beforeHousehold).toBe(6);
     expect((await count('', [])) - beforeAll).toBe(6);
+
+    // And each row names a visit rather than the household six times over, so
+    // the timeline can say which visits were on the screen.
+    const { rows: named } = await owner.query<{ entity_id: string }>(
+      "select distinct entity_id from audit_log where action = 'list' " +
+        "and entity_type = 'appointment' and client_id = $1",
+      [IDS.clientA],
+    );
+    expect(named.map((row) => row.entity_id).sort()).toEqual(
+      [APPT_CLOSED, APPT_OPEN, APPT_NEXT, APPT_OFF, APPT_MOVED, APPT_LEFT].sort(),
+    );
   });
 
   it('prices only the drives the rule can ask for, never a door nobody is going to', async () => {

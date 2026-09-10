@@ -286,10 +286,15 @@ disclosure on a different screen. `domain/shared/actor.ts` gains
 `appointment.reassign` (owner, admin, lead practitioner) and
 `appointment.board.read` (the same three).
 
-**Amended in the build, 2026-09-10:** the row is written per visit shown and
-nothing at all is written for an idle row, which is the shape the clients
-list already keeps. The day map's own helper writes a `read` and could not
-stand in for it.
+**Amended in the build, 2026-09-10:** "exactly as `GET /api/appointments`
+does" is the whole of it, and it fixes the row's shape as well as its number:
+`entity_type` `appointment`, `entity_id` the visit, `client_id` the household
+(`app/api/appointments/list.ts`). One row per visit shown, and nothing at all
+for an idle row, which discloses nobody. Six rows naming one household would
+say that the household was on somebody's screen and never which of its visits
+were, and the day schedule and the board — the same disclosure — would leave
+different trails. The day map's own helper writes a `read` and could not
+stand in for either.
 
 ## 10. Permissions and row security
 
