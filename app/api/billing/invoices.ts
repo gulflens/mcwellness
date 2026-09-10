@@ -59,7 +59,7 @@ type InvoiceDbRow = {
   id: string;
   reference: string;
   number: number;
-  kind: 'session' | 'package' | 'statement' | 'call_out_fee';
+  kind: 'session' | 'package' | 'statement' | 'call_out_fee' | 'single_session';
   issued_on: string;
   client_id: string;
   client_mrn: string;

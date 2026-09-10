@@ -370,7 +370,7 @@ export const InvoiceRow = z.object({
   id: z.uuid(),
   reference: z.string(),
   number: z.number().int().positive(),
-  kind: z.enum(['session', 'package', 'statement', 'call_out_fee']),
+  kind: z.enum(['session', 'package', 'statement', 'call_out_fee', 'single_session']),
   issuedOn: z.string(),
   clientId: z.uuid(),
   clientMrn: z.string(),

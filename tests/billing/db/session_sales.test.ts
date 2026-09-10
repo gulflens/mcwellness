@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { SellSessionResponse } from '../../../app/api/billing/ledger-schema';
+import { InvoicesResponse, type SellSessionResponse } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import { SEEDED, setPracticePrices, startHarness, type Harness } from './support';
 
@@ -337,5 +337,30 @@ describe('POST /api/billing/session-purchases', () => {
         "set_config('app.actor_roles', '', false), set_config('app.request_id', '', false), " +
         "set_config('app.reason', '', false)",
     );
+  });
+
+  it('appears in the invoice book, which still answers instead of throwing (ledger-schema.ts InvoiceRow.kind)', async () => {
+    // Task 4's report flagged this as untouched: nothing in that task's three
+    // steps opens the invoice book, and until this fix InvoiceRow.kind's enum
+    // did not list 'single_session' — the first single-session sale on a real
+    // practice would have made GET /api/billing/invoices throw a ZodError and
+    // answer 500 rather than list it (app/api/billing/invoices.ts calls
+    // InvoicesResponse.parse on every response). Proved end to end, against
+    // the route the earlier task's steps never called: sell a session, then
+    // list the book, and the row for it must both exist and parse.
+    const res = await h.call(
+      'POST',
+      '/api/billing/session-purchases',
+      SEEDED.owner,
+      sale({ clientId: h.clientId(4) }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as SellSessionResponse;
+
+    const list = await h.call('GET', '/api/billing/invoices', SEEDED.owner);
+    expect(list.status).toBe(200);
+    const book = InvoicesResponse.parse(await list.json());
+    const row = book.invoices.find((invoice) => invoice.id === body.invoiceId);
+    expect(row?.kind).toBe('single_session');
   });
 });

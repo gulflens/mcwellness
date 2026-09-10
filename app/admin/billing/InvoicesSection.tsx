@@ -29,6 +29,10 @@ const KIND_LABELS: Record<InvoiceRow['kind'], string> = {
   package: 'Package',
   statement: 'Statement',
   call_out_fee: 'Call-out fee',
+  // A session sold ahead of its visit (migration 411, trunk round 43):
+  // 'Visit' above is the same service invoiced after it closed, so this
+  // needs its own word rather than sharing that one.
+  single_session: 'Session, sold ahead',
 };
 
 type State =
