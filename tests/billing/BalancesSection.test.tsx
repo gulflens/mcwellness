@@ -232,6 +232,21 @@ describe('giving a family longer', () => {
     expect(screen.getByText(/1 of the two used\./)).toBeTruthy();
   });
 
+  it('counts the extensions a programme has had, in the list of packages bought', async () => {
+    const purchases = [
+      {
+        ...(balance().purchases[0] as Record<string, unknown>),
+        extendedTo: FIRST_EXTENSION_TO,
+        extensionReason: 'Travelling.',
+        extensionsUsed: 1,
+        extendsTo: SECOND_EXTENSION_TO,
+      },
+    ];
+    mount(balance({ purchases }));
+    await findClient();
+    expect(await screen.findByText('1 of 2 extensions used')).toBeTruthy();
+  });
+
   it('offers nothing once the programme has had its two, and says so', async () => {
     const purchases = [
       {
