@@ -249,7 +249,7 @@ Read docs/DESIGN-BRIEF.md before writing any UI.
 Do not ask for "a nice dashboard." Give it the brief and a specific room:
 
 ```
-Read docs/DESIGN-BRIEF.md and .claude/skills/frontend-design.
+Read docs/DESIGN-BRIEF.md and .claude/rules/ui.md.
 
 Build the practitioner session runner screen (apps/practitioner).
 Context: a practitioner is standing in a client's living room, dim evening
