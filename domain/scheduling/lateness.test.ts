@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Matrix } from './optimise';
-import { boardState, lateness, type Progress } from './lateness';
+import { boardState, drivenStops, lateness, type Progress } from './lateness';
 
 /**
  * Running late, decided rather than typed (docs/SPEC/dispatch.md section 5),
@@ -184,6 +184,48 @@ describe('lateness', () => {
     const result = lateness(day([{ status: 'cancelled' }]), fifteen, at('12:00'), 10);
     expect(result.get('s1')).toEqual({ late: false, byMinutes: 0 });
     expect(result.size).toBe(3);
+  });
+});
+
+describe('drivenStops', () => {
+  it('is every unsettled stop when nothing has happened yet', () => {
+    expect(drivenStops(day()).map((stop) => stop.stopId)).toEqual(['s1', 's2', 's3']);
+  });
+
+  it('is the anchor and what follows it, and nothing the day has already passed', () => {
+    // The second door was reached, so the walk leaves from there: the first is
+    // behind the anchor and no drive is ever priced to it again.
+    const stops = day([{}, { status: 'checked_in', checkedInAt: at('10:05') }]);
+    expect(drivenStops(stops).map((stop) => stop.stopId)).toEqual(['s2', 's3']);
+  });
+
+  it('leaves out a completed stop after the anchor and keeps the unsettled one beyond it', () => {
+    // A visit marked completed with no session behind it is settled but not
+    // reached, so it can sit after the anchor — and nobody drives to it.
+    const stops = day([
+      { status: 'checked_in', checkedInAt: at('09:05') },
+      { status: 'completed' },
+    ]);
+    expect(drivenStops(stops).map((stop) => stop.stopId)).toEqual(['s1', 's3']);
+  });
+
+  it('is empty when nothing after the anchor is still to be driven to', () => {
+    const stops = day([
+      { status: 'checked_in', checkedInAt: at('09:05') },
+      { status: 'cancelled' },
+      { status: 'rescheduled' },
+    ]);
+    expect(drivenStops(stops)).toEqual([]);
+    expect(drivenStops([])).toEqual([]);
+  });
+
+  it('reads the day in window order however it arrives', () => {
+    const [first, second, third] = day();
+    expect(drivenStops([third!, first!, second!]).map((stop) => stop.stopId)).toEqual([
+      's1',
+      's2',
+      's3',
+    ]);
   });
 });
 

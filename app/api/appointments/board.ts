@@ -5,23 +5,17 @@ import {
   DEFAULT_GRACE_MINUTES,
   PRACTICE_TIME_ZONE,
   boardState,
+  drivenStops,
   lateness,
-  navigationTarget,
   type AppointmentStatus,
   type Lateness,
+  type Matrix,
   type Progress,
 } from '@domain/scheduling';
 import { logReads } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
 import { dayRange, fillMatrix, readFactors } from '../routing/estimates';
-import {
-  bucketsFor,
-  placesFor,
-  readBases,
-  readDay,
-  toHomeBase,
-  toPlanStop,
-} from '../routing/practice-day';
+import { bucketsFor, placesFor, readDay, toPlanStop } from '../routing/practice-day';
 import { BoardResponse, type BoardPractitioner, type BoardVisit } from './schema';
 
 /**
@@ -35,9 +29,12 @@ import { BoardResponse, type BoardPractitioner, type BoardVisit } from './schema
  * household, in the shape `docs/SPEC/audit.md` rule 11 sets for a record that
  * appears in a list somebody fetched.
  *
- * **The drives are the map's own.** The stops and their coordinates come
- * from `practice-day.ts`'s reads and the matrix from `fillMatrix`, so the
- * board and the optimiser price a drive the same way. With no routing seam
+ * **The drives are the map's own, and only the ones the rule can ask for.**
+ * The stops and their coordinates come from `practice-day.ts`'s reads and the
+ * matrix from `fillMatrix`, so the board and the optimiser price a drive the
+ * same way — but the matrix is sized to `drivenStops` and not to the day, so
+ * a settled door and a door the day has already passed cost nothing, and the
+ * home base the rule never leaves from is not a place at all. With no routing seam
  * configured the board still answers — with `latenessAvailable: false` and
  * no lateness on any visit — rather than refusing the whole screen, which is
  * the one place it parts company with the day map (a map with no drives on it
@@ -98,6 +95,15 @@ type FactsRow = {
   closed_at: Date | null;
 };
 
+/**
+ * The matrix for a day with no leg left in it. Fewer than two driven stops
+ * means the rule asks for no drive at all — a lone door still ahead is reached
+ * from wherever the practitioner is, which the rule prices as `now` — so this
+ * is never called, and building a real matrix would be a cache read and a grid
+ * call for nothing.
+ */
+const NO_DRIVES: Matrix = () => ({ seconds: 0, metres: 0, source: 'straight-line' });
+
 async function readFacts(db: Db, date: string): Promise<Map<string, FactsRow>> {
   const [dayStart, dayEnd] = dayRange(date);
   const { rows } = await db.query<FactsRow>(FACTS_SQL, [dayStart, dayEnd]);
@@ -124,7 +130,6 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
     // because the board shows the whole day's history — what was called off
     // and what was moved are part of how the day went (spec 4.4).
     const stops = await readDay(db, date, APPOINTMENT_STATUSES);
-    const bases = await readBases(db);
     const facts = await readFacts(db, date);
 
     const byPractitioner = new Map<string, typeof stops>();
@@ -160,22 +165,31 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
       });
 
       let late = new Map<string, Lateness>();
-      if (routing && factors && day.length > 0) {
-        const planStops = day.map(toPlanStop);
-        const baseRow = bases.get(practitioner.id);
-        const base = baseRow === undefined ? null : toHomeBase(baseRow);
-        const matrix = await fillMatrix(
-          db,
-          placesFor(
-            planStops,
-            base === null ? null : { locationId: base.id, point: navigationTarget(base) },
-          ),
-          bucketsFor(planStops),
-          date,
-          factors,
-          routing,
-          actor.userId,
-        );
+      if (routing && factors) {
+        // Only the legs the rule can ask for (`drivenStops`): the door the
+        // walk leaves from and the doors still ahead of it. A settled visit,
+        // a door the day has already passed, and the home base the walk never
+        // leaves from are all left out — so the grid is not billed for drives
+        // nobody is making, and a heavily rearranged day cannot quietly cross
+        // the grid's own element ceiling and drop the whole board to
+        // straight-line arithmetic with nothing said.
+        const rowById = new Map(day.map((row) => [row.id, row]));
+        const planStops = drivenStops(progress).flatMap((stop) => {
+          const row = rowById.get(stop.stopId);
+          return row === undefined ? [] : [toPlanStop(row)];
+        });
+        const matrix =
+          planStops.length > 1
+            ? await fillMatrix(
+                db,
+                placesFor(planStops, null),
+                bucketsFor(planStops),
+                date,
+                factors,
+                routing,
+                actor.userId,
+              )
+            : NO_DRIVES;
         late = lateness(progress, matrix, at, DEFAULT_GRACE_MINUTES);
       }
 

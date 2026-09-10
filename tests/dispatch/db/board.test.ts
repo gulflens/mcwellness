@@ -325,6 +325,26 @@ describe('GET /api/appointments/board', () => {
     expect((await count('', [])) - beforeAll).toBe(6);
   });
 
+  it('prices only the drives the rule can ask for, never a door nobody is going to', async () => {
+    await get(AUTH.ownerA, `/api/appointments/board?date=${DATE}`);
+    // Both visits at the third address are settled, so no drive is ever
+    // priced to or from it — not by this read and not by any before it.
+    const { rows } = await owner.query<{ n: string }>(
+      'select count(*)::text as n from drive_estimate ' +
+        'where from_location_id = $1 or to_location_id = $1',
+      [LOCATION_OFF],
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
+    // And the drive the rule does ask for is priced: the leg from the door
+    // the practitioner is at to the one they cannot reach in time.
+    const priced = await owner.query<{ n: string }>(
+      'select count(*)::text as n from drive_estimate ' +
+        'where from_location_id = $1 and to_location_id = $2',
+      [IDS.locationA, LOCATION_FAR],
+    );
+    expect(Number(priced.rows[0]?.n)).toBeGreaterThan(0);
+  });
+
   it('answers without a routing seam, saying so rather than refusing the screen', async () => {
     const res = await get(AUTH.ownerA, `/api/appointments/board?date=${DATE}`, mapless);
     expect(res.status).toBe(200);

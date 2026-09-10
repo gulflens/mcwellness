@@ -66,6 +66,44 @@ function hasHappened(stop: Progress): boolean {
   return stop.closedAt !== null || stop.checkedInAt !== null || stop.status === 'checked_in';
 }
 
+/** The day in the order the rule reads it, however it arrives. */
+function inWindowOrder(day: readonly Progress[]): Progress[] {
+  return [...day].sort((a, b) => a.windowStart.getTime() - b.windowStart.getTime());
+}
+
+/** The last stop, in window order, at which something happened; -1 when nothing has. */
+function anchorIndexOf(stops: readonly Progress[]): number {
+  let anchorIndex = -1;
+  for (const [index, stop] of stops.entries()) {
+    if (hasHappened(stop)) anchorIndex = index;
+  }
+  return anchorIndex;
+}
+
+/**
+ * The stops `lateness` below will actually price a drive between, in window
+ * order: the anchor the walk leaves from, and every stop after it that is
+ * neither settled nor already reached. Empty when there is nothing left to
+ * drive to, and the anchor alone is never a list — a lone place has no leg.
+ *
+ * It exists so a caller can size the drive matrix to the legs the rule can
+ * ask for instead of to the whole day. Nothing else is priced: a stop before
+ * the anchor is judged against the clock alone, a settled stop is not this
+ * rule's to judge, and the walk never leaves from a home base. Keeping the
+ * two in step is this file's business, which is why the list is derived here
+ * from the same `hasHappened` and `isSettled` the walk itself uses.
+ */
+export function drivenStops(day: readonly Progress[]): Progress[] {
+  const stops = inWindowOrder(day);
+  const anchorIndex = anchorIndexOf(stops);
+  const ahead = stops
+    .slice(anchorIndex + 1)
+    .filter((stop) => !isSettled(stop.status) && !hasHappened(stop));
+  if (ahead.length === 0) return [];
+  const anchor = anchorIndex < 0 ? [] : [stops[anchorIndex]!];
+  return [...anchor, ...ahead];
+}
+
 function minutesLate(arrival: Date, windowEnd: Date): number {
   return Math.max(0, Math.ceil((arrival.getTime() - windowEnd.getTime()) / MINUTE_MS));
 }
@@ -76,15 +114,12 @@ export function lateness(
   now: Date,
   graceMinutes: number,
 ): Map<string, Lateness> {
-  const stops = [...day].sort((a, b) => a.windowStart.getTime() - b.windowStart.getTime());
+  const stops = inWindowOrder(day);
   const result = new Map<string, Lateness>();
   for (const stop of stops) result.set(stop.stopId, NOT_LATE);
 
   // The anchor: the last stop, in window order, at which something happened.
-  let anchorIndex = -1;
-  for (const [index, stop] of stops.entries()) {
-    if (hasHappened(stop)) anchorIndex = index;
-  }
+  const anchorIndex = anchorIndexOf(stops);
 
   let cursorTime: Date = now;
   let cursorLocation: string | null = null;
