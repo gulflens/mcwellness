@@ -91,9 +91,22 @@ type State =
   | { kind: 'ready'; date: string; board: BoardResponse }
   | { kind: 'error'; date: string };
 
-/** Which visits may still change hands: the two statuses the route admits. */
+/**
+ * The four states in which a visit has not yet been reached, and so is still
+ * something to hand on.
+ *
+ * Read off the state the block itself shows rather than re-derived from the
+ * status beside it. The route's gate is "proposed or confirmed, with no
+ * session open", and `boardState` has already folded the open session in: a
+ * `confirmed` visit whose practitioner is at the door reads `at_the_door`
+ * here. Testing the status again would offer a grab handle on a block
+ * labelled "At the door" and let the route refuse it with `session_open` —
+ * a second copy of a rule that has already been decided (CLAUDE.md rule 4).
+ */
+const MOVABLE_STATES: readonly BoardState[] = ['waiting', 'agreed', 'on_the_way', 'running_late'];
+
 function movable(visit: BoardVisit): boolean {
-  return visit.status === 'proposed' || visit.status === 'confirmed';
+  return MOVABLE_STATES.includes(visit.state);
 }
 
 /**

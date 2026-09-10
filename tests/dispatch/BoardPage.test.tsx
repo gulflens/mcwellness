@@ -290,6 +290,28 @@ describe('BoardPage', () => {
     expect(screen.getByText('Iris Cliff')).toBeTruthy();
   });
 
+  it('leaves a visit at the door alone, whatever its status still says', async () => {
+    // `boardState` calls a `confirmed` appointment with an open session "at
+    // the door". The route would refuse to hand it on (`session_open`), so
+    // the board must not offer the control: the state on the block is the
+    // decision, not a second reading of the status beside it.
+    mount({
+      board: {
+        ...BOARD,
+        practitioners: BOARD.practitioners.map((practitioner) => ({
+          ...practitioner,
+          visits: practitioner.visits.map((visit) =>
+            visit.appointmentId === LATE_VISIT
+              ? { ...visit, state: 'at_the_door' as const, checkedInAt: at('11:05') }
+              : visit,
+          ),
+        })),
+      },
+    });
+    expect(await screen.findByText('At the door')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Juniper Valley/ })).toBeNull();
+  });
+
   it('reads the day the address names', async () => {
     const { fetchImpl } = mount();
     await screen.findByRole('heading', { name: 'Board' });
