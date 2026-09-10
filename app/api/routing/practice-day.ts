@@ -40,7 +40,8 @@ import {
 
 /**
  * Every practitioner's stops for one day, in practitioner and then window
- * order. The Schedule table's own status list, so the map draws the day the
+ * order. The statuses arrive as an argument — `MAP_STATUSES` below is the
+ * Schedule table's own list and the default, so the map draws the day the
  * schedule already shows. Every joined table repeats the tenant predicate, as
  * every other route does and for the same reason.
  */
@@ -57,8 +58,23 @@ const STOPS_SQL =
   'where a.tenant_id = app.current_tenant_id() and st.tenant_id = app.current_tenant_id() ' +
   'and l.tenant_id = app.current_tenant_id() ' +
   'and a.window_start >= $1 and a.window_start < $2 ' +
-  "and a.status in ('proposed', 'confirmed', 'checked_in', 'completed', 'no_show') " +
+  'and a.status = any($3::appointment_status[]) ' +
   'order by a.practitioner_id, a.window_start, a.id';
+
+/**
+ * The statuses the map draws, which are the Schedule table's own: the five
+ * this query has always listed. The board asks for every status instead,
+ * because it shows the whole day's history including what was called off —
+ * so the list is an argument with this as its default, and the map's own
+ * behaviour is unchanged (docs/SPEC/dispatch.md section 4.4).
+ */
+const MAP_STATUSES: readonly AppointmentStatus[] = [
+  'proposed',
+  'confirmed',
+  'checked_in',
+  'completed',
+  'no_show',
+];
 
 /** Where each practitioner's day starts, for the ones the practice records a base for. */
 const BASES_SQL =
@@ -90,7 +106,7 @@ const BUCKETS_AFTER_LAST_DEPARTURE = 2;
 const MAX_BUCKETS = 12;
 const MINUTE_MS = 60_000;
 
-function toHomeBase(row: BaseRow): HomeBase {
+export function toHomeBase(row: BaseRow): HomeBase {
   return {
     id: row.location_id,
     entrancePoint: { lat: row.entrance_lat, lng: row.entrance_lng },
@@ -122,18 +138,22 @@ function byPractitioner(rows: readonly PracticeStopRow[]): Map<string, PracticeS
   return days;
 }
 
-async function readDay(db: Db, date: string): Promise<PracticeStopRow[]> {
+export async function readDay(
+  db: Db,
+  date: string,
+  statuses: readonly string[] = MAP_STATUSES,
+): Promise<PracticeStopRow[]> {
   const [dayStart, dayEnd] = dayRange(date);
-  const { rows } = await db.query<PracticeStopRow>(STOPS_SQL, [dayStart, dayEnd]);
+  const { rows } = await db.query<PracticeStopRow>(STOPS_SQL, [dayStart, dayEnd, statuses]);
   return rows;
 }
 
-async function readBases(db: Db): Promise<Map<string, BaseRow>> {
+export async function readBases(db: Db): Promise<Map<string, BaseRow>> {
   const { rows } = await db.query<BaseRow>(BASES_SQL);
   return new Map(rows.map((row) => [row.practitioner_id, row]));
 }
 
-function toPlanStop(row: PracticeStopRow): PlanStop {
+export function toPlanStop(row: PracticeStopRow): PlanStop {
   return {
     id: row.id,
     status: row.status as AppointmentStatus,
@@ -152,7 +172,7 @@ function toPlanStop(row: PracticeStopRow): PlanStop {
  * at twelve. Wider than the day itself, because a reordered day departs later
  * from somewhere than it does today.
  */
-function bucketsFor(stops: readonly PlanStop[]): number[] {
+export function bucketsFor(stops: readonly PlanStop[]): number[] {
   const first = stops[0];
   const last = stops[stops.length - 1];
   if (first === undefined || last === undefined) return [];
@@ -166,7 +186,7 @@ function bucketsFor(stops: readonly PlanStop[]): number[] {
 }
 
 /** The distinct places a day touches: every stop's navigation target, and the base. */
-function placesFor(stops: readonly PlanStop[], base: PlanBase | null): Place[] {
+export function placesFor(stops: readonly PlanStop[], base: PlanBase | null): Place[] {
   const places = new Map<string, Place>();
   for (const stop of stops)
     places.set(stop.locationId, { locationId: stop.locationId, point: stop.point });

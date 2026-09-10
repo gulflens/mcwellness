@@ -19,7 +19,7 @@ own pull request under the integrator's widening for one piece.
 5. **`docs/SPEC/scheduling-manual.md`**: section 4.1 already says "drag
    between columns to reassign"; sections 8 and 10 said a dispatch board is
    out of scope, and now say it is piece twenty-two's.
-6. **Four exports from `app/api/routing/practice-day.ts`** (`readDay`,
+6. **Six exports from `app/api/routing/practice-day.ts`** (`readDay`,
    `readBases`, `toHomeBase`, `toPlanStop`, `bucketsFor`, `placesFor`), so the
    board prices its drives with the same reads the map uses rather than a
    copy. Scheduling's file, edited under the same widening.

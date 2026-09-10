@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
+import { mountAppointmentBoard } from './board';
 import { mountAppointmentCancel } from './cancel';
 import { mountAppointmentConfirm } from './confirm';
 import { mountAppointmentCreate } from './create';
@@ -21,6 +22,7 @@ export function mountAppointments(api: Hono<ApiEnv>, now: () => Date = () => new
   mountAppointmentConfirm(api);
   mountAppointmentMove(api, now);
   mountAppointmentReorder(api, now);
+  mountAppointmentBoard(api, now);
   mountAppointmentCancel(api, now);
   mountAppointmentSettings(api);
 }
