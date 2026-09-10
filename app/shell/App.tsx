@@ -224,8 +224,10 @@ export function App() {
           ordinary nested route inside the console, unlike the day map above:
           it loads no third-party script, so it carries the console's own
           strict content security policy and needs no document of its own.
-          Its rule is its route's, not the schedule's — the board is the three
-          calendar roles' and the day schedule is wider.
+          It asks its own route's rule, `appointment.board.read`, rather than
+          borrowing the schedule's: the two admit the same three roles today,
+          which is why the link in the Schedule header is unconditional, but
+          they are separate actions and either may narrow without the other.
         */}
         <Route
           path="schedule/board"

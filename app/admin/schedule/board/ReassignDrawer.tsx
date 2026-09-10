@@ -3,6 +3,7 @@ import {
   ConflictResponse,
   type BoardPractitioner,
   type BoardVisit,
+  type ConflictIssue,
   type ReassignActionCode,
 } from '../../../api/appointments/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
@@ -59,6 +60,30 @@ const FORBIDDEN =
   'practitioner, or reload the board if your own access has changed.';
 
 const FAILED = 'The visit could not be reassigned. Try again.';
+
+/** What the "To" list asks of whoever is picked, said before it is sent (6.4). */
+const CREDENTIAL_HINT = 'They must hold a valid credential for this service on that day.';
+
+/**
+ * The two conflicts whose shared sentence names a recovery this drawer has
+ * not got. `localConflictMessage` is written for the booking and move
+ * drawers, and both of those can change the time; this one cannot — the
+ * household keeps the window it was promised (spec 6.1) — so "Choose a
+ * different time" would be advice about a control that is not on the screen.
+ * Every other code keeps the module's shared sentence, which already names a
+ * recovery this drawer does have.
+ */
+const OWN_CONFLICT_MESSAGES: Partial<Record<ConflictIssue['code'], string>> = {
+  practitioner_overlap:
+    'That practitioner already has a visit in this window. Choose another practitioner.',
+  client_overlap:
+    'The household already has another visit in this window. Look at the day before handing ' +
+    'this one on.',
+};
+
+function conflictMessage(issue: ConflictIssue): string {
+  return OWN_CONFLICT_MESSAGES[issue.code] ?? localConflictMessage(issue);
+}
 
 export function ReassignDrawer({
   visit,
@@ -137,7 +162,7 @@ export function ReassignDrawer({
       } | null;
       if (res.status === 409) {
         const parsed = ConflictResponse.safeParse(body);
-        setError(parsed.success ? parsed.data.issues.map(localConflictMessage).join(' ') : FAILED);
+        setError(parsed.success ? parsed.data.issues.map(conflictMessage).join(' ') : FAILED);
         return;
       }
       if (res.status === 400 || res.status === 404) {
@@ -189,6 +214,7 @@ export function ReassignDrawer({
               id="reassign-to"
               label="To"
               value={to}
+              hint={CREDENTIAL_HINT}
               onChange={(e) => {
                 setTo(e.target.value);
                 setError(null);

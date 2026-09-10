@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { z } from 'zod';
 import type { BoardState } from '@domain/scheduling';
 import {
   BoardResponse,
@@ -77,6 +78,23 @@ const NO_LATENESS =
 const LOAD_ERROR = 'The board could not be loaded. Try again.';
 
 /**
+ * The day the address asks for, or the practice's own today when it asks for
+ * something that is not a day.
+ *
+ * The address is not trusted. `?date=x` and `?date=2026-13-45` both reach
+ * `formatDay`, whose `Intl.DateTimeFormat.format` throws a `RangeError` on an
+ * Invalid Date and takes the whole screen down; the board route answers 400
+ * to the same values. The same `z.iso.date()` the route validates with, so
+ * the screen and the route agree on what a day is.
+ */
+const Day = z.iso.date();
+
+function dayAsked(params: URLSearchParams, now: Date): string {
+  const asked = params.get('date');
+  return asked !== null && Day.safeParse(asked).success ? asked : practiceDay(now);
+}
+
+/**
  * Which day the answer in hand describes, carried on the answer itself.
  *
  * Setting "loading" from inside the effect that starts the request is a
@@ -124,7 +142,7 @@ function stateLabel(visit: BoardVisit): string {
 export function BoardPage() {
   const { apiFetch } = useAuth();
   const [params] = useSearchParams();
-  const date = params.get('date') ?? practiceDay(new Date());
+  const date = dayAsked(params, new Date());
   const [state, setState] = useState<State>({ kind: 'loading' });
   /** Bumped to read the day again after a reassignment has changed it. */
   const [reads, setReads] = useState(0);

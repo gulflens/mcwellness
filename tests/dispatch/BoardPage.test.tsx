@@ -6,6 +6,7 @@ import { plainText } from '../scheduling/support';
 import type { BoardResponse } from '../../app/api/appointments/schema';
 import { BoardPage } from '../../app/admin/schedule/board/BoardPage';
 import { blockOf, daySpan, gridColumns, hourLabels } from '../../app/admin/schedule/board/columns';
+import { practiceDay } from '../../app/admin/schedule/windows';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
 
@@ -161,7 +162,8 @@ function json(body: unknown, status = 200): Response {
 
 type Reassign = (body: unknown, reason: string | null) => Response;
 
-function mount(options: { onReassign?: Reassign; board?: BoardResponse } = {}) {
+function mount(options: { onReassign?: Reassign; board?: BoardResponse; date?: string } = {}) {
+  const asked = options.date ?? DATE;
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') {
@@ -182,7 +184,7 @@ function mount(options: { onReassign?: Reassign; board?: BoardResponse } = {}) {
     return json({ error: 'not_found' }, 404);
   });
   render(
-    <MemoryRouter initialEntries={[`/admin/schedule/board?date=${DATE}`]}>
+    <MemoryRouter initialEntries={[`/admin/schedule/board?date=${asked}`]}>
       <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl as unknown as typeof fetch}>
         <Routes>
           <Route path="/admin/schedule/board" element={<BoardPage />} />
@@ -191,6 +193,14 @@ function mount(options: { onReassign?: Reassign; board?: BoardResponse } = {}) {
     </MemoryRouter>,
   );
   return { fetchImpl };
+}
+
+/** Every day the board asked the route for, in order. */
+function daysRead(fetchImpl: { mock: { calls: unknown[][] } }): (string | null)[] {
+  return fetchImpl.mock.calls
+    .map((call) => String(call[0]))
+    .filter((url) => url.includes('/board'))
+    .map((url) => new URL(url, 'http://localhost').searchParams.get('date'));
 }
 
 /** Open the drawer from the late visit's block, fill it in and send it. */
@@ -315,11 +325,16 @@ describe('BoardPage', () => {
   it('reads the day the address names', async () => {
     const { fetchImpl } = mount();
     await screen.findByRole('heading', { name: 'Board' });
-    await waitFor(() =>
-      expect(
-        fetchImpl.mock.calls.map((call) => String(call[0])).filter((url) => url.includes('/board')),
-      ).toEqual([`/api/appointments/board?date=${DATE}`]),
-    );
+    await waitFor(() => expect(daysRead(fetchImpl)).toEqual([DATE]));
+  });
+
+  it("falls back to the practice's today when the address names no real day", async () => {
+    // The address is not trusted: `?date=x` reaches `formatDay`, whose
+    // formatter throws on an Invalid Date, and a white screen is a worse
+    // answer than the day the dispatcher is standing in.
+    const { fetchImpl } = mount({ date: 'x' });
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeTruthy();
+    await waitFor(() => expect(daysRead(fetchImpl)).toEqual([practiceDay(new Date())]));
   });
 
   it('opens the drawer prefilled from a drag rather than committing on drop', async () => {
@@ -381,6 +396,24 @@ describe('BoardPage', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('says what the practitioner it is handed to has to hold, before it is sent', async () => {
+    // Spec 6.4: the drawer shows what will be checked before it commits, so
+    // the credential is not learned from a 403.
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: /Juniper Valley/ }));
+    await screen.findByRole('dialog', { name: 'Reassign the visit' });
+    expect(
+      screen.getByText('They must hold a valid credential for this service on that day.'),
+    ).toBeTruthy();
+  });
+
+  it('never offers the practitioner the visit is already with', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: /Juniper Valley/ }));
+    const select = (await screen.findByLabelText('To')) as HTMLSelectElement;
+    expect([...select.options].map((option) => option.textContent)).toEqual(['Sage Harbour']);
+  });
+
   it('sends the reason and the new practitioner, and redraws on success', async () => {
     const onReassign = vi.fn(() => json(REASSIGNED, 201));
     const { fetchImpl } = mount({ onReassign });
@@ -413,9 +446,63 @@ describe('BoardPage', () => {
         ),
     });
     await reassignTheLateVisit();
+    // Not the shared sentence, which offers a different time: this drawer has
+    // no time control, because the household keeps the window (spec 6.1).
     expect(
       await screen.findByText(
-        'This practitioner is already booked close to this time. Choose a different time or practitioner.',
+        'That practitioner already has a visit in this window. Choose another practitioner.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('refuses a household double-booked in the same window', async () => {
+    mount({
+      onReassign: () =>
+        json(
+          {
+            error: 'conflict',
+            issues: [
+              {
+                code: 'client_overlap',
+                message: 'Client already has an appointment in this window.',
+                conflictsWithAppointmentId: null,
+              },
+            ],
+            requestId: null,
+          },
+          409,
+        ),
+    });
+    await reassignTheLateVisit();
+    expect(
+      await screen.findByText(
+        'The household already has another visit in this window. Look at the day before handing this one on.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it("keeps the module's shared sentence for a refusal this screen can act on", async () => {
+    mount({
+      onReassign: () =>
+        json(
+          {
+            error: 'conflict',
+            issues: [
+              {
+                code: 'credential_invalid',
+                message: 'Practitioner is not certified for this service on this date.',
+                conflictsWithAppointmentId: null,
+              },
+            ],
+            requestId: null,
+          },
+          409,
+        ),
+    });
+    await reassignTheLateVisit();
+    expect(
+      await screen.findByText(
+        'This practitioner is not certified for this service on this date. Choose a different practitioner.',
       ),
     ).toBeTruthy();
   });
@@ -458,6 +545,22 @@ describe('BoardPage', () => {
         'That practitioner is not certified for this service on that day. Choose another practitioner, or reload the board if your own access has changed.',
       ),
     ).toBeTruthy();
+  });
+
+  it('says the visit could not be reassigned when the route answers nothing useful', async () => {
+    mount({ onReassign: () => json({ error: 'internal' }, 500) });
+    await reassignTheLateVisit();
+    expect(await screen.findByText('The visit could not be reassigned. Try again.')).toBeTruthy();
+  });
+
+  it('says the same when the request never arrives at all', async () => {
+    mount({
+      onReassign: () => {
+        throw new Error('offline');
+      },
+    });
+    await reassignTheLateVisit();
+    expect(await screen.findByText('The visit could not be reassigned. Try again.')).toBeTruthy();
   });
 
   it('says when running late cannot be worked out', async () => {
