@@ -1,0 +1,141 @@
+/* The dispatcher's board (docs/SPEC/dispatch.md 4.2): a row per practitioner,
+   fifteen-minute columns across the practice's day. Tokens only; the one hue
+   on the screen belongs to the status chips, so a day going to plan is ink on
+   paper and the eye goes straight to what is not.
+
+   Written narrow first. Below the desk tier every lane is a column of blocks
+   in time order — a board too narrow to lay a day across is a day list, which
+   is what 4.2 asks for and what the week already does at the same width. The
+   time grid arrives at 1200px, the console's own desk tier
+   (docs/SPEC/responsive-console.md section 9); no width here is invented. */
+
+.board {
+  /* The names column and the gap after it, named once so the axis across the
+     top and the lanes beneath it cannot drift apart. */
+  --board-names: 11rem;
+  --board-gap: var(--s-3);
+
+  display: flex;
+  flex-direction: column;
+  /* The whole day scrolls inside this box, so a wide grid never widens the
+     page (docs/SPEC/responsive-console.md section 10). */
+  overflow-x: auto;
+}
+
+.board__hours {
+  display: none;
+}
+
+.board__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-1) var(--board-gap);
+  padding-block: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+  min-block-size: var(--row);
+}
+
+.board__name {
+  margin: 0;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+}
+
+.board__lane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-inline-size: 0;
+}
+
+.board__idle {
+  align-self: start;
+}
+
+/* A block: the ledger's own bordered block, laid in a lane. Its columns come
+   from the page as two custom properties, so the grid can be dropped in the
+   narrow layout without an inline style to fight. */
+.board__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-1) var(--s-2);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: start;
+  min-inline-size: 0;
+}
+
+/* Only a visit that can still change hands is a control; the rest are facts
+   on the board (BoardPage.tsx says why). */
+button.board__block {
+  cursor: grab;
+}
+
+/* Moved: still in place, so the day's history reads, but plainly spent (4.4). */
+.board__block--moved {
+  opacity: 0.6;
+}
+
+/* The window, and the minutes a late visit is behind inside its chip: figures
+   read at a glance, so they line up with every other numeral in the console. */
+.board__window,
+.board__block .status {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.board__client {
+  font-weight: var(--w-medium);
+  overflow-wrap: anywhere;
+}
+
+.board__facts {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1200px) {
+  .board__hours,
+  .board__lane {
+    display: grid;
+    grid-template-columns: repeat(var(--board-columns), minmax(var(--s-6), 1fr));
+  }
+
+  .board__hours {
+    /* Cleared past the names column and the gap after it, so an hour head
+       sits over the quarter it names in every lane below. */
+    padding-inline-start: calc(var(--board-names) + var(--board-gap));
+    border-block-end: var(--hairline) solid var(--rule);
+  }
+
+  .board__hour {
+    font-size: var(--t-micro);
+    line-height: var(--lh-micro);
+    color: var(--ink-2);
+    padding-inline-start: var(--s-1);
+    border-inline-start: var(--hairline) solid var(--rule);
+  }
+
+  .board__row {
+    grid-template-columns: var(--board-names) minmax(0, 1fr);
+  }
+
+  .board__lane {
+    align-items: start;
+    gap: 0;
+  }
+
+  .board__idle {
+    grid-column: 1 / -1;
+  }
+
+  .board__block {
+    grid-column: var(--block-start) / var(--block-end);
+    /* Blocks sit side by side in one lane, so each keeps a hairline of air
+       from its neighbour rather than sharing a border with it. */
+    margin-inline-end: var(--s-1);
+  }
+}
