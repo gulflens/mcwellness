@@ -1,0 +1,180 @@
+/* The dispatcher's board (docs/SPEC/dispatch.md 4.2): a row per practitioner,
+   fifteen-minute columns across the practice's day. Tokens only; the one hue
+   on the screen belongs to the status chips, so a day going to plan is ink on
+   paper and the eye goes straight to what is not.
+
+   Written narrow first. Below the desk tier every lane is a column of blocks
+   in time order — a board too narrow to lay a day across is a day list, which
+   is what 4.2 asks for and what the week already does at the same width. The
+   time grid arrives at 1200px, the console's own desk tier
+   (docs/SPEC/responsive-console.md section 9); no width here is invented. */
+
+.board {
+  /* The names column, the gap after it, and how wide a quarter of an hour is
+     at its narrowest: named once so the axis across the top, the lanes
+     beneath it and the rules under both cannot drift apart. */
+  --board-names: 11rem;
+  --board-gap: var(--s-3);
+  --board-quarter: var(--s-6);
+  /* What the day occupies at that narrowest. The rows and the hour heads are
+     stretched items in a scrolling flex column, so their inline size is the
+     scroll box's — and on a day wider than the window their rules stopped at
+     the fold as soon as it was scrolled (the seeded walk, spec 13). A floor
+     of the grid's own minimum makes each of them as wide as the content it
+     holds, while `1fr` still fills a window wider than the day. */
+  --board-day: calc(
+    var(--board-names) + var(--board-gap) + var(--board-columns) * var(--board-quarter)
+  );
+
+  display: flex;
+  flex-direction: column;
+  /* The whole day scrolls inside this box, so a wide grid never widens the
+     page (docs/SPEC/responsive-console.md section 10). */
+  overflow-x: auto;
+}
+
+.board__hours {
+  display: none;
+}
+
+.board__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-1) var(--board-gap);
+  padding-block: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+  min-block-size: var(--row);
+}
+
+.board__name {
+  margin: 0;
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+}
+
+.board__lane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-inline-size: 0;
+}
+
+.board__idle {
+  align-self: start;
+}
+
+/* A block: the ledger's own bordered block, laid in a lane. Its columns come
+   from the page as two custom properties, so the grid can be dropped in the
+   narrow layout without an inline style to fight. */
+.board__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-1) var(--s-2);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: start;
+  min-inline-size: 0;
+}
+
+/* Only a visit that can still change hands is a control; the rest are facts
+   on the board (BoardPage.tsx says why). */
+button.board__block {
+  cursor: grab;
+}
+
+/* Moved: still in place, so the day's history reads, but plainly spent (4.4). */
+.board__block--moved {
+  opacity: 0.6;
+}
+
+/* The window, and the minutes a late visit is behind inside its chip: figures
+   read at a glance, so they line up with every other numeral in the console. */
+.board__window,
+.board__block .status {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* A block is only as wide as its visit is long, so a state can run to two
+   lines — "Running late, 109 min" in a 105-minute block. The shared chip
+   centres its dot against the whole phrase, which leaves the dot floating
+   between the lines; on the board it belongs beside the first one. */
+.board__block .status {
+  align-items: start;
+}
+
+.board__block .status__dot {
+  /* Half a line, less half the dot's own 6px, so the dot sits on the centre of
+     the first line. The 6px is `.status__dot`'s own width and height in
+     app/shell/shell.css, which is where it is set and the only place it may
+     be changed; it is a literal here because a shared component's size is not
+     a design token and there is nothing to read it from. */
+  margin-block-start: calc((var(--lh-body) - 6px) / 2);
+}
+
+.board__client {
+  font-weight: var(--w-medium);
+  overflow-wrap: anywhere;
+}
+
+.board__facts {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1200px) {
+  .board__hours,
+  .board__lane {
+    display: grid;
+    grid-template-columns: repeat(var(--board-columns), minmax(var(--board-quarter), 1fr));
+  }
+
+  .board__hours,
+  .board__row {
+    min-inline-size: var(--board-day);
+  }
+
+  .board__hours {
+    /* Cleared past the names column and the gap after it, so an hour head
+       sits over the quarter it names in every lane below. */
+    padding-inline-start: calc(var(--board-names) + var(--board-gap));
+    border-block-end: var(--hairline) solid var(--rule);
+  }
+
+  .board__hour {
+    font-size: var(--t-micro);
+    line-height: var(--lh-micro);
+    color: var(--ink-2);
+    padding-inline-start: var(--s-1);
+    border-inline-start: var(--hairline) solid var(--rule);
+  }
+
+  .board__row {
+    grid-template-columns: var(--board-names) minmax(0, 1fr);
+  }
+
+  .board__lane {
+    align-items: start;
+    /* Row gap only: blocks side by side keep their air from the margin below,
+       so a hairline is never shared between two of them. */
+    gap: var(--s-1) 0;
+  }
+
+  .board__idle {
+    grid-column: 1 / -1;
+  }
+
+  .board__block {
+    grid-column: var(--block-start) / var(--block-end);
+    /* The row `laneRows` gave it, never auto-placement: the browser's cursor
+       never returns to an earlier row, so a lane of hourly visits became one
+       row per visit (the seeded walk, spec 13). */
+    grid-row: var(--block-row);
+    /* Blocks sit side by side in one lane, so each keeps a hairline of air
+       from its neighbour rather than sharing a border with it. */
+    margin-inline-end: var(--s-1);
+  }
+}

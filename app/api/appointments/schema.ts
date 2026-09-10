@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { APPOINTMENT_STATUSES } from '@domain/scheduling';
+import { APPOINTMENT_STATUSES, BOARD_STATES } from '@domain/scheduling';
 
 /** The shapes the appointment routes return. Imported by the routes and by
  * the two screens that read them: the admin console's day schedule and the
@@ -441,6 +441,58 @@ export const ReorderResponse = z.object({
 });
 export type ReorderResponse = z.infer<typeof ReorderResponse>;
 
+/** One visit on the board (docs/SPEC/dispatch.md 4.3 and 4.4): its facts, and the state read from them. */
+export const BoardVisit = z.object({
+  appointmentId: z.uuid(),
+  windowStart: z.iso.datetime(),
+  windowEnd: z.iso.datetime(),
+  status: z.enum(APPOINTMENT_STATUSES),
+  state: z.enum(BOARD_STATES),
+  /**
+   * The two names 4.3 asks a block to say, and nothing else of the household:
+   * no record number, no age, no address. The id is the opaque handle the
+   * screen asks the rest of the console with.
+   */
+  client: z.object({ id: z.uuid(), givenName: z.string(), familyName: z.string() }),
+  serviceType: z.object({ id: z.uuid(), name: z.string(), durationMinutes: z.number().int() }),
+  emirate: z.string(),
+  checkedInAt: z.iso.datetime().nullable(),
+  closedAt: z.iso.datetime().nullable(),
+  /** Null when the deployment has no routing seam to price the drives with. */
+  lateness: z.object({ late: z.boolean(), byMinutes: z.number().int().min(0) }).nullable(),
+});
+export type BoardVisit = z.infer<typeof BoardVisit>;
+
+export const BoardPractitioner = z.object({
+  practitionerId: z.uuid(),
+  displayName: z.string(),
+  /**
+   * Whether they still work here. A practitioner who has left keeps a row for
+   * as long as a visit is still against their name (spec 4.2) — a visit nobody
+   * can see is a visit nobody drives to — but a visit may not be handed to
+   * them, which the route refuses as `practitioner_not_found` (spec 6.2). The
+   * board reads this to keep the two apart: the row is drawn, the drawer's
+   * target list is not offered it, and a drop on it does nothing at all.
+   */
+  active: z.boolean(),
+  /** In window order. Empty for an idle practitioner, who is still a row. */
+  visits: z.array(BoardVisit),
+});
+export type BoardPractitioner = z.infer<typeof BoardPractitioner>;
+
+/**
+ * The whole board for one day (docs/SPEC/dispatch.md section 9).
+ * `latenessAvailable` is false on a deployment with no routing seam: the
+ * screen says the lateness is unknown rather than showing every visit as
+ * comfortably on time.
+ */
+export const BoardResponse = z.object({
+  date: z.iso.date(),
+  latenessAvailable: z.boolean(),
+  practitioners: z.array(BoardPractitioner),
+});
+export type BoardResponse = z.infer<typeof BoardResponse>;
+
 /** Why a reorder was refused before anything was written. */
 export const REORDER_ACTION_CODES = [
   'invalid_request',
@@ -453,3 +505,47 @@ export const REORDER_ACTION_CODES = [
   'stale_plan',
 ] as const;
 export type ReorderActionCode = (typeof REORDER_ACTION_CODES)[number];
+
+// ---------------------------------------------------------------------------
+// Handing a visit to another practitioner
+// ---------------------------------------------------------------------------
+
+/**
+ * A visit put in somebody else's hands (docs/SPEC/dispatch.md section 6.1).
+ * The answer is `MoveAppointmentResponse`, because a reassignment leaves
+ * exactly what a move leaves: the appointment that now stands and the one it
+ * replaced.
+ */
+export const ReassignAppointmentRequest = z.object({
+  /**
+   * Lower-cased on the way in. `z.uuid()` accepts either case and Postgres
+   * normalises what it stores, so the route's own "is this already their
+   * visit?" test would compare a normalised id to raw text and let an
+   * upper-case one past — a visit reassigned to the practitioner who already
+   * holds it, as two rows, the new one naming itself as the one it was taken
+   * from. Normalised once here, so every reader of this body sees one form.
+   */
+  practitionerId: z.uuid().transform((id) => id.toLowerCase()),
+  /** Omitted: the household keeps the window it was promised. */
+  windowStart: z.iso.datetime().optional(),
+});
+export type ReassignAppointmentRequest = z.infer<typeof ReassignAppointmentRequest>;
+
+/**
+ * Why a reassignment was refused before any rule was consulted. Its own list
+ * rather than the move's plus two, for the reason `CONFIRM_ACTION_CODES` is
+ * its own: the drawer that shows these sentences should carry only the ones
+ * its own route can produce.
+ */
+export const REASSIGN_ACTION_CODES = [
+  'invalid_request',
+  'reason_required',
+  'appointment_not_found',
+  'appointment_settled',
+  'session_open',
+  // The visit is already that practitioner's, so there is nothing to hand over.
+  'same_practitioner',
+  // Nobody of that id in this practice.
+  'practitioner_not_found',
+] as const;
+export type ReassignActionCode = (typeof REASSIGN_ACTION_CODES)[number];

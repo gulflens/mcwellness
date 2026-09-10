@@ -104,6 +104,12 @@ function mount(me: unknown, path = '/today/check-in', auth: AuthProvider = provi
     if (url === '/api/practice') return json({ practice: PRACTICE });
     if (url === '/api/practitioners') return json({ practitioners: [], scope: null });
     if (url.startsWith('/api/routing/practice-day')) return json({ practitioners: [] });
+    if (url.startsWith('/api/appointments/board')) {
+      // The day the board asked for, with nobody on the practice's books:
+      // enough for the route guard, which is what these cases are about.
+      const date = new URL(url, 'http://localhost').searchParams.get('date');
+      return json({ date, latenessAvailable: false, practitioners: [] });
+    }
     if (url.startsWith('/api/appointments')) return json({ appointments: [] });
     return json({ error: 'not_found', requestId: null }, 404);
   }) as unknown as typeof fetch;
@@ -156,6 +162,31 @@ describe('App — /admin/billing and /admin/schedule', () => {
     mount(PRACTITIONER, '/admin/schedule/week');
     expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Week' })).toBeNull();
+  });
+
+  it("lets an admin reach the dispatcher's board", async () => {
+    mount(ADMIN, '/admin/schedule/board');
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeTruthy();
+  });
+
+  it('lets a lead practitioner reach the board', async () => {
+    mount(LEAD_PRACTITIONER, '/admin/schedule/board');
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeTruthy();
+  });
+
+  it('sends a practitioner home instead of the board', async () => {
+    // appointment.board.read is the three calendar roles' (docs/SPEC/dispatch.md
+    // section 3): a practitioner sees their own day on Today, never the
+    // practice's board.
+    mount(PRACTITIONER, '/admin/schedule/board');
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Board' })).toBeNull();
+  });
+
+  it('sends finance to their own desk instead of the board', async () => {
+    mount(FINANCE, '/admin/schedule/board');
+    expect(await screen.findByRole('heading', { name: 'Clients' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Board' })).toBeNull();
   });
 
   it("shows the rail's Billing and Schedule links for an admin", async () => {

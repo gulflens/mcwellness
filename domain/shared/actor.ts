@@ -66,6 +66,12 @@ export type Action =
   | { type: 'appointment.list'; scope: 'practice' | 'own' }
   | { type: 'appointment.create'; practitionerId: string; serviceTypeId: string; on: IsoDate }
   | { type: 'appointment.move' }
+  // The dispatcher (docs/SPEC/dispatch.md section 9): the same three roles
+  // that may move a visit may hand one to another practitioner, and see the
+  // whole practice's day on the board. A practitioner sees their own day on
+  // Today and not the board (decision 3 of docs/PLAN/dispatch.md).
+  | { type: 'appointment.reassign' }
+  | { type: 'appointment.board.read' }
   | { type: 'appointment.cancel'; ownStop: boolean }
   | { type: 'billing.price.read' }
   | { type: 'billing.price.write' }
@@ -284,6 +290,9 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // "request[s] a change (Stage 2)" (docs/SPEC/scheduling-manual.md
       // section 2) rather than making one, and the row policy on appointment
       // says the same underneath.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+    case 'appointment.reassign':
+    case 'appointment.board.read':
       return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.cancel':
       // The same three, for any visit — and a practitioner, for their own

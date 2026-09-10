@@ -512,6 +512,25 @@ function newlySet(event: AuditEvent, field: string): boolean {
   return (before === null || before === undefined) && after !== null && after !== undefined;
 }
 
+/** The word a table is called in a sentence, or its own name with the underscores taken out. */
+function entityWord(event: AuditEvent, locale: Locale): string {
+  return label(ENTITY, event.entityType, locale) ?? event.entityType.replace(/_/g, ' ');
+}
+
+/**
+ * "{actor} added a thing": the sentence every plain insert reads as, and the
+ * generic branch's own `insert` case at the foot of `sentenceFor`.
+ *
+ * It is a function rather than two copies because a table with a case of its
+ * own — `appointment.insert`, which reads the new row before it speaks — still
+ * has to fall back to *exactly* the generic sentence when the special thing is
+ * not there. Written out by hand in both places, the two drift apart the first
+ * time either is reworded, and nothing would say so.
+ */
+function plainInsert(actor: string, entity: string, locale: Locale): string {
+  return pick(t(`${actor} added ${withArticle(entity)}`, `${actor} أضاف ${entity}`), locale);
+}
+
 function sentenceFor(event: AuditEvent, locale: Locale): string | null {
   const actor = actorPhrase(event, locale);
   const key = `${event.entityType}.${event.action}`;
@@ -543,6 +562,21 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
     }
     case 'contact.update':
       return `${actor} ${joinClauses(contactClauses(event, fields, locale), locale)}`;
+    case 'appointment.insert': {
+      // A reassignment is inserted with the practitioner it was taken from
+      // (migration 210): one act, said as one (docs/SPEC/dispatch.md section
+      // 11), rather than as an addition beside an unexplained move.
+      if (scalar(event.newValues, 'reassigned_from_practitioner_id') !== null) {
+        return pick(
+          t(
+            `${actor} reassigned the appointment to another practitioner`,
+            `${actor} أعاد إسناد الموعد إلى ممارس آخر`,
+          ),
+          locale,
+        );
+      }
+      return plainInsert(actor, entityWord(event, locale), locale);
+    }
     case 'consent.insert': {
       const purpose = label(PURPOSE, event.newValues?.purpose, locale) ?? pick(t('a', ''), locale);
       const version = scalar(event.newValues, 'version');
@@ -983,13 +1017,10 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
       // a sentence anybody wrote.
       return pick(t(`${actor} erased this record`, `${actor} محا هذا السجل`), locale);
     default: {
-      const entity = label(ENTITY, event.entityType, locale) ?? event.entityType.replace(/_/g, ' ');
+      const entity = entityWord(event, locale);
       switch (event.action) {
         case 'insert':
-          return pick(
-            t(`${actor} added ${withArticle(entity)}`, `${actor} أضاف ${entity}`),
-            locale,
-          );
+          return plainInsert(actor, entity, locale);
         case 'update': {
           const what = fields.map((f) => fieldLabel(f, locale)).join(locale === 'ar' ? '، ' : ', ');
           return pick(

@@ -237,11 +237,13 @@ async function statusOf(appointmentId: string): Promise<{
   cancellation_reason: string | null;
   cancelled_at: Date | null;
   rescheduled_from_id: string | null;
+  reassigned_from_practitioner_id: string | null;
   window_start: Date;
 }> {
   const { rows } = await owner.query(
     'select status::text as status, cancellation_reason::text as cancellation_reason, ' +
-      'cancelled_at, rescheduled_from_id, window_start from appointment where id = $1',
+      'cancelled_at, rescheduled_from_id, reassigned_from_practitioner_id, window_start ' +
+      'from appointment where id = $1',
     [appointmentId],
   );
   return rows[0] as never;
@@ -520,6 +522,10 @@ describe('POST /api/appointments/:id/move', () => {
     // The status carries over: the visit was confirmed and moving it did not
     // make it less booked.
     expect(after.status).toBe('confirmed');
+    // And nobody was handed anything. The column migration 210 added is set by
+    // a reassignment alone (docs/SPEC/dispatch.md section 6.3), so a plain move
+    // — the same practitioner, a new window — leaves it empty.
+    expect(after.reassigned_from_practitioner_id).toBeNull();
   });
 
   it('refuses a move into a window the practitioner already has', async () => {

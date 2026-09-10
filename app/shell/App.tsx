@@ -10,6 +10,7 @@ import { KitPage } from '../admin/kit/KitPage';
 import { TeamPage } from '../admin/settings/TeamPage';
 import { SchedulePage } from '../admin/schedule/SchedulePage';
 import { WeekPage } from '../admin/schedule/WeekPage';
+import { BoardPage } from '../admin/schedule/board/BoardPage';
 import { DayMapPage } from '../admin/schedule/map/DayMapPage';
 import { PracticePage } from '../admin/settings/PracticePage';
 import { PractitionersPage } from '../admin/settings/PractitionersPage';
@@ -30,6 +31,7 @@ import { AdminLayout } from './AdminLayout';
 import {
   canOpenAudit,
   canOpenBilling,
+  canOpenBoard,
   canOpenBooks,
   canOpenEnquiries,
   canOpenKit,
@@ -210,6 +212,30 @@ export function App() {
               {(actor) =>
                 canOpenSchedule(actor, new Date()) ? (
                   <WeekPage />
+                ) : (
+                  <Navigate to={homeFor(actor)} replace />
+                )
+              }
+            </RequireAuth>
+          }
+        />
+        {/*
+          The dispatcher's board (docs/SPEC/dispatch.md section 4.1). An
+          ordinary nested route inside the console, unlike the day map above:
+          it loads no third-party script, so it carries the console's own
+          strict content security policy and needs no document of its own.
+          It asks its own route's rule, `appointment.board.read`, rather than
+          borrowing the schedule's: the two admit the same three roles today,
+          which is why the link in the Schedule header is unconditional, but
+          they are separate actions and either may narrow without the other.
+        */}
+        <Route
+          path="schedule/board"
+          element={
+            <RequireAuth>
+              {(actor) =>
+                canOpenBoard(actor, new Date()) ? (
+                  <BoardPage />
                 ) : (
                   <Navigate to={homeFor(actor)} replace />
                 )

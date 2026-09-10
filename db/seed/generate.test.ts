@@ -259,13 +259,27 @@ describe('generateSeed', () => {
 
   it('books a day worth optimising: five visits in a deliberately poor order, one already agreed', () => {
     const data = generateSeed();
-    expect(data.appointments).toHaveLength(5);
+    // Eight in all: the first practitioner's five-visit day the optimiser
+    // reorders, plus the second practitioner's three (docs/SPEC/dispatch.md
+    // section 13), on the same planning day.
+    expect(data.appointments).toHaveLength(8);
     expect(data.appointments.every((a) => a.windowStart.startsWith(data.planningDay))).toBe(true);
-    expect(data.appointments.filter((a) => a.status === 'confirmed')).toHaveLength(1);
-    expect(data.appointments.filter((a) => a.status === 'proposed')).toHaveLength(4);
+    const first = data.appointments.filter((a) => a.practitionerId === data.practitioners[0]?.id);
+    const second = data.appointments.filter((a) => a.practitionerId === data.practitioners[1]?.id);
+    expect(first).toHaveLength(5);
+    expect(second).toHaveLength(3);
+    expect(first.filter((a) => a.status === 'confirmed')).toHaveLength(1);
+    expect(first.filter((a) => a.status === 'proposed')).toHaveLength(4);
+    // The second practitioner's day, in window order: one visit closed, one
+    // open and never closed, one still to come.
+    expect(second.map((a) => a.status)).toEqual(['completed', 'checked_in', 'confirmed']);
+    // Two `confirmed` rows in all: the first day's own anchor (the second
+    // visit, agreed with its household) and the second day's last visit
+    // (11:15, still to come and so still open to being agreed).
+    expect(data.appointments.filter((a) => a.status === 'confirmed')).toHaveLength(2);
     // Three emirates, so the order actually costs something.
     const emirates = new Set(
-      data.appointments.map((a) => data.locations.find((l) => l.id === a.locationId)?.emirate),
+      first.map((a) => data.locations.find((l) => l.id === a.locationId)?.emirate),
     );
     expect(emirates.size).toBeGreaterThanOrEqual(3);
     // Every household on it is one that may be visited.

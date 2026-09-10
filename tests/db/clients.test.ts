@@ -96,8 +96,13 @@ describe('GET /api/clients', () => {
   });
 
   it('gives a practitioner without an admin role an empty table with the schedule note, and logs no read', async () => {
+    // The third seeded practitioner, not the second: the second now has
+    // three households on their own day (db/seed/generate.ts, the board's
+    // second practitioner, docs/SPEC/dispatch.md section 13), and the third
+    // has none by any path — no appointment, no assessment, only a
+    // credential, which names no client at all.
     const requestId = '00000000-0000-4000-8000-0000000000e2';
-    const res = await list(authIdOf(1), '', requestId);
+    const res = await list(authIdOf(2), '', requestId);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ clients: [], note: 'schedule' });
     const { rows } = await owner.query<{ n: number }>(

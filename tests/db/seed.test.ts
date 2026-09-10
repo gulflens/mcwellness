@@ -106,7 +106,17 @@ describe('the synthetic seed', () => {
         'and c.service_type_id = a.service_type_id and c.can_execute_session ' +
         'where l.entrance_point is not null',
     );
-    expect(Number(rows[0]?.n)).toBe(5);
+    // Five on the first practitioner's planning day, three more on the
+    // second's, on the same day (docs/SPEC/dispatch.md section 13).
+    expect(Number(rows[0]?.n)).toBe(8);
+  });
+
+  it('gives the second practitioner a day the board has something true to say about', () => {
+    const data = generateSeed();
+    const second = data.appointments.filter((a) => a.practitionerId === data.practitioners[1]?.id);
+    expect(second.map((a) => a.status)).toEqual(['completed', 'checked_in', 'confirmed']);
+    expect(second.every((a) => a.windowStart.startsWith(data.planningDay))).toBe(true);
+    expect(data.appointments).toHaveLength(8);
   });
 
   it('gives every practitioner an amplifier in date, and leaves one overdue on the shelf', () => {

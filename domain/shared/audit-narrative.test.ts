@@ -657,6 +657,48 @@ describe('the article before an entity', () => {
   });
 });
 
+describe('the reassignment trail (docs/SPEC/dispatch.md section 11)', () => {
+  it('reads a reassignment as one act, not as a bare addition', () => {
+    const reassigned = narrate(
+      event({
+        entityType: 'appointment',
+        action: 'insert',
+        newValues: {
+          status: 'confirmed',
+          rescheduled_from_id: '00000008-0000-4000-8000-000000000101',
+          reassigned_from_practitioner_id: '00000008-0000-4000-8000-000000000002',
+        },
+      }),
+      'en',
+    );
+    expect(reassigned?.sentence).toBe(
+      'Hazel Harbour reassigned the appointment to another practitioner',
+    );
+    expect(reassigned?.kind).toBe('create');
+
+    const reassignedAr = narrate(
+      event({
+        entityType: 'appointment',
+        action: 'insert',
+        newValues: {
+          status: 'confirmed',
+          rescheduled_from_id: '00000008-0000-4000-8000-000000000101',
+          reassigned_from_practitioner_id: '00000008-0000-4000-8000-000000000002',
+        },
+      }),
+      'ar',
+    );
+    expect(reassignedAr?.sentence).toBe('Hazel Harbour أعاد إسناد الموعد إلى ممارس آخر');
+
+    const plain = narrate(
+      event({ entityType: 'appointment', action: 'insert', newValues: { status: 'proposed' } }),
+      'en',
+    );
+    expect(plain?.sentence).not.toContain('reassigned');
+    expect(plain?.sentence).toBe('Hazel Harbour added an appointment');
+  });
+});
+
 describe('the books (docs/SPEC/accounting.md section 11)', () => {
   it('says which kind of journal entry was posted, and never who it was for', () => {
     const posted = narrate(
