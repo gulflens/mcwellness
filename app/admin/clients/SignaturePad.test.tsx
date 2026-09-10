@@ -173,6 +173,70 @@ describe('SignaturePad', () => {
     expect(onChange).toHaveBeenLastCalledWith(null);
   });
 
+  it('prints a caption beneath the name and the date when one is given, smaller than either', () => {
+    const onChange = vi.fn();
+    const context = fakeContext();
+    const fontAtCall: string[] = [];
+    context.fillText = vi.fn((text: string) => {
+      fontAtCall.push(String(context.font));
+      void text;
+    }) as unknown as CanvasRenderingContext2D['fillText'];
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => context as never);
+
+    const { container } = render(
+      <SignaturePad
+        signedName="Alpha Synthetic"
+        onSignedNameChange={vi.fn()}
+        onChange={onChange}
+        today={TODAY}
+        caption="Signed for: participation, visits at home, brain-map and neurofeedback information"
+      />,
+    );
+    sign(container.querySelector('canvas') as Element);
+
+    const fillText = context.fillText as unknown as ReturnType<typeof vi.fn>;
+    const texts = fillText.mock.calls.map((call) => call[0]);
+    expect(texts).toContain('Alpha Synthetic');
+    expect(texts).toContain(TODAY);
+    expect(texts).toContain(
+      'Signed for: participation, visits at home, brain-map and neurofeedback information',
+    );
+
+    // Beneath the name and the date, in a smaller face: this line names what
+    // was agreed to, and must never read as a second signature.
+    const captionIndex = texts.indexOf(
+      'Signed for: participation, visits at home, brain-map and neurofeedback information',
+    );
+    const nameIndex = texts.indexOf('Alpha Synthetic');
+    const dateIndex = texts.indexOf(TODAY);
+    expect(captionIndex).toBeGreaterThan(nameIndex);
+    expect(captionIndex).toBeGreaterThan(dateIndex);
+    const captionFontSize = parseInt(fontAtCall[captionIndex] ?? '', 10);
+    const nameFontSize = parseInt(fontAtCall[nameIndex] ?? '', 10);
+    expect(captionFontSize).toBeLessThan(nameFontSize);
+  });
+
+  it('renders exactly as before when no caption is given', () => {
+    const onChange = vi.fn();
+    const context = fakeContext();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => context as never);
+
+    const { container } = render(
+      <SignaturePad
+        signedName="Alpha Synthetic"
+        onSignedNameChange={vi.fn()}
+        onChange={onChange}
+        today={TODAY}
+      />,
+    );
+    sign(container.querySelector('canvas') as Element);
+
+    const fillText = context.fillText as unknown as ReturnType<typeof vi.fn>;
+    // Only the name and the date: no absent-caption blank line, no shifted
+    // band, nothing new in the image's shape.
+    expect(fillText.mock.calls.map((call) => call[0])).toEqual(['Alpha Synthetic', TODAY]);
+  });
+
   it('does not draw while it is disabled', () => {
     const onChange = vi.fn();
     const { container } = render(

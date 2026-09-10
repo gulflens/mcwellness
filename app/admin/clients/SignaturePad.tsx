@@ -68,6 +68,7 @@ export function SignaturePad({
   onChange,
   disabled,
   today,
+  caption,
 }: {
   signedName: string;
   onSignedNameChange: (value: string) => void;
@@ -76,6 +77,12 @@ export function SignaturePad({
   disabled?: boolean;
   /** The date printed into the image, in the practice's own day. */
   today: string;
+  /**
+   * What the signature covers, printed small beneath the date when a
+   * signature stands for several consents at once; the image is the
+   * evidence, so the image says so.
+   */
+  caption?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<Point[][]>([]);
@@ -140,7 +147,9 @@ export function SignaturePad({
       if (rest.length === 0) ctx.lineTo(first.x + 0.1, first.y);
       ctx.stroke();
     }
-    const captionTop = SIGNATURE_HEIGHT - CAPTION_HEIGHT;
+    // A caption needs its own line, so the band grows to hold it rather than
+    // crowding the name and the date it sits beneath.
+    const captionTop = SIGNATURE_HEIGHT - (caption ? CAPTION_HEIGHT + 20 : CAPTION_HEIGHT);
     ctx.beginPath();
     ctx.moveTo(24, captionTop);
     ctx.lineTo(SIGNATURE_WIDTH - 24, captionTop);
@@ -150,11 +159,17 @@ export function SignaturePad({
     ctx.font = '16px sans-serif';
     ctx.fillText(signedName, 24, captionTop + 26);
     ctx.fillText(today, 24, captionTop + 48);
+    if (caption) {
+      // Smaller than the name and the date: this line names what was agreed
+      // to, not who agreed to it, and must never read as a second signature.
+      ctx.font = '12px sans-serif';
+      ctx.fillText(caption, 24, captionTop + 66);
+    }
     const url = out.toDataURL('image/png');
     const comma = url.indexOf(',');
     if (!url.startsWith('data:image/png;base64,') || comma === -1) return null;
     return { mimeType: 'image/png', bytesBase64: url.slice(comma + 1) };
-  }, [signedName, today]);
+  }, [signedName, today, caption]);
 
   // The visible canvas is sized to its own box and the device's pixel ratio
   // once it is on screen; the fixed-size PNG is composed separately, so this
@@ -178,7 +193,7 @@ export function SignaturePad({
   // shows.
   useEffect(() => {
     if (hasInk) onChange(render());
-  }, [hasInk, onChange, render, signedName]);
+  }, [hasInk, onChange, render, signedName, caption]);
 
   function pointFrom(event: PointerEvent<HTMLCanvasElement>): Point | null {
     const canvas = canvasRef.current;
