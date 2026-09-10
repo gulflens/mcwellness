@@ -70,6 +70,10 @@ function toEvent(row: Row): AuditEvent {
   };
 }
 
+function sameMinute(a: string, b: string): boolean {
+  return a.slice(0, 16) === b.slice(0, 16);
+}
+
 export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.get('/api/clients/:id/timeline', async (c) => {
     const actor = c.get('actor');
@@ -109,12 +113,29 @@ export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       const event = toEvent(row);
       const narration = narrate(event, locale);
       if (narration === null) continue;
+      const previous = events[events.length - 1];
+      // Nine "saw the appointment in the schedule" lines inside one minute are
+      // one fact said nine times: the same person, the same sentence, the same
+      // minute fold into one entry with a count. Only reads fold; every change
+      // keeps its own line.
+      if (
+        previous &&
+        narration.kind === 'read' &&
+        previous.kind === 'read' &&
+        previous.sentence === narration.sentence &&
+        previous.actor?.name === (event.actor?.name ?? null) &&
+        sameMinute(previous.occurredAt, event.occurredAt)
+      ) {
+        previous.count += 1;
+        continue;
+      }
       events.push({
         id: event.id,
         occurredAt: event.occurredAt,
         sentence: narration.sentence,
         reason: narration.reason,
         kind: narration.kind,
+        count: 1,
         actor:
           event.actor === null ? null : { name: event.actor.name, roles: [...event.actor.roles] },
       });

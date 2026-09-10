@@ -53,6 +53,41 @@ function clientAt(n: number): { id: string; mrn: string } {
   return client;
 }
 
+/**
+ * Writes one audit row straight into the chain, bypassing the app: the
+ * fold-repeated-reads test (Task 8, walk-fixes-1) needs rows at exact,
+ * controlled timestamps that a live request cannot promise. `entity_id`
+ * carries no foreign key (070_audit_log.sql), so a synthetic appointment id
+ * that names no real row is a legitimate row here, exactly as the direct
+ * writes in tests/db/audit.test.ts are.
+ */
+async function insertAppointmentAudit(
+  clientId: string,
+  actorId: string,
+  appointmentId: string,
+  action: string,
+  changedFields: string[] | null,
+  occurredAt: string,
+): Promise<void> {
+  await owner.query(
+    'insert into audit_log (tenant_id, actor_id, actor_type, actor_role, action, entity_type, ' +
+      'entity_id, client_id, changed_fields, occurred_at) values ' +
+      '($1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8::uuid, $9::text[], $10::timestamptz)',
+    [
+      SEED_TENANT_ID,
+      actorId,
+      'user',
+      'owner',
+      action,
+      'appointment',
+      appointmentId,
+      clientId,
+      changedFields,
+      occurredAt,
+    ],
+  );
+}
+
 beforeAll(async () => {
   owner = await freshDatabase();
   await applySeed(owner, data, deriveIdentityKeys(Buffer.alloc(32, 7)));
@@ -206,5 +241,85 @@ describe('GET /api/clients/:id/timeline', () => {
     const client = clientAt(5);
     expect((await get(authIdOf(1), `/api/clients/${client.id}/timeline`)).status).toBe(403);
     expect((await get(ADMIN_B_AUTH, `/api/clients/${client.id}/timeline`)).status).toBe(404);
+  });
+
+  // A quieter timeline (Task 8, walk-fixes-1): the walk of 10 September found a
+  // client's timeline saying "recorded list on the appointment" nine times for
+  // one booking. Reads of the same sentence by the same person inside one
+  // minute fold into one line with a count; a change never folds, whatever its
+  // sentence.
+  it('folds three list reads of one appointment, by the same actor inside a minute, into one event with count 3', async () => {
+    const client = clientAt(6);
+    const ownerId = data.users[0]?.id;
+    const ownerName = data.users[0]?.displayName ?? '';
+    if (!ownerId) throw new Error('No seeded owner.');
+    const appointmentId = '00000009-0000-4000-8000-000000000101';
+    await insertAppointmentAudit(
+      client.id,
+      ownerId,
+      appointmentId,
+      'list',
+      null,
+      '2026-09-10T09:00:00.100Z',
+    );
+    await insertAppointmentAudit(
+      client.id,
+      ownerId,
+      appointmentId,
+      'list',
+      null,
+      '2026-09-10T09:00:20.000Z',
+    );
+    await insertAppointmentAudit(
+      client.id,
+      ownerId,
+      appointmentId,
+      'list',
+      null,
+      '2026-09-10T09:00:59.900Z',
+    );
+
+    const body = (await (
+      await get(authIdOf(0), `/api/clients/${client.id}/timeline`)
+    ).json()) as TimelineResponse;
+    const folded = body.events.filter(
+      (e) => e.sentence === `${ownerName} saw the appointment in the schedule`,
+    );
+    expect(folded).toHaveLength(1);
+    expect(folded[0]?.count).toBe(3);
+    expect(folded[0]?.kind).toBe('read');
+  });
+
+  it('never folds two changes with the same sentence, the same actor and the same minute', async () => {
+    const client = clientAt(6);
+    const ownerId = data.users[0]?.id;
+    const ownerName = data.users[0]?.displayName ?? '';
+    if (!ownerId) throw new Error('No seeded owner.');
+    const appointmentId = '00000009-0000-4000-8000-000000000102';
+    await insertAppointmentAudit(
+      client.id,
+      ownerId,
+      appointmentId,
+      'update',
+      ['status'],
+      '2026-09-10T09:01:00.000Z',
+    );
+    await insertAppointmentAudit(
+      client.id,
+      ownerId,
+      appointmentId,
+      'update',
+      ['status'],
+      '2026-09-10T09:01:10.000Z',
+    );
+
+    const body = (await (
+      await get(authIdOf(0), `/api/clients/${client.id}/timeline`)
+    ).json()) as TimelineResponse;
+    const changed = body.events.filter(
+      (e) => e.sentence === `${ownerName} changed the appointment (status)`,
+    );
+    expect(changed).toHaveLength(2);
+    expect(changed.every((e) => e.count === 1)).toBe(true);
   });
 });

@@ -252,6 +252,29 @@ describe('narrate', () => {
     });
   }
 
+  it('says an appointment was seen in the schedule, not "recorded list"', () => {
+    const n = narrate(event({ entityType: 'appointment', action: 'list' }), 'en');
+    expect(n?.sentence).toBe('Hazel Harbour saw the appointment in the schedule');
+    expect(n?.kind).toBe('read');
+  });
+
+  it('carries a reason only on a change, never on a read', () => {
+    const read = narrate(
+      event({ action: 'read', reason: 'Client asked for a morning slot' }),
+      'en',
+    );
+    expect(read?.reason).toBeNull();
+    const change = narrate(
+      event({
+        action: 'update',
+        changedFields: ['status'],
+        reason: 'Client asked for a morning slot',
+      }),
+      'en',
+    );
+    expect(change?.reason).toBe('Client asked for a morning slot');
+  });
+
   it('carries the reason on its own, never inside the sentence', () => {
     const withdrawn = CASES.find((c) => c.name === 'withdrawing consent');
     const narration = narrate(withdrawn?.event ?? event({}), 'en');

@@ -58,6 +58,7 @@ const first = {
       sentence: 'Rowan Meadow viewed this record',
       reason: null,
       kind: 'read',
+      count: 1,
       actor: { name: 'Rowan Meadow', roles: ['admin'] },
     },
     {
@@ -66,6 +67,7 @@ const first = {
       sentence: 'Hazel Harbour withdrew marketing consent',
       reason: 'Asked by the parent at the door.',
       kind: 'change',
+      count: 1,
       actor: { name: 'Hazel Harbour', roles: ['owner'] },
     },
   ],
@@ -80,6 +82,7 @@ const second = {
       sentence: 'Hazel Harbour created the record',
       reason: null,
       kind: 'create',
+      count: 1,
       actor: { name: 'Hazel Harbour', roles: ['owner'] },
     },
   ],
@@ -95,6 +98,28 @@ describe('RecordTimeline', () => {
     expect(screen.getByRole('heading', { name: /Tuesday,? 1 September 2026/ })).toBeTruthy();
     expect(screen.getByText('Reason: Asked by the parent at the door.')).toBeTruthy();
     expect(screen.getByText('10:30')).toBeTruthy();
+  });
+
+  it('says how many times a folded read happened', async () => {
+    const folded = {
+      events: [
+        {
+          id: '12',
+          occurredAt: '2026-09-02T06:30:00.000Z',
+          sentence: 'Rowan Meadow saw the appointment in the schedule',
+          reason: null,
+          kind: 'read',
+          count: 3,
+          actor: { name: 'Rowan Meadow', roles: ['admin'] },
+        },
+      ],
+      nextBefore: null,
+      hasMore: false,
+    };
+    mount({ first: folded });
+    expect(
+      await screen.findByText('Rowan Meadow saw the appointment in the schedule (3 times)'),
+    ).toBeTruthy();
   });
 
   it('loads the earlier page on request and stops when there is no more', async () => {

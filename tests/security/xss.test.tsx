@@ -43,6 +43,7 @@ describe('hostile text in the timeline', () => {
                 sentence: `${HOSTILE} created the record`,
                 reason: HOSTILE,
                 kind: 'create',
+                count: 1,
                 actor: { name: HOSTILE, roles: ['owner'] },
               },
             ],

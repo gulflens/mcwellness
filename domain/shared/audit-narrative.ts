@@ -1018,6 +1018,16 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
       return pick(t(`${actor} erased this record`, `${actor} محا هذا السجل`), locale);
     default: {
       const entity = entityWord(event, locale);
+      // The walk of 10 September found a client's timeline saying "recorded
+      // list on the appointment" nine times for one booking — nine lines that
+      // said nothing a reader wanted. Only the appointment's own list read
+      // gets this sentence; every other entity keeps the generic one.
+      if (event.entityType === 'appointment' && event.action === 'list') {
+        return pick(
+          t(`${actor} saw the ${entity} in the schedule`, `${actor} رأى ${entity} في الجدول`),
+          locale,
+        );
+      }
       switch (event.action) {
         case 'insert':
           return plainInsert(actor, entity, locale);
@@ -1052,6 +1062,11 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
 export function narrate(event: AuditEvent, locale: Locale): Narration | null {
   const sentence = sentenceFor(event, locale);
   if (sentence === null) return null;
-  const reason = event.reason?.trim() || null;
-  return { sentence, reason, kind: kindOf(event) };
+  const kind = kindOf(event);
+  // A reason is stamped on every audit row a request writes
+  // (app/api/_middleware/request-context.ts), so the read a move drawer makes
+  // while it opens carries the move's reason. The reason explains a change; on
+  // a read it explains nothing and misleads (the walk of 10 September).
+  const reason = kind === 'read' ? null : event.reason?.trim() || null;
+  return { sentence, reason, kind };
 }
