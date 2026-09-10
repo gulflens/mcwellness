@@ -122,10 +122,35 @@ describe('PinPickerPage', () => {
     expect(window.sessionStorage.getItem(`mcwellness:pin:${key}`)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Use this pin' }));
     expect(opener.postMessage).toHaveBeenCalledWith(
-      { type: PIN_MESSAGE_TYPE, lat: 25.2048, lng: 55.2708, address: null },
+      { type: PIN_MESSAGE_TYPE, lat: 25.2048, lng: 55.2708, address: null, key },
       window.location.origin,
     );
     expect(close).toHaveBeenCalled();
+  });
+
+  it('echoes the empty string as the key when the page was opened with none at all', async () => {
+    // Typed into the address bar rather than opened by
+    // CoordinateFields.openPicker — there is no key to echo, and the empty
+    // string can never equal a key a listener actually minted (finding 1 of
+    // the whole-branch review of trunk round 43).
+    const opener = { postMessage: vi.fn() };
+    Object.defineProperty(window, 'opener', { value: opener, configurable: true });
+    vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    const fake = fakeMaps();
+    render(
+      <MemoryRouter initialEntries={['/admin/clients/pin']}>
+        <PinPickerPage browserKey="browser-key-under-test" loadMaps={async () => fake.maps} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(fake.maps.Map).toHaveBeenCalled());
+    for (const fn of fake.listeners['map:click'] ?? []) {
+      fn({ latLng: { lat: () => 25.2, lng: () => 55.3 } });
+    }
+    fireEvent.click(await screen.findByRole('button', { name: 'Use this pin' }));
+    expect(opener.postMessage).toHaveBeenCalledWith(
+      { type: PIN_MESSAGE_TYPE, lat: 25.2, lng: 55.3, address: null, key: '' },
+      window.location.origin,
+    );
   });
 
   it('follows the marker when it is dragged, and a tap on the map', async () => {

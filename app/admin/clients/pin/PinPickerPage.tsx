@@ -40,9 +40,14 @@ import './pin.css';
  * **Who may receive the point.** The message is posted to `window.opener`
  * with this page's own origin as the target, so only a document of this app
  * can read it; the opener checks the origin again before using it
- * (app/shell/components/CoordinateFields.tsx). The message shape itself lives
- * in `app/shell/maps/pinMessage.ts`, not here — CoordinateFields.tsx is part
- * of the console's own bundle, and it must not import anything of this page's
+ * (app/shell/components/CoordinateFields.tsx). It also echoes the `?k=` key
+ * this page was opened with, so the opener can tell its own currently-open
+ * tab's answer from a different one's — the tab this page runs in outlives
+ * the panel that opened it, and without the key a stale tab's "Use this pin"
+ * could move a different client's boxes (the whole-branch review of trunk
+ * round 43, finding 1). The message shape itself lives in
+ * `app/shell/maps/pinMessage.ts`, not here — CoordinateFields.tsx is part of
+ * the console's own bundle, and it must not import anything of this page's
  * (the Places library included) to read it.
  */
 
@@ -263,7 +268,13 @@ export function PinPickerPage({
       setFailure(NO_OPENER);
       return;
     }
-    const message: PinMessage = { type: PIN_MESSAGE_TYPE, ...point, address };
+    // Echoes the key this page was opened with, so the opener can tell this
+    // tab's answer from a different tab's (finding 1 of the whole-branch
+    // review — see pinMessage.ts). A page opened with no key at all — typed
+    // into the address bar rather than opened by CoordinateFields.openPicker
+    // — echoes the empty string, which cannot equal any key a listener
+    // actually minted, so it is rejected the same way a stale one is.
+    const message: PinMessage = { type: PIN_MESSAGE_TYPE, ...point, address, key: keyParam ?? '' };
     opener.postMessage(message, window.location.origin);
     window.close();
   }
@@ -281,7 +292,7 @@ export function PinPickerPage({
       </header>
       <div ref={searchRef} className="pin-picker__search" />
       {note ? <Note tone={key === null ? 'muted' : 'critical'}>{note}</Note> : null}
-      <div ref={mapRef} className="pin-picker__map" aria-label="Map" />
+      <div ref={mapRef} className="pin-picker__map" role="region" aria-label="Map" />
       <footer className="pin-picker__foot">
         <p className="numeric">{point ? shown(point) : 'No pin yet. Tap the map to place one.'}</p>
         {address ? <p className="small muted">{address}</p> : null}

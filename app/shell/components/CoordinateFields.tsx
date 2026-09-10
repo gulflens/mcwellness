@@ -19,15 +19,24 @@ import { PIN_MESSAGE_TYPE, type PinMessage } from '../maps/pinMessage';
  * listener takes back the point it posts. The point these boxes hold never
  * rides in that tab's URL: `.claude/rules/ui.md` forbids personal data in a
  * URL or query string, and a household's entrance coordinate is exactly
- * that. `openPicker` writes it instead to `sessionStorage`, under a fresh
- * `crypto.randomUUID()` key, and opens the picker with only that key
- * (`?k=<uuid>`) in its URL; the picker reads the blob back by the same key
- * and deletes it immediately (the review of this component, finding 3). A
- * browser that blocks site data throws on the write — caught here, reported
- * next to the button, and the tab is not opened at all. The message shape
- * the listener below reads lives in `../maps/pinMessage.ts`, not in the
- * picker page itself, so this component — part of the console's own bundle —
- * never imports the page (and the Places library it loads) to read it.
+ * that. `openPicker` writes it instead to `sessionStorage`, under a fresh key
+ * (`randomPinKey()` — `crypto.randomUUID()`, or a random hex string outside a
+ * secure context), and opens the picker with only that key (`?k=…`) in its
+ * URL; the picker reads the blob back by the same key and deletes it
+ * immediately (the review of this component, finding 3). That same key is
+ * this instance's own correlation token, kept in `openPickerKey` below: the
+ * listener takes back a point only when the message carrying it echoes this
+ * exact key, because the tab `openPicker` opens outlives the panel this
+ * component renders in, and a stale tab's answer must never move a different
+ * client's boxes (the whole-branch review of trunk round 43, finding 1 — the
+ * harm this branch exists to prevent). A browser that blocks site data throws
+ * on the write, and a managed device or a pop-up blocker may refuse the tab
+ * outright (`window.open` returning `null`); either is caught, reported next
+ * to the button in the same voice, and leaves nothing written behind
+ * (finding 2). The message shape the listener below reads lives in
+ * `../maps/pinMessage.ts`, not in the picker page itself, so this component —
+ * a plain console component with callers across the admin app — never names
+ * the widened, security-sensitive picker page as an import target.
  *
  * **Where it lives, and why it moved.** It began in `app/admin/clients/`,
  * where "check the pin" was the only screen that needed it. From 8 September
@@ -96,6 +105,24 @@ function display(value: number | null): string {
   return value === null ? '' : String(value);
 }
 
+/**
+ * A key unique enough to tell one picker tab's answer from another's — not a
+ * cryptographic guarantee, just something nobody else is handing back today.
+ * `crypto.randomUUID` is undefined outside a secure context, and this
+ * project's own walkthroughs are actually done from a tablet reaching the
+ * dev server over `http://<LAN-IP>:5184`, an insecure context — so a plain
+ * `crypto.randomUUID()` call here throws an unhandled `TypeError` on the
+ * click instead of ever reaching the by-hand fallback below (the
+ * whole-branch review of trunk round 43, finding 10). This falls back to a
+ * random hex string rather than crash the button.
+ */
+function randomPinKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+
 export function CoordinateFields({
   idPrefix = 'coord',
   lat,
@@ -145,6 +172,13 @@ export function CoordinateFields({
   // The last pair this component reported, so a value arriving from outside — the
   // current position, or a location being edited — is told apart from our own echo.
   const reported = useRef({ lat, lng });
+  // The key of the picker tab this instance currently has open, or null when
+  // none is (nothing opened yet, or the write failed, or the tab was
+  // refused). A message bearing any other key — including one this same
+  // component minted for an earlier tab, or a different mounted instance's
+  // tab entirely — is not this open tab's answer and must not move the boxes
+  // (the whole-branch review of trunk round 43, finding 1).
+  const openPickerKey = useRef<string | null>(null);
 
   useEffect(() => {
     if (reported.current.lat === lat && reported.current.lng === lng) return;
@@ -163,6 +197,16 @@ export function CoordinateFields({
       const data = event.data as Partial<PinMessage> | null;
       if (!data || data.type !== PIN_MESSAGE_TYPE) return;
       if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
+      // The correlation check the origin check alone cannot do: two boxes are
+      // never mounted together (LocationsTab.tsx keeps one panel open at a
+      // time), but the picker tab a panel opened outlives the panel closing.
+      // A message bearing no key, a stale key this instance minted for an
+      // earlier tab, or another instance's key entirely is rejected here —
+      // the same-origin check on its own would have let it through and moved
+      // a different client's boxes (finding 1 of the whole-branch review).
+      if (typeof data.key !== 'string' || data.key === '' || data.key !== openPickerKey.current) {
+        return;
+      }
       // Report it the same way `fillFromCurrentPosition` does: `onChange` only,
       // never touching `raw` or `reported` here directly. A point from the
       // picker is a value arriving from outside, not this component's own
@@ -182,7 +226,7 @@ export function CoordinateFields({
   function openPicker(): void {
     if (!mapPicker) return;
     setPickerFailure(null);
-    const pinKey = crypto.randomUUID();
+    const pinKey = randomPinKey();
     // Only a kind-of-place word travels with the point — see PLACE_KIND_LABELS
     // above — and `lat`/`lng` are omitted entirely rather than written as
     // `null` when there is no point yet, so the picker's own "is there a
@@ -209,13 +253,35 @@ export function CoordinateFields({
     }
     // A new tab, never a frame: the picker is its own document with its own
     // policy, and the console's policy refuses to be framed and to frame.
-    // `noopener=no` is deliberate, not an oversight: the picker needs
-    // `window.opener` to post the chosen point back, and both documents are
-    // this app's own origin, so there is nothing to gain by cutting it off.
-    // The URL carries only the opaque key: no point, no emirate, no label —
-    // `.claude/rules/ui.md` forbids personal data in a URL or query string,
-    // and a household's entrance coordinate is exactly that.
-    window.open(`/admin/clients/pin?k=${pinKey}`, '_blank', 'noopener=no');
+    // The features string is `''`, not `'noopener=no'`: a named-target
+    // `window.open` keeps `window.opener` by default, so there was nothing to
+    // gain by asking for it explicitly, and some browsers read any non-empty
+    // features string as a request for a pop-up *window* rather than a tab,
+    // which makes the block this function now checks for more likely (the
+    // whole-branch review of trunk round 43, finding 2). The URL carries only
+    // the opaque key: no point, no emirate, no label — `.claude/rules/ui.md`
+    // forbids personal data in a URL or query string, and a household's
+    // entrance coordinate is exactly that.
+    const opened = window.open(`/admin/clients/pin?k=${pinKey}`, '_blank', '');
+    if (!opened) {
+      // A managed device, or a plain pop-up blocker, refuses the tab and
+      // leaves this call's return value the only sign anything happened — the
+      // blob just written above must not linger unclaimed (finding 2's other
+      // half), and the failure needs the same voice the storage-blocked note
+      // above already uses, not silence.
+      try {
+        window.sessionStorage.removeItem(`mcwellness:pin:${pinKey}`);
+      } catch {
+        // A browser that cannot remove it could not have read it either.
+      }
+      setPickerFailure(
+        'The map could not be opened: this browser blocked the new tab. Enter the coordinates by hand instead.',
+      );
+      return;
+    }
+    // Only now, once a tab genuinely opened, does this key become "the one
+    // this instance is waiting an answer from" — see `openPickerKey` above.
+    openPickerKey.current = pinKey;
   }
 
   function edit(axis: 'lat' | 'lng', value: string) {
