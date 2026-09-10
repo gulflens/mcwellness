@@ -27,18 +27,26 @@
 -- actor this policy narrows is one who holds client_contact and no practice
 -- role at all, which is the household, which is the rule.
 --
--- The six tables are the ones a figure can be read from: what was bought, what
--- credits remain, what was invoiced and on which lines, what was paid, and
--- which rendered invoice or receipt exists. `client` itself is deliberately
--- not here — a young person still sees their own record, their visits and
--- their agreements — and neither is `appointment`.
+-- The seven tables are the ones a figure can be read from: what was bought,
+-- what credits remain, what was invoiced and on which lines, what was paid,
+-- which rendered invoice or receipt exists, and how long a programme was given
+-- (`package_extension`, migration 410 — two dates and the sentence somebody
+-- wrote about why the family asked for longer, which is exactly the kind of
+-- sentence this gate exists for). `client` itself is deliberately not here — a
+-- young person still sees their own record, their visits and their agreements
+-- — and neither is `appointment`.
+--
+-- One source for one rule: a table that carries a figure or the reason behind
+-- one joins this array rather than growing a second restrictive policy of its
+-- own in whichever module happens to own it.
 
 do $$
 declare
   t text;
 begin
   foreach t in array array[
-    'package_purchase', 'entitlement', 'invoice', 'invoice_line', 'payment', 'billing_document'
+    'package_purchase', 'entitlement', 'invoice', 'invoice_line', 'payment', 'billing_document',
+    'package_extension'
   ] loop
     execute format('drop policy if exists portal_money_adults on public.%I', t);
     execute format(

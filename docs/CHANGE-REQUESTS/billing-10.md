@@ -1,12 +1,13 @@
 # billing-10: the seed's term moves with the round, and the live catalogue owes its own data step
 
-Three facts this round could not settle inside `mcwellness-billing`: the seed
+Four facts this round could not settle inside `mcwellness-billing`: the seed
 that every database is built from is a trunk file, not this worktree's to own
 outright; the three programmes already on the live price list are real rows
-nothing in this branch may touch; and the page that says who may read what is
-the trunk's, while this round is the one that adds a table to it. All three
-are recorded here rather than reached for, as `CLAUDE.md` rule 10 requires for
-a shared-zone change.
+nothing in this branch may touch; the page that says who may read what is the
+trunk's, while this round is the one that adds a table to it; and the
+adults-only gate that must now cover that table lives in the client-portal
+stream's policy folder. All four are recorded here rather than reached for, as
+`CLAUDE.md` rule 10 requires for a shared-zone change.
 
 ---
 
@@ -87,8 +88,9 @@ and now ends "…rendered invoice files, and the extensions of a programme
 (`package_extension`)". The policy cell gains `package_extension_readers` and
 `package_extension_writers` beside `ledger_readers`, with a sentence saying
 that the reader policy is `ledger_readers`' audience written out under its own
-name — so the six role cells are unchanged — and one exception noted below.
-No cell's letters move.
+name — so the six role cells are unchanged — and a second saying that the C
+cell's "not a minor's own login" holds for it too, which item 4 below is what
+makes true. No cell's letters move.
 
 **Why.** That section closes with its own rule: *"This section is rewritten in
 the same pull request as any policy that changes it."* This round adds a table
@@ -97,18 +99,18 @@ page would otherwise be wrong for a round, and the only way to discover it
 would be to read every policy file again — which is the work that section
 exists to save.
 
-**One thing the review's premise did not cover, found while writing it.**
-`portal_money_adults` (`db/policies/portal/money.sql`) narrows six tables by
-name — `package_purchase`, `entitlement`, `invoice`, `invoice_line`,
-`payment`, `billing_document` — and `package_extension` is not among them. So
-the Money row's C cell, "own record, and not a minor's own login", is those
-six tables'; a young person's own login is admitted to their own record's
-extension rows by `package_extension_readers` where the same login is refused
-the purchase they extend. Nothing reads that table for a household — the
-portal has no route that names it — so this is a policy wider than its reader,
-not an exposure. It is written into the page as the exception it is, and named
-again under "Left for the billing stream" below as the tidying it wants:
-either the table joins that array or the row says for ever why it does not.
+**One thing the review's premise did not cover, found while writing it — and
+fixed, not recorded.** `portal_money_adults` (`db/policies/portal/money.sql`)
+narrowed six tables by name — `package_purchase`, `entitlement`, `invoice`,
+`invoice_line`, `payment`, `billing_document` — and `package_extension` was
+not among them, so a young person's own login was admitted to their own
+record's extension rows by `package_extension_readers` where the same login is
+refused the purchase they extend. The first draft of this item recorded that
+and left it; the controller ruled on 2026-09-10 that it is fixed rather than
+recorded, because the policy is the floor and not the route, and the free-text
+reason on an extension row is exactly the kind of sentence the adults-only
+gate exists for. `package_extension` is now the seventh table in that array
+(**item 4** below), and the Money row says so.
 
 **Which spec.** `docs/SECURITY.md` "Who may read what" (written 2026-09-06,
 trunk round 34) and `db/policies/billing/ledger.sql`.
@@ -120,8 +122,57 @@ rule requires it here rather than a round later.
 
 ---
 
-**None of the three blocked the round.** Items 1 and 3 are applied; item 2 is
-owed and recorded, awaiting the operator's word at the live pass.
+## 4. `db/policies/portal/money.sql` — `package_extension` joins the adults-only gate
+
+**What.** One table name added to the array `portal_money_adults` loops over.
+It read:
+
+> 'package_purchase', 'entitlement', 'invoice', 'invoice_line', 'payment', 'billing_document'
+
+and now ends `, 'package_extension'`, with the comment above it saying seven
+tables rather than six and why the seventh belongs. Nothing else about the
+policy changes: the same restrictive `select` clause, the same
+`app.actor_is_adult_contact_of`, the same staff-role terms.
+
+**Why.** `package_extension` (migration 410, this round) carries two dates and
+a free-text sentence about why a household asked for longer, and
+`package_extension_readers` admits any contact of the record through
+`app.actor_is_contact_of`. A young person's own portal login therefore read an
+extension of their own programme while the same login is refused the purchase
+it belongs to. That no route reads the table for a household is not the
+argument: the policy is the floor and the route is the courtesy
+(`docs/SECURITY.md`, layer 6), and the reason on an extension row is exactly
+what the adults-only gate is for. The controller ruled it fixed rather than
+recorded on 2026-09-10.
+
+One source for one rule, rather than a second restrictive policy in billing's
+own `ledger.sql`: a table that carries a figure, or the reason behind one,
+joins this array.
+
+**Which spec.** `docs/SPEC/client-portal.md` sections 5 (rule 5) and 6.5, and
+`app.actor_is_adult_contact_of` (migration 702).
+
+**The file.** `db/policies/portal/money.sql`, the client-portal stream's
+(`docs/SPEC/OWNERSHIP.md`: `db/policies/portal/**`): *applied by the builder on
+the branch*, with three more of that stream's files carried with it —
+`tests/portal/db/money_visibility.test.ts` (the case that proves it: a young
+person's own login reads none of the household's extension rows on the day
+before their eighteenth birthday, and the mother reads its one), and two
+comments that counted the tables, in `tests/portal/db/support.ts` and
+`app/api/portal/money.ts`. No migration: a policy change never needs one
+(`.claude/rules/data-model.md`).
+
+**One thing this cannot reach.** Migration 702's `-- rollback:` block lists a
+`drop policy` line per table and names six. It is a merged migration, so it is
+not edited (`.claude/rules/data-model.md`: never edit a merged migration);
+anybody rolling 702 back must drop `portal_money_adults` on
+`package_extension` as well. Named here because that block is now one line
+short and nothing else would say so.
+
+---
+
+**None of the four blocked the round.** Items 1, 3 and 4 are applied; item 2
+is owed and recorded, awaiting the operator's word at the live pass.
 
 ---
 
@@ -169,11 +220,9 @@ them is a defect on this branch.
   — `extension_limit_reached` and `ended_too_long_ago` — each have a console
   case as well. The behaviour exists and is tested at the route; only the
   screen's rendering of it is unproved (house review 1, D4).
-- **`portal_money_adults` does not name `package_extension`.** Found while
-  writing item 3 above, and the one place the new table is not exactly the
-  purchase's equal: that policy narrows six tables by name, so a young
-  person's own portal login reads their own record's extension rows where the
-  same login is refused the purchase those rows extend. No route reads the
-  table for a household, so nothing is exposed today. The tidying is the same
-  one the bullet above wants — the table joins the array, or the page says for
-  ever why it does not.
+- **`portal_money_adults` did not name `package_extension` — done, not owed.**
+  Found while writing item 3 and left recorded in the first draft of this
+  round; the controller ruled on 2026-09-10 that a floor is fixed rather than
+  minuted. `package_extension` is the seventh table in that array as of item 4
+  above, with a case in `tests/portal/db/money_visibility.test.ts` that fails
+  without it. Nothing is left here.
