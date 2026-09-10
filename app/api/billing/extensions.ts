@@ -78,9 +78,6 @@ const INSERT_EXTENSION_SQL =
 /** The key the two-per-programme guard is enforced by (migration 410). */
 const ORDINAL_CONSTRAINT = 'package_extension_purchase_id_ordinal_key';
 
-// Aliased so the returning list can carry the count of extensions the same
-// way every other read of a purchase does, this transaction's new row
-// included.
 /**
  * Postgres: unique_violation on that key, and on no other. It is a rival
  * request that reached the insert first with the same ordinal — the two
@@ -99,6 +96,9 @@ function isOrdinalConflict(error: unknown): boolean {
   );
 }
 
+// Aliased `p` so the returning list can carry the count of extensions the
+// same way every other read of a purchase does — this transaction's new row
+// included, because the count is taken after the insert above.
 const EXTEND_SQL =
   'update package_purchase p set extended_to = $2, extension_reason = $3 where p.id = $1 ' +
   'returning p.id, p.client_id, p.package_id, p.package_name, p.package_name_ar, ' +
