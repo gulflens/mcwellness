@@ -1079,9 +1079,11 @@ nine and ten; see the records on pull requests 73 to 83).
     `domain/billing/extension.ts` (`termWords`, `nextExtension`,
     `MAX_EXTENSIONS`); the extension route
     (`POST /api/billing/package-purchases/:id/extension`, a reason alone,
-    409 `extension_limit_reached` on a third, and a race between two
-    requests for the same ordinal answered the same way instead of as an
-    internal error); the drawer that offers it, counts to two and says so;
+    409 `extension_limit_reached` on a third, 409 `ended_too_long_ago` when
+    three more months would still be behind today, and a race between two
+    requests for the same ordinal answered 409 `extended_by_someone_else`
+    instead of as an internal error); the drawer that offers it, counts to
+    two and says so;
     the term said above the Sell drawer's button and on the invoice's
     package line in both languages; the Add package drawer's own default
     moved to six; the seed's own three programmes moved to six months

@@ -68,16 +68,24 @@ const INSERT_EXTENSION_SQL =
 // Aliased so the returning list can carry the count of extensions the same
 // way every other read of a purchase does, this transaction's new row
 // included.
+/** The key the two-per-programme guard is enforced by (migration 410). */
+const ORDINAL_CONSTRAINT = 'package_extension_purchase_id_ordinal_key';
+
 /**
- * Postgres: unique_violation. Here, always a rival request that reached the
- * insert first with the same ordinal — the two counted zero prior extensions
- * apiece under read committed, computed the same next ordinal, and only one
- * of them can hold `package_extension_purchase_id_ordinal_key` (migration
- * 410).
+ * Postgres: unique_violation on that key, and on no other. It is a rival
+ * request that reached the insert first with the same ordinal — the two
+ * counted zero prior extensions apiece under read committed, computed the
+ * same next ordinal, and only one of them can hold the key. The constraint is
+ * named rather than argued: the table's other unique keys are uuid-defaulted
+ * and unreachable today, and a 23505 from anywhere else is a fault to be
+ * raised, not a refusal to be reported.
  */
 function isOrdinalConflict(error: unknown): boolean {
   return (
-    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: string }).code === '23505' &&
+    (error as { constraint?: string }).constraint === ORDINAL_CONSTRAINT
   );
 }
 
@@ -164,7 +172,11 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
         throw error;
       }
       await db.query('rollback to savepoint extension_attempt');
-      return c.json({ error: 'conflict', code: 'extension_limit_reached', requestId }, 409);
+      // The race's own code, not the count's. This programme has not had its
+      // two: somebody else took the one this request had counted on, a second
+      // ago. Telling the coordinator to arrange a refund and a new sale on
+      // that would be a money instruction given on false facts.
+      return c.json({ error: 'conflict', code: 'extended_by_someone_else', requestId }, 409);
     }
 
     // The purchase keeps the latest extension's end and reason beside the

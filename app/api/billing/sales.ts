@@ -89,10 +89,22 @@ const INSERT_PURCHASE_SQL =
 /** The practice opened in 2024; a sale before that is a mistyped year. */
 const EARLIEST_SALE_ON = '2024-01-01';
 
-/** Postgres: unique_violation. Here, always the idempotency key. */
+/** The key a repeated press collides with (migration 403's `unique (tenant_id, idempotency_key)`). */
+const PURCHASE_IDEMPOTENCY_CONSTRAINT = 'package_purchase_tenant_id_idempotency_key_key';
+
+/**
+ * Postgres: unique_violation on that key, and on no other — the same press
+ * arriving twice. Named rather than assumed: replaying the first answer is
+ * right only for the key, and a 23505 raised by anything else on the purchase
+ * insert is a fault to be raised rather than a sale to be reported as already
+ * made.
+ */
 function isDuplicateKey(error: unknown): boolean {
   return (
-    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: string }).code === '23505' &&
+    (error as { constraint?: string }).constraint === PURCHASE_IDEMPOTENCY_CONSTRAINT
   );
 }
 

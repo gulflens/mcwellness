@@ -400,7 +400,7 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
     ]);
   });
 
-  it('answers a rival extension racing the same ordinal with its own 409, not an internal error', async () => {
+  it('tells the loser of a race that somebody else extended it, not that the two are spent', async () => {
     /**
      * The race is arranged honestly, exactly as the appointments' move
      * route's (tests/scheduling/db/move_and_cancel.test.ts, finding S3): a
@@ -413,6 +413,12 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
      * proves, that abort took the whole transaction down with it and this
      * route answered `internal` 500 instead of the refusal it had already
      * decided on.
+     *
+     * The code it answers is the race's own. `extension_limit_reached` would
+     * tell the coordinator the programme had had both of its extensions and
+     * that the family's remedy is a refund and a new sale — a money
+     * instruction on false facts, when what happened is that the first of the
+     * two was taken a second ago by somebody else.
      */
     const racePurchase = await sellSilverTo(2);
     const raceFrom = racePurchase.expiresOn;
@@ -448,7 +454,7 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
       const res = await pending;
       pending = null;
       expect(res.status).toBe(409);
-      expect(((await res.json()) as { code: string }).code).toBe('extension_limit_reached');
+      expect(((await res.json()) as { code: string }).code).toBe('extended_by_someone_else');
 
       // Only the rival's row: the losing request's own insert never took hold.
       const { rows } = await h.owner.query<{ n: number }>(
