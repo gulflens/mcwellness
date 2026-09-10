@@ -2,8 +2,10 @@
 
 Written 10 September 2026 by Claude for the operator, from the operator's
 answer to decision 9 of `docs/OPERATOR/2026-09-10-decisions.md`: "as
-recommended but with 2 3 month extensions permitted". **Awaiting the
-operator's go.** Nothing reaches the live site until the operator says so.
+recommended but with 2 3 month extensions permitted". **Approved by the
+operator as written on 10 September 2026 at 15:49 on their clock (07:49 UTC),
+with the four defaults below.** The implementation plan follows; nothing
+reaches the live site until the operator says so.
 
 ## What changes, in plain language
 

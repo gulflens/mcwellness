@@ -34,7 +34,6 @@ follows from it:
 | 12 | **Do it for me** | The staging project's leaked legacy service-role key is retired: a new secret key of the current kind is minted, placed in the laptop's staging settings without being shown, and the legacy keys are switched off, which invalidates the old one. Recorded below when done |
 
 ## Done since the answers, the same hour
-
 - **Decision 1.** The books' start day on production is **15 September 2026**,
   set at 21:53 UTC under the founder's account through the API with the
   reason recorded, with the entry count read as zero before and after.
@@ -48,6 +47,7 @@ follows from it:
   its current mode. One click finishes it: Supabase dashboard, project
   `mcwellness` (the staging one), Settings › API Keys, "Disable legacy API
   keys". Nothing on staging still uses them.
+- **Decision 9, approved as written (10 September, 15:49 on the operator's clock):** `docs/PLAN/package-terms.md` — six-month programmes, up to two extensions of three months each at no charge with a reason, said at the point of sale and on the invoice line; the notice period and the fee unchanged. The implementation plan and the build follow in the `billing` worktree; the live site changes only on the operator's word.
 
 ## The twelve decisions
 
