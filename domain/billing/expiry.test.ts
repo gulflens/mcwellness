@@ -14,9 +14,9 @@ import {
  */
 
 describe('expiryOn', () => {
-  it('is twelve months from purchase by default', () => {
-    expect(DEFAULT_EXPIRY_MONTHS).toBe(12);
-    expect(expiryOn('2026-09-03', DEFAULT_EXPIRY_MONTHS)).toBe('2027-09-03');
+  it('is six months from purchase by default', () => {
+    expect(DEFAULT_EXPIRY_MONTHS).toBe(6);
+    expect(expiryOn('2026-09-03', DEFAULT_EXPIRY_MONTHS)).toBe('2027-03-03');
   });
 
   it('crosses the year end without losing a day', () => {

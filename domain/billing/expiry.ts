@@ -13,8 +13,8 @@
 
 import type { IsoDate } from '../shared';
 
-/** Twelve months, the founder's decision of 2026-09-03. Changeable: it is a setting on the package. */
-export const DEFAULT_EXPIRY_MONTHS = 12;
+/** Six months from purchase — the operator's decision 9 of 2026-09-10 (docs/PLAN/package-terms.md); twelve until then. The package row carries its own term; this is the default a new one takes. */
+export const DEFAULT_EXPIRY_MONTHS = 6;
 
 /** The two moments the practice says something. Both counted in whole days remaining. */
 export const EXPIRY_WARNING_DAYS = { first: 60, second: 30 } as const;
