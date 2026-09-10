@@ -56,6 +56,8 @@ const AUTH_FINANCE = '00000000-0000-4000-8000-000000007310';
 const FINANCE_USER = '00000000-0000-4000-8000-000000007311';
 const CONSENT_TEXT = '00000000-0000-4000-8000-000000007312';
 const SESSION_OPEN = '00000000-0000-4000-8000-000000007313';
+/** Another practice's owner, who must reach none of this one's day. */
+const AUTH_OWNER_B = '00000000-0000-4000-8000-000000007317';
 
 // One visit per case, each at its own hour so none of them clash with each
 // other on the practitioner they all start on.
@@ -146,6 +148,8 @@ beforeAll(async () => {
   owner = await freshDatabase();
   await seedTenant(owner, IDS.tenantA, IDS.ownerA, 'Synthetic Studio A');
   await owner.query('update app_user set auth_id = $1 where id = $2', [AUTH.ownerA, IDS.ownerA]);
+  await seedTenant(owner, IDS.tenantB, IDS.ownerB, 'Synthetic Studio B');
+  await owner.query('update app_user set auth_id = $1 where id = $2', [AUTH_OWNER_B, IDS.ownerB]);
   await seedServiceType(owner, IDS.tenantA, MORE_IDS.serviceTypeA, 'nf-session');
 
   await seedUser(owner, {
@@ -460,6 +464,26 @@ describe('POST /api/appointments/:id/reassign', () => {
       expect(res.status).toBe(403);
     }
     // Refused before anything was written, so the visit is still where it was.
+    const untouched = await owner.query<{ status: string; practitioner_id: string }>(
+      'select status::text as status, practitioner_id from appointment where id = $1',
+      [APPT_SAME],
+    );
+    expect(untouched.rows[0]).toEqual({
+      status: 'confirmed',
+      practitioner_id: MORE_IDS.practitionerA,
+    });
+  });
+
+  it("shows another practice nothing of this one's day, and moves none of it", async () => {
+    // Spec section 10: another practice reaches neither route. Their own
+    // owner, with a well-formed body and a reason, sees only that there is no
+    // such visit — row security hides it before the route can refuse it for
+    // any other reason.
+    const res = await call(AUTH_OWNER_B, 'POST', `/api/appointments/${APPT_SAME}/reassign`, {
+      practitionerId: PRACTITIONER_B,
+    });
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { code: string }).code).toBe('appointment_not_found');
     const untouched = await owner.query<{ status: string; practitioner_id: string }>(
       'select status::text as status, practitioner_id from appointment where id = $1',
       [APPT_SAME],
