@@ -1,8 +1,15 @@
 # Hand-over: how to pick this project up in a fresh session
 
-**As of 10 September 2026 (trunk round 41, this file's own pull request).**
+**As of 10 September 2026, 15:30 on the operator's clock (piece twenty-two merged).**
 Production at app.mcwellnessuae.com runs `main` at `05d5358` after twelve live
-passes (`docs/PRODUCTION.md`), with 92 migrations and 26 policy files applied.
+passes (`docs/PRODUCTION.md`), with 92 migrations and 26 policy files applied;
+`main` itself is at `4f89a46` — trunk round 42 and **piece twenty-two, the
+dispatcher's board** (pull request 147, migration 210) — which production has
+not yet received: the thirteenth live pass waits on the operator's word.
+Staging holds all 93 migrations after the seventeenth pass (`docs/STAGING.md`)
+and serves the merged build on port 3100 from the `mcwellness-dispatch`
+worktree, because the laptop checkout sits on somebody's `change-password`
+branch with an uncommitted change and was not switched.
 Live on it: Books, the website's enquiry door and its office screen, Settings ›
 Team, the in-process scheduler (the books posted at 03:00 Dubai and the erasure
 sweep hourly; any second instance on the same database sets `SCHEDULER=off`),
@@ -18,8 +25,9 @@ mcwellness-93) listed twelve decisions, nine roadmap areas and nine loose ends;
 round 41 closed the loose ends that were code or record
 (`docs/CHANGE-REQUESTS/trunk-notes.md`, round 41) and wrote the decisions as
 **`docs/OPERATOR/2026-09-10-decisions.md`**, which is what waits on the
-operator now. **The next thing to build is the dispatcher's board** (section 10,
-step 13), then the two billing plans and piece twelve's. Everything from here to section 1 is the state as it was written on
+operator now. **The dispatcher's board is built and merged** (section 10, step 14); the
+next things are the two billing plans (decision 9's `docs/PLAN/package-terms.md`
+awaits the operator's go) and piece twelve's plan. Everything from here to section 1 is the state as it was written on
 8 September at 02:35, kept as the record of that night; sections 2 and 8
 open with a dated note saying what has moved since, and section 10 carries
 the steps as items 9 to 12.
@@ -1051,11 +1059,20 @@ nine and ten; see the records on pull requests 73 to 83).
     the next artefact; then two short billing plans for the operator's
     approval, one takings figure for everyone (decision 4) and package expiry
     with two three-month extensions (decision 9); then piece twelve's plan.
-14. **Piece twenty-two, the board (this pull request):** built from
-    `docs/superpowers/plans/2026-09-10-dispatch-board.md` in the `dispatch`
-    worktree; migration 210; the board at `/admin/schedule/board`; a
-    reassignment as two rows with a reason. Next: pieces twenty-three to
-    twenty-five with plans of their own, after the two billing plans.
+14. **Piece twenty-two, the board (pull request 147, merged as `4f89a46`):**
+    built from `docs/superpowers/plans/2026-09-10-dispatch-board.md` in the
+    `dispatch` worktree by nine tasks, each reviewed and re-checked, then a
+    whole-branch review, a fix wave and its re-check, then the house's
+    combined review, one fix round and its re-check (all on the pull request);
+    migration 210; the board at `/admin/schedule/board`; a reassignment as
+    two rows with a reason; `docs/SPEC/dispatch.md` amended in place where
+    the build refined it, and `docs/CHANGE-REQUESTS/dispatch-01.md` closing
+    with what is left for the scheduling stream. The seventeenth staging pass
+    followed the merge (`docs/STAGING.md`). Still owed: the thirteenth live
+    pass (round 42, the board, migration 210), on the operator's word; and
+    `pnpm db:migrate` plus a restart of `pnpm dev` in the laptop checkout
+    once it is back on `main`. Next: pieces twenty-three to twenty-five with
+    plans of their own, after the two billing plans.
 
 ## 11. Where Claude's own memory lives
 
