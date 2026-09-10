@@ -71,6 +71,10 @@ their English twins are still 1.0. That asymmetry is the truth: one text was
 corrected and the other was not, and a version belongs to a document rather
 than to a pair.
 
+## One signature can cover several of these
+
+Since 10 September 2026 a household may sign every purpose it needs — participation and brain-map/neurofeedback information always, home visits because every client of this practice trains at home, a guardian's own consent when the client is a child — in one sitting rather than one scroll and one signature per purpose (`POST /api/clients/:id/consents/bundle`, `docs/SPEC/client-record.md` section 7). Nothing here changes for that: the household still reads each purpose's own full text before signing, each consent still names the exact wording document it was read against, and no version of any file above moved. What changes is only the evidence — one signature image, filed once and shared by every row it covers, its own foot naming the purposes — never the words a person reads and agrees to.
+
 ## The five years are a floor, not a timer
 
 `notices/your-information.en.md` and `health-data.en.md` say the practice keeps
