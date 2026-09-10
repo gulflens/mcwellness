@@ -5,22 +5,24 @@
  * this app can read it (docs/SPEC/route-planning.md section 8, trunk round
  * 43, "the pin on a map").
  *
- * **Its own module, not exported from the page — but not for the reason a
- * comment here once gave.** It is not to keep the page, and the Places
- * library it loads, out of the console's bundle: `app/shell/App.tsx` already
- * imports `PinPickerPage` statically for its route, so the page is in that
- * bundle regardless, and Places is never bundled at all — it arrives as a
- * runtime `<script>` tag, the same for every document that loads it (the
- * whole-branch review of trunk round 43, finding 8: that story was never
- * true). The real reason is ownership: `app/shell/components/
- * CoordinateFields.tsx` is a plain console component with callers across the
- * admin app, and it must not name the widened, security-sensitive page it
- * opens as an import target — the two are deliberately separate documents
- * with separate content security policies (`app/api/_middleware/
- * security.ts`, `MAP_DOCUMENT_PATHS`), and a direct import would survive a
- * future code-split that lazy-loads the page for exactly that separation,
- * quietly re-coupling them. `pinMessage.ts` carries nothing but the shape,
- * so both sides import it and neither names the other.
+ * **Its own module, not exported from the page, for two reasons — and the
+ * second is the one that lasts.** The first is the bundle: `app/shell/
+ * App.tsx` loads `PinPickerPage` lazily, so a console component importing the
+ * page would drag the widened document's screen into the console's own chunk
+ * and undo that split. (This half of the story has been true, then false,
+ * then true again inside one round: the whole-branch review of trunk round 43,
+ * finding 8, correctly struck it out when the page was imported statically,
+ * and pull request 152's code-splitting restored it hours later. That is
+ * precisely why it is not the reason to rely on.) The second does not move:
+ * ownership. `app/shell/components/CoordinateFields.tsx` is a plain console
+ * component with callers across the admin app, and it must not name the
+ * widened, security-sensitive page it opens as an import target — the two are
+ * deliberately separate documents with separate content security policies
+ * (`app/api/_middleware/security.ts`, `MAP_DOCUMENT_PATHS`), and that stays
+ * true however the bundler is configured next.
+ *
+ * `pinMessage.ts` carries nothing but the shape, so both sides import it and
+ * neither names the other.
  */
 
 export const PIN_MESSAGE_TYPE = 'mcwellness:pin';
