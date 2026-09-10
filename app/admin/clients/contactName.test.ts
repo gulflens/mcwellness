@@ -24,4 +24,11 @@ describe('contactDisplayName', () => {
       contactDisplayName({ givenName: null, familyName: null, relationship: 'guardian' }, client),
     ).toBe('Guardian');
   });
+
+  it('deduplicates the erased-client placeholder for a self contact on an erased record', () => {
+    const erasedClient = { givenName: 'Erased client', familyName: 'Erased client' };
+    expect(
+      contactDisplayName({ givenName: null, familyName: null, relationship: 'self' }, erasedClient),
+    ).toBe('Erased client');
+  });
 });

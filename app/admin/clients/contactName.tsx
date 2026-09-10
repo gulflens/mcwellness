@@ -71,7 +71,7 @@ export function contactDisplayName(
   const own = contactName(contact);
   if (own) return own;
   if (contact.relationship === 'self') {
-    return [client.givenName, client.familyName].filter(Boolean).join(' ').trim();
+    return clientHeadingName(client.givenName, client.familyName);
   }
   return relationshipLabel(contact.relationship);
 }
