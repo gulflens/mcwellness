@@ -65,3 +65,36 @@ describe('invoice kind single_session', () => {
     });
   });
 });
+
+describe('invoice.discount_reason (411 section 3)', () => {
+  it('refuses a blank reason, the same bound package_purchase.discount_reason (409) uses', async () => {
+    await rolledBack(h.owner, async () => {
+      await asPractice();
+      await rejectsWith(
+        h.owner,
+        CHECK_VIOLATION,
+        'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, gross_fils, discount_reason) ' +
+          "values ($1, $2, app.next_invoice_number(), 'single_session', $3, 70000, 0, 70000, '   ')",
+        [h.data.tenant.id, h.clientId(0), SEED_TODAY],
+      );
+    });
+  });
+
+  it('accepts a real reason, and null when there was no extra discount to explain', async () => {
+    await rolledBack(h.owner, async () => {
+      await asPractice();
+      const withReason = await h.owner.query<{ id: string }>(
+        'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, gross_fils, discount_reason) ' +
+          "values ($1, $2, app.next_invoice_number(), 'single_session', $3, 70000, 0, 70000, $4) returning id",
+        [h.data.tenant.id, h.clientId(0), SEED_TODAY, 'Sibling of an existing client.'],
+      );
+      expect(withReason.rows[0]?.id).toBeTruthy();
+      const withoutReason = await h.owner.query<{ id: string }>(
+        'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, gross_fils) ' +
+          "values ($1, $2, app.next_invoice_number(), 'single_session', $3, 70000, 0, 70000) returning id",
+        [h.data.tenant.id, h.clientId(0), SEED_TODAY],
+      );
+      expect(withoutReason.rows[0]?.id).toBeTruthy();
+    });
+  });
+});

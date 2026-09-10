@@ -53,9 +53,11 @@ const CLIENT_SQL =
 
 // The price in force on the day, with the service's name for the line and the
 // answer: the same row app.charge_single_visit reads, chosen the same way
-// (migration 404's own price lookup).
+// (migration 404's own price lookup). p.id was selected and never read; the
+// fix round's review named it dead but harmless and left the choice here —
+// dropped, since nothing downstream names the price row again.
 const PRICE_SQL =
-  'select p.id, p.list_price_fils, p.discount_fils, p.discount_basis_points, ' +
+  'select p.list_price_fils, p.discount_fils, p.discount_basis_points, ' +
   'p.vat_rate_basis_points, p.vat_setting_version, st.name as service_type_name, ' +
   'st.name_ar as service_type_name_ar, ' +
   'app.tenant_charges_vat(app.current_tenant_id()) as vat_registered ' +
@@ -64,10 +66,15 @@ const PRICE_SQL =
   "and p.service_type_id = $1 and p.jurisdiction = $2 and p.recipient_type = $3 and st.status = 'active' " +
   'and p.valid_from <= $4 order by p.valid_from desc limit 1';
 
+// discount_reason (migration 411 section 3) is the only place a single
+// session's extra discount reason can be written: this route writes an
+// invoice and a credit and no purchase row, unlike sales.ts's own
+// INSERT_PURCHASE_SQL, which has package_purchase.discount_reason to carry it
+// instead.
 const INSERT_INVOICE_SQL =
   'insert into invoice (tenant_id, client_id, number, kind, issued_on, net_fils, vat_fils, ' +
-  'gross_fils, idempotency_key, created_by) values (app.current_tenant_id(), $1, ' +
-  "app.next_invoice_number(), 'single_session', $2, $3, $4, $5, $6, app.current_actor_id()) " +
+  'gross_fils, idempotency_key, discount_reason, created_by) values (app.current_tenant_id(), $1, ' +
+  "app.next_invoice_number(), 'single_session', $2, $3, $4, $5, $6, $7, app.current_actor_id()) " +
   'returning id, reference';
 
 // Same shape as sales.ts's own INSERT_LINE_SQL, with service_type_id in place
@@ -181,7 +188,6 @@ export function mountSessionSales(api: Hono<ApiEnv>, now: () => Date = () => new
       return c.json({ error: 'not_found', requestId }, 404);
     }
     const priced = await db.query<{
-      id: string;
       list_price_fils: number;
       discount_fils: number;
       discount_basis_points: number | null;
@@ -233,6 +239,10 @@ export function mountSessionSales(api: Hono<ApiEnv>, now: () => Date = () => new
         vat.vatFils,
         vat.grossFils,
         idempotencyKey,
+        // Null when the price list's own discount was all of it — the extra
+        // discount is the only thing that carries a reason (sales.ts's own
+        // INSERT_PURCHASE_SQL does the same).
+        input.extraDiscount?.reason ?? null,
       ]);
     } catch (error) {
       if (idempotencyKey === null || !isDuplicateKey(error)) throw error;

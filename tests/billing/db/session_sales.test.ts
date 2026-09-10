@@ -69,11 +69,18 @@ describe('POST /api/billing/session-purchases', () => {
       status: 'available',
       allocated_net_fils: 70_000,
     });
-    const invoice = await h.owner.query<{ kind: string; session_id: string | null }>(
-      'select kind, session_id from invoice where id = $1',
-      [body.invoiceId],
-    );
-    expect(invoice.rows[0]).toEqual({ kind: 'single_session', session_id: null });
+    const invoice = await h.owner.query<{
+      kind: string;
+      session_id: string | null;
+      discount_reason: string | null;
+    }>('select kind, session_id, discount_reason from invoice where id = $1', [body.invoiceId]);
+    // No extra discount on this sale, so nothing explains one (migration 411
+    // section 3): the column stays null rather than an empty string.
+    expect(invoice.rows[0]).toEqual({
+      kind: 'single_session',
+      session_id: null,
+      discount_reason: null,
+    });
     const paid = await h.owner.query('select 1 from payment where invoice_id = $1', [
       body.invoiceId,
     ]);
@@ -179,6 +186,94 @@ describe('POST /api/billing/session-purchases', () => {
       }),
     );
     expect(res.status).toBe(403);
+  });
+
+  it('combines a standing discount and an extra one once, and keeps the reason', async () => {
+    // Nothing else in this file prices a service that already carries the
+    // price list's own discount, so a discounted sale's wiring
+    // (combineDiscounts / toDiscount, session-sales.ts:203-212) has never
+    // actually run here — the unit tests cover the arithmetic,
+    // tests/billing/db/session_sales.test.ts had only the 403 above. Priced
+    // fresh: discovery-call carries no price from setPracticePrices, so a
+    // standing ten per cent off is this test's own, and the extra discount is
+    // a further five. Both are percentages, so domain/billing/discount.ts
+    // combines them into one flat fifteen per cent off the list — 15,000 of
+    // 100,000 — never fifteen and then five per cent of an already
+    // discounted figure. Sold by an admin rather than the owner, to prove the
+    // route's own use of the domain functions for the audience
+    // access.ts:mayDiscount actually admits, not only for the role every
+    // other case in this file happens to use.
+    const priced = await h.call('POST', '/api/billing/prices', SEEDED.owner, {
+      serviceTypeId: h.serviceTypeId('discovery-call'),
+      listPriceFils: 100_000,
+      discount: { kind: 'percent', basisPoints: 1000 },
+      validFrom: SEED_TODAY,
+      amendmentReason: 'A launch discount of ten per cent on the discovery call.',
+    });
+    expect(priced.status).toBe(201);
+
+    const res = await h.call(
+      'POST',
+      '/api/billing/session-purchases',
+      SEEDED.admin,
+      sale({
+        clientId: h.clientId(5),
+        serviceTypeId: h.serviceTypeId('discovery-call'),
+        extraDiscount: {
+          discount: { kind: 'percent', basisPoints: 500 },
+          reason: 'A further five per cent agreed on the call.',
+        },
+        payment: { method: 'cash', amountFils: 85_000, reference: 'DOOR-2' },
+      }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as SellSessionResponse;
+    expect(body.netFils).toBe(85_000);
+    expect(body.vatFils).toBe(0);
+    expect(body.grossFils).toBe(85_000);
+
+    const invoice = await h.owner.query<{
+      net_fils: number;
+      vat_fils: number;
+      gross_fils: number;
+      discount_reason: string | null;
+    }>('select net_fils, vat_fils, gross_fils, discount_reason from invoice where id = $1', [
+      body.invoiceId,
+    ]);
+    expect(invoice.rows[0]).toEqual({
+      net_fils: 85_000,
+      vat_fils: 0,
+      gross_fils: 85_000,
+      discount_reason: 'A further five per cent agreed on the call.',
+    });
+
+    const line = await h.owner.query<{
+      unit_net_fils: number;
+      discount_fils: number;
+      discount_basis_points: number | null;
+      net_fils: number;
+    }>(
+      'select unit_net_fils, discount_fils, discount_basis_points, net_fils from invoice_line where invoice_id = $1',
+      [body.invoiceId],
+    );
+    expect(line.rows[0]).toEqual({
+      unit_net_fils: 100_000,
+      discount_fils: 15_000,
+      discount_basis_points: 1500,
+      net_fils: 85_000,
+    });
+
+    const entitlement = await h.owner.query<{ allocated_net_fils: number }>(
+      'select allocated_net_fils from entitlement where id = $1',
+      [body.entitlementId],
+    );
+    expect(entitlement.rows[0]?.allocated_net_fils).toBe(85_000);
+
+    const payment = await h.owner.query<{ amount_fils: number }>(
+      'select amount_fils from payment where invoice_id = $1',
+      [body.invoiceId],
+    );
+    expect(payment.rows[0]?.amount_fils).toBe(85_000);
   });
 
   it('answers three presses at once the same way, and sells once', async () => {

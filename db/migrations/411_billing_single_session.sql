@@ -90,7 +90,44 @@ comment on column public.invoice.idempotency_key is
 create unique index invoice_one_per_idempotency_key
   on invoice (tenant_id, idempotency_key) where idempotency_key is not null;
 
+------------------------------------------------------------------------------
+-- 3. The extra discount's reason, for the one sale that has nowhere else to
+--    keep it.
+--
+--    `SellSessionInput.extraDiscount.reason` (app/api/billing/ledger-schema.ts)
+--    is required and length-checked the moment an actor asks for an extra
+--    discount, and until now the route read it only to decide whether the
+--    actor's role was allowed to give one — the figure it named went into the
+--    arithmetic and the sentence explaining it went nowhere. A package sale
+--    does not have this problem: its reason sits on
+--    package_purchase.discount_reason (409 section 4), the row the sale
+--    writes beside its invoice. A single-session sale writes an invoice and a
+--    credit and no purchase row — the credit already points at the invoice
+--    rather than the other way round (403's entitlement_source_is_named,
+--    section 1's comment above) — so the invoice is the only row left that
+--    could hold it. That is the identical argument section 2 above makes for
+--    idempotency_key: nothing else is written when a session is sold, so
+--    whatever a repeat has to be read back from, or a discount explained by,
+--    has to live here.
+--
+--    Not discount_basis_points beside it: invoice_line already carries the
+--    combined share and the combined sum (408 section 3), so a second column
+--    naming the same split would only be the same fact stored twice.
+--
+--    The bound is the one package_purchase.discount_reason and
+--    invoice.waiver_reason (408) already use, so a reason means the same
+--    thing wherever the practice writes one.
+------------------------------------------------------------------------------
+alter table invoice add column discount_reason text
+  check (length(btrim(discount_reason)) between 1 and 200);
+comment on column public.invoice.discount_reason is
+  'Why an extra discount was given at a single-session sale (migration 411). Null when the '
+  'price list''s own discount was all of it — the only thing an extra discount alone carries, '
+  'since a single_session invoice has no purchase row to hold it instead, unlike a package sale''s '
+  'package_purchase.discount_reason (409 section 4).';
+
 -- rollback:
+--   alter table invoice drop column if exists discount_reason;
 --   drop index if exists invoice_one_per_idempotency_key;
 --   alter table invoice drop column if exists idempotency_key;
 --   alter table invoice drop constraint if exists invoice_source_matches_kind;
