@@ -10,10 +10,21 @@
    (docs/SPEC/responsive-console.md section 9); no width here is invented. */
 
 .board {
-  /* The names column and the gap after it, named once so the axis across the
-     top and the lanes beneath it cannot drift apart. */
+  /* The names column, the gap after it, and how wide a quarter of an hour is
+     at its narrowest: named once so the axis across the top, the lanes
+     beneath it and the rules under both cannot drift apart. */
   --board-names: 11rem;
   --board-gap: var(--s-3);
+  --board-quarter: var(--s-6);
+  /* What the day occupies at that narrowest. The rows and the hour heads are
+     stretched items in a scrolling flex column, so their inline size is the
+     scroll box's — and on a day wider than the window their rules stopped at
+     the fold as soon as it was scrolled (the seeded walk, spec 13). A floor
+     of the grid's own minimum makes each of them as wide as the content it
+     holds, while `1fr` still fills a window wider than the day. */
+  --board-day: calc(
+    var(--board-names) + var(--board-gap) + var(--board-columns) * var(--board-quarter)
+  );
 
   display: flex;
   flex-direction: column;
@@ -115,7 +126,12 @@ button.board__block {
   .board__hours,
   .board__lane {
     display: grid;
-    grid-template-columns: repeat(var(--board-columns), minmax(var(--s-6), 1fr));
+    grid-template-columns: repeat(var(--board-columns), minmax(var(--board-quarter), 1fr));
+  }
+
+  .board__hours,
+  .board__row {
+    min-inline-size: var(--board-day);
   }
 
   .board__hours {
