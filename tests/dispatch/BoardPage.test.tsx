@@ -46,10 +46,14 @@ const at = (time: string) => new Date(`${DATE}T${time}:00+04:00`).toISOString();
 
 const CEDAR = '00000008-0000-4000-8000-000000000002';
 const SAGE = '00000008-0000-4000-8000-000000000004';
+/** A practitioner who has left, still a row because a visit is still theirs (spec 4.2). */
+const ROWAN = '00000008-0000-4000-8000-000000000005';
 const FINISHED_VISIT = '00000008-0000-4000-8000-000000000101';
 const LATE_VISIT = '00000008-0000-4000-8000-000000000102';
 /** A second visit that can still change hands, so a drag can re-target the drawer. */
 const LIVE_VISIT = '00000008-0000-4000-8000-000000000104';
+/** The leaver's own visit, the one nobody has taken off them yet. */
+const LEAVERS_VISIT = '00000008-0000-4000-8000-000000000105';
 const SERVICE = {
   id: '00000008-0000-4000-8000-000000000003',
   name: 'Neurofeedback session',
@@ -65,6 +69,7 @@ const BOARD: BoardResponse = {
     {
       practitionerId: CEDAR,
       displayName: 'Cedar Ridge',
+      active: true,
       visits: [
         {
           appointmentId: FINISHED_VISIT,
@@ -119,7 +124,44 @@ const BOARD: BoardResponse = {
         },
       ],
     },
-    { practitionerId: SAGE, displayName: 'Sage Harbour', visits: [] },
+    { practitionerId: SAGE, displayName: 'Sage Harbour', active: true, visits: [] },
+  ],
+};
+
+/**
+ * The same day with a practitioner who has left the practice on it, holding a
+ * visit nobody has taken off them yet (spec 4.2). They are a row, so the visit
+ * is on the board; they are not somebody a visit can be handed to, because the
+ * route refuses a leaver as `practitioner_not_found` (spec 6.2).
+ */
+const WITH_A_LEAVER: BoardResponse = {
+  ...BOARD,
+  practitioners: [
+    ...BOARD.practitioners,
+    {
+      practitionerId: ROWAN,
+      displayName: 'Rowan Meadow',
+      active: false,
+      visits: [
+        {
+          appointmentId: LEAVERS_VISIT,
+          windowStart: at('15:00'),
+          windowEnd: at('15:45'),
+          status: 'confirmed',
+          state: 'agreed',
+          client: {
+            id: '00000008-0000-4000-8000-000000000014',
+            givenName: 'Maple',
+            familyName: 'Orchard',
+          },
+          serviceType: SERVICE,
+          emirate: 'DXB',
+          checkedInAt: null,
+          closedAt: null,
+          lateness: { late: false, byMinutes: 0 },
+        },
+      ],
+    },
   ],
 };
 
@@ -490,6 +532,28 @@ describe('BoardPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Juniper Valley/ }));
     const select = (await screen.findByLabelText('To')) as HTMLSelectElement;
     expect([...select.options].map((option) => option.textContent)).toEqual(['Sage Harbour']);
+  });
+
+  it('never offers a practitioner who has left the practice', async () => {
+    // Their row is on the board, because the visit still against their name
+    // must be somewhere a dispatcher can see it (spec 4.2). Handing a visit to
+    // them is a different thing, and the route refuses it (spec 6.2), so the
+    // drawer does not offer it in the first place.
+    mount({ board: WITH_A_LEAVER });
+    expect(await screen.findByRole('region', { name: 'Rowan Meadow' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Juniper Valley/ }));
+    const select = (await screen.findByLabelText('To')) as HTMLSelectElement;
+    expect([...select.options].map((option) => option.textContent)).toEqual(['Sage Harbour']);
+  });
+
+  it('opens nothing at all when a visit is dropped on a leaver', async () => {
+    mount({ board: WITH_A_LEAVER });
+    const block = await screen.findByRole('button', { name: /Juniper Valley/ });
+    fireEvent.dragStart(block, { dataTransfer: { setData: vi.fn(), getData: () => '' } });
+    fireEvent.drop(screen.getByRole('region', { name: 'Rowan Meadow' }), {
+      dataTransfer: { getData: () => LATE_VISIT },
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('sends the reason and the new practitioner, and redraws on success', async () => {

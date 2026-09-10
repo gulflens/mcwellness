@@ -178,9 +178,17 @@ export function BoardPage() {
     board ? board.practitioners.flatMap((p) => p.visits.map(blockOf)) : [],
   );
 
-  /** Open the drawer for a block dropped on another practitioner's row. */
+  /**
+   * Open the drawer for a block dropped on another practitioner's row.
+   *
+   * A row that is not somebody a visit can be handed to takes nothing: a
+   * practitioner who has left keeps their row while a visit is still theirs
+   * (spec 4.2), and the route refuses a leaver as `practitioner_not_found`
+   * (spec 6.2), so a drop on them opens no drawer rather than one that could
+   * only be refused.
+   */
   function pickUp(appointmentId: string, onto: BoardPractitioner) {
-    if (!board) return;
+    if (!board || !onto.active) return;
     for (const practitioner of board.practitioners) {
       for (const visit of practitioner.visits) {
         if (visit.appointmentId !== appointmentId) continue;
@@ -311,7 +319,7 @@ export function BoardPage() {
           from={drawer.from}
           initialTo={drawer.to}
           practitioners={board.practitioners.filter(
-            (p) => p.practitionerId !== drawer.from.practitionerId,
+            (p) => p.active && p.practitionerId !== drawer.from.practitionerId,
           )}
           onClose={() => setDrawer(null)}
           onDone={() => {

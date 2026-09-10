@@ -466,6 +466,15 @@ export type BoardVisit = z.infer<typeof BoardVisit>;
 export const BoardPractitioner = z.object({
   practitionerId: z.uuid(),
   displayName: z.string(),
+  /**
+   * Whether they still work here. A practitioner who has left keeps a row for
+   * as long as a visit is still against their name (spec 4.2) — a visit nobody
+   * can see is a visit nobody drives to — but a visit may not be handed to
+   * them, which the route refuses as `practitioner_not_found` (spec 6.2). The
+   * board reads this to keep the two apart: the row is drawn, the drawer's
+   * target list is not offered it, and a drop on it does nothing at all.
+   */
+  active: z.boolean(),
   /** In window order. Empty for an idle practitioner, who is still a row. */
   visits: z.array(BoardVisit),
 });

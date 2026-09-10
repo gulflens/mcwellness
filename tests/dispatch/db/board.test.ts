@@ -369,6 +369,13 @@ describe('GET /api/appointments/board', () => {
     expect(body.practitioners.map((p) => p.practitionerId)).not.toContain(PRACTITIONER_GONE);
     const left = body.practitioners.find((p) => p.practitionerId === PRACTITIONER_LEFT);
     expect(left?.visits.map((v) => v.appointmentId)).toEqual([APPT_LEFT]);
+    // The row says which of the two it is, because a leaver may hold a visit
+    // and may not be handed one: the screen filters its own target list on
+    // this rather than offering somebody the route refuses (spec 6.2).
+    expect(left?.active).toBe(false);
+    expect(
+      body.practitioners.filter((p) => p.practitionerId !== PRACTITIONER_LEFT).map((p) => p.active),
+    ).toEqual([true, true]);
     // Row order is the practice's own list, by name (spec 4.2).
     expect(body.practitioners.map((p) => p.displayName)).toEqual([
       'Synthetic Practitioner A',
