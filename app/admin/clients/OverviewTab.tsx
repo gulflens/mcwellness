@@ -5,7 +5,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ActivationSummary } from './ActivationSummary';
 import { ErasureSection } from './ErasureSection';
-import { contactName } from './contactName';
+import { contactDisplayName } from './contactName';
 import { canActivate, practiceToday, toActivationRecord } from './activation';
 import { canAskForErasure, canErase } from './clientAccess';
 
@@ -133,9 +133,7 @@ export function OverviewTab({
                 {record.contacts.map((contact) => (
                   <li key={contact.id}>
                     <span>
-                      {contactName(contact)
-                        ? `${contactName(contact)} (${(RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship).toLowerCase()})`
-                        : (RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship)}
+                      {`${contactDisplayName(contact, record)} (${(RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship).toLowerCase()})`}
                     </span>
                     {contact.phone ? <span className="numeric muted">{contact.phone}</span> : null}
                   </li>

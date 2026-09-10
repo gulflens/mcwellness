@@ -56,3 +56,22 @@ export function clientHeadingName(givenName: string, familyName: string): string
   if (givenName === ERASED_NAME && familyName === ERASED_NAME) return ERASED_NAME;
   return [givenName, familyName].filter(Boolean).join(' ').trim();
 }
+
+/**
+ * The name a screen shows for a contact, with the one fallback a `self` contact
+ * needs: the wizard files the client's own phone under a contact with no name
+ * of its own, so "Unnamed contact — self" on a consent was the client being
+ * asked to sign as nobody (the walk of 10 September). The client's own name is
+ * the honest label; any other unnamed contact keeps the relationship.
+ */
+export function contactDisplayName(
+  contact: Pick<Contact, 'givenName' | 'familyName' | 'relationship'>,
+  client: { givenName: string; familyName: string },
+): string {
+  const own = contactName(contact);
+  if (own) return own;
+  if (contact.relationship === 'self') {
+    return [client.givenName, client.familyName].filter(Boolean).join(' ').trim();
+  }
+  return relationshipLabel(contact.relationship);
+}

@@ -12,7 +12,7 @@ import { Button, Note, Select } from '../../shell/components/Controls';
 import { ConsentText } from './ConsentText';
 import { SignaturePad, type SignatureResult } from './SignaturePad';
 import { compressToFit, type UploadFile } from './fileUpload';
-import { contactName, relationshipLabel } from './contactName';
+import { contactDisplayName, contactName, relationshipLabel } from './contactName';
 import { practiceToday, practiceTodayInWords } from './activation';
 
 /**
@@ -347,7 +347,7 @@ export function RecordConsentForm({
         >
           {consenting.map((contact) => (
             <option key={contact.id} value={contact.id}>
-              {contactName(contact) ?? 'Unnamed contact'} —{' '}
+              {contactDisplayName(contact, record)} —{' '}
               {relationshipLabel(contact.relationship).toLowerCase()}
               {contact.isLegalGuardian ? ' (legal guardian)' : ''}
             </option>
