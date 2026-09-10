@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requiredConsents } from './requiredConsents';
+import { requiredConsents, requiredConsentsFor } from './requiredConsents';
 import type { ClientRecord } from './types';
 
 function record(dateOfBirth: string | null): ClientRecord {
@@ -73,6 +73,33 @@ describe('requiredConsents', () => {
     expect(requiredConsents(client, ['home'], '2026-09-02')).toEqual([
       'health_data',
       'home_visit',
+      'participation',
+    ]);
+  });
+});
+
+describe('requiredConsentsFor', () => {
+  it('answers exactly what requiredConsents would, from the date of birth alone', () => {
+    for (const [dateOfBirth, modes, atDate] of [
+      ['1990-01-01', ['home'], '2026-09-02'],
+      ['1990-01-01', [], '2026-09-02'],
+      ['2010-01-01', ['home'], '2026-09-02'],
+      [null, ['home'], '2026-09-02'],
+    ] as const) {
+      expect(requiredConsentsFor({ dateOfBirth }, modes, atDate)).toEqual(
+        requiredConsents(record(dateOfBirth), modes, atDate),
+      );
+    }
+  });
+
+  it('does not need contacts, locations or consent history to answer', () => {
+    // The whole point: a caller with only a date of birth in hand — the
+    // bundle route, before it has read anything else about the client — can
+    // still ask this question without assembling a ClientRecord.
+    expect(requiredConsentsFor({ dateOfBirth: '2015-04-01' }, ['home'], '2026-09-02')).toEqual([
+      'health_data',
+      'home_visit',
+      'minor_participation',
       'participation',
     ]);
   });

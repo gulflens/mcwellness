@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { OFFERED_CONSENT_PURPOSES, requiredConsents, type ConsentPurpose } from '@domain/client';
+import { OFFERED_CONSENT_PURPOSES, requiredConsentsFor, type ConsentPurpose } from '@domain/client';
 import {
   WithdrawConsentResponse,
   type ClientRecordResponse,
@@ -7,20 +7,13 @@ import {
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
-import { practiceToday, toActivationRecord } from './activation';
+import { practiceToday } from './activation';
 import { contactDisplayName } from './contactName';
+import { PURPOSE_LABELS } from './consentPurposeLabels';
 import { DocumentLink } from './DocumentLink';
 import { RecordConsentForm } from './RecordConsentForm';
+import { SignAllForm } from './SignAllForm';
 
-const PURPOSE_LABELS: Record<string, string> = {
-  participation: 'Participation',
-  minor_participation: "Guardian's consent for a child",
-  home_visit: 'Visits at home',
-  health_data: 'Brain-map and neurofeedback information',
-  photo_video: 'Photographs and video',
-  research: 'Research',
-  marketing: 'Marketing',
-};
 const STATUS_LABELS: Record<string, string> = {
   active: 'Active',
   withdrawn: 'Withdrawn',
@@ -84,7 +77,7 @@ function isActiveOn(consent: Consent, today: string, purpose: ConsentPurpose): b
  * are the same job at two moments.
  *
  * Three parts: what this client needs before they can be activated, from
- * `requiredConsents` in domain/client, so a guardian's consent appears the
+ * `requiredConsentsFor` in domain/client, so a guardian's consent appears the
  * moment a date of birth makes the client a child; every purpose with what is
  * on file for it; and, for each, the way to record a new one or withdraw the
  * one standing.
@@ -118,18 +111,29 @@ export function ConsentTab({
   erased?: boolean;
 }) {
   const today = practiceToday();
-  // As a set of plain strings: `requiredConsents` answers with the purposes
-  // activation can ask for, and this list runs over those the practice offers
-  // plus any retired one this household still holds.
-  const required = new Set<string>(requiredConsents(toActivationRecord(record), ['home'], today));
+  // `requiredConsentsFor` answers with the purposes activation can ask for,
+  // from the date of birth alone, and this list runs over those the practice
+  // offers plus any retired one this household still holds.
+  const required = new Set<ConsentPurpose>(
+    requiredConsentsFor({ dateOfBirth: record.dateOfBirth }, ['home'], today),
+  );
   const consenting = record.contacts.filter((contact) => contact.canConsent);
   const [recording, setRecording] = useState<ConsentPurpose | null>(null);
   const [withdrawing, setWithdrawing] = useState<string | null>(null);
+  const [signingAll, setSigningAll] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { apiFetch } = useAuth();
+  const isErased = erased || record.status === 'erased';
+  // At least one required purpose has no active consent: "Sign everything at
+  // once" is offered only then, the same rule that gives it a reason to
+  // exist — a record that already holds everything it needs has nothing left
+  // for one signature to cover.
+  const missingAny = [...required].some(
+    (purpose) => !record.consents.some((consent) => isActiveOn(consent, today, purpose)),
+  );
 
   function nameOf(contactId: string): string {
     const contact = record.contacts.find((candidate) => candidate.id === contactId);
@@ -206,7 +210,7 @@ export function ConsentTab({
 
   return (
     <div className="tab-section">
-      {erased || record.status === 'erased' ? (
+      {isErased ? (
         <Note tone="attention">
           This record has been erased. The consents below are what was agreed; nothing more can be
           recorded or withdrawn.
@@ -222,70 +226,108 @@ export function ConsentTab({
         </Note>
       ) : null}
 
-      <ul className="record-rows">
-        {purposes.map((purpose) => {
-          const history = record.consents.filter((consent) => consent.purpose === purpose);
-          const active = history.find((consent) => isActiveOn(consent, today, purpose));
-          const isRequired = required.has(purpose);
-          return (
-            <li key={purpose} className="record-row">
-              <div className="record-row__main">
-                <p>{PURPOSE_LABELS[purpose] ?? purpose}</p>
-                <p className="small muted">
-                  {active
-                    ? `On file since ${new Date(active.givenAt).toLocaleDateString('en-GB')}`
-                    : isRequired
-                      ? 'Needed before this client can be activated'
-                      : 'Not recorded'}
-                </p>
-                {history.map((consent) => (
-                  <div key={consent.id} className="consent-row__history small muted">
-                    <span>{STATUS_LABELS[consent.status] ?? consent.status}</span>
-                    <span>{METHOD_LABELS[consent.method] ?? consent.method}</span>
-                    <span>Given by {nameOf(consent.givenByContactId)}</span>
-                    <span>{new Date(consent.givenAt).toLocaleDateString('en-GB')}</span>
-                    {consent.withdrawnAt ? (
-                      <span>
-                        Withdrawn {new Date(consent.withdrawnAt).toLocaleDateString('en-GB')}
-                      </span>
-                    ) : null}
-                    {/* Why it went, from the trail rather than a column: a
+      {/* Offered only while something required is still missing: a record
+          that already holds every consent it needs has nothing left for one
+          signature to cover (docs/SPEC/client-record.md section 7). */}
+      {mayWrite && !isErased && missingAny && !signingAll ? (
+        <div className="drawer__actions">
+          <Button
+            variant="primary"
+            onClick={() => {
+              setOutcome(null);
+              setError(null);
+              setSigningAll(true);
+            }}
+          >
+            Sign everything at once
+          </Button>
+          <p className="small muted">
+            One reading, one signature, every consent this client needs.
+          </p>
+        </div>
+      ) : null}
+      {signingAll ? (
+        <SignAllForm
+          clientId={clientId}
+          record={record}
+          onSaved={(signedPurposes) => {
+            setSigningAll(false);
+            setOutcome(
+              `Consents recorded: ${signedPurposes
+                .map((purpose) => (PURPOSE_LABELS[purpose] ?? purpose).toLowerCase())
+                .join(', ')}.`,
+            );
+            onChanged();
+          }}
+          onCancel={() => setSigningAll(false)}
+        />
+      ) : null}
+
+      {signingAll ? null : (
+        <ul className="record-rows">
+          {purposes.map((purpose) => {
+            const history = record.consents.filter((consent) => consent.purpose === purpose);
+            const active = history.find((consent) => isActiveOn(consent, today, purpose));
+            const isRequired = required.has(purpose);
+            return (
+              <li key={purpose} className="record-row">
+                <div className="record-row__main">
+                  <p>{PURPOSE_LABELS[purpose] ?? purpose}</p>
+                  <p className="small muted">
+                    {active
+                      ? `On file since ${new Date(active.givenAt).toLocaleDateString('en-GB')}`
+                      : isRequired
+                        ? 'Needed before this client can be activated'
+                        : 'Not recorded'}
+                  </p>
+                  {history.map((consent) => (
+                    <div key={consent.id} className="consent-row__history small muted">
+                      <span>{STATUS_LABELS[consent.status] ?? consent.status}</span>
+                      <span>{METHOD_LABELS[consent.method] ?? consent.method}</span>
+                      <span>Given by {nameOf(consent.givenByContactId)}</span>
+                      <span>{new Date(consent.givenAt).toLocaleDateString('en-GB')}</span>
+                      {consent.withdrawnAt ? (
+                        <span>
+                          Withdrawn {new Date(consent.withdrawnAt).toLocaleDateString('en-GB')}
+                        </span>
+                      ) : null}
+                      {/* Why it went, from the trail rather than a column: a
                         withdrawal always carries a reason and the tab that
                         asked for it is the tab that should show it back. */}
-                    {consent.withdrawalReason ? (
-                      <span>Reason: {consent.withdrawalReason}</span>
-                    ) : null}
-                    {consent.witnessedByName ? (
-                      <span>Witnessed by {consent.witnessedByName}</span>
-                    ) : null}
-                    {consent.signatureDocumentId ? (
-                      <DocumentLink
-                        clientId={clientId}
-                        documentId={consent.signatureDocumentId}
-                        label="Open what was signed"
-                      />
-                    ) : (
-                      <span>No document filed</span>
-                    )}
-                    {/* The words, not only the signature. A person is entitled to
+                      {consent.withdrawalReason ? (
+                        <span>Reason: {consent.withdrawalReason}</span>
+                      ) : null}
+                      {consent.witnessedByName ? (
+                        <span>Witnessed by {consent.witnessedByName}</span>
+                      ) : null}
+                      {consent.signatureDocumentId ? (
+                        <DocumentLink
+                          clientId={clientId}
+                          documentId={consent.signatureDocumentId}
+                          label="Open what was signed"
+                        />
+                      ) : (
+                        <span>No document filed</span>
+                      )}
+                      {/* The words, not only the signature. A person is entitled to
                         a copy of what they agreed to, and the exact version is on
                         the consent row, so the tab can name it rather than send
                         somebody to the current wording and hope. */}
-                    <DocumentLink
-                      clientId={clientId}
-                      documentId={consent.textDocumentId}
-                      label={
-                        consent.wordingVersion === null
-                          ? 'Open the wording'
-                          : `Wording version ${consent.wordingVersion}`
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-              {mayWrite ? (
-                <div className="record-row__actions">
-                  {/* Recording is offered only for a purpose the practice still
+                      <DocumentLink
+                        clientId={clientId}
+                        documentId={consent.textDocumentId}
+                        label={
+                          consent.wordingVersion === null
+                            ? 'Open the wording'
+                            : `Wording version ${consent.wordingVersion}`
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+                {mayWrite ? (
+                  <div className="record-row__actions">
+                    {/* Recording is offered only for a purpose the practice still
                       asks for. A retired one appears on this row because the
                       household holds it and may withdraw it — but nothing may
                       take a NEW consent for a capability that no longer
@@ -293,98 +335,99 @@ export function ConsentTab({
                       that would otherwise let somebody file one. Migration
                       960's own reasoning: a guard with nothing left to guard
                       is a guard somebody later mistakes for permission. */}
-                  {offered.has(purpose) ? (
-                    <Button
-                      variant="quiet"
-                      disabled={consenting.length === 0}
-                      onClick={() => {
-                        setRecording(purpose);
-                        setWithdrawing(null);
-                        setOutcome(null);
-                      }}
-                    >
-                      {active ? 'Record again' : 'Record'}
-                    </Button>
-                  ) : null}
-                  {active ? (
-                    <Button
-                      variant="quiet"
-                      onClick={() => {
-                        setWithdrawing(active.id);
-                        setRecording(null);
-                        setReason('');
-                        setOutcome(null);
-                      }}
-                    >
-                      Withdraw
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
+                    {offered.has(purpose) ? (
+                      <Button
+                        variant="quiet"
+                        disabled={consenting.length === 0}
+                        onClick={() => {
+                          setRecording(purpose);
+                          setWithdrawing(null);
+                          setOutcome(null);
+                        }}
+                      >
+                        {active ? 'Record again' : 'Record'}
+                      </Button>
+                    ) : null}
+                    {active ? (
+                      <Button
+                        variant="quiet"
+                        onClick={() => {
+                          setWithdrawing(active.id);
+                          setRecording(null);
+                          setReason('');
+                          setOutcome(null);
+                        }}
+                      >
+                        Withdraw
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
 
-              {/* Both panels open inside the row they are about, so pressing
+                {/* Both panels open inside the row they are about, so pressing
                   Record or Withdraw changes the thing that was pressed rather
                   than something a thousand pixels below the fold. */}
-              {active && withdrawing === active.id ? (
-                <div className="record-row__reason">
-                  <PanelHeading>
-                    Withdraw consent: {(PURPOSE_LABELS[purpose] ?? purpose).toLowerCase()}
-                  </PanelHeading>
-                  <p className="small">
-                    Withdrawing takes effect at once. Appointments already in the diary are not
-                    cancelled by this — tell whoever keeps the schedule.
-                  </p>
-                  <Field
-                    id="withdraw-reason"
-                    label="Reason"
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                    hint="Recorded against this withdrawal in the client's history."
-                  />
-                  <div className="drawer__actions">
-                    <Button
-                      variant="secondary"
-                      onClick={() => setWithdrawing(null)}
-                      disabled={busy}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="primary"
-                      disabled={busy || reason.trim() === ''}
-                      onClick={() => void withdraw(active.id)}
-                    >
-                      {busy ? 'Withdrawing…' : 'Withdraw consent'}
-                    </Button>
+                {active && withdrawing === active.id ? (
+                  <div className="record-row__reason">
+                    <PanelHeading>
+                      Withdraw consent: {(PURPOSE_LABELS[purpose] ?? purpose).toLowerCase()}
+                    </PanelHeading>
+                    <p className="small">
+                      Withdrawing takes effect at once. Appointments already in the diary are not
+                      cancelled by this — tell whoever keeps the schedule.
+                    </p>
+                    <Field
+                      id="withdraw-reason"
+                      label="Reason"
+                      value={reason}
+                      onChange={(event) => setReason(event.target.value)}
+                      hint="Recorded against this withdrawal in the client's history."
+                    />
+                    <div className="drawer__actions">
+                      <Button
+                        variant="secondary"
+                        onClick={() => setWithdrawing(null)}
+                        disabled={busy}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        disabled={busy || reason.trim() === ''}
+                        onClick={() => void withdraw(active.id)}
+                      >
+                        {busy ? 'Withdrawing…' : 'Withdraw consent'}
+                      </Button>
+                    </div>
+                    {reason.trim() === '' ? (
+                      <p className="small muted">A withdrawal is not recorded without a reason.</p>
+                    ) : null}
+                    {error ? <Note tone="critical">{error}</Note> : null}
                   </div>
-                  {reason.trim() === '' ? (
-                    <p className="small muted">A withdrawal is not recorded without a reason.</p>
-                  ) : null}
-                  {error ? <Note tone="critical">{error}</Note> : null}
-                </div>
-              ) : null}
+                ) : null}
 
-              {recording === purpose ? (
-                <RecordConsentForm
-                  // Keyed on the purpose: choosing a different consent is a fresh
-                  // form, so the wording, the pad and the read-to-the-end gate all
-                  // start again rather than one purpose's state leaking into another's.
-                  key={purpose}
-                  clientId={clientId}
-                  record={record}
-                  purpose={purpose}
-                  onSaved={() => {
-                    setRecording(null);
-                    setOutcome(`Consent recorded: ${PURPOSE_LABELS[purpose] ?? purpose}.`);
-                    onChanged();
-                  }}
-                  onCancel={() => setRecording(null)}
-                />
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+                {recording === purpose ? (
+                  <RecordConsentForm
+                    // Keyed on the purpose: choosing a different consent is a fresh
+                    // form, so the wording, the pad and the read-to-the-end gate all
+                    // start again rather than one purpose's state leaking into another's.
+                    key={purpose}
+                    clientId={clientId}
+                    record={record}
+                    purpose={purpose}
+                    onSaved={() => {
+                      setRecording(null);
+                      setOutcome(`Consent recorded: ${PURPOSE_LABELS[purpose] ?? purpose}.`);
+                      onChanged();
+                    }}
+                    onCancel={() => setRecording(null)}
+                  />
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }

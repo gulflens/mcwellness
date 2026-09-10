@@ -41,7 +41,7 @@ export { formatMrn } from './formatMrn';
 export { isMinor } from './isMinor';
 export { nextMrn } from './nextMrn';
 export { parseMrn } from './parseMrn';
-export { requiredConsents } from './requiredConsents';
+export { requiredConsents, requiredConsentsFor } from './requiredConsents';
 export * from './types';
 export { validateEmiratesId } from './validateEmiratesId';
 export type { EmiratesIdValidation } from './validateEmiratesId';

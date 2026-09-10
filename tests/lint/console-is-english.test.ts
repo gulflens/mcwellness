@@ -35,12 +35,18 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const WALKED_DIRECTORIES = ['app/admin', 'app/therapist'] as const;
 
 /**
- * The one screen that may render Arabic, and why: the consent wording is the
+ * The screens that may render Arabic, and why: the consent wording is the
  * household's own text, read aloud and signed in its own language on the
  * practice's screen (docs/CONSENT/*.ar.md). It is not console copy — it is the
- * agreement, and the household must see it as it was written.
+ * agreement, and the household must see it as it was written, whether it is
+ * shown one purpose at a time (`RecordConsentForm.tsx`) or stacked for every
+ * purpose a client needs, signed once (`SignAllForm.tsx`, trunk round 43,
+ * part four).
  */
-const ALLOWED = new Set(['app/admin/clients/RecordConsentForm.tsx']);
+const ALLOWED = new Set([
+  'app/admin/clients/RecordConsentForm.tsx',
+  'app/admin/clients/SignAllForm.tsx',
+]);
 
 const CODE_EXTENSIONS = new Set(['.ts', '.tsx']);
 
@@ -113,7 +119,7 @@ describe('the console and the practitioner app are English only', () => {
     expect(lines).toEqual([]);
   });
 
-  it('names the one file that may carry the household’s own language', () => {
+  it('names the files that may carry the household’s own language', () => {
     // The allowlist is a decision, not a leftover: every entry must exist, and
     // must still be the thing it was allowed for.
     for (const file of ALLOWED) {

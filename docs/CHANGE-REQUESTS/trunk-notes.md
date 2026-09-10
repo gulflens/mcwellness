@@ -3416,3 +3416,110 @@ note had gone stale describing a commit no longer being merged). The audit is
 green at this head: 95 migration files checked against `origin/main`, none
 edited, deleted or renamed after merge.
 
+## Round 43 — the walk's fixes, part four: one signature (2026-09-10)
+
+The walk of 10 September (part one of this round, above) found nine actions
+standing between a household and an activated client: three consents, each
+with its own scroll to the end of its wording, its own drawn signature and
+its own typed name. The operator's decision the same afternoon: one
+signature should cover everything a client needs, in one sitting. This is
+that decision, built.
+
+**What the round builds.** `SignaturePad.tsx` takes an optional `caption`,
+printed as a third, smaller line beneath the signed name and the date in
+the filed PNG — the image says on its own face what it was signed for.
+`POST /api/clients/:id/consents/bundle` (`app/api/clients/consents.ts`)
+writes one consent row per purpose a client needs, each against that
+purpose's own current approved wording, all sharing one filed signature, in
+one transaction. It runs, per purpose, every check the single-consent route
+already runs — the wording is current and in the client's own language, the
+giver may give it, the evidence fits the method — before writing a single
+row, so a refusal on the last purpose leaves no earlier ones; and it adds
+two checks of its own, a purpose the client does not need and the same
+purpose named twice in one signing. `domain/client` gains
+`requiredConsentsFor`, the same question `requiredConsents` already
+answered from a full client record, now answerable from a date of birth
+alone — the bundle route and the Consent tab both need it before they have
+anything else about the client to hand, and this keeps the two rules from
+being able to drift apart.
+
+`SignAllForm.tsx` is the screen: every wording the client needs, stacked
+one after another under its own heading, the household reading the whole
+stack before the pad unlocks — the same read-to-the-end gate
+`RecordConsentForm.tsx` already used on one wording at a time, now judged
+against the combined box. One signature is drawn, one bundle is sent, and
+`ConsentTab.tsx` offers "Sign everything at once" above the per-consent
+list only while something required is still missing; choosing it replaces
+the list with the form, and the per-consent form underneath is untouched —
+a re-consent, a withdrawal, a paper form and a verbal re-confirmation at
+the door all still go through it exactly as before. The caption printed
+into the filed image names each purpose in the same words its on-screen
+heading uses: `wrapCaption.ts` breaks the combined names onto as many lines
+as they need, measured against the real font, and the image grows downward
+to hold whatever that produces. A first attempt shortened the labels
+instead, to fit `fillText`'s single line — a fix round of 10 September 2026
+reversed that, because the evidence's own footer is the practice's record
+of what a household agreed to, and cannot say less than what it actually
+read and signed against. Building the screen also found a real gap in
+`tests/lint/console-is-english.test.ts`
+(round 35's own guard, trunk-owned): its allowlist named only
+`RecordConsentForm.tsx` as the one staff screen that may show the
+household's consent wording in Arabic, and `SignAllForm.tsx` needed to
+render the identical text for the identical reason. The allowlist now
+names both.
+
+**The compliance reading.** No wording changed, and no wording changed
+version, for any of this. The screen shows each purpose's own current
+approved text in full; a household reads every word of every consent it is
+signing before the pad unlocks, exactly as it did signing one at a time.
+What changed is only the evidence: one signature image, filed once, its
+foot naming the purposes it covers, and every consent row it stands behind
+still records the exact wording document it was read against — the same
+fact a single consent has always recorded. A withdrawal stays the
+withdrawal of one purpose, on that purpose's own row; it leaves the shared
+image referenced by whichever of the other rows still stand, which is
+honest rather than a gap, because the image is immutable and was never
+about only one purpose, and the withdrawal row itself records which
+purpose ended and why.
+
+**What the round records.** `docs/SPEC/client-record.md` section 7 gains
+"Signing everything at once": the route, its checks, the one image and its
+caption, the refusals, and that a verbal re-confirmation and a withdrawal
+both stay per consent. `docs/CONSENT/README.md` gains one paragraph saying
+a signature may now cover several of these wordings, that each consent
+still names its own, and that no version of any wording moved for it.
+
+**Every file this round touched.** The trunk's own:
+`docs/SPEC/client-record.md`, `docs/CONSENT/README.md`, this file. Outside
+the trunk's own paths, by the integrator's widening for one round
+(`docs/SPEC/OWNERSHIP.md`): `client-record` —
+`app/admin/clients/SignaturePad.tsx` with its test,
+`app/admin/clients/RecordConsentForm.tsx`,
+`app/admin/clients/ConsentTab.tsx`, `app/admin/clients/SignAllForm.tsx`
+(new) with its test, `app/admin/clients/consentPurposeLabels.ts` (new),
+`app/admin/clients/wrapCaption.ts` (new) with its test,
+`app/admin/clients/clients.css`,
+`app/api/clients/consents.ts`, `app/api/clients/record-schema.ts`,
+`domain/client/index.ts`, `domain/client/requiredConsents.ts` with its
+test, and `tests/client/db/consent_bundle.test.ts` (new); plus
+`tests/lint/console-is-english.test.ts`, which is the trunk's own guard and
+is touched here only to add the one file this round's screen needed on its
+allowlist. **No migration, no policy file, no schema change**: the bundle
+route is a new endpoint over tables and columns that already existed, and
+`consent.signature_document_id` was already nullable and already shared by
+a `verbal_witnessed` row with none.
+
+**Gates on the branch head, in this worktree** (`mcwellness-reports`,
+database on port 5438): format, lint, typecheck and the secrets scan (1,512
+tracked files) clean; 2,537 unit tests passed across 218 files; 1,356
+database tests passed across 99 files. The migration audit did not read
+clean earlier in this round, for a reason this round did not create: this
+branch's base predated `db/migrations/410_package_terms.sql`, merged to
+`origin/main` afterwards by the billing stream's own round, so the audit
+read it as a file missing locally rather than one this branch never had
+cause to carry. Merge `f527f36` brought that file, and the rest of that
+round, in. The audit is green at this head — `pnpm audit:migrations`
+reports 95 migration files checked against `origin/main`, none edited,
+deleted or renamed after the merge — and `db/migrations/` remains untouched
+by every commit this round makes of its own.
+

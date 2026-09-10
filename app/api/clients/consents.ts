@@ -5,6 +5,7 @@ import {
   CONSENT_SCAN_KIND,
   CONSENT_SIGNATURE_KIND,
   canGiveConsent,
+  requiredConsentsFor,
   type ConsentPurpose,
 } from '../../../domain/client';
 import { isoDateIn, hasRole, type Actor } from '../../../domain/shared';
@@ -13,9 +14,11 @@ import { canWriteClientRecord } from './access';
 import { currentWording } from './consent-wording';
 import { fileClientDocument } from './document-store';
 import {
+  ConsentBundleResponse,
   ConsentWitnessListResponse,
   IdResponse,
   RecordConsentBody,
+  RecordConsentBundleBody,
   WithdrawConsentResponse,
   type DocumentBytes,
 } from './record-schema';
@@ -398,6 +401,180 @@ export function mountConsents(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       ],
     );
     return c.json(IdResponse.parse({ id: consentId }), 201);
+  });
+
+  /**
+   * `POST /api/clients/:id/consents/bundle` — one signature, every consent the
+   * client needs (the operator's decision of 10 September 2026, trunk round
+   * 43 "one signature"). A walkthrough found the single route above meant
+   * three scrolls and three signatures before a client could start; this
+   * writes one row per purpose against one filed signature instead.
+   *
+   * Every check the single route makes above is made here too, per purpose,
+   * before anything is written: the wording is the current approved one for
+   * that purpose and this client's own language (`checkWording`); the giver
+   * may give it (`canGiveConsent`); the evidence fits the method
+   * (`checkEvidence`). Two checks are the bundle's own. A purpose this client
+   * does not need (`requiredConsentsFor`, domain/client) is refused, so a
+   * screen can never file more than the household was actually shown; and the
+   * same purpose named twice in one signing is refused, since one signing
+   * gives one consent per purpose. `verbal_witnessed` is not a bundle method
+   * at all — it is `home_visit`'s own re-confirmation at the door, never a
+   * first signature and never several purposes at once — so the body's shape
+   * admits only the two methods that actually file evidence.
+   *
+   * The checks for every purpose run to completion before a single row is
+   * written: a refusal on the third purpose must leave no first and second,
+   * and structuring it this way makes that true without leaning on the
+   * request's transaction to undo partial work. The evidence is filed once,
+   * immutably (`fileClientDocument`), and every consent row points at the
+   * same `signature_document_id` — the image is what was signed, and its foot
+   * names the purposes it covers (SignaturePad.tsx, `caption`). Each purpose
+   * supersedes that purpose's own active consent, exactly as the single route
+   * does above.
+   */
+  api.post('/api/clients/:id/consents/bundle', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    const params = ClientParams.safeParse(c.req.param());
+    if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
+    const clientId = params.data.id;
+    const bodyJson = await c.req.json().catch(() => null);
+    const body = RecordConsentBundleBody.safeParse(bodyJson);
+    if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
+
+    // One signing, one consent per purpose: the same purpose named twice would
+    // be two attestations of the same agreement, which is not what a second
+    // row is for (status `superseded` already says "replaced").
+    const purposes = body.data.purposes.map((p) => p.purpose);
+    if (new Set(purposes).size !== purposes.length) {
+      return c.json({ error: 'bad_request', code: 'purpose_repeated', requestId }, 400);
+    }
+
+    const statusRow = await db.query<{ status: string | null }>(
+      'select app.client_status_for($1) as status',
+      [clientId],
+    );
+    const clientStatus = statusRow.rows[0]?.status ?? null;
+    if (clientStatus === null) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    if (!canWriteClientRecord(actor, clientId, now())) {
+      await logRefused(db, 'client', clientId, clientId);
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    if (clientStatus === 'erased') {
+      return c.json({ error: 'erased', requestId }, 400);
+    }
+
+    const clientRow = await db.query<{ preferred_locale: string; date_of_birth: string | null }>(
+      'select preferred_locale, date_of_birth from client where id = $1',
+      [clientId],
+    );
+    const client = clientRow.rows[0];
+    if (!client) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+
+    const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
+    // What this client needs today, judged as the Consent tab judges it: a
+    // home visit is assumed, since every client of this practice is trained
+    // at home (docs/SPEC/client-record.md section 3, ConsentTab.tsx).
+    const needed = new Set<ConsentPurpose>(
+      requiredConsentsFor({ dateOfBirth: client.date_of_birth }, ['home'], today),
+    );
+    for (const purpose of purposes) {
+      if (!needed.has(purpose)) {
+        return c.json({ error: 'bad_request', code: 'purpose_not_needed', requestId }, 400);
+      }
+    }
+
+    const contact = await db.query<{
+      id: string;
+      can_consent: boolean;
+      is_legal_guardian: boolean;
+    }>('select id, can_consent, is_legal_guardian from contact where id = $1 and client_id = $2', [
+      body.data.givenByContactId,
+      clientId,
+    ]);
+    const giver = contact.rows[0];
+    if (!giver) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+
+    // Every purpose's checks, to completion, before anything is written: the
+    // same order the single route above uses per purpose (wording, then who
+    // may give it, then whether the evidence fits), so a bundle can never
+    // write a row the single route would have refused.
+    for (const { purpose, textDocumentId } of body.data.purposes) {
+      const wording = await checkWording(db, textDocumentId, purpose, client.preferred_locale);
+      if (!wording.ok) {
+        return c.json({ error: 'bad_request', code: wording.code, requestId }, 400);
+      }
+      const permitted = canGiveConsent(
+        { dateOfBirth: client.date_of_birth },
+        { id: giver.id, canConsent: giver.can_consent, isLegalGuardian: giver.is_legal_guardian },
+        purpose,
+        today,
+      );
+      if (!permitted.ok) {
+        return c.json({ error: 'bad_request', code: permitted.reason, requestId }, 400);
+      }
+      const evidence = checkEvidence(body.data.method, purpose, body.data.evidence);
+      if (!evidence.ok) {
+        return c.json({ error: 'bad_request', code: evidence.code, requestId }, 400);
+      }
+    }
+
+    // Bytes into the store and the document row that names them, once for the
+    // whole bundle: filed immutable, exactly as the single route's own
+    // evidence is (migration 903).
+    const filed = await fileClientDocument(db, c.get('storage'), actor, {
+      clientId,
+      kind: body.data.method === 'app_signature' ? CONSENT_SIGNATURE_KIND : CONSENT_SCAN_KIND,
+      file: body.data.evidence,
+      isImmutable: true,
+      now: now(),
+    });
+    if (!filed.ok) {
+      return filed.reason === 'storage_unavailable'
+        ? c.json({ error: 'storage_unavailable', requestId }, 503)
+        : c.json({ error: 'bad_request', code: filed.reason, requestId }, 400);
+    }
+
+    // Every check above has already passed for every purpose, so this loop
+    // only writes: a purpose has one live answer, so recording a new consent
+    // supersedes the active one it replaces, exactly as the single route does.
+    const ids: string[] = [];
+    for (const { purpose, textDocumentId } of body.data.purposes) {
+      await db.query(
+        "update consent set status = 'superseded' where client_id = $1 and purpose = $2 " +
+          "and status = 'active'",
+        [clientId, purpose],
+      );
+      const consentId = randomUUID();
+      await db.query(
+        'insert into consent (id, tenant_id, client_id, given_by_contact_id, purpose, version, ' +
+          'text_document_id, method, expires_at, signature_document_id, witnessed_by_user_id) ' +
+          'values ($1, $2, $3, $4, $5, 1, $6, $7, null, $8, null)',
+        [
+          consentId,
+          actor.tenantId,
+          clientId,
+          body.data.givenByContactId,
+          purpose,
+          textDocumentId,
+          body.data.method,
+          filed.document.id,
+        ],
+      );
+      ids.push(consentId);
+    }
+    return c.json(
+      ConsentBundleResponse.parse({ ids, signatureDocumentId: filed.document.id }),
+      201,
+    );
   });
 
   api.post('/api/clients/:id/consents/:consentId/withdraw', async (c) => {

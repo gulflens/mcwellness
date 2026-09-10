@@ -71,6 +71,16 @@ any ──► erased   (erasure request)
 - Method `verbal_witnessed`: practitioner records, second staff member confirms; allowed only for `home_visit` re-confirmation, never for initial `participation`.
 - Withdrawal: reason required, immediate effect, existing sessions in progress complete, future appointments cancelled with notification (Stage 2).
 
+### Signing everything at once
+
+A walkthrough of 10 September found nine actions — three scrolls, three drawn signatures, three typed names — standing between a household and an activated client, one for each purpose it needed. The operator's decision the same afternoon: one signature should cover everything a client needs, in one sitting.
+
+`POST /api/clients/:id/consents/bundle` is the route. It takes the purposes the client needs, each naming the wording it was shown, one giver, one method (`app_signature` or `paper_scan` — never `verbal_witnessed`, which is one purpose's own re-confirmation at the door and never a first signature), and one piece of evidence. Before it writes anything it runs, per purpose, every check the single-consent route above runs: the wording named is the current approved one for that purpose and the client's own language, the giver may give it (`canGiveConsent`), the evidence fits the method. Two checks are the bundle's own: a purpose this client does not need (`requiredConsentsFor`, judged from the date of birth alone) is refused, so a screen can never file more than the household was actually shown; and the same purpose named twice in one signing is refused, since one signing gives one consent per purpose. Every check for every purpose runs to completion before a single row is written, so a refusal on the last purpose leaves no earlier ones.
+
+The evidence — the drawn signature or the scanned form — is filed once, immutably, and every consent row written by the bundle points at that same `signature_document_id`. The image itself says what it covers: `SignaturePad`'s `caption` prints one line or more, naming the purposes in the same words their on-screen headings use, beneath the signed name and the date — wrapped across as many lines as those words need, with the image growing to hold them, rather than shortened to fit. Each row still names the exact wording document it was read against, exactly as a single consent does — nothing about a wording, or its version, changes for this. On screen, the household reads every purpose's full approved text, one after another under its own heading, and the pad stays gated until the combined stack has been read to its end; a household never sees less than the whole of what it signs.
+
+A withdrawal stays a withdrawal of one purpose, recorded on the row that purpose owns. It leaves the shared image referenced by whichever of the other rows still stand — which is honest rather than a gap, because the image is immutable and unrelated to any one purpose's standing, and the withdrawal row itself records which purpose ended and why. A verbal re-confirmation, and a withdrawal, are both the per-consent form's own; "sign everything at once" is offered only while something required is still missing, and never replaces either.
+
 ## 8. Erasure request
 
 Admin action "Record erasure request" → reason, requested by (contact), date. System then:

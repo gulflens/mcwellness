@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { KNOWN_MIME_TYPES } from '../../../domain/client';
+import { KNOWN_MIME_TYPES, OFFERED_CONSENT_PURPOSES } from '../../../domain/client';
 import { isoDateIn } from '../../../domain/shared';
 
 /**
@@ -451,6 +451,11 @@ export const CONSENT_ERROR_CODES = [
   'witness_not_accepted',
   'witness_is_actor',
   'witness_not_staff',
+  // The bundle route's own two (trunk round 43, "one signature"): a purpose
+  // this client was never asked for, and the same purpose named twice in one
+  // signing.
+  'purpose_not_needed',
+  'purpose_repeated',
 ] as const;
 export type ConsentErrorCode = (typeof CONSENT_ERROR_CODES)[number];
 
@@ -480,6 +485,45 @@ export const RecordConsentBody = z.object({
   witnessedByUserId: z.uuid().optional(),
 });
 export type RecordConsentBody = z.infer<typeof RecordConsentBody>;
+
+/**
+ * One signature for several consents (trunk round 43, "one signature"): the
+ * bundle behind `POST /api/clients/:id/consents/bundle`. Each purpose names
+ * the wording it was read against, exactly as `RecordConsentBody` does for
+ * one; one piece of evidence covers them all, so it is not repeated per
+ * purpose. `1` to `OFFERED_CONSENT_PURPOSES.length` because a signing with
+ * none would be nothing to record and one cannot exceed every purpose the
+ * practice actually asks a household for today; the route itself refuses a
+ * purpose this client was never asked for and a purpose repeated within the
+ * one signing.
+ *
+ * The purpose enum is `OFFERED_CONSENT_PURPOSES`, not the wider
+ * `CONSENT_PURPOSES` above: `photo_video`, `research` and `marketing` are
+ * not offered (see the comment on `OFFERED_CONSENT_PURPOSES` in
+ * domain/client/types.ts), so a bundle naming one of them is refused at the
+ * boundary rather than reaching `requiredConsentsFor`'s own refusal.
+ *
+ * A verbal re-confirmation is one purpose's own re-confirmation at the door,
+ * never a way to sign several at once, so `method` here is only the two ways
+ * evidence is actually filed.
+ */
+export const RecordConsentBundleBody = z.object({
+  purposes: z
+    .array(z.object({ purpose: z.enum(OFFERED_CONSENT_PURPOSES), textDocumentId: z.uuid() }))
+    .min(1)
+    .max(OFFERED_CONSENT_PURPOSES.length),
+  givenByContactId: z.uuid(),
+  method: z.enum(['app_signature', 'paper_scan']),
+  evidence: DocumentBytes,
+});
+export type RecordConsentBundleBody = z.infer<typeof RecordConsentBundleBody>;
+
+/** What the bundle route answers with: every consent it wrote, and the one signature they share. */
+export const ConsentBundleResponse = z.object({
+  ids: z.array(z.uuid()),
+  signatureDocumentId: z.uuid(),
+});
+export type ConsentBundleResponse = z.infer<typeof ConsentBundleResponse>;
 
 /**
  * Who may stand as a witness to a verbal re-confirmation: this practice's own
