@@ -67,6 +67,39 @@ export function hourLabels(span: Span): { label: string; column: number }[] {
   return labels;
 }
 
+/**
+ * Which row inside a lane each block takes, so that blocks overlapping in
+ * time are kept apart on the fewest rows that will hold them (spec 4.2:
+ * one row per practitioner, and blocks that overlap stack within the lane).
+ *
+ * A block spans its window *plus* the service that follows it, so a
+ * practitioner seeing a household every hour has every block overlapping its
+ * neighbour: left to the browser's own auto-placement, whose cursor never
+ * returns to an earlier row, five such visits became a five-step staircase
+ * seven hundred pixels tall (the seeded walk, spec 13). Placed here instead,
+ * because a browser's packing is neither testable nor visible to the next
+ * reader of this file.
+ *
+ * First fit, in start order: a block goes on the first row whose last block
+ * ends at or before it starts — touching is not overlapping — and otherwise
+ * opens a new one. For intervals sorted by start, that is the minimum number
+ * of rows. Blocks must arrive in start order, which is the order the route
+ * sends a practitioner's visits and the order they are drawn in, so a
+ * later-starting block can never land above an earlier one.
+ *
+ * Returns one 1-based row per block, in the order given. Pure.
+ */
+export function laneRows(blocks: readonly Block[]): number[] {
+  /** When the last block on each row so far ends. */
+  const endsAt: number[] = [];
+  return blocks.map((block) => {
+    const found = endsAt.findIndex((end) => end <= block.start.getTime());
+    const row = found === -1 ? endsAt.length : found;
+    endsAt[row] = block.end.getTime();
+    return row + 1;
+  });
+}
+
 /** A block spans its arrival window plus the service's own length (4.2). */
 export function blockOf(visit: {
   windowStart: string;

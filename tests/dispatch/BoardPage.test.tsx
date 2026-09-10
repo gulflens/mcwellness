@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { plainText } from '../scheduling/support';
 import type { BoardResponse } from '../../app/api/appointments/schema';
 import { BoardPage } from '../../app/admin/schedule/board/BoardPage';
-import { blockOf, daySpan, gridColumns, hourLabels } from '../../app/admin/schedule/board/columns';
+import {
+  blockOf,
+  daySpan,
+  gridColumns,
+  hourLabels,
+  laneRows,
+} from '../../app/admin/schedule/board/columns';
 import { practiceDay } from '../../app/admin/schedule/windows';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
@@ -131,6 +137,21 @@ const NO_SEAM: BoardResponse = {
   })),
 };
 
+/**
+ * The seeded shape: a visit every hour, each block its window plus the
+ * service that follows it, so every block overlaps its neighbour.
+ */
+const OVERLAPPING: BoardResponse = {
+  ...BOARD,
+  practitioners: BOARD.practitioners.map((practitioner) => ({
+    ...practitioner,
+    visits: practitioner.visits.map((visit, index) => {
+      const hour = String(9 + index).padStart(2, '0');
+      return { ...visit, windowStart: at(`${hour}:00`), windowEnd: at(`${hour}:45`) };
+    }),
+  })),
+};
+
 /** What the route answers a reassignment with: the row that stands, and the one it replaced. */
 const REASSIGNED = {
   appointment: {
@@ -201,6 +222,18 @@ function daysRead(fetchImpl: { mock: { calls: unknown[][] } }): (string | null)[
     .map((call) => String(call[0]))
     .filter((url) => url.includes('/board'))
     .map((url) => new URL(url, 'http://localhost').searchParams.get('date'));
+}
+
+/**
+ * The lane row each block in a practitioner's row was put on, in the order
+ * they are drawn. jsdom lays nothing out, so the assertion is on the property
+ * the stylesheet reads rather than on where the blocks ended up.
+ */
+function rowsInLane(practitioner: string): (string | undefined)[] {
+  const row = screen.getByRole('region', { name: practitioner });
+  return [...row.querySelectorAll<HTMLElement>('.board__block')].map((block) =>
+    block.style.getPropertyValue('--block-row'),
+  );
 }
 
 /** Open the drawer from the late visit's block, fill it in and send it. */
@@ -274,6 +307,39 @@ describe('the board grid', () => {
     expect(labels[0]).toEqual({ label: '08:00', column: 1 });
     expect(labels[9]).toEqual({ label: '17:00', column: 37 });
   });
+
+  /** A block starting at `time` and running for `minutes`. */
+  const runs = (time: string, minutes: number) => ({
+    start: new Date(at(time)),
+    end: new Date(new Date(at(time)).getTime() + minutes * 60_000),
+  });
+
+  it('keeps a lane one row deep when nothing on it overlaps', () => {
+    expect(laneRows([runs('09:00', 45), runs('11:00', 45), runs('13:00', 45)])).toEqual([1, 1, 1]);
+  });
+
+  it('stacks a day of hourly visits on two rows rather than one row each', () => {
+    // The seeded shape: a visit every hour, each block its window plus the
+    // service that follows it, so every block overlaps its neighbour and no
+    // other. Two rows, alternating — never a five-step staircase.
+    const hourly = ['09:00', '10:00', '11:00', '12:00', '13:00'].map((time) => runs(time, 105));
+    expect(laneRows(hourly)).toEqual([1, 2, 1, 2, 1]);
+  });
+
+  it('gives three visits that all overlap a row each', () => {
+    expect(laneRows([runs('09:00', 120), runs('09:30', 120), runs('10:00', 120)])).toEqual([
+      1, 2, 3,
+    ]);
+  });
+
+  it('reuses a row for a block that starts exactly when the last one ended', () => {
+    // Touching is not overlapping.
+    expect(laneRows([runs('09:00', 60), runs('10:00', 60)])).toEqual([1, 1]);
+  });
+
+  it('gives an empty lane no rows at all', () => {
+    expect(laneRows([])).toEqual([]);
+  });
 });
 
 describe('BoardPage', () => {
@@ -290,6 +356,18 @@ describe('BoardPage', () => {
     expect(screen.getByText('Running late, 20 min')).toBeTruthy();
     expect(screen.getByText('Iris Cliff')).toBeTruthy();
     expect(screen.getByText('09:00–09:45', plainText)).toBeTruthy();
+  });
+
+  it('stacks a lane of overlapping visits instead of giving each one its own row', async () => {
+    mount({ board: OVERLAPPING });
+    await screen.findByRole('heading', { name: 'Board' });
+    expect(rowsInLane('Cedar Ridge')).toEqual(['1', '2', '1']);
+  });
+
+  it('keeps a lane one row deep when its visits do not overlap', async () => {
+    mount();
+    await screen.findByRole('heading', { name: 'Board' });
+    expect(rowsInLane('Cedar Ridge')).toEqual(['1', '1', '1']);
   });
 
   it('leaves a settled visit as a fact on the board rather than a control', async () => {

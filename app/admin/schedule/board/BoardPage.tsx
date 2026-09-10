@@ -12,7 +12,7 @@ import { Note, PageHeader } from '../../../shell/components/Controls';
 import { StatusChip, type StatusTone } from '../../../shell/components/StatusChip';
 import { formatDay, formatWindow, practiceDay } from '../windows';
 import { ReassignDrawer } from './ReassignDrawer';
-import { blockOf, daySpan, gridColumns, hourLabels } from './columns';
+import { blockOf, daySpan, gridColumns, hourLabels, laneRows } from './columns';
 import './board.css';
 
 /**
@@ -237,7 +237,13 @@ export function BoardPage() {
                 {practitioner.visits.length === 0 ? (
                   <span className="board__idle small muted">Nothing on</span>
                 ) : null}
-                {practitioner.visits.map((visit) => {
+                {/* Rows worked out for the whole lane before any of it is
+                    drawn, so blocks that overlap in time stack on the fewest
+                    rows that keep them apart rather than one each. The route
+                    sends a practitioner's visits in window order, which is
+                    the order `laneRows` needs and the order they are drawn. */}
+                {laneRows(practitioner.visits.map(blockOf)).map((row, index) => {
+                  const visit = practitioner.visits[index]!;
                   const columns = gridColumns(span, blockOf(visit));
                   const facts = (
                     <>
@@ -257,6 +263,7 @@ export function BoardPage() {
                   const style = {
                     '--block-start': columns.start,
                     '--block-end': columns.end,
+                    '--block-row': row,
                   } as CSSProperties;
                   // A visit that has been checked in, delivered, missed, called
                   // off or already moved cannot change hands, and a control
