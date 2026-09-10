@@ -51,8 +51,9 @@ export function ExtensionDrawer({
 
   const runsTo = purchase.extendedTo ?? purchase.expiresOn;
   const used = purchase.extensionsUsed;
-  const left =
-    used === 0 ? 'None of the two used yet.' : used === 1 ? '1 of the two used.' : 'Both used.';
+  // Only ever none or one: with both used `extendsTo` is null and the other
+  // sentence is the one that renders.
+  const left = used === 0 ? 'None of the two used yet.' : '1 of the two used.';
   const sentence = purchase.extendsTo
     ? `It runs to ${formatDate(runsTo)} today. An extension adds three months, to ${formatDate(purchase.extendsTo)}. ${left}`
     : 'This programme has had its two extensions.';
@@ -84,8 +85,12 @@ export function ExtensionDrawer({
       });
       if (res.status === 201) {
         const body = ExtendPurchaseResponse.parse(await res.json());
+        // Named, not just dated: a household with two programmes has to be
+        // told which of them moved.
         onExtended(
-          `Extended to ${formatDate(body.purchase.extendedTo ?? body.purchase.expiresOn)}.`,
+          `${body.purchase.packageName} now runs to ${formatDate(
+            body.purchase.extendedTo ?? body.purchase.expiresOn,
+          )}.`,
         );
         return;
       }

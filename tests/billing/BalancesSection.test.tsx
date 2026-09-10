@@ -205,7 +205,9 @@ describe('giving a family longer', () => {
     expect(screen.queryByLabelText('Runs to')).toBeNull();
     fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'Travelling for a month' } });
     fireEvent.click(screen.getByRole('button', { name: 'Extend by three months' }));
-    expect(await screen.findByText('Extended to 1 Mar 2028.')).toBeTruthy();
+    // The note names the programme: a family with two purchases must be told
+    // which of them moved.
+    expect(await screen.findByText('Silver now runs to 1 Mar 2028.')).toBeTruthy();
     expect(requests.filter((r) => r.url.endsWith('/extension'))).toEqual([
       {
         url: `/api/billing/package-purchases/${SILVER_PURCHASE_ID}/extension`,
