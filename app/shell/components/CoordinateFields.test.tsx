@@ -109,7 +109,23 @@ describe('CoordinateFields — offerMapLink', () => {
 });
 
 describe('CoordinateFields — mapPicker', () => {
-  it('opens the picker with the point it holds, and takes the point it sends back', () => {
+  afterEach(() => {
+    try {
+      window.sessionStorage.clear();
+    } catch {
+      // One of the tests below makes sessionStorage itself throw; if a prior
+      // test left it in that state this must not fail the next one's setup.
+    }
+  });
+
+  /** What `openPicker` wrote under the key its `window.open` URL names. */
+  function stored(open: ReturnType<typeof vi.spyOn>, call = 0): unknown {
+    const url = new URL(String(open.mock.calls[call]?.[0]), window.location.origin);
+    const key = url.searchParams.get('k');
+    return JSON.parse(window.sessionStorage.getItem(`mcwellness:pin:${key}`) ?? 'null');
+  }
+
+  it('opens the picker behind an opaque key, the point stored under it, and takes the point sent back', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
     const onChange = vi.fn();
     const onAddress = vi.fn();
@@ -123,11 +139,18 @@ describe('CoordinateFields — mapPicker', () => {
       />,
     );
     fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+
+    // The URL carries nothing but the key — no point, no emirate, no label:
+    // `.claude/rules/ui.md` forbids personal data in a URL, and a
+    // household's entrance coordinate is exactly that.
     const url = new URL(String(open.mock.calls[0]?.[0]), window.location.origin);
     expect(url.pathname).toBe('/admin/clients/pin');
-    expect(url.searchParams.get('lat')).toBe('25.2048');
-    expect(url.searchParams.get('emirate')).toBe('DXB');
-    expect(url.searchParams.get('label')).toBe('Home');
+    expect([...url.searchParams.keys()]).toEqual(['k']);
+    expect(url.searchParams.get('k')).toBeTruthy();
+
+    // The point travels through sessionStorage instead, under that same key.
+    expect(stored(open)).toEqual({ lat: 25.2048, lng: 55.2708, emirate: 'DXB', label: 'Home' });
+
     fireEvent(
       window,
       new MessageEvent('message', {
@@ -137,6 +160,78 @@ describe('CoordinateFields — mapPicker', () => {
     );
     expect(onChange).toHaveBeenLastCalledWith({ lat: 25.21, lng: 55.28 });
     expect(onAddress).toHaveBeenCalledWith('Villa 12, Street 4');
+    open.mockRestore();
+  });
+
+  it('omits lat and lng from the stored blob when there is no point yet', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    const blob = stored(open);
+    expect(blob).toEqual({ label: 'Home' });
+    expect(blob).not.toHaveProperty('lat');
+    expect(blob).not.toHaveProperty('lng');
+    open.mockRestore();
+  });
+
+  it('keeps a kind-of-place label but drops anything else', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const { rerender } = render(
+      <CoordinateFields
+        lat={25.2}
+        lng={55.3}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Not a kind of place' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    expect(stored(open, 0)).not.toHaveProperty('label');
+
+    rerender(
+      <CoordinateFields
+        lat={25.2}
+        lng={55.3}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home base' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    expect(stored(open, 1)).toHaveProperty('label', 'Home base');
+    open.mockRestore();
+  });
+
+  it('says so next to the button, and never opens the tab, when sessionStorage blocks the write', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('site data blocked');
+    });
+    render(
+      <CoordinateFields
+        lat={25.2}
+        lng={55.3}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    expect(open).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'The map could not be opened: this browser is blocking site data. Enter the coordinates by hand instead.',
+      ),
+    ).toBeTruthy();
+    setItem.mockRestore();
     open.mockRestore();
   });
 

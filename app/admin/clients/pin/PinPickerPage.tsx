@@ -16,11 +16,24 @@ import './pin.css';
  * hands the point back to the tab that asked through `postMessage`, then
  * closes.
  *
+ * **What the URL carries.** An opaque key (`?k=<uuid>`) and nothing else —
+ * never a point, an emirate or a label. A household's entrance coordinate is
+ * personal data, and `.claude/rules/ui.md` forbids personal data in a URL: a
+ * new tab sends its own URL to whatever serves it, and that would put the
+ * coordinate in the access log of a host the practice does not control
+ * (finding 3 of the review of this page). `CoordinateFields.openPicker`
+ * writes the point, under that key, to `sessionStorage` — private to this
+ * browser and never sent to a server — and this page reads it back by the
+ * same key and removes it immediately, so it does not linger once read. A
+ * missing key, or one whose item cannot be read or parsed, is treated exactly
+ * like a client with no pin yet: centred on the UAE (or the emirate, once one
+ * is known), no marker, "Use this pin" disabled.
+ *
  * **What Google receives.** The browser's address, the map viewport and the
  * key, as any map page sends — and, only while the search box is used, the
  * address text as it is typed, restricted to the UAE. Nothing here names a
- * person, a record or a location id; the query string carries a point, an
- * emirate and a label like "Home" and nothing else
+ * person, a record or a location id, and the point chosen on this page never
+ * reaches Google or any server of this app's own
  * (docs/COMPLIANCE/approved-vendors.md, Google Maps Platform, amended in trunk
  * round 43).
  *
@@ -33,9 +46,6 @@ import './pin.css';
  * (the Places library included) to read it.
  */
 
-export { PIN_MESSAGE_TYPE };
-export type { PinMessage };
-
 const NO_KEY = 'The map needs the practice’s browser key.';
 const NOT_LOADED = 'The map did not load. Check the connection and try again.';
 const WRONG_DOOR =
@@ -45,17 +55,48 @@ const NO_OPENER =
 
 type Point = { lat: number; lng: number };
 
+/** The shape `CoordinateFields.openPicker` writes under `mcwellness:pin:<key>`. */
+type StoredPin = { lat?: number; lng?: number; emirate?: string; label?: string };
+
+/** `mcwellness:pin:<key>` — the same item name `CoordinateFields.openPicker` writes. */
+function itemKeyFor(key: string): string {
+  return `mcwellness:pin:${key}`;
+}
+
 /**
- * The point the query string names, or null when it names none. `lat` and
- * `lng` are read together: a URL missing one of them, or carrying an empty
- * value for one, describes no point at all rather than one anchored at zero.
+ * The blob written under this key, or null for a missing key, an item
+ * already gone (a stale link, or another tab that got there first), a value
+ * that fails to parse, or a browser that throws on the storage call at all
+ * (site data blocked). Every one of those is the same "no starting point"
+ * case the fallback below already handles. Read-only: it does not remove the
+ * item, so calling it more than once for the same key — which is exactly
+ * what happens once, harmlessly, under Strict Mode's extra development-only
+ * invocation of a `useState` initializer — reads the same still-present
+ * value both times, rather than the second call finding nothing left.
+ * Removal happens once, separately, in the effect below.
  */
-function pointFrom(params: URLSearchParams): Point | null {
-  const latRaw = params.get('lat');
-  const lngRaw = params.get('lng');
-  if (!latRaw || !lngRaw) return null;
-  const lat = Number(latRaw);
-  const lng = Number(lngRaw);
+function readStored(key: string | null): StoredPin | null {
+  if (!key) return null;
+  try {
+    const raw = window.sessionStorage.getItem(itemKeyFor(key));
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as StoredPin) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The point a stored blob names, or null when it names none. `lat` and `lng`
+ * are read together: a blob missing one of them, or carrying something that
+ * is not a finite, in-range number for one, describes no point at all rather
+ * than one anchored at zero.
+ */
+function pointFrom(stored: StoredPin | null): Point | null {
+  if (!stored) return null;
+  const { lat, lng } = stored;
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
   return { lat, lng };
@@ -75,9 +116,32 @@ export function PinPickerPage({
   loadMaps?: (key: string) => Promise<GoogleMaps>;
 } = {}) {
   const [params] = useSearchParams();
-  const label = params.get('label') ?? 'Location';
-  const emirate = params.get('emirate') ?? '';
-  const start = pointFrom(params);
+  const keyParam = params.get('k');
+  // Read once, as a lazy `useState` initializer — never a ref read during
+  // render, which React's own hooks lint now refuses outright. `readStored`
+  // is safe to call twice (Strict Mode's development-only extra invocation
+  // of this exact initializer) because it never removes anything; removal is
+  // the separate effect just below, and removal is safe to run twice because
+  // it is idempotent.
+  const [stored] = useState<StoredPin | null>(() => readStored(keyParam));
+  useEffect(() => {
+    if (!keyParam) return;
+    try {
+      // Removed here, not inside `readStored`: so it does not linger once
+      // read (finding 3 of the review of this page — the point must not sit
+      // in the URL, and sessionStorage is where it travels instead), while
+      // staying safe under Strict Mode's mount → cleanup → mount replay,
+      // which would otherwise run a read-and-remove twice and lose the
+      // second read.
+      window.sessionStorage.removeItem(itemKeyFor(keyParam));
+    } catch {
+      // A browser that cannot remove it could not have read it either; the
+      // fallback below already covers that browser as "no starting point".
+    }
+  }, [keyParam]);
+  const label = typeof stored?.label === 'string' && stored.label ? stored.label : 'Location';
+  const emirate = typeof stored?.emirate === 'string' ? stored.emirate : '';
+  const start = pointFrom(stored);
 
   const key = browserKey === undefined ? browserMapKey() : browserKey;
   const mapRef = useRef<HTMLDivElement>(null);
@@ -187,7 +251,8 @@ export function PinPickerPage({
     return () => {
       marker.setMap(null);
     };
-    // `start`, `emirate` and `label` come from the query string and do not change.
+    // `start`, `emirate` and `label` come from the sessionStorage blob
+    // consumed once above and do not change across this component's renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maps]);
 
