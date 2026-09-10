@@ -250,7 +250,7 @@ describe('EnrolmentWizard', () => {
     await goToSummary();
     expect(await screen.findByText('Still to complete')).toBeTruthy();
     expect(screen.getByText('Date of birth')).toBeTruthy();
-    expect(screen.getByText('A location with a verified pin')).toBeTruthy();
+    expect(screen.getByText('A location with its pin set')).toBeTruthy();
     expect(screen.getByText('Participation consent')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
   });

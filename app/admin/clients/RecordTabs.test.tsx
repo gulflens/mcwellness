@@ -102,7 +102,7 @@ describe('OverviewTab', () => {
     expect(screen.getByText('Iris Creek (mother)')).toBeTruthy();
     expect(screen.getByText('+971500000061')).toBeTruthy();
     // A lead with no location and no consent cannot be activated, and is told so.
-    expect(screen.getByText('A location with a verified pin')).toBeTruthy();
+    expect(screen.getByText('A location with its pin set')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
   });
 

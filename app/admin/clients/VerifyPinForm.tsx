@@ -61,10 +61,7 @@ export function VerifyPinForm({
   return (
     <div className="verify-pin">
       <h4 className="drawer__section">Where the practitioner should arrive</h4>
-      <p className="small muted">
-        The pin is the door to knock on, not the middle of the building. Check it on the map before
-        saving.
-      </p>
+      <p className="small muted">Move it to the door the practitioner should knock on.</p>
       <CoordinateFields
         idPrefix={`verify-pin-${location.id}`}
         lat={lat}
