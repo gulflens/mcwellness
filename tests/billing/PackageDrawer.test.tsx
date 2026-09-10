@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PackageDrawer } from '../../app/admin/billing/PackageDrawer';
+import { DEFAULT_EXPIRY_MONTHS, termWords } from '../../domain/billing';
 import { json, mountWith, OWNER } from './harness';
 
 afterEach(cleanup);
@@ -76,6 +77,23 @@ function mount(onCreated: (row: unknown) => void = () => undefined) {
 }
 
 describe('PackageDrawer', () => {
+  it("starts a new programme at the practice's own default term", async () => {
+    // Asserted against `DEFAULT_EXPIRY_MONTHS` rather than the figure it
+    // holds today: the field, the hint and the constant are one fact, and a
+    // test that typed six would let them come apart the day the operator
+    // changes it.
+    mount();
+    await screen.findByLabelText(/Brain map/);
+    expect((await screen.findByLabelText('Runs for (months)')).getAttribute('value')).toBe(
+      String(DEFAULT_EXPIRY_MONTHS),
+    );
+    expect(
+      screen.getByText(
+        `How long a family has to use it. ${termWords(DEFAULT_EXPIRY_MONTHS).en} unless the practice decides otherwise.`,
+      ),
+    ).toBeTruthy();
+  });
+
   it("offers the contents' total as the list price, grouped as money is written", async () => {
     mount();
     await screen.findByLabelText(/Brain map/);

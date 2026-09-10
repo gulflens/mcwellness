@@ -16,6 +16,8 @@ export {
   isUsableOn,
 } from './expiry';
 export type { ExpiryWarning } from './expiry';
+export { EXTENSION_MONTHS, MAX_EXTENSIONS, nextExtension, termWords } from './extension';
+export type { Extension } from './extension';
 export {
   CONSUMPTION_KINDS,
   ENTITLEMENT_STATUSES,

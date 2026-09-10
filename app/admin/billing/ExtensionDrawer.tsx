@@ -9,27 +9,34 @@ import { useDrawer } from './useDrawer';
 import { formatDate } from './BillingPage';
 
 /**
- * "Give them longer" — the coordinator's discretion over a programme that has
- * run out of time, with the reason it always carries.
+ * "Extend" — the coordinator's discretion over a programme that has run out
+ * of time, with the reason it always carries. One name for one act: the
+ * button in the list, this heading and the confirm all say it.
  *
  * The reason is the field that matters. A family whose year ran out during a
  * hospital stay is not the same as one that simply did not book, and a year
  * from now the practice should be able to see which it was. It goes on the
  * purchase and into the audit trail, not into somebody's memory.
  *
- * The date it replaces is shown rather than assumed: an extension that gives
- * a family less time than they had is refused, and saying what they have now
- * is how a person avoids typing one.
+ * The length is not the coordinator's to choose, and neither is the count:
+ * an extension is always exactly three months, a programme may have at most
+ * two, and this drawer offers nothing once it has had them — the route
+ * refuses a third for everybody, the owner included
+ * (docs/PLAN/package-terms.md).
  */
 
 const FORBIDDEN_MESSAGE = "You don't have permission to extend a programme.";
 const NOT_FOUND_MESSAGE = 'This programme is no longer available. Refresh and try again.';
 const GENERIC_MESSAGE = 'The programme could not be extended. Try again.';
 const MESSAGES: Record<string, string> = {
-  not_later: 'Choose a date later than the one this programme already runs to.',
-  date_in_past: 'Choose a date in the future.',
-  invalid_request: 'Check the date and the reason, then try again.',
+  invalid_request: 'Check the reason, then try again.',
   not_extendable: 'This programme has been refunded or called off, so it cannot be extended.',
+  extension_limit_reached:
+    'This programme has had its two extensions. A programme that needs longer is a refund and a new sale.',
+  ended_too_long_ago:
+    'This programme ended more than three months ago, so three more months would still be in the past. A programme that needs longer is a refund and a new sale.',
+  extended_by_someone_else:
+    'Somebody else extended this programme a moment ago. Refresh and check before extending it again.',
 };
 
 export function ExtensionDrawer({
@@ -46,9 +53,14 @@ export function ExtensionDrawer({
   const closeRef = useRef<HTMLButtonElement>(null);
 
   const runsTo = purchase.extendedTo ?? purchase.expiresOn;
-  const [extendedTo, setExtendedTo] = useState('');
+  const used = purchase.extensionsUsed;
+  // Only ever none or one: with both used `extendsTo` is null and the other
+  // sentence is the one that renders.
+  const left = used === 0 ? 'None of the two used yet.' : '1 of the two used.';
+  const sentence = purchase.extendsTo
+    ? `It runs to ${formatDate(runsTo)} today. An extension adds three months, to ${formatDate(purchase.extendsTo)}. ${left}`
+    : 'This programme has had its two extensions.';
   const [reason, setReason] = useState('');
-  const [dateError, setDateError] = useState<string | undefined>();
   const [reasonError, setReasonError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,45 +70,30 @@ export function ExtensionDrawer({
   async function submit(event: FormEvent) {
     event.preventDefault();
     setFormError(null);
-    let refused = false;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(extendedTo)) {
-      setDateError('Choose the date it should run to.');
-      refused = true;
-    } else if (extendedTo <= runsTo) {
-      setDateError(`Choose a date after ${formatDate(runsTo)}.`);
-      refused = true;
-    } else {
-      setDateError(undefined);
-    }
     if (!isRealText(reason.trim())) {
       setReasonError(
         `Say why this programme is being extended, in at least ${MINIMUM_REASON} characters.`,
       );
-      refused = true;
-    } else {
-      setReasonError(undefined);
-    }
-    if (refused) {
-      focusFirstInvalid([
-        dateError !== undefined || !/^\d{4}-\d{2}-\d{2}$/.test(extendedTo) || extendedTo <= runsTo
-          ? 'extension-date'
-          : 'extension-reason',
-      ]);
+      focusFirstInvalid(['extension-reason']);
       return;
     }
+    setReasonError(undefined);
 
     setBusy(true);
     try {
       const res = await apiFetch(`/api/billing/package-purchases/${purchase.id}/extension`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ extendedTo, reason: reason.trim() }),
+        body: JSON.stringify({ reason: reason.trim() }),
       });
       if (res.status === 201) {
         const body = ExtendPurchaseResponse.parse(await res.json());
+        // Named, not just dated: a household with two programmes has to be
+        // told which of them moved.
         onExtended(
-          `${body.purchase.packageName} now runs to ` +
-            `${formatDate(body.purchase.extendedTo ?? body.purchase.expiresOn)}.`,
+          `${body.purchase.packageName} now runs to ${formatDate(
+            body.purchase.extendedTo ?? body.purchase.expiresOn,
+          )}.`,
         );
         return;
       }
@@ -131,7 +128,7 @@ export function ExtensionDrawer({
     >
       <header className="drawer__header">
         <div className="drawer__title">
-          <h2 id="extension-drawer-title">Give them longer</h2>
+          <h2 id="extension-drawer-title">Extend</h2>
           <p className="small muted">
             {purchase.packageName}, bought {formatDate(purchase.purchasedOn)}
           </p>
@@ -148,18 +145,7 @@ export function ExtensionDrawer({
       </header>
       <div className="drawer__body">
         <form className="drawer__form" onSubmit={(e) => void submit(e)}>
-          <Field
-            id="extension-date"
-            label="Runs to"
-            type="date"
-            value={extendedTo}
-            onChange={(e) => {
-              setExtendedTo(e.target.value);
-              setDateError(undefined);
-            }}
-            hint={`It runs to ${formatDate(runsTo)} today.`}
-            error={dateError}
-          />
+          <p className="small muted">{sentence}</p>
           <Field
             id="extension-reason"
             label="Why"
@@ -174,10 +160,6 @@ export function ExtensionDrawer({
             error={reasonError}
           />
 
-          <p className="small muted">
-            The date first agreed stays on the record beside the new one.
-          </p>
-
           {formError ? <Note tone="critical">{formError}</Note> : null}
 
           <div className="drawer__actions">
@@ -185,7 +167,7 @@ export function ExtensionDrawer({
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={busy}>
-              {busy ? 'Saving…' : 'Extend it'}
+              {busy ? 'Saving…' : 'Extend by three months'}
             </Button>
           </div>
         </form>

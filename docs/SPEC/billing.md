@@ -237,7 +237,16 @@ Refund due                              11,100
 
 They lose the volume discount on what they consumed, which is exactly what a volume discount means. State it plainly in the T&Cs at point of sale, show the number in the portal, and let the system compute it.
 
-**Expiry.** 12 months from purchase is reasonable and standard. Be conservative here — aggressive expiry on prepaid programmes invites both consumer-protection scrutiny and bad reviews. Warn at 60 and 30 days, and allow a documented extension for good reason.
+**Expiry.** _Amended 2026-09-10 on the operator's decision 9._ A programme
+runs **six months** from purchase (`package.expiry_months`, six by default;
+a programme keeps the term it was sold with). Up to **two extensions of three
+months each**, at no charge, each with a reason written down — one row each in
+`package_extension` (migration 410), numbered one and two, so a programme runs
+twelve months at most and only by asking; a third is refused for everyone,
+the owner included. The term is said at the point of sale (the Sell drawer)
+and on the invoice's package line in both languages. Warnings at 60 and 30
+days are a later round, once households are on programmes; the notice period
+and the call-out fee are unchanged.
 
 **Late cancellation and no-show.** _Amended 2026-09-06 on the founder's
 decision of 4 September._ Under 24 hours carries a **call-out fee** — AED 150,
