@@ -21,7 +21,7 @@ The service catalogue itself (what the practice offers, its durations and the ce
 
 A client holds entitlements — credits for a specific service type. A session consumes one. That's it.
 
-- Buy a single session → 1 entitlement, consumed immediately
+- Buy a single session → 1 entitlement, consumed immediately when it is charged at the door; sold ahead of the visit instead (a `single_session` invoice, migration 411, trunk round 43), it is available for twelve months before it lapses
 - Buy a 20-session package → 20 entitlements, consumed over months
 - Insurance approves 8 sessions → 8 entitlements with a payer attached
 - Comp a session for a service failure → 1 entitlement, zero value, reason logged
