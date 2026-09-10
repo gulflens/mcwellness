@@ -34,6 +34,18 @@ const PRACTITIONER_AUTH = '00000000-0000-4000-8000-000000000204';
 const ADULT_ID = '00000000-0000-4000-8000-000000000211';
 const ADULT_CONTACT = '00000000-0000-4000-8000-000000000212';
 
+// A minor client: the household the bundle exists for, since a child signs
+// four scrolls (participation, home_visit, health_data, minor_participation)
+// rather than three. One contact who may consent but is not a guardian, and
+// one who is both, so the guardian rule inside the bundle actually runs.
+const CHILD_ID = '00000000-0000-4000-8000-000000000213';
+const CHILD_NON_GUARDIAN_CONTACT = '00000000-0000-4000-8000-000000000214';
+const CHILD_GUARDIAN_CONTACT = '00000000-0000-4000-8000-000000000215';
+// Same convention as tests/client/db/consent_documents.test.ts's CHILD_ID and
+// domain/client/requiredConsents.test.ts's own minor fixture: a synthetic
+// date, not a real child's birthday, that is unambiguously a minor today.
+const CHILD_DATE_OF_BIRTH = '2015-04-01';
+
 const WORDING_PARTICIPATION = '00000000-0000-4000-8000-000000000221';
 const WORDING_HOME_VISIT = '00000000-0000-4000-8000-000000000222';
 const WORDING_HEALTH_DATA = '00000000-0000-4000-8000-000000000223';
@@ -94,9 +106,12 @@ async function seedWording(
   );
 }
 
-const bundle = (purposes: { purpose: string; textDocumentId: string }[]) => ({
+const bundle = (
+  purposes: { purpose: string; textDocumentId: string }[],
+  givenByContactId: string = ADULT_CONTACT,
+) => ({
   purposes,
-  givenByContactId: ADULT_CONTACT,
+  givenByContactId,
   method: 'app_signature',
   evidence: { mimeType: 'image/png', bytesBase64: PNG_BASE64 },
 });
@@ -106,6 +121,10 @@ const THREE = [
   { purpose: 'home_visit', textDocumentId: WORDING_HOME_VISIT },
   { purpose: 'health_data', textDocumentId: WORDING_HEALTH_DATA },
 ];
+
+// What a minor needs beyond the three above: the guardian's own consent that
+// this child in particular is participating (docs/SPEC/client-record.md rule 3).
+const FOUR = [...THREE, { purpose: 'minor_participation', textDocumentId: WORDING_MINOR }];
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), 'mcwellness-bundle-'));
@@ -139,6 +158,28 @@ beforeAll(async () => {
       "is_legal_guardian, can_consent, phone) values ($1, $2, $3, 'Laurel', 'Meadow', 'self', " +
       "false, true, '+971500000021')",
     [ADULT_CONTACT, IDS.tenantA, ADULT_ID],
+  );
+
+  // A minor client: the household a child's own household faces, four
+  // scrolls rather than three (F1, task-2-fix-brief.md). One contact who may
+  // give consent but is not a guardian, and one who is both.
+  await owner.query(
+    'insert into client (id, tenant_id, mrn, given_name, family_name, date_of_birth, ' +
+      "preferred_locale, status, created_by) values ($1, $2, $3, 'Synthetic', 'Brook', " +
+      "$4, 'en', 'lead', $5)",
+    [CHILD_ID, IDS.tenantA, `MW-${CHILD_ID.slice(-6)}`, CHILD_DATE_OF_BIRTH, IDS.ownerA],
+  );
+  await owner.query(
+    'insert into contact (id, tenant_id, client_id, given_name, family_name, relationship, ' +
+      "is_legal_guardian, can_consent, phone) values ($1, $2, $3, 'Rowan', 'Brook', 'other', " +
+      "false, true, '+971500000022')",
+    [CHILD_NON_GUARDIAN_CONTACT, IDS.tenantA, CHILD_ID],
+  );
+  await owner.query(
+    'insert into contact (id, tenant_id, client_id, given_name, family_name, relationship, ' +
+      "is_legal_guardian, can_consent, phone) values ($1, $2, $3, 'Elm', 'Brook', 'mother', " +
+      "true, true, '+971500000023')",
+    [CHILD_GUARDIAN_CONTACT, IDS.tenantA, CHILD_ID],
   );
 
   await seedWording(WORDING_PARTICIPATION, 'participation', 'en', '1.0', 'approved', false);
@@ -210,6 +251,18 @@ describe('POST /api/clients/:id/consents/bundle', () => {
       "select count(*)::int as n from document where kind = 'consent_signature'",
     );
     expect(docs.rows[0]?.n).toBe(1);
+
+    // F2: the design spec names "one audit row per consent" — it holds today
+    // because the audit trigger fires per row (db/migrations/080_audit_triggers.sql),
+    // but a future implementer who batched the insert would pass every other
+    // assertion here. Pin it directly: one 'insert' row per consent this
+    // bundle wrote, each naming its own consent id, and no more.
+    const audit = await owner.query<{ entity_id: string }>(
+      "select entity_id from audit_log where entity_type = 'consent' and action = 'insert' " +
+        'and client_id = $1',
+      [ADULT_ID],
+    );
+    expect(audit.rows.map((r) => r.entity_id).sort()).toEqual([...body.ids].sort());
   });
 
   it('supersedes the earlier active consent for each purpose, as the single route does', async () => {
@@ -256,6 +309,12 @@ describe('POST /api/clients/:id/consents/bundle', () => {
       'select count(*)::int as n from consent where client_id = $1',
       [ADULT_ID],
     );
+    // Cheap 1: a route that files the evidence before it validates would pass
+    // every assertion above without this — prove the signature was never
+    // filed either, not only that no consent row exists.
+    const docsBefore = await owner.query<{ n: number }>(
+      "select count(*)::int as n from document where kind = 'consent_signature'",
+    );
     const res = await request(ADMIN_AUTH, `/api/clients/${ADULT_ID}/consents/bundle`, {
       method: 'POST',
       body: JSON.stringify(
@@ -269,6 +328,10 @@ describe('POST /api/clients/:id/consents/bundle', () => {
       [ADULT_ID],
     );
     expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
+    const docsAfter = await owner.query<{ n: number }>(
+      "select count(*)::int as n from document where kind = 'consent_signature'",
+    );
+    expect(docsAfter.rows[0]?.n).toBe(docsBefore.rows[0]?.n);
   });
 
   it('is refused for a practitioner, who may not write the record', async () => {
@@ -277,5 +340,54 @@ describe('POST /api/clients/:id/consents/bundle', () => {
       body: JSON.stringify(bundle(THREE)),
     });
     expect(res.status).toBe(403);
+  });
+
+  // F1: a household with a child signs four scrolls, not three — that
+  // household is the whole reason the bundle exists, and until now no test
+  // ever drove it with a minor, so the guardian rule inside the bundle
+  // (`canGiveConsent`, via `requiredConsentsFor`) had never actually run.
+  it('refuses a bundle for a minor given by a contact who is not a guardian, writing nothing', async () => {
+    const before = await owner.query<{ n: number }>(
+      'select count(*)::int as n from consent where client_id = $1',
+      [CHILD_ID],
+    );
+    const res = await request(ADMIN_AUTH, `/api/clients/${CHILD_ID}/consents/bundle`, {
+      method: 'POST',
+      body: JSON.stringify(bundle(FOUR, CHILD_NON_GUARDIAN_CONTACT)),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { code: string }).toMatchObject({ code: 'guardian_required' });
+    // The whole transaction rolled back, not just the offending purpose: the
+    // route checks every purpose to completion before writing any of them
+    // (app/api/clients/consents.ts), so a refusal on one leaves none.
+    const after = await owner.query<{ n: number }>(
+      'select count(*)::int as n from consent where client_id = $1',
+      [CHILD_ID],
+    );
+    expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
+  });
+
+  it('writes all four consents for a minor when a guardian gives them, under one signature', async () => {
+    const docsBefore = await owner.query<{ n: number }>(
+      "select count(*)::int as n from document where kind = 'consent_signature'",
+    );
+    const res = await request(ADMIN_AUTH, `/api/clients/${CHILD_ID}/consents/bundle`, {
+      method: 'POST',
+      body: JSON.stringify(bundle(FOUR, CHILD_GUARDIAN_CONTACT)),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { ids: string[]; signatureDocumentId: string };
+    expect(body.ids).toHaveLength(4);
+    const { rows } = await owner.query<{ purpose: string; signature_document_id: string }>(
+      'select purpose, signature_document_id from consent where client_id = $1',
+      [CHILD_ID],
+    );
+    expect(rows).toHaveLength(4);
+    expect(new Set(rows.map((r) => r.signature_document_id)).size).toBe(1);
+    expect(rows[0]?.signature_document_id).toBe(body.signatureDocumentId);
+    const docsAfter = await owner.query<{ n: number }>(
+      "select count(*)::int as n from document where kind = 'consent_signature'",
+    );
+    expect((docsAfter.rows[0]?.n ?? 0) - (docsBefore.rows[0]?.n ?? 0)).toBe(1);
   });
 });

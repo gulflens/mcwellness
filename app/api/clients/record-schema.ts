@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { KNOWN_MIME_TYPES } from '../../../domain/client';
+import { KNOWN_MIME_TYPES, OFFERED_CONSENT_PURPOSES } from '../../../domain/client';
 import { isoDateIn } from '../../../domain/shared';
 
 /**
@@ -491,10 +491,17 @@ export type RecordConsentBody = z.infer<typeof RecordConsentBody>;
  * bundle behind `POST /api/clients/:id/consents/bundle`. Each purpose names
  * the wording it was read against, exactly as `RecordConsentBody` does for
  * one; one piece of evidence covers them all, so it is not repeated per
- * purpose. `1` to `CONSENT_PURPOSES.length` because a signing with none would
- * be nothing to record and one cannot exceed every purpose the practice has a
- * name for; the route itself refuses a purpose this client was never asked
- * for and a purpose repeated within the one signing.
+ * purpose. `1` to `OFFERED_CONSENT_PURPOSES.length` because a signing with
+ * none would be nothing to record and one cannot exceed every purpose the
+ * practice actually asks a household for today; the route itself refuses a
+ * purpose this client was never asked for and a purpose repeated within the
+ * one signing.
+ *
+ * The purpose enum is `OFFERED_CONSENT_PURPOSES`, not the wider
+ * `CONSENT_PURPOSES` above: `photo_video`, `research` and `marketing` are
+ * not offered (see the comment on `OFFERED_CONSENT_PURPOSES` in
+ * domain/client/types.ts), so a bundle naming one of them is refused at the
+ * boundary rather than reaching `requiredConsentsFor`'s own refusal.
  *
  * A verbal re-confirmation is one purpose's own re-confirmation at the door,
  * never a way to sign several at once, so `method` here is only the two ways
@@ -502,9 +509,9 @@ export type RecordConsentBody = z.infer<typeof RecordConsentBody>;
  */
 export const RecordConsentBundleBody = z.object({
   purposes: z
-    .array(z.object({ purpose: z.enum(CONSENT_PURPOSES), textDocumentId: z.uuid() }))
+    .array(z.object({ purpose: z.enum(OFFERED_CONSENT_PURPOSES), textDocumentId: z.uuid() }))
     .min(1)
-    .max(CONSENT_PURPOSES.length),
+    .max(OFFERED_CONSENT_PURPOSES.length),
   givenByContactId: z.uuid(),
   method: z.enum(['app_signature', 'paper_scan']),
   evidence: DocumentBytes,
