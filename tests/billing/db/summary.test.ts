@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { MonthlyMoneyResponse } from '../../../app/api/billing/document-schema';
-import type { BalanceResponse, SellPackageResponse } from '../../../app/api/billing/ledger-schema';
+import type {
+  BalanceResponse,
+  SellPackageResponse,
+  SellSessionResponse,
+} from '../../../app/api/billing/ledger-schema';
+import { expiryOn, SINGLE_SESSION_MONTHS } from '../../../domain/billing';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import {
   SEEDED,
@@ -145,6 +150,52 @@ describe('the figures reconcile to the ledger', () => {
     const figures = await summary();
     expect(figures.deferredNetFils).toBe(balance.deferredNetFils);
     expect(figures.revenueRecognisedFils).toBe(balance.recognisedNetFils);
+  });
+});
+
+describe('a session sold ahead of its visit', () => {
+  /**
+   * Task 4 of the walk-fixes round, step 2: the design's claim is that a
+   * sold-ahead session's credit counts on the client's balance exactly as any
+   * other credit does. `clientId(1)` is fresh in this file — the earlier
+   * describe blocks' programme and visit are on `clientId(0)`, and the
+   * previous block's own identities depend on that being the tenant's only
+   * deferred credit, so this one runs after it rather than before.
+   */
+  it('shows one credit left, twelve months out, and charged by the gross', async () => {
+    const clientId = h.clientId(1);
+    const before = (await (
+      await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner)
+    ).json()) as BalanceResponse;
+    expect(before.services.find((s) => s.serviceTypeCode === 'nf-session')).toBeUndefined();
+
+    const sold = await h.call('POST', '/api/billing/session-purchases', SEEDED.owner, {
+      clientId,
+      serviceTypeId: h.serviceTypeId('nf-session'),
+      purchasedOn: SEED_TODAY,
+    });
+    expect(sold.status).toBe(201);
+    const sale = (await sold.json()) as SellSessionResponse;
+
+    const after = (await (
+      await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner)
+    ).json()) as BalanceResponse;
+    const service = after.services.find((s) => s.serviceTypeCode === 'nf-session');
+    expect(service?.purchased).toBe(1);
+    expect(service?.remaining).toBe(1);
+    expect(service?.delivered).toBe(0);
+
+    // Twelve months from the day it was bought — SINGLE_SESSION_MONTHS in
+    // domain/billing/expiry.ts, never a date written down here, which would
+    // rot the moment the term changes.
+    const expected = expiryOn(SEED_TODAY, SINGLE_SESSION_MONTHS);
+    expect(sale.expiresOn).toBe(expected);
+    expect(service?.nextExpiryOn).toBe(expected);
+
+    // The same figure the sale itself answered, and "Charged" rose by exactly
+    // it — a credit sold ahead of its visit counts on the money screen like
+    // any other.
+    expect(after.chargedFils - before.chargedFils).toBe(sale.grossFils);
   });
 });
 

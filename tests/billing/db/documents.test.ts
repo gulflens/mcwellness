@@ -6,7 +6,7 @@ import type {
   DocumentLinkResponse,
   SendDocumentResponse,
 } from '../../../app/api/billing/document-schema';
-import type { RecordPaymentResponse } from '../../../app/api/billing/ledger-schema';
+import type { RecordPaymentResponse, SellSessionResponse } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import { SEEDED, setPracticePrices, startHarness, type Harness } from './support';
 
@@ -181,6 +181,67 @@ describe('rendering an invoice', () => {
       paymentId: '00000000-0000-4000-8000-0000000009fe',
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('rendering a single-session invoice', () => {
+  /**
+   * Task 4 of the walk-fixes round, step 1: the design's claim is that a
+   * session sold ahead of its visit is a package invoice's own line, a
+   * service and quantity one — nothing the renderer has to know is new. Sold
+   * through `POST /api/billing/session-purchases` rather than
+   * `deliverVisit`'s raw insert, so this proves the actual sale route's
+   * invoice renders, not a hand-built row shaped to look like one.
+   */
+  it('renders a session sold ahead of its visit exactly as it renders a package invoice', async () => {
+    const clientId = h.clientId(16);
+    const sold = await h.call('POST', '/api/billing/session-purchases', SEEDED.owner, {
+      clientId,
+      serviceTypeId: h.serviceTypeId('nf-session'),
+      purchasedOn: SEED_TODAY,
+    });
+    expect(sold.status).toBe(201);
+    const sale = (await sold.json()) as SellSessionResponse;
+
+    const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, {
+      invoiceId: sale.invoiceId,
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as CreateDocumentResponse;
+    expect(body.document.kind).toBe('invoice');
+
+    const { rows } = await h.owner.query<{ mime_type: string; client_id: string }>(
+      'select mime_type, client_id from document where id = $1',
+      [body.document.id],
+    );
+    const row = rows[0];
+    if (!row) throw new Error('No document row was written.');
+    expect(row.mime_type).toBe('application/pdf');
+    expect(row.client_id).toBe(clientId);
+
+    const link = await h.call(
+      'GET',
+      `/api/billing/documents/${body.document.id}/link`,
+      SEEDED.owner,
+      undefined,
+      { 'x-reason': 'Sending the invoice to the family.' },
+    );
+    expect(link.status).toBe(200);
+    const linkBody = (await link.json()) as DocumentLinkResponse;
+
+    const fetched = await h.api.request(linkBody.url);
+    expect(fetched.status).toBe(200);
+    const bytes = Buffer.from(await fetched.arrayBuffer());
+    expect(bytes.subarray(0, 8).toString('latin1')).toBe('%PDF-1.7');
+
+    // What it says, not only what it is: the same words a package invoice's
+    // page carries, and the line the sale actually wrote.
+    const page = extractAll(new Uint8Array(bytes));
+    expect(page).toContain(h.data.tenant.legalName);
+    expect(page).toContain(sale.invoiceReference);
+    expect(page).toContain('Invoice');
+    expect(page).toContain(sale.serviceTypeName);
+    expect(page).toContain('700.00');
   });
 });
 
