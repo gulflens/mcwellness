@@ -147,6 +147,7 @@ describe('NewAppointmentDrawer', () => {
                 label: homeLocation.label,
                 emirate: homeLocation.emirate,
               },
+              movedTo: null,
             }),
             { status: 201 },
           ),
@@ -173,6 +174,132 @@ describe('NewAppointmentDrawer', () => {
       });
     },
   );
+
+  it('books on the day chosen in the panel, defaulting to the day shown', async () => {
+    const fetchImpl = buildFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            id: '00000008-0000-4000-8000-000000000098',
+            windowStart: '2026-09-11T06:00:00.000Z',
+            windowEnd: '2026-09-11T06:45:00.000Z',
+            status: 'proposed',
+            deliveryMode: 'home',
+            client: {
+              id: client.id,
+              givenName: client.givenName,
+              familyName: client.familyName,
+              givenNameAr: client.givenNameAr,
+              familyNameAr: client.familyNameAr,
+            },
+            practitioner: { id: practitioner.id, displayName: practitioner.displayName },
+            serviceType: { id: serviceType.id, name: serviceType.name },
+            location: {
+              id: homeLocation.id,
+              label: homeLocation.label,
+              emirate: homeLocation.emirate,
+            },
+            movedTo: null,
+          }),
+          { status: 201 },
+        ),
+    );
+    const onCreated = vi.fn();
+
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <NewAppointmentDrawer date="2026-09-10" onClose={vi.fn()} onCreated={onCreated} />
+      </AuthProviderBoundary>,
+    );
+
+    // Defaults to the day the schedule was showing when the panel opened.
+    const dateField = screen.getByLabelText('Date') as HTMLInputElement;
+    expect(dateField.value).toBe('2026-09-10');
+    fireEvent.change(dateField, { target: { value: '2026-09-11' } });
+
+    // Same walk as "books on submit" above: client, service, location, practitioner, time.
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Iris' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Cliff' }));
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('Service') as HTMLSelectElement).options).toHaveLength(2),
+    );
+    fireEvent.change(screen.getByLabelText('Service'), { target: { value: serviceType.id } });
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('Location') as HTMLSelectElement).options).toHaveLength(3),
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).options).toHaveLength(2),
+    );
+    fireEvent.change(screen.getByLabelText('Location'), { target: { value: homeLocation.id } });
+    fireEvent.change(screen.getByLabelText('Practitioner'), { target: { value: practitioner.id } });
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '10:00' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Book appointment' }));
+
+    await waitFor(() =>
+      expect(fetchImpl.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
+    );
+    const postCall = fetchImpl.mock.calls.find(
+      ([input, init]) => String(input).startsWith('/api/appointments') && init?.method === 'POST',
+    );
+    if (!postCall) throw new Error('POST /api/appointments was never called');
+    const [, init] = postCall;
+    const body = JSON.parse(String(init?.body));
+    expect(body.windowStart).toBe(new Date('2026-09-11T10:00:00+04:00').toISOString());
+
+    // The options — and so the practitioner list — were fetched for the new day.
+    expect(fetchImpl.mock.calls.some(([input]) => String(input).includes('date=2026-09-11'))).toBe(
+      true,
+    );
+  });
+
+  it('disables submit and asks for a date when the date is cleared after everything else is chosen', async () => {
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+    );
+    await walkToStartTime(fetchImpl);
+
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '' } });
+
+    // Clearing the date also clears the practitioner choice (as any date
+    // change does); re-picking one here reproduces the actual bug — every
+    // other step is still filled in, only the date itself is missing.
+    await waitFor(() =>
+      expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).options).toHaveLength(2),
+    );
+    fireEvent.change(screen.getByLabelText('Practitioner'), { target: { value: practitioner.id } });
+
+    const submitButton = screen.getByRole('button', {
+      name: 'Book appointment',
+    }) as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    expect(screen.getByText('Choose a date.')).toBeTruthy();
+  });
+
+  it('clears the chosen practitioner when the date changes, and refetches options for the new day', async () => {
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+    );
+    await walkToStartTime(fetchImpl);
+
+    const practitionerSelect = screen.getByLabelText('Practitioner') as HTMLSelectElement;
+    expect(practitionerSelect.value).toBe(practitioner.id);
+
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-11' } });
+
+    // A practitioner certified on one day may be away on another: the choice
+    // is cleared the moment the date changes, not left showing a stale pick.
+    expect(practitionerSelect.value).toBe('');
+
+    await waitFor(() =>
+      expect(
+        fetchImpl.mock.calls.some(([input]) => String(input).includes('date=2026-09-11')),
+      ).toBe(true),
+    );
+  });
 
   it("renders every 409 issue as its own local sentence, never the server's own wording", async () => {
     const issues = [

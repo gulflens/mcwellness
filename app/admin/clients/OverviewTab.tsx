@@ -5,7 +5,8 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
 import { ActivationSummary } from './ActivationSummary';
 import { ErasureSection } from './ErasureSection';
-import { contactName } from './contactName';
+import { IdentityForm } from './IdentityForm';
+import { contactDisplayName } from './contactName';
 import { canActivate, practiceToday, toActivationRecord } from './activation';
 import { canAskForErasure, canErase } from './clientAccess';
 
@@ -65,6 +66,7 @@ export function OverviewTab({
   const gate = useMemo(() => canActivate(toActivationRecord(record), practiceToday()), [record]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   async function activate() {
     setBusy(true);
@@ -102,65 +104,92 @@ export function OverviewTab({
           {error ? <Note tone="critical">{error}</Note> : null}
         </div>
       ) : null}
-      <dl className="record-facts">
-        <div className="record-facts__row">
-          <dt>Date of birth</dt>
-          <dd className="numeric">
-            {record.dateOfBirth
-              ? `${new Date(record.dateOfBirth).toLocaleDateString('en-GB')} (age ${age})`
-              : 'Not recorded'}
-          </dd>
+      {mayWrite && record.status !== 'erased' && !editing ? (
+        <div className="drawer__actions">
+          <Button variant="secondary" onClick={() => setEditing(true)}>
+            Edit
+          </Button>
         </div>
-        <div className="record-facts__row">
-          <dt>Sex at birth</dt>
-          <dd>{record.sexAtBirth ? SEX_LABELS[record.sexAtBirth] : 'Not recorded'}</dd>
-        </div>
-        <div className="record-facts__row">
-          <dt>Preferred language</dt>
-          <dd>{record.preferredLocale === 'ar' ? 'Arabic' : 'English'}</dd>
-        </div>
-        <div className="record-facts__row">
-          <dt>Referral</dt>
-          <dd>{record.referralSource ?? 'Not recorded'}</dd>
-        </div>
-        <div className="record-facts__row">
-          <dt>Key contacts</dt>
-          <dd>
-            {record.contacts.length === 0 ? (
-              'None yet'
-            ) : (
-              <ul className="record-facts__list">
-                {record.contacts.map((contact) => (
-                  <li key={contact.id}>
-                    <span>
-                      {contactName(contact)
-                        ? `${contactName(contact)} (${(RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship).toLowerCase()})`
-                        : (RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship)}
-                    </span>
-                    {contact.phone ? <span className="numeric muted">{contact.phone}</span> : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </dd>
-        </div>
-        <div className="record-facts__row">
-          <dt>Primary location</dt>
-          <dd>
-            {primaryLocation ? (
-              <ul className="record-facts__list">
-                <li>{EMIRATE_LABELS[primaryLocation.emirate] ?? primaryLocation.emirate}</li>
-                {primaryLocation.displayAddress ? <li>{primaryLocation.displayAddress}</li> : null}
-                {primaryLocation.makaniNumber ? (
-                  <li className="numeric muted">Makani {primaryLocation.makaniNumber}</li>
-                ) : null}
-              </ul>
-            ) : (
-              'Not recorded'
-            )}
-          </dd>
-        </div>
-      </dl>
+      ) : null}
+      {editing ? (
+        <IdentityForm
+          clientId={record.id}
+          record={record}
+          onSaved={() => {
+            setEditing(false);
+            onChanged();
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <dl className="record-facts">
+          <div className="record-facts__row">
+            <dt>Date of birth</dt>
+            <dd className="numeric">
+              {record.dateOfBirth
+                ? `${new Date(record.dateOfBirth).toLocaleDateString('en-GB')} (age ${age})`
+                : 'Not recorded'}
+            </dd>
+          </div>
+          <div className="record-facts__row">
+            <dt>Sex at birth</dt>
+            <dd>{record.sexAtBirth ? SEX_LABELS[record.sexAtBirth] : 'Not recorded'}</dd>
+          </div>
+          <div className="record-facts__row">
+            <dt>Preferred language</dt>
+            <dd>
+              {record.preferredLocale === 'ar' ? 'Arabic' : 'English'}
+              <p className="small muted">
+                Decides the language of this household&rsquo;s consent wording and erasure letters.
+                Cannot be changed from this screen yet.
+              </p>
+            </dd>
+          </div>
+          <div className="record-facts__row">
+            <dt>Referral</dt>
+            <dd>{record.referralSource ?? 'Not recorded'}</dd>
+          </div>
+          <div className="record-facts__row">
+            <dt>Key contacts</dt>
+            <dd>
+              {record.contacts.length === 0 ? (
+                'None yet'
+              ) : (
+                <ul className="record-facts__list">
+                  {record.contacts.map((contact) => (
+                    <li key={contact.id}>
+                      <span>
+                        {`${contactDisplayName(contact, record)} (${(RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship).toLowerCase()})`}
+                      </span>
+                      {contact.phone ? (
+                        <span className="numeric muted">{contact.phone}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </dd>
+          </div>
+          <div className="record-facts__row">
+            <dt>Primary location</dt>
+            <dd>
+              {primaryLocation ? (
+                <ul className="record-facts__list">
+                  <li>{EMIRATE_LABELS[primaryLocation.emirate] ?? primaryLocation.emirate}</li>
+                  {primaryLocation.displayAddress ? (
+                    <li>{primaryLocation.displayAddress}</li>
+                  ) : null}
+                  {primaryLocation.makaniNumber ? (
+                    <li className="numeric muted">Makani {primaryLocation.makaniNumber}</li>
+                  ) : null}
+                </ul>
+              ) : (
+                'Not recorded'
+              )}
+            </dd>
+          </div>
+        </dl>
+      )}
       <ErasureSection
         record={record}
         reason={reason}

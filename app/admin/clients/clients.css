@@ -304,6 +304,20 @@
   color: var(--ink-2);
 }
 
+/* SignAllForm.tsx's own heading, naming which of the stacked consents this
+   is — a different thing from `.consent-text__heading` above, which is a
+   heading *inside* one wording's own markdown. Its own size (h3, not body)
+   carries that distinction visually, on top of the `<h3>` element itself
+   carrying it structurally, so four consents read as four rather than one
+   wording with three sub-headings (fix round of 10 September 2026,
+   finding 6). */
+.consent-text__part-heading {
+  font-size: var(--t-h3);
+  line-height: var(--lh-h3);
+  font-weight: var(--w-medium);
+  color: var(--ink);
+}
+
 .consent-text__list {
   padding-inline-start: var(--s-5);
   margin: 0;
@@ -313,18 +327,31 @@
   margin-block-start: var(--s-2);
 }
 
+/* "Sign everything at once" (SignAllForm.tsx) stacks several wordings inside
+   one scroll box. Each after the first gets a rule and more room above it
+   than an ordinary paragraph break, so the eye reads it as a new consent
+   starting rather than the previous one continuing. */
+.consent-text__part + .consent-text__part {
+  margin-block-start: var(--s-6);
+  border-block-start: var(--hairline) solid var(--rule);
+  padding-block-start: var(--s-4);
+}
+
 .signature {
   display: flex;
   flex-direction: column;
   gap: var(--s-2);
 }
 
-/* The drawing surface. The aspect ratio matches the PNG the pad renders
-   (600 by 260), so what is drawn is what is filed. `touch-action: none`
-   keeps a finger drawing a line instead of scrolling the drawer under it. */
+/* The drawing surface. `SignaturePad.tsx` sets its own aspect ratio inline,
+   not here: it is 600 by 260 (the full PNG the pad renders) while there is
+   no caption, or 600 by the ink area alone while there is one, so a person
+   can never draw where the caption is about to be filed (fix round of 10
+   September 2026, finding 2) — one static rule here could not hold both.
+   `touch-action: none` keeps a finger drawing a line instead of scrolling
+   the drawer under it. */
 .signature__pad {
   inline-size: 100%;
-  aspect-ratio: 600 / 260;
   touch-action: none;
   color: var(--ink);
   border: var(--hairline) solid var(--rule);

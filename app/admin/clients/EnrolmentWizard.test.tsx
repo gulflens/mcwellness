@@ -159,7 +159,12 @@ function completeRecord() {
   });
 }
 
-function mountWithRecord(record: ReturnType<typeof baseRecord>, onDone = vi.fn()) {
+function mountWithRecord(
+  record: ReturnType<typeof baseRecord>,
+  onDone = vi.fn(),
+  onCreated = vi.fn(),
+  onActivated = vi.fn(),
+) {
   const calls: { url: string; init?: RequestInit }[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ url: String(input), init });
@@ -181,10 +186,15 @@ function mountWithRecord(record: ReturnType<typeof baseRecord>, onDone = vi.fn()
   }) as unknown as typeof fetch;
   render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <EnrolmentWizard onDone={onDone} mayWriteGoals />
+      <EnrolmentWizard
+        onDone={onDone}
+        onCreated={onCreated}
+        onActivated={onActivated}
+        mayWriteGoals
+      />
     </AuthProviderBoundary>,
   );
-  return { calls, onDone };
+  return { calls, onDone, onCreated, onActivated };
 }
 
 async function fillIdentity() {
@@ -250,7 +260,7 @@ describe('EnrolmentWizard', () => {
     await goToSummary();
     expect(await screen.findByText('Still to complete')).toBeTruthy();
     expect(screen.getByText('Date of birth')).toBeTruthy();
-    expect(screen.getByText('A location with a verified pin')).toBeTruthy();
+    expect(screen.getByText('A location with its pin set')).toBeTruthy();
     expect(screen.getByText('Participation consent')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
   });
@@ -337,5 +347,18 @@ describe('EnrolmentWizard', () => {
     await screen.findByRole('button', { name: 'Add contact' });
     fireEvent.click(screen.getByRole('button', { name: 'Finish later' }));
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells the page when the lead exists and when it is activated', async () => {
+    const { onCreated, onActivated } = mountWithRecord(completeRecord());
+    await fillIdentity();
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    await goToSummary();
+    expect(await screen.findByText('Ready to activate')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Activate' }));
+    // The record's own name, not the identity form's field values: the two
+    // agree here because fillIdentity types Laurel Meadow, but it is
+    // `record.givenName`/`familyName` the callback reads (task brief).
+    await waitFor(() => expect(onActivated).toHaveBeenCalledWith('Laurel Meadow'));
   });
 });

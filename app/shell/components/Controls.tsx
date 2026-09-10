@@ -52,6 +52,7 @@ export function Field({
       {message ? (
         <div
           id={messageId}
+          role={error ? 'alert' : undefined}
           className={['field__hint', 'small', error ? 'field__hint--error' : 'muted'].join(' ')}
         >
           {message}
@@ -116,6 +117,7 @@ export function PasswordField({
       {message ? (
         <div
           id={messageId}
+          role={error ? 'alert' : undefined}
           className={['field__hint', 'small', error ? 'field__hint--error' : 'muted'].join(' ')}
         >
           {message}
@@ -161,6 +163,7 @@ export function Select({
       {message ? (
         <div
           id={messageId}
+          role={error ? 'alert' : undefined}
           className={['field__hint', 'small', error ? 'field__hint--error' : 'muted'].join(' ')}
         >
           {message}

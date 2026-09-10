@@ -24,6 +24,7 @@ import { Checkbox } from './FormAtoms';
 import { ConsentTab } from './ConsentTab';
 import { ContactsTab } from './ContactsTab';
 import { GoalsTab } from './GoalsTab';
+import { IdentityForm } from './IdentityForm';
 import { LocationsTab } from './LocationsTab';
 import { useClientRecord } from './useClientRecord';
 
@@ -94,9 +95,17 @@ const FORBIDDEN_ERROR = "You don't have permission to enrol a client.";
  */
 export function EnrolmentWizard({
   onDone,
+  onCreated,
+  onActivated,
   mayWriteGoals,
 }: {
   onDone: () => void;
+  /** Called once the lead exists, so the list behind the drawer can pick it up
+   * without waiting for the wizard to close (10 September walkthrough). */
+  onCreated?: () => void;
+  /** Called with the client's display name right after a successful Activate,
+   * before `onDone` closes the drawer. */
+  onActivated?: (name: string) => void;
   /** Whether this person may set a goal: an admin writes the record but not goals. */
   mayWriteGoals: boolean;
 }) {
@@ -211,6 +220,7 @@ export function EnrolmentWizard({
       if (res.status === 201) {
         const body = (await res.json()) as CreateClientResponse;
         setCreated(body);
+        onCreated?.();
         goTo('contacts');
         return;
       }
@@ -293,6 +303,7 @@ export function EnrolmentWizard({
         body: JSON.stringify({ to: 'active' }),
       });
       if (res.status === 200) {
+        onActivated?.(`${record?.givenName ?? ''} ${record?.familyName ?? ''}`.trim());
         onDone();
         return;
       }
@@ -308,9 +319,7 @@ export function EnrolmentWizard({
   // The furthest step reached, not the current one: stepping back to Contacts must not
   // put Goals out of reach again, since the lead already holds whatever was saved there.
   const furthest = Math.max(stepIndex, STEPS.indexOf(furthestStep));
-  // Never back past 'contacts' (index 1): identity is a one-time, submit-only step in
-  // this pull request, matching the breadcrumb's own floor above.
-  const canGoBack = stepIndex > 1;
+  const canGoBack = stepIndex > 0;
   const canGoNext = step !== 'identity' && step !== 'summary' && stepIndex < STEPS.length - 1;
 
   return (
@@ -333,10 +342,7 @@ export function EnrolmentWizard({
       <div className="drawer__body">
         <ol className="wizard__steps small">
           {STEPS.map((s, index) => {
-            // Identity is a one-time, submit-only step in this pull request (no route
-            // yet edits it from here): once it has created the lead, index 0 is a plain
-            // label, not a step to revisit. Every later step is reachable once reached.
-            const reachable = created !== null && index > 0 && index <= furthest;
+            const reachable = created !== null && index <= furthest;
             return (
               <li
                 key={s}
@@ -361,7 +367,7 @@ export function EnrolmentWizard({
           })}
         </ol>
 
-        {step === 'identity' ? (
+        {step === 'identity' && !created ? (
           <form className="drawer__form" onSubmit={(e) => void submitIdentity(e)}>
             <Field
               id="wizard-given-name"
@@ -424,7 +430,6 @@ export function EnrolmentWizard({
               id="wizard-phone"
               label="Phone"
               type="tel"
-              placeholder="+971500001234"
               value={phone}
               onChange={(e) => {
                 setPhone(e.target.value);
@@ -447,13 +452,12 @@ export function EnrolmentWizard({
             <Field
               id="wizard-emirates-id"
               label="Emirates ID (optional)"
-              placeholder="784-1900-1234567-1"
               value={emiratesId}
               onChange={(e) => {
                 setEmiratesId(e.target.value);
                 clearIdentityError('emiratesId');
               }}
-              hint="Only when the practice must verify this adult. Never required."
+              hint="For example 784-1900-1234567-1. Only when the practice must verify this adult. Never required."
               error={identityErrors.emiratesId}
             />
             <Checkbox
@@ -565,6 +569,21 @@ export function EnrolmentWizard({
                 </Button>
               ) : null}
             </div>
+          </div>
+        ) : null}
+
+        {step === 'identity' && created && record ? (
+          <div className="wizard__step-body">
+            <IdentityForm
+              clientId={created.id}
+              record={record}
+              onSaved={() => {
+                void refetch();
+                goTo('contacts');
+              }}
+              onCancel={() => goTo('contacts')}
+            />
+            {gate ? <ActivationSummary missing={gate.missing} /> : null}
           </div>
         ) : null}
       </div>

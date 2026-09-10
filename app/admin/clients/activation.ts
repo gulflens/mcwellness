@@ -45,7 +45,7 @@ export function toActivationRecord(record: ClientRecordResponse): ClientRecord {
 /** Plain words for each reason `canActivate` can refuse (client-record.md rule 1). */
 const MISSING_LABELS: Record<Missing, string> = {
   date_of_birth: 'Date of birth',
-  verified_location: 'A location with a verified pin',
+  verified_location: 'A location with its pin set',
   consenting_contact: 'A contact who may give consent',
   'consent:participation': 'Participation consent',
   'consent:minor_participation': "The guardian's consent for a minor",

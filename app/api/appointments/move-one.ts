@@ -362,5 +362,9 @@ export function appointmentRow(
       label: appointment.location_label,
       emirate: appointment.location_emirate,
     },
+    // `created` is the row this same request just wrote: nothing can point
+    // rescheduled_from_id at a row that did not exist a moment ago, so it has
+    // never itself been superseded.
+    movedTo: null,
   };
 }

@@ -205,7 +205,10 @@ export function RecordTimeline({ clientId }: { clientId: string }) {
           <ol className="timeline__list">
             {group.events.map((event) => (
               <li key={event.id} className={`timeline__event timeline__event--${event.kind}`}>
-                <p className="timeline__sentence">{event.sentence}</p>
+                <p className="timeline__sentence">
+                  {event.sentence}
+                  {event.count > 1 ? ` (${event.count} times)` : ''}
+                </p>
                 <p className="timeline__meta micro">
                   {rolesShown.has(event.id) && event.actor ? (
                     <span>{describeRoles(event.actor.roles)}</span>

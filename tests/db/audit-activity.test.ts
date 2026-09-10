@@ -166,6 +166,20 @@ describe('GET /api/audit/activity', () => {
       'The household asked what the record still held.',
     );
     expect(withReason.events.length).toBeGreaterThan(0);
+
+    // The reason that read needed is the whole point of the row
+    // (docs/SPEC/audit.md section 6): a second read narrowed to the same
+    // erased record shows the first read's own reason, rather than nulling
+    // it the way an ordinary read's reason is nulled.
+    const again = await feed(
+      `/api/audit/activity?clientId=${ERASED}&limit=50`,
+      AUTH.ownerA,
+      'Checking again before the letter goes out.',
+    );
+    const priorRead = again.events.find(
+      (event) => event.entityType === 'client' && event.kind === 'read',
+    );
+    expect(priorRead?.reason).toBe('The household asked what the record still held.');
   });
 
   it('keeps an erased household out of the unfiltered feed until a reason is typed', async () => {
@@ -181,6 +195,45 @@ describe('GET /api/audit/activity', () => {
       'Reviewing what the practice erased last month.',
     );
     expect(withReason.events.some((event) => event.clientId === ERASED)).toBe(true);
+  });
+
+  it('keeps a break-glass reason on the unfiltered feed, row by row, not once for the whole request', async () => {
+    // The read that break-glass access forces a reason for: opening the
+    // erased record itself, narrowed by clientId, exactly as the earlier
+    // test above does. The reason is this read's own.
+    const breakGlassReason = 'Confirming what the household says the practice still holds.';
+    await feed(`/api/audit/activity?clientId=${ERASED}&limit=50`, AUTH.ownerA, breakGlassReason);
+
+    // An ordinary read of the record that stands, with a reason typed on the
+    // request but not one this read needed — the case this round's amendment
+    // means to silence (docs/SPEC/audit.md section 9, the 10 September note).
+    const ordinaryReason = "Checking the household's own file before the call.";
+    await feed(`/api/audit/activity?clientId=${STANDING}&limit=50`, AUTH.ownerA, ordinaryReason);
+
+    // Now the *unfiltered* feed, itself opened with a reason so a senior
+    // actor can see the erased household's rows at all. Both rows above are
+    // somewhere in it, scattered among other clients' rows — this is the
+    // shape the narrowed feed never has to resolve, because there every row
+    // already belongs to the one client the request itself checked.
+    const wide = await feed(
+      '/api/audit/activity?entityType=client&action=read&limit=100',
+      AUTH.ownerA,
+      "Reviewing the practice's whole trail before the audit.",
+    );
+
+    const erasedRead = wide.events.find(
+      (event) => event.clientId === ERASED && event.reason === breakGlassReason,
+    );
+    expect(erasedRead?.kind).toBe('read');
+
+    // The ordinary read's own reason was typed on its request too, but its
+    // client is not erased, so the per-row flag never keeps it — the same
+    // silencing rule an ordinary read already gets everywhere else.
+    const standingRead = wide.events.find(
+      (event) => event.clientId === STANDING && event.kind === 'read',
+    );
+    expect(standingRead).toBeTruthy();
+    expect(standingRead?.reason).toBeNull();
   });
 
   it('refuses a practitioner, whose oversight it is not', async () => {

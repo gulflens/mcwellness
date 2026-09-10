@@ -102,13 +102,26 @@ describe('OverviewTab', () => {
     expect(screen.getByText('Iris Creek (mother)')).toBeTruthy();
     expect(screen.getByText('+971500000061')).toBeTruthy();
     // A lead with no location and no consent cannot be activated, and is told so.
-    expect(screen.getByText('A location with a verified pin')).toBeTruthy();
+    expect(screen.getByText('A location with its pin set')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
   });
 
   it('offers no Activate to someone the status route would refuse', () => {
     mount(<OverviewTab record={record} onChanged={vi.fn()} mayWrite={false} />);
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
+  });
+
+  // A real column (db/migrations/060_client.sql), read-only here: it decides
+  // which language a household's consent wording and erasure letter come out
+  // in (app/api/clients/consents.ts, app/api/clients/erasure.ts), and it was
+  // briefly removed as a "placeholder" before being restored (round 43,
+  // fix wave).
+  it("shows a client's preferred language as text, not a control", async () => {
+    mount(
+      <OverviewTab record={{ ...record, preferredLocale: 'ar' }} onChanged={vi.fn()} mayWrite />,
+    );
+    expect(await screen.findByText('Arabic')).toBeTruthy();
+    expect(screen.queryByLabelText(/preferred language/i)).toBeNull();
   });
 });
 

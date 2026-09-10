@@ -39,7 +39,7 @@ type FieldErrors = { emirate?: string; makani?: string; point?: string };
  * Add or edit one location (docs/SPEC/client-record.md section 4.2). A
  * location's emirate and entrance point are set once, at creation
  * (locations.ts does not let either move through the ordinary edit route —
- * the point moves only through "Verify pin", CoordinateFields.tsx), so edit
+ * the point moves only through "Check the pin", CoordinateFields.tsx), so edit
  * mode hides both and asks only for what the edit route accepts. Reused by
  * the drawer's Locations tab and the enrolment wizard's location step.
  */
@@ -174,13 +174,12 @@ export function LocationForm({
         label="Makani number (Dubai only, optional)"
         type="text"
         inputMode="numeric"
-        placeholder="1234567890"
         value={makani}
         onChange={(e) => {
           setMakani(e.target.value);
           clear('makani');
         }}
-        hint="Find it on the building's Makani plate or in the Dubai Municipality app."
+        hint="Ten digits, for example 1234567890. Find it on the building's Makani plate or in the Dubai Municipality app."
         error={fieldErrors.makani}
       />
       {!editing ? (
@@ -193,6 +192,13 @@ export function LocationForm({
             clear('point');
           }}
           error={fieldErrors.point}
+          mapPicker={{
+            emirate,
+            label: LOCATION_LABEL_TEXT[label] ?? 'Location',
+            onAddress: (address) => {
+              if (!displayAddress.trim()) setDisplayAddress(address);
+            },
+          }}
         />
       ) : null}
       <Field

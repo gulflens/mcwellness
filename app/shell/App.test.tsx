@@ -51,6 +51,14 @@ const FINANCE = {
   capabilities: [],
 };
 
+const CLIENT_CONTACT = {
+  userId: '00000002-0000-4000-8000-000000000014',
+  displayName: 'Wren Fairview',
+  tenantId: TENANT_ID,
+  roles: ['client_contact'],
+  capabilities: [],
+};
+
 /** What GET /api/practice answers on this synthetic practice. */
 const PRACTICE = {
   legalName: 'Synthetic Wellness Studio',
@@ -500,5 +508,50 @@ describe('App — the day map is a document of its own', () => {
   it('keeps the rail on every other console screen', async () => {
     mount(OWNER, '/admin/clients');
     expect(await screen.findByRole('navigation', { name: 'Sections' })).toBeTruthy();
+  });
+});
+
+/**
+ * The pin picker (trunk round 43, "the pin on a map") is the second and, for
+ * now, last document carrying the wider policy: reached the same way as the
+ * day map and for the same reason (`RequirePinDocument`). Unlike the day map
+ * it checks no capability of the screen it is opened from — `/admin/clients`
+ * has none of its own either — but it is not `/admin/clients`'s strict policy
+ * this document carries, so it checks its own bar, `canOpenPin`: every staff
+ * role, and not `client_contact`, a household's own actor in this same
+ * session (the whole-branch review of trunk round 43, finding 5).
+ */
+describe('App — the pin picker is a document of its own', () => {
+  it('renders the picker with no rail, so the wider policy reaches one screen', async () => {
+    mount(OWNER, '/admin/clients/pin');
+    expect(
+      await screen.findByRole('heading', { name: 'Where the practitioner should arrive' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Sections' })).toBeNull();
+  });
+
+  it('offers a signed-out person a plain anchor, never the sign-in form itself', async () => {
+    mount(null, '/admin/clients/pin', signedOutProvider);
+    expect(await screen.findByText('Sign in to open the pin picker.')).toBeTruthy();
+    const anchor = screen.getByRole('link', { name: 'Sign in' });
+    expect(anchor).toHaveProperty('href', expect.stringContaining('/sign-in'));
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Pin picker' })).toBeTruthy();
+  });
+
+  it('offers a household contact a plain anchor to their own portal, never the map', async () => {
+    // No practice data is reachable on this screen, so admitting a
+    // client_contact would not leak a record — the risk is a household
+    // member driving the practice's own browser key and its Places quota
+    // from a page handed to them (finding 5).
+    mount(CLIENT_CONTACT, '/admin/clients/pin');
+    expect(await screen.findByText('You do not have access to the pin picker.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Go to your own screen' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/portal'),
+    );
+    expect(
+      screen.queryByRole('heading', { name: 'Where the practitioner should arrive' }),
+    ).toBeNull();
   });
 });

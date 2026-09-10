@@ -32,7 +32,7 @@ type Panel =
  * Locations (docs/SPEC/client-record.md section 4.2): Makani, the verified
  * pin, parking and gate pins (shown as present/absent — neither is
  * captured through a route this pull request builds), access notes, add,
- * edit and "verify pin".
+ * edit and "check the pin".
  */
 export function LocationsTab({
   clientId,
@@ -44,7 +44,7 @@ export function LocationsTab({
   clientId: string;
   record: ClientRecordResponse;
   onChanged: () => void;
-  /** False for a role the write routes would refuse: no Add, no Edit, no Verify pin. */
+  /** False for a role the write routes would refuse: no Add, no Edit, no Check the pin. */
   mayWrite: boolean;
   /**
    * Whether this record has been erased. Passed rather than read from
@@ -54,10 +54,19 @@ export function LocationsTab({
   erased?: boolean;
 }) {
   const [panel, setPanel] = useState<Panel>({ kind: 'closed' });
+  const [pinSavedLocationId, setPinSavedLocationId] = useState<string | null>(null);
 
   function saved() {
+    if (panel.kind === 'verify') {
+      setPinSavedLocationId(panel.location.id);
+    }
     setPanel({ kind: 'closed' });
     onChanged();
+  }
+
+  function openVerifyPanel(location: Location) {
+    setPinSavedLocationId(null);
+    setPanel({ kind: 'verify', location });
   }
 
   return (
@@ -101,8 +110,8 @@ export function LocationsTab({
               </div>
               {mayWrite ? (
                 <div className="record-row__actions">
-                  <Button variant="quiet" onClick={() => setPanel({ kind: 'verify', location })}>
-                    Verify pin
+                  <Button variant="quiet" onClick={() => openVerifyPanel(location)}>
+                    Check the pin
                   </Button>
                   <Button variant="quiet" onClick={() => setPanel({ kind: 'edit', location })}>
                     Edit
@@ -116,6 +125,11 @@ export function LocationsTab({
                   onSaved={saved}
                   onCancel={() => setPanel({ kind: 'closed' })}
                 />
+              ) : null}
+              {pinSavedLocationId === location.id ? (
+                <div role="status" className="small muted">
+                  Pin saved.
+                </div>
               ) : null}
               {panel.kind === 'edit' && panel.location.id === location.id ? (
                 <LocationForm

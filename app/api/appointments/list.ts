@@ -76,6 +76,8 @@ type PracticeRow = BaseRow & {
   client_family_name_ar: string | null;
   practitioner_id: string;
   practitioner_display_name: string;
+  moved_to_id: string | null;
+  moved_to_window_start: Date | null;
 };
 
 type OwnRow = BaseRow & {
@@ -103,7 +105,8 @@ const BASE_COLUMNS =
 const PRACTICE_COLUMNS =
   ', c.given_name as client_given_name, c.family_name as client_family_name, ' +
   'c.given_name_ar as client_given_name_ar, c.family_name_ar as client_family_name_ar, ' +
-  'p.id as practitioner_id, u.display_name as practitioner_display_name';
+  'p.id as practitioner_id, u.display_name as practitioner_display_name, ' +
+  'n.id as moved_to_id, n.window_start as moved_to_window_start';
 
 // st_x/st_y against the geography cast to geometry is the same read
 // app/api/clients/record.ts makes of a location. left(...) is the family
@@ -138,6 +141,22 @@ const FROM_AND_WHERE =
 
 const ORDER = 'order by a.window_start';
 
+// The appointment that replaced a rescheduled one, if any: the move rule
+// writes the new row with rescheduled_from_id pointing back (scheduling-
+// manual.md section 3), and the old row on the old day should say where the
+// visit went rather than only that it did (the walk of 10 September). Used
+// only by the practice query — the practitioner's own day never shows a
+// `rescheduled` row at all (OWN_STATUS_FILTER below). Repeats the tenant
+// predicate for the same reason every other join here does (this file's own
+// docstring).
+const MOVED_TO_JOIN =
+  // Leading space: spliced into FROM_AND_WHERE by replacing ' where ', which
+  // consumes the one space that used to sit before it (the join's own
+  // trailing ' ' before 'where' is what supplies the next one).
+  ' left join lateral (select n.id, n.window_start from appointment n ' +
+  'where n.rescheduled_from_id = a.id and n.tenant_id = app.current_tenant_id() ' +
+  'order by n.created_at desc limit 1) n on true';
+
 // What counts as a stop on a day sheet: a visit the practitioner is going to,
 // is at, or has been to. Named positively, so a status added to
 // appointment_status later appears on nobody's day until somebody puts it
@@ -162,7 +181,11 @@ const ORDER = 'order by a.window_start';
 // outranks a day sheet.)
 const OWN_STATUS_FILTER = "and a.status in ('confirmed', 'checked_in', 'completed', 'no_show') ";
 
-const PRACTICE_SQL = BASE_COLUMNS + PRACTICE_COLUMNS + FROM_AND_WHERE + ORDER;
+const PRACTICE_SQL =
+  BASE_COLUMNS +
+  PRACTICE_COLUMNS +
+  FROM_AND_WHERE.replace(' where ', MOVED_TO_JOIN + ' where ') +
+  ORDER;
 const OWN_SQL =
   BASE_COLUMNS +
   OWN_COLUMNS +
@@ -202,6 +225,10 @@ function toPracticeRow(r: PracticeRow): AppointmentRow {
     practitioner: { id: r.practitioner_id, displayName: r.practitioner_display_name },
     serviceType: { id: r.service_type_id, name: r.service_type_name },
     location: { id: r.location_id, label: r.location_label, emirate: r.location_emirate },
+    movedTo:
+      r.moved_to_id && r.moved_to_window_start
+        ? { id: r.moved_to_id, windowStart: r.moved_to_window_start.toISOString() }
+        : null,
   };
 }
 

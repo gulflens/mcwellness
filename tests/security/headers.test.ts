@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MAP_DOCUMENT_PATHS } from '@domain/shared/widened-document-paths';
 import { createApi } from '../../app/api/create-api';
 
 // No database is touched: the pool refuses to connect, and every request stops before it.
@@ -137,7 +138,12 @@ describe('the policy and the sign-in project', () => {
 });
 
 describe('the day map document, and only it', () => {
-  const withMap = { ...deps, mapDocumentPaths: ['/admin/schedule/map'] };
+  // The two widened documents from trunk round 43, imported from the one
+  // shared list rather than re-typed — a second, hand-kept literal here used
+  // to be the only thing standing between a real third widened document and
+  // one silently missing from either the server's list or the worker's (the
+  // whole-branch review of trunk round 43, finding 4).
+  const withMap = { ...deps, mapDocumentPaths: MAP_DOCUMENT_PATHS };
 
   it('carries the wider policy Google needs, with a nonce, on that one path', async () => {
     const res = await createApi(withMap).request('/admin/schedule/map');
@@ -196,10 +202,11 @@ describe('the day map document, and only it', () => {
   });
 
   /**
-   * The near misses, pinned rather than changed (the review's note N5). Two
-   * of them are served widened and three are not, and none of the five can
-   * put another screen of the practice under the wider policy: the shell
-   * mounts `/admin/schedule/map` outside the `/admin` layout, so the widened
+   * The near misses, pinned rather than changed (the review's note N5), now
+   * naming both widened documents (trunk round 43 part two). Four of them are
+   * served widened and five are not, and none of the nine can put another
+   * screen of the practice under the wider policy: the shell mounts
+   * `/admin/schedule/map` outside the `/admin` layout, so the widened
    * document carries the day map, no rail, and two plain anchors out
    * (`app/shell/App.tsx`, `RequireAuthDocument`). Where a near miss is served
    * strictly the map still renders, and Google's script is refused — which is
@@ -219,6 +226,18 @@ describe('the day map document, and only it', () => {
     ['/admin/schedule/map/', false, 'a trailing slash is a different path'],
     ['/admin/schedule/maps', false, 'one letter more is a different path'],
     ['/Admin/Schedule/Map', false, 'the match is case-sensitive'],
+    ['/admin/clients/pin', true, 'the pin picker is the second map document (trunk round 43)'],
+    // `?k=` is the opaque key shape the picker's URL actually carries since
+    // commit fc2bf4d — never a point, which `.claude/rules/ui.md` forbids in
+    // a URL or query string (the whole-branch review of trunk round 43,
+    // finding 11: this row used to pin the abandoned `?lat=&lng=` shape).
+    [
+      '/admin/clients/pin?k=6f2c1a9e-0000-4000-8000-000000000000',
+      true,
+      'a query string is not part of the path',
+    ],
+    ['/admin/clients/pins', false, 'one letter more is a different path'],
+    ['/admin/clients', false, 'the clients list is not the picker'],
   ];
 
   for (const [path, widened, why] of nearMisses) {

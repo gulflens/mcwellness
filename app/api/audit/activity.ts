@@ -87,6 +87,7 @@ type Row = {
   reason: string | null;
   client_id: string | null;
   client_mrn: string | null;
+  client_status: string | null;
 };
 
 /**
@@ -102,7 +103,7 @@ type Row = {
 const ACTIVITY_SQL =
   'select a.id::text, a.occurred_at, a.actor_id, u.display_name as actor_name, a.actor_type, ' +
   'a.actor_role, a.action, a.entity_type, a.entity_id, a.changed_fields, a.old_values, ' +
-  'a.new_values, a.reason, a.client_id, c.mrn as client_mrn ' +
+  'a.new_values, a.reason, a.client_id, c.mrn as client_mrn, c.status as client_status ' +
   'from audit_log a ' +
   'left join app_user u on u.id = a.actor_id ' +
   'left join client c on c.id = a.client_id ' +
@@ -125,6 +126,16 @@ const ACTIVITY_SQL =
   '           and app.client_erasure_gate(app.client_status_for(a.client_id)))) ' +
   'order by a.id desc limit $10';
 
+/**
+ * `subjectErased` is read off this row's own `client_status` (joined
+ * alongside `client_mrn` above) rather than a single value computed once for
+ * the whole request: the unfiltered feed can carry rows from any number of
+ * clients in one page, erased and not, and only the row's own status says
+ * which. The narrowed-by-`clientId` request reads the same way — every row
+ * it returns is that one client's own, so its status is this same column,
+ * read once per row instead of once for the request but never disagreeing
+ * with it.
+ */
 function toEvent(row: Row): AuditEvent {
   return {
     id: row.id,
@@ -145,6 +156,7 @@ function toEvent(row: Row): AuditEvent {
     oldValues: row.old_values,
     newValues: row.new_values,
     reason: row.reason,
+    subjectErased: row.client_status === 'erased',
   };
 }
 
@@ -197,7 +209,14 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // door the record's own timeline holds (app/api/audit/timeline.ts): under
     // row security a client of another practice does not exist, an erased
     // record is the owner's and the lead practitioner's, and opening one needs
-    // a typed reason the trail then carries with the read.
+    // a typed reason the trail then carries with the read. This status read is
+    // the gate alone now — whether a row's own client is erased, for
+    // `toEvent`'s `subjectErased`, is read per row from `client_status` in
+    // `ACTIVITY_SQL` below instead, which is right for this query either way:
+    // narrowed by clientId every row agrees with this same status, and
+    // unfiltered a senior actor with a reason typed ($9 below) can see rows
+    // scattered across many clients, erased and not, that this single read
+    // never named.
     if (clientId !== undefined) {
       const found = await db.query<{ status: string }>(
         "select status from client where id = $1 and ($2::boolean or status <> 'erased')",

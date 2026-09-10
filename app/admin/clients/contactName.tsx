@@ -56,3 +56,45 @@ export function clientHeadingName(givenName: string, familyName: string): string
   if (givenName === ERASED_NAME && familyName === ERASED_NAME) return ERASED_NAME;
   return [givenName, familyName].filter(Boolean).join(' ').trim();
 }
+
+/**
+ * The name a screen shows for a contact, with the one fallback a `self` contact
+ * needs: the wizard files the client's own phone under a contact with no name
+ * of its own, so "Unnamed contact — self" on a consent was the client being
+ * asked to sign as nobody (the walk of 10 September). The client's own name is
+ * the honest label; any other unnamed contact keeps the relationship.
+ */
+export function contactDisplayName(
+  contact: Pick<Contact, 'givenName' | 'familyName' | 'relationship'>,
+  client: { givenName: string; familyName: string },
+): string {
+  const own = contactName(contact);
+  if (own) return own;
+  if (contact.relationship === 'self') {
+    return clientHeadingName(client.givenName, client.familyName);
+  }
+  return relationshipLabel(contact.relationship);
+}
+
+/**
+ * The name that pre-fills a consent's signature, distinct from
+ * `contactDisplayName` above: a relationship label must never sit on a
+ * signature as if it were a person's name (the walk of 10 September found
+ * "Alpha Synthetic — self" naming the giver correctly in the dropdown while
+ * the signature pad still had nothing to offer but a blank the coordinator
+ * had to fill in by hand). The same self-contact fallback applies — the
+ * enrolment wizard files the client's own phone under a contact with no name
+ * of its own — but any other unnamed giver gets an empty string here, never
+ * "Guardian" or "Mother" standing in for a person's name on what they sign.
+ */
+export function signatureName(
+  contact: Pick<Contact, 'givenName' | 'familyName' | 'relationship'>,
+  client: { givenName: string; familyName: string },
+): string {
+  const own = contactName(contact);
+  if (own) return own;
+  if (contact.relationship === 'self') {
+    return clientHeadingName(client.givenName, client.familyName);
+  }
+  return '';
+}

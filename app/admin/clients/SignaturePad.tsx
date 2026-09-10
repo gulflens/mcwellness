@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Button, Field, Note } from '../../shell/components/Controls';
+import { wrapCaption } from './wrapCaption';
 
 /**
  * Signing on screen (docs/SPEC/client-record.md section 7, method
@@ -19,13 +20,34 @@ import { Button, Field, Note } from '../../shell/components/Controls';
  * a typed name as `app_signature` would put a consent on the record attesting
  * to something that never happened.
  *
- * **Fixed size.** The visible canvas is scaled for the screen it is on, so a
- * stroke is not a staircase on a retina display; the PNG is composed
- * separately at exactly 600 by 260, so every signature the practice holds is
- * the same shape whatever device drew it. The printed name and the date are
- * drawn into the image beneath the stroke, the way they sit on a paper form —
- * which also means the name is inside the evidence rather than in a column
- * beside it.
+ * **Fixed size, except for how tall the caption makes it.** The visible
+ * canvas is scaled for the screen it is on, so a stroke is not a staircase on
+ * a retina display; the PNG is composed separately at exactly 600 wide, 260
+ * tall while there is no caption or a one-line one. The printed name and the
+ * date are drawn into the image beneath the stroke, the way they sit on a
+ * paper form — which also means the name is inside the evidence rather than
+ * in a column beside it.
+ *
+ * **The caption wraps rather than reword the evidence.** Signing once for
+ * several purposes at once (`SignAllForm.tsx`) means naming all of them in
+ * the caption, in the same words their headings use, and that can run wider
+ * than one `fillText` line ever holds. `wrapCaption.ts` breaks it into lines
+ * that fit, measured against the real font with `ctx.measureText`, and the
+ * image grows downward to hold whatever that produces — the space reserved
+ * above the caption band for the stroke itself never shrinks to make room.
+ *
+ * **The drawable area is the ink area, never more.** A stroke with any
+ * descent in what the caption band reserves used to draw straight through
+ * "Signed for: …", because the visible pad stayed the full 260 tall while
+ * the band it composed underneath started higher up, and nothing on screen
+ * showed that region was spoken for (fix round of 10 September 2026,
+ * finding 2). While a caption is present the pad's own aspect ratio —
+ * on screen and in the physical canvas it draws to — is `CAPTIONED_INK_HEIGHT`,
+ * not `SIGNATURE_HEIGHT`, so a person can never draw where the caption will
+ * be filed. The composed image also paints the band opaque immediately
+ * before drawing the rule and the text on it, belt-and-braces, which closes
+ * the same, pre-existing collision with the name and the date even when
+ * there is no caption at all.
  *
  * **The keyboard cannot draw**, and no arrangement of this control changes
  * that. The alternative is not a worse version of the same thing but a
@@ -43,6 +65,25 @@ export const SIGNATURE_WIDTH = 600;
 export const SIGNATURE_HEIGHT = 260;
 /** The band at the foot of the image holding the printed name and the date. */
 const CAPTION_HEIGHT = 60;
+/**
+ * How much room one line of the caption needs: the fixed extra the band has
+ * always grown by when a caption exists at all, the spacing between two
+ * wrapped lines, and — for a caption past the first line — how much taller
+ * the whole image grows to hold each one. One number for all three, because
+ * they are the same "one more line" the caption is asking for.
+ */
+const CAPTION_LINE_HEIGHT = 20;
+/**
+ * The ink area's own height while a caption is drawn beneath it: the full
+ * image height less the band the caption always reserves, whatever it wraps
+ * to. The visible pad's own aspect ratio and the composed image's caption
+ * band both read this one number, so the two can never drift into the
+ * mismatch that let a signature's descender draw straight through
+ * "Signed for: …" (fix round of 10 September 2026, finding 2).
+ */
+export const CAPTIONED_INK_HEIGHT = SIGNATURE_HEIGHT - CAPTION_HEIGHT - CAPTION_LINE_HEIGHT;
+const CAPTION_FONT = '12px sans-serif';
+const NAME_FONT = '16px sans-serif';
 const STROKE_WIDTH = 2.5;
 
 export type SignatureResult = {
@@ -68,6 +109,7 @@ export function SignaturePad({
   onChange,
   disabled,
   today,
+  caption,
 }: {
   signedName: string;
   onSignedNameChange: (value: string) => void;
@@ -76,7 +118,19 @@ export function SignaturePad({
   disabled?: boolean;
   /** The date printed into the image, in the practice's own day. */
   today: string;
+  /**
+   * What the signature covers, printed small beneath the date when a
+   * signature stands for several consents at once; the image is the
+   * evidence, so the image says so.
+   */
+  caption?: string;
 }) {
+  // Whether the composed image will carry a caption band at all: it decides
+  // how tall the drawable area is allowed to be, on screen and in the
+  // physical canvas alike, so a person can never draw where the caption is
+  // about to be filed (finding 2).
+  const captioned = Boolean(caption);
+  const inkHeight = captioned ? CAPTIONED_INK_HEIGHT : SIGNATURE_HEIGHT;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokes = useRef<Point[][]>([]);
   const drawing = useRef(false);
@@ -111,22 +165,40 @@ export function SignaturePad({
     }
   }, []);
 
-  /** The PNG, composed at the fixed size with the printed name beneath. */
+  /**
+   * The PNG, composed with the printed name beneath the stroke and the
+   * caption — wrapped into however many lines it needs — beneath that. The
+   * image grows downward to hold any line past the first; the space above
+   * the band, where the stroke itself lives, stays the size it has always
+   * been, whatever the caption says.
+   */
   const render = useCallback((): SignatureResult | null => {
     const source = canvasRef.current;
     if (!source || typeof document.createElement !== 'function') return null;
     const out = document.createElement('canvas');
     const ctx = context(out);
     if (!ctx || typeof out.toDataURL !== 'function') return null;
+
+    // Measured before anything is drawn: `measureText` answers for the
+    // caption's own font, so that font has to be set first, and how many
+    // lines wrapping produces decides how tall the image needs to be.
+    const captionLines = caption
+      ? (() => {
+          ctx.font = CAPTION_FONT;
+          return wrapCaption(caption, SIGNATURE_WIDTH - 48, (text) => ctx.measureText(text).width);
+        })()
+      : [];
+    const extraLines = Math.max(0, captionLines.length - 1);
+
     out.width = SIGNATURE_WIDTH;
-    out.height = SIGNATURE_HEIGHT;
+    out.height = SIGNATURE_HEIGHT + extraLines * CAPTION_LINE_HEIGHT;
     // Ink on paper, deliberately, and deliberately not the interface's own
     // colours: this is a filed document rather than a screen. A signature
     // rendered in a dark theme would be a white stroke on black, which is
     // wrong in every place a consent is ever looked at — printed, attached to
     // an email, opened years later by somebody who was not there.
     ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, SIGNATURE_WIDTH, SIGNATURE_HEIGHT);
+    ctx.fillRect(0, 0, out.width, out.height);
     ctx.strokeStyle = 'black';
     ctx.lineWidth = STROKE_WIDTH;
     ctx.lineCap = 'round';
@@ -140,25 +212,54 @@ export function SignaturePad({
       if (rest.length === 0) ctx.lineTo(first.x + 0.1, first.y);
       ctx.stroke();
     }
-    const captionTop = SIGNATURE_HEIGHT - CAPTION_HEIGHT;
+    // A caption needs its own lines, so the band grows to hold them rather
+    // than crowding the name and the date it sits beneath — pinned to the
+    // same offset from the top whether the caption is one line or four, so
+    // the stroke's own room above it never shrinks to make space. The same
+    // constant the pad's own drawable area is sized to (`CAPTIONED_INK_HEIGHT`
+    // above), so the two can never say a different number for where the
+    // band starts.
+    const captionTop =
+      captionLines.length > 0 ? CAPTIONED_INK_HEIGHT : SIGNATURE_HEIGHT - CAPTION_HEIGHT;
+    // Painted opaque immediately before the rule and the text below it, so
+    // the name, the date and the caption stay legible whatever is above
+    // them. Belt-and-braces now that the pad's own drawable area is made to
+    // match this band exactly (finding 2) — and it also closes a
+    // pre-existing collision between a stroke and the name/date lines even
+    // when there is no caption at all, since that band was never painted
+    // over either.
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, captionTop, SIGNATURE_WIDTH, out.height - captionTop);
     ctx.beginPath();
     ctx.moveTo(24, captionTop);
     ctx.lineTo(SIGNATURE_WIDTH - 24, captionTop);
     ctx.lineWidth = 1;
     ctx.stroke();
     ctx.fillStyle = 'black';
-    ctx.font = '16px sans-serif';
+    ctx.font = NAME_FONT;
     ctx.fillText(signedName, 24, captionTop + 26);
     ctx.fillText(today, 24, captionTop + 48);
+    if (captionLines.length > 0) {
+      // Smaller than the name and the date: these lines name what was
+      // agreed to, not who agreed to it, and must never read as a second
+      // signature.
+      ctx.font = CAPTION_FONT;
+      captionLines.forEach((line, index) => {
+        ctx.fillText(line, 24, captionTop + 66 + index * CAPTION_LINE_HEIGHT);
+      });
+    }
     const url = out.toDataURL('image/png');
     const comma = url.indexOf(',');
     if (!url.startsWith('data:image/png;base64,') || comma === -1) return null;
     return { mimeType: 'image/png', bytesBase64: url.slice(comma + 1) };
-  }, [signedName, today]);
+  }, [signedName, today, caption]);
 
   // The visible canvas is sized to its own box and the device's pixel ratio
   // once it is on screen; the fixed-size PNG is composed separately, so this
-  // only affects how the stroke looks while it is being drawn.
+  // only affects how the stroke looks while it is being drawn. `inkHeight`
+  // rather than `SIGNATURE_HEIGHT` always: while a caption is present the
+  // box itself is only as tall as the ink area (the CSS aspect ratio below),
+  // and the physical canvas has to match it rather than the old full height.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -169,16 +270,16 @@ export function SignaturePad({
     const ratio = typeof window !== 'undefined' ? (window.devicePixelRatio ?? 1) : 1;
     const width = canvas.clientWidth || SIGNATURE_WIDTH;
     canvas.width = Math.round(width * ratio);
-    canvas.height = Math.round((width * SIGNATURE_HEIGHT * ratio) / SIGNATURE_WIDTH);
+    canvas.height = Math.round((width * inkHeight * ratio) / SIGNATURE_WIDTH);
     repaint();
-  }, [repaint]);
+  }, [repaint, inkHeight]);
 
   // The typed name is drawn into the image, so changing it after a stroke has
   // to re-render: otherwise the evidence would carry a name the form no longer
   // shows.
   useEffect(() => {
     if (hasInk) onChange(render());
-  }, [hasInk, onChange, render, signedName]);
+  }, [hasInk, onChange, render, signedName, caption]);
 
   function pointFrom(event: PointerEvent<HTMLCanvasElement>): Point | null {
     const canvas = canvasRef.current;
@@ -239,6 +340,12 @@ export function SignaturePad({
         <canvas
           ref={canvasRef}
           className={disabled ? 'signature__pad signature__pad--gated' : 'signature__pad'}
+          // The two heights the PNG can be composed at cannot both live in a
+          // static rule in clients.css, so the pad's own aspect ratio is set
+          // here, from the same constant the composed image's caption band
+          // reads (finding 2): the ink area only, while a caption is
+          // present, so a person can never draw where it will be filed.
+          style={{ aspectRatio: `${SIGNATURE_WIDTH} / ${inkHeight}` }}
           aria-labelledby="signature-label"
           // Gated, not broken: the pad is live-looking and strokes vanish
           // without this, so somebody signs, sees nothing, and signs again.

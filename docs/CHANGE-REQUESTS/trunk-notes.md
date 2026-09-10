@@ -3112,6 +3112,310 @@ database on 5451): format, lint, typecheck, the secrets scan and the
 migration audit clean; 2,428 unit tests passed across 211 files; 1,308
 database tests passed across 94 files.
 
+## Round 43 — the walk's fixes, part one (2026-09-10)
+
+The console was driven in a browser as the practice owner through ten
+everyday jobs, on the synthetic practice against main `58f08b6`
+(`docs/superpowers/specs/2026-09-10-walk-fixes-design.md`). The day-to-day
+jobs were easy; the client record and the schedule were not. This is the
+first of four pull requests on branch `trunk-round-43`: everything the walk
+found that needed no decision from the operator. The remaining three — a
+map for the home pin, selling a single session up front, and one signature
+covering every consent — wait on the operator's three decisions of the same
+afternoon and are not in this round.
+
+**What the round builds.** A self contact is shown under the client's own
+name rather than "Unnamed contact — self": `contactDisplayName` falls back
+to `clientHeadingName` when the contact has no name of its own, and
+`clientHeadingName` also collapses the erasure placeholder so an erased
+client reads "Erased client" once, not twice. Example values moved out of
+`ContactForm.tsx`, `EnrolmentWizard.tsx` and `LocationForm.tsx`'s
+placeholders and into their hints, where a person can still read them once
+typing has started; `Field`, `PasswordField` and `Select`
+(`app/shell/components/Controls.tsx`) now give their error text
+`role="alert"`, so a screen reader announces it — and so does every other
+screen that already builds a field from one of these three, the payment
+drawer's reference-number refusal included, without a line of that screen
+being touched this round. "Verify pin" is "Check the pin", saving one says
+"Pin saved.", the activation checklist says "A location with its pin set",
+and the pin panel's own line now reads "Move it to the door the
+practitioner should knock on." The location table holds one entrance point
+and no separate verified flag, so the screen stopped implying a second
+step.
+
+A client's given and family name, date of birth, sex at birth and referral
+source can now be edited after the first wizard step
+(`app/admin/clients/IdentityForm.tsx`), from an Edit button on the Overview
+tab and from the wizard's Identity tab, which becomes a revisit once the
+lead exists rather than a one-time, submit-only step. `PATCH
+/api/clients/:id` had accepted every one of those fields since piece four;
+no screen had ever offered them, so a lead enrolled with the wrong date of
+birth had no way to be corrected short of erasing and re-enrolling. The
+form carries no Arabic-name fields: the console is English only, the
+operator's decision of 7 September (`tests/lint/console-is-english.test.ts`
+enforces it), a rule this round's own design spec first missed and the
+build corrected. The Overview's "Preferred language" row was briefly removed
+in error, on the stated but false grounds that the client table had no such
+column — it does (`db/migrations/060_client.sql`), and it decides the
+language of a household's consent wording and erasure letter. It is
+restored, read-only: no screen can change the setting yet.
+
+`client.primary_location_id` is now written going forward, not only by the
+seed. Creating or patching a location with `isPrimary` demotes every other
+location of that client first and only then promotes this one — in that
+order, never the reverse, and never as one statement spanning both rows,
+because the new unique index below checks each row the moment it is
+written, not once at the end of the statement
+(`app/api/clients/locations.ts`, `makePrimary`). Unflagging the client's
+current primary clears the link in the same request, so the flag and the
+link can never disagree. Migration `963_backfill_primary_location.sql`
+fills in the past, in order: a client with a flagged primary keeps it (the
+newest one, by creation, where more than one had ever ended up flagged); a
+client with exactly one location and no flag gets that one; a client with
+several unflagged locations and no clear owner is left null, as today,
+until the office marks one. The migration then makes every location's flag
+agree with the link — including a client already linked before this file
+ran, whose flag had drifted — and only once that agreement holds everywhere
+does it add `location_one_primary_per_owner`, a plain, non-deferrable
+unique index that from here on refuses a second flagged location for the
+same owner. Until this round, every client the app enrolled — as opposed to
+the seed — showed no emirate in the list, because only the seed had ever
+written the link the list reads.
+
+The booking panel now carries its own date, starting on the day the
+schedule was showing when the panel opened. Changing the date clears the
+chosen practitioner and asks the server again, because who is credentialed
+and free can differ by day. An emptied date disables the button and says
+"Choose a date." rather than letting a blank slip through to the request. A
+rescheduled row on the schedule now says where the visit went:
+`AppointmentRow.movedTo`, found by a join that follows a row's
+`rescheduled_from_id` to whichever appointment replaced it, renders as
+"Moved to Fri 11 Sept 10:00", a link to that day
+(`app/api/appointments/list.ts`, `SchedulePage.tsx`). It shows only on the
+practice-wide day view; a practitioner's own day never lists a superseded
+row at all.
+
+The timeline no longer says "recorded list on the appointment" nine times
+for one booking. Looking at an appointment now narrates as "saw the
+appointment in the schedule", and a reason is attached only when the
+narration is of a change, never a read: `app.reason` is stamped on every
+audit row a request writes, so a read made while, say, a move drawer opened
+was carrying the move's own reason and implying the read explained itself.
+Consecutive reads with the same sentence, by the same person, inside the
+same minute, now fold into one entry carrying a count, printed as "(N
+times)" — folded by the actor's own id, never by the display name a
+fix-round review found two same-named people could share, and a row with no
+actor at all never folds into another (`domain/shared/audit-narrative.ts`,
+`app/api/audit/timeline.ts`, `TimelineEvent.count`).
+
+The enrolment wizard now tells the list behind it what happened, rather
+than making it wait for the drawer to close: `onCreated` fires once the
+lead exists, so the table picks it up without a stale row sitting under it;
+`onActivated(name)` fires with the client's name right before the drawer
+closes on a successful Activate, and `ClientsPage` announces "<name> is now
+active." in a status region, cleared as soon as the search box or the
+status filter changes to something else.
+
+**What the round records.** `docs/SPEC/client-record.md` line 42 (the
+locations screen reads "check the pin", not "verify pin"; the map that
+replaces the two number boxes is part two of the walk's fixes).
+`docs/SPEC/scheduling-manual.md` section 4.1 (a rescheduled row's link to
+where the visit went; the booking panel's own date). `docs/SPEC/audit.md`
+section 9 (a read carries no reason; repeated reads by one person inside
+one minute show once, with a count).
+
+**Every file this round touched.** The trunk's own:
+`app/shell/components/Controls.tsx` with its test;
+`domain/shared/audit-narrative.ts` with its test; migration
+`963_backfill_primary_location.sql`; `tests/db/helpers.ts` (seven more
+fixture location ids), `primary-location-backfill.test.ts` (new) and
+`timeline.test.ts` (its new fold-and-count cases);
+`tests/security/xss.test.tsx` (one fixture line, the new `count` field);
+`docs/superpowers/specs/2026-09-10-walk-fixes-design.md` and the four plans
+beside it (`docs/superpowers/plans/2026-09-10-walk-fixes-1-plain.md`
+through `-4-sign-all.md`); `docs/SPEC/client-record.md`,
+`scheduling-manual.md`, `audit.md` and this file. Outside the trunk's own
+paths, by the integrator's widening for one round (`docs/SPEC/OWNERSHIP.md`):
+`client-record` — `app/admin/clients/ClientsPage.tsx`, `ContactForm.tsx`,
+`EnrolmentWizard.tsx`, `IdentityForm.tsx` (new, with its test),
+`LocationForm.tsx`, `LocationsTab.tsx` (with a new test),
+`OverviewTab.tsx`, `RecordConsentForm.tsx`, `RecordTabs.test.tsx`,
+`VerifyPinForm.tsx`, `activation.ts`, `contactName.tsx` (its new test
+`contactName.test.ts`); `app/api/clients/locations.ts`;
+`tests/client/db/primary_location.test.ts` (new); `scheduling` —
+`app/admin/schedule/NewAppointmentDrawer.tsx`, `SchedulePage.tsx`,
+`schedule.css`, `windows.ts`; `app/api/appointments/create.ts`, `list.ts`,
+`move-one.ts`, `schema.ts`; `tests/scheduling/DayMapPage.test.tsx`,
+`MoveAndCancelDrawers.test.tsx`, `NewAppointmentDrawer.test.tsx`,
+`OptimiseDrawer.test.tsx`, `SchedulePage.test.tsx`, `WeekPage.test.tsx` and
+`db/move_and_cancel.test.ts`; `audit-ui` —
+`app/admin/audit/RecordTimeline.tsx` with its test, `app/api/audit/schema.ts`
+and `timeline.ts`. **One migration, one new
+index, no policy file**: `location_one_primary_per_owner` is the only
+schema change, and it makes a rule the routes already kept the database's
+own rule too. The payment drawer earns `role="alert"` the way every caller
+of `Field`, `PasswordField` and `Select` does — the shared component
+changed; `app/admin/billing/**` did not, and no billing file is touched
+this round.
+
+**Gates on the branch head, in this worktree** (`mcwellness-accounting`):
+format, lint, typecheck, the secrets scan (1,509 tracked files) and the
+migration audit (94 files checked against `origin/main`) clean; 2,520 unit
+tests passed and 1 skipped across 217 files; 1,348 database tests passed
+across 98 files.
+
+## Round 43 — the walk's fixes, part two: the pin on a map (2026-09-10)
+
+Part one (above) built everything the walk found that needed no decision
+from the operator. This is the second of the remaining three pull requests,
+and it needed one: since the browser walk of 10 September, a household's
+entrance pin has been two text boxes, latitude and longitude, typed by
+whoever books the visit. That is what the walk found unusable — a
+coordinator does not carry a client's coordinates in their head, and typing
+one wrong digit sends a practitioner to the wrong door. The operator's
+decision the same day was to put the pin on a map.
+
+**What the round builds.** The Maps loader (`app/shell/maps/googleMaps.ts`,
+moved from the day map's own folder) now takes a list of libraries to ask
+Google for, so two documents can share one loader without either asking
+for more than it draws with. `mapStyle.ts` moved beside it for the same
+reason: it is the basemap both the day map and the new picker draw on, and
+a thing two modules share lives in the shell (`docs/SPEC/OWNERSHIP.md`).
+
+**The pin picker is its own document, not a panel inside the console.**
+Google's Maps JavaScript API needs a content security policy the console's
+own strict policy refuses — no third-party script host, ever, anywhere
+else — and that widening was built for piece seventeen's day map alone,
+confined to that one page on purpose. Opening a panel for the pin inside an
+ordinary console screen would have meant admitting Google's script on every
+page that screen could appear on, which undoes the confinement rather than
+keeping it. So the picker is a second page, `/admin/clients/pin`, admitted
+by name in the same two places the day map already was:
+`MAP_DOCUMENT_PATHS` (`app/api/_middleware/security.ts`) and
+`WIDENED_DOCUMENTS` (`app/shell/sw.ts`, so the offline shell never caches it
+as an ordinary page). The console opens it in a new tab. On it, a marker
+drags or a tap places it, centred on the point it was handed, or the
+client's emirate, or the UAE when neither is known; and Google's own
+address search — `PlaceAutocompleteElement` from the Places library,
+restricted to the UAE — moves the marker to whatever address is chosen and
+shows it underneath.
+
+**How the picker hands the pin back, and how it does not.** The chosen
+point travels to the tab that opened it by `postMessage`, addressed to this
+app's own origin and read only after the receiving side checks that origin
+again — a message from anywhere else is not a pin, silently. The message's
+shape, `{ type: 'mcwellness:pin', lat, lng, address }`, lives in its own
+module, `app/shell/maps/pinMessage.ts`, imported by both sides: the picker
+page pulls in the Places library, and if `CoordinateFields.tsx` — part of
+the console's own bundle — imported the shape from the page itself, the
+page and the library would ride along into every screen that renders a
+coordinate box.
+
+**The point itself never travels in a URL.** A new tab's address reaches
+whatever serves it — this app's own access log — and `.claude/rules/ui.md`
+line 10 forbids personal data in a URL or query string; a household's
+entrance coordinate is exactly that, decision or no decision to make. The
+plan called for the point to ride as the picker's own query string
+(`?lat=&lng=&emirate=&label=`); the controller ruled against it once this
+was noticed, mid-build. Instead, `CoordinateFields.openPicker` writes
+`{ lat, lng, emirate, label }` to `sessionStorage` — private to this
+browser, never sent to any server — under a fresh, random key, and opens
+the picker on `/admin/clients/pin?k=<key>` carrying only that key. The
+picker reads the item back by the same key and removes it at once, so it
+does not linger once read. A browser blocking site data throws on the
+write; the button reports that and does not open a tab it could not hand a
+point back through. "Pick on the map" itself appears on every coordinate
+box — the client's location form, "check the pin", and a practitioner's own
+home base — only when the practice's browser key is set; without one, the
+boxes work as they always have and a line says the map needs the practice's
+key.
+
+**The vendor register.** `docs/COMPLIANCE/approved-vendors.md`, the Google
+Maps Platform row, already said coordinates only, never names or
+identities. This round amends it, on the operator's decision of 10
+September: from trunk round 43 the picker's search box sends the address
+text a coordinator types — as it is typed, restricted to the UAE — to
+Google's Places service. That is the one address that leaves the practice,
+and it leaves only on the coordinator's own deliberate use of the search
+box, never carrying a name, a record number, a location id or a Makani
+number alongside it. A pin dragged or tapped into place by hand sends
+Google nothing but the map viewport, and the point being picked — typed,
+dragged or found by search — never reaches Google or this practice's own
+server through a URL. The approval column now also dates the address
+search itself: approved by the operator, 10 September 2026, for the pin
+picker alone.
+
+**What the round records.** `docs/COMPLIANCE/approved-vendors.md`, the
+Google Maps Platform row (the address search, and its own dated approval).
+`docs/SEAMS.md` (the picker named beside the day map's paragraph, sharing
+its loader). `docs/SPEC/route-planning.md` section 8 (two widened
+documents from trunk round 43, not one; `MAP_DOCUMENT_PATHS` lists both).
+`docs/SPEC/client-record.md`'s locations line ("check the pin" opens the
+picker in a new tab now; the coordinate boxes stay, for a coordinator who
+already has the numbers).
+
+**Every file this round touched.** The trunk's own, all under paths this
+document's shared zone already names (`app/shell/**`,
+`app/api/_middleware/**`, `app/admin/settings/**`):
+`app/shell/maps/googleMaps.ts` and `mapStyle.ts` (moved from
+`app/admin/schedule/map/`, with their tests moved to `tests/shell/`),
+`app/shell/maps/pinMessage.ts` (new),
+`app/shell/components/CoordinateFields.tsx` with its test, `app/api/_middleware/security.ts`,
+`app/shell/sw.ts` with its test, `app/shell/App.tsx` with its test,
+`tests/security/headers.test.ts`, and the
+`app/admin/settings/PractitionerBaseDrawer.tsx` line that hands the base
+drawer's own `mapPicker` prop through. Outside the trunk's own paths, by
+the integrator's widening for one round (`docs/SPEC/OWNERSHIP.md`):
+`client-record` — the new `app/admin/clients/pin/` (`PinPickerPage.tsx`
+with its test, `emirates.ts`, `pin.css`), and one import line each in
+`LocationForm.tsx` and `VerifyPinForm.tsx`; `scheduling` — the day map's
+own import lines in `DayMap.tsx`, `DayMapPage.tsx` and `overlays.ts`,
+unchanged otherwise. The documents: this file,
+`docs/COMPLIANCE/approved-vendors.md`, `docs/SEAMS.md`,
+`docs/SPEC/route-planning.md`, `docs/SPEC/client-record.md`. One
+correction unrelated to the pin rode on this branch alongside it:
+`docs/superpowers/plans/2026-09-10-walk-fixes-3-sell-session.md` and
+`docs/superpowers/specs/2026-09-10-walk-fixes-design.md`, part three's own
+plan, now read migration 411 rather than 410 — a concurrent piece of work
+(package terms) took 410 first and merged to `main` while part three's plan
+still named it. **No migration, no policy file, no API route, no schema
+change**: nothing this round decided is a database's to enforce, and the
+picker reads and writes nothing but `sessionStorage` and a message to its
+own opener.
+
+**Outside the repository, for the operator.** Two things this round cannot
+do from inside it: enable the Places API on the browser key's Google Cloud
+project — and add Places API (New) to that key's API restrictions, since
+`app/shell/maps/googleMaps.ts` states the key is restricted to one product
+and a key restricted to Maps JavaScript API alone loads the map and the
+search box and then has every autocomplete request refused, with the search
+box degrading silently and no explanation on screen (the whole-branch review
+of trunk round 43, finding 6) — and confirm `VITE_GOOGLE_MAPS_BROWSER_KEY` is
+set on the production build. Without either, "Pick on the map" does not
+appear and the two boxes work exactly as they did before this round.
+
+**Gates on the branch head, in this worktree** (`mcwellness-accounting`,
+database 5443): format, lint, typecheck and the secrets scan (1,514 tracked
+files) clean; 2,555 unit tests passed across 218 files; 1,351 database
+tests passed across 98 files. The migration audit failed at the time this
+note was first written, on one file neither this round nor that task
+touched: `db/migrations/410_package_terms.sql`, which a different piece of
+work (package terms, decision 9, pull request 151) merged to `main` at 16:22
+on the operator's clock, after this stacked branch had already forked from
+it. The audit compares a branch's `db/migrations/` directly against
+`origin/main`'s, with no way to tell a long-lived stacked branch apart from
+one that deleted a merged file, and it was not that task's place to merge
+`main` into a branch stacked under an open pull request — so the failure was
+recorded here rather than routed around.
+
+**Resolved.** Part one merged `main` in (`824df9b`) and part two merged part
+one (`dd77388`); `origin/main` is now a full ancestor of this head, migration
+410 is present in `db/migrations/`, and the audit no longer has a file to
+disagree about (the whole-branch review of trunk round 43, finding 7 — this
+note had gone stale describing a commit no longer being merged). The audit is
+green at this head: 95 migration files checked against `origin/main`, none
+edited, deleted or renamed after merge.
+
 ## Round 43 — the walk's fixes, part three: sell a session ahead of its visit (2026-09-10)
 
 Part one and part two answered what the walk found needing no decision, and
@@ -3216,4 +3520,111 @@ all passing). The wider run belongs to the task that proved the three
 downstream claims above: `pnpm vitest run --config vitest.db.config.ts
 tests/billing tests/accounting`, 349 of 349 passing, run against the
 branch before this round's own closing fix was written.
+
+## Round 43 — the walk's fixes, part four: one signature (2026-09-10)
+
+The walk of 10 September (part one of this round, above) found nine actions
+standing between a household and an activated client: three consents, each
+with its own scroll to the end of its wording, its own drawn signature and
+its own typed name. The operator's decision the same afternoon: one
+signature should cover everything a client needs, in one sitting. This is
+that decision, built.
+
+**What the round builds.** `SignaturePad.tsx` takes an optional `caption`,
+printed as a third, smaller line beneath the signed name and the date in
+the filed PNG — the image says on its own face what it was signed for.
+`POST /api/clients/:id/consents/bundle` (`app/api/clients/consents.ts`)
+writes one consent row per purpose a client needs, each against that
+purpose's own current approved wording, all sharing one filed signature, in
+one transaction. It runs, per purpose, every check the single-consent route
+already runs — the wording is current and in the client's own language, the
+giver may give it, the evidence fits the method — before writing a single
+row, so a refusal on the last purpose leaves no earlier ones; and it adds
+two checks of its own, a purpose the client does not need and the same
+purpose named twice in one signing. `domain/client` gains
+`requiredConsentsFor`, the same question `requiredConsents` already
+answered from a full client record, now answerable from a date of birth
+alone — the bundle route and the Consent tab both need it before they have
+anything else about the client to hand, and this keeps the two rules from
+being able to drift apart.
+
+`SignAllForm.tsx` is the screen: every wording the client needs, stacked
+one after another under its own heading, the household reading the whole
+stack before the pad unlocks — the same read-to-the-end gate
+`RecordConsentForm.tsx` already used on one wording at a time, now judged
+against the combined box. One signature is drawn, one bundle is sent, and
+`ConsentTab.tsx` offers "Sign everything at once" above the per-consent
+list only while something required is still missing; choosing it replaces
+the list with the form, and the per-consent form underneath is untouched —
+a re-consent, a withdrawal, a paper form and a verbal re-confirmation at
+the door all still go through it exactly as before. The caption printed
+into the filed image names each purpose in the same words its on-screen
+heading uses: `wrapCaption.ts` breaks the combined names onto as many lines
+as they need, measured against the real font, and the image grows downward
+to hold whatever that produces. A first attempt shortened the labels
+instead, to fit `fillText`'s single line — a fix round of 10 September 2026
+reversed that, because the evidence's own footer is the practice's record
+of what a household agreed to, and cannot say less than what it actually
+read and signed against. Building the screen also found a real gap in
+`tests/lint/console-is-english.test.ts`
+(round 35's own guard, trunk-owned): its allowlist named only
+`RecordConsentForm.tsx` as the one staff screen that may show the
+household's consent wording in Arabic, and `SignAllForm.tsx` needed to
+render the identical text for the identical reason. The allowlist now
+names both.
+
+**The compliance reading.** No wording changed, and no wording changed
+version, for any of this. The screen shows each purpose's own current
+approved text in full; a household reads every word of every consent it is
+signing before the pad unlocks, exactly as it did signing one at a time.
+What changed is only the evidence: one signature image, filed once, its
+foot naming the purposes it covers, and every consent row it stands behind
+still records the exact wording document it was read against — the same
+fact a single consent has always recorded. A withdrawal stays the
+withdrawal of one purpose, on that purpose's own row; it leaves the shared
+image referenced by whichever of the other rows still stand, which is
+honest rather than a gap, because the image is immutable and was never
+about only one purpose, and the withdrawal row itself records which
+purpose ended and why.
+
+**What the round records.** `docs/SPEC/client-record.md` section 7 gains
+"Signing everything at once": the route, its checks, the one image and its
+caption, the refusals, and that a verbal re-confirmation and a withdrawal
+both stay per consent. `docs/CONSENT/README.md` gains one paragraph saying
+a signature may now cover several of these wordings, that each consent
+still names its own, and that no version of any wording moved for it.
+
+**Every file this round touched.** The trunk's own:
+`docs/SPEC/client-record.md`, `docs/CONSENT/README.md`, this file. Outside
+the trunk's own paths, by the integrator's widening for one round
+(`docs/SPEC/OWNERSHIP.md`): `client-record` —
+`app/admin/clients/SignaturePad.tsx` with its test,
+`app/admin/clients/RecordConsentForm.tsx`,
+`app/admin/clients/ConsentTab.tsx`, `app/admin/clients/SignAllForm.tsx`
+(new) with its test, `app/admin/clients/consentPurposeLabels.ts` (new),
+`app/admin/clients/wrapCaption.ts` (new) with its test,
+`app/admin/clients/clients.css`,
+`app/api/clients/consents.ts`, `app/api/clients/record-schema.ts`,
+`domain/client/index.ts`, `domain/client/requiredConsents.ts` with its
+test, and `tests/client/db/consent_bundle.test.ts` (new); plus
+`tests/lint/console-is-english.test.ts`, which is the trunk's own guard and
+is touched here only to add the one file this round's screen needed on its
+allowlist. **No migration, no policy file, no schema change**: the bundle
+route is a new endpoint over tables and columns that already existed, and
+`consent.signature_document_id` was already nullable and already shared by
+a `verbal_witnessed` row with none.
+
+**Gates on the branch head, in this worktree** (`mcwellness-reports`,
+database on port 5438): format, lint, typecheck and the secrets scan (1,512
+tracked files) clean; 2,537 unit tests passed across 218 files; 1,356
+database tests passed across 99 files. The migration audit did not read
+clean earlier in this round, for a reason this round did not create: this
+branch's base predated `db/migrations/410_package_terms.sql`, merged to
+`origin/main` afterwards by the billing stream's own round, so the audit
+read it as a file missing locally rather than one this branch never had
+cause to carry. Merge `f527f36` brought that file, and the rest of that
+round, in. The audit is green at this head — `pnpm audit:migrations`
+reports 95 migration files checked against `origin/main`, none edited,
+deleted or renamed after the merge — and `db/migrations/` remains untouched
+by every commit this round makes of its own.
 
