@@ -199,10 +199,11 @@ describe('the day map document, and only it', () => {
   });
 
   /**
-   * The near misses, pinned rather than changed (the review's note N5). Two
-   * of them are served widened and three are not, and none of the five can
-   * put another screen of the practice under the wider policy: the shell
-   * mounts `/admin/schedule/map` outside the `/admin` layout, so the widened
+   * The near misses, pinned rather than changed (the review's note N5), now
+   * naming both widened documents (trunk round 43 part two). Four of them are
+   * served widened and five are not, and none of the nine can put another
+   * screen of the practice under the wider policy: the shell mounts
+   * `/admin/schedule/map` outside the `/admin` layout, so the widened
    * document carries the day map, no rail, and two plain anchors out
    * (`app/shell/App.tsx`, `RequireAuthDocument`). Where a near miss is served
    * strictly the map still renders, and Google's script is refused — which is
