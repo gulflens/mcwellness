@@ -1,10 +1,12 @@
 # billing-10: the seed's term moves with the round, and the live catalogue owes its own data step
 
-Two facts this round could not settle inside `mcwellness-billing`: the seed
+Three facts this round could not settle inside `mcwellness-billing`: the seed
 that every database is built from is a trunk file, not this worktree's to own
-outright, and the three programmes already on the live price list are real
-rows nothing in this branch may touch. Both are recorded here rather than
-reached for, as `CLAUDE.md` rule 10 requires for a shared-zone change.
+outright; the three programmes already on the live price list are real rows
+nothing in this branch may touch; and the page that says who may read what is
+the trunk's, while this round is the one that adds a table to it. All three
+are recorded here rather than reached for, as `CLAUDE.md` rule 10 requires for
+a shared-zone change.
 
 ---
 
@@ -74,8 +76,52 @@ meant for rather than every row in the table that happens to share a code.
 
 ---
 
-**Neither blocked the round.** Item 1 is applied; item 2 is owed and recorded,
-awaiting the operator's word at the live pass.
+## 3. `docs/SECURITY.md` — the Money row names `package_extension`
+
+**What.** The "Who may read what" table's Money row gains the new table in
+both of its written cells. The "What" cell read:
+
+> **Money**: purchases, entitlements, invoices and their lines, payments, refunds, rendered invoice files
+
+and now ends "…rendered invoice files, and the extensions of a programme
+(`package_extension`)". The policy cell gains `package_extension_readers` and
+`package_extension_writers` beside `ledger_readers`, with a sentence saying
+that the reader policy is `ledger_readers`' audience written out under its own
+name — so the six role cells are unchanged — and one exception noted below.
+No cell's letters move.
+
+**Why.** That section closes with its own rule: *"This section is rewritten in
+the same pull request as any policy that changes it."* This round adds a table
+and three policies (`db/policies/billing/ledger.sql`, migration 410), so the
+page would otherwise be wrong for a round, and the only way to discover it
+would be to read every policy file again — which is the work that section
+exists to save.
+
+**One thing the review's premise did not cover, found while writing it.**
+`portal_money_adults` (`db/policies/portal/money.sql`) narrows six tables by
+name — `package_purchase`, `entitlement`, `invoice`, `invoice_line`,
+`payment`, `billing_document` — and `package_extension` is not among them. So
+the Money row's C cell, "own record, and not a minor's own login", is those
+six tables'; a young person's own login is admitted to their own record's
+extension rows by `package_extension_readers` where the same login is refused
+the purchase they extend. Nothing reads that table for a household — the
+portal has no route that names it — so this is a policy wider than its reader,
+not an exposure. It is written into the page as the exception it is, and named
+again under "Left for the billing stream" below as the tidying it wants:
+either the table joins that array or the row says for ever why it does not.
+
+**Which spec.** `docs/SECURITY.md` "Who may read what" (written 2026-09-06,
+trunk round 34) and `db/policies/billing/ledger.sql`.
+
+**The file.** `docs/SECURITY.md`, the trunk's (`docs/SPEC/OWNERSHIP.md`:
+`docs/**`): *applied by the builder on the branch*, in this round's house fix
+round, under the precedent item 1 sets — a two-cell edit to a page whose own
+rule requires it here rather than a round later.
+
+---
+
+**None of the three blocked the round.** Items 1 and 3 are applied; item 2 is
+owed and recorded, awaiting the operator's word at the live pass.
 
 ---
 
@@ -103,3 +149,11 @@ them is a defect on this branch.
   `ledger_amenders` for it. The trigger is therefore dead. It stays because
   the standard-column rule wants `updated_at` on every table and the trigger
   is what keeps that column honest if an update case ever appears.
+- **`portal_money_adults` does not name `package_extension`.** Found while
+  writing item 3 above, and the one place the new table is not exactly the
+  purchase's equal: that policy narrows six tables by name, so a young
+  person's own portal login reads their own record's extension rows where the
+  same login is refused the purchase those rows extend. No route reads the
+  table for a household, so nothing is exposed today. The tidying is the same
+  one the bullet above wants — the table joins the array, or the page says for
+  ever why it does not.
