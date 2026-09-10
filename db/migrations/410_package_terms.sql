@@ -77,6 +77,19 @@ comment on table public.package_extension is
 -- purchase_id, which serves every lookup by programme, and that is the only
 -- way anything reads these rows: no query in the round filters them by
 -- client_id, and an index nothing uses is a write to keep right for nobody.
+--
+-- That is the argument from queries; the other half is the scans a foreign
+-- key implies on the parent's side, which no query of ours issues. Deleting a
+-- parent row, or rewriting the key it is referenced by, makes Postgres scan
+-- this table for children, and without an index on (tenant_id, client_id) or
+-- (tenant_id, created_by) that scan is a sequential one. Both were considered
+-- and both are free here: a household that asks to be forgotten has its
+-- `client` row anonymised in place and never deleted (migration 100's erasure
+-- act, and CLAUDE.md rule 8 — financial records keep five years regardless),
+-- an `app_user` row is archived rather than deleted, and neither table's
+-- (tenant_id, id) is ever rewritten. `package_purchase` is the same. So the
+-- scan has no occasion to happen, and an index against an occasion that does
+-- not arise is the write nobody needs.
 
 create trigger set_updated_at before update on public.package_extension
   for each row execute function app.set_updated_at();
