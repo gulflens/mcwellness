@@ -57,3 +57,4 @@ export {
   passwordProblemKey,
 } from './password';
 export type { PasswordProblemKey } from './password';
+export { MAP_DOCUMENT_PATHS } from './widened-document-paths';

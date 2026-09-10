@@ -158,6 +158,18 @@ export function PractitionerBaseDrawer({
             // note directly above this form promises the practice keeps the
             // coordinate and nothing else. "Use my current position" stays: it
             // reaches the browser and nobody else.
+            //
+            // "Pick on the map" is a different thing, and it does stay. "Open in
+            // Google Maps" is an outbound link whose one purpose is to hand a
+            // point already fixed as this person's home to Google, to look at
+            // — exactly the hand-off the vendor listing does not describe for
+            // a member of staff. The picker is the practitioner actively
+            // choosing where their own pin sits, the way typing into the boxes
+            // or tapping "Use my current position" already is; nobody outside
+            // the practice reads what is decided until "Use this pin" sends it
+            // back to this very form. No emirate and no address are passed
+            // either, for the same reason the note above gives: the practice
+            // keeps the coordinate and nothing else.
             offerMapLink={false}
             lat={point.lat}
             lng={point.lng}
@@ -167,6 +179,7 @@ export function PractitionerBaseDrawer({
               setFormError(null);
             }}
             error={coordinateError}
+            mapPicker={{ label: 'Home base' }}
           />
 
           <Select

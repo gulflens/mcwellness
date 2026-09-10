@@ -236,6 +236,18 @@ describe('rule 1, continued: the day map never becomes the offline shell', () =>
     expect(await (shell as Response).text()).toBe('the shell');
   });
 
+  it('leaves the shell as it was when the pin picker is opened online', async () => {
+    // The second widened document (trunk round 43): the same risk as the day
+    // map, because the shell cache does not know why a document was widened,
+    // only that it was.
+    const pin = new Request(`${ORIGIN}/admin/clients/pin`);
+    Object.defineProperty(pin, 'mode', { value: 'navigate' });
+    const answer = await handleFetch(pin);
+    expect(await (answer as Response).text()).toBe(`live ${ORIGIN}/admin/clients/pin`);
+    const shell = caches.get('mcwellness-shell-v1')?.entries.get(`${ORIGIN}/`);
+    expect(await (shell as Response).text()).toBe('the shell');
+  });
+
   it('still keeps the last console document a device saw as its shell', async () => {
     const clients = new Request(`${ORIGIN}/admin/clients`);
     Object.defineProperty(clients, 'mode', { value: 'navigate' });

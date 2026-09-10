@@ -7,6 +7,19 @@ import { CoordinateFields } from '../../shell/components/CoordinateFields';
 const GENERIC_ERROR = 'The pin could not be verified. Try again.';
 const FORBIDDEN_ERROR = "You don't have permission to change this client's locations.";
 
+// The picker's page title and its marker's title read this label; the console's
+// own row (LocationsTab.tsx) carries the same words for the same reason — a
+// kind of place, not a record — and this form has no reason to import that
+// file just to reach its private map.
+const LOCATION_LABEL_TEXT: Record<string, string> = {
+  home: 'Home',
+  work: 'Work',
+  school: 'School',
+  studio: 'The studio',
+  base: 'Base',
+  other: 'Other',
+};
+
 /**
  * "Check the pin" (docs/SPEC/client-record.md section 4.2; task brief item 4):
  * drag-the-marker becomes latitude and longitude, "Use my current
@@ -69,6 +82,10 @@ export function VerifyPinForm({
         onChange={(next) => {
           setLat(next.lat);
           setLng(next.lng);
+        }}
+        mapPicker={{
+          emirate: location.emirate,
+          label: LOCATION_LABEL_TEXT[location.label] ?? location.label,
         }}
       />
       {error ? <Note tone="critical">{error}</Note> : null}

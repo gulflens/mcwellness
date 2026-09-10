@@ -10,6 +10,7 @@ import {
   canOpenBooks,
   canOpenEnquiries,
   canOpenKit,
+  canOpenPin,
   canOpenPortalAccess,
   canOpenPractitioners,
   canOpenSchedule,
@@ -68,6 +69,7 @@ const AuditPage = screen(() => import('../admin/audit/AuditPage'), 'AuditPage');
 const BooksPage = screen(() => import('../admin/accounting/BooksPage'), 'BooksPage');
 const BillingPage = screen(() => import('../admin/billing/BillingPage'), 'BillingPage');
 const ClientsPage = screen(() => import('../admin/clients/ClientsPage'), 'ClientsPage');
+const PinPickerPage = screen(() => import('../admin/clients/pin/PinPickerPage'), 'PinPickerPage');
 const EnquiriesPage = screen(() => import('../admin/enquiries/EnquiriesPage'), 'EnquiriesPage');
 const KitPage = screen(() => import('../admin/kit/KitPage'), 'KitPage');
 const TeamPage = screen(() => import('../admin/settings/TeamPage'), 'TeamPage');
@@ -177,7 +179,63 @@ function RequireAuthDocument({ children }: { children: ReactNode }) {
 }
 
 /**
- * What the practitioner waits on while their screen arrives.
+ * The same wait as `RequireAuthDocument`, for the pin picker's own widened
+ * document (`MAP_DOCUMENT_PATHS`, `app/api/_middleware/security.ts`). The
+ * mechanism is identical and for the identical reason (finding B2 above): a
+ * signed-out visitor is offered a plain anchor, never a `<Navigate>`, because
+ * this document too carries `'unsafe-eval'` and `'strict-dynamic'` and a
+ * client-side redirect would render the next screen inside it.
+ *
+ * **Its bar is `canOpenPin`, not merely being signed in.** `/admin/clients`,
+ * the screen this page is opened from, admits every signed-in member of
+ * staff and has no `canOpenX` gate of its own in `adminAccess.ts` — but
+ * `/admin/clients` carries the console's strict policy, and this document
+ * does not. A `client_contact` is an actor in the same session
+ * (`app/shell/routing.ts`; `/portal` is mounted under this same
+ * `RequireAuth`), and no practice data is reachable here, so admitting one
+ * is not a data leak — the risk is a household member driving the practice's
+ * own browser key and its Places quota from a page handed to them. A widened
+ * document takes a higher bar than the strict page it sits beside, so this
+ * one checks `canOpenPin` on top of being signed in (the whole-branch review
+ * of trunk round 43, finding 5 — an earlier version of this comment justified
+ * the looser bar by parity with `/admin/clients`, which was the wrong page to
+ * measure against).
+ */
+function RequirePinDocument({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
+  if (session.status === 'loading') {
+    return (
+      <main className="plain">
+        <Note>Checking who you are.</Note>
+      </main>
+    );
+  }
+  if (session.status === 'signed-out') {
+    return (
+      <main className="plain">
+        <h1>Pin picker</h1>
+        <Note>Sign in to open the pin picker.</Note>
+        <a className="link" href="/sign-in">
+          Sign in
+        </a>
+      </main>
+    );
+  }
+  if (!canOpenPin(session.actor, new Date())) {
+    return (
+      <main className="plain">
+        <h1>Pin picker</h1>
+        <Note>You do not have access to the pin picker.</Note>
+        <a className="link" href={homeFor(session.actor)}>
+          Go to your own screen
+        </a>
+      </main>
+    );
+  }
+  return <>{children}</>;
+}
+
+/** * What the practitioner waits on while their screen arrives.
  *
  * Their three screens are the one part of the app with no chrome around them
  * — the design brief asks for "no chrome during a session" — so there is no
@@ -228,6 +286,25 @@ export function App() {
               <RequireAuthDocument>
                 <DayMapPage />
               </RequireAuthDocument>
+            }
+          />
+          {/*
+            The pin picker (docs/SPEC/route-planning.md section 8; trunk round
+            43, "the pin on a map"), reached the same way and for the same
+            reason as the day map above: its own document, carrying the wider
+            content security policy Google's Maps JavaScript API needs, opened
+            by a plain anchor into a new tab rather than by the router. It
+            renders no `Link` of its own into any other screen — "Cancel" and
+            "Use this pin" close the tab or post a message and close it — so,
+            unlike the day map, it needs no `DocumentBoundary`: there is
+            nothing inside it for one to guard.
+          */}
+          <Route
+            path="/admin/clients/pin"
+            element={
+              <RequirePinDocument>
+                <PinPickerPage />
+              </RequirePinDocument>
             }
           />
           <Route

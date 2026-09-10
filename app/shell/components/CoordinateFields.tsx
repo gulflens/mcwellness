@@ -1,14 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Field, Note } from './Controls';
 import { googleMapsUrl, requestCurrentPosition } from './geolocation';
+import { browserMapKey } from '../maps/googleMaps';
+import { PIN_MESSAGE_TYPE, type PinMessage } from '../maps/pinMessage';
 
 /**
- * Latitude, longitude, "Use my current position" and "Open in Google Maps"
- * (docs/SPEC/client-record.md section 4.2, "check the pin"): no map library and
- * no map key exist on the web yet, so this is the whole of it — a small form,
+ * Latitude, longitude, "Use my current position", "Open in Google Maps" and,
+ * since trunk round 43 part two, "Pick on the map"
+ * (docs/SPEC/client-record.md section 4.2, "check the pin"): a small form,
  * never blocking when geolocation is refused or unsupported. Shared by
- * LocationForm's entrance point and the standalone "Check the pin" action on an
- * existing location.
+ * LocationForm's entrance point, the standalone "Check the pin" action on an
+ * existing location, and the practitioner base drawer.
+ *
+ * **"Pick on the map" (`mapPicker` prop).** The map itself never renders here
+ * — Google's script is admitted only on the pin picker's own document
+ * (`app/admin/clients/pin/PinPickerPage.tsx`, docs/SPEC/route-planning.md
+ * section 8), so this button opens that document in a new tab, and a
+ * listener takes back the point it posts. The point these boxes hold never
+ * rides in that tab's URL: `.claude/rules/ui.md` forbids personal data in a
+ * URL or query string, and a household's entrance coordinate is exactly
+ * that. `openPicker` writes it instead to `sessionStorage`, under a fresh key
+ * (`randomPinKey()` — `crypto.randomUUID()`, or a random hex string outside a
+ * secure context), and opens the picker with only that key (`?k=…`) in its
+ * URL; the picker reads the blob back by the same key and deletes it
+ * immediately (the review of this component, finding 3). That same key is
+ * this instance's own correlation token, kept in `openPickerKey` below: the
+ * listener takes back a point only when the message carrying it echoes this
+ * exact key, because the tab `openPicker` opens outlives the panel this
+ * component renders in, and a stale tab's answer must never move a different
+ * client's boxes (the whole-branch review of trunk round 43, finding 1 — the
+ * harm this branch exists to prevent). A browser that blocks site data throws
+ * on the write, and a managed device or a pop-up blocker may refuse the tab
+ * outright (`window.open` returning `null`); either is caught, reported next
+ * to the button in the same voice, and leaves nothing written behind
+ * (finding 2). The message shape the listener below reads lives in
+ * `../maps/pinMessage.ts`, not in the picker page itself, so this component —
+ * a plain console component with callers across the admin app — never names
+ * the widened, security-sensitive picker page as an import target.
  *
  * **Where it lives, and why it moved.** It began in `app/admin/clients/`,
  * where "check the pin" was the only screen that needed it. From 8 September
@@ -41,6 +69,28 @@ import { googleMapsUrl, requestCurrentPosition } from './geolocation';
 
 const BOUNDS = { lat: 90, lng: 180 } as const;
 
+/**
+ * The literal words every caller resolves `mapPicker.label` to today —
+ * LocationForm.tsx, VerifyPinForm.tsx and PractitionerBaseDrawer.tsx each
+ * turn their own enum value into one of exactly these before handing it
+ * here. A kind-of-place word is fine to keep beside a coordinate in
+ * `sessionStorage`, briefly, for the picker's page heading and marker
+ * tooltip; a record's own words are not (the review of this component,
+ * finding 3). This component cannot tell a future caller's free text from a
+ * client's own nickname for a location except by checking it against this
+ * finite list, so anything not on it is left out of the stored blob.
+ */
+const PLACE_KIND_LABELS = new Set([
+  'Home',
+  'Work',
+  'School',
+  'Other',
+  'The studio',
+  'Base',
+  'Home base',
+  'Location',
+]);
+
 /** A coordinate, or null when the box is empty or holds nothing usable yet. */
 function parse(value: string, limit: number): number | null {
   const trimmed = value.trim();
@@ -55,6 +105,24 @@ function display(value: number | null): string {
   return value === null ? '' : String(value);
 }
 
+/**
+ * A key unique enough to tell one picker tab's answer from another's — not a
+ * cryptographic guarantee, just something nobody else is handing back today.
+ * `crypto.randomUUID` is undefined outside a secure context, and this
+ * project's own walkthroughs are actually done from a tablet reaching the
+ * dev server over `http://<LAN-IP>:5184`, an insecure context — so a plain
+ * `crypto.randomUUID()` call here throws an unhandled `TypeError` on the
+ * click instead of ever reaching the by-hand fallback below (the
+ * whole-branch review of trunk round 43, finding 10). This falls back to a
+ * random hex string rather than crash the button.
+ */
+function randomPinKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+
 export function CoordinateFields({
   idPrefix = 'coord',
   lat,
@@ -62,6 +130,8 @@ export function CoordinateFields({
   onChange,
   error,
   offerMapLink = true,
+  browserKey,
+  mapPicker,
 }: {
   /** Unique per instance on screen, so two open at once never share an id. */
   idPrefix?: string;
@@ -75,21 +145,144 @@ export function CoordinateFields({
    * approves; false for a member of staff's own home, which it does not.
    */
   offerMapLink?: boolean;
+  /** Tests hand the browser key in; the component reads the build's otherwise. */
+  browserKey?: string | null;
+  /**
+   * When set, offers "Pick on the map": a button that opens the pin picker in
+   * a new tab, handing it the point these boxes hold through `sessionStorage`
+   * rather than the tab's URL, and a listener that takes back the point it
+   * posts. Absent only for nothing today — every caller of this component
+   * passes it — but kept optional rather than forced.
+   */
+  mapPicker?: {
+    /** Centres the picker on the emirate when there is no point yet. */
+    emirate?: string;
+    /** Shown on the picker's page and used as the marker's title. */
+    label: string;
+    /** A caller may take the address the picker's search found. */
+    onAddress?: (address: string) => void;
+  };
 }) {
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
+  const [pickerFailure, setPickerFailure] = useState<string | null>(null);
   // What is in the boxes, which is not always what the parent holds: half of a
   // number on the way to being one parses to null, and the characters must stay.
   const [raw, setRaw] = useState({ lat: display(lat), lng: display(lng) });
   // The last pair this component reported, so a value arriving from outside — the
   // current position, or a location being edited — is told apart from our own echo.
   const reported = useRef({ lat, lng });
+  // The key of the picker tab this instance currently has open, or null when
+  // none is (nothing opened yet, or the write failed, or the tab was
+  // refused). A message bearing any other key — including one this same
+  // component minted for an earlier tab, or a different mounted instance's
+  // tab entirely — is not this open tab's answer and must not move the boxes
+  // (the whole-branch review of trunk round 43, finding 1).
+  const openPickerKey = useRef<string | null>(null);
 
   useEffect(() => {
     if (reported.current.lat === lat && reported.current.lng === lng) return;
     reported.current = { lat, lng };
     setRaw({ lat: display(lat), lng: display(lng) });
   }, [lat, lng]);
+
+  const key = browserKey === undefined ? browserMapKey() : browserKey;
+
+  useEffect(() => {
+    if (!mapPicker) return;
+    // The picker posts to its opener with this origin as the target, and this
+    // side checks the origin again: a message from anywhere else is not a pin.
+    const onMessage = (event: MessageEvent): void => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as Partial<PinMessage> | null;
+      if (!data || data.type !== PIN_MESSAGE_TYPE) return;
+      if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
+      // The correlation check the origin check alone cannot do: two boxes are
+      // never mounted together (LocationsTab.tsx keeps one panel open at a
+      // time), but the picker tab a panel opened outlives the panel closing.
+      // A message bearing no key, a stale key this instance minted for an
+      // earlier tab, or another instance's key entirely is rejected here —
+      // the same-origin check on its own would have let it through and moved
+      // a different client's boxes (finding 1 of the whole-branch review).
+      if (typeof data.key !== 'string' || data.key === '' || data.key !== openPickerKey.current) {
+        return;
+      }
+      // Report it the same way `fillFromCurrentPosition` does: `onChange` only,
+      // never touching `raw` or `reported` here directly. A point from the
+      // picker is a value arriving from outside, not this component's own
+      // echo of what was typed, so it takes the same path back in as an edited
+      // location's point does — through the parent, and the `[lat, lng]`
+      // effect above reconciles the boxes once it comes back down. Setting
+      // `reported.current` here instead would make that effect think its own
+      // echo had already arrived and skip updating the boxes, leaving them
+      // showing the old point while the parent holds the new one.
+      onChange({ lat: data.lat, lng: data.lng });
+      if (data.address && mapPicker.onAddress) mapPicker.onAddress(data.address);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [mapPicker, onChange]);
+
+  function openPicker(): void {
+    if (!mapPicker) return;
+    setPickerFailure(null);
+    const pinKey = randomPinKey();
+    // Only a kind-of-place word travels with the point — see PLACE_KIND_LABELS
+    // above — and `lat`/`lng` are omitted entirely rather than written as
+    // `null` when there is no point yet, so the picker's own "is there a
+    // starting point" check (reading the parsed object's fields) sees the
+    // same "missing" shape either way.
+    const toStore: { lat?: number; lng?: number; emirate?: string; label?: string } = {};
+    if (lat !== null && lng !== null) {
+      toStore.lat = lat;
+      toStore.lng = lng;
+    }
+    if (mapPicker.emirate) toStore.emirate = mapPicker.emirate;
+    if (PLACE_KIND_LABELS.has(mapPicker.label)) toStore.label = mapPicker.label;
+    try {
+      window.sessionStorage.setItem(`mcwellness:pin:${pinKey}`, JSON.stringify(toStore));
+    } catch {
+      // A browser blocking site data (private mode, storage switched off) must
+      // not silently open a picker with no way to hand its point back safely,
+      // and must not fall back to the URL either — that is the very thing
+      // this key exists to avoid. Say so, and stop here.
+      setPickerFailure(
+        'The map could not be opened: this browser is blocking site data. Enter the coordinates by hand instead.',
+      );
+      return;
+    }
+    // A new tab, never a frame: the picker is its own document with its own
+    // policy, and the console's policy refuses to be framed and to frame.
+    // The features string is `''`, not `'noopener=no'`: a named-target
+    // `window.open` keeps `window.opener` by default, so there was nothing to
+    // gain by asking for it explicitly, and some browsers read any non-empty
+    // features string as a request for a pop-up *window* rather than a tab,
+    // which makes the block this function now checks for more likely (the
+    // whole-branch review of trunk round 43, finding 2). The URL carries only
+    // the opaque key: no point, no emirate, no label — `.claude/rules/ui.md`
+    // forbids personal data in a URL or query string, and a household's
+    // entrance coordinate is exactly that.
+    const opened = window.open(`/admin/clients/pin?k=${pinKey}`, '_blank', '');
+    if (!opened) {
+      // A managed device, or a plain pop-up blocker, refuses the tab and
+      // leaves this call's return value the only sign anything happened — the
+      // blob just written above must not linger unclaimed (finding 2's other
+      // half), and the failure needs the same voice the storage-blocked note
+      // above already uses, not silence.
+      try {
+        window.sessionStorage.removeItem(`mcwellness:pin:${pinKey}`);
+      } catch {
+        // A browser that cannot remove it could not have read it either.
+      }
+      setPickerFailure(
+        'The map could not be opened: this browser blocked the new tab. Enter the coordinates by hand instead.',
+      );
+      return;
+    }
+    // Only now, once a tab genuinely opened, does this key become "the one
+    // this instance is waiting an answer from" — see `openPickerKey` above.
+    openPickerKey.current = pinKey;
+  }
 
   function edit(axis: 'lat' | 'lng', value: string) {
     const next = { ...raw, [axis]: value };
@@ -149,6 +342,11 @@ export function CoordinateFields({
         </p>
       ) : null}
       <div className="coordinate-fields__actions">
+        {mapPicker && key !== null ? (
+          <Button type="button" variant="primary" onClick={openPicker}>
+            Pick on the map
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="secondary"
@@ -169,6 +367,10 @@ export function CoordinateFields({
           </a>
         ) : null}
       </div>
+      {mapPicker && key === null ? (
+        <p className="small muted">The map needs the practice’s browser key.</p>
+      ) : null}
+      {pickerFailure ? <Note tone="critical">{pickerFailure}</Note> : null}
       {locateNote ? <Note>{locateNote}</Note> : null}
     </div>
   );

@@ -380,12 +380,17 @@ gains the grid cases and a forced-fallback case for the practice-day route.
 **8.1 Why a second policy.** Google's Maps JavaScript API needs directives
 the console's strict policy refuses (`script-src 'self'`; no third-party
 host anywhere). Google documents two policies; the strict one uses a nonce
-and `'strict-dynamic'`. The widening is confined to the one document that
-needs it.
+and `'strict-dynamic'`. The widening is confined to the documents that need
+it, named one by one, never guessed from a prefix. From piece seventeen that
+was the day map alone; from trunk round 43 it is two: the day map and the
+pin picker (`/admin/clients/pin`), which needs the same script to draw its
+own marker and its address search.
 
 **8.2 Mechanism.** `securityHeaders` gains `mapDocumentPaths` (the trunk
-passes `['/admin/schedule/map']`). For a `GET` whose path is exactly one of
-them, the middleware mints a nonce (`randomBytes(16)`, base64), sets it as
+passes `MAP_DOCUMENT_PATHS`, `app/api/_middleware/security.ts`, which from
+trunk round 43 lists both `/admin/schedule/map` and `/admin/clients/pin`).
+For a `GET` whose path is exactly one of them, the middleware mints a nonce
+(`randomBytes(16)`, base64), sets it as
 `cspNonce` on the context (`ApiEnv` gains the variable) and sends the map
 policy below; every other path sends the strict policy unchanged.
 `mountApp`'s catch-all reads `cspNonce` and, when present, serves the shell
@@ -445,6 +450,8 @@ address; Google receives the browser's IP address, the map viewport and the
 key, as any map page sends. The pins and lines are drawn by the app; no
 household coordinate is sent to Google by the map. The grid request from
 the API carries the coordinates of the day's places and one departure time."
+Trunk round 43 amends the same row again, for the pin picker's address
+search — see `docs/COMPLIANCE/approved-vendors.md` itself for the wording.
 
 ## 9. API (part A)
 
