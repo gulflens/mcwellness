@@ -53,3 +53,5 @@ export type {
   PlannedStop,
   Totals,
 } from './optimise';
+export { BOARD_STATES, DEFAULT_GRACE_MINUTES, boardState, lateness } from './lateness';
+export type { BoardState, Lateness, Progress } from './lateness';
