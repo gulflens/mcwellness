@@ -73,9 +73,10 @@ create table public.package_extension (
 comment on table public.package_extension is
   'audited: client — one row per extension of a programme; at most two, of three months each (docs/PLAN/package-terms.md)';
 
--- No index on purchase_id alone: the unique key above builds one leading with
--- purchase_id, which serves every lookup by programme.
-create index package_extension_client_idx on public.package_extension (client_id);
+-- No index of this table's own. The unique key above builds one leading with
+-- purchase_id, which serves every lookup by programme, and that is the only
+-- way anything reads these rows: no query in the round filters them by
+-- client_id, and an index nothing uses is a write to keep right for nobody.
 
 create trigger set_updated_at before update on public.package_extension
   for each row execute function app.set_updated_at();
