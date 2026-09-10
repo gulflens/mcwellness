@@ -24,6 +24,7 @@ import { Checkbox } from './FormAtoms';
 import { ConsentTab } from './ConsentTab';
 import { ContactsTab } from './ContactsTab';
 import { GoalsTab } from './GoalsTab';
+import { IdentityForm } from './IdentityForm';
 import { LocationsTab } from './LocationsTab';
 import { useClientRecord } from './useClientRecord';
 
@@ -308,9 +309,7 @@ export function EnrolmentWizard({
   // The furthest step reached, not the current one: stepping back to Contacts must not
   // put Goals out of reach again, since the lead already holds whatever was saved there.
   const furthest = Math.max(stepIndex, STEPS.indexOf(furthestStep));
-  // Never back past 'contacts' (index 1): identity is a one-time, submit-only step in
-  // this pull request, matching the breadcrumb's own floor above.
-  const canGoBack = stepIndex > 1;
+  const canGoBack = stepIndex > 0;
   const canGoNext = step !== 'identity' && step !== 'summary' && stepIndex < STEPS.length - 1;
 
   return (
@@ -333,10 +332,7 @@ export function EnrolmentWizard({
       <div className="drawer__body">
         <ol className="wizard__steps small">
           {STEPS.map((s, index) => {
-            // Identity is a one-time, submit-only step in this pull request (no route
-            // yet edits it from here): once it has created the lead, index 0 is a plain
-            // label, not a step to revisit. Every later step is reachable once reached.
-            const reachable = created !== null && index > 0 && index <= furthest;
+            const reachable = created !== null && index <= furthest;
             return (
               <li
                 key={s}
@@ -361,7 +357,7 @@ export function EnrolmentWizard({
           })}
         </ol>
 
-        {step === 'identity' ? (
+        {step === 'identity' && !created ? (
           <form className="drawer__form" onSubmit={(e) => void submitIdentity(e)}>
             <Field
               id="wizard-given-name"
@@ -563,6 +559,21 @@ export function EnrolmentWizard({
                 </Button>
               ) : null}
             </div>
+          </div>
+        ) : null}
+
+        {step === 'identity' && created && record ? (
+          <div className="wizard__step-body">
+            <IdentityForm
+              clientId={created.id}
+              record={record}
+              onSaved={() => {
+                void refetch();
+                goTo('contacts');
+              }}
+              onCancel={() => goTo('contacts')}
+            />
+            {gate ? <ActivationSummary missing={gate.missing} /> : null}
           </div>
         ) : null}
       </div>
