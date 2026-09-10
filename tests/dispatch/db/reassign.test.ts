@@ -678,5 +678,16 @@ describe('migration 210', () => {
       "select conname from pg_constraint where conname = 'appointment_reassigned_implies_rescheduled'",
     );
     expect(guard.rows).toHaveLength(1);
+    // The foreign key carries an index, and a partial one: only the rows a
+    // reassignment wrote hold a value, which is the shape 203 gave
+    // `rescheduled_from_id` and 200 gave every other key on this table.
+    const index = await owner.query<{ indexdef: string }>(
+      "select indexdef from pg_indexes where tablename = 'appointment' " +
+        "and indexname = 'appointment_reassigned_from_practitioner_idx'",
+    );
+    expect(index.rows).toHaveLength(1);
+    expect(index.rows[0]?.indexdef).toContain(
+      'WHERE (reassigned_from_practitioner_id IS NOT NULL)',
+    );
   });
 });

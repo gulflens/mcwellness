@@ -22,6 +22,15 @@ alter table public.appointment
   add constraint appointment_reassigned_implies_rescheduled
   check (reassigned_from_practitioner_id is null or rescheduled_from_id is not null);
 
+-- The key is indexed, as every other foreign key on this table is (200), and
+-- partially, as 203 indexed `rescheduled_from_id`: a reassignment is the rare
+-- act and only the rows it wrote carry a value, so the index is kept to them
+-- rather than to a column that is null on nearly every appointment.
+create index appointment_reassigned_from_practitioner_idx
+  on public.appointment (reassigned_from_practitioner_id)
+  where reassigned_from_practitioner_id is not null;
+
 -- rollback:
+-- drop index if exists appointment_reassigned_from_practitioner_idx;
 -- alter table public.appointment drop constraint appointment_reassigned_implies_rescheduled;
 -- alter table public.appointment drop column reassigned_from_practitioner_id;
