@@ -322,4 +322,81 @@ describe('GET /api/clients/:id/timeline', () => {
     expect(changed).toHaveLength(2);
     expect(changed.every((e) => e.count === 1)).toBe(true);
   });
+
+  // Fix round 1 (Task 8): the first pass folded by the actor's display name,
+  // which would merge two different people who happen to share one. An audit
+  // line must never merge two people, so the fold now keys on the actor's id.
+  it('never folds two different people who share a display name into one line', async () => {
+    const client = clientAt(6);
+    const readerA = '00000009-0000-4000-8000-000000000201';
+    const readerB = '00000009-0000-4000-8000-000000000202';
+    const sharedName = 'Synthetic Reader';
+    await owner.query(
+      'insert into app_user (id, tenant_id, display_name) values ($1, $2, $3), ($4, $2, $3)',
+      [readerA, SEED_TENANT_ID, sharedName, readerB],
+    );
+    const appointmentId = '00000009-0000-4000-8000-000000000103';
+    await insertAppointmentAudit(
+      client.id,
+      readerA,
+      appointmentId,
+      'list',
+      null,
+      '2026-09-10T09:02:00.000Z',
+    );
+    await insertAppointmentAudit(
+      client.id,
+      readerB,
+      appointmentId,
+      'list',
+      null,
+      '2026-09-10T09:02:10.000Z',
+    );
+
+    const body = (await (
+      await get(authIdOf(0), `/api/clients/${client.id}/timeline`)
+    ).json()) as TimelineResponse;
+    const seen = body.events.filter(
+      (e) => e.sentence === `${sharedName} saw the appointment in the schedule`,
+    );
+    expect(seen).toHaveLength(2);
+    expect(seen.every((e) => e.count === 1)).toBe(true);
+  });
+
+  it('never folds two reads that straddle a calendar-minute boundary', async () => {
+    // A fresh client (unused by the other fold tests above): this test's
+    // filter matches on sentence text alone, and client 6 already carries a
+    // folded "saw the appointment in the schedule" entry from an earlier case
+    // in this file that would otherwise be counted here too.
+    const client = clientAt(7);
+    const ownerId = data.users[0]?.id;
+    const ownerName = data.users[0]?.displayName ?? '';
+    if (!ownerId) throw new Error('No seeded owner.');
+    const appointmentId = '00000009-0000-4000-8000-000000000104';
+    await insertAppointmentAudit(
+      client.id,
+      ownerId,
+      appointmentId,
+      'list',
+      null,
+      '2026-09-10T09:03:59.999Z',
+    );
+    await insertAppointmentAudit(
+      client.id,
+      ownerId,
+      appointmentId,
+      'list',
+      null,
+      '2026-09-10T09:04:00.000Z',
+    );
+
+    const body = (await (
+      await get(authIdOf(0), `/api/clients/${client.id}/timeline`)
+    ).json()) as TimelineResponse;
+    const seen = body.events.filter(
+      (e) => e.sentence === `${ownerName} saw the appointment in the schedule`,
+    );
+    expect(seen).toHaveLength(2);
+    expect(seen.every((e) => e.count === 1)).toBe(true);
+  });
 });
