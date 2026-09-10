@@ -36,6 +36,7 @@ let h: Harness;
 let silverId: string;
 let purchaseId: string;
 let expiredPurchaseId: string;
+let lapsedPurchaseId: string;
 
 /**
  * The day the programme runs out as sold, and the two ends its two
@@ -151,6 +152,7 @@ beforeAll(async () => {
   // second extension is: three months from the current end, twice over.
   sixMonthsOn = expiryOn(threeMonthsOn, 3);
   expiredPurchaseId = (await sellSilverTo(1)).id;
+  lapsedPurchaseId = (await sellSilverTo(3)).id;
 
   // The practice's own settings, as the request middleware would stamp them,
   // so the raw statements below are attributable in the trail.
@@ -351,6 +353,37 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
       [purchaseId],
     );
     expect(rows[0]?.n).toBe(2);
+  });
+
+  it('refuses a programme so far past its end that three more months are still behind today', async () => {
+    // Four months past the day it ran out. Three months from that end lands
+    // before today, so the family would gain no day they can use and would
+    // have spent one of the two extensions they are allowed for ever. Written
+    // directly rather than by waiting four months, as the fixture in the last
+    // describe below is.
+    const endedOn = '2026-05-01';
+    expect(expiryOn(endedOn, 3) < SEED_TODAY).toBe(true);
+    await h.owner.query(
+      "update package_purchase set purchased_on = '2025-11-01', expires_on = $2 where id = $1",
+      [lapsedPurchaseId, endedOn],
+    );
+
+    const res = await h.call(
+      'POST',
+      `/api/billing/package-purchases/${lapsedPurchaseId}/extension`,
+      SEEDED.owner,
+      { reason: 'The family asked, long after the programme ran out.' },
+    );
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code: string }).code).toBe('ended_too_long_ago');
+
+    // Nothing spent and nothing moved: the refusal is the whole of it.
+    const { rows } = await h.owner.query<{ n: number; extended_to: string | null }>(
+      'select (select count(*)::int from package_extension where purchase_id = p.id) as n, ' +
+        'p.extended_to::text as extended_to from package_purchase p where p.id = $1',
+      [lapsedPurchaseId],
+    );
+    expect(rows[0]).toEqual({ n: 0, extended_to: null });
   });
 
   it('records why in the audit trail, not only in the column', async () => {

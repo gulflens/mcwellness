@@ -3,6 +3,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BalancesSection } from '../../app/admin/billing/BalancesSection';
 import { expiryOn } from '../../domain/billing';
+import { isoDateIn } from '../../domain/shared';
 import { json, mountWith, OWNER } from './harness';
 
 afterEach(cleanup);
@@ -26,6 +27,14 @@ const SILVER_PURCHASE_ID = '00000004-0000-4000-8000-000000000401';
 const EXPIRES_ON = '2027-09-02';
 const FIRST_EXTENSION_TO = expiryOn(EXPIRES_ON, 3);
 const SECOND_EXTENSION_TO = expiryOn(FIRST_EXTENSION_TO, 3);
+
+/**
+ * A programme that ran out long ago: far enough behind that three more months
+ * are still behind today whenever this suite runs. Taken from the day the
+ * screen itself is on, because that is the day it judges an extension
+ * against.
+ */
+const LONG_LAPSED_ON = isoDateIn(new Date(Date.now() - 400 * 86_400_000), 'Asia/Dubai');
 
 const CLIENT = {
   id: CLIENT_ID,
@@ -266,6 +275,46 @@ describe('giving a family longer', () => {
       ),
     ).toBeTruthy();
     expect(requests.filter((r) => r.url.endsWith('/extension'))).toHaveLength(1);
+  });
+
+  it('offers nothing to a programme whose three more months would still be in the past', async () => {
+    // The screen must not offer what the route refuses: a programme more than
+    // three months past its end cannot be extended into a date the family can
+    // use, and pressing the button would spend one of their two for nothing.
+    const purchases = [
+      {
+        ...(balance().purchases[0] as Record<string, unknown>),
+        expiresOn: LONG_LAPSED_ON,
+        extendsTo: expiryOn(LONG_LAPSED_ON, 3),
+      },
+    ];
+    mount(balance({ purchases }));
+    await findClient();
+    await screen.findByText('Silver');
+    expect(screen.queryByRole('button', { name: 'Extend' })).toBeNull();
+  });
+
+  it('says so when the route refuses a programme that ended too long ago', async () => {
+    const body = balance();
+    mountWith(OWNER, <BalancesSection canWrite={true} />, (url, init) => {
+      if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+      if (url === `/api/billing/clients/${CLIENT_ID}/balance`) return json(body);
+      if (url.endsWith('/extension') && init?.method === 'POST') {
+        return json({ error: 'conflict', code: 'ended_too_long_ago' }, 409);
+      }
+      return null;
+    });
+    await findClient();
+    fireEvent.click(await screen.findByRole('button', { name: 'Extend' }));
+    fireEvent.change(screen.getByLabelText('Why'), {
+      target: { value: 'The family asked, long after it ran out.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Extend by three months' }));
+    expect(
+      await screen.findByText(
+        'This programme ended more than three months ago, so three more months would still be in the past. A programme that needs longer is a refund and a new sale.',
+      ),
+    ).toBeTruthy();
   });
 
   it('says what was given away on a sale, and why', async () => {

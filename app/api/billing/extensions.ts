@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import { nextExtension } from '../../../domain/billing';
+import { isoDateIn } from '../../../domain/shared';
 import { scrubReason } from '../_middleware/request-context';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isUuid } from './ids';
@@ -38,7 +39,18 @@ import { EXTENSIONS_USED_SQL, purchaseRow, type PurchaseDbRow } from './sales';
  * (docs/SPEC/audit.md section 5). The route is the authority on why this
  * particular write happened; a header the browser may or may not have sent
  * is not.
+ *
+ * **A programme too far past its end is refused rather than extended.** Three
+ * months are added to the end it has, not to today, so a programme that ran
+ * out more than three months ago would be "extended" to a date still behind
+ * today: the family would gain no day they can use, and one of the two
+ * extensions they are allowed for ever would be gone. Extending from today
+ * instead would hand a household that let a year lapse more than the operator
+ * granted, so the answer is 409 `ended_too_long_ago` and the practice decides
+ * between a refund and a new sale.
  */
+
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
 const PURCHASE_SQL =
   'select id, client_id, expires_on, extended_to, status from package_purchase ' +
@@ -127,6 +139,12 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
     const next = nextExtension(currentEnd, used.rows[0]?.n ?? 0);
     if (next === null) {
       return c.json({ error: 'conflict', code: 'extension_limit_reached', requestId }, 409);
+    }
+    // Three months onto an end already three months behind is still behind:
+    // an extension that buys the family no day they can use, and spends one
+    // of the two they have for ever.
+    if (next.toOn < isoDateIn(now(), PRACTICE_TIME_ZONE)) {
+      return c.json({ error: 'conflict', code: 'ended_too_long_ago', requestId }, 409);
     }
 
     await db.query("select set_config('app.reason', $1, true)", [scrubReason(input.reason)]);

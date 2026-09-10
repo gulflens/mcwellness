@@ -32,6 +32,8 @@ const MESSAGES: Record<string, string> = {
   not_extendable: 'This programme has been refunded or called off, so it cannot be extended.',
   extension_limit_reached:
     'This programme has had its two extensions. A programme that needs longer is a refund and a new sale.',
+  ended_too_long_ago:
+    'This programme ended more than three months ago, so three more months would still be in the past. A programme that needs longer is a refund and a new sale.',
 };
 
 export function ExtensionDrawer({

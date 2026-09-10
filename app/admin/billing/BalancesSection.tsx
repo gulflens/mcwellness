@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { isoDateIn } from '@domain/shared/actor';
 import {
   BalanceResponse,
   type PurchaseRow,
@@ -37,6 +38,8 @@ import { PaymentDrawer } from './PaymentDrawer';
  * nobody has to act on. Sixty and thirty days want noticing without being
  * wrong yet; a programme that has already run out is wrong now.
  */
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+
 const WARNINGS: Record<string, { tone: 'attention' | 'critical'; say: (on: string) => string }> = {
   sixty_days: {
     tone: 'attention',
@@ -160,6 +163,14 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
         .map((service) => `${service.remaining} × ${service.serviceTypeName}`)
         .join(', ')
     : '';
+  // The day the practice is on, for the one judgement this screen makes about
+  // a date of its own: whether an extension would land behind today. The
+  // three months are not counted here — `purchase.extendsTo` is
+  // `nextExtension`'s own answer, computed by the rule on the server
+  // (app/api/billing/sales.ts's `purchaseRow`) — so the screen offers the
+  // button on exactly the condition the route accepts, and never offers what
+  // it would refuse as `ended_too_long_ago`.
+  const today = isoDateIn(new Date(), PRACTICE_TIME_ZONE);
   const warningFor = balance ? WARNINGS[balance.expiryWarning] : undefined;
   const warning =
     balance && balance.nextExpiryOn && warningFor
@@ -274,7 +285,7 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                     {canWrite &&
                     purchase.status !== 'refunded' &&
                     purchase.status !== 'cancelled' ? (
-                      purchase.extendsTo !== null ? (
+                      purchase.extendsTo !== null && purchase.extendsTo >= today ? (
                         <Button
                           variant="secondary"
                           onClick={() => {
