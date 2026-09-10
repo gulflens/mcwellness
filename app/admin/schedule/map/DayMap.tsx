@@ -103,7 +103,7 @@ export function DayMap({ maps, day, selectedId, onSelect }: DayMapProps) {
       maxZoom: MAX_ZOOM,
       disableDefaultUI: true,
       clickableIcons: false,
-      styles: mapStyle(document.documentElement),
+      styles: mapStyle(),
       backgroundColor: token('--paper'),
     });
     const bridge = createProjectionBridge(maps, setProjection);
