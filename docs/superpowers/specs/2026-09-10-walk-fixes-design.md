@@ -55,8 +55,10 @@ longer is refunded and sold again, which the existing refund path already suppor
 
 ### Pull request 1: the plain fixes
 
-- **Identity edit.** `app/admin/clients/IdentityForm.tsx`: given and family name in English and
-  Arabic, date of birth, sex at birth, referral. Sent to `PATCH /api/clients/:id`, which
+- **Identity edit.** `app/admin/clients/IdentityForm.tsx`: given and family name, date of
+  birth, sex at birth, referral. No Arabic-name fields: the console is English only by the
+  operator's decision of 7 September (`tests/lint/console-is-english.test.ts` enforces it), a
+  rule this spec first overlooked and execution corrected. Sent to `PATCH /api/clients/:id`, which
   already accepts every field and refuses anyone but owner and admin. Rendered from an Edit
   button on `OverviewTab.tsx` and from the wizard's Identity tab, which becomes a button once
   the record exists. Preferred language stays read-only: the client table has no such column
