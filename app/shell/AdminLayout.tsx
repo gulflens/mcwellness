@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Outlet } from 'react-router';
 import {
   canOpenAudit,
@@ -142,7 +142,18 @@ export function AdminLayout({ actorName }: { actorName: string }) {
         />
       ) : null}
       <main className="admin__main">
-        <Outlet />
+        {/*
+         * The screens arrive one at a time rather than in the file everybody
+         * downloads at sign-in (`app/shell/App.tsx`), so the wait belongs
+         * here, inside the chrome: the rail and the header stay where they
+         * are and only this panel is briefly empty. Nothing is drawn in that
+         * gap deliberately — every screen already says what it is loading
+         * once it has arrived, and a second message in front of it would say
+         * the same thing twice.
+         */}
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );
