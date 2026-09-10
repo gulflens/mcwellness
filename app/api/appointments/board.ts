@@ -8,6 +8,7 @@ import {
   boardState,
   drivenStops,
   lateness,
+  previousStop,
   type AppointmentStatus,
   type Lateness,
   type Matrix,
@@ -227,9 +228,11 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
           windowStart: stop.windowStart.toISOString(),
           windowEnd: stop.windowEnd.toISOString(),
           status: stop.status,
-          // The stop before it in the day, whether or not that household can
-          // be named here: "on the way" is a fact about the practitioner.
-          state: boardState(stop, progress[index - 1] ?? null, own?.late ?? false, at),
+          // The last stop before it that actually took place, whether or not
+          // that household can be named here: "on the way" is a fact about the
+          // practitioner, and a visit called off is not somewhere they have
+          // been.
+          state: boardState(stop, previousStop(progress, index), own?.late ?? false, at),
           client: { id: fact.client_id, givenName: fact.given_name, familyName: fact.family_name },
           serviceType: {
             id: fact.service_type_id,

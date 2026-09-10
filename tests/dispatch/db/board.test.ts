@@ -60,6 +60,10 @@ const APPT_OFF = '00000000-0000-4000-8000-000000007105';
 const APPT_MOVED = '00000000-0000-4000-8000-000000007106';
 /** The erased household's own visit, on a day of its own. */
 const APPT_ERASED = '00000000-0000-4000-8000-000000007107';
+/** A later day again: one door closed, the next called off, the third still to come. */
+const APPT_AFTER_DONE = '00000000-0000-4000-8000-000000007108';
+const APPT_AFTER_OFF = '00000000-0000-4000-8000-000000007109';
+const APPT_AFTER_NEXT = '00000000-0000-4000-8000-000000007110';
 const SESSION_CLOSED = '00000000-0000-4000-8000-000000007201';
 const SESSION_OPEN = '00000000-0000-4000-8000-000000007202';
 
@@ -73,6 +77,8 @@ const NOW = at('10:50');
  * cannot change what any of the other cases read.
  */
 const DATE_ERASED = '2026-09-05';
+/** A later day again, for the one case about which visit "on the way" follows. */
+const DATE_AFTER = '2026-09-06';
 const on = (date: string, time: string) => new Date(`${date}T${time}:00+04:00`);
 
 let owner: pg.Client;
@@ -293,6 +299,14 @@ beforeAll(async () => {
   );
   await owner.query("update client set status = 'erased' where id = $1", [CLIENT_ERASED]);
 
+  // A day later still, with a call-off in the middle of it: the 09:00 door was
+  // closed, the 10:00 visit was called off, and the practitioner is driving to
+  // the 11:00 one. A visit called off did not happen, so it is not what they
+  // are coming from (spec 4.4).
+  await seedAppointment(APPT_AFTER_DONE, on(DATE_AFTER, '09:00'), 'completed');
+  await seedAppointment(APPT_AFTER_OFF, on(DATE_AFTER, '10:00'), 'cancelled');
+  await seedAppointment(APPT_AFTER_NEXT, on(DATE_AFTER, '11:00'), 'confirmed');
+
   pool = createPool(process.env.API_DATABASE_URL ?? '');
   const verifier = createTokenVerifier({ issuer: ISSUER, secret: SECRET });
   api = createApi({
@@ -435,6 +449,20 @@ describe('GET /api/appointments/board', () => {
       'Synthetic Practitioner A',
       'Synthetic Practitioner Idle',
       'Synthetic Practitioner Left',
+    ]);
+  });
+
+  it('reads "on the way" from the last visit that happened, past one called off', async () => {
+    // Spec 4.4 turns "on the way" on the previous visit being closed. A visit
+    // called off never took place, so a practitioner who closed the 09:00 door
+    // is on the way to the 11:00 one and not merely agreed to it.
+    const res = await get(AUTH.ownerA, `/api/appointments/board?date=${DATE_AFTER}`);
+    const body = (await res.json()) as BoardResponse;
+    const busy = body.practitioners.find((p) => p.practitionerId === MORE_IDS.practitionerA);
+    expect(busy?.visits.map((v) => [v.appointmentId, v.state])).toEqual([
+      [APPT_AFTER_DONE, 'finished'],
+      [APPT_AFTER_OFF, 'called_off'],
+      [APPT_AFTER_NEXT, 'on_the_way'],
     ]);
   });
 

@@ -176,6 +176,41 @@ export const BOARD_STATES = [
 export type BoardState = (typeof BOARD_STATES)[number];
 
 /**
+ * The four statuses in which nothing happened at the door: the visit was
+ * called off on either side of the notice period, missed, or moved to an
+ * appointment of its own. `completed` is settled too and did take place, so it
+ * is not one of them.
+ */
+const NEVER_TOOK_PLACE: readonly AppointmentStatus[] = [
+  'cancelled',
+  'cancelled_late',
+  'no_show',
+  'rescheduled',
+];
+
+/**
+ * "The previous visit" as `boardState` below means it (docs/SPEC/dispatch.md
+ * 4.4, "the previous visit is closed"): the last stop before this one that
+ * actually took place.
+ *
+ * The stop immediately before is the wrong answer whenever the day has a
+ * call-off in it. A practitioner who closed the nine o'clock door, had the ten
+ * o'clock called off and is now driving to the eleven o'clock one is on the
+ * way to it; reading the cancellation as what they are coming from says
+ * "Agreed" about a practitioner already in the car.
+ *
+ * `day` arrives in window order — `readDay`'s own `order by`, which is also
+ * the order the board draws — and `index` is this stop's place in it. Pure.
+ */
+export function previousStop(day: readonly Progress[], index: number): Progress | null {
+  for (let before = index - 1; before >= 0; before -= 1) {
+    const stop = day[before]!;
+    if (!NEVER_TOOK_PLACE.includes(stop.status)) return stop;
+  }
+  return null;
+}
+
+/**
  * The state a block shows (docs/SPEC/dispatch.md 4.4), read and never typed.
  * The status decides the settled states outright; a door reached is at the
  * door whatever the clock says; lateness overrides only the states in which

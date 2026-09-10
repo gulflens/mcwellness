@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Matrix } from './optimise';
-import { boardState, drivenStops, lateness, type Progress } from './lateness';
+import { boardState, drivenStops, lateness, previousStop, type Progress } from './lateness';
 
 /**
  * Running late, decided rather than typed (docs/SPEC/dispatch.md section 5),
@@ -226,6 +226,30 @@ describe('drivenStops', () => {
       's2',
       's3',
     ]);
+  });
+});
+
+describe('previousStop', () => {
+  it('is the stop immediately before when that visit took place', () => {
+    const stops = day([{ status: 'completed', closedAt: at('09:40') }]);
+    expect(previousStop(stops, 1)?.stopId).toBe('s1');
+  });
+
+  it('walks back past a visit that never took place', () => {
+    for (const status of ['cancelled', 'cancelled_late', 'no_show', 'rescheduled'] as const) {
+      const stops = day([{ status: 'completed', closedAt: at('09:40') }, { status }]);
+      expect(previousStop(stops, 2)?.stopId).toBe('s1');
+    }
+  });
+
+  it('is nothing at all when this is the first stop, or when nothing before it took place', () => {
+    expect(previousStop(day(), 0)).toBeNull();
+    expect(previousStop(day([{ status: 'cancelled' }, { status: 'no_show' }]), 2)).toBeNull();
+  });
+
+  it('keeps a completed visit, which is settled and did take place', () => {
+    const stops = day([{ status: 'completed', closedAt: at('09:40') }, { status: 'completed' }]);
+    expect(previousStop(stops, 2)?.stopId).toBe('s2');
   });
 });
 
