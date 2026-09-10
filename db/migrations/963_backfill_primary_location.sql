@@ -29,6 +29,14 @@
 -- the link names the winner. Only after that agreement is universal does the
 -- partial unique index below get to hold.
 --
+-- The index below spans every owner_type the table has, not only 'client'.
+-- The client case is repaired by the three statements above; the practice's
+-- own studio ('tenant') and a practitioner's home base ('practitioner',
+-- migration 913) are only checked, not repaired, because their sole writers
+-- — the tenant bootstrap, and app.set_practitioner_base — always reuse the
+-- single row a tenant or a practitioner already has rather than write a
+-- second flagged one alongside it. The do $$ block ends with that check.
+--
 -- Audit context, as 956 sets it: the client table's triggers stamp an actor
 -- and a reason on every change, and a migration has neither.
 do $$
@@ -69,6 +77,38 @@ begin
      and l.owner_id = c.id
      and c.primary_location_id is not null
      and l.is_primary <> (l.id = c.primary_location_id);
+
+  -- Pre-flight for the index below, which the three statements above do
+  -- nothing to earn for 'tenant' or 'practitioner': a studio or a home base
+  -- is believed to hold at most one flagged primary because its only writer
+  -- always reuses the row it already has, but "believed" is not "checked".
+  -- Without this, a database where that turned out false would fail on the
+  -- create unique index statement below, with a bare "duplicate key value
+  -- violates unique constraint" that names neither the owner nor the rows —
+  -- this names both, so a stuck deploy is diagnosable rather than a puzzle.
+  declare
+    v_found text;
+  begin
+    select string_agg(
+             format('%s %s (locations %s)', dup.owner_type, dup.owner_id, dup.ids),
+             '; ' order by dup.owner_type, dup.owner_id
+           )
+      into v_found
+      from (
+        select owner_type, owner_id, string_agg(id::text, ', ' order by id) as ids
+          from public.location
+         where owner_type <> 'client'
+           and is_primary
+         group by owner_type, owner_id
+        having count(*) > 1
+      ) dup;
+
+    if v_found is not null then
+      raise exception
+        'migration 963 cannot create location_one_primary_per_owner: % already has more than one flagged primary location. Pick the row that should stay is_primary, set is_primary to false on the rest by hand, and re-run this migration.',
+        v_found;
+    end if;
+  end;
 end
 $$;
 

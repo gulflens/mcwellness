@@ -87,6 +87,7 @@ type Row = {
   reason: string | null;
   client_id: string | null;
   client_mrn: string | null;
+  client_status: string | null;
 };
 
 /**
@@ -102,7 +103,7 @@ type Row = {
 const ACTIVITY_SQL =
   'select a.id::text, a.occurred_at, a.actor_id, u.display_name as actor_name, a.actor_type, ' +
   'a.actor_role, a.action, a.entity_type, a.entity_id, a.changed_fields, a.old_values, ' +
-  'a.new_values, a.reason, a.client_id, c.mrn as client_mrn ' +
+  'a.new_values, a.reason, a.client_id, c.mrn as client_mrn, c.status as client_status ' +
   'from audit_log a ' +
   'left join app_user u on u.id = a.actor_id ' +
   'left join client c on c.id = a.client_id ' +
@@ -125,7 +126,17 @@ const ACTIVITY_SQL =
   '           and app.client_erasure_gate(app.client_status_for(a.client_id)))) ' +
   'order by a.id desc limit $10';
 
-function toEvent(row: Row, subjectErased: boolean): AuditEvent {
+/**
+ * `subjectErased` is read off this row's own `client_status` (joined
+ * alongside `client_mrn` above) rather than a single value computed once for
+ * the whole request: the unfiltered feed can carry rows from any number of
+ * clients in one page, erased and not, and only the row's own status says
+ * which. The narrowed-by-`clientId` request reads the same way — every row
+ * it returns is that one client's own, so its status is this same column,
+ * read once per row instead of once for the request but never disagreeing
+ * with it.
+ */
+function toEvent(row: Row): AuditEvent {
   return {
     id: row.id,
     occurredAt: row.occurred_at.toISOString(),
@@ -145,7 +156,7 @@ function toEvent(row: Row, subjectErased: boolean): AuditEvent {
     oldValues: row.old_values,
     newValues: row.new_values,
     reason: row.reason,
-    subjectErased,
+    subjectErased: row.client_status === 'erased',
   };
 }
 
@@ -198,17 +209,14 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // door the record's own timeline holds (app/api/audit/timeline.ts): under
     // row security a client of another practice does not exist, an erased
     // record is the owner's and the lead practitioner's, and opening one needs
-    // a typed reason the trail then carries with the read.
-    // Every row this request can return, once narrowed by clientId, is that
-    // one client's own (the SQL's own $7 filter below) — so the status read
-    // here to gate the request is also the answer for every row `toEvent`
-    // builds from it, exactly as the record timeline's single status read is
-    // (app/api/audit/timeline.ts). Unfiltered, the feed can still surface an
-    // erased household's rows for a senior actor with a reason typed ($9
-    // below), but which of those scattered rows belong to an erased client is
-    // not something this request has already read, so they carry the
-    // ordinary read rule rather than a status this route never asked for.
-    let clientErased = false;
+    // a typed reason the trail then carries with the read. This status read is
+    // the gate alone now — whether a row's own client is erased, for
+    // `toEvent`'s `subjectErased`, is read per row from `client_status` in
+    // `ACTIVITY_SQL` below instead, which is right for this query either way:
+    // narrowed by clientId every row agrees with this same status, and
+    // unfiltered a senior actor with a reason typed ($9 below) can see rows
+    // scattered across many clients, erased and not, that this single read
+    // never named.
     if (clientId !== undefined) {
       const found = await db.query<{ status: string }>(
         "select status from client where id = $1 and ($2::boolean or status <> 'erased')",
@@ -217,8 +225,7 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       if (found.rowCount === 0) {
         return c.json({ error: 'not_found', requestId }, 404);
       }
-      clientErased = found.rows[0]?.status === 'erased';
-      if (clientErased && reason.length === 0) {
+      if (found.rows[0]?.status === 'erased' && reason.length === 0) {
         return c.json({ error: 'reason_required', requestId }, 400);
       }
     }
@@ -245,7 +252,7 @@ export function mountActivity(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     // wrongs.
     const narrated: ActivityEvent[] = [];
     for (const row of rows) {
-      const event = toEvent(row, clientErased);
+      const event = toEvent(row);
       const narration = narrate(event, locale);
       if (narration === null) continue;
       narrated.push({

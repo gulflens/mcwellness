@@ -1,6 +1,15 @@
 import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { IDS, MORE_IDS, freshDatabase, seedClient, seedLocation, seedTenant } from './helpers';
+import {
+  IDS,
+  MORE_IDS,
+  freshDatabase,
+  seedClient,
+  seedLocation,
+  seedPractitioner,
+  seedTenant,
+  seedUser,
+} from './helpers';
 
 /**
  * Migration 963 fills client.primary_location_id from the flag on the location
@@ -20,6 +29,10 @@ const FLAGGED = '00000000-0000-4000-8000-00000000a001';
 const LONE = '00000000-0000-4000-8000-00000000a002';
 const AMBIGUOUS = '00000000-0000-4000-8000-00000000a003';
 const TWO_FLAGGED = '00000000-0000-4000-8000-00000000a004';
+const PRACTITIONER_USER = '00000000-0000-4000-8000-00000000a005';
+const PRACTITIONER = '00000000-0000-4000-8000-00000000a006';
+const PRACTITIONER_BASE_1 = '00000000-0000-4000-8000-00000000a007';
+const PRACTITIONER_BASE_2 = '00000000-0000-4000-8000-00000000a008';
 
 async function backfillSql(): Promise<string> {
   const fs = await import('node:fs/promises');
@@ -92,5 +105,71 @@ describe('963_backfill_primary_location', () => {
       "select indexname from pg_indexes where indexname = 'location_one_primary_per_owner'",
     );
     expect(rowCount).toBe(1);
+  });
+});
+
+describe('963_backfill_primary_location — the pre-flight for other owner types', () => {
+  // The three repair statements only ever touch owner_type = 'client'. A
+  // practitioner's home base (db/migrations/913_practitioner_base.sql) has
+  // one legitimate writer, app.set_practitioner_base, which always reuses the
+  // practitioner's own row rather than insert a second flagged one — so this
+  // scenario reproduces the shape a bug elsewhere would have to produce
+  // before the pre-flight check has anything to find. Run inside its own
+  // transaction, rolled back at the end, so it never disturbs the successful
+  // run the rest of this file asserts against.
+  it('checks a practitioner base rather than repairing it, and names the owner when it already holds two flagged primaries', async () => {
+    await owner.query('begin');
+    try {
+      // The index would itself refuse seeding a second flagged row below;
+      // dropping it first reproduces the state a real duplicate would need to
+      // have gotten into before this migration ever ran.
+      await owner.query('drop index if exists location_one_primary_per_owner');
+
+      await seedUser(owner, {
+        id: PRACTITIONER_USER,
+        tenantId: IDS.tenantA,
+        authId: null,
+        displayName: 'Synthetic Practitioner',
+        roles: ['practitioner'],
+      });
+      await seedPractitioner(owner, IDS.tenantA, PRACTITIONER, PRACTITIONER_USER);
+      for (const locationId of [PRACTITIONER_BASE_1, PRACTITIONER_BASE_2]) {
+        await owner.query(
+          'insert into location (id, tenant_id, owner_type, owner_id, label, emirate, ' +
+            'entrance_point, is_primary, created_by) ' +
+            "values ($1, $2, 'practitioner', $3, 'base', 'DXB', " +
+            "extensions.st_geogfromtext('SRID=4326;POINT(55.27 25.20)'), true, $4)",
+          [locationId, IDS.tenantA, PRACTITIONER, IDS.ownerA],
+        );
+      }
+
+      await owner.query('savepoint before_backfill');
+      let failure: Error | undefined;
+      try {
+        await owner.query(await backfillSql());
+      } catch (error) {
+        failure = error as Error;
+      } finally {
+        await owner.query('rollback to savepoint before_backfill');
+      }
+
+      // Named: which migration, which owner, and that it is a practitioner
+      // rather than the studio or a household — a bare constraint violation
+      // from the index below would have said none of that.
+      expect(failure?.message).toContain('963');
+      expect(failure?.message).toContain('practitioner');
+      expect(failure?.message).toContain(PRACTITIONER);
+
+      // And the index was never reached: the check runs first and the whole
+      // file's own transaction stops there, which is why the index this
+      // suite's other describe block found in place is, for the moment this
+      // rolls back to, still missing.
+      const { rowCount } = await owner.query(
+        "select indexname from pg_indexes where indexname = 'location_one_primary_per_owner'",
+      );
+      expect(rowCount).toBe(0);
+    } finally {
+      await owner.query('rollback');
+    }
   });
 });
