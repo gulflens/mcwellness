@@ -164,7 +164,7 @@ Each is a pure function under `domain/accounting/` with a test file named after 
 
 | Event (`source_event`) | Source row and condition | Lines |
 | --- | --- | --- |
-| `invoice.issued` | `invoice` of kind `session` or `package`, on `issued_on` | Dr `receivable` gross · Cr `contract_liability` net · Cr `vat_payable` vat, that line omitted when vat is zero |
+| `invoice.issued` | `invoice` of kind `session`, `package` or `single_session` (migration 411, trunk round 43 — a session sold ahead of its visit), on `issued_on` | Dr `receivable` gross · Cr `contract_liability` net · Cr `vat_payable` vat, that line omitted when vat is zero |
 | `invoice.issued` | `invoice` of kind `call_out_fee`, on `issued_on` | Dr `receivable` gross · Cr `income_fees` net · Cr `vat_payable` vat (omitted at zero) |
 | `invoice.issued` | `invoice` of kind `statement` | **Nothing.** Nothing writes one today, and 953 records that a statement may be a re-presentation of charges already invoiced; counted as unknown until billing says what it is (piece thirteen makes it the household's statement of account, which posts nothing by design) |
 | `payment.received` | `payment`, on the day of `received_at` | Dr `bank` (method `transfer`), `cash` (`cash`) or `link_clearing` (`link`) amount · Cr `receivable` amount |
@@ -174,6 +174,8 @@ Each is a pure function under `domain/accounting/` with a test file named after 
 | `credit.expired` | `entitlement` with status `expired`, on `expires_on` | Dr `contract_liability` allocated net · Cr `income_expired`. Nothing writes this status today; the rule waits for billing |
 | `credit.refunded` | `entitlement` with status `refunded`, on the day of `updated_at` | Dr `contract_liability` allocated net · Cr `refunds_payable`. The money leaving the bank is piece twelve's act; nothing writes this status today |
 | `fee.waived` | `invoice` of kind `call_out_fee` with `waived_at` set, on the day of `waived_at` | Dr `income_fees` net · Dr `vat_payable` vat (omitted at zero) · Cr `receivable` gross |
+
+**A session sold ahead of its visit posts as a package does.** `single_session` is not a case of its own in `postingsFor` — it shares `invoice.issued`'s first row with `session` and `package` on purpose, since a credit sold before the visit and a credit sold inside a bundle are the same fact for the books: money in, in exchange for a promise still owed. The sale is credited to `contract_liability`, never to income, and only moves to `income_sessions` (or `income_assessments`, for the brain map) later, when `credit.consumed` fires for the entitlement it created — a package of one, exactly.
 
 **The identity these rules keep**, proved on the seed (section 12): the `contract_liability` balance equals `monthlyMoney`'s deferred figure; `receivable` equals invoices issued gross less payments received less fees waived gross; `vat_payable` equals invoice VAT less waived VAT; income by month equals `revenueRecognisedFils` by month plus fee income; the three cash accounts equal payments by method. `allocateEntitlements` hands out its rounding remainder so a package's credits sum exactly to its net (`domain/billing/allocation.ts`), which is what lets the first identity hold to the fils.
 

@@ -57,6 +57,7 @@ const CHART = [
 const INV = '0000000e-0000-4000-8000-000000002001';
 const INV2 = '0000000e-0000-4000-8000-000000002002';
 const INV3 = '0000000e-0000-4000-8000-000000002003';
+const INV4 = '0000000e-0000-4000-8000-000000002004';
 const PAY = '0000000e-0000-4000-8000-000000003001';
 const ENT = '0000000e-0000-4000-8000-000000004001';
 
@@ -104,6 +105,22 @@ describe('postingsFor', () => {
       cr(VAT.id, fils(51_625)),
     ]);
     expect(() => assertBalanced(draft!.lines)).not.toThrow();
+  });
+
+  it('posts a session sold ahead of its visit to contract liability, as a package is', () => {
+    const draft = postingsFor(
+      {
+        event: 'invoice.issued',
+        sourceId: INV4,
+        occurredOn: '2026-09-10',
+        invoiceKind: 'single_session',
+        netFils: fils(70_000),
+        vatFils: fils(0),
+        grossFils: fils(70_000),
+      },
+      CHART,
+    );
+    expect(draft?.lines).toEqual([dr(RECEIVABLE.id, fils(70_000)), cr(CONTRACT.id, fils(70_000))]);
   });
 
   it('omits the VAT line when VAT is zero', () => {

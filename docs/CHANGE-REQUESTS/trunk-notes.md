@@ -3416,6 +3416,111 @@ note had gone stale describing a commit no longer being merged). The audit is
 green at this head: 95 migration files checked against `origin/main`, none
 edited, deleted or renamed after merge.
 
+## Round 43 — the walk's fixes, part three: sell a session ahead of its visit (2026-09-10)
+
+Part one and part two answered what the walk found needing no decision, and
+put the household's entrance pin on a map. This is the third of the four
+pull requests, and answers the operator's decision of 10 September: let the
+practice invoice a trial or one-off session before the visit, not only
+after the practitioner closes it. Until now a visit outside a package could
+only be charged once it closed — `app.charge_single_visit` writing a
+`session` invoice that names the session it is charging for — so a family
+paying up front for a first neurofeedback session, or the office wanting
+the money before a practitioner drives out to it, had no charge to write at
+all.
+
+**What the round builds.** A fourth invoice kind, `single_session`
+(migration 411), naming no session, no package purchase and no
+appointment — the credit it creates points at the invoice, not the other
+way round, which the entitlement table has allowed since it was written;
+only the rule saying what each invoice kind must name needed a new case,
+restated whole the way migration 408 restated it for the call-out fee. The
+same migration adds two columns `invoice` had never carried, both needed
+because this is the first sale that writes an invoice on its own rather
+than alongside a purchase row: `idempotency_key` (a partial unique index,
+so the same press twice replays the first sale instead of doubling it —
+`payment` and `package_purchase` already had their own) and
+`discount_reason` (nowhere else to keep why an extra discount was given,
+since a single-session sale writes no purchase row the way a package sale's
+`package_purchase.discount_reason` does). `POST
+/api/billing/session-purchases` prices the service at the day's price
+list, combines the standing discount with an optional extra one exactly as
+a package sale does, resolves VAT from the price row's own stamp, and in
+one transaction writes the invoice, one line, one credit good for twelve
+months (`SINGLE_SESSION_MONTHS`, `domain/billing/expiry.ts`), and the
+payment when money changed hands. "Sell a session" sits beside "Add
+package" on the packages screen, with the same figures, the same discount
+fields and the same idempotency key generated the moment the button is
+pressed.
+
+Three downstream claims were tested against the real route and the real
+database rather than assumed from reading the code, and all three held
+with no code change: the invoice document renders a `single_session`
+invoice exactly as it renders a package invoice, because the renderer
+never branches on `kind`; the balance route counts its credit as one
+purchased, one remaining, twelve months from the sale, because the balance
+is driven by the entitlement table and does not care where a credit came
+from; and the books post it to contract liability, moving to income only
+when the credit is consumed, because the poster already sent every invoice
+kind but `statement` and `call_out_fee` there.
+
+One gap that proof did not reach: `GET /api/billing/invoices` — the
+practice's own invoice book — parses every response against
+`InvoiceRow.kind`, and that list had not been told about the fourth kind.
+The first single-session sale on a real practice would have made the
+invoice book answer with an error instead of listing it. Fixed in this
+round's own closing task, with a test that sells a session and then lists
+the book against the real route before asserting the row is there — it
+failed, against the real database, for that reason before the fix, and
+passes now. The same gap existed, less dangerously, in the raw database
+row's own type in `app/api/billing/invoices.ts`, and in the admin screen's
+kind-to-label map, which TypeScript now guards for good: the label map is
+keyed off `InvoiceRow['kind']` itself, so a fifth kind added without a
+label fails to compile rather than fails on someone's screen.
+
+**What a sold single session cannot do, in this round.** Extending a
+credit's expiry before it lapses is a package's own act — three months at a
+time, twice over — and a `single_session` credit has no package behind it
+to extend. A household that bought a trial session ahead and needs longer
+than the twelve months has, in this round, one route: the office refunds
+the unused credit and sells another. Extending a single-session credit the
+way a package extends is not built.
+
+**What the round records.** `docs/SPEC/billing.md` section 1's own list of
+what a client buys now says a single session is consumed immediately only
+when it is charged at the door; sold ahead of the visit instead, the same
+credit runs twelve months before it lapses. `docs/SPEC/accounting.md`
+section 7 lists `single_session` beside `session` and `package` in the
+poster's own table, and adds a sentence saying why it needs no row of its
+own there: credited to contract liability exactly as a package is, moved
+to income only when the credit it created is consumed — a package of one.
+
+**Every file this round touched.** The trunk's own: `docs/SPEC/billing.md`,
+`docs/SPEC/accounting.md`, this file. Outside the trunk's own paths, by the
+integrator's widening for one round (`docs/SPEC/OWNERSHIP.md`): `billing` —
+migration `411_billing_single_session.sql`; `app/api/billing/ledger-schema.ts`,
+`session-sales.ts` (new), `invoices.ts` and `routes.ts`; `domain/billing/expiry.ts`
+with its test, and `domain/billing/index.ts`; `app/admin/billing/SellSessionDrawer.tsx`
+(new) with its test, `PackagesSection.tsx` with its test, and
+`InvoicesSection.tsx`; and `tests/billing/db/session_sales.test.ts` (new),
+`single_session_kind.test.ts` (new), `documents.test.ts` and `summary.test.ts`;
+`accounting` — `domain/accounting/posting.ts` with its test,
+`app/api/accounting/poster.ts`, and `tests/accounting/db/posting.test.ts`.
+**No policy file, and no migration outside 411's own file.**
+
+**Gates.** This round's own closing task was told to run only the test
+files it touched plus `pnpm lint` and `pnpm typecheck`, not the full
+`pnpm verify` or the database suite, which is the controller's own gate
+before the branch goes forward. Against the branch head (worktree
+`mcwellness-assessment`, database on port 5437): `pnpm lint` and
+`pnpm typecheck` both clean; `tests/billing/db/session_sales.test.ts` (9
+tests, all passing, including the one that answered with an error before
+this round's fix) and `tests/billing/InvoicesSection.test.tsx` (14 tests,
+all passing). The wider run belongs to the task that proved the three
+downstream claims above: `pnpm vitest run --config vitest.db.config.ts
+tests/billing tests/accounting`, 349 of 349 passing, run against the
+branch before this round's own closing fix was written.
+
 ## Round 43 — the walk's fixes, part four: one signature (2026-09-10)
 
 The walk of 10 September (part one of this round, above) found nine actions

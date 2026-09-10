@@ -10,6 +10,7 @@ export type { AllocatedEntitlement, PackageComponent } from './allocation';
 export {
   DEFAULT_EXPIRY_MONTHS,
   EXPIRY_WARNING_DAYS,
+  SINGLE_SESSION_MONTHS,
   daysBetween,
   expiryOn,
   expiryWarningFor,

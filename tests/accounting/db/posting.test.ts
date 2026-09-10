@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PostResponse, SettingsResponse } from '../../../app/api/accounting/schema';
+import type { SellSessionResponse } from '../../../app/api/billing/ledger-schema';
+import { SEED_TODAY } from '../../../db/seed/generate';
 import { buildActivity, eraseHousehold, type Activity } from './fixture';
 import { FINANCE, SEEDED, seedFinanceUser, startHarness, type Harness } from './support';
 
@@ -193,6 +195,74 @@ describe('the identities of section 7', () => {
     const books = await balances();
     expect(books.totalDebitFils).toBe(books.totalCreditFils);
     expect(books.totalDebitFils).toBeGreaterThan(0);
+  });
+});
+
+describe('a session sold ahead of its visit posts like a package of one', () => {
+  /**
+   * Task 4 of the walk-fixes round, step 3: migration 411's own claim —
+   * "the books already know what to do with it... nothing there changes" —
+   * proved against a real sale through `POST /api/billing/session-purchases`
+   * and a real run of the poster, not read off `postingsFor` in isolation.
+   *
+   * The identity that matters: the practice has been paid for a session it
+   * has not yet delivered, so the money is a contract liability — a debt the
+   * practice owes in a future visit — and only becomes income
+   * (`domain/accounting/posting.ts`'s `credit.consumed` case) when the credit
+   * is used up at that visit. Posting it to income now would count revenue
+   * the practice has not yet earned.
+   */
+  it('debits receivable and credits contract liability for the net, never income', async () => {
+    const clientId = h.clientId(2);
+    const sold = await h.call('POST', '/api/billing/session-purchases', SEEDED.owner, {
+      clientId,
+      serviceTypeId: h.serviceTypeId('nf-session'),
+      purchasedOn: SEED_TODAY,
+    });
+    expect(sold.status).toBe(201);
+    const sale = (await sold.json()) as SellSessionResponse;
+
+    const report = await post(SEEDED.owner);
+    expect(report.posted).toBeGreaterThanOrEqual(1);
+
+    const { rows } = await h.owner.query<{
+      memo: string;
+      code: string;
+      debit_fils: string;
+      credit_fils: string;
+    }>(
+      'select e.memo, a.code, l.debit_fils::text as debit_fils, l.credit_fils::text as credit_fils ' +
+        'from journal_line l ' +
+        'join journal_entry e on e.tenant_id = l.tenant_id and e.id = l.entry_id ' +
+        'join account a on a.tenant_id = l.tenant_id and a.id = l.account_id ' +
+        "where l.tenant_id = $1 and e.source_table = 'invoice' and e.source_id = $2 " +
+        'order by a.code',
+      [h.data.tenant.id, sale.invoiceId],
+    );
+    // Exactly the two lines a package sale's own invoice posts (no VAT line:
+    // the seeded practice is not VAT-registered), and the same memo.
+    expect(rows.map((row) => row.code)).toEqual(['1200', '2400']);
+    expect(rows.every((row) => row.memo === 'Invoice issued')).toBe(true);
+
+    const receivable = rows.find((row) => row.code === '1200');
+    expect(Number(receivable?.debit_fils)).toBe(sale.grossFils);
+    expect(Number(receivable?.credit_fils)).toBe(0);
+
+    // 2400 is contract liability, not 4000 (session income): the claim this
+    // step exists to prove or disprove.
+    const liability = rows.find((row) => row.code === '2400');
+    expect(Number(liability?.credit_fils)).toBe(sale.netFils);
+    expect(Number(liability?.debit_fils)).toBe(0);
+
+    const income = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from journal_line l ' +
+        'join journal_entry e on e.tenant_id = l.tenant_id and e.id = l.entry_id ' +
+        'join account a on a.tenant_id = l.tenant_id and a.id = l.account_id ' +
+        "where l.tenant_id = $1 and e.source_table = 'invoice' and e.source_id = $2 " +
+        "and a.code = '4000'",
+      [h.data.tenant.id, sale.invoiceId],
+    );
+    expect(Number(income.rows[0]?.n)).toBe(0);
   });
 });
 

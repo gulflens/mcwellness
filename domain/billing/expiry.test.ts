@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_EXPIRY_MONTHS,
+  SINGLE_SESSION_MONTHS,
   daysBetween,
   expiryOn,
   expiryWarningFor,
@@ -38,6 +39,11 @@ describe('expiryOn', () => {
   it('refuses a period that is not a whole number of months', () => {
     expect(() => expiryOn('2026-09-03', 0)).toThrow(RangeError);
     expect(() => expiryOn('2026-09-03', 1.5)).toThrow(RangeError);
+  });
+
+  it('gives a session sold on its own twelve months, fixed rather than tied to the package term', () => {
+    expect(SINGLE_SESSION_MONTHS).toBe(12);
+    expect(expiryOn('2026-09-10', SINGLE_SESSION_MONTHS)).toBe('2027-09-10');
   });
 });
 
