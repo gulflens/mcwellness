@@ -16,9 +16,11 @@ import { isSettled, type AppointmentStatus } from './status';
  * **Two things it must not do.** It must not call a visit late because the
  * practitioner has not checked in yet while the window is still open — so
  * with nothing happened, the earliest arrival is simply `now`. And it must
- * not cascade a single overrun into every later stop — so the walk waits for
- * each window to open before counting the visit's length, which is what the
- * gaps between windows are for.
+ * not cascade a single overrun into every later stop: the walk carries the
+ * overrun forward as a delay on its cursor, and a stop far enough ahead is
+ * saved by slack in the gap before its own window, not by anything to do
+ * with waiting for a window to open — that wait (`Math.max` against
+ * `windowStart`, below) handles the opposite case, a door reached early.
  */
 
 const MINUTE_MS = 60_000;
@@ -46,10 +48,14 @@ const NOT_LATE: Lateness = { late: false, byMinutes: 0 };
 /** The instant the practitioner can leave a stop, given what has happened at it. */
 function departureFrom(stop: Progress, now: Date): Date | null {
   if (stop.closedAt !== null) return stop.closedAt;
-  if (stop.checkedInAt !== null) {
+  // The session's own check-in instant, or — when the status alone says
+  // checked in but the session recorded none (a seed can produce this) —
+  // the window's own start standing in for it.
+  const checkedInAt = stop.checkedInAt ?? (stop.status === 'checked_in' ? stop.windowStart : null);
+  if (checkedInAt !== null) {
     // Still there: they leave when the service is done, or now if that has
     // already passed and they have not closed it — an overrun.
-    const planned = stop.checkedInAt.getTime() + stop.durationMinutes * MINUTE_MS;
+    const planned = checkedInAt.getTime() + stop.durationMinutes * MINUTE_MS;
     return new Date(Math.max(planned, now.getTime()));
   }
   return null;
@@ -57,7 +63,7 @@ function departureFrom(stop: Progress, now: Date): Date | null {
 
 /** Whether anything has happened at this stop that fixes the practitioner in time and place. */
 function hasHappened(stop: Progress): boolean {
-  return stop.closedAt !== null || stop.checkedInAt !== null;
+  return stop.closedAt !== null || stop.checkedInAt !== null || stop.status === 'checked_in';
 }
 
 function minutesLate(arrival: Date, windowEnd: Date): number {
@@ -107,7 +113,9 @@ export function lateness(
     }
     const driveSeconds =
       cursorLocation === null ? 0 : drive(cursorLocation, stop.locationId, cursorTime).seconds;
-    const arrival = new Date(cursorTime.getTime() + driveSeconds * 1000);
+    // The earliest possible arrival, but never earlier than now: an idle
+    // practitioner does not make a stop less late by doing nothing.
+    const arrival = new Date(Math.max(cursorTime.getTime() + driveSeconds * 1000, now.getTime()));
     const by = minutesLate(arrival, stop.windowEnd);
     result.set(stop.stopId, { late: by > graceMinutes, byMinutes: by });
     // Waiting for a window to open is not lateness: the visit starts at the

@@ -49,10 +49,10 @@ describe('lateness', () => {
     expect(result.get('s1')).toEqual({ late: false, byMinutes: 0 });
   });
 
-  it('walks forward from the last visit closed, and lets the gaps absorb a single overrun', () => {
+  it('reaches the next doors inside their windows after an overrun the day had room for', () => {
     // The first visit overran by 35 minutes and closed at 10:20. The second
     // is reached at 10:35, inside its window; the third at 11:35, inside its
-    // window too, because waiting for a window to open is not lateness.
+    // window too.
     const result = lateness(
       day([{ status: 'completed', closedAt: at('10:20') }]),
       fifteen,
@@ -60,6 +60,48 @@ describe('lateness', () => {
       10,
     );
     expect(result.get('s2')).toEqual({ late: false, byMinutes: 0 });
+    expect(result.get('s3')).toEqual({ late: false, byMinutes: 0 });
+  });
+
+  it('lets slack in the gap before a stop absorb an overrun, rather than cascading it forward', () => {
+    // Three stops at 09:00, 10:00 and — this time — 12:00, so the gap ahead
+    // of the third has room to spare. The first ran an hour over and closed
+    // at 10:50; by 10:55 the second door is already twenty minutes late, but
+    // the ninety-minute gap ahead of the third absorbs the delay entirely.
+    const stops: Progress[] = [
+      {
+        stopId: 's1',
+        windowStart: at('09:00'),
+        windowEnd: at('09:45'),
+        durationMinutes: 45,
+        status: 'completed',
+        checkedInAt: null,
+        closedAt: at('10:50'),
+        locationId: 'L1',
+      },
+      {
+        stopId: 's2',
+        windowStart: at('10:00'),
+        windowEnd: at('10:45'),
+        durationMinutes: 45,
+        status: 'confirmed',
+        checkedInAt: null,
+        closedAt: null,
+        locationId: 'L2',
+      },
+      {
+        stopId: 's3',
+        windowStart: at('12:00'),
+        windowEnd: at('12:45'),
+        durationMinutes: 45,
+        status: 'confirmed',
+        checkedInAt: null,
+        closedAt: null,
+        locationId: 'L3',
+      },
+    ];
+    const result = lateness(stops, fifteen, at('10:55'), 10);
+    expect(result.get('s2')).toEqual({ late: true, byMinutes: 20 });
     expect(result.get('s3')).toEqual({ late: false, byMinutes: 0 });
   });
 
@@ -76,6 +118,22 @@ describe('lateness', () => {
     expect(result.get('s1')).toEqual({ late: false, byMinutes: 0 });
     expect(result.get('s2')).toEqual({ late: true, byMinutes: 20 });
     expect(result.get('s3')).toEqual({ late: true, byMinutes: 20 });
+  });
+
+  it('clamps arrival to now once nothing further has happened, so an idle wait cannot erase a lateness', () => {
+    // Closed at 09:40, well inside its own window — but by 11:00 nobody has
+    // moved on. The earliest possible arrival at a door not yet reached can
+    // never be in the past, so it is 11:00, not the 09:55 the drive alone
+    // would give: fifteen minutes after the second window shut. The third,
+    // reached from there at 11:45 + 15 minutes, is late by the same margin.
+    const result = lateness(
+      day([{ status: 'completed', closedAt: at('09:40') }]),
+      fifteen,
+      at('11:00'),
+      10,
+    );
+    expect(result.get('s2')).toEqual({ late: true, byMinutes: 15 });
+    expect(result.get('s3')).toEqual({ late: true, byMinutes: 15 });
   });
 
   it('applies the grace as given, never a constant of its own', () => {
@@ -101,6 +159,25 @@ describe('lateness', () => {
     );
     expect(result.get('s1')).toEqual({ late: true, byMinutes: 25 });
     expect(result.get('s2')).toEqual({ late: false, byMinutes: 0 });
+  });
+
+  it('treats a checked-in status as a door reached even when the session recorded no instant', () => {
+    // The status alone says the practitioner is at the second door; a seed
+    // can leave a checked-in row with no session instant, and the walk takes
+    // it as checked in at the window's own start (10:00), departing at
+    // max(10:00 + 45, now) = max(10:45, 10:50) = 10:50. The first door,
+    // skipped on the way there, is late by the time since its own window
+    // shut: 09:45 to 10:50 is 65 minutes. The third, reached from 10:50 by a
+    // 15-minute drive, arrives at 11:05 — inside its 11:00–11:45 window.
+    const result = lateness(
+      day([{}, { status: 'checked_in', checkedInAt: null }]),
+      fifteen,
+      at('10:50'),
+      10,
+    );
+    expect(result.get('s1')).toEqual({ late: true, byMinutes: 65 });
+    expect(result.get('s2')).toEqual({ late: false, byMinutes: 0 });
+    expect(result.get('s3')).toEqual({ late: false, byMinutes: 0 });
   });
 
   it('answers every stop, settled ones as not late', () => {
@@ -148,5 +225,11 @@ describe('boardState', () => {
       'at_the_door',
     );
     expect(boardState({ ...stop, status: 'completed' }, null, true, at('12:00'))).toBe('finished');
+  });
+
+  it('reads a checked-in status as at the door even with no session instant', () => {
+    expect(
+      boardState({ ...stop, status: 'checked_in', checkedInAt: null }, null, false, at('09:10')),
+    ).toBe('at_the_door');
   });
 });
