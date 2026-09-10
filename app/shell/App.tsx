@@ -36,6 +36,7 @@ import {
   canOpenBooks,
   canOpenEnquiries,
   canOpenKit,
+  canOpenPin,
   canOpenPortalAccess,
   canOpenPractitioners,
   canOpenSchedule,
@@ -138,11 +139,20 @@ function RequireAuthDocument({ children }: { children: ReactNode }) {
  * this document too carries `'unsafe-eval'` and `'strict-dynamic'` and a
  * client-side redirect would render the next screen inside it.
  *
- * **It carries no permission check of its own.** The screen this page is
- * opened from, `/admin/clients`, admits every signed-in member of staff —
- * unlike Schedule, Billing or Books it has no `canOpenX` gate in
- * `adminAccess.ts` — so the picker's own bar is the same: being signed in,
- * and nothing more.
+ * **Its bar is `canOpenPin`, not merely being signed in.** `/admin/clients`,
+ * the screen this page is opened from, admits every signed-in member of
+ * staff and has no `canOpenX` gate of its own in `adminAccess.ts` — but
+ * `/admin/clients` carries the console's strict policy, and this document
+ * does not. A `client_contact` is an actor in the same session
+ * (`app/shell/routing.ts`; `/portal` is mounted under this same
+ * `RequireAuth`), and no practice data is reachable here, so admitting one
+ * is not a data leak — the risk is a household member driving the practice's
+ * own browser key and its Places quota from a page handed to them. A widened
+ * document takes a higher bar than the strict page it sits beside, so this
+ * one checks `canOpenPin` on top of being signed in (the whole-branch review
+ * of trunk round 43, finding 5 — an earlier version of this comment justified
+ * the looser bar by parity with `/admin/clients`, which was the wrong page to
+ * measure against).
  */
 function RequirePinDocument({ children }: { children: ReactNode }) {
   const { session } = useAuth();
@@ -160,6 +170,17 @@ function RequirePinDocument({ children }: { children: ReactNode }) {
         <Note>Sign in to open the pin picker.</Note>
         <a className="link" href="/sign-in">
           Sign in
+        </a>
+      </main>
+    );
+  }
+  if (!canOpenPin(session.actor, new Date())) {
+    return (
+      <main className="plain">
+        <h1>Pin picker</h1>
+        <Note>You do not have access to the pin picker.</Note>
+        <a className="link" href={homeFor(session.actor)}>
+          Go to your own screen
         </a>
       </main>
     );
