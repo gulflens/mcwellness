@@ -54,15 +54,39 @@ header beside "Open the day map" and "See the week". A router route inside the
 console: unlike the day map it loads no third-party script, so it carries the
 console's own strict content security policy and needs no document of its own.
 
+**Amended in the build, 2026-09-10:** the Schedule header's link is the
+board's only door, and the board itself carries no date control. The day
+rides in the address as `?date=YYYY-MM-DD` and is validated as a calendar
+date rather than as a shape — `2026-13-45` has the right shape and is not a
+day — so an impossible date is answered 400 by the route and the screen falls
+back to the practice's own today.
+
 **4.2 The shape.** Practitioners down the inline start, one row each; the
 practice's working hours across, in fifteen-minute columns as
 `docs/SPEC/scheduling-manual.md` section 4.1 describes for the week grid. A
 visit is a block spanning its arrival window plus its service's own length. A
 row with nothing on it still shows, so an idle practitioner is visible.
 
+**Amended in the build, 2026-09-10:** the rows are the practice's **active**
+practitioners plus any practitioner with a stop that day, ordered by display
+name and then by id. A practitioner who has left the practice but still has a
+visit against their name on that day is shown, because the render loop is
+driven by this list and a leaver dropped from it would take their
+unreassigned visits off the board with them — a visit nobody can see is a
+visit nobody drives to. A leaver with nothing that day is not listed.
+
 Below about 1100px the grid becomes one column per practitioner in sequence,
 as the week already does; below 640px it becomes the day list, because a
 dispatch board on a phone is not a dispatch board.
+
+**Amended in the build, 2026-09-10, and a reduction against the sentence
+above:** there are two shapes and one fold, not three shapes and two. The
+time grid arrives at **1200px**, the console's own desk tier
+(`docs/SPEC/responsive-console.md` section 9); below it every lane is a
+column of blocks in time order, which is the day list. The repository's
+breakpoint lint (`tests/lint/one-set-of-breakpoints.test.ts`) admits 767, 768
+and 1200 and nothing else, so 1100 and 640 are widths this board may not
+invent, and the two narrower shapes share one layout.
 
 **4.3 What a block says.** The window in tabular figures, the client's name,
 the service, the emirate. And its state, which is the point of the screen.
@@ -86,6 +110,12 @@ Hue is the practice's three status tones (`--ok`, `--attention`,
 bands and those three states, and a board that invents a palette per
 practitioner breaks that rule for decoration. Practitioners are told apart by
 their row, which is what a row is for.
+
+**Amended in the build, 2026-09-10:** whether a block can be handed on
+follows the **state** it shows and never the appointment's status beneath it.
+Waiting, agreed, on the way and running late are the four a dispatcher may
+move; every other state renders as a settled block with no control on it at
+all.
 
 ## 5. Running late, decided rather than typed
 
@@ -112,6 +142,30 @@ late because the practitioner has not checked in yet when the window is still
 open; and it must not cascade a single overrun into every later stop being
 "late" when the gaps absorb it.
 
+**Amended in the build, 2026-09-10:** the matrix prices only what the rule
+can ask for. That is the anchor — the last stop, in window order, at which
+something actually happened — and the unsettled stops after it, which
+`drivenStops` in `domain/scheduling/lateness.ts` returns. There is no leg
+from the home base, because the rule never asks for one, and no leg to or
+from a cancelled, rescheduled or completed stop. With fewer than two such
+stops no matrix is built at all: a lone door still ahead is reached from
+wherever the practitioner is, which the rule prices as `now`.
+
+**Amended in the build, 2026-09-10:** a deployment with no routing seam still
+answers the board. `latenessAvailable` is false, no visit carries a figure,
+the states are read from the facts exactly as before, and the screen says on
+its face that running late cannot be worked out here. It is the one place the
+board parts company with the day map: a map with no drives on it is nothing,
+a board with no lateness on it is still the day.
+
+**Amended in the build, 2026-09-10:** a household the erasure gate hides from
+whoever is reading keeps its place in the walk but not its events. Its window
+and its service's length still count towards what the stops after it can
+reach, and its check-in and its close do not reach the rule at all, so it can
+never be the anchor and "on the way" can never follow it. The gate is the
+erasure policy's and not this rule's; it is written down here rather than
+worked around.
+
 ## 6. Reassignment
 
 **6.1 The act.** `POST /api/appointments/:id/reassign`, body
@@ -131,11 +185,40 @@ composes `move-one.ts`'s pieces, which pull request 121 extracted for exactly
 this kind of second caller, and raises rather than returns after its first
 write, for the reason `reorder.ts` records.
 
+**Amended in the build, 2026-09-10:** the new practitioner is read **before**
+the household's audited read, and the order is not incidental.
+`app.audit_chain` (migration 070) serialises every audit insert on one row
+for the life of the transaction, so a request that took its deciding reads
+after that insert would queue there behind a rival, resume once the rival had
+committed, and refuse on the conflict check instead of on the exclusion
+constraint — and the race would never reach the raise-and-roll-back path
+section 13 asks be proved. `move.ts` takes its deciding reads first for the
+same reason, and so must any write route built after this one. The order has
+a second effect, and it is the right one by `docs/SPEC/audit.md`'s rule that
+a refused attempt writes no row: a reassignment naming a practitioner who is
+not there refuses as `practitioner_not_found` before any household record is
+read at all.
+
+**Amended in the build, 2026-09-10:** the target's id is compared to the
+visit's own practitioner after lower-casing, so a UUID written in upper-case
+hex cannot walk past `same_practitioner` and retire a live row in favour of
+an identical one. A practitioner who has left the practice refuses as
+`practitioner_not_found`; the drawer's list never offers one.
+
 **6.3 The migration.** `appointment` gains
 `reassigned_from_practitioner_id uuid references practitioner (id)` on the new
 row, so the trail answers "who was it taken from" without walking the chain.
 Nullable; set only by a reassignment. Migration `210` in the new stream's
 range.
+
+**Amended in the build, 2026-09-10:** the migration also carries the check
+`appointment_reassigned_implies_rescheduled` —
+`reassigned_from_practitioner_id is null or rescheduled_from_id is not null`
+— so a reassignment is always also a reschedule and the promise the retired
+row keeps is always recoverable. The check reads the reschedule **link**, not
+the `rescheduled` **status**: the new row carries the column and the link and
+stands as `confirmed`, and the row it retires is the one that carries the
+status.
 
 **6.4 On the board.** Drag a block from one row to another, or open the
 drawer from it. A drag shows what will be checked before it commits and
@@ -143,6 +226,17 @@ refuses in place with the sentence the route would have given. The drawer is
 the accessible path and the one that takes the reason; a drag opens it
 prefilled rather than committing on drop, because a reassignment asks for a
 reason and a drop cannot type one.
+
+**Amended in the build, 2026-09-10:** the drawer says beside the target,
+before anything is sent, what will be asked of whoever is picked — that they
+must hold a valid credential for this service on that day. A fresh drawer is
+made for each visit it is pointed at, so a reason typed against one visit can
+never be posted against another. A refusal is rendered in the screen's own
+words and never in the server's: the two overlap codes get sentences this
+drawer can honour, because it has no time control and "choose a different
+time" would be advice about a control that is not on the screen; every other
+code keeps the scheduling module's shared sentence, which already names a
+recovery this drawer does have.
 
 ## 7. Rules
 
@@ -165,6 +259,11 @@ visit shown, exactly as `GET /api/appointments` does — it is the same
 disclosure on a different screen. `domain/shared/actor.ts` gains
 `appointment.reassign` (owner, admin, lead practitioner) and
 `appointment.board.read` (the same three).
+
+**Amended in the build, 2026-09-10:** the row is written per visit shown and
+nothing at all is written for an idle row, which is the shape the clients
+list already keeps. The day map's own helper writes a `read` and could not
+stand in for it.
 
 ## 10. Permissions and row security
 
@@ -225,6 +324,12 @@ day's visits in their states, one row late; a visit is reassigned with a
 reason, both days redraw, the household's window is unchanged, and the trail
 reads "reassigned from X to Y". `pnpm verify`, `pnpm test:db` and `pnpm build`
 green.
+
+The walk also opens two things no test sees, **added 2026-09-10**: a lane
+holding two visits at the same time, where the grid places the second on an
+implicit row of its own; and a day wider than the window, scrolled to its
+right end, where the hairlines under the rows and under the hour heads end at
+the scroll box (`app/admin/schedule/board/board.css`, lines 35 and 111).
 
 ## 14. Change requests to the shared zone
 

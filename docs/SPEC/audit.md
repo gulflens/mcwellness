@@ -250,6 +250,8 @@ Four views. Build the first two in Phase 1.
 
 **Rendering rule:** the log stores structured data; the UI renders it into sentences using a message catalogue keyed by `(entity_type, action)`. Never show a user a raw JSON diff. And translate the catalogue for Arabic alongside everything else.
 
+*Amended 2026-09-10 (piece twenty-two):* the catalogue's `appointment.insert` sentence reads the new row before it speaks. An appointment inserted carrying `reassigned_from_practitioner_id` (migration 210) is a visit handed from one practitioner to another, and is said as one act — *"{actor} reassigned the appointment to another practitioner"*, in both languages — rather than as a bare addition beside an unexplained move. Every other insert keeps *"{actor} added an appointment"*.
+
 ---
 
 ## 10. Alerts worth having

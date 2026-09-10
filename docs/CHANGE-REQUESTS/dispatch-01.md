@@ -12,7 +12,14 @@ own pull request under the integrator's widening for one piece.
    three who may already move a visit (spec section 9).
 3. **The route in `app/shell/App.tsx`.** `schedule/board`, guarded by
    `canOpenBoard` in `app/shell/adminAccess.ts`, inside the console's own
-   layout: the board loads no third-party script (spec 4.1).
+   layout: the board loads no third-party script (spec 4.1). With it, three
+   more of scheduling's and the shell's own files: the link that is the
+   board's only door, in `app/admin/schedule/SchedulePage.tsx` ("Open the
+   board", carrying the day the page is showing); the route's own cases in
+   `app/shell/App.test.tsx`, which prove an admin and a lead practitioner
+   reach the board and a practitioner is sent home from it; and a dependency
+   rather than an edit — the reassign drawer takes the console's shared drawer
+   behaviour from `app/shell/components/useDrawer.ts`, which is unchanged.
 4. **One sentence in `domain/shared/audit-narrative.ts`**, so an appointment
    inserted with `reassigned_from_practitioner_id` reads as a reassignment
    rather than as a bare addition (spec section 11).
@@ -22,9 +29,19 @@ own pull request under the integrator's widening for one piece.
 6. **Six exports from `app/api/routing/practice-day.ts`** (`readDay`,
    `readBases`, `toHomeBase`, `toPlanStop`, `bucketsFor`, `placesFor`), so the
    board prices its drives with the same reads the map uses rather than a
-   copy. Scheduling's file, edited under the same widening.
+   copy. Scheduling's file, edited under the same widening. What is true
+   today: the board uses four of the six. `readBases` and `toHomeBase` are
+   exported and unused by the board, because the matrix the lateness rule asks
+   for takes no home base (spec section 5, amended); both are still used
+   inside their own file by the day map. They are kept exported until the
+   final review rules on whether to un-export them.
 7. **`insertMoved` in `app/api/appointments/move-one.ts`** takes the new
    practitioner and the new column, both optional, so a move is unchanged.
-8. **The seed** (`db/seed/generate.ts`, `apply.ts`, `tests/db/seed.test.ts`):
-   three visits for the second practitioner on the planning day, one closed,
-   one open and overrunning, one still to come (spec section 13).
+8. **The seed** (`db/seed/generate.ts`, `apply.ts`, `tests/db/seed.test.ts`),
+   the trunk's own files: three visits for the second practitioner on the
+   planning day, one closed, one open and overrunning, one still to come (spec
+   section 13), so the board opens on a fresh laptop with a finished row and a
+   late one. Two facts follow from them. `SeedAppointment.status` is widened
+   to admit `checked_in` and `completed`, which the seed had no visit in
+   before. And the day now holds eight appointments rather than five, so the
+   seed test's unfiltered count reads 8.

@@ -80,7 +80,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 
 ## 8. Integrations
 
-Google Maps Distance Matrix for estimates; Places for pin verification is client-record's. Navigation handoff is a deep link, nothing more. **From piece seventeen the day's own order is optimised** (`docs/SPEC/route-planning.md` section 5): within one day, around the visits already agreed with their households, applied through the move rule of section 3. A dispatch board and live tracking stay out.
+Google Maps Distance Matrix for estimates; Places for pin verification is client-record's. Navigation handoff is a deep link, nothing more. **From piece seventeen the day's own order is optimised** (`docs/SPEC/route-planning.md` section 5): within one day, around the visits already agreed with their households, applied through the move rule of section 3. The dispatch board is piece twenty-two's (`docs/SPEC/dispatch.md`, 2026-09-10); live tracking stays out until piece twenty-five.
 
 ## 9. Audit
 
@@ -88,7 +88,7 @@ Create, move, reassign, cancel each logged with before/after times and practitio
 
 ## 10. Out of scope
 
-Dispatch board, live tracking, client notifications, practitioner-initiated changes, recurring appointments (Phase 2: "book the next 10 Tuesdays"). *Route solver* left this list in piece seventeen, within the limits section 8 now states: one day at a time, around the confirmed visits, never across days and never a fleet.
+Live tracking (piece twenty-five), client notifications, practitioner-initiated changes, recurring appointments (Phase 2: "book the next 10 Tuesdays"). *Route solver* left this list in piece seventeen, within the limits section 8 now states: one day at a time, around the confirmed visits, never across days and never a fleet. *The dispatch board* left this list on 2026-09-10 for piece twenty-two.
 
 ## 11. Done when
 

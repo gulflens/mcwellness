@@ -1051,6 +1051,11 @@ nine and ten; see the records on pull requests 73 to 83).
     the next artefact; then two short billing plans for the operator's
     approval, one takings figure for everyone (decision 4) and package expiry
     with two three-month extensions (decision 9); then piece twelve's plan.
+14. **Piece twenty-two, the board (this pull request):** built from
+    `docs/superpowers/plans/2026-09-10-dispatch-board.md` in the `dispatch`
+    worktree; migration 210; the board at `/admin/schedule/board`; a
+    reassignment as two rows with a reason. Next: the whole-branch review,
+    then the pull request.
 
 ## 11. Where Claude's own memory lives
 
