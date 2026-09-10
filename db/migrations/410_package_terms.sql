@@ -16,13 +16,17 @@
 -- most — the ceiling it had before, reached only by asking. Each extension is
 -- its own row here, numbered 1 or 2, so the count is the database's to keep
 -- and not a route's to remember. package_purchase.extended_to and
--- extension_reason stay: they are what app.billing_ledger and the balances
--- screen read (403 lines 341-352), and the route keeps them equal to the
+-- extension_reason stay: they are what every reader of a programme's end
+-- already reads — app.oldest_available_entitlement (403 lines 351-355),
+-- app/api/billing/balance.ts, app/api/portal/money.ts,
+-- app/api/billing/stop-balance.ts, app/api/billing/sales.ts and
+-- app/api/billing/extensions.ts — and the route keeps them equal to the
 -- latest extension's to_on and reason.
 --
--- Needs: 401 (package.expiry_months), 403 (package_purchase, its extension
--- columns and its tenant-scoped key), 060 (client), 099 (tenant-scoped keys),
--- 080 (app.audit_row), 000 (app.set_updated_at, app_role).
+-- Needs: 000 (app.set_updated_at, app_role), 010 (tenant), 020 (app_user),
+-- 060 (client), 080 (app.audit_row), 099 (tenant-scoped keys), 401
+-- (package.expiry_months), 403 (package_purchase, its extension columns and
+-- its tenant-scoped key).
 
 alter table public.package
   alter column expiry_months set default 6;
@@ -48,6 +52,13 @@ create table public.package_extension (
   constraint package_extension_ordinal_is_one_or_two check (ordinal in (1, 2)),
   constraint package_extension_purchase_id_ordinal_key unique (purchase_id, ordinal),
   constraint package_extension_moves_forward check (to_on > from_on),
+  -- Three months, at the database as well as in the rule
+  -- (domain/billing/extension.ts). Postgres clamps a date to the target
+  -- month's end exactly as `expiryOn` does — 30 November plus three months is
+  -- 28 February, 31 January plus three is 30 April — so the two agree on
+  -- every date there is.
+  constraint package_extension_is_three_months
+    check (to_on = (from_on + interval '3 months')::date),
   constraint package_extension_tenant_id_id_key unique (tenant_id, id),
   constraint package_extension_purchase_id_fkey
     foreign key (tenant_id, purchase_id) references public.package_purchase (tenant_id, id),
@@ -95,6 +106,6 @@ $$;
 -- rollback:
 --   drop table if exists public.package_extension;
 --   alter table public.package alter column expiry_months set default 12;
---   comment on column public.package.expiry_months is 'How many months a programme runs from purchase.';
+--   comment on column public.package.expiry_months is null;
 --   -- and remove this table's three policies from db/policies/billing/ledger.sql,
 --   -- which the runner re-applies and which name the table.

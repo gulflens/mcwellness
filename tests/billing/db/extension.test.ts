@@ -88,14 +88,16 @@ async function remainingSessions(clientIndex: number): Promise<number> {
  * request actually connects as — with the roles the middleware would have
  * stamped. `h.owner` owns the tables and row security steps aside for an owner,
  * so a read taken through it proves nothing about a policy; this takes the read
- * through the role the policy is written for. A transaction of its own, rolled
+ * through the role the policy is written for. A savepoint of its own, rolled
  * back, so the session's audit context survives untouched
  * (tests/db/helpers.ts's `asApiRole` is the same manoeuvre, for a suite that is
- * already inside one).
+ * already inside one). A savepoint rather than a transaction because its only
+ * caller reads rows it has just written inside a transaction of its own, and
+ * a `begin` nested in that would end the caller's transaction, not its own.
  */
 async function countExtensionsAs(roles: string, seededUser: number): Promise<number> {
   const user = h.data.users[seededUser];
-  await h.owner.query('begin');
+  await h.owner.query('savepoint reading_as_role');
   try {
     await h.owner.query('set local role app_role');
     await h.owner.query(
@@ -108,7 +110,8 @@ async function countExtensionsAs(roles: string, seededUser: number): Promise<num
     );
     return Number(rows[0]?.n);
   } finally {
-    await h.owner.query('rollback');
+    await h.owner.query('rollback to savepoint reading_as_role');
+    await h.owner.query('release savepoint reading_as_role');
   }
 }
 
@@ -165,8 +168,30 @@ describe('migration 410: six months, and two extensions at most', () => {
         'package_extension_ordinal_is_one_or_two',
         'package_extension_purchase_id_ordinal_key',
         'package_extension_moves_forward',
+        'package_extension_is_three_months',
       ]),
     );
+  });
+
+  it('refuses an extension of any length but three months', async () => {
+    // The length is fixed at the database as well as in the rule
+    // (domain/billing/extension.ts). Postgres clamps a date to the month's
+    // end exactly as `expiryOn` does, so the two never disagree.
+    await expect(
+      h.owner.query(
+        'insert into package_extension (tenant_id, client_id, purchase_id, ordinal, from_on, to_on, ' +
+          'reason, created_by) values ($1, $2, $3, 1, $4, $5, $6, $7)',
+        [
+          h.data.tenant.id,
+          h.clientId(0),
+          purchaseId,
+          '2027-09-02',
+          '2027-11-02',
+          'Two months, which is not what an extension is.',
+          h.data.users[SEEDED.owner]?.id ?? null,
+        ],
+      ),
+    ).rejects.toThrow('package_extension_is_three_months');
   });
 
   it('is audited with the household named', async () => {
@@ -180,26 +205,34 @@ describe('migration 410: six months, and two extensions at most', () => {
     // A row naming a household and carrying a sentence about why they asked.
     // Written as the practice, so the office's own read below is the one the
     // policy admits rather than the table owner's, which row security skips.
-    await h.owner.query(
-      'insert into package_extension (tenant_id, client_id, purchase_id, ordinal, from_on, to_on, ' +
-        'reason, created_by) values ($1, $2, $3, 1, $4, $5, $6, $7)',
-      [
-        h.data.tenant.id,
-        h.clientId(0),
-        purchaseId,
-        '2027-09-02',
-        '2027-12-02',
-        'The family asked for longer.',
-        h.data.users[SEEDED.owner]?.id ?? null,
-      ],
-    );
+    // Written and read inside a transaction that is rolled back: the route
+    // cases below extend this same programme, and they must find it with the
+    // two extensions it is allowed still untouched.
+    await h.owner.query('begin');
+    try {
+      await h.owner.query(
+        'insert into package_extension (tenant_id, client_id, purchase_id, ordinal, from_on, to_on, ' +
+          'reason, created_by) values ($1, $2, $3, 1, $4, $5, $6, $7)',
+        [
+          h.data.tenant.id,
+          h.clientId(0),
+          purchaseId,
+          '2027-09-02',
+          '2027-12-02',
+          'The family asked for longer.',
+          h.data.users[SEEDED.owner]?.id ?? null,
+        ],
+      );
 
-    // The practitioner is not on this client's schedule — no appointment was
-    // ever booked for them here — so app.client_visible_to_practitioner
-    // answers false and ledger_readers shuts the row out. Without that policy
-    // tenant_isolation alone lets them count it, which is the fault.
-    expect(await countExtensionsAs('practitioner', SEEDED.practitioner)).toBe(0);
-    expect(await countExtensionsAs('owner', SEEDED.owner)).toBe(1);
+      // The practitioner is not on this client's schedule — no appointment was
+      // ever booked for them here — so app.client_visible_to_practitioner
+      // answers false and ledger_readers shuts the row out. Without that policy
+      // tenant_isolation alone lets them count it, which is the fault.
+      expect(await countExtensionsAs('practitioner', SEEDED.practitioner)).toBe(0);
+      expect(await countExtensionsAs('owner', SEEDED.owner)).toBe(1);
+    } finally {
+      await h.owner.query('rollback');
+    }
   });
 });
 
