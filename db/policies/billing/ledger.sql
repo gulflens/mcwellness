@@ -163,6 +163,22 @@ begin
 end
 $$;
 
+-- package_extension (410): read by whoever reads the purchase; written by
+-- whoever may extend (the roles app/api/billing/access.ts's mayExtend admits,
+-- which the route checks first; this is the floor beneath it). mayExtend rides
+-- on billing.waiver.write, and domain/shared/actor.ts gives that to the owner,
+-- an admin and finance — the three money roles, and no lead practitioner.
+drop policy if exists tenant_isolation on public.package_extension;
+create policy tenant_isolation on public.package_extension for all to app_role
+  using (tenant_id = app.current_tenant_id())
+  with check (tenant_id = app.current_tenant_id());
+
+drop policy if exists package_extension_writers on public.package_extension;
+create policy package_extension_writers on public.package_extension as restrictive for insert to app_role
+  with check (
+    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('finance')
+  );
+
 ------------------------------------------------------------------------------
 -- 4. The exception queue. An office matter: something the practice owes an
 --    answer on, not something a client or the practitioner at the door is

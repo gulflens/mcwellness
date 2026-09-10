@@ -119,6 +119,35 @@ afterAll(async () => {
   await h.close();
 });
 
+describe('migration 410: six months, and two extensions at most', () => {
+  it('defaults a new package to six months', async () => {
+    const { rows } = await h.owner.query<{ column_default: string }>(
+      "select column_default from information_schema.columns where table_name = 'package' and column_name = 'expiry_months'",
+    );
+    expect(rows[0]?.column_default).toBe('6');
+  });
+
+  it('holds at most two extensions for one purchase, numbered one and two', async () => {
+    const { rows } = await h.owner.query<{ conname: string }>(
+      "select conname from pg_constraint where conrelid = 'public.package_extension'::regclass order by conname",
+    );
+    expect(rows.map((r) => r.conname)).toEqual(
+      expect.arrayContaining([
+        'package_extension_ordinal_is_one_or_two',
+        'package_extension_purchase_id_ordinal_key',
+        'package_extension_moves_forward',
+      ]),
+    );
+  });
+
+  it('is audited with the household named', async () => {
+    const { rows } = await h.owner.query<{ description: string }>(
+      "select obj_description('public.package_extension'::regclass, 'pg_class') as description",
+    );
+    expect(rows[0]?.description?.startsWith('audited: client')).toBe(true);
+  });
+});
+
 describe('POST /api/billing/package-purchases/:id/extension', () => {
   it('refuses somebody who does not record money', async () => {
     const res = await h.call(
