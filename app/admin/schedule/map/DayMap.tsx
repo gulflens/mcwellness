@@ -40,7 +40,14 @@ const MAX_ZOOM = 16;
 
 export type DayMapProps = {
   maps: GoogleMaps;
-  day: PracticeDayPractitioner;
+  /**
+   * The day being shown, or null when nobody has a stop that day. The map is
+   * still drawn: a coordinator opening an empty day should see the city they
+   * work in, centred and quiet, not a blank panel they cannot tell apart from
+   * a map that failed to load. Every reader of a stop below stands down when
+   * this is null, and the map falls back to `DEFAULT_CENTRE`.
+   */
+  day: PracticeDayPractitioner | null;
   selectedId: string | null;
   onSelect: (appointmentId: string) => void;
 };
@@ -81,6 +88,7 @@ export function DayMap({ maps, day, selectedId, onSelect }: DayMapProps) {
   /** The base first, then every stop in window order: the day as a route. */
   const places = useMemo(() => {
     const ordered: { key: string; point: { lat: number; lng: number } }[] = [];
+    if (day === null) return ordered;
     if (day.homeBase) ordered.push({ key: 'base', point: day.homeBase.point });
     for (const stop of day.stops) ordered.push({ key: stop.appointmentId, point: stop.point });
     return ordered;
@@ -141,13 +149,13 @@ export function DayMap({ maps, day, selectedId, onSelect }: DayMapProps) {
     return { left: pixel.x, top: pixel.y };
   };
 
-  const legFor = (appointmentId: string) => day.legs.find((leg) => leg.toStopId === appointmentId);
+  const legFor = (appointmentId: string) => day?.legs.find((leg) => leg.toStopId === appointmentId);
 
   return (
     <div className="daymap">
       <div className="daymap__canvas" ref={canvas} />
       <div className="daymap__layer">
-        {day.homeBase
+        {day?.homeBase
           ? (() => {
               const position = at(day.homeBase.point);
               if (position === null) return null;
@@ -162,7 +170,7 @@ export function DayMap({ maps, day, selectedId, onSelect }: DayMapProps) {
               );
             })()
           : null}
-        {day.stops.map((stop, index) => {
+        {(day?.stops ?? []).map((stop, index) => {
           const position = at(stop.point);
           if (position === null) return null;
           return (
