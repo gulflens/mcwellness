@@ -74,7 +74,13 @@ export type EventRow = {
 
 export type PostingReport = { posted: number; unknown: number };
 
-const INVOICE_KINDS = ['session', 'package', 'call_out_fee', 'statement'] as const;
+const INVOICE_KINDS = [
+  'session',
+  'package',
+  'call_out_fee',
+  'statement',
+  'single_session',
+] as const;
 const METHODS = ['cash', 'transfer', 'link'] as const;
 
 function amount(value: string | null): number {

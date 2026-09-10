@@ -14,7 +14,7 @@ export type MoneyEvent =
       event: 'invoice.issued';
       sourceId: string;
       occurredOn: IsoDate;
-      invoiceKind: 'session' | 'package' | 'call_out_fee' | 'statement';
+      invoiceKind: 'session' | 'package' | 'call_out_fee' | 'statement' | 'single_session';
       netFils: Fils;
       vatFils: Fils;
       grossFils: Fils;
