@@ -69,6 +69,8 @@ const APPT_SETTLED = '00000000-0000-4000-8000-000000007324';
 const APPT_OPEN = '00000000-0000-4000-8000-000000007325';
 const APPT_UNCERTIFIED = '00000000-0000-4000-8000-000000007326';
 const APPT_MOVED_TOO = '00000000-0000-4000-8000-000000007327';
+/** The one an admin hands on, rather than the owner. */
+const APPT_ADMIN = '00000000-0000-4000-8000-000000007332';
 /** The one visit already on the practitioner everything is handed to. */
 const APPT_B_ELEVEN = '00000000-0000-4000-8000-000000007328';
 /** The booking that wins the race, written from a second connection. */
@@ -205,6 +207,15 @@ beforeAll(async () => {
     });
   }
 
+  // The admin: one of the three roles the act admits, and the one
+  // `board.test.ts` says is proved admitted here rather than there.
+  await seedUser(owner, {
+    id: MORE_IDS.adminUserA,
+    tenantId: IDS.tenantA,
+    authId: AUTH.adminA,
+    displayName: 'Synthetic Admin',
+    roles: ['admin'],
+  });
   await seedUser(owner, {
     id: FINANCE_USER,
     tenantId: IDS.tenantA,
@@ -252,6 +263,7 @@ beforeAll(async () => {
   // Practitioner A's day: one visit per case, an hour apart. A window is
   // forty-five minutes and the default travel buffer fifteen, so an hourly
   // spacing is exactly clear of itself.
+  await seedAppointment(APPT_ADMIN, at('07:00'));
   await seedAppointment(APPT_RACE, at('08:00'));
   await seedAppointment(APPT_OK, at('09:00'));
   await seedAppointment(APPT_SAME, at('10:00'));
@@ -336,6 +348,39 @@ describe('POST /api/appointments/:id/reassign', () => {
       [body.appointment.id],
     );
     expect(trail.rows[0]?.reason).toBe(REASON);
+  });
+
+  it('admits an admin, who hands a visit on exactly as the owner does', async () => {
+    const res = await call(AUTH.adminA, 'POST', `/api/appointments/${APPT_ADMIN}/reassign`, {
+      practitionerId: PRACTITIONER_B,
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as MoveAppointmentResponse;
+    expect(body.appointment.practitioner.id).toBe(PRACTITIONER_B);
+    const rows = await owner.query<{
+      id: string;
+      status: string;
+      practitioner_id: string;
+      reassigned_from_practitioner_id: string | null;
+    }>(
+      'select id, status::text as status, practitioner_id, reassigned_from_practitioner_id ' +
+        'from appointment where id = $1 or rescheduled_from_id = $1 order by created_at',
+      [APPT_ADMIN],
+    );
+    expect(rows.rows).toEqual([
+      {
+        id: APPT_ADMIN,
+        status: 'rescheduled',
+        practitioner_id: MORE_IDS.practitionerA,
+        reassigned_from_practitioner_id: null,
+      },
+      {
+        id: body.appointment.id,
+        status: 'confirmed',
+        practitioner_id: PRACTITIONER_B,
+        reassigned_from_practitioner_id: MORE_IDS.practitionerA,
+      },
+    ]);
   });
 
   it('may move the window at the same time', async () => {
@@ -547,12 +592,15 @@ describe('POST /api/appointments/:id/reassign', () => {
      * A second connection inserts a rival booking for the practitioner this
      * visit is being handed to and holds its transaction open: read committed
      * hides an uncommitted row, so this request's own reads and
-     * `checkConflicts` pass, its first write retires the old row, and its
-     * insert then blocks on the exclusion index until the rival commits — at
-     * which point it is refused as `23P01`. Raised rather than returned, the
-     * 409 survives the rollback of the aborted transaction, and the visit is
-     * left standing on the practitioner it started on rather than retired
-     * with nothing put in its place.
+     * `checkConflicts` pass on a day that does not have it. The request then
+     * queues at `app.audit_chain` while writing the household's `read` row —
+     * the rival's own insert holds that lock until it commits — and resumes
+     * the moment the rival commits, so by the time it retires the old row and
+     * inserts the new one the rival is there and the exclusion constraint
+     * refuses it at once as `23P01`. Raised rather than returned, the 409
+     * survives the rollback of the aborted transaction, and the visit is left
+     * standing on the practitioner it started on rather than retired with
+     * nothing put in its place.
      */
     const target = at('18:00');
     const rival = new pg.Client({ connectionString: process.env.DATABASE_URL });
