@@ -420,7 +420,7 @@ export async function asContact<T>(
 /**
  * The money on one record: a bundle bought, its credits, an invoice and a
  * payment against it. Enough for every figure the portal's money screen shows
- * and for the six restrictive policies to have something to hide.
+ * and for the seven restrictive policies to have something to hide.
  */
 export const PORTAL_MONEY = {
   package: '00000001-0000-4000-8000-000000000061',

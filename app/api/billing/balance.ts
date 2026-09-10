@@ -9,6 +9,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { logRead } from '../_middleware/audit';
 import { mayReadBalance } from './access';
 import { BalanceResponse } from './ledger-schema';
+import { EXTENSIONS_USED_SQL, purchaseRow, type PurchaseDbRow } from './sales';
 
 /**
  * `GET /api/billing/clients/:clientId/balance` — what a family has left and
@@ -50,11 +51,12 @@ const LEDGER_SQL =
   'where tenant_id = app.current_tenant_id() and client_id = $1';
 
 const PURCHASES_SQL =
-  'select id, client_id, package_id, package_name, package_name_ar, purchased_on, net_fils, ' +
-  'vat_fils, list_price_fils, discount_basis_points, discount_reason, expires_on, ' +
-  'extended_to, extension_reason, status, invoice_id ' +
-  'from package_purchase where tenant_id = app.current_tenant_id() and client_id = $1 ' +
-  'order by purchased_on desc, id';
+  'select p.id, p.client_id, p.package_id, p.package_name, p.package_name_ar, p.purchased_on, ' +
+  'p.net_fils, p.vat_fils, p.list_price_fils, p.discount_basis_points, p.discount_reason, ' +
+  'p.expires_on, p.extended_to, p.extension_reason, p.status, p.invoice_id, ' +
+  EXTENSIONS_USED_SQL +
+  ' from package_purchase p where p.tenant_id = app.current_tenant_id() and p.client_id = $1 ' +
+  'order by p.purchased_on desc, p.id';
 
 type EntitlementDbRow = {
   service_type_id: string;
@@ -88,24 +90,7 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
     const [entitlements, ledger, purchases] = await Promise.all([
       db.query<EntitlementDbRow>(ENTITLEMENTS_SQL, [clientId]),
       db.query<{ entry_kind: string; amount_fils: number }>(LEDGER_SQL, [clientId]),
-      db.query<{
-        id: string;
-        client_id: string;
-        package_id: string;
-        package_name: string;
-        package_name_ar: string | null;
-        purchased_on: string;
-        net_fils: number;
-        vat_fils: number;
-        list_price_fils: number;
-        discount_basis_points: number | null;
-        discount_reason: string | null;
-        expires_on: string;
-        extended_to: string | null;
-        extension_reason: string | null;
-        status: 'active' | 'completed' | 'expired' | 'refunded' | 'cancelled';
-        invoice_id: string | null;
-      }>(PURCHASES_SQL, [clientId]),
+      db.query<PurchaseDbRow>(PURCHASES_SQL, [clientId]),
     ]);
 
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
@@ -176,29 +161,7 @@ export function mountBalance(api: Hono<ApiEnv>, now: () => Date = () => new Date
         ),
         chargedFils,
         paidFils,
-        purchases: purchases.rows.map((row) => ({
-          id: row.id,
-          clientId: row.client_id,
-          packageId: row.package_id,
-          packageName: row.package_name,
-          packageNameAr: row.package_name_ar,
-          purchasedOn: row.purchased_on,
-          netFils: row.net_fils,
-          vatFils: row.vat_fils,
-          grossFils: row.net_fils + row.vat_fils,
-          listPriceFils: row.list_price_fils,
-          // Not a fifth column on the row: the discount is the gap between
-          // what the list said and what was charged, and both are already
-          // here (migration 409's fourth section).
-          discountFils: Math.max(0, row.list_price_fils - row.net_fils),
-          discountBasisPoints: row.discount_basis_points,
-          discountReason: row.discount_reason,
-          expiresOn: row.expires_on,
-          extendedTo: row.extended_to,
-          extensionReason: row.extension_reason,
-          status: row.status,
-          invoiceId: row.invoice_id,
-        })),
+        purchases: purchases.rows.map(purchaseRow),
       }),
     );
   });

@@ -18,6 +18,14 @@
   padding-block-start: var(--s-2);
 }
 
+/* The term, said plainly above the sale's own actions. */
+.sell__term {
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  margin-block: var(--s-3);
+}
+
 /* The live VAT-inclusive total: a small ledger-within-the-ledger. */
 .price-preview {
   display: flex;

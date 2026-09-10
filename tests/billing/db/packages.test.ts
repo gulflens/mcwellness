@@ -25,6 +25,14 @@ import {
 // SEED_TODAY (2026-09-02) at 08:00 UTC is still 2026-09-02 in Asia/Dubai.
 const NOW = () => new Date('2026-09-02T08:00:00.000Z');
 
+/**
+ * A third bundle, created at the term the operator chose, so the invoice
+ * line can be read at six months as well as at this suite's twelve. Suffixed
+ * like `SILVER_CODE` and `GOLD_CODE`, and for the same reason: a bundle code
+ * is unique per practice and the seed's own three must not be collided with.
+ */
+const SIX_MONTH_CODE = 'bronze-under-test';
+
 let h: Harness;
 
 beforeAll(async () => {
@@ -406,12 +414,22 @@ describe('selling a Silver package', () => {
       },
     ]);
 
-    const { rows: lines } = await h.owner.query<{ description: string; quantity: number }>(
-      'select l.description, l.quantity from invoice_line l join invoice i on i.id = l.invoice_id ' +
-        'where i.package_purchase_id = $1',
+    const { rows: lines } = await h.owner.query<{
+      description: string;
+      description_ar: string | null;
+      quantity: number;
+    }>(
+      'select l.description, l.description_ar, l.quantity from invoice_line l ' +
+        'join invoice i on i.id = l.invoice_id where i.package_purchase_id = $1',
       [purchaseId],
     );
-    expect(lines).toEqual([{ description: 'Silver', quantity: 1 }]);
+    // The term said on the invoice line, in both languages
+    // (docs/PLAN/package-terms.md): this suite's own Silver is built by
+    // silverInput() at twelve months, not the seed's new six, so the words
+    // are the fixture's own term and not the operator's headline figure.
+    expect(lines).toEqual([
+      { description: 'Silver, 12 months', description_ar: 'الفضية، 12 شهرًا', quantity: 1 },
+    ]);
 
     const { rows: payments } = await h.owner.query<{ method: string; amount_fils: number }>(
       'select p.method, p.amount_fils from payment p join invoice i on i.id = p.invoice_id ' +
@@ -419,6 +437,39 @@ describe('selling a Silver package', () => {
       [purchaseId],
     );
     expect(payments).toEqual([{ method: 'transfer', amount_fils: 1_032_500 }]);
+  });
+
+  it('says six months on the line of a programme sold at six months', async () => {
+    // The assertion above proves the line reads the bundle's own term, at the
+    // twelve months this suite's Silver is built with. This is the same
+    // composition at the term the operator chose, end to end: a bundle
+    // created at six months, sold, and the words that reach its invoice.
+    const created = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...silverInput(h, SEED_TODAY),
+      code: SIX_MONTH_CODE,
+      name: 'Bronze',
+      nameAr: 'البرونزية',
+      expiryMonths: 6,
+    });
+    expect(created.status).toBe(201);
+    const bundleId = ((await created.json()) as PackageResponse).package.id;
+
+    const sold = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: bundleId,
+      clientId: h.clientId(2),
+      purchasedOn: SEED_TODAY,
+    });
+    expect(sold.status).toBe(201);
+    const { purchase } = (await sold.json()) as SellPackageResponse;
+
+    const { rows } = await h.owner.query<{ description: string; description_ar: string | null }>(
+      'select l.description, l.description_ar from invoice_line l ' +
+        'join invoice i on i.id = l.invoice_id where i.package_purchase_id = $1',
+      [purchase.id],
+    );
+    expect(rows).toEqual([
+      { description: 'Bronze, 6 months', description_ar: 'البرونزية، 6 أشهر' },
+    ]);
   });
 
   it('shows the family fifteen sessions to come and nothing owed', async () => {

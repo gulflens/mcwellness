@@ -1072,6 +1072,23 @@ nine and ten; see the records on pull requests 73 to 83).
     pass (07:52 UTC the same day). Still owed: `pnpm db:migrate` plus a
     restart of `pnpm dev` in the laptop checkout once it is back on `main`. Next: pieces twenty-three to twenty-five with
     plans of their own, after the two billing plans.
+15. **Package terms (decision 9, this pull request):** migration 410 (the
+    `package_extension` table with its two-per-programme guard, and
+    `package.expiry_months`'s default moved from twelve to six);
+    `domain/billing/extension.ts` (`termWords`, `nextExtension`,
+    `MAX_EXTENSIONS`); the extension route
+    (`POST /api/billing/package-purchases/:id/extension`, a reason alone,
+    409 `extension_limit_reached` on a third, 409 `ended_too_long_ago` when
+    three more months would still be behind today, and a race between two
+    requests for the same ordinal answered 409 `extended_by_someone_else`
+    instead of as an internal error); the drawer that offers it, counts to
+    two and says so; the term said above the Sell drawer's button and on the
+    invoice's package line in both languages; the Add package drawer's own
+    default moved to six; the seed's own three programmes moved to six months
+    (`docs/CHANGE-REQUESTS/billing-10.md`, item 1). **Still owed:** the
+    staging pass with migration 410, the production data step for the three
+    live programmes (`docs/CHANGE-REQUESTS/billing-10.md`, item 2), and the
+    live pass — all on the operator's word. **Next:** piece twelve's plan.
 
 ## 11. Where Claude's own memory lives
 
