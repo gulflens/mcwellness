@@ -1,8 +1,15 @@
 /**
- * The day map's basemap, in Google's own styling vocabulary
- * (docs/SPEC/route-planning.md section 4.5): a quiet, achromatic ground with
- * the roads legible and everything else out of the way, so the pins and the
- * lines are what the eye finds.
+ * The basemap both of the console's browser maps draw on, in Google's own
+ * styling vocabulary (docs/SPEC/route-planning.md section 4.5): a quiet,
+ * achromatic ground with the roads legible and everything else out of the
+ * way, so the pins and the lines are what the eye finds. Started as the day
+ * map's own (`app/admin/schedule/map/`); since trunk round 43 the pin picker
+ * (`app/admin/clients/pin/PinPickerPage.tsx`) draws its single marker on the
+ * same basemap rather than Google's default one, so it reads as this
+ * console's own screen and not a page borrowed from somewhere else — the
+ * same reason `googleMaps.ts` moved to this folder first, and this
+ * document's own rule for a thing two modules share (docs/SPEC/
+ * OWNERSHIP.md).
  *
  * **Every colour is read from the running document**, not written out here:
  * `getComputedStyle` on the element the page hands in resolves the same

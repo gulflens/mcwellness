@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { mapStyle } from '../../app/admin/schedule/map/mapStyle';
+import { mapStyle } from '../../app/shell/maps/mapStyle';
 
 /** The style is read from the running document, so a token change moves the map with it. */
 describe('mapStyle', () => {

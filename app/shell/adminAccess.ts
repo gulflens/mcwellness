@@ -36,6 +36,22 @@ export function canOpenSchedule(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `client.list` (app/api/clients/list.ts) — who may open the pin
+ * picker, `/admin/clients/pin`. The same audience `/admin/clients` itself
+ * admits: every staff role, and not a household's own `client_contact`
+ * account, which signs in through the same session
+ * (`app/shell/routing.ts`, `app/shell/App.tsx`'s `RequireAuth`) but reaches
+ * no practice data on this screen and must not be the one driving the
+ * practice's browser key and its Places quota (the whole-branch review of
+ * trunk round 43, finding 5). Unlike `canOpenSchedule`, this is not the
+ * picker's own capability — the picker calls no API route of its own — it is
+ * the capability that gates the one screen this picker is ever opened from.
+ */
+export function canOpenPin(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'client.list' }, {}, now);
+}
+
+/**
  * Matches `appointment.board.read` (app/api/appointments/board.ts) — who may
  * open the dispatcher's board. The three calendar roles, which are the same
  * three `appointment.reassign` admits, so nobody reaches a board whose one

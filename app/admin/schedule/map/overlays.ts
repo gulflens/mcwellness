@@ -1,4 +1,4 @@
-import type { GoogleMaps } from './googleMaps';
+import type { GoogleMaps } from '../../../shell/maps/googleMaps';
 
 /**
  * One overlay, for its projection alone (docs/SPEC/route-planning.md section

@@ -107,3 +107,288 @@ describe('CoordinateFields — offerMapLink', () => {
     ).toBeTruthy();
   });
 });
+
+describe('CoordinateFields — mapPicker', () => {
+  afterEach(() => {
+    try {
+      window.sessionStorage.clear();
+    } catch {
+      // One of the tests below makes sessionStorage itself throw; if a prior
+      // test left it in that state this must not fail the next one's setup.
+    }
+  });
+
+  /** What `openPicker` wrote under the key its `window.open` URL names. */
+  function stored(open: ReturnType<typeof vi.spyOn>, call = 0): unknown {
+    const url = new URL(String(open.mock.calls[call]?.[0]), window.location.origin);
+    const key = url.searchParams.get('k');
+    return JSON.parse(window.sessionStorage.getItem(`mcwellness:pin:${key}`) ?? 'null');
+  }
+
+  it('opens the picker behind an opaque key, the point stored under it, and takes the point sent back bearing the same key', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const onChange = vi.fn();
+    const onAddress = vi.fn();
+    render(
+      <CoordinateFields
+        lat={25.2048}
+        lng={55.2708}
+        onChange={onChange}
+        browserKey="browser-key-under-test"
+        mapPicker={{ emirate: 'DXB', label: 'Home', onAddress }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+
+    // The URL carries nothing but the key — no point, no emirate, no label:
+    // `.claude/rules/ui.md` forbids personal data in a URL, and a
+    // household's entrance coordinate is exactly that.
+    const url = new URL(String(open.mock.calls[0]?.[0]), window.location.origin);
+    expect(url.pathname).toBe('/admin/clients/pin');
+    expect([...url.searchParams.keys()]).toEqual(['k']);
+    const key = url.searchParams.get('k');
+    expect(key).toBeTruthy();
+
+    // The point travels through sessionStorage instead, under that same key.
+    expect(stored(open)).toEqual({ lat: 25.2048, lng: 55.2708, emirate: 'DXB', label: 'Home' });
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        data: {
+          type: 'mcwellness:pin',
+          lat: 25.21,
+          lng: 55.28,
+          address: 'Villa 12, Street 4',
+          key,
+        },
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({ lat: 25.21, lng: 55.28 });
+    expect(onAddress).toHaveBeenCalledWith('Villa 12, Street 4');
+    open.mockRestore();
+  });
+
+  it('ignores a message with no key at all, the shape the picker sent before this fix', () => {
+    const onChange = vi.fn();
+    render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={onChange}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        data: { type: 'mcwellness:pin', lat: 1, lng: 2, address: null },
+      }),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  // The critical finding of the whole-branch review of trunk round 43: two
+  // boxes never mount together (LocationsTab.tsx keeps one panel open at a
+  // time), but the picker tab a panel opened outlives the panel closing. This
+  // walks the review's own sequence — open "Check the pin" on one client,
+  // open the picker, close the panel, open "Check the pin" on a *different*
+  // client, then return to the still-open first tab and press "Use this
+  // pin" — and is the test that is the point of this fix.
+  it('does not move a different client’s boxes when a stale tab’s pin arrives bearing an old key', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const onChangeA = vi.fn();
+    const { unmount } = render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={onChangeA}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    // Client A: "Check the pin" → "Pick on the map" opens a tab, minting a key.
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    const staleKey = new URL(
+      String(open.mock.calls[0]?.[0]),
+      window.location.origin,
+    ).searchParams.get('k');
+    expect(staleKey).toBeTruthy();
+
+    // The panel for A closes (LocationsTab.tsx unmounts it), and a fresh
+    // panel opens for client B — a different CoordinateFields instance that
+    // has not opened its own picker tab.
+    unmount();
+    const onChangeB = vi.fn();
+    render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={onChangeB}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+
+    // A's still-open tab posts A's pin, bearing A's key. B's boxes must not move.
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        data: {
+          type: 'mcwellness:pin',
+          lat: 25.21,
+          lng: 55.28,
+          address: 'A stale address from client A',
+          key: staleKey,
+        },
+      }),
+    );
+    expect(onChangeB).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('omits lat and lng from the stored blob when there is no point yet', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    const blob = stored(open);
+    expect(blob).toEqual({ label: 'Home' });
+    expect(blob).not.toHaveProperty('lat');
+    expect(blob).not.toHaveProperty('lng');
+    open.mockRestore();
+  });
+
+  it('keeps a kind-of-place label but drops anything else', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const { rerender } = render(
+      <CoordinateFields
+        lat={25.2}
+        lng={55.3}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Not a kind of place' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    expect(stored(open, 0)).not.toHaveProperty('label');
+
+    rerender(
+      <CoordinateFields
+        lat={25.2}
+        lng={55.3}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home base' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    expect(stored(open, 1)).toHaveProperty('label', 'Home base');
+    open.mockRestore();
+  });
+
+  it('says so next to the button, and never opens the tab, when sessionStorage blocks the write', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('site data blocked');
+    });
+    render(
+      <CoordinateFields
+        lat={25.2}
+        lng={55.3}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    expect(open).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'The map could not be opened: this browser is blocking site data. Enter the coordinates by hand instead.',
+      ),
+    ).toBeTruthy();
+    setItem.mockRestore();
+    open.mockRestore();
+  });
+
+  // Finding 2 of the whole-branch review: a managed device or a plain
+  // pop-up blocker refuses `window.open` outright rather than throwing on the
+  // storage write, and the old code silently ignored the return value — the
+  // click wrote to sessionStorage and then visibly did nothing.
+  it('says so next to the button, and removes the stored blob, when the browser blocks the new tab itself', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <CoordinateFields
+        lat={25.2}
+        lng={55.3}
+        onChange={vi.fn()}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    expect(open).toHaveBeenCalledTimes(1);
+    // The features argument is the empty string, not `'noopener=no'`: a named
+    // target already keeps `window.opener`, and a non-empty features string
+    // makes some browsers treat the call as a pop-up window request, which is
+    // more likely to be blocked in the first place.
+    expect(open.mock.calls[0]?.[2]).toBe('');
+    const key = new URL(String(open.mock.calls[0]?.[0]), window.location.origin).searchParams.get(
+      'k',
+    );
+    expect(window.sessionStorage.getItem(`mcwellness:pin:${key}`)).toBeNull();
+    expect(
+      screen.getByText(
+        'The map could not be opened: this browser blocked the new tab. Enter the coordinates by hand instead.',
+      ),
+    ).toBeTruthy();
+    open.mockRestore();
+  });
+
+  it('ignores a message from any other origin', () => {
+    const onChange = vi.fn();
+    render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={onChange}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        origin: 'https://evil.example',
+        data: { type: 'mcwellness:pin', lat: 1, lng: 2, address: null },
+      }),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('says the map needs the key when the build has none', () => {
+    render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={vi.fn()}
+        browserKey={null}
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Pick on the map' })).toBeNull();
+    expect(screen.getByText('The map needs the practice’s browser key.')).toBeTruthy();
+  });
+});

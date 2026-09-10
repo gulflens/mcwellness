@@ -11,7 +11,7 @@ import { MoveAppointmentDrawer } from '../MoveAppointmentDrawer';
 import { formatWindow, practiceDay } from '../windows';
 import { DayMap, formatDrive } from './DayMap';
 import { DocumentBoundary } from './documentBoundary';
-import { browserMapKey, loadGoogleMaps, type GoogleMaps } from './googleMaps';
+import { browserMapKey, loadGoogleMaps, type GoogleMaps } from '../../../shell/maps/googleMaps';
 import { OptimiseDrawer } from './OptimiseDrawer';
 import './map.css';
 
