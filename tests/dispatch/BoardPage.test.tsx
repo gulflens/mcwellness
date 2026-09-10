@@ -292,6 +292,20 @@ describe('BoardPage', () => {
     expect(onReassign).not.toHaveBeenCalled();
   });
 
+  it('puts the board out of reach while the drawer is open, and closes on Escape', async () => {
+    mount();
+    fireEvent.click(await screen.findByRole('button', { name: /Juniper Valley/ }));
+    const drawer = await screen.findByRole('dialog', { name: 'Reassign the visit' });
+    // The console's shared drawer behaviour: everything beside the drawer is
+    // inert, so the board behind cannot be tabbed into, read out or dragged
+    // while a reassignment is being written.
+    const behind = [...(drawer.parentElement?.children ?? [])].filter((each) => each !== drawer);
+    expect(behind.length).toBeGreaterThan(0);
+    expect(behind.map((each) => (each as HTMLElement).inert)).toEqual(behind.map(() => true));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('leaves a visit where it is when it is dropped back on its own row', async () => {
     mount();
     const block = await screen.findByRole('button', { name: /Juniper Valley/ });

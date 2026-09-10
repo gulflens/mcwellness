@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ConflictResponse,
   type BoardPractitioner,
@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../../shell/components/Controls';
 import { CloseIcon } from '../../../shell/components/Icons';
+import { useDrawer } from '../../../shell/components/useDrawer';
 import { localConflictMessage } from '../conflictMessages';
 import { formatWindow } from '../windows';
 
@@ -77,25 +78,19 @@ export function ReassignDrawer({
   onDone: () => void;
 }) {
   const { apiFetch } = useAuth();
+  const drawerRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  // The console's shared drawer behaviour: `inert` on everything behind, a
+  // focus cycle inside, focus returned, Escape to close. It matters more here
+  // than on the day's own drawers — the board behind is a grid of draggable
+  // blocks, and a drag begun on it while this is open would re-target the
+  // reassignment underneath the dispatcher.
+  useDrawer(drawerRef, closeRef, onClose);
 
   const [to, setTo] = useState(initialTo ?? practitioners[0]?.practitionerId ?? '');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      previous?.focus();
-    };
-  }, [onClose]);
 
   const canSubmit = Boolean(to && reason.trim()) && !submitting;
 
@@ -159,7 +154,7 @@ export function ReassignDrawer({
   }
 
   return (
-    <aside className="drawer" role="dialog" aria-labelledby="reassign-title">
+    <aside ref={drawerRef} className="drawer" role="dialog" aria-labelledby="reassign-title">
       <header className="drawer__header">
         <div className="drawer__title">
           <h2 id="reassign-title">Reassign the visit</h2>
