@@ -1055,3 +1055,83 @@ console document, and `/api/enquiries` still answers 401.
 
 **Left as it was.** The archive `mcwellness-c4ecea0.tar.gz` in `public_html`
 beside the earlier ones. Production is level with `main`: 93 migrations.
+
+## What was done on 2026-09-10: the fourteenth live pass — trunk round 43, the walk's fixes
+
+At 18:31 UTC on 10 September (22:31 in Dubai; 02:31 on the operator's clock),
+on the operator's word, the live process was rebuilt from `main` at `a03a0fc`
+— trunk round 43 in four pull requests (150, 153, 154, 155), the package terms
+(151) merged earlier the same day, and the console's code split (152).
+**Three migrations:** 410, 411 and 963, applied to the production project
+first.
+
+**The migrations, first.** `schema_migration` read 93 rows, last
+`962_erasure_guard_admits_the_sweep.sql`. Applied one at a time in the
+runner's shape (the transaction-local audit context, the file's statements,
+then the bookkeeping row with the file's own sha256):
+`410_package_terms.sql` (`d4581ea4…`), `411_billing_single_session.sql`
+(`79b5e3d0…`) and `963_backfill_primary_location.sql` (`d00c4e77…`). Then the
+two policy files this round changed, `db/policies/billing/ledger.sql` and
+`db/policies/portal/money.sql`, re-applied as the runner re-applies every
+policy file on each run. Read back: **96 rows**, each checksum equal to its
+file's.
+
+**Proved rather than assumed.** The affected tables' schema — every column,
+constraint, index, policy, trigger and the `invoice_kind` enum across
+`client`, `location`, `package`, `package_extension` and `invoice` — was
+fingerprinted on production and compared against a freshly migrated local
+database: **`237b902727b5743f6a3d2b6065a57fa7`, 221 items, identical**, and
+identical to staging's. The first production fingerprint read 217; the four
+missing items were `package_extension`'s policies, which live in policy files
+rather than in the migration, and applying them closed the gap exactly.
+
+**963 refused on staging, and that was the point.** Staging's tenant carried
+two locations both flagged `is_primary` — a `studio` and a `base`, both seeded
+on 2026-09-03, before `913_practitioner_base.sql` existed — so the file's
+pre-flight check raised rather than let `create unique index
+location_one_primary_per_owner` fail with a bare duplicate-key error. It named
+the owner and both rows, so the repair was obvious: the newer `base` was
+demoted with an audited reason and the migration then ran. **Production was
+checked before it was touched and had no such duplicate**, so 963 ran there
+first try. This is the whole value of the named exception the task's review
+insisted on.
+
+**The recipe, as the third pass wrote it.** Hold protocol: `ListAgents`
+reported no other session running. `git archive --prefix=mcwellness/
+origin/main | gzip -9` (6,432,078 bytes, sha256 `1ffa9c0f…`), carrying all
+three migrations; TUS create 201 and PATCH 204 with the offset equal to the
+size; `hosting_startNode_jsBuildV1` with the stored settings read back
+identical: build `01a08c96`, created 18:31:16. The served bundle flipped from
+`index-ejvQq2uB.js` to `index-B8NXW7WB.js`. No restart needed:
+`/api/health` 200 in 0.38 s and `/api/health/deep` 200 in 0.62 s.
+
+**What the served process proves.** `POST /api/billing/session-purchases` and
+`POST /api/clients/:id/consents/bundle` answer 401 to a stranger — the routes
+exist, where before this pass they were 404. `/admin/clients/pin` serves the
+picker's document with the widened policy (`script-src 'strict-dynamic' https:
+'unsafe-eval'`) while `/admin/clients` beside it still serves `script-src
+'self'`: the confinement part two's design rests on, holding on the live site
+through the build, the host's header rewriting and the service worker.
+
+**The two test records were removed first.** Before the pass, on the operator's
+word ("they were both test subjects"), the two client records made while the
+system was being built were deleted: one still at `lead` from 7 September, one
+already `erased` on 9 September. Neither carried an invoice, a payment, a
+visit, a session or a stored document, so nothing rule 8 retains was touched.
+Children first (3 consents, 2 erasure requests, 2 contacts, 1 location), after
+clearing `client.primary_contact_id`, which references `contact` and made the
+first attempt fail and roll back whole. The audit trail was not touched and
+does not reference `client` by foreign key: **379 rows, and
+`app.verify_audit_chain()` returns null** — intact. The removal itself is in
+that trail, 12 rows carrying the old values and the operator's reason.
+
+**Left as it was.** The archive `mcwellness-a03a0fc.tar.gz` in `public_html`
+beside the earlier ones. Production is level with `main`: 96 migrations, and
+**zero client records** — the practice's own books, catalogue, practitioner and
+identity stand as they were.
+
+**Owed after this pass.** The three live programmes still run twelve months;
+moving them to six is a data step on the operator's word
+(docs/CHANGE-REQUESTS/billing-10.md). The day map draws an empty day as a grey
+panel — found by the operator immediately after this pass, fixed in pull
+request 156, not in this build.
