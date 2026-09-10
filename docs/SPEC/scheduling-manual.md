@@ -34,7 +34,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 
 ## 4. Screens (admin)
 
-**4.1 Week calendar.** Practitioners as columns (or rows on narrow screens), days across, 15-minute grid. Appointment block shows client name, service, location label, delivery mode icon. Drag to move, drag edge to change duration, drag between columns to reassign. Every drag runs `checkConflicts` before commit and shows blocking errors or warnings inline.
+**4.1 Week calendar.** Practitioners as columns (or rows on narrow screens), days across, 15-minute grid. Appointment block shows client name, service, location label, delivery mode icon. Drag to move, drag edge to change duration, drag between columns to reassign. Every drag runs `checkConflicts` before commit and shows blocking errors or warnings inline. *Amended 2026-09-10 (trunk round 43):* the day view built ahead of this grid (`SchedulePage.tsx`) says where a rescheduled row went, with a link to that day, and its booking panel carries its own date rather than only the day already open.
 
 **4.2 Day map.** **Built in piece seventeen (2026-09-07); the screen is specified in `docs/SPEC/route-planning.md` Part A, which supersedes the sketch below where the two differ.** Full-bleed map for one day. Pins numbered in time order; straight lines between consecutive stops with estimated drive minutes from the Maps API (cached per pair per hour-bucket). Click a pin → appointment. Toggle practitioners on/off. This is the screen for noticing "she's in Jumeirah at 2 and Mirdif at 3." *Not* each practitioner a colour: the design brief reserves hue for the bands and the three status states, so a pin carries its stop number and nothing more (`docs/SPEC/route-planning.md` 4.2).
 

@@ -3112,3 +3112,153 @@ database on 5451): format, lint, typecheck, the secrets scan and the
 migration audit clean; 2,428 unit tests passed across 211 files; 1,308
 database tests passed across 94 files.
 
+## Round 43 — the walk's fixes, part one (2026-09-10)
+
+The console was driven in a browser as the practice owner through ten
+everyday jobs, on the synthetic practice against main `58f08b6`
+(`docs/superpowers/specs/2026-09-10-walk-fixes-design.md`). The day-to-day
+jobs were easy; the client record and the schedule were not. This is the
+first of four pull requests on branch `trunk-round-43`: everything the walk
+found that needed no decision from the operator. The remaining three — a
+map for the home pin, selling a single session up front, and one signature
+covering every consent — wait on the operator's three decisions of the same
+afternoon and are not in this round.
+
+**What the round builds.** A self contact is shown under the client's own
+name rather than "Unnamed contact — self": `contactDisplayName` falls back
+to `clientHeadingName` when the contact has no name of its own, and
+`clientHeadingName` also collapses the erasure placeholder so an erased
+client reads "Erased client" once, not twice. Example values moved out of
+`ContactForm.tsx`, `EnrolmentWizard.tsx` and `LocationForm.tsx`'s
+placeholders and into their hints, where a person can still read them once
+typing has started; `Field`, `PasswordField` and `Select`
+(`app/shell/components/Controls.tsx`) now give their error text
+`role="alert"`, so a screen reader announces it — and so does every other
+screen that already builds a field from one of these three, the payment
+drawer's reference-number refusal included, without a line of that screen
+being touched this round. "Verify pin" is "Check the pin", saving one says
+"Pin saved.", the activation checklist says "A location with its pin set",
+and the pin panel's own line now reads "Move it to the door the
+practitioner should knock on." The location table holds one entrance point
+and no separate verified flag, so the screen stopped implying a second
+step.
+
+A client's given and family name, date of birth, sex at birth and referral
+source can now be edited after the first wizard step
+(`app/admin/clients/IdentityForm.tsx`), from an Edit button on the Overview
+tab and from the wizard's Identity tab, which becomes a revisit once the
+lead exists rather than a one-time, submit-only step. `PATCH
+/api/clients/:id` had accepted every one of those fields since piece four;
+no screen had ever offered them, so a lead enrolled with the wrong date of
+birth had no way to be corrected short of erasing and re-enrolling. The
+form carries no Arabic-name fields: the console is English only, the
+operator's decision of 7 September (`tests/lint/console-is-english.test.ts`
+enforces it), a rule this round's own design spec first missed and the
+build corrected. The Overview's "Preferred language" row is gone with it —
+the client table has no such column, and the row's "English" was always a
+placeholder, never a real setting.
+
+`client.primary_location_id` is now written going forward, not only by the
+seed. Creating or patching a location with `isPrimary` demotes every other
+location of that client first and only then promotes this one — in that
+order, never the reverse, and never as one statement spanning both rows,
+because the new unique index below checks each row the moment it is
+written, not once at the end of the statement
+(`app/api/clients/locations.ts`, `makePrimary`). Unflagging the client's
+current primary clears the link in the same request, so the flag and the
+link can never disagree. Migration `963_backfill_primary_location.sql`
+fills in the past, in order: a client with a flagged primary keeps it (the
+newest one, by creation, where more than one had ever ended up flagged); a
+client with exactly one location and no flag gets that one; a client with
+several unflagged locations and no clear owner is left null, as today,
+until the office marks one. The migration then makes every location's flag
+agree with the link — including a client already linked before this file
+ran, whose flag had drifted — and only once that agreement holds everywhere
+does it add `location_one_primary_per_owner`, a plain, non-deferrable
+unique index that from here on refuses a second flagged location for the
+same owner. Until this round, every client the app enrolled — as opposed to
+the seed — showed no emirate in the list, because only the seed had ever
+written the link the list reads.
+
+The booking panel now carries its own date, starting on the day the
+schedule was showing when the panel opened. Changing the date clears the
+chosen practitioner and asks the server again, because who is credentialed
+and free can differ by day. An emptied date disables the button and says
+"Choose a date." rather than letting a blank slip through to the request. A
+rescheduled row on the schedule now says where the visit went:
+`AppointmentRow.movedTo`, found by a join that follows a row's
+`rescheduled_from_id` to whichever appointment replaced it, renders as
+"Moved to Fri 11 Sept 10:00", a link to that day
+(`app/api/appointments/list.ts`, `SchedulePage.tsx`). It shows only on the
+practice-wide day view; a practitioner's own day never lists a superseded
+row at all.
+
+The timeline no longer says "recorded list on the appointment" nine times
+for one booking. Looking at an appointment now narrates as "saw the
+appointment in the schedule", and a reason is attached only when the
+narration is of a change, never a read: `app.reason` is stamped on every
+audit row a request writes, so a read made while, say, a move drawer opened
+was carrying the move's own reason and implying the read explained itself.
+Consecutive reads with the same sentence, by the same person, inside the
+same minute, now fold into one entry carrying a count, printed as "(N
+times)" — folded by the actor's own id, never by the display name a
+fix-round review found two same-named people could share, and a row with no
+actor at all never folds into another (`domain/shared/audit-narrative.ts`,
+`app/api/audit/timeline.ts`, `TimelineEvent.count`).
+
+The enrolment wizard now tells the list behind it what happened, rather
+than making it wait for the drawer to close: `onCreated` fires once the
+lead exists, so the table picks it up without a stale row sitting under it;
+`onActivated(name)` fires with the client's name right before the drawer
+closes on a successful Activate, and `ClientsPage` announces "<name> is now
+active." in a status region, cleared as soon as the search box or the
+status filter changes to something else.
+
+**What the round records.** `docs/SPEC/client-record.md` line 42 (the
+locations screen reads "check the pin", not "verify pin"; the map that
+replaces the two number boxes is part two of the walk's fixes).
+`docs/SPEC/scheduling-manual.md` section 4.1 (a rescheduled row's link to
+where the visit went; the booking panel's own date). `docs/SPEC/audit.md`
+section 9 (a read carries no reason; repeated reads by one person inside
+one minute show once, with a count).
+
+**Every file this round touched.** The trunk's own:
+`app/shell/components/Controls.tsx` with its test;
+`domain/shared/audit-narrative.ts` with its test; migration
+`963_backfill_primary_location.sql`; `tests/db/helpers.ts` (seven more
+fixture location ids), `primary-location-backfill.test.ts` (new) and
+`timeline.test.ts` (its new fold-and-count cases);
+`tests/security/xss.test.tsx` (one fixture line, the new `count` field);
+`docs/superpowers/specs/2026-09-10-walk-fixes-design.md` and the four plans
+beside it (`docs/superpowers/plans/2026-09-10-walk-fixes-1-plain.md`
+through `-4-sign-all.md`); `docs/SPEC/client-record.md`,
+`scheduling-manual.md`, `audit.md` and this file. Outside the trunk's own
+paths, by the integrator's widening for one round (`docs/SPEC/OWNERSHIP.md`):
+`client-record` — `app/admin/clients/ClientsPage.tsx`, `ContactForm.tsx`,
+`EnrolmentWizard.tsx`, `IdentityForm.tsx` (new, with its test),
+`LocationForm.tsx`, `LocationsTab.tsx` (with a new test),
+`OverviewTab.tsx`, `RecordConsentForm.tsx`, `RecordTabs.test.tsx`,
+`VerifyPinForm.tsx`, `activation.ts`, `contactName.tsx` (its new test
+`contactName.test.ts`); `app/api/clients/locations.ts`;
+`tests/client/db/primary_location.test.ts` (new); `scheduling` —
+`app/admin/schedule/NewAppointmentDrawer.tsx`, `SchedulePage.tsx`,
+`schedule.css`, `windows.ts`; `app/api/appointments/create.ts`, `list.ts`,
+`move-one.ts`, `schema.ts`; `tests/scheduling/DayMapPage.test.tsx`,
+`MoveAndCancelDrawers.test.tsx`, `NewAppointmentDrawer.test.tsx`,
+`OptimiseDrawer.test.tsx`, `SchedulePage.test.tsx`, `WeekPage.test.tsx` and
+`db/move_and_cancel.test.ts`; `audit-ui` —
+`app/admin/audit/RecordTimeline.tsx` with its test, `app/api/audit/schema.ts`
+and `timeline.ts`. **One migration, one new
+index, no policy file**: `location_one_primary_per_owner` is the only
+schema change, and it makes a rule the routes already kept the database's
+own rule too. The payment drawer earns `role="alert"` the way every caller
+of `Field`, `PasswordField` and `Select` does — the shared component
+changed; `app/admin/billing/**` did not, and no billing file is touched
+this round.
+
+**Gates on the branch head, in this worktree** (`mcwellness-accounting`):
+format, lint, typecheck, the secrets scan (1,509 tracked files) and the
+migration audit (94 files checked against `origin/main`) clean; 2,520 unit
+tests passed and 1 skipped across 217 files; 1,348 database tests passed
+across 98 files.
+

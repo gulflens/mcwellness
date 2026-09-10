@@ -39,7 +39,7 @@ any ──► erased   (erasure request)
 **4.2 Client detail.** Right-side drawer, tabs:
 - **Overview** — demographics, status, MRN, ribbon (Stage 2), key contacts, primary location with map thumbnail
 - **Contacts** — list with relationship flags; one must be `can_consent` before activation
-- **Locations** — list; each shows Makani, verified pin, parking pin, gate pin, access notes; "verify pin" opens a map to drag the marker
+- **Locations** — list; each shows Makani, verified pin, parking pin, gate pin, access notes; "check the pin" opens a map to drag the marker (part two of the walk's fixes; until then the coordinate boxes)
 - **Consent** — every purpose with status, version, who gave it, when; record new consent; withdraw with reason
 - **Goals** — the client's goals and concerns (category from the owner-editable list, free text beside it), current wellbeing notes, who referred them
 - **Documents** — upload, preview, kind, retention date shown
