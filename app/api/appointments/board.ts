@@ -1,4 +1,5 @@
 import type { Hono } from 'hono';
+import { z } from 'zod';
 import { canActor, isoDateIn } from '@domain/shared';
 import {
   APPOINTMENT_STATUSES,
@@ -49,6 +50,14 @@ import { BoardResponse, type BoardPractitioner, type BoardVisit } from './schema
  * visits off the board with them, and a visit nobody can see is a visit
  * nobody drives to. `$1` is the day's own practitioners, read first.
  */
+/**
+ * The day asked for. `z.iso.date()` and not a shape test: `2026-13-45` has the
+ * right shape and is not a day, and handing that to `dayRange` makes an
+ * Invalid Date that Postgres refuses — a 500 where the schedule's own route,
+ * which this mirrors, answers 400 (`app/api/appointments/list.ts`).
+ */
+const Query = z.object({ date: z.iso.date() });
+
 const PRACTITIONERS_SQL =
   'select p.id, u.display_name from practitioner p join app_user u on u.id = p.user_id ' +
   'where p.tenant_id = app.current_tenant_id() and u.tenant_id = app.current_tenant_id() ' +
@@ -114,10 +123,11 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
   api.get('/api/appointments/board', async (c) => {
     const actor = c.get('actor');
     const requestId = c.get('requestId');
-    const date = c.req.query('date');
-    if (date === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const query = Query.safeParse(c.req.query());
+    if (!query.success) {
       return c.json({ error: 'bad_request', requestId }, 400);
     }
+    const { date } = query.data;
     if (!canActor(actor, { type: 'appointment.board.read' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }

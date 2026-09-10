@@ -392,10 +392,18 @@ describe('GET /api/appointments/board', () => {
     expect(res.status).toBe(400);
   });
 
+  it('refuses a well-shaped date that is not a day', async () => {
+    // The shape is right and the day does not exist; the schedule's own
+    // validation refuses it rather than handing Postgres an invalid date.
+    const res = await get(AUTH.ownerA, '/api/appointments/board?date=2026-13-45');
+    expect(res.status).toBe(400);
+  });
+
   it("shows another practice nothing of this one's day", async () => {
     const res = await get(AUTH_OWNER_B, `/api/appointments/board?date=${DATE}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as BoardResponse;
-    expect(body.practitioners.flatMap((p) => p.visits)).toEqual([]);
+    // Not merely stop-free: the other practice's own rows are not there either.
+    expect(body.practitioners).toEqual([]);
   });
 });

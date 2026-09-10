@@ -141,7 +141,7 @@ function byPractitioner(rows: readonly PracticeStopRow[]): Map<string, PracticeS
 export async function readDay(
   db: Db,
   date: string,
-  statuses: readonly string[] = MAP_STATUSES,
+  statuses: readonly AppointmentStatus[] = MAP_STATUSES,
 ): Promise<PracticeStopRow[]> {
   const [dayStart, dayEnd] = dayRange(date);
   const { rows } = await db.query<PracticeStopRow>(STOPS_SQL, [dayStart, dayEnd, statuses]);
