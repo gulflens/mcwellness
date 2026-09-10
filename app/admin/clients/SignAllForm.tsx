@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
 import { ConsentText } from './ConsentText';
+import { PURPOSE_LABELS } from './consentPurposeLabels';
 import { SignaturePad, type SignatureResult } from './SignaturePad';
 import { compressToFit, type UploadFile } from './fileUpload';
 import { contactDisplayName, relationshipLabel, signatureName } from './contactName';
@@ -40,13 +41,6 @@ import { practiceToday, practiceTodayInWords } from './activation';
  * door — never a first signature and never several purposes at once) and a
  * withdrawal both stay on the per-consent form beneath, in `ConsentTab.tsx`.
  */
-
-const PURPOSE_LABELS: Record<string, string> = {
-  participation: 'Participation',
-  minor_participation: "Guardian's consent for a child",
-  home_visit: 'Visits at home',
-  health_data: 'Brain-map and neurofeedback information',
-};
 
 const REFUSALS: Record<string, string> = {
   wording_not_found: 'One wording is no longer on file. Reopen this form to load the current ones.',

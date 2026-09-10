@@ -9,19 +9,11 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { practiceToday } from './activation';
 import { contactDisplayName } from './contactName';
+import { PURPOSE_LABELS } from './consentPurposeLabels';
 import { DocumentLink } from './DocumentLink';
 import { RecordConsentForm } from './RecordConsentForm';
 import { SignAllForm } from './SignAllForm';
 
-const PURPOSE_LABELS: Record<string, string> = {
-  participation: 'Participation',
-  minor_participation: "Guardian's consent for a child",
-  home_visit: 'Visits at home',
-  health_data: 'Brain-map and neurofeedback information',
-  photo_video: 'Photographs and video',
-  research: 'Research',
-  marketing: 'Marketing',
-};
 const STATUS_LABELS: Record<string, string> = {
   active: 'Active',
   withdrawn: 'Withdrawn',
@@ -119,11 +111,10 @@ export function ConsentTab({
   erased?: boolean;
 }) {
   const today = practiceToday();
-  // As a set of plain strings: `requiredConsentsFor` answers with the purposes
-  // activation can ask for, from the date of birth alone, and this list runs
-  // over those the practice offers plus any retired one this household still
-  // holds.
-  const required = new Set<string>(
+  // `requiredConsentsFor` answers with the purposes activation can ask for,
+  // from the date of birth alone, and this list runs over those the practice
+  // offers plus any retired one this household still holds.
+  const required = new Set<ConsentPurpose>(
     requiredConsentsFor({ dateOfBirth: record.dateOfBirth }, ['home'], today),
   );
   const consenting = record.contacts.filter((contact) => contact.canConsent);
@@ -141,8 +132,7 @@ export function ConsentTab({
   // exist — a record that already holds everything it needs has nothing left
   // for one signature to cover.
   const missingAny = [...required].some(
-    (purpose) =>
-      !record.consents.some((consent) => isActiveOn(consent, today, purpose as ConsentPurpose)),
+    (purpose) => !record.consents.some((consent) => isActiveOn(consent, today, purpose)),
   );
 
   function nameOf(contactId: string): string {
