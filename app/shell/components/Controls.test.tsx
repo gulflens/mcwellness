@@ -58,7 +58,13 @@ describe('Field', () => {
 
   it('announces its error so a refused submit is heard, not only seen', () => {
     render(
-      <Field id="f" label="Reference" value="a,b" onChange={() => undefined} error="Letters only." />,
+      <Field
+        id="f"
+        label="Reference"
+        value="a,b"
+        onChange={() => undefined}
+        error="Letters only."
+      />,
     );
     expect(screen.getByRole('alert').textContent).toBe('Letters only.');
   });
