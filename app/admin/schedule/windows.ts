@@ -81,6 +81,21 @@ export function composeWindowStart(date: string, time: string): string {
   return new Date(`${date}T${time}:00${PRACTICE_UTC_OFFSET}`).toISOString();
 }
 
+const MOVED_TO_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: PRACTICE_TIME_ZONE,
+});
+
+/** "Fri 11 Sept, 10:00", the way a rescheduled row names where the visit went. */
+export function formatMovedTo(iso: string): string {
+  return MOVED_TO_FORMAT.format(new Date(iso));
+}
+
 /** The day `offset` days after `day`, as YYYY-MM-DD. */
 export function addDays(day: string, offset: number): string {
   const start = new Date(`${day}T00:00:00${PRACTICE_UTC_OFFSET}`);

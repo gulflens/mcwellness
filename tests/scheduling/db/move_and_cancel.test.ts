@@ -5,6 +5,7 @@ import { createPool } from '@app/api/_middleware/db';
 import { createTokenVerifier } from '@app/api/_middleware/token-verifier';
 import { createApi } from '@app/api/create-api';
 import type {
+  AppointmentRow,
   CancelAppointmentResponse,
   ConflictResponse,
   MoveAppointmentResponse,
@@ -110,6 +111,11 @@ const APPT_UNTOLD_REASON = '00000000-0000-4000-8000-000000006131';
 const APPT_RACE = '00000000-0000-4000-8000-000000006132';
 /** The booking that wins that race, written from a second connection. */
 const APPT_RACE_RIVAL = '00000000-0000-4000-8000-000000006133';
+// A visit moved on, and one on the same day left alone: the coordinator's day
+// sheet should say where the first went and nothing about the second (the
+// walk of 10 September).
+const APPT_MOVED_TO_OLD = '00000000-0000-4000-8000-000000006134';
+const APPT_MOVED_TO_UNRELATED = '00000000-0000-4000-8000-000000006135';
 const CLIENT_NO_CREDIT = '00000000-0000-4000-8000-000000006120';
 const CONTACT_NO_CREDIT = '00000000-0000-4000-8000-000000006121';
 const LOCATION_NO_CREDIT = '00000000-0000-4000-8000-000000006122';
@@ -119,6 +125,10 @@ const REASON = 'The family asked for a different day.';
 let owner: pg.Client;
 let pool: pg.Pool;
 let api: ReturnType<typeof createApi>;
+/** The window APPT_MOVED_TO_OLD starts at, before it is moved on: read by
+ * both beforeAll, to seed it, and the test itself, to ask the coordinator's
+ * day sheet for that same calendar day. */
+let movedToDay: Date;
 
 function mint(sub: string): Promise<string> {
   return new SignJWT({ role: 'authenticated' })
@@ -392,6 +402,18 @@ beforeAll(async () => {
     status: 'no_show',
   });
   await seedAppointment(APPT_MOVE_TWICE, { clientId: IDS.clientA, windowStart: hoursFromNow(600) });
+  // Same instant, a different practitioner, so the two cannot clash on the
+  // exclusion constraint and are guaranteed to land on the same Dubai day.
+  movedToDay = hoursFromNow(870);
+  await seedAppointment(APPT_MOVED_TO_OLD, { clientId: IDS.clientA, windowStart: movedToDay });
+  // CLIENT_NO_CREDIT, not clientB: clientB's future visits are the ones
+  // app.cancel_future_appointments's own test counts exactly, and a fifth
+  // standing appointment here would throw off that count.
+  await seedAppointment(APPT_MOVED_TO_UNRELATED, {
+    clientId: CLIENT_NO_CREDIT,
+    practitionerId: PRACTITIONER_C,
+    windowStart: movedToDay,
+  });
   // Eighteen hours out: late under the practice's own twenty-four, in time
   // under twelve. The one fixture whose whole point is the difference.
   await seedAppointment(APPT_NOTICE_SETTING, {
@@ -698,6 +720,30 @@ describe('POST /api/appointments/:id/move', () => {
       windowStart: hoursFromNow(100).toISOString(),
     });
     expect(res.status).toBe(404);
+  });
+
+  it("says on the coordinator's day sheet where a rescheduled visit went", async () => {
+    const to = new Date(movedToDay.getTime() + 24 * 3_600_000);
+    const res = await call(AUTH.ownerA, 'POST', `/api/appointments/${APPT_MOVED_TO_OLD}/move`, {
+      windowStart: to.toISOString(),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as MoveAppointmentResponse;
+
+    const day = practiceDay(movedToDay);
+    const list = await call(AUTH.ownerA, 'GET', `/api/appointments?date=${day}`);
+    expect(list.status).toBe(200);
+    const rows = ((await list.json()) as { appointments: AppointmentRow[] }).appointments;
+
+    // The old row stays on the old day, and now says where the visit went.
+    const old = rows.find((r) => r.id === APPT_MOVED_TO_OLD);
+    expect(old?.status).toBe('rescheduled');
+    expect(old?.movedTo).toEqual({ id: body.appointment.id, windowStart: to.toISOString() });
+
+    // A visit on the same day that nobody moved says nothing.
+    const unrelated = rows.find((r) => r.id === APPT_MOVED_TO_UNRELATED);
+    expect(unrelated?.status).toBe('confirmed');
+    expect(unrelated?.movedTo).toBeNull();
   });
 });
 

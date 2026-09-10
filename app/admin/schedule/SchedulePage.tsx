@@ -16,7 +16,7 @@ import { CancellationPolicyDrawer } from './CancellationPolicyDrawer';
 import { MoveAppointmentDrawer } from './MoveAppointmentDrawer';
 import { NewAppointmentDrawer } from './NewAppointmentDrawer';
 import { ScheduleClientDrawer } from './ScheduleClientDrawer';
-import { formatWindow, practiceDay } from './windows';
+import { dayOf, formatMovedTo, formatWindow, practiceDay } from './windows';
 import './schedule.css';
 
 /**
@@ -218,10 +218,20 @@ export function SchedulePage() {
         key: 'status',
         header: 'Status',
         render: (row) => (
-          <StatusChip
-            label={APPOINTMENT_STATUS_LABELS[row.status]}
-            tone={APPOINTMENT_STATUS_TONES[row.status]}
-          />
+          <span className="schedule__status">
+            <StatusChip
+              label={APPOINTMENT_STATUS_LABELS[row.status]}
+              tone={APPOINTMENT_STATUS_TONES[row.status]}
+            />
+            {row.movedTo ? (
+              <Link
+                className="link small"
+                to={`/admin/schedule?date=${dayOf(row.movedTo.windowStart)}`}
+              >
+                Moved to {formatMovedTo(row.movedTo.windowStart)}
+              </Link>
+            ) : null}
+          </span>
         ),
       },
       {

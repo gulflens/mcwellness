@@ -41,6 +41,7 @@ function row(id: string, givenName: string, familyName: string, hour: string): A
     practitioner: { id: PRACTITIONER, displayName: 'Cedar Ridge' },
     serviceType: { id: '00000008-0000-4000-8000-000000000003', name: 'Standard session' },
     location: { id: '00000008-0000-4000-8000-000000000202', label: 'home', emirate: 'DXB' },
+    movedTo: null,
   };
 }
 

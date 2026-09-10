@@ -48,6 +48,7 @@ function appointmentOn(date: string, id: string): AppointmentRow {
     practitioner: { id: '0000000b-0000-4000-8000-000000000002', displayName: 'Cedar Ridge' },
     serviceType: { id: '0000000b-0000-4000-8000-000000000003', name: 'Standard session' },
     location: { id: '0000000b-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
+    movedTo: null,
   };
 }
 

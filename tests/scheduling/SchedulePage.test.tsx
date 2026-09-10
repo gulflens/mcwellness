@@ -33,6 +33,7 @@ const appointment = {
   practitioner: { id: '00000008-0000-4000-8000-000000000002', displayName: 'Cedar Ridge' },
   serviceType: { id: '00000008-0000-4000-8000-000000000003', name: 'Standard session' },
   location: { id: '00000008-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
+  movedTo: null,
 };
 
 /**
@@ -49,6 +50,21 @@ const proposed = {
     familyName: 'Valley',
     givenNameAr: null,
     familyNameAr: null,
+  },
+};
+
+/**
+ * A visit moved on: the old row stays on its own day, marked rescheduled,
+ * and the schedule should say where it went (the walk of 10 September).
+ * Fri 11 Sept 10:00 Dubai time is 06:00 UTC.
+ */
+const rescheduled = {
+  ...appointment,
+  id: '00000008-0000-4000-8000-000000000106',
+  status: 'rescheduled' as const,
+  movedTo: {
+    id: '00000008-0000-4000-8000-000000000107',
+    windowStart: '2026-09-11T06:00:00.000Z',
   },
 };
 
@@ -88,6 +104,25 @@ describe('SchedulePage', () => {
     expect(screen.getByText('Confirmed')).toBeTruthy();
     expect(screen.getByText('09:00–09:45', plainText)).toBeTruthy();
     expect(screen.getByText('1 appointment')).toBeTruthy();
+  });
+
+  it('says where a rescheduled visit went, as a link to that day', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: [rescheduled] }), { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    renderPage(fetchImpl);
+
+    await waitFor(() => expect(screen.getByText('Rescheduled')).toBeTruthy());
+    const link = screen.getByRole('link', { name: /^Moved to /u });
+    expect(link.textContent?.startsWith('Moved to Fri 11 Sept')).toBe(true);
+    expect(link.textContent).toContain('10:00');
+    // The next day, in the same address the date field itself writes to.
+    expect(link.getAttribute('href')).toBe('/admin/schedule?date=2026-09-11');
   });
 
   it("opens the client's own drawer from the client link, beside the ledger", async () => {
