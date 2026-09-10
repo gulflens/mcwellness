@@ -90,7 +90,7 @@ const RETIRE_SQL =
 const INSERT_SQL =
   'insert into appointment (tenant_id, client_id, practitioner_id, service_type_id, location_id, ' +
   'delivery_mode, window_start, window_end, travel_buffer_minutes, status, rescheduled_from_id, ' +
-  'created_by) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ' +
+  'created_by, reassigned_from_practitioner_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) ' +
   'returning id, window_start, window_end, status, delivery_mode';
 
 export type AppointmentDbRow = {
@@ -287,12 +287,16 @@ export async function insertMoved(
     status: AppointmentRow['status'];
     rescheduledFromId: string;
     createdBy: string;
+    /** A reassignment's new practitioner; a move passes nothing and keeps the row's own. */
+    practitionerId?: string;
+    /** Set by a reassignment alone (migration 210). */
+    reassignedFromPractitionerId?: string;
   },
 ): Promise<CreatedRow | undefined> {
   const result = await db.query<CreatedRow>(INSERT_SQL, [
     args.tenantId,
     args.appointment.client_id,
-    args.appointment.practitioner_id,
+    args.practitionerId ?? args.appointment.practitioner_id,
     args.appointment.service_type_id,
     args.appointment.location_id,
     args.appointment.delivery_mode,
@@ -302,6 +306,7 @@ export async function insertMoved(
     args.status,
     args.rescheduledFromId,
     args.createdBy,
+    args.reassignedFromPractitionerId ?? null,
   ]);
   return result.rows[0];
 }
@@ -317,11 +322,19 @@ export function exclusionConflict(
     : 'practitioner_overlap';
 }
 
-/** The wire row both routes answer with. */
+/**
+ * The wire row these routes answer with.
+ *
+ * `practitioner` is the row's own unless one is handed in: a reassignment
+ * puts the visit in somebody else's hands, and `appointment` is the row it
+ * was taken *from*, whose practitioner and display name are the ones the
+ * household was promised rather than the ones the answer should carry.
+ */
 export function appointmentRow(
   appointment: AppointmentDbRow,
   client: ClientDbRow,
   created: CreatedRow,
+  practitioner?: { id: string; displayName: string },
 ): AppointmentRow {
   return {
     id: created.id,
@@ -336,7 +349,7 @@ export function appointmentRow(
       givenNameAr: client.given_name_ar,
       familyNameAr: client.family_name_ar,
     },
-    practitioner: {
+    practitioner: practitioner ?? {
       id: appointment.practitioner_id,
       displayName: appointment.practitioner_display_name,
     },

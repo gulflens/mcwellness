@@ -496,3 +496,39 @@ export const REORDER_ACTION_CODES = [
   'stale_plan',
 ] as const;
 export type ReorderActionCode = (typeof REORDER_ACTION_CODES)[number];
+
+// ---------------------------------------------------------------------------
+// Handing a visit to another practitioner
+// ---------------------------------------------------------------------------
+
+/**
+ * A visit put in somebody else's hands (docs/SPEC/dispatch.md section 6.1).
+ * The answer is `MoveAppointmentResponse`, because a reassignment leaves
+ * exactly what a move leaves: the appointment that now stands and the one it
+ * replaced.
+ */
+export const ReassignAppointmentRequest = z.object({
+  practitionerId: z.uuid(),
+  /** Omitted: the household keeps the window it was promised. */
+  windowStart: z.iso.datetime().optional(),
+});
+export type ReassignAppointmentRequest = z.infer<typeof ReassignAppointmentRequest>;
+
+/**
+ * Why a reassignment was refused before any rule was consulted. Its own list
+ * rather than the move's plus two, for the reason `CONFIRM_ACTION_CODES` is
+ * its own: the drawer that shows these sentences should carry only the ones
+ * its own route can produce.
+ */
+export const REASSIGN_ACTION_CODES = [
+  'invalid_request',
+  'reason_required',
+  'appointment_not_found',
+  'appointment_settled',
+  'session_open',
+  // The visit is already that practitioner's, so there is nothing to hand over.
+  'same_practitioner',
+  // Nobody of that id in this practice.
+  'practitioner_not_found',
+] as const;
+export type ReassignActionCode = (typeof REASSIGN_ACTION_CODES)[number];
