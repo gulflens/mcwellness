@@ -1,11 +1,11 @@
 # Hand-over: how to pick this project up in a fresh session
 
-**As of 10 September 2026, 15:30 on the operator's clock (piece twenty-two merged).**
-Production at app.mcwellnessuae.com runs `main` at `05d5358` after twelve live
-passes (`docs/PRODUCTION.md`), with 92 migrations and 26 policy files applied;
-`main` itself is at `4f89a46` — trunk round 42 and **piece twenty-two, the
-dispatcher's board** (pull request 147, migration 210) — which production has
-not yet received: the thirteenth live pass waits on the operator's word.
+**As of 10 September 2026, 15:55 on the operator's clock (the board live).**
+Production at app.mcwellnessuae.com runs `main` at `c4ecea0` after thirteen
+live passes (`docs/PRODUCTION.md`), with 93 migrations and 26 policy files
+applied: trunk round 42 and **piece twenty-two, the dispatcher's board**
+(pull request 147, migration 210) went live in the thirteenth pass at 07:52
+UTC on the operator's word.
 Staging holds all 93 migrations after the seventeenth pass (`docs/STAGING.md`)
 and serves the merged build on port 3100 from the `mcwellness-dispatch`
 worktree, because the laptop checkout sits on somebody's `change-password`
@@ -1068,10 +1068,9 @@ nine and ten; see the records on pull requests 73 to 83).
     two rows with a reason; `docs/SPEC/dispatch.md` amended in place where
     the build refined it, and `docs/CHANGE-REQUESTS/dispatch-01.md` closing
     with what is left for the scheduling stream. The seventeenth staging pass
-    followed the merge (`docs/STAGING.md`). Still owed: the thirteenth live
-    pass (round 42, the board, migration 210), on the operator's word; and
-    `pnpm db:migrate` plus a restart of `pnpm dev` in the laptop checkout
-    once it is back on `main`. Next: pieces twenty-three to twenty-five with
+    followed the merge (`docs/STAGING.md`). Live since the thirteenth
+    pass (07:52 UTC the same day). Still owed: `pnpm db:migrate` plus a
+    restart of `pnpm dev` in the laptop checkout once it is back on `main`. Next: pieces twenty-three to twenty-five with
     plans of their own, after the two billing plans.
 
 ## 11. Where Claude's own memory lives

@@ -1002,7 +1002,7 @@ security policy it replaces.
 **Left as it was.** The archive `mcwellness-05d5358.tar.gz` in `public_html`
 beside the earlier ones. Production is level with `main`.
 
-## What production owes as of 2026-09-10, 15:30 on the operator's clock: the thirteenth live pass
+## What production owed as of 2026-09-10, 15:30 on the operator's clock (paid by the thirteenth pass below)
 
 Production runs `main` `05d5358` (the twelfth pass). `main` is now `4f89a46`:
 trunk round 42 (the enquiry "Waiting N days" chip, the check-in gate for a
@@ -1014,3 +1014,44 @@ project through `apply_migration` in the seventeenth staging pass's shape
 (`docs/STAGING.md`), outside auto mode if the classifier refuses the write,
 then the archive, the upload, the build and the bundle poll, then a restart if
 the health check hangs. **Nothing here happens until the operator says so.**
+
+## What was done on 2026-09-10: the thirteenth live pass — trunk round 42, the dispatcher's board, migration 210
+
+At 07:51 UTC on 10 September (11:51 in Dubai; 15:51 on the operator's clock),
+on the operator's word ("Go live now"), the live process was rebuilt from
+`main` at `c4ecea0` — trunk round 42 (pull request 144), piece twenty-two,
+the dispatcher's board (pull request 147), and the two records (146, 148).
+**One migration:** 210, `appointment.reassigned_from_practitioner_id` with
+its check and partial index, applied to the production project first.
+
+**The migration, first.** `schema_migration` read 92 rows, last
+`962_erasure_guard_admits_the_sweep.sql`; `appointment` held 0 rows, so the
+column, the check and the index touched nothing. Applied as one
+`apply_migration` call in the runner's shape (the transaction-local audit
+context with `app.reason = 'migration 210_appointment_reassigned_from.sql'`
+and a fresh `app.request_id`, the file's full text, the bookkeeping row with
+the file's sha256
+`61da0bc1f9a8d3386fe555d417f29d10cc1b556db69e4ac4eea35ed7caf6d1c1`), first
+try. Read back: **93 rows**, the row's checksum equal to the file's, the
+column, the constraint `appointment_reassigned_implies_rescheduled` and the
+index `appointment_reassigned_from_practitioner_idx` present. No policy file
+changed since the twelfth pass, so none was re-applied.
+
+**The recipe, as the third pass wrote it.** Hold protocol: one peer session
+(`mcwellness-cf`) was running and acknowledged the hold before the upload.
+`git archive --prefix=mcwellness/ origin/main | gzip -9` (6,247,527 bytes,
+sha256 `f217789d…`), carrying `db/migrations/210_*`; TUS create 201 and PATCH
+204 with the offset equal to the size; `hosting_startNode_jsBuildV1` with the
+stored settings (read back identical): build `01a08a4d`, created 07:51:50,
+completed 07:52:43. The served bundle flipped from `index-CYEXN7VE.js` to
+`index-ejvQq2uB.js` with `index-iaBRRWeR.css` within the first minute. No restart
+needed: `/api/health` 200 in 0.33 s and `/api/health/deep` 200 in 0.41 s on
+the first poll after the flip.
+
+**What the served process proves.** `GET /api/appointments/board?date=…` and
+`POST /api/appointments/:id/reassign` answer 401 to a stranger (the routes
+exist; before this pass they were 404), `/admin/schedule/board` serves the
+console document, and `/api/enquiries` still answers 401.
+
+**Left as it was.** The archive `mcwellness-c4ecea0.tar.gz` in `public_html`
+beside the earlier ones. Production is level with `main`: 93 migrations.
