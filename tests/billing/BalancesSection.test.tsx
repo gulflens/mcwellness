@@ -294,10 +294,13 @@ describe('giving a family longer', () => {
     expect(requests.filter((r) => r.url.endsWith('/extension'))).toHaveLength(1);
   });
 
-  it('offers nothing to a programme whose three more months would still be in the past', async () => {
+  it('offers nothing to a programme whose three more months would still be in the past, and says why', async () => {
     // The screen must not offer what the route refuses: a programme more than
     // three months past its end cannot be extended into a date the family can
     // use, and pressing the button would spend one of their two for nothing.
+    // Saying nothing at all is not the answer either — the coordinator is left
+    // looking for a button that is not there. The words are the drawer's own,
+    // so the problem and the recovery read the same wherever they are met.
     const purchases = [
       {
         ...(balance().purchases[0] as Record<string, unknown>),
@@ -309,6 +312,11 @@ describe('giving a family longer', () => {
     await findClient();
     await screen.findByText('Silver');
     expect(screen.queryByRole('button', { name: 'Extend' })).toBeNull();
+    expect(
+      await screen.findByText(
+        'This programme ended more than three months ago, so three more months would still be in the past. A programme that needs longer is a refund and a new sale.',
+      ),
+    ).toBeTruthy();
   });
 
   it('says so when the route refuses a programme that ended too long ago', async () => {

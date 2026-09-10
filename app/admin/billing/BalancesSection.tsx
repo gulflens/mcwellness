@@ -299,7 +299,21 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                         <span className="small muted">
                           This programme has had its two extensions.
                         </span>
-                      ) : null
+                      ) : (
+                        // Fewer than two used and still no button, which
+                        // leaves one case: `extendsTo` is a date already
+                        // behind today, so three more months would buy the
+                        // family no day they can use and would spend one of
+                        // the two they are allowed for ever. The route
+                        // refuses it as `ended_too_long_ago`; these are the
+                        // drawer's own words for it, because a control that
+                        // is simply absent tells a coordinator nothing.
+                        <span className="small muted">
+                          This programme ended more than three months ago, so three more months
+                          would still be in the past. A programme that needs longer is a refund and
+                          a new sale.
+                        </span>
+                      )
                     ) : null}
                   </li>
                 ))}
