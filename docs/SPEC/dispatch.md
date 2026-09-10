@@ -67,6 +67,14 @@ practice's working hours across, in fifteen-minute columns as
 visit is a block spanning its arrival window plus its service's own length. A
 row with nothing on it still shows, so an idle practitioner is visible.
 
+**Amended in the build, 2026-09-10:** a block spans its window *plus* the
+service that follows it, so a practitioner seeing a household every hour has
+every block overlapping its neighbour. Blocks that overlap in time stack
+within the lane, on the fewest rows that keep them apart: each takes the first
+row free at its start — touching is not overlapping — and opens a new row only
+when none is. A lane whose visits do not overlap is one row tall, and the
+practitioner is still one row of the board.
+
 **Amended in the build, 2026-09-10:** the rows are the practice's **active**
 practitioners plus any practitioner with a stop that day, ordered by display
 name and then by id. A practitioner who has left the practice but still has a
@@ -280,6 +288,16 @@ column. `docs/SPEC/audit.md`'s narrative catalogue gains one sentence so the
 trail reads "reassigned from X to Y" rather than as two unrelated rows.
 Erasure and retention are untouched.
 
+**Amended in the build, 2026-09-10:** the sentence the catalogue gained names
+neither practitioner. It reads *"{actor} reassigned the appointment to another
+practitioner"* — in Arabic, *"{actor} أعاد إسناد الموعد إلى ممارس آخر"* — so
+the act is said as one act rather than as a bare addition beside an
+unexplained move, which is what "rather than as two unrelated rows" was for.
+Who it was taken from is answered by the row itself:
+`reassigned_from_practitioner_id` (6.3) holds that practitioner, which is the
+column's whole purpose, and the trail's reader reaches the name through it
+rather than through the sentence.
+
 ## 12. What the later pieces add, so nothing here pre-builds them
 
 **Twenty-three.** `day_change` (what changed, for whom, when, and whether it
@@ -325,11 +343,21 @@ reason, both days redraw, the household's window is unchanged, and the trail
 reads "reassigned from X to Y". `pnpm verify`, `pnpm test:db` and `pnpm build`
 green.
 
+**Amended in the build, 2026-09-10:** the trail reads *"{actor} reassigned the
+appointment to another practitioner"*, with the reason beneath it, and the row
+the act retired reads as a change of status under the same reason. The
+practitioner it was taken from is on the row, not in the sentence (section
+11). "Both days redraw" is both **rows**: the retired visit stays in the first
+practitioner's lane, greyed and settled, as `rescheduled` does everywhere on
+this board (4.4), and the new one stands in the second's at the same window.
+
 The walk also opens two things no test sees, **added 2026-09-10**: a lane
-holding two visits at the same time, where the grid places the second on an
-implicit row of its own; and a day wider than the window, scrolled to its
-right end, where the hairlines under the rows and under the hour heads end at
-the scroll box (`app/admin/schedule/board/board.css`, lines 35 and 111).
+holding two visits at the same time, which stacks them on the fewest rows that
+keep them apart (4.2) rather than stepping each one down a row of its own; and
+a day wider than the window, scrolled to its right end, where the hairlines
+under the rows and under the hour heads run the width of the day rather than
+stopping at the fold. Both were found by this walk and are what the board does
+from 2026-09-10; the walk keeps them because neither is a thing a test sees.
 
 ## 14. Change requests to the shared zone
 
