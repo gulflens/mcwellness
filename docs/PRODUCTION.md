@@ -1135,3 +1135,51 @@ moving them to six is a data step on the operator's word
 (docs/CHANGE-REQUESTS/billing-10.md). The day map draws an empty day as a grey
 panel — found by the operator immediately after this pass, fixed in pull
 request 156, not in this build.
+
+## What was done on 2026-09-10: the fifteenth live pass — the day map draws an empty day
+
+At 18:48 UTC on 10 September, minutes after the fourteenth pass, the operator
+opened the day map on the new build and reported a flat grey rectangle: "the
+map in the browser is not working and it never worked before". It was not a
+broken map. It was no map at all.
+
+**What it was.** `DayMapPage` rendered `DayMap` only when Google's script had
+loaded **and** a practitioner's day was in hand, falling through otherwise to
+`<div className="daymap daymap--absent" />`, whose background is `--paper`
+(`#e9e7ec`) — exactly the grey reported. `/api/routing/practice-day` builds its
+practitioner list by looping over appointments, so a day with nothing booked
+names no practitioner and the plain panel is what gets drawn. Production has
+never had a visit booked, so the map had never once been drawn there.
+
+**What was ruled out first, before any code changed.** The browser key is baked
+into the served bundle and is byte-identical to the key in Google Cloud and in
+`~/Documents/mcwellness-production-secrets.env`; that key's `apiTargets` carry
+both `maps-backend.googleapis.com` and `places.googleapis.com`, and its
+referrer restriction still refuses a foreign site (`API_KEY_HTTP_REFERRER_
+BLOCKED`); the document carries the widened policy in its meta tag and the
+host's own header adds only `upgrade-insecure-requests`; and Google's script
+does load — the page carries three separate failure notes and showed none of
+them. The absence of an error was the tell: a component that fails loudly and
+shows nothing is not failing, it is not running.
+
+**The fix** (pull request 156, merged as `f80efbc`). The map is drawn as soon
+as the script is here. `DayMap` already fell back to `DEFAULT_CENTRE` — Dubai
+at zoom eleven — when it had no places to fit; that path was simply
+unreachable. `day` becomes nullable and the three readers of a stop stand down
+when it is null. The test drives the answer the route really gives for an empty
+day and was watched failing on the old page for the right reason: no map object
+was ever constructed.
+
+**The pass.** No migration. Hold protocol clear. Archive
+`mcwellness-f80efbc.tar.gz` (6,434,536 bytes); TUS create 201 and PATCH 204
+with the offset equal to the size; build `01a08ca6` with the stored settings.
+The served bundle flipped from `index-B8NXW7WB.js` to `index-Bw4G3Mcz.js`. No
+restart needed: `/api/health` 200 in 1.32 s and `/api/health/deep` 200 in
+0.42 s. `/admin/schedule/map` still serves its widened policy (`script-src
+'strict-dynamic' https: 'unsafe-eval'`).
+
+**Still open, and separate.** The basemap paints all geometry `--paper`
+(`#e9e7ec`) and roads `--rule` (`#d0cbd6`), which is very low contrast. Nothing
+has yet been seen with a real stop on it; if it reads as washed out when the
+first visit is booked, that is a styling tune in `app/shell/maps/mapStyle.ts`
+and not this defect.
