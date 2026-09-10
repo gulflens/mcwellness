@@ -137,7 +137,10 @@ describe('the policy and the sign-in project', () => {
 });
 
 describe('the day map document, and only it', () => {
-  const withMap = { ...deps, mapDocumentPaths: ['/admin/schedule/map'] };
+  // The two widened documents from trunk round 43, kept as the same literal
+  // `MAP_DOCUMENT_PATHS` carries in app/api/_middleware/security.ts: this is
+  // the test that pins the server's list.
+  const withMap = { ...deps, mapDocumentPaths: ['/admin/schedule/map', '/admin/clients/pin'] };
 
   it('carries the wider policy Google needs, with a nonce, on that one path', async () => {
     const res = await createApi(withMap).request('/admin/schedule/map');
@@ -219,6 +222,10 @@ describe('the day map document, and only it', () => {
     ['/admin/schedule/map/', false, 'a trailing slash is a different path'],
     ['/admin/schedule/maps', false, 'one letter more is a different path'],
     ['/Admin/Schedule/Map', false, 'the match is case-sensitive'],
+    ['/admin/clients/pin', true, 'the pin picker is the second map document (trunk round 43)'],
+    ['/admin/clients/pin?lat=25.2&lng=55.27', true, 'a query string is not part of the path'],
+    ['/admin/clients/pins', false, 'one letter more is a different path'],
+    ['/admin/clients', false, 'the clients list is not the picker'],
   ];
 
   for (const [path, widened, why] of nearMisses) {

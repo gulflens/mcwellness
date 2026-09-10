@@ -81,7 +81,7 @@ const KEEP = [SHELL, READS];
  * own bundle and the API's copy is server code. It is one line in both places
  * and `tests/security/headers.test.ts` pins the server's.
  */
-const WIDENED_DOCUMENTS = ['/admin/schedule/map'];
+const WIDENED_DOCUMENTS = ['/admin/schedule/map', '/admin/clients/pin'];
 
 /**
  * Whether this navigation is for one of them. The path is decoded first, as

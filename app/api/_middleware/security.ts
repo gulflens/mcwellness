@@ -6,12 +6,13 @@ import { secureHeaders } from 'hono/secure-headers';
 import type { ApiEnv } from './request-context';
 
 /**
- * The one path served with the wider policy a browser map needs. A constant
- * rather than a guess: the middleware compares the request path against this
- * list exactly, so no `/admin/schedule/map-something` can widen itself into
- * it (docs/SPEC/route-planning.md section 8.2).
+ * Two documents, from trunk round 43: the day map and the pin picker. Each is
+ * its own page and carries the wider policy; the console around them stays
+ * strict. A constant rather than a guess: the middleware compares the
+ * request path against this list exactly, so no `/admin/schedule/map-something`
+ * can widen itself into it (docs/SPEC/route-planning.md section 8.2).
  */
-export const MAP_DOCUMENT_PATHS: readonly string[] = ['/admin/schedule/map'];
+export const MAP_DOCUMENT_PATHS: readonly string[] = ['/admin/schedule/map', '/admin/clients/pin'];
 
 /**
  * A content security policy, as the directives that make it up.
