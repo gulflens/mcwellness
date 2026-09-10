@@ -92,16 +92,23 @@ longer is refunded and sold again, which the existing refund path already suppor
   the loader accepts a list of libraries so the picker can ask for `places` while the day map
   asks for none. The day map's import line changes and nothing else. Trunk note records the
   move under the rule for a thing two modules share.
-- `app/shell/components/MapPinPicker.tsx`: a map centred on the point in the boxes, or the
-  emirate's centre, or Dubai; a marker that drags and that a tap places; a search box bound to
-  `google.maps.places.Autocomplete` restricted to `ae`, which on a chosen place moves the
-  marker and fills the address line if empty. Every move writes back through the same
-  `onChange` the boxes use, so the numbers and the map never disagree.
-- `CoordinateFields.tsx` renders the picker above the boxes when `browserMapKey()` is set and
-  the caller passes `map: true`; otherwise the boxes as today plus the line "The map needs the
-  practice's browser key". All three callers pass `map: true`.
-- The CSP already admits `maps.googleapis.com` scripts and connections; the test in
-  `tests/security/headers.test.ts` pins that nothing new is needed.
+- **The picker is its own document, not a panel.** Planning found what the design conversation
+  missed: Google's script is admitted only on the map document path
+  (`MAP_DOCUMENT_PATHS` in `app/api/_middleware/security.ts`; `tests/security/headers.test.ts`
+  pins that every other console page refuses `googleapis`, `'unsafe-eval'` and
+  `'strict-dynamic'`). Widening every console page for one map would undo the one-page
+  confinement the security design chose. So the picker lives at `/admin/clients/pin`, the second
+  widened document (`security.ts`, `app/shell/sw.ts`), rendered by
+  `app/admin/clients/pin/PinPickerPage.tsx`: a map centred on the point it was opened with, or
+  the emirate's centre, or the UAE; a marker that drags and that a tap places; Google's
+  `PlaceAutocompleteElement` (the `places` library, Places API New) restricted to the UAE, which
+  on a chosen place moves the marker and reports the formatted address.
+- `CoordinateFields.tsx` gains "Pick on the map" when `browserMapKey()` is set and the caller
+  passes `mapPicker`: it opens the picker in a new tab with the current point; the picker posts
+  `{ type: 'mcwellness:pin', lat, lng, address }` to its opener with the page's own origin as
+  the target and closes; the boxes check the origin again and take the point, and a caller may
+  take the address to fill an empty address line. Without a key: the boxes as today plus the
+  line "The map needs the practice's browser key". All three callers pass `mapPicker`.
 - `docs/COMPLIANCE/approved-vendors.md`: the Google Maps Platform row's data column adds the
   address search sentence stated above, dated, attributed to the operator's decision of
   10 September. `docs/SEAMS.md` names the picker beside the day map.
@@ -113,14 +120,23 @@ longer is refunded and sold again, which the existing refund path already suppor
 
 ### Pull request 3: sell a session
 
+- **A fourth invoice kind, `single_session`** (migration `410_billing_single_session.sql`).
+  Planning found that `invoice_source_matches_kind` (migrations 402 and 408) requires a
+  `session_id` on a `session` invoice, and a credit sold ahead of its visit has none; a
+  `single_session` invoice names no session, no package purchase and no appointment, and the
+  credit points at it. The books need no new rule: `domain/accounting/posting.ts` already posts
+  every kind but the fee and the statement to contract liability and moves it to income when the
+  credit is consumed, a package's life for a package of one; the kind is added to its union and
+  to the poster's list.
 - `POST /api/billing/session-purchases` in `app/api/billing/session-sales.ts`, body
-  `{ clientId, serviceTypeId, purchasedOn, discount?, payment? }` shaped like
+  `{ clientId, serviceTypeId, purchasedOn, extraDiscount?, payment? }` shaped like
   `SellPackageInput`. In one transaction: the service's price row in force on `purchasedOn`;
-  the VAT resolution the package sale uses; one invoice of kind `session` with one line; one
+  the VAT resolution the package sale uses; one `single_session` invoice with one line; one
   entitlement with `source_type = 'single'`, `invoice_id` set, `expires_on` twelve months on
   (`SINGLE_SESSION_MONTHS` in `domain/billing/expiry.ts`); the payment and its receipt when
-  `payment` is present. Refusals mirror the package sale's: unknown client, no price on the day,
-  a discount from a role that may not give one.
+  `payment` is present. An `Idempotency-Key` replays the first answer, kept on the invoice.
+  Refusals mirror the package sale's: unknown client, no price on the day, a discount from a
+  role that may not give one.
 - `app/admin/billing/SellSessionDrawer.tsx` opened from a "Sell a session" button on the
   Packages tab: client search, service (the priced ones), bought-on, the figures, discount,
   "Money has changed hands". Toast: "Neurofeedback session sold to <name> for AED 700.00,
