@@ -44,9 +44,18 @@ import { BoardResponse, type BoardPractitioner, type BoardVisit } from './schema
  * is nothing, a board with no lateness on it is still the day).
  */
 
+/**
+ * The rows down the side of the board (spec 4.2): the practice's current
+ * practitioners, plus anyone who has left with a visit still against their
+ * name that day. The second half is not politeness — the render loop is
+ * driven by this list, so a leaver dropped from it takes their unreassigned
+ * visits off the board with them, and a visit nobody can see is a visit
+ * nobody drives to. `$1` is the day's own practitioners, read first.
+ */
 const PRACTITIONERS_SQL =
   'select p.id, u.display_name from practitioner p join app_user u on u.id = p.user_id ' +
   'where p.tenant_id = app.current_tenant_id() and u.tenant_id = app.current_tenant_id() ' +
+  "and (p.status = 'active' or p.id = any($1::uuid[])) " +
   'order by u.display_name, p.id';
 
 /**
@@ -110,7 +119,6 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
     const routing = c.get('routing');
     const at = now();
 
-    const practitioners = await db.query<{ id: string; display_name: string }>(PRACTITIONERS_SQL);
     // The map's own reads: every stop of the day with its coordinates, and
     // where each practitioner starts. Every status, not the map's five,
     // because the board shows the whole day's history — what was called off
@@ -125,6 +133,11 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
       if (day) day.push(row);
       else byPractitioner.set(row.practitioner_id, [row]);
     }
+    // The stops are read before the rows, because who has a stop that day is
+    // half of who gets a row.
+    const practitioners = await db.query<{ id: string; display_name: string }>(PRACTITIONERS_SQL, [
+      [...byPractitioner.keys()],
+    ]);
 
     const factors = routing ? await readFactors(db) : null;
     const answer: BoardPractitioner[] = [];

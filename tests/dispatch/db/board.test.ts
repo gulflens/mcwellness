@@ -44,9 +44,14 @@ const AUTH_PRACTITIONER_IDLE = '00000000-0000-4000-8000-000000007005';
 const CONTACT_A = '00000000-0000-4000-8000-000000007006';
 const AUTH_OWNER_B = '00000000-0000-4000-8000-000000007007';
 const LOCATION_FAR = '00000000-0000-4000-8000-000000007008';
+const PRACTITIONER_GONE = '00000000-0000-4000-8000-000000007009';
+const PRACTITIONER_GONE_USER = '00000000-0000-4000-8000-000000007010';
+const PRACTITIONER_LEFT = '00000000-0000-4000-8000-000000007011';
+const PRACTITIONER_LEFT_USER = '00000000-0000-4000-8000-000000007012';
 const APPT_CLOSED = '00000000-0000-4000-8000-000000007101';
 const APPT_OPEN = '00000000-0000-4000-8000-000000007102';
 const APPT_NEXT = '00000000-0000-4000-8000-000000007103';
+const APPT_LEFT = '00000000-0000-4000-8000-000000007104';
 const SESSION_CLOSED = '00000000-0000-4000-8000-000000007201';
 const SESSION_OPEN = '00000000-0000-4000-8000-000000007202';
 
@@ -85,6 +90,7 @@ async function seedAppointment(
   windowStart: Date,
   status: string,
   locationId: string = IDS.locationA,
+  practitionerId: string = MORE_IDS.practitionerA,
 ): Promise<void> {
   await owner.query(
     'insert into appointment (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
@@ -94,7 +100,7 @@ async function seedAppointment(
       id,
       IDS.tenantA,
       IDS.clientA,
-      MORE_IDS.practitionerA,
+      practitionerId,
       MORE_IDS.serviceTypeA,
       locationId,
       windowStart,
@@ -165,6 +171,29 @@ beforeAll(async () => {
     roles: ['practitioner'],
   });
   await seedPractitioner(owner, IDS.tenantA, PRACTITIONER_IDLE, PRACTITIONER_IDLE_USER);
+  // Two who have left the practice. One has nothing on the day and is not a
+  // row on the board at all; the other still has a visit against their name,
+  // and a visit that has not been reassigned must not vanish with them
+  // (spec 4.2).
+  await seedUser(owner, {
+    id: PRACTITIONER_GONE_USER,
+    tenantId: IDS.tenantA,
+    authId: null,
+    displayName: 'Synthetic Practitioner Gone',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, PRACTITIONER_GONE, PRACTITIONER_GONE_USER);
+  await seedUser(owner, {
+    id: PRACTITIONER_LEFT_USER,
+    tenantId: IDS.tenantA,
+    authId: null,
+    displayName: 'Synthetic Practitioner Left',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, PRACTITIONER_LEFT, PRACTITIONER_LEFT_USER);
+  await owner.query("update practitioner set status = 'inactive' where id = any($1::uuid[])", [
+    [PRACTITIONER_GONE, PRACTITIONER_LEFT],
+  ]);
   await seedUser(owner, {
     id: FINANCE_USER,
     tenantId: IDS.tenantA,
@@ -205,6 +234,7 @@ beforeAll(async () => {
   await seedAppointment(APPT_CLOSED, at('09:00'), 'completed');
   await seedAppointment(APPT_OPEN, at('10:00'), 'checked_in');
   await seedAppointment(APPT_NEXT, at('11:00'), 'confirmed', LOCATION_FAR);
+  await seedAppointment(APPT_LEFT, at('14:00'), 'confirmed', IDS.locationA, PRACTITIONER_LEFT);
   await seedSession(SESSION_CLOSED, APPT_CLOSED, at('09:02'), at('09:40'));
   await seedSession(SESSION_OPEN, APPT_OPEN, at('10:03'), null);
 
@@ -235,6 +265,7 @@ describe('GET /api/appointments/board', () => {
     expect(body.practitioners.map((p) => p.displayName).sort()).toEqual([
       'Synthetic Practitioner A',
       'Synthetic Practitioner Idle',
+      'Synthetic Practitioner Left',
     ]);
     const idle = body.practitioners.find((p) => p.practitionerId === PRACTITIONER_IDLE);
     expect(idle?.visits).toEqual([]);
@@ -271,8 +302,8 @@ describe('GET /api/appointments/board', () => {
     const beforeHousehold = await count(' and client_id = $1', [IDS.clientA]);
     const beforeAll = await count('', []);
     await get(AUTH.ownerA, `/api/appointments/board?date=${DATE}`);
-    expect((await count(' and client_id = $1', [IDS.clientA])) - beforeHousehold).toBe(3);
-    expect((await count('', [])) - beforeAll).toBe(3);
+    expect((await count(' and client_id = $1', [IDS.clientA])) - beforeHousehold).toBe(4);
+    expect((await count('', [])) - beforeAll).toBe(4);
   });
 
   it('answers without a routing seam, saying so rather than refusing the screen', async () => {
@@ -281,10 +312,24 @@ describe('GET /api/appointments/board', () => {
     const body = (await res.json()) as BoardResponse;
     expect(body.latenessAvailable).toBe(false);
     const visits = body.practitioners.flatMap((p) => p.visits);
-    expect(visits).toHaveLength(3);
-    expect(visits.map((v) => v.lateness)).toEqual([null, null, null]);
+    expect(visits.map((v) => v.lateness)).toEqual(visits.map(() => null));
     // The facts still decide the states; only the lateness is unknown.
-    expect(visits.map((v) => v.state)).toEqual(['finished', 'at_the_door', 'agreed']);
+    const busy = body.practitioners.find((p) => p.practitionerId === MORE_IDS.practitionerA);
+    expect(busy?.visits.map((v) => v.state)).toEqual(['finished', 'at_the_door', 'agreed']);
+  });
+
+  it("lists the practice's current practitioners, and a leaver only while a visit is still theirs", async () => {
+    const res = await get(AUTH.ownerA, `/api/appointments/board?date=${DATE}`);
+    const body = (await res.json()) as BoardResponse;
+    expect(body.practitioners.map((p) => p.practitionerId)).not.toContain(PRACTITIONER_GONE);
+    const left = body.practitioners.find((p) => p.practitionerId === PRACTITIONER_LEFT);
+    expect(left?.visits.map((v) => v.appointmentId)).toEqual([APPT_LEFT]);
+    // Row order is the practice's own list, by name (spec 4.2).
+    expect(body.practitioners.map((p) => p.displayName)).toEqual([
+      'Synthetic Practitioner A',
+      'Synthetic Practitioner Idle',
+      'Synthetic Practitioner Left',
+    ]);
   });
 
   it('admits the lead practitioner and refuses a practitioner, finance and a household', async () => {
