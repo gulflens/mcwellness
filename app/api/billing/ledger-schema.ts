@@ -249,6 +249,33 @@ export const SellPackageResponse = z.object({
 export type SellPackageResponse = z.infer<typeof SellPackageResponse>;
 
 // ---------------------------------------------------------------------------
+// Selling one session
+// ---------------------------------------------------------------------------
+
+/**
+ * A trial or a one-off session, sold ahead of the visit rather than charged
+ * when it closes (the operator's decision of 10 September 2026). The
+ * package sale's own body, with `serviceTypeId` naming the one thing sold in
+ * place of `packageId` naming a bundle of them.
+ */
+export const SellSessionInput = SellPackageInput.omit({ packageId: true }).extend({
+  serviceTypeId: z.uuid(),
+});
+export type SellSessionInput = z.infer<typeof SellSessionInput>;
+
+export const SellSessionResponse = z.object({
+  invoiceId: z.uuid(),
+  invoiceReference: z.string(),
+  entitlementId: z.uuid(),
+  serviceTypeName: z.string(),
+  netFils: z.number().int().nonnegative(),
+  vatFils: z.number().int().nonnegative(),
+  grossFils: z.number().int().nonnegative(),
+  expiresOn: z.string(),
+});
+export type SellSessionResponse = z.infer<typeof SellSessionResponse>;
+
+// ---------------------------------------------------------------------------
 // Money in
 // ---------------------------------------------------------------------------
 

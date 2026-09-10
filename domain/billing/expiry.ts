@@ -18,6 +18,18 @@ import type { IsoDate } from '../shared';
 /** Six months from purchase — the operator's decision 9 of 2026-09-10 (docs/PLAN/package-terms.md); twelve until then. The package row carries its own term; this is the default a new one takes. */
 export const DEFAULT_EXPIRY_MONTHS = 6;
 
+/**
+ * How long a session sold on its own can be used: twelve months from the day
+ * it was bought. Fixed, not read from a package's own term — a single credit
+ * has no package behind it to take a term from, and package terms are free to
+ * move (they did, from twelve months to six, in the operator's decision 9
+ * above) without pulling a one-off sale's expiry along with them. The
+ * operator's decision of 10 September 2026 to sell one session ahead of its
+ * visit set this figure at twelve months
+ * (.superpowers/sdd/2026-09-10-walk-fixes-3-sell-session/task-2-brief.md).
+ */
+export const SINGLE_SESSION_MONTHS = 12;
+
 /** The two moments the practice says something. Both counted in whole days remaining. */
 export const EXPIRY_WARNING_DAYS = { first: 60, second: 30 } as const;
 
