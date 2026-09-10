@@ -95,9 +95,17 @@ const FORBIDDEN_ERROR = "You don't have permission to enrol a client.";
  */
 export function EnrolmentWizard({
   onDone,
+  onCreated,
+  onActivated,
   mayWriteGoals,
 }: {
   onDone: () => void;
+  /** Called once the lead exists, so the list behind the drawer can pick it up
+   * without waiting for the wizard to close (10 September walkthrough). */
+  onCreated?: () => void;
+  /** Called with the client's display name right after a successful Activate,
+   * before `onDone` closes the drawer. */
+  onActivated?: (name: string) => void;
   /** Whether this person may set a goal: an admin writes the record but not goals. */
   mayWriteGoals: boolean;
 }) {
@@ -212,6 +220,7 @@ export function EnrolmentWizard({
       if (res.status === 201) {
         const body = (await res.json()) as CreateClientResponse;
         setCreated(body);
+        onCreated?.();
         goTo('contacts');
         return;
       }
@@ -294,6 +303,7 @@ export function EnrolmentWizard({
         body: JSON.stringify({ to: 'active' }),
       });
       if (res.status === 200) {
+        onActivated?.(`${record?.givenName ?? ''} ${record?.familyName ?? ''}`.trim());
         onDone();
         return;
       }

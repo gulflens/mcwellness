@@ -6,7 +6,31 @@ import type { AuthProvider } from '../../shell/auth/types';
 import { ClientsPage, searchRequest } from './ClientsPage';
 import { ADMIN, FINANCE, PRACTITIONER, signedInProvider } from './testActors';
 
-afterEach(cleanup);
+// Set by the one test that needs the wizard replaced with a button standing in for
+// activation, so every other test here still exercises the real drawer (its dialog
+// role, its Cancel button) rather than a stub.
+let useStubWizard = false;
+
+vi.mock('./EnrolmentWizard', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./EnrolmentWizard')>();
+  const RealWizard = actual.EnrolmentWizard;
+  return {
+    ...actual,
+    EnrolmentWizard: (props: Parameters<typeof RealWizard>[0]) =>
+      useStubWizard ? (
+        <button type="button" onClick={() => props.onActivated?.('Alpha Synthetic')}>
+          activate-stub
+        </button>
+      ) : (
+        <RealWizard {...props} />
+      ),
+  };
+});
+
+afterEach(() => {
+  cleanup();
+  useStubWizard = false;
+});
 
 const provider: AuthProvider = signedInProvider;
 
@@ -179,5 +203,16 @@ describe('ClientsPage search', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Enrolment' })).toBeNull());
+  });
+
+  it('announces an activation on the list', async () => {
+    useStubWizard = true;
+    mount();
+    await screen.findByRole('table');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enrol a client' }));
+    fireEvent.click(screen.getByRole('button', { name: 'activate-stub' }));
+
+    expect(screen.getByRole('status').textContent).toBe('Alpha Synthetic is now active.');
   });
 });
