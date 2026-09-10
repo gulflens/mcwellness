@@ -6,6 +6,7 @@ import type {
   SellPackageResponse,
 } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
+import { expiryOn } from '../../../domain/billing';
 import {
   SEEDED,
   setPracticePrices,
@@ -35,14 +36,23 @@ let silverId: string;
 let purchaseId: string;
 let expiredPurchaseId: string;
 
-async function sellSilverTo(clientIndex: number): Promise<string> {
+/**
+ * The day the programme runs out as sold, and the two ends its two
+ * extensions reach. Derived from the sale rather than typed, so the term the
+ * seed sells Silver on can change without these cases changing with it.
+ */
+let expiresOn: string;
+let threeMonthsOn: string;
+let sixMonthsOn: string;
+
+async function sellSilverTo(clientIndex: number): Promise<SellPackageResponse['purchase']> {
   const sale = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
     packageId: silverId,
     clientId: h.clientId(clientIndex),
     purchasedOn: SEED_TODAY,
   });
   if (sale.status !== 201) throw new Error('Silver could not be sold.');
-  return ((await sale.json()) as SellPackageResponse).purchase.id;
+  return ((await sale.json()) as SellPackageResponse).purchase;
 }
 
 let sessionSeq = 0;
@@ -132,8 +142,14 @@ beforeAll(async () => {
   if (!silver) throw new Error('Silver is missing.');
   silverId = silver.id;
 
-  purchaseId = await sellSilverTo(0);
-  expiredPurchaseId = await sellSilverTo(1);
+  const purchase = await sellSilverTo(0);
+  purchaseId = purchase.id;
+  expiresOn = purchase.expiresOn;
+  threeMonthsOn = expiryOn(expiresOn, 3);
+  // Three months from the end the first extension reached, which is what the
+  // second extension is: three months from the current end, twice over.
+  sixMonthsOn = expiryOn(threeMonthsOn, 3);
+  expiredPurchaseId = (await sellSilverTo(1)).id;
 
   // The practice's own settings, as the request middleware would stamp them,
   // so the raw statements below are attributable in the trail.
@@ -242,7 +258,7 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
       'POST',
       `/api/billing/package-purchases/${purchaseId}/extension`,
       SEEDED.practitioner,
-      { extendedTo: '2028-03-01', reason: 'A long hospital stay.' },
+      { reason: 'A long hospital stay.' },
     );
     expect(res.status).toBe(403);
   });
@@ -252,7 +268,7 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
       'POST',
       '/api/billing/package-purchases/not-a-uuid/extension',
       SEEDED.owner,
-      { extendedTo: '2028-03-01', reason: 'A long hospital stay.' },
+      { reason: 'A long hospital stay.' },
     );
     expect(res.status).toBe(400);
   });
@@ -262,60 +278,110 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
       'POST',
       `/api/billing/package-purchases/${purchaseId}/extension`,
       SEEDED.owner,
-      { extendedTo: '2028-03-01', reason: '   ' },
+      { reason: '   ' },
     );
     expect(res.status).toBe(400);
   });
 
-  it('refuses a date no later than the one it replaces', async () => {
+  it('extends it by exactly three months, keeping the original date beside the new one', async () => {
     const res = await h.call(
       'POST',
       `/api/billing/package-purchases/${purchaseId}/extension`,
       SEEDED.owner,
-      { extendedTo: '2027-09-02', reason: 'Trying to keep the same date.' },
-    );
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { code: string }).code).toBe('not_later');
-  });
-
-  it('extends it, keeping the original date beside the new one', async () => {
-    const res = await h.call(
-      'POST',
-      `/api/billing/package-purchases/${purchaseId}/extension`,
-      SEEDED.owner,
-      { extendedTo: '2028-03-01', reason: 'A long hospital stay over the winter.' },
+      { reason: 'A long hospital stay over the winter.' },
     );
     expect(res.status).toBe(201);
     const { purchase } = (await res.json()) as ExtendPurchaseResponse;
-    // What was agreed and what was granted, both legible a year later.
-    expect(purchase.expiresOn).toBe('2027-09-02');
-    expect(purchase.extendedTo).toBe('2028-03-01');
+    // What was agreed and what was granted, both legible a year later. The
+    // three months are not typed: nobody may grant four.
+    expect(purchase.expiresOn).toBe(expiresOn);
+    expect(purchase.extendedTo).toBe(threeMonthsOn);
     expect(purchase.extensionReason).toBe('A long hospital stay over the winter.');
+    expect(purchase.extensionsUsed).toBe(1);
+    expect(purchase.extensionsAllowed).toBe(2);
+    expect(purchase.extendsTo).toBe(sixMonthsOn);
+
+    const { rows } = await h.owner.query<{
+      ordinal: number;
+      from_on: string;
+      to_on: string;
+      reason: string;
+    }>(
+      'select ordinal, from_on::text, to_on::text, reason from package_extension ' +
+        'where purchase_id = $1 order by ordinal',
+      [purchaseId],
+    );
+    expect(rows).toEqual([
+      {
+        ordinal: 1,
+        from_on: expiresOn,
+        to_on: threeMonthsOn,
+        reason: 'A long hospital stay over the winter.',
+      },
+    ]);
+  });
+
+  it('extends it a second time from the extended end', async () => {
+    const res = await h.call(
+      'POST',
+      `/api/billing/package-purchases/${purchaseId}/extension`,
+      SEEDED.owner,
+      { reason: 'The family is still away.' },
+    );
+    expect(res.status).toBe(201);
+    const { purchase } = (await res.json()) as ExtendPurchaseResponse;
+    // Three months from where the first one left off, not from the sale.
+    expect(purchase.extendedTo).toBe(sixMonthsOn);
+    expect(purchase.extensionsUsed).toBe(2);
+    expect(purchase.extendsTo).toBeNull();
+  });
+
+  it('refuses a third: the programme has had its two, for the owner too', async () => {
+    const res = await h.call(
+      'POST',
+      `/api/billing/package-purchases/${purchaseId}/extension`,
+      SEEDED.owner,
+      { reason: 'One more, as a favour.' },
+    );
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code: string }).code).toBe('extension_limit_reached');
+    const { rows } = await h.owner.query<{ n: number }>(
+      'select count(*)::int as n from package_extension where purchase_id = $1',
+      [purchaseId],
+    );
+    expect(rows[0]?.n).toBe(2);
   });
 
   it('records why in the audit trail, not only in the column', async () => {
     const { rows } = await h.owner.query<{ reason: string | null }>(
       "select reason from audit_log where entity_type = 'package_purchase' and action = 'update' " +
-        'and entity_id = $1 order by occurred_at desc limit 1',
+        'and entity_id = $1 order by id desc limit 2',
       [purchaseId],
     );
-    expect(rows[0]?.reason).toBe('A long hospital stay over the winter.');
+    // Each extension stamped its own sentence, and the refused third wrote
+    // nothing at all.
+    expect(rows.map((row) => row.reason)).toEqual([
+      'The family is still away.',
+      'A long hospital stay over the winter.',
+    ]);
   });
 });
 
 describe('the double charge an extension used to cause', () => {
   beforeAll(async () => {
-    // A programme sold long ago and already out of time. Written directly
-    // rather than by waiting a year: what matters is a purchase whose credits
-    // expired before today, which is the only state in which the two readers
-    // of an expiry could disagree.
+    // A programme already out of time. Written directly rather than by
+    // waiting six months: what matters is a purchase whose credits expired
+    // before today, which is the only state in which the two readers of an
+    // expiry could disagree. It ran out a month ago rather than years ago
+    // because an extension is three months and no longer a date somebody
+    // types — a programme years past its end can no longer be reached.
     await h.owner.query(
-      "update package_purchase set purchased_on = '2024-01-01', expires_on = '2025-01-01' " +
+      "update package_purchase set purchased_on = '2026-02-01', expires_on = '2026-08-01' " +
         'where id = $1',
       [expiredPurchaseId],
     );
     await h.owner.query(
-      "update entitlement set expires_on = '2025-01-01' where package_purchase_id = $1",
+      "update entitlement set expires_on = '2026-08-01' where package_purchase_id = $1",
       [expiredPurchaseId],
     );
   });
@@ -337,9 +403,12 @@ describe('the double charge an extension used to cause', () => {
       'POST',
       `/api/billing/package-purchases/${expiredPurchaseId}/extension`,
       SEEDED.owner,
-      { extendedTo: '2027-06-01', reason: 'The family was abroad for a year.' },
+      { reason: 'The family was abroad for the summer.' },
     );
     expect(res.status).toBe(201);
+    const { purchase } = (await res.json()) as ExtendPurchaseResponse;
+    // Three months from the end it had, which is now ahead of today.
+    expect(purchase.extendedTo).toBe(expiryOn('2026-08-01', 3));
     expect(await remainingSessions(1)).toBe(15);
   });
 

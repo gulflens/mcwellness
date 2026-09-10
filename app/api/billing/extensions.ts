@@ -1,21 +1,28 @@
 import type { Hono } from 'hono';
-import { isoDateIn } from '../../../domain/shared';
+import { nextExtension } from '../../../domain/billing';
 import { scrubReason } from '../_middleware/request-context';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isUuid } from './ids';
 import { mayExtend } from './access';
 import { ExtendPurchaseInput, ExtendPurchaseResponse } from './ledger-schema';
+import { EXTENSIONS_USED_SQL, purchaseRow, type PurchaseDbRow } from './sales';
 
 /**
  * `POST /api/billing/package-purchases/:id/extension` — a programme gets
  * longer.
  *
- * Twelve months is the founder's decision of 2026-09-03, and so is the
- * escape from it: an extension is the coordinator's discretion and always
- * carries a reason. The reason is the whole point of the route. A family
- * whose programme ran out during a hospital stay is not the same as one that
- * simply did not book, and the practice should be able to see, a year later,
- * which it was.
+ * Six months is the operator's decision 9 of 2026-09-10, and so is the
+ * escape from it: a programme may be extended twice, by exactly three months
+ * each, so it runs twelve months at most — the term it had before, reached
+ * only by asking. The body carries a reason and nothing else. The length is
+ * not the coordinator's to choose and neither is the count: the third
+ * request is refused for everybody, the owner included, because a limit that
+ * bends for whoever asks loudest is not a limit
+ * (docs/PLAN/package-terms.md).
+ *
+ * The reason is the whole point of what remains. A family whose programme
+ * ran out during a hospital stay is not the same as one that simply did not
+ * book, and the practice should be able to see, a year later, which it was.
  *
  * **Both readers of an expiry now agree.** `domain/billing/balance.ts` counts
  * a credit as remaining while the extension holds, and
@@ -33,36 +40,29 @@ import { ExtendPurchaseInput, ExtendPurchaseResponse } from './ledger-schema';
  * is not.
  */
 
-const PRACTICE_TIME_ZONE = 'Asia/Dubai';
-
 const PURCHASE_SQL =
   'select id, client_id, expires_on, extended_to, status from package_purchase ' +
   'where tenant_id = app.current_tenant_id() and id = $1';
 
-const EXTEND_SQL =
-  'update package_purchase set extended_to = $2, extension_reason = $3 where id = $1 ' +
-  'returning id, client_id, package_id, package_name, package_name_ar, purchased_on, ' +
-  'net_fils, vat_fils, list_price_fils, discount_basis_points, discount_reason, expires_on, ' +
-  'extended_to, extension_reason, status, invoice_id';
+const USED_SQL =
+  'select count(*)::int as n from package_extension ' +
+  'where tenant_id = app.current_tenant_id() and purchase_id = $1';
 
-type PurchaseDbRow = {
-  id: string;
-  client_id: string;
-  package_id: string;
-  package_name: string;
-  package_name_ar: string | null;
-  purchased_on: string;
-  net_fils: number;
-  vat_fils: number;
-  list_price_fils: number;
-  discount_basis_points: number | null;
-  discount_reason: string | null;
-  expires_on: string;
-  extended_to: string | null;
-  extension_reason: string | null;
-  status: 'active' | 'completed' | 'expired' | 'refunded' | 'cancelled';
-  invoice_id: string | null;
-};
+const INSERT_EXTENSION_SQL =
+  'insert into package_extension (tenant_id, client_id, purchase_id, ordinal, from_on, to_on, ' +
+  'reason, created_by) ' +
+  'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, app.current_actor_id())';
+
+// Aliased so the returning list can carry the count of extensions the same
+// way every other read of a purchase does, this transaction's new row
+// included.
+const EXTEND_SQL =
+  'update package_purchase p set extended_to = $2, extension_reason = $3 where p.id = $1 ' +
+  'returning p.id, p.client_id, p.package_id, p.package_name, p.package_name_ar, ' +
+  'p.purchased_on, p.net_fils, p.vat_fils, p.list_price_fils, p.discount_basis_points, ' +
+  'p.discount_reason, p.expires_on, p.extended_to, p.extension_reason, p.status, ' +
+  'p.invoice_id, ' +
+  EXTENSIONS_USED_SQL;
 
 export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
   api.post('/api/billing/package-purchases/:id/extension', async (c) => {
@@ -100,24 +100,35 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
       return c.json({ error: 'conflict', code: 'not_extendable', requestId }, 409);
     }
 
-    // Later than the date it replaces, which is the extension already in
-    // force when there is one. The database says the same
-    // (package_purchase_extension_moves_forward), and this says it as an
-    // answer a person can read rather than as a 500.
+    // Three months from the end it has now, which is the extension already in
+    // force when there is one; and nothing at all once it has had its two.
+    // The count is the database's rather than a number kept on the purchase
+    // row, so two coordinators asking at once cannot both be the second: the
+    // unique key on (purchase_id, ordinal) refuses the loser (migration 410).
     const currentEnd = purchase.extended_to ?? purchase.expires_on;
-    if (input.extendedTo <= currentEnd) {
-      return c.json({ error: 'bad_request', code: 'not_later', requestId }, 400);
-    }
-    const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
-    if (input.extendedTo < today) {
-      return c.json({ error: 'bad_request', code: 'date_in_past', requestId }, 400);
+    const used = await db.query<{ n: number }>(USED_SQL, [purchaseId]);
+    const next = nextExtension(currentEnd, used.rows[0]?.n ?? 0);
+    if (next === null) {
+      return c.json({ error: 'conflict', code: 'extension_limit_reached', requestId }, 409);
     }
 
     await db.query("select set_config('app.reason', $1, true)", [scrubReason(input.reason)]);
 
+    await db.query(INSERT_EXTENSION_SQL, [
+      purchase.client_id,
+      purchaseId,
+      next.ordinal,
+      next.fromOn,
+      next.toOn,
+      input.reason,
+    ]);
+
+    // The purchase keeps the latest extension's end and reason beside the
+    // date it was sold with, which is what every reader of a programme's end
+    // already reads (migration 410's header).
     const updated = await db.query<PurchaseDbRow>(EXTEND_SQL, [
       purchaseId,
-      input.extendedTo,
+      next.toOn,
       input.reason,
     ]);
     const row = updated.rows[0];
@@ -125,33 +136,6 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
       throw new Error('The extension updated no purchase.');
     }
 
-    return c.json(
-      ExtendPurchaseResponse.parse({
-        purchase: {
-          id: row.id,
-          clientId: row.client_id,
-          packageId: row.package_id,
-          packageName: row.package_name,
-          packageNameAr: row.package_name_ar,
-          purchasedOn: row.purchased_on,
-          netFils: row.net_fils,
-          vatFils: row.vat_fils,
-          grossFils: row.net_fils + row.vat_fils,
-          listPriceFils: row.list_price_fils,
-          // Not a fifth column on the row: the discount is the gap between
-          // what the list said and what was charged, and both are already
-          // here (migration 409's fourth section).
-          discountFils: Math.max(0, row.list_price_fils - row.net_fils),
-          discountBasisPoints: row.discount_basis_points,
-          discountReason: row.discount_reason,
-          expiresOn: row.expires_on,
-          extendedTo: row.extended_to,
-          extensionReason: row.extension_reason,
-          status: row.status,
-          invoiceId: row.invoice_id,
-        },
-      }),
-      201,
-    );
+    return c.json(ExtendPurchaseResponse.parse({ purchase: purchaseRow(row) }), 201);
   });
 }
