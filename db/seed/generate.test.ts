@@ -238,10 +238,15 @@ describe('generateSeed', () => {
       expect(bundle.price.amountFils, bundle.code).toBe(selling[i]);
       expect(bundle.price.amountFils).toBeLessThan(bundle.listPriceFils);
       expect(bundle.price.amendmentReason).toContain('Launch pricing');
-      expect(bundle.expiryMonths).toBe(12);
+      expect(bundle.expiryMonths).toBe(6);
       expect(bundle.components.map((c) => c.lineNo)).toEqual([1, 2, 3]);
       for (const component of bundle.components) expect(component.packageId).toBe(bundle.id);
     });
+  });
+
+  it('sells six-month programmes from this round', () => {
+    const data = generateSeed();
+    expect(data.packages.map((p) => p.expiryMonths)).toEqual([6, 6, 6]);
   });
 
   it('places a home in every emirate, with a Makani number only in Dubai', () => {

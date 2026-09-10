@@ -29,7 +29,7 @@ import {
  * **A young person's own login does not get this screen.** The route answers
  * 403 rather than an empty one, because an empty money screen is a screen that
  * says the household has no money rather than that this person is not shown it
- * — and the six restrictive policies of `db/policies/portal/money.sql` refuse
+ * — and the seven restrictive policies of `db/policies/portal/money.sql` refuse
  * the rows underneath in any case, so the 403 is the honest translation of
  * what the database would do rather than a courtesy in front of it.
  *

@@ -541,8 +541,8 @@ const VAT_RATE_BASIS_POINTS = 500;
 const VAT_SETTING_VERSION = 1;
 /** The price list opens before the seed's own "today", so every price is in force. */
 const PRICED_FROM = '2026-01-01';
-/** Twelve months, the founder's decision of 2026-09-03; package.expiry_months's own default. */
-const PACKAGE_EXPIRY_MONTHS = 12;
+/** Six months, the operator's decision 9 of 2026-09-10 (docs/PLAN/package-terms.md); twelve from 2026-09-03 until then. package.expiry_months carries it per programme. */
+const PACKAGE_EXPIRY_MONTHS = 6;
 
 const CONSENT_PURPOSES: readonly ConsentPurpose[] = [
   'participation',

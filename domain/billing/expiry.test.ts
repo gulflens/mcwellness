@@ -8,15 +8,17 @@ import {
 } from './expiry';
 
 /**
- * The specification for package expiry (docs/SPEC/billing.md section 4.3 and
- * the founder's decision of 2026-09-03: twelve months, warned at sixty days
- * and again at thirty).
+ * The specification for package expiry (docs/SPEC/billing.md section 4.3):
+ * six months from purchase, the operator's decision 9 of 10 September 2026
+ * (docs/PLAN/package-terms.md); twelve from the founder's decision of
+ * 3 September until then. The warnings at sixty and thirty days are
+ * unchanged.
  */
 
 describe('expiryOn', () => {
-  it('is twelve months from purchase by default', () => {
-    expect(DEFAULT_EXPIRY_MONTHS).toBe(12);
-    expect(expiryOn('2026-09-03', DEFAULT_EXPIRY_MONTHS)).toBe('2027-09-03');
+  it('is six months from purchase by default', () => {
+    expect(DEFAULT_EXPIRY_MONTHS).toBe(6);
+    expect(expiryOn('2026-09-03', DEFAULT_EXPIRY_MONTHS)).toBe('2027-03-03');
   });
 
   it('crosses the year end without losing a day', () => {
