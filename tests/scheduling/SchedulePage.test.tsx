@@ -118,9 +118,7 @@ describe('SchedulePage', () => {
     renderPage(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('Rescheduled')).toBeTruthy());
-    const link = screen.getByRole('link', { name: /^Moved to /u });
-    expect(link.textContent?.startsWith('Moved to Fri 11 Sept')).toBe(true);
-    expect(link.textContent).toContain('10:00');
+    const link = screen.getByRole('link', { name: 'Moved to Fri 11 Sept 10:00' });
     // The next day, in the same address the date field itself writes to.
     expect(link.getAttribute('href')).toBe('/admin/schedule?date=2026-09-11');
   });

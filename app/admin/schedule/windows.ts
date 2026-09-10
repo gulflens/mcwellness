@@ -81,19 +81,16 @@ export function composeWindowStart(date: string, time: string): string {
   return new Date(`${date}T${time}:00${PRACTICE_UTC_OFFSET}`).toISOString();
 }
 
-const MOVED_TO_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  weekday: 'short',
-  day: 'numeric',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-  timeZone: PRACTICE_TIME_ZONE,
-});
-
-/** "Fri 11 Sept, 10:00", the way a rescheduled row names where the visit went. */
+/**
+ * "Fri 11 Sept 10:00", the way a rescheduled row names where the visit
+ * went — the same day-and-time the move drawer itself shows
+ * (`formatDay(dayOf(...))` beside the window, MoveAppointmentDrawer.tsx),
+ * composed rather than a second Intl formatter of its own: the drawer shows
+ * a window (`formatWindow`, a start and an end); this shows only the start
+ * a rescheduled row's `movedTo` carries.
+ */
 export function formatMovedTo(iso: string): string {
-  return MOVED_TO_FORMAT.format(new Date(iso));
+  return `${formatDay(dayOf(iso))} ${timeOf(iso)}`;
 }
 
 /** The day `offset` days after `day`, as YYYY-MM-DD. */
