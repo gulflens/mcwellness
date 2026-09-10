@@ -354,6 +354,8 @@ export function mountAppointmentCreate(
         practitioner: { id: practitionerId, displayName: practitioner.display_name },
         serviceType: { id: serviceTypeId, name: serviceType.name },
         location: { id: locationId, label: location.label, emirate: location.emirate },
+        // A row just booked has nothing pointing rescheduled_from_id at it yet.
+        movedTo: null,
       }),
       201,
     );

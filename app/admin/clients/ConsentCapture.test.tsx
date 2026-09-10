@@ -28,6 +28,8 @@ const SIBLING_ID = '00000008-0000-4000-8000-000000000203';
 const WORDING_ID = '00000008-0000-4000-8000-000000000204';
 const EVIDENCE_ID = '00000008-0000-4000-8000-000000000205';
 const WITNESS_ID = '00000008-0000-4000-8000-000000000208';
+const ADULT_CLIENT_ID = '00000008-0000-4000-8000-000000000210';
+const SELF_NO_NAME_ID = '00000008-0000-4000-8000-000000000211';
 
 /** A consent already on the record, so a test can say what has been agreed before. */
 function consentOn(purpose: 'participation' | 'home_visit', id: string) {
@@ -248,6 +250,59 @@ describe('ConsentTab', () => {
     ).toBeTruthy();
   });
 
+  // The form that captures a consent shows a nameless self contact under the
+  // client's own name (RecordConsentForm.tsx); the history below it must say
+  // the same thing, not fall back to the bare relationship "Self".
+  it("shows a nameless self contact's history under the client's own name", async () => {
+    const adultSelf: ClientRecordResponse = {
+      ...record,
+      id: ADULT_CLIENT_ID,
+      mrn: 'MW-000210',
+      dateOfBirth: '1990-01-01',
+      contacts: [
+        {
+          id: SELF_NO_NAME_ID,
+          givenName: null,
+          familyName: null,
+          givenNameAr: null,
+          familyNameAr: null,
+          relationship: 'self',
+          isLegalGuardian: false,
+          canConsent: true,
+          canReceiveReports: true,
+          canPay: true,
+          phone: '+971500000099',
+          email: null,
+          whatsappOptIn: false,
+          hasEmiratesId: false,
+        },
+      ],
+      consents: [
+        {
+          id: '00000008-0000-4000-8000-000000000212',
+          purpose: 'participation',
+          status: 'active',
+          givenByContactId: SELF_NO_NAME_ID,
+          givenAt: '2026-09-01T08:00:00+04:00',
+          withdrawnAt: null,
+          expiresAt: null,
+          method: 'app_signature',
+          signatureDocumentId: EVIDENCE_ID,
+          textDocumentId: WORDING_ID,
+          wordingVersion: '0.1-draft',
+          wordingStatus: 'draft',
+          witnessedByUserId: null,
+          witnessedByName: null,
+          withdrawalReason: null,
+        },
+      ],
+    };
+    mount(
+      <ConsentTab clientId={ADULT_CLIENT_ID} record={adultSelf} onChanged={vi.fn()} mayWrite />,
+    );
+    expect(await screen.findByText('Given by Juniper Harbour (self)')).toBeTruthy();
+  });
+
   it('asks for a reason before it will withdraw, and says what it does not do', async () => {
     const signed: ClientRecordResponse = {
       ...record,
@@ -343,6 +398,78 @@ describe('recording a consent', () => {
     // the only contact who may consent.
     expect((screen.getByLabelText('Name, as the person writes it') as HTMLInputElement).value).toBe(
       'Iris Harbour',
+    );
+  });
+
+  // The walk of 10 September: a self contact with no name of its own — the
+  // contact the enrolment wizard creates — is the client giving consent for
+  // themselves, and the signature pad should say so rather than leave the
+  // coordinator to type the client's own name by hand.
+  it("pre-fills a self contact's signature with the client's own name when it has none of its own", async () => {
+    const adultSelf: ClientRecordResponse = {
+      ...record,
+      id: ADULT_CLIENT_ID,
+      mrn: 'MW-000210',
+      dateOfBirth: '1990-01-01',
+      contacts: [
+        {
+          id: SELF_NO_NAME_ID,
+          givenName: null,
+          familyName: null,
+          givenNameAr: null,
+          familyNameAr: null,
+          relationship: 'self',
+          isLegalGuardian: false,
+          canConsent: true,
+          canReceiveReports: true,
+          canPay: true,
+          phone: '+971500000099',
+          email: null,
+          whatsappOptIn: false,
+          hasEmiratesId: false,
+        },
+      ],
+    };
+    mount(
+      <ConsentTab clientId={ADULT_CLIENT_ID} record={adultSelf} onChanged={vi.fn()} mayWrite />,
+    );
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[0] as Element);
+    await screen.findByText('Agreement to take part');
+    expect((screen.getByLabelText('Name, as the person writes it') as HTMLInputElement).value).toBe(
+      'Juniper Harbour',
+    );
+  });
+
+  // A relationship label must never sit on a signature as if it were a
+  // person's name: only a self contact falls through to the client's own
+  // name, and every other unnamed giver keeps the field empty.
+  it('pre-fills nothing for a guardian with no name of their own, never the relationship', async () => {
+    const guardianNoName: ClientRecordResponse = {
+      ...record,
+      contacts: [
+        {
+          id: GUARDIAN_ID,
+          givenName: null,
+          familyName: null,
+          givenNameAr: null,
+          familyNameAr: null,
+          relationship: 'mother',
+          isLegalGuardian: true,
+          canConsent: true,
+          canReceiveReports: true,
+          canPay: true,
+          phone: '+971500000021',
+          email: null,
+          whatsappOptIn: false,
+          hasEmiratesId: false,
+        },
+      ],
+    };
+    mount(<ConsentTab clientId={CLIENT_ID} record={guardianNoName} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[0] as Element);
+    await screen.findByText('Agreement to take part');
+    expect((screen.getByLabelText('Name, as the person writes it') as HTMLInputElement).value).toBe(
+      '',
     );
   });
 

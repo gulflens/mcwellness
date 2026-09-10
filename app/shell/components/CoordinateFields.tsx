@@ -4,14 +4,14 @@ import { googleMapsUrl, requestCurrentPosition } from './geolocation';
 
 /**
  * Latitude, longitude, "Use my current position" and "Open in Google Maps"
- * (docs/SPEC/client-record.md section 4.2, "verify pin"): no map library and
+ * (docs/SPEC/client-record.md section 4.2, "check the pin"): no map library and
  * no map key exist on the web yet, so this is the whole of it — a small form,
  * never blocking when geolocation is refused or unsupported. Shared by
- * LocationForm's entrance point and the standalone "Verify pin" action on an
+ * LocationForm's entrance point and the standalone "Check the pin" action on an
  * existing location.
  *
  * **Where it lives, and why it moved.** It began in `app/admin/clients/`,
- * where "verify pin" was the only screen that needed it. From 8 September
+ * where "check the pin" was the only screen that needed it. From 8 September
  * 2026 a practitioner sets their own home base on
  * `/admin/settings/practitioners` — standing at their own front door, tapping
  * "Use my current position" — which is the second module to need exactly this

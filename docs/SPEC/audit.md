@@ -252,6 +252,8 @@ Four views. Build the first two in Phase 1.
 
 *Amended 2026-09-10 (piece twenty-two):* the catalogue's `appointment.insert` sentence reads the new row before it speaks. An appointment inserted carrying `reassigned_from_practitioner_id` (migration 210) is a visit handed from one practitioner to another, and is said as one act — *"{actor} reassigned the appointment to another practitioner"*, in both languages — rather than as a bare addition beside an unexplained move. Every other insert keeps *"{actor} added an appointment"*.
 
+*Amended 2026-09-10 (trunk round 43, the walk's fixes):* an ordinary read carries no reason. `app.reason` is stamped on every audit row a request writes, so a read made while, say, a move drawer opened was carrying the move's own reason and implying the read explained itself; the reason is now shown only beside a change. A read of an erased record is the one exception: opening one is refused without a typed reason in the first place (§6, break-glass access), and that read keeps the reason the reader had to type. Identical reads by one person inside one minute are shown once, with a count, rather than as one line for every glance.
+
 ---
 
 ## 10. Alerts worth having

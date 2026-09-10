@@ -115,6 +115,10 @@ export function ClientsPage() {
   // Bumped after the enrolment wizard closes, so the table picks up the lead it just
   // created (or any later step's write) without duplicating the fetch effect below.
   const [reloadToken, setReloadToken] = useState(0);
+  // What the status region under the header reports, cleared as soon as the person
+  // changes what the table is showing (a new search or filter is not the moment
+  // that notice is still about).
+  const [notice, setNotice] = useState<string | null>(null);
   // Closing the drawer reloads the table: a status changed on Overview (a lead
   // activated) must not leave the row behind it still saying what it said before.
   const closeDrawer = useCallback(() => {
@@ -132,6 +136,12 @@ export function ClientsPage() {
   const closeWizard = useCallback(() => {
     setEnrolling(false);
     setReloadToken((t) => t + 1);
+  }, []);
+  const wizardCreatedLead = useCallback(() => {
+    setReloadToken((t) => t + 1);
+  }, []);
+  const wizardActivated = useCallback((name: string) => {
+    setNotice(`${name} is now active.`);
   }, []);
 
   useEffect(() => {
@@ -230,6 +240,11 @@ export function ClientsPage() {
           ) : undefined
         }
       />
+      {notice ? (
+        <div role="status">
+          <Note>{notice}</Note>
+        </div>
+      ) : null}
       <div className="toolbar">
         <Field
           id="client-search"
@@ -245,14 +260,20 @@ export function ClientsPage() {
           }
           placeholder="Name, record number or Emirates ID"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setNotice(null);
+          }}
           hint={partialEmiratesId ? PARTIAL_EMIRATES_ID_HINT : undefined}
         />
         <Select
           id="client-status"
           label="Status"
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setNotice(null);
+          }}
         >
           <option value="">Any status</option>
           {CLIENT_STATUSES.filter((s) => s !== 'erased').map((s) => (
@@ -278,7 +299,14 @@ export function ClientsPage() {
         />
       ) : null}
       {selected ? <ClientDrawer key={selected.id} client={selected} onClose={closeDrawer} /> : null}
-      {enrolling ? <EnrolmentWizard onDone={closeWizard} mayWriteGoals={mayWriteGoals} /> : null}
+      {enrolling ? (
+        <EnrolmentWizard
+          onDone={closeWizard}
+          onCreated={wizardCreatedLead}
+          onActivated={wizardActivated}
+          mayWriteGoals={mayWriteGoals}
+        />
+      ) : null}
     </section>
   );
 }

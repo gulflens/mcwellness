@@ -47,7 +47,7 @@ const SQL =
   'where a.client_id = $1 and ($2::bigint is null or a.id < $2::bigint) ' +
   'order by a.id desc limit $3';
 
-function toEvent(row: Row): AuditEvent {
+function toEvent(row: Row, subjectErased: boolean): AuditEvent {
   return {
     id: row.id,
     occurredAt: row.occurred_at.toISOString(),
@@ -67,7 +67,12 @@ function toEvent(row: Row): AuditEvent {
     oldValues: row.old_values,
     newValues: row.new_values,
     reason: row.reason,
+    subjectErased,
   };
+}
+
+function sameMinute(a: string, b: string): boolean {
+  return a.slice(0, 16) === b.slice(0, 16);
 }
 
 export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
@@ -96,7 +101,8 @@ export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
     // Opening an erased record is a sensitive action (client-record.md section 8):
     // it needs a typed reason, which the trail then carries with the read.
-    if (exists.rows[0]?.status === 'erased' && !(c.req.header('x-reason') ?? '').trim()) {
+    const subjectErased = exists.rows[0]?.status === 'erased';
+    if (subjectErased && !(c.req.header('x-reason') ?? '').trim()) {
       return c.json({ error: 'reason_required', requestId }, 400);
     }
     const { limit, locale } = query.data;
@@ -105,19 +111,46 @@ export function mountTimeline(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const page = rows.slice(0, limit);
     const hasMore = rows.length > limit;
     const events: TimelineEvent[] = [];
+    // TimelineEvent.actor carries a name for display, never an id (schema.ts):
+    // this tracks the actor id of whichever row is currently events[events.length
+    // - 1], kept beside the array rather than on it, so the fold below can never
+    // merge two different people who happen to share a display name (fix round
+    // 1, Task 8: a name is not an identity).
+    let previousActorId: string | null = null;
     for (const row of page) {
-      const event = toEvent(row);
+      const event = toEvent(row, subjectErased);
       const narration = narrate(event, locale);
       if (narration === null) continue;
+      const previous = events[events.length - 1];
+      const actorId = event.actor?.id ?? null;
+      // Nine "saw the appointment in the schedule" lines inside one minute are
+      // one fact said nine times: the same person, the same sentence, the same
+      // minute fold into one entry with a count. Only reads fold; every change
+      // keeps its own line. A system row (no actor id at all) is never treated
+      // as the same person as another system row, so it never folds either.
+      if (
+        previous &&
+        narration.kind === 'read' &&
+        previous.kind === 'read' &&
+        previous.sentence === narration.sentence &&
+        previousActorId !== null &&
+        previousActorId === actorId &&
+        sameMinute(previous.occurredAt, event.occurredAt)
+      ) {
+        previous.count += 1;
+        continue;
+      }
       events.push({
         id: event.id,
         occurredAt: event.occurredAt,
         sentence: narration.sentence,
         reason: narration.reason,
         kind: narration.kind,
+        count: 1,
         actor:
           event.actor === null ? null : { name: event.actor.name, roles: [...event.actor.roles] },
       });
+      previousActorId = actorId;
     }
     await logRead(db, 'client', clientId, clientId);
     const last = page[page.length - 1];

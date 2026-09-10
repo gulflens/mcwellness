@@ -22,6 +22,18 @@ export type AuditEvent = {
   oldValues: Readonly<Record<string, unknown>> | null;
   newValues: Readonly<Record<string, unknown>> | null;
   reason: string | null;
+  /**
+   * Whether this row's client is (or was, at the moment of this event) an
+   * erased record. Opening an erased record demands a typed reason
+   * (docs/SPEC/client-record.md section 8; app/api/audit/timeline.ts,
+   * app/api/clients/record.ts, app/api/audit/activity.ts), and that reason
+   * belongs on the trail of *that* read — a break-glass access
+   * (docs/SPEC/audit.md section 6) is exactly the read an ordinary reason
+   * rule would otherwise silence. Left undefined by an event this catalogue
+   * has no way to know it for; `narrate` then falls back to the ordinary
+   * read rule.
+   */
+  subjectErased?: boolean;
 };
 
 export type NarrationKind = 'create' | 'change' | 'read' | 'system' | 'other';
@@ -1018,6 +1030,16 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
       return pick(t(`${actor} erased this record`, `${actor} محا هذا السجل`), locale);
     default: {
       const entity = entityWord(event, locale);
+      // The walk of 10 September found a client's timeline saying "recorded
+      // list on the appointment" nine times for one booking — nine lines that
+      // said nothing a reader wanted. Only the appointment's own list read
+      // gets this sentence; every other entity keeps the generic one.
+      if (event.entityType === 'appointment' && event.action === 'list') {
+        return pick(
+          t(`${actor} saw the ${entity} in the schedule`, `${actor} رأى ${entity} في الجدول`),
+          locale,
+        );
+      }
       switch (event.action) {
         case 'insert':
           return plainInsert(actor, entity, locale);
@@ -1052,6 +1074,17 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
 export function narrate(event: AuditEvent, locale: Locale): Narration | null {
   const sentence = sentenceFor(event, locale);
   if (sentence === null) return null;
-  const reason = event.reason?.trim() || null;
-  return { sentence, reason, kind: kindOf(event) };
+  const kind = kindOf(event);
+  // A reason is stamped on every audit row a request writes
+  // (app/api/_middleware/request-context.ts), so the read a move drawer makes
+  // while it opens carries the move's reason. The reason explains a change; on
+  // an ordinary read it explains nothing and misleads (the walk of 10
+  // September). But a read of an *erased* record is not an ordinary read: it
+  // is refused without a typed reason in the first place (docs/SPEC/audit.md
+  // section 6, break-glass access), and that reason is the whole point of the
+  // row — nulling it here would make the one read that demanded a reason the
+  // one read that can never show it.
+  const keepReason = kind !== 'read' || event.subjectErased === true;
+  const reason = keepReason ? event.reason?.trim() || null : null;
+  return { sentence, reason, kind };
 }

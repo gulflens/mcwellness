@@ -227,3 +227,13 @@
 .schedule__policy-button {
   align-self: end;
 }
+
+/* The status cell on a rescheduled row: the chip, and beneath it the link to
+   where the visit went (the walk of 10 September). Stacked rather than
+   side by side — the chip and the link say two different things, and a row
+   is not the place to widen the status column for one status alone. */
+.schedule__status {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}

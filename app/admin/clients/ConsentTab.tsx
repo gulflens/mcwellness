@@ -8,7 +8,7 @@ import {
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { practiceToday, toActivationRecord } from './activation';
-import { contactName } from './contactName';
+import { contactDisplayName } from './contactName';
 import { DocumentLink } from './DocumentLink';
 import { RecordConsentForm } from './RecordConsentForm';
 
@@ -135,8 +135,12 @@ export function ConsentTab({
     const contact = record.contacts.find((candidate) => candidate.id === contactId);
     if (!contact) return 'A contact no longer on this record';
     const relationship = RELATIONSHIP_LABELS[contact.relationship] ?? contact.relationship;
-    const name = contactName(contact);
-    return name === null ? relationship : `${name} (${relationship.toLowerCase()})`;
+    // The same display helper the "Given by" dropdown uses (RecordConsentForm.tsx):
+    // a nameless self contact — the one the enrolment wizard creates — reads as
+    // the client's own name here too, rather than the bare relationship the form
+    // that captured this consent no longer shows.
+    const shown = contactDisplayName(contact, record);
+    return shown === relationship ? shown : `${shown} (${relationship.toLowerCase()})`;
   }
 
   async function withdraw(consentId: string): Promise<void> {

@@ -11,7 +11,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { localConflictMessage } from './conflictMessages';
-import { composeWindowStart, windowEndForTime } from './windows';
+import { composeWindowStart, PRACTICE_UTC_OFFSET, windowEndForTime } from './windows';
 
 /**
  * The right-side "new appointment" drawer (docs/SPEC/scheduling-manual.md
@@ -75,7 +75,8 @@ export function NewAppointmentDrawer({
   onClose,
   onCreated,
 }: {
-  /** The day currently shown on the schedule; every step below books within it. */
+  /** The day the schedule was showing when the panel opened; the panel's own
+   * date field starts there. */
   date: string;
   onClose: () => void;
   onCreated: (appointment: AppointmentRow) => void;
@@ -94,6 +95,7 @@ export function NewAppointmentDrawer({
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedPractitionerId, setSelectedPractitionerId] = useState<string | null>(null);
   const [startTime, setStartTime] = useState('');
+  const [bookingDate, setBookingDate] = useState(date);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<SubmitError | null>(null);
@@ -155,7 +157,7 @@ export function NewAppointmentDrawer({
     const params = new URLSearchParams({ clientId: selectedClient.id });
     if (selectedServiceTypeId) {
       params.set('serviceTypeId', selectedServiceTypeId);
-      params.set('date', date);
+      params.set('date', bookingDate);
     }
     void apiFetch(`/api/appointments/options?${params.toString()}`)
       .then(async (res) => {
@@ -173,7 +175,7 @@ export function NewAppointmentDrawer({
     return () => {
       live = false;
     };
-  }, [apiFetch, selectedClient, selectedServiceTypeId, date]);
+  }, [apiFetch, selectedClient, selectedServiceTypeId, bookingDate]);
 
   function selectClient(client: ClientRow) {
     setSelectedClient(client);
@@ -222,6 +224,13 @@ export function NewAppointmentDrawer({
 
   const practitionerStepEnabled = Boolean(serviceType);
   const timeStepEnabled = Boolean(selectedLocationId && selectedPractitionerId);
+  // The date field carries no `required`, and submit is a plain button click
+  // (no form validation to lean on), so an emptied — or otherwise unparsable
+  // — date has to be caught here, the same way every other required choice
+  // already is, rather than only surfacing once composeWindowStart throws.
+  const bookingDateValid = Number.isFinite(
+    new Date(`${bookingDate}T00:00:00${PRACTICE_UTC_OFFSET}`).getTime(),
+  );
   const canSubmit =
     Boolean(
       selectedClient &&
@@ -229,12 +238,13 @@ export function NewAppointmentDrawer({
       selectedLocationId &&
       deliveryMode &&
       selectedPractitionerId &&
-      startTime,
+      startTime &&
+      bookingDateValid,
     ) && !submitting;
 
   async function handleSubmit() {
     if (!selectedClient || !selectedServiceTypeId || !selectedLocationId || !deliveryMode) return;
-    if (!selectedPractitionerId || !startTime) return;
+    if (!selectedPractitionerId || !startTime || !bookingDateValid) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
@@ -247,7 +257,7 @@ export function NewAppointmentDrawer({
           serviceTypeId: selectedServiceTypeId,
           locationId: selectedLocationId,
           deliveryMode,
-          windowStart: composeWindowStart(date, startTime),
+          windowStart: composeWindowStart(bookingDate, startTime),
         }),
       });
       if (res.status === 201) {
@@ -317,6 +327,24 @@ export function NewAppointmentDrawer({
       </header>
       <div className="drawer__body">
         <div className="stepper">
+          <div className="stepper__step">
+            <Field
+              id="new-appointment-date"
+              label="Date"
+              type="date"
+              value={bookingDate}
+              onChange={(e) => {
+                setBookingDate(e.target.value);
+                // A practitioner certified on one day may be away on another: the
+                // list is filtered by date on the server, so the choice is
+                // cleared and fetched again.
+                setSelectedPractitionerId(null);
+              }}
+              hint={bookingDateValid ? 'The visit is booked on this day.' : undefined}
+              error={bookingDateValid ? undefined : 'Choose a date.'}
+            />
+          </div>
+
           <div className="stepper__step">
             {/* A plain label, not a heading: the other four steps carry no
                 heading of their own either (each is named by its own Field

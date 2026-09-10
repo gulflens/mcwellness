@@ -69,6 +69,14 @@ export const AppointmentRow = z.object({
   practitioner: z.object({ id: z.uuid(), displayName: z.string() }),
   serviceType: z.object({ id: z.uuid(), name: z.string() }),
   location: z.object({ id: z.uuid(), label: z.string(), emirate: z.string() }),
+  /**
+   * The appointment that replaced this one, when its own status is
+   * `rescheduled` — null otherwise. The move rule writes the new row with
+   * `rescheduled_from_id` pointing back here (scheduling-manual.md section
+   * 3); before this field existed the old row said only that it had been
+   * moved, never where to (the walk of 10 September).
+   */
+  movedTo: z.object({ id: z.uuid(), windowStart: z.iso.datetime() }).nullable(),
 });
 export type AppointmentRow = z.infer<typeof AppointmentRow>;
 
