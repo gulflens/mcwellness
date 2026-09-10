@@ -2122,3 +2122,41 @@ checksum)` carrying the file's sha256 computed locally with `shasum -a 256`.
 - **Still owed:** production runs `main` `05d5358` (twelve passes, 92
   migrations); the thirteenth live pass — trunk round 42, the board and
   migration 210 — waits on the operator's word (`docs/PRODUCTION.md`).
+
+## What was done on 2026-09-10: the eighteenth staging pass — trunk round 43
+
+At about 17:20 UTC on 10 September, staging was brought level with `main` at
+`a03a0fc` ahead of the fourteenth live pass. `schema_migration` read 93 rows,
+last `962_erasure_guard_admits_the_sweep.sql`; the gap against `main` was
+exactly three files and nothing was applied here that `main` does not have.
+
+`410_package_terms.sql`, `411_billing_single_session.sql` and
+`963_backfill_primary_location.sql` were applied one at a time through
+Supabase's migration tool — the laptop still holds no owner password, as this
+document's own first section explains — each followed by the runner's
+bookkeeping row carrying the file's own sha256, so a later `pnpm db:migrate`
+sees nothing pending. Then the two policy files this round changed,
+`db/policies/billing/ledger.sql` and `db/policies/portal/money.sql`. Read
+back: **96 rows**.
+
+**Fingerprinted, not assumed.** Every column, constraint, index, policy,
+trigger and the `invoice_kind` enum across `client`, `location`, `package`,
+`package_extension` and `invoice` hashed to
+**`237b902727b5743f6a3d2b6065a57fa7`, 221 items — identical to a freshly
+migrated local database**, which is what proves the hand-applied SQL did not
+diverge from the files. (The first local reading differed by five items and
+was the *local* database being stale: it had never been migrated after the
+checkout moved to `main`. `pnpm db:migrate` there applied 411 and the two
+digests met.)
+
+**963 refused here, and should have.** The tenant carried two locations both
+flagged `is_primary` — `studio` and `base`, both from the 2026-09-03 seed,
+before `913_practitioner_base.sql` existed — so the file's pre-flight check
+raised a named exception rather than let the new unique index fail with a bare
+duplicate-key error. It named the owner and both rows. `base` was demoted with
+an audited reason (`app.reason` naming this pass) and the migration then ran:
+20 clients linked, 0 unlinked, `location_one_primary_per_owner` present, no
+owner with two flagged primaries.
+
+Production was checked for the same shape **before** it was touched and had
+none, so 963 ran there first try. Staging did exactly the job staging is for.
