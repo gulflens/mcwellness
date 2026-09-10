@@ -1,4 +1,5 @@
 import {
+  Suspense,
   createContext,
   useCallback,
   useContext,
@@ -279,7 +280,16 @@ export function PortalShell({
             />
             <span className="portal__practice small">{practiceName ?? ''}</span>
           </header>
-          <main className="portal__main">{children ?? <Outlet />}</main>
+          <main className="portal__main">
+            {/*
+             * A screen arrives when the household opens it rather than in the
+             * file everybody downloads at sign-in, so the wait sits inside the
+             * portal's own chrome: the sidebar and the header stay, and only
+             * this panel is briefly empty. Nothing is drawn in the gap — the
+             * screen says what it is fetching once it is here.
+             */}
+            <Suspense fallback={null}>{children ?? <Outlet />}</Suspense>
+          </main>
         </div>
       </div>
     </div>
