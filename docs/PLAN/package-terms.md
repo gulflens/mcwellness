@@ -69,3 +69,11 @@ Approving this file approves the change as described and the four defaults.
 The build follows in the `billing` worktree from an implementation plan
 written from this file, and comes back for the operator's word before the
 live site changes.
+
+## Built
+
+Built on 10 September 2026 as the billing round on this branch: migration
+410; the domain rule in `domain/billing/extension.ts`; the extension route
+and the drawer that offers it; the sale sentence and the invoice line; the
+seed. The three live programmes move to six months by a data step at the
+live pass, on the operator's word, recorded in `docs/PRODUCTION.md`.
