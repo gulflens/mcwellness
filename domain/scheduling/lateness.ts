@@ -191,7 +191,7 @@ const NEVER_TOOK_PLACE: readonly AppointmentStatus[] = [
 /**
  * "The previous visit" as `boardState` below means it (docs/SPEC/dispatch.md
  * 4.4, "the previous visit is closed"): the last stop before this one that
- * actually took place.
+ * still stands on the day — anything but the four above.
  *
  * The stop immediately before is the wrong answer whenever the day has a
  * call-off in it. A practitioner who closed the nine o'clock door, had the ten

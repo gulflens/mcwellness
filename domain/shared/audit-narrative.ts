@@ -524,8 +524,8 @@ function entityWord(event: AuditEvent, locale: Locale): string {
  * It is a function rather than two copies because a table with a case of its
  * own — `appointment.insert`, which reads the new row before it speaks — still
  * has to fall back to *exactly* the generic sentence when the special thing is
- * not there. Written out by hand in both places, the two drifted apart the
- * first time either was reworded.
+ * not there. Written out by hand in both places, the two drift apart the first
+ * time either is reworded, and nothing would say so.
  */
 function plainInsert(actor: string, entity: string, locale: Locale): string {
   return pick(t(`${actor} added ${withArticle(entity)}`, `${actor} أضاف ${entity}`), locale);

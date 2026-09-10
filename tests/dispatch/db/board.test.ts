@@ -24,7 +24,7 @@ import {
 /**
  * The board (docs/SPEC/dispatch.md sections 4, 9 and 10): every practitioner
  * with a row, each visit with its facts and its state, one `list` audit row
- * per household shown, and the three roles admitted while everyone else is
+ * per visit shown, and the three roles admitted while everyone else is
  * refused. Ids in this file's own 7xxx block of the reserved range.
  *
  * The routing seam here is the deterministic fallback, so the drive that
