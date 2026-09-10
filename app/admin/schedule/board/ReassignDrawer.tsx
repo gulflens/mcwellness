@@ -44,7 +44,7 @@ const ACTION_MESSAGES: Record<ReassignActionCode, string> = {
   session_open: 'A session has already been started for this visit, so it cannot change hands now.',
   same_practitioner: 'That is the practitioner it is already with.',
   practitioner_not_found:
-    'That practitioner is no longer on the practice. Reload the board and choose somebody else.',
+    'That practitioner is no longer with the practice. Reload the board and choose somebody else.',
 };
 
 /**

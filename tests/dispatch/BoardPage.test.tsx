@@ -674,7 +674,7 @@ describe('BoardPage', () => {
     [
       400,
       'practitioner_not_found',
-      'That practitioner is no longer on the practice. Reload the board and choose somebody else.',
+      'That practitioner is no longer with the practice. Reload the board and choose somebody else.',
     ],
     [400, 'invalid_request', 'Check the practitioner and try again.'],
     [
