@@ -83,6 +83,35 @@ async function remainingSessions(clientIndex: number): Promise<number> {
   return body.services.find((s) => s.serviceTypeCode === 'nf-session')?.remaining ?? 0;
 }
 
+/**
+ * Counts the extension rows one person may see, as `app_role` — the role every
+ * request actually connects as — with the roles the middleware would have
+ * stamped. `h.owner` owns the tables and row security steps aside for an owner,
+ * so a read taken through it proves nothing about a policy; this takes the read
+ * through the role the policy is written for. A transaction of its own, rolled
+ * back, so the session's audit context survives untouched
+ * (tests/db/helpers.ts's `asApiRole` is the same manoeuvre, for a suite that is
+ * already inside one).
+ */
+async function countExtensionsAs(roles: string, seededUser: number): Promise<number> {
+  const user = h.data.users[seededUser];
+  await h.owner.query('begin');
+  try {
+    await h.owner.query('set local role app_role');
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.actor_roles', $3, true), set_config('app.reason', '', true)",
+      [h.data.tenant.id, user?.id ?? null, roles],
+    );
+    const { rows } = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from package_extension',
+    );
+    return Number(rows[0]?.n);
+  } finally {
+    await h.owner.query('rollback');
+  }
+}
+
 beforeAll(async () => {
   h = await startHarness(NOW);
   await setPracticePrices(h, SEED_TODAY);
@@ -145,6 +174,32 @@ describe('migration 410: six months, and two extensions at most', () => {
       "select obj_description('public.package_extension'::regclass, 'pg_class') as description",
     );
     expect(rows[0]?.description?.startsWith('audited: client')).toBe(true);
+  });
+
+  it('is read no more widely than the purchase it extends', async () => {
+    // A row naming a household and carrying a sentence about why they asked.
+    // Written as the practice, so the office's own read below is the one the
+    // policy admits rather than the table owner's, which row security skips.
+    await h.owner.query(
+      'insert into package_extension (tenant_id, client_id, purchase_id, ordinal, from_on, to_on, ' +
+        'reason, created_by) values ($1, $2, $3, 1, $4, $5, $6, $7)',
+      [
+        h.data.tenant.id,
+        h.clientId(0),
+        purchaseId,
+        '2027-09-02',
+        '2027-12-02',
+        'The family asked for longer.',
+        h.data.users[SEEDED.owner]?.id ?? null,
+      ],
+    );
+
+    // The practitioner is not on this client's schedule — no appointment was
+    // ever booked for them here — so app.client_visible_to_practitioner
+    // answers false and ledger_readers shuts the row out. Without that policy
+    // tenant_isolation alone lets them count it, which is the fault.
+    expect(await countExtensionsAs('practitioner', SEEDED.practitioner)).toBe(0);
+    expect(await countExtensionsAs('owner', SEEDED.owner)).toBe(1);
   });
 });
 

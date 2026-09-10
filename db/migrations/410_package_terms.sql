@@ -60,7 +60,8 @@ create table public.package_extension (
 comment on table public.package_extension is
   'audited: client — one row per extension of a programme; at most two, of three months each (docs/PLAN/package-terms.md)';
 
-create index package_extension_purchase_idx on public.package_extension (purchase_id);
+-- No index on purchase_id alone: the unique key above builds one leading with
+-- purchase_id, which serves every lookup by programme.
 create index package_extension_client_idx on public.package_extension (client_id);
 
 create trigger set_updated_at before update on public.package_extension
@@ -95,5 +96,5 @@ $$;
 --   drop table if exists public.package_extension;
 --   alter table public.package alter column expiry_months set default 12;
 --   comment on column public.package.expiry_months is 'How many months a programme runs from purchase.';
---   -- and remove this table's two policies from db/policies/billing/ledger.sql,
+--   -- and remove this table's three policies from db/policies/billing/ledger.sql,
 --   -- which the runner re-applies and which name the table.
