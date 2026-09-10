@@ -168,8 +168,15 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
           windowEnd: row.window_end,
           durationMinutes: row.duration_minutes,
           status: row.status as AppointmentStatus,
-          checkedInAt: fact?.checked_in_at ?? null,
-          closedAt: fact?.closed_at ?? null,
+          // The session's own instants, or — when the status alone says
+          // checked in or completed but no session was ever opened (a seed
+          // can produce this, and so can a coordinator's hand-edit of a row)
+          // — the window's own start or end standing in for it, the same
+          // fallback domain/scheduling/lateness.ts already applies inside
+          // its own rule.
+          checkedInAt:
+            fact?.checked_in_at ?? (row.status === 'checked_in' ? row.window_start : null),
+          closedAt: fact?.closed_at ?? (row.status === 'completed' ? row.window_end : null),
           locationId: row.location_id,
         };
       });

@@ -301,7 +301,7 @@ export type SeedAppointment = {
   windowStart: string;
   windowEnd: string;
   travelBufferMinutes: number;
-  status: 'proposed' | 'confirmed';
+  status: 'proposed' | 'confirmed' | 'checked_in' | 'completed';
 };
 
 export type SeedData = {
@@ -1288,6 +1288,36 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       // anchor to plan around and the drawer has a "kept (confirmed)" to show.
       status: i === 1 ? 'confirmed' : 'proposed',
     };
+  });
+
+  // The second practitioner's day, for the board (docs/SPEC/dispatch.md
+  // section 13): one visit closed, one open and overrunning — checked in and
+  // never closed, so on any day after the planning day the rule finds the
+  // next door unreachable — and one still to come. Three households not on
+  // the first practitioner's day, so the two days never share a family.
+  const secondPractitioner = at(practitioners, 1);
+  const others = visitable.filter((c) => !chosen.includes(c) && placeOf(c.id)).slice(0, 3);
+  const SECOND_DAY: { time: string; status: SeedAppointment['status'] }[] = [
+    { time: '09:00', status: 'completed' },
+    { time: '10:00', status: 'checked_in' },
+    { time: '11:15', status: 'confirmed' },
+  ];
+  others.forEach((c, i) => {
+    const slot = at(SECOND_DAY, i);
+    const start = `${planningDay}T${slot.time}:00+04:00`;
+    const place = placeOf(c.id);
+    if (!place) throw new Error(`No home on file for ${c.id}.`);
+    appointments.push({
+      id: seedId('a', 6 + i),
+      clientId: c.id,
+      practitionerId: secondPractitioner.id,
+      serviceTypeId: visitService.id,
+      locationId: place.id,
+      windowStart: start,
+      windowEnd: new Date(new Date(start).getTime() + 45 * 60_000).toISOString(),
+      travelBufferMinutes: 15,
+      status: slot.status,
+    });
   });
 
   return {
