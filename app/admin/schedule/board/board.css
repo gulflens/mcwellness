@@ -88,6 +88,20 @@ button.board__block {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
+/* A block is only as wide as its visit is long, so a state can run to two
+   lines — "Running late, 109 min" in a 105-minute block. The shared chip
+   centres its dot against the whole phrase, which leaves the dot floating
+   between the lines; on the board it belongs beside the first one. */
+.board__block .status {
+  align-items: start;
+}
+
+.board__block .status__dot {
+  /* Half a line, less half the dot's own 6px (the size `StatusChip` gives it,
+     app/shell/shell.css), so the dot sits on the centre of the first line. */
+  margin-block-start: calc((var(--lh-body) - 6px) / 2);
+}
+
 .board__client {
   font-weight: var(--w-medium);
   overflow-wrap: anywhere;
