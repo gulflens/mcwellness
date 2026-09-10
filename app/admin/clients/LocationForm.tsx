@@ -174,13 +174,12 @@ export function LocationForm({
         label="Makani number (Dubai only, optional)"
         type="text"
         inputMode="numeric"
-        placeholder="1234567890"
         value={makani}
         onChange={(e) => {
           setMakani(e.target.value);
           clear('makani');
         }}
-        hint="Find it on the building's Makani plate or in the Dubai Municipality app."
+        hint="Ten digits, for example 1234567890. Find it on the building's Makani plate or in the Dubai Municipality app."
         error={fieldErrors.makani}
       />
       {!editing ? (

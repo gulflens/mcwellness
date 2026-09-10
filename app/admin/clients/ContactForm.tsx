@@ -301,7 +301,6 @@ export function ContactForm({
         id="contact-phone"
         label="Phone (optional)"
         type="tel"
-        placeholder="+971500001234"
         value={phone}
         onChange={(e) => {
           setPhone(e.target.value);
@@ -325,7 +324,6 @@ export function ContactForm({
         id="contact-emirates-id"
         label="Emirates ID (optional)"
         type="text"
-        placeholder="784-1900-1234567-1"
         value={emiratesId}
         onChange={(e) => {
           setEmiratesId(e.target.value);
@@ -333,8 +331,8 @@ export function ContactForm({
         }}
         hint={
           editing && contact?.hasEmiratesId
-            ? 'One is already on file. Leave blank to keep it, or type a new one to replace it.'
-            : 'Only when the practice must verify this adult. Never required.'
+            ? 'For example 784-1900-1234567-1. One is already on file. Leave blank to keep it, or type a new one to replace it.'
+            : 'For example 784-1900-1234567-1. Only when the practice must verify this adult. Never required.'
         }
         error={fieldErrors.emiratesId}
       />

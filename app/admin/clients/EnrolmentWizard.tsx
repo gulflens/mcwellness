@@ -424,7 +424,6 @@ export function EnrolmentWizard({
               id="wizard-phone"
               label="Phone"
               type="tel"
-              placeholder="+971500001234"
               value={phone}
               onChange={(e) => {
                 setPhone(e.target.value);
@@ -447,13 +446,12 @@ export function EnrolmentWizard({
             <Field
               id="wizard-emirates-id"
               label="Emirates ID (optional)"
-              placeholder="784-1900-1234567-1"
               value={emiratesId}
               onChange={(e) => {
                 setEmiratesId(e.target.value);
                 clearIdentityError('emiratesId');
               }}
-              hint="Only when the practice must verify this adult. Never required."
+              hint="For example 784-1900-1234567-1. Only when the practice must verify this adult. Never required."
               error={identityErrors.emiratesId}
             />
             <Checkbox
