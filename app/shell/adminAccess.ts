@@ -36,6 +36,17 @@ export function canOpenSchedule(actor: Actor, now: Date): boolean {
 }
 
 /**
+ * Matches `appointment.board.read` (app/api/appointments/board.ts) — who may
+ * open the dispatcher's board. The three calendar roles, which are the same
+ * three `appointment.reassign` admits, so nobody reaches a board whose one
+ * act they could not perform (docs/SPEC/dispatch.md section 3). A
+ * practitioner sees their own day on Today and not the practice's board.
+ */
+export function canOpenBoard(actor: Actor, now: Date): boolean {
+  return canActor(actor, { type: 'appointment.board.read' }, {}, now);
+}
+
+/**
  * Matches `practice.settings.write` (app/api/practice/routes.ts) — who may
  * open Settings. The practice's legal name, its trade licence and its VAT
  * registration are what a tax invoice says the supplier is, so the audience is

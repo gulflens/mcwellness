@@ -305,6 +305,9 @@ export function SchedulePage() {
         <Link className="link schedule__week-link" to={`/admin/schedule/week?date=${date}`}>
           See the week
         </Link>
+        <Link className="link schedule__week-link" to={`/admin/schedule/board?date=${date}`}>
+          Open the board
+        </Link>
         {/* A plain anchor, not a Link: the map is served as its own document
             with the policy a browser map needs (docs/SPEC/route-planning.md
             section 4.1), and a client-side navigation would carry this
