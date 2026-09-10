@@ -351,6 +351,17 @@ describe('moving and cancelling a visit (docs/CHANGE-REQUESTS/scheduling-04.md s
     expect(canActor(actor([]), { type: 'appointment.move' }, {}, NOW)).toBe(false);
     expect(canActor(actor([]), { type: 'appointment.cancel', ownStop: true }, {}, NOW)).toBe(false);
   });
+
+  it('lets the three calendar roles reassign a visit and read the board, and nobody else', () => {
+    for (const type of ['appointment.reassign', 'appointment.board.read'] as const) {
+      expect(canActor(actor(['owner']), { type }, {}, NOW)).toBe(true);
+      expect(canActor(actor(['admin']), { type }, {}, NOW)).toBe(true);
+      expect(canActor(actor(['lead_practitioner']), { type }, {}, NOW)).toBe(true);
+      expect(canActor(actor(['practitioner']), { type }, {}, NOW)).toBe(false);
+      expect(canActor(actor(['finance']), { type }, {}, NOW)).toBe(false);
+      expect(canActor(actor(['client_contact']), { type }, {}, NOW)).toBe(false);
+    }
+  });
 });
 
 describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 1)', () => {
