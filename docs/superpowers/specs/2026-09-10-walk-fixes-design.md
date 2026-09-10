@@ -123,7 +123,7 @@ longer is refunded and sold again, which the existing refund path already suppor
 
 ### Pull request 3: sell a session
 
-- **A fourth invoice kind, `single_session`** (migration `410_billing_single_session.sql`).
+- **A fourth invoice kind, `single_session`** (migration `411_billing_single_session.sql`).
   Planning found that `invoice_source_matches_kind` (migrations 402 and 408) requires a
   `session_id` on a `session` invoice, and a credit sold ahead of its visit has none; a
   `single_session` invoice names no session, no package purchase and no appointment, and the

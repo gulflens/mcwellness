@@ -4,7 +4,7 @@
 
 **Goal:** Let the office sell one session up front: an invoice, one credit at the single-session price, and the payment when money changed hands, so a trial session can be invoiced before the visit.
 
-**Architecture:** A new invoice kind `single_session` (migration 410) sits beside `session` and `package`: like a package it is a credit sold ahead of delivery, so the books post it to contract liability and move it to income when the credit is consumed, which the existing posting rules already do for every kind but the fee and the statement. One route, `POST /api/billing/session-purchases`, mirrors the package sale's shape and idempotency. One drawer, `SellSessionDrawer`, mirrors the package drawer. Check-in consumes the credit through `app.oldest_available_entitlement`, which already ignores where a credit came from.
+**Architecture:** A new invoice kind `single_session` (migration 411) sits beside `session` and `package`: like a package it is a credit sold ahead of delivery, so the books post it to contract liability and move it to income when the credit is consumed, which the existing posting rules already do for every kind but the fee and the statement. One route, `POST /api/billing/session-purchases`, mirrors the package sale's shape and idempotency. One drawer, `SellSessionDrawer`, mirrors the package drawer. Check-in consumes the credit through `app.oldest_available_entitlement`, which already ignores where a credit came from.
 
 **Tech Stack:** PostgreSQL enum and check constraint, Hono, zod, React 19, Vitest against the local database with the billing harness in `tests/billing/db/support.ts`.
 
@@ -16,7 +16,7 @@
 - Money is integer fils. VAT is resolved by `resolveSaleVat` from the price row's stamp and the registration, never typed (CLAUDE.md rule 6).
 - The price is never typed into a sale: it is the price row in force on `purchasedOn`; an extra discount needs `mayDiscount` and a reason of at least `MINIMUM_REASON` characters.
 - Issued invoices are never edited (rule 7); the sale is one transaction.
-- Every task ends with its tests green; the PR ends with `pnpm verify`, `pnpm test:db`, the compliance and security reviewers, and the schema reviewer for migration 410.
+- Every task ends with its tests green; the PR ends with `pnpm verify`, `pnpm test:db`, the compliance and security reviewers, and the schema reviewer for migration 411.
 - Commit after every task, conventional message, trailer `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 
 ---
@@ -24,7 +24,7 @@
 ### Task 1: The invoice kind `single_session`
 
 **Files:**
-- Create: `db/migrations/410_billing_single_session.sql`
+- Create: `db/migrations/411_billing_single_session.sql`
 - Modify: `domain/accounting/posting.ts:17` (union), `app/api/accounting/poster.ts:77` (list)
 - Test: `tests/billing/db/single_session_kind.test.ts` (new), `domain/accounting/posting.test.ts` (add a case)
 
@@ -68,7 +68,7 @@ import { rejectsWith } from '../../db/helpers';
 import { startHarness, type Harness } from './support';
 
 /**
- * Migration 410: an invoice may be of kind single_session, and then names no
+ * Migration 411: an invoice may be of kind single_session, and then names no
  * session, no package purchase and no appointment — a credit sold ahead of the
  * visit that will consume it. The source rule is the one place that says what
  * each kind must name (408's precedent), restated here with the new kind in it.
@@ -133,7 +133,7 @@ Expected: FAIL (a type error on the union; an invalid enum value).
 - [ ] **Step 4: Write the migration**
 
 ```sql
--- 410_billing_single_session.sql
+-- 411_billing_single_session.sql
 -- Needs: 402 (invoice, invoice_kind), 403 (entitlement.source_type 'single'), 408 (the source rule as last restated)
 --
 -- A session sold before its visit. Until trunk round 43 (2026-09-10) a visit
@@ -173,7 +173,7 @@ alter table invoice add constraint invoice_source_matches_kind check (
 );
 
 comment on constraint invoice_source_matches_kind on invoice is
-  'What each kind of invoice must name (402, restated in 408 and 410). A single_session '
+  'What each kind of invoice must name (402, restated in 408 and 411). A single_session '
   'invoice names nothing: the credit it created points at it, not the other way round.';
 ```
 
@@ -191,12 +191,12 @@ No branch changes: `postingsFor` already sends every kind but `statement` and `c
 - [ ] **Step 6: Run the tests and the migration audit**
 
 Run: `pnpm vitest run domain/accounting && pnpm vitest run --config vitest.db.config.ts tests/billing/db/single_session_kind.test.ts tests/db/checksums.test.ts && pnpm audit:migrations`
-Expected: PASS (add 410 to the checksum list if the test keeps one).
+Expected: PASS (add 411 to the checksum list if the test keeps one).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add db/migrations/410_billing_single_session.sql domain/accounting/posting.ts domain/accounting/posting.test.ts app/api/accounting/poster.ts tests/billing/db/single_session_kind.test.ts
+git add db/migrations/411_billing_single_session.sql domain/accounting/posting.ts domain/accounting/posting.test.ts app/api/accounting/poster.ts tests/billing/db/single_session_kind.test.ts
 git commit -m "feat(billing): an invoice kind for a session sold ahead of its visit"
 ```
 
@@ -435,7 +435,7 @@ import { IdempotencyKey, SellSessionInput, SellSessionResponse } from './ledger-
  * the day, the practice's discount and an optional extra one combined once
  * against the list figure, VAT resolved from the row's stamp and the
  * registration, and in one transaction an invoice of kind `single_session`
- * (migration 410) with one line, one credit of source `single` pointing at
+ * (migration 411) with one line, one credit of source `single` pointing at
  * the invoice, and the payment when money changed hands. A retry with the same
  * `Idempotency-Key` replays the first answer from what it wrote; the key is
  * kept on the invoice, since a single sale has no purchase row of its own.
@@ -685,7 +685,7 @@ export function mountSessionSales(api: Hono<ApiEnv>, now: () => Date = () => new
 
 Before running: check three column names against the schema and the package sale, and fix
 the SQL above to match: (1) whether `invoice` has an `idempotency_key` column (the package
-sale keeps the key on `package_purchase`; if `invoice` has none, migration 410 adds
+sale keeps the key on `package_purchase`; if `invoice` has none, migration 411 adds
 `idempotency_key text` with a partial unique index `(tenant_id, idempotency_key) where
 idempotency_key is not null`, and the test in Task 1 gains a case for it); (2) whether
 `invoice_line` has `service_type_id` (it does if `app.charge_single_visit` writes one; read
@@ -700,7 +700,7 @@ Expected: PASS. `audit_coverage.test.ts` may list every billing route; add the n
 - [ ] **Step 7: Commit**
 
 ```bash
-git add domain/billing/expiry.ts domain/billing/expiry.test.ts domain/billing/index.ts app/api/billing/ledger-schema.ts app/api/billing/session-sales.ts app/api/billing/routes.ts tests/billing/db/session_sales.test.ts db/migrations/410_billing_single_session.sql tests/billing/db/single_session_kind.test.ts
+git add domain/billing/expiry.ts domain/billing/expiry.test.ts domain/billing/index.ts app/api/billing/ledger-schema.ts app/api/billing/session-sales.ts app/api/billing/routes.ts tests/billing/db/session_sales.test.ts db/migrations/411_billing_single_session.sql tests/billing/db/single_session_kind.test.ts
 git commit -m "feat(billing): sell one session ahead of its visit"
 ```
 
@@ -867,7 +867,7 @@ git commit -m "test(billing): a sold session renders, counts, and posts like a p
 
 `billing.md`: under "Buy a single session → 1 entitlement", change "consumed immediately" to
 "consumed immediately when charged at the door; available for twelve months when sold ahead
-(`single_session` invoice, migration 410, trunk round 43)". `accounting.md`: add
+(`single_session` invoice, migration 411, trunk round 43)". `accounting.md`: add
 `single_session` to the list of invoice kinds and say it posts as a package does. Trunk note:
 what was added, the two shared-zone lines in `domain/accounting/posting.ts` and
 `app/api/accounting/poster.ts`, and that the credit cannot be extended in this round.
@@ -882,7 +882,7 @@ git commit -m "docs(trunk): round 43, part three — a session sold ahead of its
 git push
 gh pr create --title "trunk round 43, part three: sell a session" --body-file <(cat <<'EOF'
 A session can be sold before the visit: "Sell a session" beside the packages, one invoice of a
-new kind `single_session` (migration 410), one credit at the single-session price running for
+new kind `single_session` (migration 411), one credit at the single-session price running for
 twelve months, and the payment when money changed hands. Check-in consumes it like any credit;
 the books post it as a package of one.
 
@@ -893,5 +893,5 @@ EOF
 
 - [ ] **Step 3: Reviews**
 
-Dispatch `compliance-reviewer`, `security-reviewer` and `schema-reviewer` (migration 410). Fix,
+Dispatch `compliance-reviewer`, `security-reviewer` and `schema-reviewer` (migration 411). Fix,
 re-run the gate, merge only when every check reads SUCCESS.
