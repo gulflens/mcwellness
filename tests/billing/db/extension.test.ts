@@ -1,3 +1,4 @@
+import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type {
   BalanceResponse,
@@ -364,6 +365,68 @@ describe('POST /api/billing/package-purchases/:id/extension', () => {
       'The family is still away.',
       'A long hospital stay over the winter.',
     ]);
+  });
+
+  it('answers a rival extension racing the same ordinal with its own 409, not an internal error', async () => {
+    /**
+     * The race is arranged honestly, exactly as the appointments' move
+     * route's (tests/scheduling/db/move_and_cancel.test.ts, finding S3): a
+     * second connection inserts the rival's row and holds its transaction
+     * open. Read committed hides the uncommitted row, so this request's own
+     * count of existing extensions passes at zero and it computes the same
+     * first ordinal the rival took; its insert then blocks on
+     * `package_extension_purchase_id_ordinal_key` until the rival commits, at
+     * which point it is refused as `23505`. Before the follow-up this test
+     * proves, that abort took the whole transaction down with it and this
+     * route answered `internal` 500 instead of the refusal it had already
+     * decided on.
+     */
+    const racePurchase = await sellSilverTo(2);
+    const raceFrom = racePurchase.expiresOn;
+    const raceTo = expiryOn(raceFrom, 3);
+    const rival = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await rival.connect();
+    let pending: Promise<Response> | null = null;
+    try {
+      await rival.query('begin');
+      await rival.query(
+        'insert into package_extension (tenant_id, client_id, purchase_id, ordinal, from_on, to_on, ' +
+          'reason, created_by) values ($1, $2, $3, 1, $4, $5, $6, $7)',
+        [
+          h.data.tenant.id,
+          h.clientId(2),
+          racePurchase.id,
+          raceFrom,
+          raceTo,
+          'The rival holding the first ordinal open.',
+          h.data.users[SEEDED.owner]?.id ?? null,
+        ],
+      );
+      pending = h.call(
+        'POST',
+        `/api/billing/package-purchases/${racePurchase.id}/extension`,
+        SEEDED.owner,
+        { reason: 'Racing the rival for the same ordinal.' },
+      );
+      // Long enough for the request to finish its reads and block on the
+      // unique index, and far inside the request's own budget.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await rival.query('commit');
+      const res = await pending;
+      pending = null;
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { code: string }).code).toBe('extension_limit_reached');
+
+      // Only the rival's row: the losing request's own insert never took hold.
+      const { rows } = await h.owner.query<{ n: number }>(
+        'select count(*)::int as n from package_extension where purchase_id = $1',
+        [racePurchase.id],
+      );
+      expect(rows[0]?.n).toBe(1);
+    } finally {
+      await pending;
+      await rival.end();
+    }
   });
 });
 

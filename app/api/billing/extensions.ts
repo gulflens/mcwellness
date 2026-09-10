@@ -56,6 +56,19 @@ const INSERT_EXTENSION_SQL =
 // Aliased so the returning list can carry the count of extensions the same
 // way every other read of a purchase does, this transaction's new row
 // included.
+/**
+ * Postgres: unique_violation. Here, always a rival request that reached the
+ * insert first with the same ordinal — the two counted zero prior extensions
+ * apiece under read committed, computed the same next ordinal, and only one
+ * of them can hold `package_extension_purchase_id_ordinal_key` (migration
+ * 410).
+ */
+function isOrdinalConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+  );
+}
+
 const EXTEND_SQL =
   'update package_purchase p set extended_to = $2, extension_reason = $3 where p.id = $1 ' +
   'returning p.id, p.client_id, p.package_id, p.package_name, p.package_name_ar, ' +
@@ -105,6 +118,10 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
     // The count is the database's rather than a number kept on the purchase
     // row, so two coordinators asking at once cannot both be the second: the
     // unique key on (purchase_id, ordinal) refuses the loser (migration 410).
+    // Read committed hides an uncommitted rival's row from this count, so both
+    // requests can compute the same next ordinal; the savepoint below is what
+    // lets this one answer its refusal instead of losing the whole
+    // transaction to the insert that follows.
     const currentEnd = purchase.extended_to ?? purchase.expires_on;
     const used = await db.query<{ n: number }>(USED_SQL, [purchaseId]);
     const next = nextExtension(currentEnd, used.rows[0]?.n ?? 0);
@@ -114,14 +131,23 @@ export function mountExtensions(api: Hono<ApiEnv>, now: () => Date = () => new D
 
     await db.query("select set_config('app.reason', $1, true)", [scrubReason(input.reason)]);
 
-    await db.query(INSERT_EXTENSION_SQL, [
-      purchase.client_id,
-      purchaseId,
-      next.ordinal,
-      next.fromOn,
-      next.toOn,
-      input.reason,
-    ]);
+    await db.query('savepoint extension_attempt');
+    try {
+      await db.query(INSERT_EXTENSION_SQL, [
+        purchase.client_id,
+        purchaseId,
+        next.ordinal,
+        next.fromOn,
+        next.toOn,
+        input.reason,
+      ]);
+    } catch (error) {
+      if (!isOrdinalConflict(error)) {
+        throw error;
+      }
+      await db.query('rollback to savepoint extension_attempt');
+      return c.json({ error: 'conflict', code: 'extension_limit_reached', requestId }, 409);
+    }
 
     // The purchase keeps the latest extension's end and reason beside the
     // date it was sold with, which is what every reader of a programme's end
