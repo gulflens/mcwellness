@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BalancesSection } from '../../app/admin/billing/BalancesSection';
+import { expiryOn } from '../../domain/billing';
 import { json, mountWith, OWNER } from './harness';
 
 afterEach(cleanup);
@@ -14,6 +15,17 @@ afterEach(cleanup);
 const CLIENT_ID = '00000005-0000-4000-8000-000000000001';
 const NF_SESSION = '00000004-0000-4000-8000-000000000005';
 const BRAIN_MAP = '00000004-0000-4000-8000-000000000003';
+const SILVER_PURCHASE_ID = '00000004-0000-4000-8000-000000000401';
+
+/**
+ * The fixture's own dates for a programme extended once and twice, derived
+ * rather than typed so they stay three months apart exactly as
+ * `domain/billing/extension.ts` computes them, whatever the sale's own term
+ * happens to be.
+ */
+const EXPIRES_ON = '2027-09-02';
+const FIRST_EXTENSION_TO = expiryOn(EXPIRES_ON, 3);
+const SECOND_EXTENSION_TO = expiryOn(FIRST_EXTENSION_TO, 3);
 
 const CLIENT = {
   id: CLIENT_ID,
@@ -77,7 +89,7 @@ function balance(over: Record<string, unknown> = {}) {
     paidFils: 1_084_125,
     purchases: [
       {
-        id: '00000004-0000-4000-8000-000000000401',
+        id: SILVER_PURCHASE_ID,
         clientId: CLIENT_ID,
         packageId: '00000004-0000-4000-8000-000000000201',
         packageName: 'Silver',
@@ -90,12 +102,12 @@ function balance(over: Record<string, unknown> = {}) {
         discountFils: 182_500,
         discountBasisPoints: null,
         discountReason: null,
-        expiresOn: '2027-09-02',
+        expiresOn: EXPIRES_ON,
         extendedTo: null,
         extensionReason: null,
         extensionsUsed: 0,
         extensionsAllowed: 2 as const,
-        extendsTo: '2027-12-02',
+        extendsTo: FIRST_EXTENSION_TO,
         status: 'active' as const,
         invoiceId: '00000004-0000-4000-8000-000000000501',
       },
@@ -150,47 +162,110 @@ describe('giving a family longer', () => {
   it('offers it against a package the practice sold', async () => {
     mount(balance());
     await findClient();
-    expect(await screen.findByRole('button', { name: 'Give them longer' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Extend' })).toBeTruthy();
   });
 
   it('offers it to nobody who may not record money', async () => {
     mount(balance(), false);
     await findClient();
     await screen.findByText('Silver');
-    expect(screen.queryByRole('button', { name: 'Give them longer' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Extend' })).toBeNull();
   });
 
-  it('asks for a date and a reason, and will not take one without the other', async () => {
+  it('will not take an extension without a reason', async () => {
     mount(balance());
     await findClient();
-    fireEvent.click(await screen.findByRole('button', { name: 'Give them longer' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Extend it' }));
-    expect(await screen.findByText('Choose the date it should run to.')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Extend' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Extend by three months' }));
     expect(
-      screen.getByText('Say why this programme is being extended, in at least 8 characters.'),
+      await screen.findByText(
+        'Say why this programme is being extended, in at least 8 characters.',
+      ),
     ).toBeTruthy();
   });
 
-  it('refuses a date that gives the family less time than they have', async () => {
-    mount(balance());
+  it('offers an extension of three months, says how many are left, and sends the reason alone', async () => {
+    const { requests } = mount(balance());
     await findClient();
-    fireEvent.click(await screen.findByRole('button', { name: 'Give them longer' }));
-    fireEvent.change(screen.getByLabelText('Runs to'), { target: { value: '2027-01-01' } });
-    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'A long hospital stay.' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Extend it' }));
-    expect(await screen.findByText(/Choose a date after 2 Sept 2027/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Extend' }));
+    expect(
+      screen.getByText(
+        'It runs to 2 Sept 2027 today. An extension adds three months, to 2 Dec 2027. None of the two used yet.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByLabelText('Runs to')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'Travelling for a month' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Extend by three months' }));
+    expect(await screen.findByText('Extended to 1 Mar 2028.')).toBeTruthy();
+    expect(requests.filter((r) => r.url.endsWith('/extension'))).toEqual([
+      {
+        url: `/api/billing/package-purchases/${SILVER_PURCHASE_ID}/extension`,
+        body: { reason: 'Travelling for a month' },
+      },
+    ]);
   });
 
-  it('says what it did, naming the new date', async () => {
-    mount(balance());
+  it('says one of the two is used after the first', async () => {
+    const purchases = [
+      {
+        ...(balance().purchases[0] as Record<string, unknown>),
+        extendedTo: FIRST_EXTENSION_TO,
+        extensionReason: 'Travelling.',
+        extensionsUsed: 1,
+        extendsTo: SECOND_EXTENSION_TO,
+      },
+    ];
+    mount(balance({ purchases }));
     await findClient();
-    fireEvent.click(await screen.findByRole('button', { name: 'Give them longer' }));
-    fireEvent.change(screen.getByLabelText('Runs to'), { target: { value: '2028-03-01' } });
-    fireEvent.change(screen.getByLabelText('Why'), {
-      target: { value: 'A long hospital stay over the winter.' },
+    fireEvent.click(await screen.findByRole('button', { name: 'Extend' }));
+    expect(screen.getByText(/1 of the two used\./)).toBeTruthy();
+  });
+
+  it('offers nothing once the programme has had its two, and says so', async () => {
+    const purchases = [
+      {
+        ...(balance().purchases[0] as Record<string, unknown>),
+        extendedTo: SECOND_EXTENSION_TO,
+        extensionReason: 'Still away.',
+        extensionsUsed: 2,
+        extendsTo: null,
+      },
+    ];
+    mount(balance({ purchases }));
+    await findClient();
+    expect(await screen.findByText('This programme has had its two extensions.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Extend' })).toBeNull();
+  });
+
+  it('says so when the route refuses a third', async () => {
+    const purchases = [
+      {
+        ...(balance().purchases[0] as Record<string, unknown>),
+        extendedTo: FIRST_EXTENSION_TO,
+        extensionReason: 'Travelling.',
+        extensionsUsed: 1,
+        extendsTo: SECOND_EXTENSION_TO,
+      },
+    ];
+    const body = balance({ purchases });
+    const { requests } = mountWith(OWNER, <BalancesSection canWrite={true} />, (url, init) => {
+      if (url.startsWith('/api/clients?q=')) return json({ clients: [CLIENT], note: null });
+      if (url === `/api/billing/clients/${CLIENT_ID}/balance`) return json(body);
+      if (url.endsWith('/extension') && init?.method === 'POST') {
+        return json({ error: 'conflict', code: 'extension_limit_reached' }, 409);
+      }
+      return null;
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Extend it' }));
-    expect(await screen.findByText('Silver now runs to 1 Mar 2028.')).toBeTruthy();
+    await findClient();
+    fireEvent.click(await screen.findByRole('button', { name: 'Extend' }));
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'One more, as a favour.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Extend by three months' }));
+    expect(
+      await screen.findByText(
+        'This programme has had its two extensions. A programme that needs longer is a refund and a new sale.',
+      ),
+    ).toBeTruthy();
+    expect(requests.filter((r) => r.url.endsWith('/extension'))).toHaveLength(1);
   });
 
   it('says what was given away on a sale, and why', async () => {

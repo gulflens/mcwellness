@@ -253,6 +253,11 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                           Extended from {formatDate(purchase.expiresOn)}. {purchase.extensionReason}
                         </span>
                       ) : null}
+                      {purchase.extensionsUsed > 0 ? (
+                        <span className="small muted">
+                          {purchase.extensionsUsed} of {purchase.extensionsAllowed} extensions used
+                        </span>
+                      ) : null}
                       {purchase.discountReason ? (
                         // What was given away on this sale, and why — the
                         // operator's purpose for the discount round
@@ -269,15 +274,21 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                     {canWrite &&
                     purchase.status !== 'refunded' &&
                     purchase.status !== 'cancelled' ? (
-                      <Button
-                        variant="secondary"
-                        onClick={() => {
-                          setNote(null);
-                          setExtending(purchase);
-                        }}
-                      >
-                        Give them longer
-                      </Button>
+                      purchase.extendsTo !== null ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setNote(null);
+                            setExtending(purchase);
+                          }}
+                        >
+                          Extend
+                        </Button>
+                      ) : purchase.extensionsUsed === 2 ? (
+                        <span className="small muted">
+                          This programme has had its two extensions.
+                        </span>
+                      ) : null
                     ) : null}
                   </li>
                 ))}
