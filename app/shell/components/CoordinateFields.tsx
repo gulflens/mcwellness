@@ -1,14 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Field, Note } from './Controls';
 import { googleMapsUrl, requestCurrentPosition } from './geolocation';
+import { browserMapKey } from '../maps/googleMaps';
+import { PIN_MESSAGE_TYPE, type PinMessage } from '../maps/pinMessage';
 
 /**
- * Latitude, longitude, "Use my current position" and "Open in Google Maps"
- * (docs/SPEC/client-record.md section 4.2, "check the pin"): no map library and
- * no map key exist on the web yet, so this is the whole of it — a small form,
+ * Latitude, longitude, "Use my current position", "Open in Google Maps" and,
+ * since trunk round 43 part two, "Pick on the map"
+ * (docs/SPEC/client-record.md section 4.2, "check the pin"): a small form,
  * never blocking when geolocation is refused or unsupported. Shared by
- * LocationForm's entrance point and the standalone "Check the pin" action on an
- * existing location.
+ * LocationForm's entrance point, the standalone "Check the pin" action on an
+ * existing location, and the practitioner base drawer.
+ *
+ * **"Pick on the map" (`mapPicker` prop).** The map itself never renders here
+ * — Google's script is admitted only on the pin picker's own document
+ * (`app/admin/clients/pin/PinPickerPage.tsx`, docs/SPEC/route-planning.md
+ * section 8), so this button opens that document in a new tab with the point
+ * these boxes hold, and a listener takes back the point it posts. The
+ * message shape lives in `../maps/pinMessage.ts`, not in the picker page
+ * itself, so this component — part of the console's own bundle — never
+ * imports the page (and the Places library it loads) to read it.
  *
  * **Where it lives, and why it moved.** It began in `app/admin/clients/`,
  * where "check the pin" was the only screen that needed it. From 8 September
@@ -62,6 +73,8 @@ export function CoordinateFields({
   onChange,
   error,
   offerMapLink = true,
+  browserKey,
+  mapPicker,
 }: {
   /** Unique per instance on screen, so two open at once never share an id. */
   idPrefix?: string;
@@ -75,6 +88,22 @@ export function CoordinateFields({
    * approves; false for a member of staff's own home, which it does not.
    */
   offerMapLink?: boolean;
+  /** Tests hand the browser key in; the component reads the build's otherwise. */
+  browserKey?: string | null;
+  /**
+   * When set, offers "Pick on the map": a button that opens the pin picker
+   * in a new tab with the point these boxes hold, and a listener that takes
+   * back the point it posts. Absent only for nothing today — every caller of
+   * this component passes it — but kept optional rather than forced.
+   */
+  mapPicker?: {
+    /** Centres the picker on the emirate when there is no point yet. */
+    emirate?: string;
+    /** Shown on the picker's page and used as the marker's title. */
+    label: string;
+    /** A caller may take the address the picker's search found. */
+    onAddress?: (address: string) => void;
+  };
 }) {
   const [locating, setLocating] = useState(false);
   const [locateNote, setLocateNote] = useState<string | null>(null);
@@ -90,6 +119,49 @@ export function CoordinateFields({
     reported.current = { lat, lng };
     setRaw({ lat: display(lat), lng: display(lng) });
   }, [lat, lng]);
+
+  const key = browserKey === undefined ? browserMapKey() : browserKey;
+
+  useEffect(() => {
+    if (!mapPicker) return;
+    // The picker posts to its opener with this origin as the target, and this
+    // side checks the origin again: a message from anywhere else is not a pin.
+    const onMessage = (event: MessageEvent): void => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as Partial<PinMessage> | null;
+      if (!data || data.type !== PIN_MESSAGE_TYPE) return;
+      if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
+      // Report it the same way `fillFromCurrentPosition` does: `onChange` only,
+      // never touching `raw` or `reported` here directly. A point from the
+      // picker is a value arriving from outside, not this component's own
+      // echo of what was typed, so it takes the same path back in as an edited
+      // location's point does — through the parent, and the `[lat, lng]`
+      // effect above reconciles the boxes once it comes back down. Setting
+      // `reported.current` here instead would make that effect think its own
+      // echo had already arrived and skip updating the boxes, leaving them
+      // showing the old point while the parent holds the new one.
+      onChange({ lat: data.lat, lng: data.lng });
+      if (data.address && mapPicker.onAddress) mapPicker.onAddress(data.address);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [mapPicker, onChange]);
+
+  function openPicker(): void {
+    if (!mapPicker) return;
+    const params = new URLSearchParams({ label: mapPicker.label });
+    if (lat !== null && lng !== null) {
+      params.set('lat', String(lat));
+      params.set('lng', String(lng));
+    }
+    if (mapPicker.emirate) params.set('emirate', mapPicker.emirate);
+    // A new tab, never a frame: the picker is its own document with its own
+    // policy, and the console's policy refuses to be framed and to frame.
+    // `noopener=no` is deliberate, not an oversight: the picker needs
+    // `window.opener` to post the chosen point back, and both documents are
+    // this app's own origin, so there is nothing to gain by cutting it off.
+    window.open(`/admin/clients/pin?${params.toString()}`, '_blank', 'noopener=no');
+  }
 
   function edit(axis: 'lat' | 'lng', value: string) {
     const next = { ...raw, [axis]: value };
@@ -149,6 +221,11 @@ export function CoordinateFields({
         </p>
       ) : null}
       <div className="coordinate-fields__actions">
+        {mapPicker && key !== null ? (
+          <Button type="button" variant="primary" onClick={openPicker}>
+            Pick on the map
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="secondary"
@@ -169,6 +246,9 @@ export function CoordinateFields({
           </a>
         ) : null}
       </div>
+      {mapPicker && key === null ? (
+        <p className="small muted">The map needs the practice’s browser key.</p>
+      ) : null}
       {locateNote ? <Note>{locateNote}</Note> : null}
     </div>
   );

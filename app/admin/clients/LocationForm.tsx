@@ -192,6 +192,13 @@ export function LocationForm({
             clear('point');
           }}
           error={fieldErrors.point}
+          mapPicker={{
+            emirate,
+            label: LOCATION_LABEL_TEXT[label] ?? 'Location',
+            onAddress: (address) => {
+              if (!displayAddress.trim()) setDisplayAddress(address);
+            },
+          }}
         />
       ) : null}
       <Field

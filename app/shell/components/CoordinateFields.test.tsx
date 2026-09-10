@@ -107,3 +107,71 @@ describe('CoordinateFields — offerMapLink', () => {
     ).toBeTruthy();
   });
 });
+
+describe('CoordinateFields — mapPicker', () => {
+  it('opens the picker with the point it holds, and takes the point it sends back', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue({} as Window);
+    const onChange = vi.fn();
+    const onAddress = vi.fn();
+    render(
+      <CoordinateFields
+        lat={25.2048}
+        lng={55.2708}
+        onChange={onChange}
+        browserKey="browser-key-under-test"
+        mapPicker={{ emirate: 'DXB', label: 'Home', onAddress }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Pick on the map' }));
+    const url = new URL(String(open.mock.calls[0]?.[0]), window.location.origin);
+    expect(url.pathname).toBe('/admin/clients/pin');
+    expect(url.searchParams.get('lat')).toBe('25.2048');
+    expect(url.searchParams.get('emirate')).toBe('DXB');
+    expect(url.searchParams.get('label')).toBe('Home');
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        data: { type: 'mcwellness:pin', lat: 25.21, lng: 55.28, address: 'Villa 12, Street 4' },
+      }),
+    );
+    expect(onChange).toHaveBeenLastCalledWith({ lat: 25.21, lng: 55.28 });
+    expect(onAddress).toHaveBeenCalledWith('Villa 12, Street 4');
+    open.mockRestore();
+  });
+
+  it('ignores a message from any other origin', () => {
+    const onChange = vi.fn();
+    render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={onChange}
+        browserKey="browser-key-under-test"
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        origin: 'https://evil.example',
+        data: { type: 'mcwellness:pin', lat: 1, lng: 2, address: null },
+      }),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('says the map needs the key when the build has none', () => {
+    render(
+      <CoordinateFields
+        lat={null}
+        lng={null}
+        onChange={vi.fn()}
+        browserKey={null}
+        mapPicker={{ label: 'Home' }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Pick on the map' })).toBeNull();
+    expect(screen.getByText('The map needs the practice’s browser key.')).toBeTruthy();
+  });
+});
