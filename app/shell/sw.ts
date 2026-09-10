@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute } from 'workbox-precaching';
+import { MAP_DOCUMENT_PATHS as WIDENED_DOCUMENTS } from '@domain/shared/widened-document-paths';
 
 /**
  * The practitioner app's service worker (docs/SPEC/practitioner-phone.md
@@ -77,11 +78,16 @@ const KEEP = [SHELL, READS];
  * Reading still falls back to the cached shell for this path, which is honest:
  * with no signal the map cannot draw anyway, and the page says so.
  *
- * The list is duplicated here rather than imported because the worker is its
- * own bundle and the API's copy is server code. It is one line in both places
- * and `tests/security/headers.test.ts` pins the server's.
+ * Imported, not duplicated: it used to be a second, hand-copied literal here,
+ * kept equal to the API's own only by `tests/security/headers.test.ts` pinning
+ * both — a third widened document added to one list and not the other would
+ * have been served widened *and* cached as this device's offline shell, with
+ * no test failing (the whole-branch review of trunk round 43, finding 4).
+ * `domain/shared/widened-document-paths.ts` (imported above, aliased to this
+ * file's own name for it) is dependency-free by construction for exactly
+ * this reason: this worker is its own bundle, and nothing server-side may
+ * ever ride into it through this import.
  */
-const WIDENED_DOCUMENTS = ['/admin/schedule/map', '/admin/clients/pin'];
 
 /**
  * Whether this navigation is for one of them. The path is decoded first, as

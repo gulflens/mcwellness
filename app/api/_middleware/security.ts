@@ -11,8 +11,16 @@ import type { ApiEnv } from './request-context';
  * strict. A constant rather than a guess: the middleware compares the
  * request path against this list exactly, so no `/admin/schedule/map-something`
  * can widen itself into it (docs/SPEC/route-planning.md section 8.2).
+ *
+ * Re-exported, not defined here: `app/shell/sw.ts` must never write a
+ * widened document into the offline shell cache, and until the whole-branch
+ * review of trunk round 43 (finding 4) that rule was kept by a second,
+ * hand-copied literal in the worker and a third in
+ * `tests/security/headers.test.ts` — three places that had to agree, with
+ * nothing that noticed if they stopped. `domain/shared/widened-document-paths.ts`
+ * is the one list now; see it for why it holds nothing else.
  */
-export const MAP_DOCUMENT_PATHS: readonly string[] = ['/admin/schedule/map', '/admin/clients/pin'];
+export { MAP_DOCUMENT_PATHS } from '@domain/shared/widened-document-paths';
 
 /**
  * A content security policy, as the directives that make it up.

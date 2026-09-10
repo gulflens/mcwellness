@@ -3385,21 +3385,34 @@ own opener.
 
 **Outside the repository, for the operator.** Two things this round cannot
 do from inside it: enable the Places API on the browser key's Google Cloud
-project, and confirm `VITE_GOOGLE_MAPS_BROWSER_KEY` is set on the
-production build. Without either, "Pick on the map" does not appear and the
-two boxes work exactly as they did before this round.
+project — and add Places API (New) to that key's API restrictions, since
+`app/shell/maps/googleMaps.ts` states the key is restricted to one product
+and a key restricted to Maps JavaScript API alone loads the map and the
+search box and then has every autocomplete request refused, with the search
+box degrading silently and no explanation on screen (the whole-branch review
+of trunk round 43, finding 6) — and confirm `VITE_GOOGLE_MAPS_BROWSER_KEY` is
+set on the production build. Without either, "Pick on the map" does not
+appear and the two boxes work exactly as they did before this round.
 
 **Gates on the branch head, in this worktree** (`mcwellness-accounting`,
 database 5443): format, lint, typecheck and the secrets scan (1,514 tracked
 files) clean; 2,555 unit tests passed across 218 files; 1,351 database
-tests passed across 98 files. The migration audit failed on one file
-neither this round nor this task touched:
-`db/migrations/410_package_terms.sql`, which a different piece of work
-(package terms, decision 9, pull request 151) merged to `main` at 16:22 on
-the operator's clock, after this stacked
-branch had already forked from it. The audit compares this branch's
-`db/migrations/` directly against `origin/main`'s, with no way to tell a
-long-lived stacked branch apart from one that deleted a merged file; it is
-not this task's place to merge `main` into a branch stacked under an open
-pull request, so the failure is recorded here rather than routed around.
+tests passed across 98 files. The migration audit failed at the time this
+note was first written, on one file neither this round nor that task
+touched: `db/migrations/410_package_terms.sql`, which a different piece of
+work (package terms, decision 9, pull request 151) merged to `main` at 16:22
+on the operator's clock, after this stacked branch had already forked from
+it. The audit compares a branch's `db/migrations/` directly against
+`origin/main`'s, with no way to tell a long-lived stacked branch apart from
+one that deleted a merged file, and it was not that task's place to merge
+`main` into a branch stacked under an open pull request — so the failure was
+recorded here rather than routed around.
+
+**Resolved.** Part one merged `main` in (`824df9b`) and part two merged part
+one (`dd77388`); `origin/main` is now a full ancestor of this head, migration
+410 is present in `db/migrations/`, and the audit no longer has a file to
+disagree about (the whole-branch review of trunk round 43, finding 7 — this
+note had gone stale describing a commit no longer being merged). The audit is
+green at this head: 95 migration files checked against `origin/main`, none
+edited, deleted or renamed after merge.
 

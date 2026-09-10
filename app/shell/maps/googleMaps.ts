@@ -49,6 +49,17 @@ export function browserMapKey(): string | null {
   return typeof key === 'string' && key.trim() !== '' ? key.trim() : null;
 }
 
+/**
+ * The one load this module remembers, keyed on nothing but "has a load
+ * already started" — not on which `libraries` were asked for. A second
+ * caller in the same document asking for `places` after a first call that
+ * did not would silently get the cached namespace without it, rather than a
+ * second script tag. Unreachable today: the day map and the pin picker are
+ * two separate documents, so each gets its own module instance, and neither
+ * calls this twice with a different `libraries` set (the whole-branch review
+ * of trunk round 43, finding 13 — flagged in case a future document ever
+ * shares this loader with more than one caller).
+ */
 let pending: Promise<GoogleMaps> | null = null;
 
 /** For the tests only: forgets the one script this module remembers adding. */
