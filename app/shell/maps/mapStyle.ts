@@ -1,48 +1,27 @@
 /**
- * The basemap both of the console's browser maps draw on, in Google's own
- * styling vocabulary (docs/SPEC/route-planning.md section 4.5): a quiet,
- * achromatic ground with the roads legible and everything else out of the
- * way, so the pins and the lines are what the eye finds. Started as the day
- * map's own (`app/admin/schedule/map/`); since trunk round 43 the pin picker
- * (`app/admin/clients/pin/PinPickerPage.tsx`) draws its single marker on the
- * same basemap rather than Google's default one, so it reads as this
- * console's own screen and not a page borrowed from somewhere else — the
- * same reason `googleMaps.ts` moved to this folder first, and this
- * document's own rule for a thing two modules share (docs/SPEC/
- * OWNERSHIP.md).
+ * The basemap both of the console's browser maps draw on: **Google's own
+ * colours**, with the clutter turned off and nothing repainted.
  *
- * **Every colour is read from the running document**, not written out here:
- * `getComputedStyle` on the element the page hands in resolves the same
- * custom properties `app/shell/tokens.css` declares, so a token that changes
- * moves the map with it and no value is ever duplicated
- * (.claude/rules/ui.md, "never hardcode colours" — with no exception).
- * A property that resolves to nothing leaves its rule out rather than
- * inventing a colour, which is what happens under a test renderer that
- * computes no styles.
+ * **Why no colours here any more.** Until the operator saw it on the live site
+ * (2026-09-11), this file painted every feature from the console's own tokens
+ * — all geometry `--paper` (`#e9e7ec`) and the roads `--rule` (`#d0cbd6`).
+ * Those two sit about 1.2:1 apart, so the roads were very nearly invisible and
+ * the map read as an empty grey panel: a quiet basemap taken so far that it
+ * stopped being a map. Google's palette already separates land, water and road
+ * legibly, and it is the one a coordinator recognises from every other map
+ * they use. So the colours are Google's and this file no longer names one.
+ *
+ * That also settles the rule this file used to have to argue with
+ * (`.claude/rules/ui.md`, "never hardcode colours"): with nothing painted, no
+ * colour is declared here at all, from a token or otherwise.
+ *
+ * **What is still turned off**, because it is noise rather than colour: a shop,
+ * a bus route and an emirate's boundary are not what this map is for. The day
+ * map shows where a practitioner drives; the pin picker shows one front door.
+ * Both read better without a layer of commerce and transit under the pins.
  */
-export function mapStyle(root: Element): google.maps.MapTypeStyle[] {
-  const computed = getComputedStyle(root);
-  const token = (name: string): string | null => {
-    const value = computed.getPropertyValue(name).trim();
-    return value === '' ? null : value;
-  };
-  const paint = (
-    featureType: string,
-    elementType: string,
-    name: string,
-  ): google.maps.MapTypeStyle[] => {
-    const color = token(name);
-    return color === null ? [] : [{ featureType, elementType, stylers: [{ color }] }];
-  };
+export function mapStyle(): google.maps.MapTypeStyle[] {
   return [
-    // The ground, the roads, and a label that reads without shouting.
-    ...paint('all', 'geometry', '--paper'),
-    ...paint('road', 'geometry', '--rule'),
-    ...paint('all', 'labels.text.fill', '--slate'),
-    ...paint('all', 'labels.text.stroke', '--paper'),
-    // Water as a band lifted off the ground rather than as a colour.
-    ...paint('water', 'geometry', '--surface'),
-    // The noise: nothing on this map is a shop, a bus route or a border.
     { featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] },
     { featureType: 'transit', elementType: 'all', stylers: [{ visibility: 'off' }] },
     { featureType: 'administrative', elementType: 'geometry', stylers: [{ visibility: 'off' }] },

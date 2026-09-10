@@ -183,7 +183,7 @@ export function PinPickerPage({
       zoomControl: true,
       gestureHandling: 'greedy',
       clickableIcons: false,
-      styles: mapStyle(document.documentElement),
+      styles: mapStyle(),
     });
     const marker = new maps.Marker({
       map,
