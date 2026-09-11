@@ -6,7 +6,7 @@ Written for you to read once, over coffee, and act on. It covers the night of
 and the reports a practitioner signs.
 
 Nothing below is a technical instruction you have to carry out yourself. Each
-item says what it costs, what Claude recommends and why, and what happens if
+item says what it costs, what is recommended and why, and what happens if
 you leave it. Two ready-to-send drafts sit at the end: one to Hostinger, one
 to your lawyer.
 
@@ -98,7 +98,7 @@ one to plan on.
 | Another host that runs Node continuously | Adds a vendor row and a second account | not priced in the repository | not priced in the repository |
 | Split: screens on Premium, API elsewhere | Uses the plan already paid for | not priced in the repository | not priced in the repository |
 
-**What Claude recommends.** Do not bet the first deploy on the Premium plan.
+**The recommendation.** Do not bet the first deploy on the Premium plan.
 Move the platform to Hostinger's managed Node.js product on the same account,
 in Mumbai. That keeps one vendor, one bill and one line in the vendor
 register, and it is a small monthly figure against the cost of discovering on
@@ -144,7 +144,7 @@ watching.
 
 **What it costs.** Nothing, and about a minute.
 
-**What Claude recommends.** Create it today. It does not depend on 1.1 and it
+**The recommendation.** Create it today. It does not depend on 1.1 and it
 is the cheapest item on this page.
 
 In the browser: the repository, then Settings, Environments, New environment,
@@ -177,7 +177,7 @@ the domain's settings, pointing at whatever answers.
 
 **What it costs.** Nothing but the minutes.
 
-**What Claude recommends.** Add it the day 1.1 settles, and not before —
+**The recommendation.** Add it the day 1.1 settles, and not before —
 what the record points at is exactly what 1.1 decides. The repository does not
 say what type of record it will be or what value it carries, because that
 depends on the product chosen; whoever you buy from will tell you, and it is
@@ -189,8 +189,8 @@ fails on purpose.
 
 ### 1.4 The settings, and which store each one goes in
 
-Two stores, and neither of them is the code. Claude never handles these values
-and none of them enters the repository.
+Two stores, and neither of them is the code. These values are never handled in
+a build session and none of them enters the repository.
 
 **Store one: the repository's `production` environment**, which is what 1.2
 creates. Set once, by you.
@@ -246,7 +246,7 @@ migration of every row and every file.
 provides the daily snapshots; the repository does not carry a figure for
 adding this project, so ask Supabase or read it in the billing page.
 
-**What Claude recommends.** Wait for the lawyer's answer on region (section
+**The recommendation.** Wait for the lawyer's answer on region (section
 4), then create it. Everything else in this section can be prepared first.
 
 **If it waits.** The database, the backups, the restore rehearsal and the
@@ -272,9 +272,9 @@ that takes at real size, and whether the screens come up against it.
 
 **What it costs.** A throwaway Supabase project for the duration. The
 repository does not price it, which is why it is yours to authorise rather
-than Claude's to run.
+than something a build session runs on its own.
 
-**What Claude recommends.** Authorise it once the production project and the
+**The recommendation.** Authorise it once the production project and the
 backups project exist and the first weekly backup has been written, and before
 the first deploy. It replaces the laptop rehearsal.
 
@@ -304,13 +304,13 @@ error text, so a stranger learns whether the practice's system is up and
 nothing about how it is built.
 
 Something outside has to ask. The proposal in the vendor register is Better
-Stack's free tier, marked as Claude's suggestion; no account has been created
+Stack's free tier, marked as a suggestion; no account has been created
 and nothing has been signed up for.
 
 **What it costs.** Nothing on the proposed free tier. Any service that can
 telephone you will do instead.
 
-**What Claude recommends.** Accept it or name another, then choose the number
+**The recommendation.** Accept it or name another, then choose the number
 or address the alert wakes, and fire the alert once on purpose to prove it
 arrives. The alternative that needs no vendor — a scheduled job in GitHub that
 calls the address — was considered and rejected: scheduled runs are delayed
@@ -335,13 +335,13 @@ Two keys, not one, and neither is the key inside the old Flutter app.
 
 In the practice's Google Cloud project: enable the Routes API and the Maps
 Static API, mint a server key restricted to those two, set a spending cap, and
-hand it to a session to place in the right settings file. Claude can do the
-console work if you ask.
+hand it to a session to place in the right settings file. The console work can
+be done for you if you ask.
 
 **What it costs.** Whatever Google charges for the calls, bounded by the cap
 you set. The repository does not carry a figure.
 
-**What Claude recommends.** Mint the staging key when convenient and the
+**The recommendation.** Mint the staging key when convenient and the
 production key with the production project. What the key touches is
 coordinates only — never a name, a record number, an address or an identity —
 and the practitioner's navigation hand-off sends a client's entrance
@@ -367,7 +367,7 @@ cost, below.
 | 81, measurements | 1.53 million |
 | 83, reports | 1.93 million |
 
-**What Claude recommends.** Cut the first tag, run the scan against it in its
+**The recommendation.** Cut the first tag, run the scan against it in its
 own session, triage each finding — each accepted one becomes its own small
 change with the usual review, each rejected one recorded with the reason — and
 only then approve the deploy. A scan whose findings were never verified is
@@ -402,7 +402,7 @@ the build took a default for each and none of them is settled.
 |---|---|---|---|
 | 1 | Which equipment and software the practice uses, and what its export file looks like | Built regardless: the practitioner uploads the equipment's own file and types the figures, exactly as the session's signal check already works | Only a convenience. Naming the equipment lets a later piece read the file automatically instead of typing. Nothing else waits on it |
 | 2 | Which questionnaires the practice actually uses | The brain map is built in full. The questionnaire *mechanism* is built and exercised by one synthetic sample; no licensed questionnaire's name, questions or scoring appears anywhere, because several are somebody else's property and need a licence the practice holds | Adding the one you license is one more entry in a list |
-| 3 | Whether a report is deleted when a household asks to be erased | Delete it. An erasure now removes the report files and the words inside them — goals, ratings, summaries — and the record of who was sent what. What stays is a note that a report once existed and who signed it, holding nothing about the family | If the lawyer says a report must be kept, the erasure step changes. Claude's view: the practice should have to be told to keep it, not told to delete it |
+| 3 | Whether a report is deleted when a household asks to be erased | Delete it. An erasure now removes the report files and the words inside them — goals, ratings, summaries — and the record of who was sent what. What stays is a note that a report once existed and who signed it, holding nothing about the family | If the lawyer says a report must be kept, the erasure step changes. The view taken here: the practice should have to be told to keep it, not told to delete it |
 | 4 | A report written for a child's school | The practice may write and issue one and hand it to a parent, who passes it on. Nothing sends anything to an institution | The agreements a household signs do not cover sharing a child's measurements with a school. For the lawyer's list — section 4 |
 | 5 | The draft mark on reports | Yes, on every copy: until the lawyer approves the wording, every report carries the same visible draft line the agreements carry today | It comes off the day the wording is approved |
 
@@ -430,7 +430,7 @@ they do.
 person with their own sign-in sees the Reports screen and can open the
 practitioner's written summary of themselves. They see no money screen,
 because a balance is the household's business — but a report about them was
-judged not to be the same kind of thing. This was Claude's reading of the
+judged not to be the same kind of thing. This was a reading of the
 specification, which says the portal shows "issued reports for their own
 client" without narrowing it. **It is for you to say yes to.** If you would
 rather a minor's reports went only to the parent's login, that is a change to
@@ -464,7 +464,7 @@ and Arabic, eight documents in all, plus the erasure confirmation letter — are
 what the app loads and shows today, every one marked as a draft on its face.
 The four short plain-language pages written on 4 September at your direction
 are what you intend a household to actually read, and their Arabic versions do
-not exist yet. Tell the lawyer which set you want reviewed. Claude's
+not exist yet. Tell the lawyer which set you want reviewed. The
 recommendation: review the short set, because that is what a family will
 actually sign, and have the long set retired once the short set is approved
 and translated.

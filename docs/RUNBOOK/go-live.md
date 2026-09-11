@@ -6,7 +6,7 @@ site exists on the hosting account, the code has been sent to it, and the
 settings that are not secret are already in the list. What is left is seven
 values that unlock things, and a login of your own.
 
-**Why you and not Claude.** These seven values open the practice's database,
+**Why you and nobody else.** These seven values open the practice's database,
 its documents and its sign-ins. They are typed once by you into the hosting
 panel, they never enter the code, they never pass through GitHub, and no
 session ever reads them back. That is the whole point of the arrangement

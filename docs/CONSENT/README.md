@@ -83,7 +83,7 @@ may keep them for longer, and deletes nothing on a timer — a household asks, a
 then it is deleted.
 
 That is the operator's rule of 2026-09-09 and it matches what the practice
-already had written down: CLAUDE.md's absolute rule 8 and the `uae-compliance`
+already had written down: the practice's absolute rule 8 and the `uae-compliance`
 skill both say a minimum of five years after last activity, kept after that,
 **nothing deleted on a timer, and erasure or anonymisation when the client
 asks**, with financial records kept five years regardless. The wording
