@@ -41,6 +41,8 @@ const PACKAGE_SIX = '00000000-0000-4000-8000-0000000009a5';
 const CREDIT_DATED = '00000000-0000-4000-8000-0000000009a7';
 const CREDIT_NEVER = '00000000-0000-4000-8000-0000000009a8';
 const CREDIT_SPENT = '00000000-0000-4000-8000-0000000009a9';
+const CREDIT_BOUGHT = '00000000-0000-4000-8000-0000000009b0';
+const PURCHASE_ID = '00000000-0000-4000-8000-0000000009b1';
 
 /** The day the ledger is asked about, and one long after every dated credit. */
 const TODAY = '2026-09-12';
@@ -76,6 +78,34 @@ async function credit(id: string, expiresOn: string | null): Promise<void> {
       'allocated_net_fils, vat_rate_basis_points, vat_setting_version, expires_on) ' +
       "values ($1, $2, $3, $4, 'complimentary', 0, 500, 1, $5)",
     [id, TENANT_ID, CLIENT_ID, SERVICE_TYPE_ID, expiresOn],
+  );
+}
+
+/**
+ * A credit a programme paid for. The old function reached through
+ * `package_purchase` for `extended_to`; 412 takes that join out. A credit with
+ * no purchase behind it would be found either way, so the join's removal is
+ * only really proved by one that has.
+ */
+async function purchasedCredit(
+  creditId: string,
+  purchaseId: string,
+  expiresOn: string | null,
+): Promise<void> {
+  await owner.query(
+    'insert into package_purchase (id, tenant_id, client_id, package_id, package_name, ' +
+      'purchased_on, net_fils, vat_fils, vat_rate_basis_points, vat_setting_version, ' +
+      'list_price_fils, expires_on) ' +
+      "values ($1, $2, $3, $4, 'Twelve-month programme', '2026-01-01', 0, 0, 500, 1, 0, " +
+      "'2027-01-01')",
+    [purchaseId, TENANT_ID, CLIENT_ID, PACKAGE_TWELVE],
+  );
+  await owner.query(
+    'insert into entitlement (id, tenant_id, client_id, service_type_id, source_type, ' +
+      'package_purchase_id, allocated_net_fils, vat_rate_basis_points, vat_setting_version, ' +
+      'expires_on) ' +
+      "values ($1, $2, $3, $4, 'package', $5, 0, 500, 1, $6)",
+    [creditId, TENANT_ID, CLIENT_ID, SERVICE_TYPE_ID, purchaseId, expiresOn],
   );
 }
 
@@ -161,6 +191,9 @@ beforeAll(async () => {
   await credit(CREDIT_SPENT, '2026-01-01');
   await credit(CREDIT_DATED, '2027-01-31');
   await credit(CREDIT_NEVER, null);
+  // One a programme paid for, with no end, so the join 412 removes is
+  // exercised rather than merely read.
+  await purchasedCredit(CREDIT_BOUGHT, PURCHASE_ID, null);
 
   await applyMigrationFile(owner, target[0]?.filename ?? '');
 
@@ -391,6 +424,19 @@ describe('the extension machinery', () => {
 });
 
 describe('the consumption rule, after the extension is taken out of it', () => {
+  it('still finds a credit a programme paid for, now that the purchase join is gone', async () => {
+    // The old body reached through package_purchase for extended_to. This
+    // credit has a purchase behind it and no end date, so it must come back
+    // as usable on any day at all — and a complimentary credit could not
+    // prove that, because it was never on the removed join in the first place.
+    expect(await oldestOn('2030-01-01')).toBeTruthy();
+    const { rows } = await owner.query<{ package_purchase_id: string | null }>(
+      'select package_purchase_id from entitlement where id = $1',
+      [CREDIT_BOUGHT],
+    );
+    expect(rows[0]?.package_purchase_id).toBe(PURCHASE_ID);
+  });
+
   it('spends the dated credit first, so none is lost to expiry', async () => {
     expect(await oldestOn(TODAY)).toBe(CREDIT_DATED);
   });

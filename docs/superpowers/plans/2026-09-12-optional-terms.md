@@ -81,7 +81,7 @@ migration fixes structure, and what a practice charges for is the practice's own
 
 ## Tasks
 
-1. **Migration 964** — the two columns on `package` and on `price`, the wholeness constraints, the
+1. **Migration 412** — the two columns on `package` and on `price`, the wholeness constraints, the
    backfill of the existing `expiry_months` into the pair, dropping `expiry_months`, dropping
    `package_extension` with its policies, dropping `extended_to` and `extension_reason`. Full
    review: it is a migration.

@@ -48,12 +48,15 @@
 -- which is the only way the history stays true on the databases that have
 -- already run it.
 --
--- **Why a trunk number for billing's tables.** The round spans three streams —
--- the catalogue, the household's portal and the trunk's own documents — so it
--- is numbered in the trunk's 900–999 half rather than billing's 400–449, and
--- names every range it depends on below. The runner applies pending files in
--- numeric order, so 401, 403, 409 and 410 have all run by the time this one
--- does on any database that carries them.
+-- **Why 412.** `package` and `price` are billing's tables and
+-- docs/SPEC/OWNERSHIP.md gives billing 400–449, so this file takes the next
+-- free number in that band rather than a trunk number. It applies to a
+-- database already carrying the trunk's 9xx migrations because
+-- db/runner/plan.ts admits a pending file numbered below the highest applied —
+-- what it refuses is an *edit* to a file already run, not a low number arriving
+-- late. The runner applies pending files in numeric order, so 401, 403, 409
+-- and 410 have all run by the time this one does on any database that carries
+-- them.
 --
 -- Needs: 400 (price), 401 (package and package.expiry_months), 403
 -- (package_purchase with its extension columns and their constraints;
@@ -148,6 +151,29 @@ comment on constraint price_expiry_term_is_whole on public.price is
 --    migrate; they go in the same pull request as this file, or the policy
 --    pass fails on a table that is no longer there.
 ------------------------------------------------------------------------------
+-- Pre-flight, in the shape 963 used: this drop is irreversible, and if any
+-- household ever had a programme extended then dropping the table and
+-- extended_to with it would silently revert their credits to the shorter
+-- original date — sessions a family paid for ceasing to be usable, which is
+-- the exact harm this round exists to prevent. Believed empty is not checked
+-- empty, so it is checked. (The controller read zero rows on staging and
+-- production on 12 September; this refuses on any database where that is not
+-- true, including one nobody has looked at.)
+do $$
+declare
+  v_rows bigint;
+  v_extended bigint;
+begin
+  select count(*) into v_rows from public.package_extension;
+  select count(*) into v_extended from public.package_purchase where extended_to is not null;
+  if v_rows > 0 or v_extended > 0 then
+    raise exception
+      'migration 412 will not drop the extension machinery: % extension row(s) and % extended purchase(s) exist. Every one is a household whose credits would revert to a shorter date. Decide what each should keep, write it into package_purchase.expires_on by hand, then re-run.',
+      v_rows, v_extended;
+  end if;
+end
+$$;
+
 drop table public.package_extension;
 
 alter table public.package_purchase drop constraint package_purchase_extension_is_reasoned;
@@ -239,52 +265,16 @@ comment on column public.package_purchase.expires_on is
   'household keeps the term it was sold, whatever the catalogue says later.';
 
 -- rollback:
+--   Not in strict reverse order, and deliberately so: section 4 restores
+--   403's function, whose body names package_purchase.extended_to, and
+--   `check_function_bodies` is on — so section 3 has to put that column back
+--   first or the create fails with 42703 and the block stops half done.
+--
 --   -- Section 5. A programme sold with no term has no date to put back, so
 --   -- this line refuses until each such purchase has been given one; that is
 --   -- the point, not an oversight.
 --   alter table public.package_purchase alter column expires_on set not null;
 --   comment on column public.package_purchase.expires_on is null;
---
---   -- Section 4. 403's own text, written out: `create or replace` has no undo,
---   -- and the column its coalesce names is restored by the section below.
---   create or replace function app.oldest_available_entitlement(
---     p_client_id uuid, p_service_type_id uuid, p_on date
---   ) returns uuid
---   language sql volatile security definer
---   set search_path = pg_catalog, pg_temp
---   as $$
---     select e.id from public.entitlement e
---       -- A purchase the coordinator extended runs to the new date. Two readers
---       -- of one expiry must not disagree: domain/billing/balance.ts counts a
---       -- credit as remaining while the extension holds, and this must find the
---       -- same credit, or the balance would promise a session that a delivered
---       -- visit could not find and the family would be invoiced for it a second
---       -- time.
---       left join public.package_purchase pp
---         on pp.tenant_id = e.tenant_id and pp.id = e.package_purchase_id
---      where e.tenant_id = app.current_tenant_id()
---        and e.client_id = p_client_id
---        and e.service_type_id = p_service_type_id
---        and e.status = 'available'
---        and (coalesce(pp.extended_to, e.expires_on) is null
---             or coalesce(pp.extended_to, e.expires_on) >= p_on)
---      -- Oldest first, so the credit closest to running out is the one used, and
---      -- a client never loses a credit to expiry while a newer one is spent.
---      order by coalesce(pp.extended_to, e.expires_on) nulls last, e.created_at, e.id
---      limit 1
---      -- The read is the lock. Two visits for the same client and service
---      -- completing at the same moment would otherwise both read the same credit
---      -- id, and the second update would overwrite the first: one credit spent
---      -- twice, and the second visit never invoiced, because only one row exists
---      -- and entitlement_one_per_session never fires. Locking the row this
---      -- returns, and skipping one another transaction already holds, hands the
---      -- second visit the next credit — or none, which charges it properly.
---      -- `of e`: the purchase is the nullable side of the join and cannot be
---      -- locked, and does not need to be.
---      for no key update of e skip locked
---   $$;
---   revoke execute on function app.oldest_available_entitlement(uuid, uuid, date) from public;
---   grant execute on function app.oldest_available_entitlement(uuid, uuid, date) to app_role;
 --
 --   -- Section 3. The purchase's two columns and their three constraints, then
 --   -- 410's table whole, with the triggers, grants and row security it gave it.
@@ -345,6 +335,47 @@ comment on column public.package_purchase.expires_on is
 --   -- and put this table's three policies back into db/policies/billing/ledger.sql
 --   -- and its name back into db/policies/portal/money.sql's array, which the
 --   -- runner re-applies and which both name the table.
+--
+--   -- Section 4. 403's own text, written out: `create or replace` has no undo,
+--   -- and the column its coalesce names is restored by the section above.
+--   create or replace function app.oldest_available_entitlement(
+--     p_client_id uuid, p_service_type_id uuid, p_on date
+--   ) returns uuid
+--   language sql volatile security definer
+--   set search_path = pg_catalog, pg_temp
+--   as $$
+--     select e.id from public.entitlement e
+--       -- A purchase the coordinator extended runs to the new date. Two readers
+--       -- of one expiry must not disagree: domain/billing/balance.ts counts a
+--       -- credit as remaining while the extension holds, and this must find the
+--       -- same credit, or the balance would promise a session that a delivered
+--       -- visit could not find and the family would be invoiced for it a second
+--       -- time.
+--       left join public.package_purchase pp
+--         on pp.tenant_id = e.tenant_id and pp.id = e.package_purchase_id
+--      where e.tenant_id = app.current_tenant_id()
+--        and e.client_id = p_client_id
+--        and e.service_type_id = p_service_type_id
+--        and e.status = 'available'
+--        and (coalesce(pp.extended_to, e.expires_on) is null
+--             or coalesce(pp.extended_to, e.expires_on) >= p_on)
+--      -- Oldest first, so the credit closest to running out is the one used, and
+--      -- a client never loses a credit to expiry while a newer one is spent.
+--      order by coalesce(pp.extended_to, e.expires_on) nulls last, e.created_at, e.id
+--      limit 1
+--      -- The read is the lock. Two visits for the same client and service
+--      -- completing at the same moment would otherwise both read the same credit
+--      -- id, and the second update would overwrite the first: one credit spent
+--      -- twice, and the second visit never invoiced, because only one row exists
+--      -- and entitlement_one_per_session never fires. Locking the row this
+--      -- returns, and skipping one another transaction already holds, hands the
+--      -- second visit the next credit — or none, which charges it properly.
+--      -- `of e`: the purchase is the nullable side of the join and cannot be
+--      -- locked, and does not need to be.
+--      for no key update of e skip locked
+--   $$;
+--   revoke execute on function app.oldest_available_entitlement(uuid, uuid, date) from public;
+--   grant execute on function app.oldest_available_entitlement(uuid, uuid, date) to app_role;
 --
 --   -- Section 2. The term on a price, which nothing had before this file.
 --   alter table public.price drop constraint if exists price_expiry_term_is_whole;
