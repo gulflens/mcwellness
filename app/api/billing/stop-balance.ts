@@ -19,7 +19,7 @@ import { isUuid } from './ids';
  * card shows "Session 3 of 15" and what is owed at the door, and until now it
  * read `GET /api/billing/clients/:id/balance` to get them. That route answers
  * the console's whole picture — every purchase with its net, its VAT and its
- * list price, the reason a coordinator extended one, invoice ids, the
+ * list price, the reason any extra discount was given, invoice ids, the
  * recognised and deferred figures — which is the practice's commercial position
  * and has no business sitting in a phone at somebody's front door. The
  * permission was never the problem: a practitioner is entitled to both figures,
@@ -49,9 +49,11 @@ const CLIENT_SQL = 'select id from client where tenant_id = app.current_tenant_i
 // it is never answered: what a family paid per credit is not a doorstep fact.
 const ENTITLEMENTS_SQL =
   'select e.service_type_id, st.code as service_type_code, e.status, e.allocated_net_fils, ' +
-  'e.consumption_kind, coalesce(pp.extended_to, e.expires_on) as expires_on ' +
+  // The credit's own date, null when it has none: the balance engine reads a
+  // null as a credit that never lapses, so a termless credit still counts on
+  // the stop card. No date reaches the card either way — it shows counts.
+  'e.consumption_kind, e.expires_on ' +
   'from entitlement e join service_type st on st.id = e.service_type_id ' +
-  'left join package_purchase pp on pp.id = e.package_purchase_id ' +
   'where e.tenant_id = app.current_tenant_id() and e.client_id = $1 ' +
   'order by e.created_at, e.id';
 

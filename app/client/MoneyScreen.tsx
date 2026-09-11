@@ -35,6 +35,12 @@ import { usePortalRead } from './usePortal';
  *
  * Figures are tabular and the currency is named once, by the section, never
  * repeated on every row.
+ *
+ * **A programme may have no end date**, which is what the practice's own
+ * catalogue now carries: the credits a household paid for never stop being
+ * usable (the operator's ruling of 12 September 2026). The row says so in one
+ * plain sentence from the dictionary, in either language, rather than showing
+ * a household a blank where a date would be.
  */
 
 function DocumentButton({ documentId }: { documentId: string }) {
@@ -177,8 +183,14 @@ function MoneyBody() {
                         {words.phrase(PHRASES.sessionOf(row.used, row.total))}
                       </span>
                       <span className="small muted">
-                        {words.t('expires')}{' '}
-                        <span className="numeric">{words.date(row.expiresOn)}</span>
+                        {row.expiresOn === null ? (
+                          words.t('neverExpires')
+                        ) : (
+                          <>
+                            {words.t('expires')}{' '}
+                            <span className="numeric">{words.date(row.expiresOn)}</span>
+                          </>
+                        )}
                       </span>
                     </div>
                   ))}

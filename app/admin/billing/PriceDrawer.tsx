@@ -14,6 +14,7 @@ import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { DiscountFields } from './DiscountFields';
 import { focusFirstInvalid } from './refusal';
+import { draftFrom, readTerm, TermFields, type TermDraft, type TermRefusal } from './TermFields';
 import { useDrawer } from './useDrawer';
 import {
   AED_MAX_FILS,
@@ -56,6 +57,7 @@ type FieldErrors = {
   discount?: string;
   validFrom?: string;
   reason?: string;
+  term?: TermRefusal;
 };
 
 /** Fixed sentences for every answer the server can give a save attempt, keyed
@@ -93,13 +95,26 @@ function badRequestMessage(code: string | undefined): string {
 /**
  * "Add a price" (docs/DESIGN-BRIEF.md section 6.2: a right-side drawer, not
  * a modal, in the shape ClientDrawer.tsx set).
+ *
+ * **The term is prefilled from the price this one will supersede**, and sent
+ * only when somebody touches it (the controller's ruling of 12 September
+ * 2026). A price amendment is a new row, so a drawer that sent a blank term
+ * with every change of figure would wipe a term the practice set on purpose;
+ * a body with no `term` at all tells the server to carry the superseded row's
+ * forward, which is the safe default living where it cannot be forgotten.
+ * Taking a term away is then what it should be: clearing both boxes.
+ *
+ * `currentPrices` is the list the page already has open behind the drawer —
+ * the prices in force today — so the prefill costs no second request.
  */
 export function PriceDrawer({
   onClose,
   onCreated,
+  currentPrices,
 }: {
   onClose: () => void;
   onCreated: (price: PriceRow) => void;
+  currentPrices: readonly PriceRow[];
 }) {
   const { apiFetch } = useAuth();
   const drawerRef = useRef<HTMLElement>(null);
@@ -111,6 +126,10 @@ export function PriceDrawer({
   const [discountKind, setDiscountKind] = useState<DiscountKind>('none');
   const [discountValue, setDiscountValue] = useState('');
   const [validFrom, setValidFrom] = useState(() => isoDateIn(new Date(), PRACTICE_TIME_ZONE));
+  // The term as typed, and null while nobody has typed anything: untouched is
+  // what tells the server to leave the superseded row's term alone, so it is
+  // a state of its own rather than a blank draft that looks the same.
+  const [typedTerm, setTypedTerm] = useState<TermDraft | null>(null);
   const [reason, setReason] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -173,6 +192,17 @@ export function PriceDrawer({
     };
   }, [apiFetch, validFrom]);
 
+  /**
+   * The term the superseded row carries, as the two boxes show it — the
+   * screen saying what the server will do if nobody touches it. Derived
+   * rather than written back by an effect, the same arrangement
+   * `PackageDrawer`'s price-now field uses: a synchronous `setState` in an
+   * effect is refused by `react-hooks/set-state-in-effect`, and the prefill
+   * is only ever displayed.
+   */
+  const supersedes = currentPrices.find((row) => row.serviceTypeId === serviceTypeId) ?? null;
+  const termDraft = typedTerm ?? draftFrom(supersedes?.term ?? null);
+
   const vatRateBasisPoints = vatRate.kind === 'ready' ? vatRate.rateBasisPoints : null;
   const parsedFils = parseAedToFils(price);
   // The same arithmetic the server writes the row with: the list figure, what
@@ -220,8 +250,14 @@ export function PriceDrawer({
     } else if (trimmedReason.length > 200) {
       errors.reason = 'Keep the reason to 200 characters or fewer.';
     }
+    // Half a term never reaches the server: migration 412's constraint would
+    // refuse it, but a coordinator should not meet that as a 400.
+    const reading = readTerm(termDraft);
+    if (!reading.ok) {
+      errors.term = { message: reading.message, focus: reading.focus };
+    }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0 || parsedFils === null) {
+    if (Object.keys(errors).length > 0 || parsedFils === null || !reading.ok) {
       focusFirstInvalid(
         [
           errors.service ? 'price-service' : null,
@@ -229,6 +265,7 @@ export function PriceDrawer({
           errors.discount ? 'price-discount-value' : null,
           errors.validFrom ? 'price-valid-from' : null,
           errors.reason ? 'price-reason' : null,
+          errors.term ? `price-term-${errors.term.focus}` : null,
         ].filter((id): id is string => id !== null),
       );
       return;
@@ -245,6 +282,10 @@ export function PriceDrawer({
           discount: discountBody(discountKind, discountValue),
           validFrom,
           amendmentReason: trimmedReason,
+          // Absent while nobody has touched the term, which is how the server
+          // is told to carry the superseded row's forward; `null` only when
+          // somebody has cleared both boxes on purpose.
+          ...(typedTerm === null ? {} : { term: reading.term }),
         }),
       });
       if (res.status === 201) {
@@ -315,7 +356,12 @@ export function PriceDrawer({
               value={serviceTypeId}
               onChange={(e) => {
                 setServiceTypeId(e.target.value);
+                // The term belongs to the service's own price, so choosing a
+                // different service goes back to that price's term rather
+                // than carrying the last one across.
+                setTypedTerm(null);
                 clearFieldError('service');
+                clearFieldError('term');
               }}
               disabled={serviceTypes.kind === 'loading'}
               error={fieldErrors.service}
@@ -383,6 +429,16 @@ export function PriceDrawer({
               clearFieldError('reason');
             }}
             error={fieldErrors.reason}
+          />
+
+          <TermFields
+            id="price-term"
+            draft={termDraft}
+            error={fieldErrors.term}
+            onChange={(next) => {
+              setTypedTerm(next);
+              clearFieldError('term');
+            }}
           />
 
           <div className="price-preview">

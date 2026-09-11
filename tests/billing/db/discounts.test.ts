@@ -319,7 +319,7 @@ describe('the bundle catalogue', () => {
       code,
       name,
       listPriceFils,
-      expiryMonths: 12,
+      term: { amount: 12, unit: 'month' as const },
       components: [
         { serviceTypeId: h.serviceTypeId('consultation'), quantity: 1 },
         { serviceTypeId: h.serviceTypeId('brain-map'), quantity: 2 },

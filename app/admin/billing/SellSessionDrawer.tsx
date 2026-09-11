@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { SINGLE_SESSION_MONTHS, termWords } from '@domain/billing';
+import { termWords } from '@domain/billing';
 import { isoDateIn } from '@domain/shared/actor';
 import {
   PAYMENT_METHODS,
@@ -49,12 +49,13 @@ import {
  * the server runs — so what the coordinator reads out is what the invoice
  * will say.
  *
- * The credit this writes is good for twelve months
- * (`SINGLE_SESSION_MONTHS`, `domain/billing/expiry.ts`) — fixed, not tied to
- * any package's own term, because a single credit has no package behind it to
- * take a term from. It carries no extensions: those belong to a programme's
- * own purchase row (`POST /api/billing/package-purchases/:id/extension`),
- * which a single sale never writes.
+ * **How long the credit lasts is the price row's own business.** A price may
+ * carry a term — a number with its unit beside it — and where it carries none
+ * the credit never expires, which is what every price carries until the
+ * practice sets one (migration 412, the operator's ruling of 12 September
+ * 2026). The drawer reads the term off the row it is selling at and says it in
+ * the rule's own words, or says nothing at all; it is no longer twelve months
+ * from a constant in the code.
  *
  * Nothing about `app.charge_single_visit` changes: a visit with no credit
  * against it is still charged when it closes. This drawer only gives a
@@ -160,6 +161,9 @@ export function SellSessionDrawer({
   // package of one, not a quantity a person chooses.
   const credits = 1;
   const contents = price ? `1 × ${price.serviceTypeName}` : '—';
+  // Null before a service is chosen, and null for a price with no term at all.
+  // Either way the sentence below is simply absent.
+  const term = price ? termWords(price.term) : null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -441,7 +445,7 @@ export function SellSessionDrawer({
 
           {formError ? <Note tone="critical">{formError}</Note> : null}
 
-          <p className="sell__term">Runs {termWords(SINGLE_SESSION_MONTHS).en} from today.</p>
+          {term ? <p className="sell__term">Runs {term.en} from today.</p> : null}
 
           <div className="drawer__actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>

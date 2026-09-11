@@ -217,16 +217,28 @@
 
 /* The discount control: the kind, and the value beside it when there is one.
    Two fields on one line where there is room and stacked where there is not,
-   so a narrow drawer never puts the value below the fold. */
-.discount-fields {
+   so a narrow drawer never puts the value below the fold.
+
+   The term control is the same arrangement — a number and the unit beside it
+   — and shares the rule rather than repeating it. Its sentence sits under
+   both fields at the drawer's full width, because it is about the pair and
+   not about either box. */
+.discount-fields,
+.term-fields {
   display: flex;
   flex-wrap: wrap;
   align-items: start;
   gap: var(--s-3);
 }
 
-.discount-fields > * {
+.discount-fields > *,
+.term-fields > * {
   flex: 1 1 10rem;
+}
+
+.term {
+  display: grid;
+  gap: var(--s-2);
 }
 
 /* Money changing hands, and what a family has bought. */

@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { isoDateIn } from '@domain/shared/actor';
-import {
-  BalanceResponse,
-  type PurchaseRow,
-  type ServiceBalanceRow,
-} from '../../api/billing/ledger-schema';
+import { BalanceResponse, type ServiceBalanceRow } from '../../api/billing/ledger-schema';
 import type { ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
@@ -12,7 +7,6 @@ import { BillingNote } from './BillingNote';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate } from './BillingPage';
 import { ClientPicker } from './ClientPicker';
-import { ExtensionDrawer } from './ExtensionDrawer';
 import { formatDiscount, formatFils } from './money';
 import { PaymentDrawer } from './PaymentDrawer';
 
@@ -28,9 +22,16 @@ import { PaymentDrawer } from './PaymentDrawer';
  * thirty the practice is told in words how long a family has left, because a
  * family who loses prepaid sessions to a date nobody mentioned is a
  * complaint, not an accounting event.
+ *
+ * **A credit may have no expiry at all**, which is what the practice's own
+ * catalogue now carries (the operator's ruling of 12 September 2026,
+ * docs/superpowers/plans/2026-09-12-optional-terms.md). Wherever a date would
+ * be, the screen says so in words rather than leaving a cell blank: an em dash
+ * in an expiry column reads as a figure that failed to load.
  */
 
-const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+/** What a credit with no term says, wherever a date would otherwise be. */
+const NO_EXPIRY = 'No expiry';
 
 /**
  * What to say about an expiry, and how loudly.
@@ -67,7 +68,6 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
   const [client, setClient] = useState<ClientRow | null>(null);
   const [state, setState] = useState<State>({ kind: 'idle' });
   const [payingOpen, setPayingOpen] = useState(false);
-  const [extending, setExtending] = useState<PurchaseRow | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   const clientId = client?.id ?? null;
@@ -149,7 +149,7 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
         key: 'expiry',
         header: 'Runs out',
         numeric: true,
-        render: (row) => (row.nextExpiryOn ? formatDate(row.nextExpiryOn) : '—'),
+        render: (row) => (row.nextExpiryOn ? formatDate(row.nextExpiryOn) : NO_EXPIRY),
       },
     ],
     [],
@@ -163,14 +163,6 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
         .map((service) => `${service.remaining} × ${service.serviceTypeName}`)
         .join(', ')
     : '';
-  // The day the practice is on, for the one judgement this screen makes about
-  // a date of its own: whether an extension would land behind today. The
-  // three months are not counted here — `purchase.extendsTo` is
-  // `nextExtension`'s own answer, computed by the rule on the server
-  // (app/api/billing/sales.ts's `purchaseRow`) — so the screen offers the
-  // button on exactly the condition the route accepts, and never offers what
-  // it would refuse as `ended_too_long_ago`.
-  const today = isoDateIn(new Date(), PRACTICE_TIME_ZONE);
   const warningFor = balance ? WARNINGS[balance.expiryWarning] : undefined;
   const warning =
     balance && balance.nextExpiryOn && warningFor
@@ -253,22 +245,13 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                     <span className="name">
                       <span>{purchase.packageName}</span>
                       <span className="small muted">
-                        Bought {formatDate(purchase.purchasedOn)}, runs to{' '}
-                        {formatDate(purchase.extendedTo ?? purchase.expiresOn)}
+                        {purchase.expiresOn
+                          ? `Bought ${formatDate(purchase.purchasedOn)}, runs to ${formatDate(purchase.expiresOn)}`
+                          : // Sold under no term: the credits never expire, and
+                            // the line says the fact rather than trailing off
+                            // after the day of the sale.
+                            `Bought ${formatDate(purchase.purchasedOn)}, no expiry`}
                       </span>
-                      {purchase.extendedTo && purchase.extensionReason ? (
-                        // What was first agreed, and why it moved: an
-                        // extension is a decision somebody made, and the
-                        // record should say so without being asked.
-                        <span className="small muted">
-                          Extended from {formatDate(purchase.expiresOn)}. {purchase.extensionReason}
-                        </span>
-                      ) : null}
-                      {purchase.extensionsUsed > 0 ? (
-                        <span className="small muted">
-                          {purchase.extensionsUsed} of {purchase.extensionsAllowed} extensions used
-                        </span>
-                      ) : null}
                       {purchase.discountReason ? (
                         // What was given away on this sale, and why — the
                         // operator's purpose for the discount round
@@ -282,57 +265,12 @@ export function BalancesSection({ canWrite }: { canWrite: boolean }) {
                       ) : null}
                     </span>
                     <span className="numeric">{formatFils(purchase.grossFils)}</span>
-                    {canWrite &&
-                    purchase.status !== 'refunded' &&
-                    purchase.status !== 'cancelled' ? (
-                      purchase.extendsTo !== null && purchase.extendsTo >= today ? (
-                        <Button
-                          variant="secondary"
-                          onClick={() => {
-                            setNote(null);
-                            setExtending(purchase);
-                          }}
-                        >
-                          Extend
-                        </Button>
-                      ) : purchase.extensionsUsed === 2 ? (
-                        <span className="small muted">
-                          This programme has had its two extensions.
-                        </span>
-                      ) : (
-                        // Fewer than two used and still no button, which
-                        // leaves one case: `extendsTo` is a date already
-                        // behind today, so three more months would buy the
-                        // family no day they can use and would spend one of
-                        // the two they are allowed for ever. The route
-                        // refuses it as `ended_too_long_ago`; these are the
-                        // drawer's own words for it, because a control that
-                        // is simply absent tells a coordinator nothing.
-                        <span className="small muted">
-                          This programme ended more than three months ago, so three more months
-                          would still be in the past. A programme that needs longer is a refund and
-                          a new sale.
-                        </span>
-                      )
-                    ) : null}
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
         </>
-      ) : null}
-
-      {extending ? (
-        <ExtensionDrawer
-          purchase={extending}
-          onClose={() => setExtending(null)}
-          onExtended={(summary) => {
-            setExtending(null);
-            setNote(summary);
-            load();
-          }}
-        />
       ) : null}
 
       {payingOpen && client ? (

@@ -49,15 +49,17 @@ describe('POST /api/billing/session-purchases', () => {
     expect(body.netFils).toBe(70_000);
     expect(body.grossFils).toBe(70_000);
     expect(body.invoiceReference).toMatch(/^INV-\d{6}$/);
-    // Twelve months from SEED_TODAY (db/seed/generate.ts: '2026-09-02'), not
-    // from 10 September — the brief's own draft assumed SEED_TODAY was the
-    // day this round started rather than the fixed seed date.
-    expect(body.expiresOn).toBe('2027-09-02');
+    // No date at all. The twelve months this used to expect came from a
+    // constant in the code; the term is the price row's own now (migration
+    // 412), and a price carries none until the practice sets one — so these
+    // credits never expire, which is the operator's ruling of 12 September
+    // 2026. The two cases below walk a price that does carry a term.
+    expect(body.expiresOn).toBeNull();
     const credit = await h.owner.query<{
       source_type: string;
       invoice_id: string;
       status: string;
-      expires_on: string;
+      expires_on: string | null;
       allocated_net_fils: number;
     }>(
       'select source_type, invoice_id, status, expires_on, allocated_net_fils from entitlement where id = $1',
@@ -68,6 +70,10 @@ describe('POST /api/billing/session-purchases', () => {
       invoice_id: body.invoiceId,
       status: 'available',
       allocated_net_fils: 70_000,
+      // The credit carries the same nothing the answer did: a date written
+      // here and not there, or the other way round, is how a household ends
+      // up being told one thing and charged another.
+      expires_on: null,
     });
     const invoice = await h.owner.query<{
       kind: string;
@@ -85,6 +91,69 @@ describe('POST /api/billing/session-purchases', () => {
       body.invoiceId,
     ]);
     expect(paid.rows).toHaveLength(0);
+  });
+
+  /**
+   * The term the price itself carries, in each unit (migration 412). The
+   * catalogue screen that sets it is task 4's; the row is written here the way
+   * that screen will write it, so the sale can be walked end to end today.
+   */
+  describe('a price that does carry a term', () => {
+    /** The brain map's price, which this suite prices and no other case dates. */
+    const CODE = 'brain-map';
+
+    async function setTerm(amount: number | null, unit: string | null): Promise<void> {
+      await h.owner.query(
+        'update price set expiry_amount = $1, expiry_unit = $2 ' +
+          'where tenant_id = $3 and service_type_id = $4',
+        [amount, unit, h.data.tenant.id, h.serviceTypeId(CODE)],
+      );
+    }
+
+    /** The day on the credit itself, as the database holds it. */
+    async function creditExpiry(entitlementId: string): Promise<string | null> {
+      const { rows } = await h.owner.query<{ expires_on: string | null }>(
+        "select to_char(expires_on, 'YYYY-MM-DD') as expires_on from entitlement where id = $1",
+        [entitlementId],
+      );
+      return rows[0]?.expires_on ?? null;
+    }
+
+    async function sell(clientIndex: number): Promise<SellSessionResponse> {
+      const res = await h.call(
+        'POST',
+        '/api/billing/session-purchases',
+        SEEDED.owner,
+        sale({ clientId: h.clientId(clientIndex), serviceTypeId: h.serviceTypeId(CODE) }),
+      );
+      expect(res.status).toBe(201);
+      return (await res.json()) as SellSessionResponse;
+    }
+
+    it('counts a term in days from the day of the sale, with no clamp', async () => {
+      await setTerm(30, 'day');
+      const sold = await sell(5);
+      // Thirty days from 2026-09-02 is 2 October: plain addition, which is
+      // what a day term means, and it is not pulled back into a shorter month.
+      expect(sold.expiresOn).toBe('2026-10-02');
+      expect(await creditExpiry(sold.entitlementId)).toBe('2026-10-02');
+      await setTerm(null, null);
+    });
+
+    it('counts a term in months, and lets the practice take the term away again', async () => {
+      await setTerm(6, 'month');
+      const dated = await sell(6);
+      expect(dated.expiresOn).toBe('2027-03-02');
+
+      // The term taken off the price: the next sale writes no date at all,
+      // and the sale already made keeps the term it was sold — a household
+      // keeps what it bought (the plan's own risk, answered).
+      await setTerm(null, null);
+      const termless = await sell(7);
+      expect(termless.expiresOn).toBeNull();
+      expect(await creditExpiry(termless.entitlementId)).toBeNull();
+      expect(await creditExpiry(dated.entitlementId)).toBe('2027-03-02');
+    });
   });
 
   it('records the payment and its receipt when money changed hands', async () => {

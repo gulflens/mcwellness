@@ -214,7 +214,7 @@ describe('the stop card’s balance', () => {
       'paidFils',
       'purchases',
       'invoiceId',
-      'extensionReason',
+      'discountReason',
       'expiresOn',
       'serviceTypeId',
     ]) {

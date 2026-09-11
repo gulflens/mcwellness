@@ -217,7 +217,10 @@ export function silverInput(h: Harness, validFrom: string) {
     name: 'Silver',
     nameAr: 'الفضية',
     listPriceFils: 1_215_000,
-    expiryMonths: 12,
+    // A term the fixture sets on purpose, so the suites read a dated
+    // programme end to end. A bundle may carry none at all now (migration
+    // 412); the suite that walks that case overrides this with `term: null`.
+    term: { amount: 12, unit: 'month' as const },
     components: [
       { serviceTypeId: h.serviceTypeId('consultation'), quantity: 1 },
       { serviceTypeId: h.serviceTypeId('brain-map'), quantity: 2 },

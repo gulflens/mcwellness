@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { DEFAULT_EXPIRY_MONTHS, termWords } from '@domain/billing';
 import { isoDateIn } from '@domain/shared/actor';
 import { PackageResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import {
@@ -13,6 +12,7 @@ import { Button, Field, Note } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
 import { DiscountFields } from './DiscountFields';
 import { focusFirstInvalid } from './refusal';
+import { NO_TERM, readTerm, TermFields, type TermDraft, type TermRefusal } from './TermFields';
 import { useDrawer } from './useDrawer';
 import {
   AED_MAX_FILS,
@@ -77,6 +77,7 @@ type FieldErrors = {
   contents?: string;
   price?: string;
   reason?: string;
+  term?: TermRefusal;
 };
 
 /** Lower case, digits and hyphens: the shape the database's own check allows. */
@@ -103,10 +104,11 @@ export function PackageDrawer({
   const [name, setName] = useState('');
   const [codeTouched, setCodeTouched] = useState(false);
   const [code, setCode] = useState('');
-  // The default term is the rule's, not a figure typed here: the field, the
-  // hint below and `DEFAULT_EXPIRY_MONTHS` are one fact
-  // (domain/billing/expiry.ts).
-  const [expiryMonths, setExpiryMonths] = useState(String(DEFAULT_EXPIRY_MONTHS));
+  // A new programme starts with no term at all: the credits it sells never
+  // expire unless the practice says otherwise, and there is no default figure
+  // and no default unit to be accepted by accident (the operator's ruling of
+  // 12 September 2026).
+  const [term, setTerm] = useState<TermDraft>(NO_TERM);
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [listPrice, setListPrice] = useState('');
   const [listPriceTouched, setListPriceTouched] = useState(false);
@@ -244,8 +246,14 @@ export function PackageDrawer({
     if (!isRealText(trimmedReason)) {
       errors.reason = `Say why in at least ${MINIMUM_REASON} characters.`;
     }
+    // Half a term never reaches the server: migration 412's constraint would
+    // refuse it, but a coordinator should not meet that as a 400.
+    const reading = readTerm(term);
+    if (!reading.ok) {
+      errors.term = { message: reading.message, focus: reading.focus };
+    }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0 || listFils === null || applied === null) {
+    if (Object.keys(errors).length > 0 || listFils === null || applied === null || !reading.ok) {
       // In the order the fields sit on screen, so focus moves to the first
       // thing wrong rather than the first thing checked.
       focusFirstInvalid(
@@ -255,6 +263,7 @@ export function PackageDrawer({
           errors.contents ? 'quantity-first' : null,
           errors.price ? 'package-sale-price' : null,
           errors.reason ? 'package-reason' : null,
+          errors.term ? `package-term-${errors.term.focus}` : null,
         ].filter((id): id is string => id !== null),
       );
       return;
@@ -275,7 +284,9 @@ export function PackageDrawer({
           code: effectiveCode,
           name: name.trim(),
           listPriceFils: listFils,
-          expiryMonths: Number(expiryMonths),
+          // Null, deliberately, when the programme has no term: the credits
+          // it sells never expire, and the sale writes no date at all.
+          term: reading.term,
           components: chosen.map((entry) => ({
             serviceTypeId: entry.price.serviceTypeId,
             quantity: entry.quantity,
@@ -454,15 +465,14 @@ export function PackageDrawer({
             onChange={(e) => setReason(e.target.value)}
             error={fieldErrors.reason}
           />
-          <Field
-            id="package-expiry"
-            label="Runs for (months)"
-            type="number"
-            min={1}
-            max={60}
-            value={expiryMonths}
-            onChange={(e) => setExpiryMonths(e.target.value)}
-            hint={`How long a family has to use it. ${termWords(DEFAULT_EXPIRY_MONTHS).en} unless the practice decides otherwise.`}
+          <TermFields
+            id="package-term"
+            draft={term}
+            error={fieldErrors.term}
+            onChange={(next) => {
+              setTerm(next);
+              clearFieldError('term');
+            }}
           />
 
           {formError ? <Note tone="critical">{formError}</Note> : null}

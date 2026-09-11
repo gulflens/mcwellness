@@ -7,18 +7,9 @@ export { currentPriceFor, validateNewPrice } from './price';
 export type { NewPriceApproval, NewPriceRefusal, Price } from './price';
 export { allocateEntitlements, standaloneTotalFils } from './allocation';
 export type { AllocatedEntitlement, PackageComponent } from './allocation';
-export {
-  DEFAULT_EXPIRY_MONTHS,
-  EXPIRY_WARNING_DAYS,
-  SINGLE_SESSION_MONTHS,
-  daysBetween,
-  expiryOn,
-  expiryWarningFor,
-  isUsableOn,
-} from './expiry';
-export type { ExpiryWarning } from './expiry';
-export { EXTENSION_MONTHS, MAX_EXTENSIONS, nextExtension, termWords } from './extension';
-export type { Extension } from './extension';
+export { EXPIRY_WARNING_DAYS, daysBetween, expiryOn, expiryWarningFor, isUsableOn } from './expiry';
+export type { ExpiryTerm, ExpiryUnit, ExpiryWarning } from './expiry';
+export { termWords } from './term';
 export {
   CONSUMPTION_KINDS,
   ENTITLEMENT_STATUSES,

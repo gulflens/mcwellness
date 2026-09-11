@@ -5,7 +5,6 @@ import type {
   SellPackageResponse,
   SellSessionResponse,
 } from '../../../app/api/billing/ledger-schema';
-import { expiryOn, SINGLE_SESSION_MONTHS } from '../../../domain/billing';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import {
   SEEDED,
@@ -162,7 +161,7 @@ describe('a session sold ahead of its visit', () => {
    * previous block's own identities depend on that being the tenant's only
    * deferred credit, so this one runs after it rather than before.
    */
-  it('shows one credit left, twelve months out, and charged by the gross', async () => {
+  it('shows one credit left, with no expiry, and charged by the gross', async () => {
     const clientId = h.clientId(1);
     const before = (await (
       await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner)
@@ -185,12 +184,13 @@ describe('a session sold ahead of its visit', () => {
     expect(service?.remaining).toBe(1);
     expect(service?.delivered).toBe(0);
 
-    // Twelve months from the day it was bought — SINGLE_SESSION_MONTHS in
-    // domain/billing/expiry.ts, never a date written down here, which would
-    // rot the moment the term changes.
-    const expected = expiryOn(SEED_TODAY, SINGLE_SESSION_MONTHS);
-    expect(sale.expiresOn).toBe(expected);
-    expect(service?.nextExpiryOn).toBe(expected);
+    // No date at all. The twelve months this assertion used to expect came
+    // from a constant in the code; the term is the price row's own now, and
+    // the seeded price carries none, so the credit never expires (the
+    // operator's ruling of 12 September 2026). A dated price is walked in
+    // tests/billing/db/session_sales.test.ts.
+    expect(sale.expiresOn).toBeNull();
+    expect(service?.nextExpiryOn).toBeNull();
 
     // The same figure the sale itself answered, and "Charged" rose by exactly
     // it — a credit sold ahead of its visit counts on the money screen like

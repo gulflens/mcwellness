@@ -33,6 +33,13 @@ const NOW = () => new Date('2026-09-02T08:00:00.000Z');
  */
 const SIX_MONTH_CODE = 'bronze-under-test';
 
+/**
+ * A fourth, carrying **no term at all** — the shape the operator ruled for on
+ * 12 September 2026 and the one the three live programmes will end up in.
+ * Sold, it writes no expiry date anywhere and its invoice line names no term.
+ */
+const TERMLESS_CODE = 'copper-under-test';
+
 let h: Harness;
 
 beforeAll(async () => {
@@ -118,7 +125,7 @@ describe('the bundle catalogue', () => {
     // figure the founder published.
     expect(body.package.componentsTotalFils).toBe(1_215_000);
     expect(body.package.sellable).toBe(true);
-    expect(body.package.expiryMonths).toBe(12);
+    expect(body.package.term).toEqual({ amount: 12, unit: 'month' });
   });
 
   it('charges no VAT while the practice is not registered, so the total is the price', async () => {
@@ -449,7 +456,7 @@ describe('selling a Silver package', () => {
       code: SIX_MONTH_CODE,
       name: 'Bronze',
       nameAr: 'البرونزية',
-      expiryMonths: 6,
+      term: { amount: 6, unit: 'month' },
     });
     expect(created.status).toBe(201);
     const bundleId = ((await created.json()) as PackageResponse).package.id;
@@ -470,6 +477,60 @@ describe('selling a Silver package', () => {
     expect(rows).toEqual([
       { description: 'Bronze, 6 months', description_ar: 'البرونزية، 6 أشهر' },
     ]);
+  });
+
+  it('sells a programme with no term at all: no date, and a line that names none', async () => {
+    // The operator's ruling of 12 September 2026, end to end. A bundle with
+    // an empty term sells credits that never expire: the purchase carries no
+    // date, every credit carries no date, and the invoice line is the
+    // bundle's name and nothing after it — not a sentence about not expiring,
+    // and not a date nobody agreed to.
+    const created = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...silverInput(h, SEED_TODAY),
+      code: TERMLESS_CODE,
+      name: 'Copper',
+      nameAr: 'النحاسية',
+      term: null,
+    });
+    expect(created.status).toBe(201);
+    const bundle = ((await created.json()) as PackageResponse).package;
+    expect(bundle.term).toBeNull();
+
+    // A household of its own: the charged totals asserted elsewhere in this
+    // file belong to clients 0 to 3, and a sale on one of those would move
+    // them.
+    const clientId = h.clientId(4);
+    const sold = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: bundle.id,
+      clientId,
+      purchasedOn: SEED_TODAY,
+    });
+    expect(sold.status).toBe(201);
+    const { purchase } = (await sold.json()) as SellPackageResponse;
+    expect(purchase.expiresOn).toBeNull();
+
+    const { rows: stored } = await h.owner.query<{ expires_on: string | null; credits: string }>(
+      'select p.expires_on, (select count(*)::text from entitlement e ' +
+        'where e.package_purchase_id = p.id and e.expires_on is null) as credits ' +
+        'from package_purchase p where p.id = $1',
+      [purchase.id],
+    );
+    expect(stored[0]).toEqual({ expires_on: null, credits: '18' });
+
+    const { rows } = await h.owner.query<{ description: string; description_ar: string | null }>(
+      'select l.description, l.description_ar from invoice_line l ' +
+        'join invoice i on i.id = l.invoice_id where i.package_purchase_id = $1',
+      [purchase.id],
+    );
+    expect(rows).toEqual([{ description: 'Copper', description_ar: 'النحاسية' }]);
+
+    // And the household's own balance says the credits never lapse rather
+    // than guessing a date for them.
+    const res = await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner);
+    const balance = (await res.json()) as BalanceResponse;
+    expect(balance.nextExpiryOn).toBeNull();
+    expect(balance.expiryWarning).toBe('none');
+    expect(balance.services.find((s) => s.serviceTypeCode === 'nf-session')?.remaining).toBe(15);
   });
 
   it('shows the family fifteen sessions to come and nothing owed', async () => {

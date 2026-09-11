@@ -30,6 +30,16 @@ const NF_SESSION_PRICE = {
   validFrom: '2026-09-02',
   supersedesId: null,
   amendmentReason: 'Launch pricing, ends on the founder’s word.',
+  // No term, which is what every seeded price carries: the credits a family
+  // buys never expire unless the practice sets a term on this row
+  // (migration 412, the operator's ruling of 12 September 2026).
+  term: null as { amount: number; unit: 'day' | 'month' } | null,
+};
+
+/** The same row with a term the practice set on it deliberately. */
+const NF_SESSION_PRICE_WITH_TERM = {
+  ...NF_SESSION_PRICE,
+  term: { amount: 30, unit: 'day' as const },
 };
 
 /** The same row with the price list's own discount on it. */
@@ -219,10 +229,18 @@ describe('SellSessionDrawer', () => {
     });
   });
 
-  it('says the credit runs twelve months, and nothing about an extension', async () => {
+  it('says the term the price carries, and nothing about an extension', async () => {
+    // The term is read off the price being sold, not from a constant in the
+    // code — which is what retired `SINGLE_SESSION_MONTHS`.
+    mount(() => undefined, NF_SESSION_PRICE_WITH_TERM);
+    await chooseService();
+    expect(screen.getByText('Runs 30 days from today.')).toBeTruthy();
+    expect(screen.queryByText(/extension/i)).toBeNull();
+  });
+
+  it('says nothing at all where the price carries no term', async () => {
     mount();
     await chooseService();
-    expect(screen.getByText('Runs 12 months from today.')).toBeTruthy();
-    expect(screen.queryByText(/extension/i)).toBeNull();
+    expect(screen.queryByText(/^Runs /)).toBeNull();
   });
 });

@@ -327,7 +327,8 @@ export async function applySeed(
         name: p.name,
         name_ar: p.nameAr,
         list_price_fils: p.listPriceFils,
-        expiry_months: p.expiryMonths,
+        expiry_amount: p.expiryAmount,
+        expiry_unit: p.expiryUnit,
         created_by: owner,
       });
       for (const c of p.components) {

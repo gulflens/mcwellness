@@ -21,6 +21,38 @@ export const ServiceTypeOptionsResponse = z.object({
 });
 export type ServiceTypeOptionsResponse = z.infer<typeof ServiceTypeOptionsResponse>;
 
+/**
+ * How long the credits something sells last: a whole number with its unit
+ * beside it (migration 412, the operator's ruling of 12 September 2026). A
+ * `package` carries one and so does a `price`, and both may carry none — and
+ * none is expressed as `null` on the field this shape sits in, never as a
+ * half-filled pair. That is the point of sending the two together: a number
+ * with no unit is the way a term goes wrong, and it cannot be put on the wire
+ * at all.
+ *
+ * Five years is the ceiling in either unit — the sixty months the bundle
+ * catalogue always allowed, said in days as well. Migration 412 holds the same
+ * ceiling in the database, because the catalogue's lists parse what they read
+ * with this very shape: a row written over it by hand, as a data step writes,
+ * would otherwise fail every list that reads it. Here it is said first, so a
+ * mistyped 3650 in a field set to months is refused with a sentence rather
+ * than a constraint violation.
+ *
+ * It lives in this file rather than in `ledger-schema.ts`, which re-exports
+ * it, because that file imports this one and both catalogues need the one
+ * declaration.
+ */
+export const Term = z
+  .object({
+    amount: z.number().int().min(1),
+    unit: z.enum(['day', 'month']),
+  })
+  .refine(
+    (term) => term.amount <= (term.unit === 'month' ? 60 : 1825),
+    'A term is at most five years, in either unit.',
+  );
+export type Term = z.infer<typeof Term>;
+
 export const PriceRow = z.object({
   id: z.uuid(),
   serviceTypeId: z.uuid(),
@@ -42,6 +74,14 @@ export const PriceRow = z.object({
   /** The price this one replaces; null only for a service's first price. */
   supersedesId: z.uuid().nullable(),
   amendmentReason: z.string(),
+  /**
+   * How long a session bought at this price stays usable, and null when it
+   * never stops being usable — which is what every price carries until the
+   * practice sets a term on one. It is read off the row rather than taken
+   * from a constant in the code, which is what retired
+   * `SINGLE_SESSION_MONTHS`.
+   */
+  term: Term.nullable(),
 });
 export type PriceRow = z.infer<typeof PriceRow>;
 
@@ -86,12 +126,12 @@ export const IsoDate = z
  * Why something was done, in enough words to be worth reading a year later.
  *
  * A reason of one character passed every check while saying nothing: "x",
- * ".", "aaaaaaaa". These appear on price changes, waivers and extensions —
- * the three places where somebody gave money away or took a charge back — and
- * the whole purpose of the field is that a person later can see what
- * happened. So: at least eight characters after trimming, and not the same
- * character repeated, which is what a required field collects when nobody
- * means to fill it in.
+ * ".", "aaaaaaaa". In billing these appear on price changes, on an extra
+ * discount given at a sale, and on waivers — the places where somebody gave
+ * money away or took a charge back — and the whole purpose of the field is
+ * that a person later can see what happened. So: at least eight characters
+ * after trimming, and not the same character repeated, which is what a
+ * required field collects when nobody means to fill it in.
  */
 export const MINIMUM_REASON = 8;
 
@@ -150,6 +190,16 @@ export const CreatePriceInput = z
      */
     unitPriceFils: z.number().int().nonnegative().max(INT4_MAX).optional(),
     discount: DiscountInput.nullable().optional(),
+    /**
+     * **Optional, and the three states are all different.** A term sent is
+     * the term written; `null` takes a term away deliberately; **absent
+     * carries the superseded row's term forward** (the controller's ruling of
+     * 12 September 2026). Required would mean a screen that forgot to prefill
+     * silently wiping a term the practice set on purpose — the trap
+     * `INSERT_PRICE_SQL` closes — so absence is the safe default and removal
+     * is the deliberate act.
+     */
+    term: Term.nullable().optional(),
     validFrom: IsoDate,
     /**
      * Why, in enough words to be worth reading a year later. The same rule the

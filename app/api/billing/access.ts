@@ -101,17 +101,6 @@ export function mayWaive(actor: Actor, now: Date): boolean {
 }
 
 /**
- * Extending a programme's expiry. The founder's decision of 2026-09-03 puts
- * this at the coordinator's discretion, and a coordinator here is one of the
- * three money roles: an extension gives away sessions the practice has been
- * paid for, which is a commercial decision even when it is an obviously kind
- * one.
- */
-export function mayExtend(actor: Actor, now: Date): boolean {
-  return may(actor, 'billing.waiver.write', PRICE_WRITE, now);
-}
-
-/**
  * Giving an extra discount at a sale: the owner, an admin or finance, and
  * nobody else (docs/SPEC/billing.md section 2.4). The same three roles
  * migration 408 lets forgive a call-out fee, for the same reason — a discount

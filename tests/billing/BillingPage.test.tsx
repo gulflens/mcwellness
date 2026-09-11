@@ -47,6 +47,9 @@ const NF_PRICE = {
   validFrom: '2026-09-02',
   supersedesId: null,
   amendmentReason: 'Setting the launch price.',
+  // No term: the credits a single session sells never expire unless the
+  // practice sets one on this row (migration 412).
+  term: null,
 };
 
 // A practice registered for VAT: the rate is stamped on the row and it is
@@ -79,6 +82,7 @@ const CREATED_PRICE = {
   validFrom: '2026-12-01',
   supersedesId: '00000004-0000-4000-8000-000000000101',
   amendmentReason: 'Adjusting for the new season.',
+  term: null,
 };
 
 const VAT_RATE = { rateBasisPoints: 500, effectiveFrom: '2018-01-01' };
@@ -195,6 +199,34 @@ describe('BillingPage', () => {
     await screen.findByText('Neurofeedback session');
     expect(screen.getByText('15%')).toBeTruthy();
     expect(screen.getAllByText('765.00')).toHaveLength(2);
+  });
+
+  it('says how long a credit sold at each price runs, and "No expiry" where the price sets none', async () => {
+    // A term set on a price carries forward through every amendment, so the
+    // list is where it has to be seen. The words are domain/billing/term.ts's,
+    // exactly as the Packages list's "Runs for" column reads them.
+    mount(OWNER, {
+      body: {
+        vatRegistered: true,
+        prices: [
+          NF_PRICE,
+          {
+            ...NF_PRICE,
+            id: '00000004-0000-4000-8000-000000000103',
+            serviceTypeId: '00000004-0000-4000-8000-000000000006',
+            serviceTypeCode: 'qeeg',
+            serviceTypeName: 'Brain map (QEEG)',
+            serviceTypeNameAr: null,
+            term: { amount: 30, unit: 'day' },
+          },
+        ],
+      },
+    });
+    await screen.findByText('Brain map (QEEG)');
+    expect(screen.getByText('Runs for')).toBeTruthy();
+    expect(screen.getByText('30 days')).toBeTruthy();
+    // The neurofeedback price sets no term: said in words, not left blank.
+    expect(screen.getAllByText('No expiry')).toHaveLength(1);
   });
 
   it('offers "Add price" to the owner, as the page header\'s secondary action', async () => {

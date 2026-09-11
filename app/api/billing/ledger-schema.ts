@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { MAX_EXTENSIONS } from '../../../domain/billing';
 import { cleanText } from '../_middleware/text';
-import { DiscountInput, IsoDate, isRealText, MINIMUM_REASON } from './schema';
+import { DiscountInput, IsoDate, isRealText, MINIMUM_REASON, Term } from './schema';
 
 /**
  * The shapes the packages, sales, payments, balance, invoice and refund
@@ -50,6 +49,15 @@ const PaymentReference = z
  */
 export const IdempotencyKey = z.uuid();
 
+/**
+ * How long the credits something sells last, declared once in `schema.ts`
+ * and re-exported here because a `package` and a `price` carry the same pair
+ * (migration 412, the operator's ruling of 12 September 2026). Whole or
+ * absent, never half; `null` on the field it sits in is how the practice says
+ * these credits never expire.
+ */
+export { Term };
+
 // ---------------------------------------------------------------------------
 // The bundle catalogue
 // ---------------------------------------------------------------------------
@@ -90,7 +98,12 @@ export const PackageRow = z.object({
   nameAr: z.string().nullable(),
   /** What the contents come to bought one at a time, as the practice publishes it. */
   listPriceFils: z.number().int().nonnegative(),
-  expiryMonths: z.number().int().positive(),
+  /**
+   * How long the credits this bundle sells last, and null when they never
+   * expire — which is what an empty term means and what the three live
+   * programmes will carry (the operator's ruling of 12 September 2026).
+   */
+  term: Term.nullable(),
   status: z.enum(['active', 'inactive']),
   components: z.array(PackageComponentRow),
   /** The price in force today; null when none has started yet. */
@@ -154,7 +167,8 @@ export const CreatePackageInput = z.object({
     .nullable()
     .optional(),
   listPriceFils: Fils,
-  expiryMonths: z.number().int().min(1).max(60),
+  /** Sent as null, deliberately, for a bundle whose credits never expire. */
+  term: Term.nullable(),
   components: z
     .array(z.object({ serviceTypeId: z.uuid(), quantity: z.number().int().min(1).max(1000) }))
     .min(1)
@@ -222,19 +236,13 @@ export const PurchaseRow = z.object({
   discountBasisPoints: z.number().int().min(0).max(10_000).nullable(),
   /** Why an extra discount was given at this sale; null when there was none. */
   discountReason: z.string().nullable(),
-  expiresOn: z.string(),
-  extendedTo: z.string().nullable(),
-  extensionReason: z.string().nullable(),
-  /** How many of the two extensions this programme has had. */
-  extensionsUsed: z.number().int().min(0).max(MAX_EXTENSIONS),
-  extensionsAllowed: z.literal(MAX_EXTENSIONS),
   /**
-   * The end the next extension would reach; null once the programme has had
-   * its two. The screen shows the date it is offering before anybody asks
-   * for it, and the count is the database's rather than a drawer's arithmetic
-   * (docs/PLAN/package-terms.md, the operator's decision 9 of 2026-09-10).
+   * The day these credits stop being usable, and **null when they never do**
+   * — the programme was sold with no term, so there is no date to show rather
+   * than a date a screen has to invent (the operator's ruling of 12 September
+   * 2026). A screen says "No expiry"; it does not leave the cell blank.
    */
-  extendsTo: z.string().nullable(),
+  expiresOn: z.string().nullable(),
   status: z.enum(['active', 'completed', 'expired', 'refunded', 'cancelled']),
   invoiceId: z.uuid().nullable(),
 });
@@ -271,7 +279,8 @@ export const SellSessionResponse = z.object({
   netFils: z.number().int().nonnegative(),
   vatFils: z.number().int().nonnegative(),
   grossFils: z.number().int().nonnegative(),
-  expiresOn: z.string(),
+  /** Null when the price this session was sold at carries no term at all. */
+  expiresOn: z.string().nullable(),
 });
 export type SellSessionResponse = z.infer<typeof SellSessionResponse>;
 
@@ -436,23 +445,6 @@ export const RefundQuoteResponse = z.object({
   quoteOnly: z.literal(true),
 });
 export type RefundQuoteResponse = z.infer<typeof RefundQuoteResponse>;
-
-/**
- * Extending a programme's expiry: the coordinator's discretion, with a reason
- * (docs/SPEC/billing.md section 4.3, and the founder's decision of
- * 2026-09-03). A reason and nothing else. The length is not the coordinator's
- * to choose — an extension is always exactly three months from the current
- * end, and a programme may have two (docs/PLAN/package-terms.md, the
- * operator's decision 9 of 2026-09-10) — so there is no date on the wire for
- * a screen to get wrong, and no shortening of a prepaid programme to refuse.
- */
-export const ExtendPurchaseInput = z.object({
-  reason: Reason,
-});
-export type ExtendPurchaseInput = z.infer<typeof ExtendPurchaseInput>;
-
-export const ExtendPurchaseResponse = z.object({ purchase: PurchaseRow });
-export type ExtendPurchaseResponse = z.infer<typeof ExtendPurchaseResponse>;
 
 export const WaiveEntitlementInput = z.object({ reason: Reason });
 export type WaiveEntitlementInput = z.infer<typeof WaiveEntitlementInput>;

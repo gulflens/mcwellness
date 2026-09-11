@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { termWords } from '@domain/billing';
 import { PackagesResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
@@ -161,7 +162,10 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         key: 'expiry',
         header: 'Runs for',
         numeric: true,
-        render: (row) => `${row.expiryMonths} months`,
+        // The term in the rule's own words, and "No expiry" where there is
+        // none — a fact said plainly rather than a cell left blank for a
+        // reader to guess at (the operator's ruling of 12 September 2026).
+        render: (row) => termWords(row.term)?.en ?? 'No expiry',
       },
       {
         key: 'from',

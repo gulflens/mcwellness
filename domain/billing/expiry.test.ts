@@ -1,49 +1,87 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_EXPIRY_MONTHS,
-  SINGLE_SESSION_MONTHS,
-  daysBetween,
-  expiryOn,
-  expiryWarningFor,
-  isUsableOn,
-} from './expiry';
+import { daysBetween, expiryOn, expiryWarningFor, isUsableOn } from './expiry';
+import type { ExpiryTerm } from './expiry';
 
 /**
- * The specification for package expiry (docs/SPEC/billing.md section 4.3):
- * six months from purchase, the operator's decision 9 of 10 September 2026
- * (docs/PLAN/package-terms.md); twelve from the founder's decision of
- * 3 September until then. The warnings at sixty and thirty days are
- * unchanged.
+ * The specification for package expiry (docs/SPEC/billing.md section 4.3) as
+ * the operator's ruling of 12 September 2026 leaves it
+ * (docs/superpowers/plans/2026-09-12-optional-terms.md): a term is optional,
+ * and where there is one it is a whole number with a unit beside it. No term
+ * means the credits never expire, and the rule says so by returning null
+ * rather than a date, which is what the catalogue and the sale then write.
+ * The warnings at sixty and thirty days are unchanged.
  */
 
 describe('expiryOn', () => {
-  it('is six months from purchase by default', () => {
-    expect(DEFAULT_EXPIRY_MONTHS).toBe(6);
-    expect(expiryOn('2026-09-03', DEFAULT_EXPIRY_MONTHS)).toBe('2027-03-03');
+  it('gives no date at all to a programme sold without a term', () => {
+    expect(expiryOn('2026-09-03', null)).toBeNull();
   });
 
-  it('crosses the year end without losing a day', () => {
-    expect(expiryOn('2026-11-30', 3)).toBe('2027-02-28');
-    expect(expiryOn('2026-12-31', 1)).toBe('2027-01-31');
+  describe('a term counted in months', () => {
+    it('lands on the same day of the month, the stated number of months later', () => {
+      expect(expiryOn('2026-09-03', { amount: 6, unit: 'month' })).toBe('2027-03-03');
+    });
+
+    it('crosses the year end without losing a day', () => {
+      expect(expiryOn('2026-11-30', { amount: 3, unit: 'month' })).toBe('2027-02-28');
+      expect(expiryOn('2026-12-31', { amount: 1, unit: 'month' })).toBe('2027-01-31');
+    });
+
+    it('falls back to the last day of a month too short to hold the same date', () => {
+      expect(expiryOn('2026-08-31', { amount: 6, unit: 'month' })).toBe('2027-02-28');
+      expect(expiryOn('2027-08-31', { amount: 6, unit: 'month' })).toBe('2028-02-29');
+    });
+
+    it('keeps a leap day when the target year has one', () => {
+      expect(expiryOn('2028-02-29', { amount: 12, unit: 'month' })).toBe('2029-02-28');
+    });
+
+    it('refuses a term that is not a whole number of months', () => {
+      expect(() => expiryOn('2026-09-03', { amount: 0, unit: 'month' })).toThrow(RangeError);
+      expect(() => expiryOn('2026-09-03', { amount: 1.5, unit: 'month' })).toThrow(RangeError);
+      expect(() => expiryOn('2026-09-03', { amount: -3, unit: 'month' })).toThrow(RangeError);
+    });
   });
 
-  it('falls back to the last day of a month too short to hold the same date', () => {
-    expect(expiryOn('2026-08-31', 6)).toBe('2027-02-28');
-    expect(expiryOn('2027-08-31', 6)).toBe('2028-02-29');
+  describe('a term counted in days', () => {
+    it('adds the days and nothing else', () => {
+      expect(expiryOn('2026-09-03', { amount: 1, unit: 'day' })).toBe('2026-09-04');
+      expect(expiryOn('2026-09-03', { amount: 14, unit: 'day' })).toBe('2026-09-17');
+    });
+
+    it('runs straight through the end of a month, with no clamp to shorten it', () => {
+      expect(expiryOn('2026-08-31', { amount: 1, unit: 'day' })).toBe('2026-09-01');
+      // Where three months from 30 November is pulled back to 28 February,
+      // thirty days from 31 January simply runs on to 2 March: the clamp is
+      // the month branch's, and the day branch has nothing to clamp.
+      expect(expiryOn('2026-01-31', { amount: 30, unit: 'day' })).toBe('2026-03-02');
+    });
+
+    it('runs through the end of a year', () => {
+      expect(expiryOn('2026-12-31', { amount: 1, unit: 'day' })).toBe('2027-01-01');
+      expect(expiryOn('2026-12-20', { amount: 30, unit: 'day' })).toBe('2027-01-19');
+    });
+
+    it('counts the leap day as a day, and does not invent one', () => {
+      expect(expiryOn('2028-02-28', { amount: 2, unit: 'day' })).toBe('2028-03-01');
+      expect(expiryOn('2027-02-28', { amount: 2, unit: 'day' })).toBe('2027-03-02');
+    });
+
+    it('refuses a term that is not a whole number of days', () => {
+      expect(() => expiryOn('2026-09-03', { amount: 0, unit: 'day' })).toThrow(RangeError);
+      expect(() => expiryOn('2026-09-03', { amount: 2.5, unit: 'day' })).toThrow(RangeError);
+      expect(() => expiryOn('2026-09-03', { amount: -1, unit: 'day' })).toThrow(RangeError);
+    });
   });
 
-  it('keeps a leap day when the target year has one', () => {
-    expect(expiryOn('2028-02-29', 12)).toBe('2029-02-28');
+  it('refuses a unit the practice does not count in', () => {
+    const weeks = { amount: 6, unit: 'week' } as unknown as ExpiryTerm;
+    expect(() => expiryOn('2026-09-03', weeks)).toThrow(RangeError);
   });
 
-  it('refuses a period that is not a whole number of months', () => {
-    expect(() => expiryOn('2026-09-03', 0)).toThrow(RangeError);
-    expect(() => expiryOn('2026-09-03', 1.5)).toThrow(RangeError);
-  });
-
-  it('gives a session sold on its own twelve months, fixed rather than tied to the package term', () => {
-    expect(SINGLE_SESSION_MONTHS).toBe(12);
-    expect(expiryOn('2026-09-10', SINGLE_SESSION_MONTHS)).toBe('2027-09-10');
+  it('refuses something that is not a calendar date, in either unit', () => {
+    expect(() => expiryOn('not-a-date', { amount: 1, unit: 'month' })).toThrow(RangeError);
+    expect(() => expiryOn('not-a-date', { amount: 1, unit: 'day' })).toThrow(RangeError);
   });
 });
 

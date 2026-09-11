@@ -158,7 +158,13 @@ export const PortalPackage = Named.extend({
   id: z.uuid(),
   clientId: z.uuid(),
   purchasedOn: IsoDate,
-  expiresOn: IsoDate,
+  /**
+   * The day these credits stop being usable, and null when they never do —
+   * the programme was sold with no term (migration 412, the operator's ruling
+   * of 12 September 2026). The screen says so in words; a household is never
+   * shown a blank where a date would be.
+   */
+  expiresOn: IsoDate.nullable(),
   used: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
 });

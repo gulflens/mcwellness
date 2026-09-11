@@ -300,6 +300,158 @@ describe('POST /api/billing/prices', () => {
     expect(secondBody.price.amendmentReason).toBe('Aligning with the updated price list.');
   });
 
+  /**
+   * The trap this round walked up to: `INSERT_PRICE_SQL` names its columns
+   * explicitly, and a term it does not name is a term the amendment drops.
+   *
+   * A price amendment writes a **new row** superseding the old one — that is
+   * how the price list works, and it is right. But the practice's term lives
+   * on the price row too now (migration 412), so unless the new row carries
+   * the old one's term forward, every change of figure would quietly turn a
+   * deliberate "these credits last thirty days" into "these credits never
+   * expire". A household's credits becoming eternal is the kind thing to get
+   * wrong; a practice's intent being discarded without anybody typing
+   * anything is not. Neither is acceptable silently.
+   */
+  it('carries a term forward onto the row that supersedes it', async () => {
+    const svc = serviceTypeId('discovery-call');
+    const first = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 15_000,
+      validFrom: SEED_TODAY,
+      amendmentReason: 'Initial price for the discovery call.',
+    });
+    expect(first.status).toBe(201);
+    const firstId = ((await first.json()) as CreatePriceResponse).price.id;
+
+    // The term as the practice means it, set on the row the way the catalogue
+    // screen will set it (task 4): thirty days, deliberately, on this price.
+    await owner.query("update price set expiry_amount = 30, expiry_unit = 'day' where id = $1", [
+      firstId,
+    ]);
+
+    const second = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 16_000,
+      validFrom: '2026-11-01',
+      amendmentReason: 'A figure changes; the term the practice set does not.',
+    });
+    expect(second.status).toBe(201);
+    const secondId = ((await second.json()) as CreatePriceResponse).price.id;
+
+    const { rows } = await owner.query<{
+      supersedes_id: string | null;
+      expiry_amount: number | null;
+      expiry_unit: string | null;
+    }>('select supersedes_id, expiry_amount, expiry_unit from price where id = $1', [secondId]);
+    expect(rows[0]).toEqual({
+      supersedes_id: firstId,
+      expiry_amount: 30,
+      expiry_unit: 'day',
+    });
+  });
+
+  it('leaves a termless price termless when its figure is amended', async () => {
+    // The other half of the same rule: carrying forward must not invent a
+    // term for a price that never had one. Every price starts with none.
+    const svc = serviceTypeId('results-call');
+    const amended = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 24_000,
+      validFrom: '2026-12-15',
+      amendmentReason: 'A later figure for the results call.',
+    });
+    expect(amended.status).toBe(201);
+    const id = ((await amended.json()) as CreatePriceResponse).price.id;
+    const { rows } = await owner.query<{
+      expiry_amount: number | null;
+      expiry_unit: string | null;
+    }>('select expiry_amount, expiry_unit from price where id = $1', [id]);
+    expect(rows[0]).toEqual({ expiry_amount: null, expiry_unit: null });
+  });
+
+  it('writes the term the catalogue drawer sends, over whatever the superseded row carried', async () => {
+    // The other side of the optional shape: a term that IS sent is the term
+    // written, and it replaces the one carried forward rather than joining it.
+    const svc = serviceTypeId('results-call');
+    const first = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 21_000,
+      validFrom: '2027-03-01',
+      amendmentReason: 'A figure to hang a term on.',
+      term: { amount: 30, unit: 'day' },
+    });
+    expect(first.status).toBe(201);
+    const firstId = ((await first.json()) as CreatePriceResponse).price.id;
+
+    const second = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 21_500,
+      validFrom: '2027-04-01',
+      amendmentReason: 'The practice lengthens the term deliberately.',
+      term: { amount: 3, unit: 'month' },
+    });
+    expect(second.status).toBe(201);
+    const secondId = ((await second.json()) as CreatePriceResponse).price.id;
+
+    const { rows } = await owner.query<{
+      id: string;
+      expiry_amount: number | null;
+      expiry_unit: string | null;
+    }>('select id, expiry_amount, expiry_unit from price where id = any($1)', [
+      [firstId, secondId],
+    ]);
+    expect(rows.find((row) => row.id === firstId)).toMatchObject({
+      expiry_amount: 30,
+      expiry_unit: 'day',
+    });
+    expect(rows.find((row) => row.id === secondId)).toMatchObject({
+      expiry_amount: 3,
+      expiry_unit: 'month',
+    });
+  });
+
+  it('takes a term away when the screen sends none deliberately', async () => {
+    // `null` is not absence: absent carries forward, null says the practice
+    // has decided these credits never expire (the controller's ruling of
+    // 12 September 2026).
+    const svc = serviceTypeId('compassionate-inquiry');
+    const first = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 30_000,
+      validFrom: '2027-03-01',
+      amendmentReason: 'A course place that runs out.',
+      term: { amount: 6, unit: 'month' },
+    });
+    expect(first.status).toBe(201);
+
+    const second = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 30_000,
+      validFrom: '2027-04-01',
+      amendmentReason: 'A household keeps every place it paid for.',
+      term: null,
+    });
+    expect(second.status).toBe(201);
+    const secondId = ((await second.json()) as CreatePriceResponse).price.id;
+    const { rows } = await owner.query<{
+      expiry_amount: number | null;
+      expiry_unit: string | null;
+    }>('select expiry_amount, expiry_unit from price where id = $1', [secondId]);
+    expect(rows[0]).toEqual({ expiry_amount: null, expiry_unit: null });
+  });
+
+  it('refuses half a term at the door, the way the database refuses it', async () => {
+    const res = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: serviceTypeId('results-call'),
+      listPriceFils: 21_000,
+      validFrom: '2027-06-01',
+      amendmentReason: 'A number with no unit beside it.',
+      term: { amount: 30 },
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('cannot price a service type in a tenant it does not belong to', async () => {
     const res = await call('POST', '/api/billing/prices', ADMIN_B_AUTH, {
       serviceTypeId: serviceTypeId('nf-session'),

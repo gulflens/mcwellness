@@ -797,7 +797,10 @@ record.
   question (`docs/ADR/0003`).
 - The tax adviser on the tax point of prepaid packages
   (`docs/SPEC/billing.md` section 5.3).
-- The refund policy wording and the package expiry period.
+- The refund policy wording. ~~The package expiry period.~~ **Answered on 11
+  and 12 September 2026**: credits do not expire unless the practice sets a
+  term on that exact programme or price, in days or months
+  (`docs/SPEC/billing.md` section 4.3).
 - Optional: the flight-mode drill described in pull request #41's body.
 
 ## 9. Where the briefs and reports live
@@ -1085,10 +1088,33 @@ nine and ten; see the records on pull requests 73 to 83).
     two and says so; the term said above the Sell drawer's button and on the
     invoice's package line in both languages; the Add package drawer's own
     default moved to six; the seed's own three programmes moved to six months
-    (`docs/CHANGE-REQUESTS/billing-10.md`, item 1). **Still owed:** the
-    staging pass with migration 410, the production data step for the three
-    live programmes (`docs/CHANGE-REQUESTS/billing-10.md`, item 2), and the
-    live pass — all on the operator's word. **Next:** piece twelve's plan.
+    (`docs/CHANGE-REQUESTS/billing-10.md`, item 1). Merged as `2e2feb5`,
+    applied to staging and to production, and live from the fourteenth pass.
+    **Reversed by item 16 the day after it went live**, on the operator's own
+    ruling: six months became no term at all and the extensions were removed.
+    Read it as the record of a decision that stood for one day, not as how the
+    practice works. Migration 410 is not edited; 412 undoes it forward.
+16. **A programme's term is optional (this pull request):** the operator ruled
+    on 11 September that a household keeps every session it paid for, and on
+    12 September set the shape — an empty term means the credits never expire,
+    and a number with a unit beside it means that term, for that exact
+    programme or that exact price. Migration 412 puts `expiry_amount` and
+    `expiry_unit` on `package` and on `price`, both optional and whole or
+    absent, backfills and drops `package.expiry_months`, makes a purchase's
+    end date optional, and removes the extension feature entirely (the table,
+    the two purchase columns, the route, the drawer and the rule), refusing
+    rather than dropping if any environment holds a single extension row. A
+    single session sold ahead of its visit now takes the term of the price it
+    was sold at instead of a constant in the code. The catalogue drawers set a
+    term or leave it blank, the console says "No expiry" where a date would
+    be, and a household reads "These sessions do not expire." in its own
+    language. The seed carries no term, so a fresh environment starts the way
+    the practice runs. **Still owed:** the staging pass with migration 412,
+    the live pass, and the production data step that blanks the three live
+    programmes' terms — they still read twelve months, which is what they were
+    created with (`docs/CHANGE-REQUESTS/billing-11.md` item 2; the step billing-10
+    item 2 owed, never run, is replaced by it). All on the operator's word.
+    **Next:** piece twelve's plan.
 
 ## 11. Where Claude's own memory lives
 

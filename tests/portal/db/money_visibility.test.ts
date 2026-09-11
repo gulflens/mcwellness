@@ -2,7 +2,7 @@ import type pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ADULT_AGE, moneyVisibleTo } from '../../../domain/portal';
 import { IDS, asApiRole, freshDatabase, rolledBack, setAuditContext } from '../../db/helpers';
-import { PORTAL, PORTAL_MONEY, asContact, seedMoney, seedPortalHousehold } from './support';
+import { PORTAL, asContact, seedMoney, seedPortalHousehold } from './support';
 
 /** The practice's own zone, and the one this fixture's seed writes. */
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -28,32 +28,10 @@ const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
 let owner: pg.Client;
 
-/**
- * One extension of the household's programme. Written here rather than in
- * `seedMoney` because it is this file's question alone: an extension carries
- * two dates and a sentence about why the family asked for longer, and the
- * question is who may read it.
- */
-const EXTENSION = '00000001-0000-4000-8000-000000000069';
-
 beforeAll(async () => {
   owner = await freshDatabase();
   await seedPortalHousehold(owner);
   await seedMoney(owner, PORTAL.childA);
-  await owner.query(
-    'insert into package_extension (id, tenant_id, client_id, purchase_id, ordinal, ' +
-      'from_on, to_on, reason, created_by) values ($1, $2, $3, $4, 1, ' +
-      "(current_date + interval '180 days')::date, " +
-      "((current_date + interval '180 days')::date + interval '3 months')::date, $5, $6)",
-    [
-      EXTENSION,
-      IDS.tenantA,
-      PORTAL.childA,
-      PORTAL_MONEY.purchase,
-      'The family was away for the summer.',
-      PORTAL.admin,
-    ],
-  );
 });
 
 afterAll(async () => {
@@ -76,18 +54,6 @@ async function moneyRowsFor(userId: string): Promise<number> {
     });
     return counts;
   });
-}
-
-/** What the database says the household's extensions hold for this person, today. */
-async function extensionRowsFor(userId: string): Promise<number> {
-  return rolledBack(owner, async () =>
-    asContact(owner, userId, async () => {
-      const rows = await owner.query('select id from package_extension where client_id = $1', [
-        PORTAL.childA,
-      ]);
-      return rows.rowCount ?? 0;
-    }),
-  );
 }
 
 /** The database's own answer to the age question, for this person. */
@@ -185,23 +151,6 @@ describe('everybody else', () => {
       );
       expect(rows.rowCount).toBe(1);
     });
-  });
-
-  it("hides an extension of the household's programme from the young person's own login", async () => {
-    // `package_extension` (migration 410) joined the money tables a round
-    // after this policy was written, and the array below it was not widened
-    // with them. `package_extension_readers` admits any contact of the record,
-    // so a young person's own login read the dates of an extension of their
-    // own programme — and the sentence somebody wrote about why the family
-    // asked for longer — where the same login is refused the purchase those
-    // rows belong to. The free-text reason is exactly the kind of sentence
-    // this gate exists for.
-    const dateOfBirth = birthdayFor(ADULT_AGE, 1);
-    await childBornOn(dateOfBirth);
-    expect(await extensionRowsFor(PORTAL.minorUser)).toBe(0);
-    // The same row, to the mother, on the same day: the gate narrows the
-    // young person's own login and nobody else.
-    expect(await extensionRowsFor(PORTAL.motherUser)).toBe(1);
   });
 
   it('shows a staff member who is also a contact their staff reach', async () => {

@@ -385,6 +385,36 @@ describe('GET /api/portal/money', () => {
     expect(fee?.grossFils).toBe(FEE_FILS);
   });
 
+  it('tells a household a programme with no term has no expiry, rather than a date', async () => {
+    // The operator's ruling of 12 September 2026: credits a family paid for
+    // do not expire unless the practice deliberately says they do. The
+    // purchase row carries no date at all then, and the wire says null — the
+    // screen's "No expiry" is the honest reading of that, and a fabricated
+    // date or a missing field would both be lies.
+    const dated = (await (
+      await h.callAs('GET', '/api/portal/money', PORTAL.motherAuth)
+    ).json()) as MoneyResponse;
+    expect(dated.packages[0]?.expiresOn).not.toBeNull();
+
+    await h.owner.query('update package_purchase set expires_on = null where id = $1', [
+      PORTAL_MONEY.purchase,
+    ]);
+    const res = await h.callAs('GET', '/api/portal/money', PORTAL.motherAuth);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as MoneyResponse;
+    expect(body.packages).toHaveLength(1);
+    expect(body.packages[0]?.expiresOn).toBeNull();
+    // And nothing else about the programme moved.
+    expect(body.packages[0]).toMatchObject({ used: 1, total: 2, name: 'Silver' });
+
+    // Put the fixture's own date back: this file's later cases read the same
+    // household, and a test that changes the world tidies up after itself.
+    await h.owner.query('update package_purchase set expires_on = $1 where id = $2', [
+      dated.packages[0]?.expiresOn ?? null,
+      PORTAL_MONEY.purchase,
+    ]);
+  });
+
   it("refuses a young person's own login the screen entirely", async () => {
     const res = await h.callAs('GET', '/api/portal/money', PORTAL.minorAuth);
     expect(res.status).toBe(403);

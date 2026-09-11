@@ -21,7 +21,7 @@ The service catalogue itself (what the practice offers, its durations and the ce
 
 A client holds entitlements — credits for a specific service type. A session consumes one. That's it.
 
-- Buy a single session → 1 entitlement, consumed immediately when it is charged at the door; sold ahead of the visit instead (a `single_session` invoice, migration 411, trunk round 43), it is available for twelve months before it lapses
+- Buy a single session → 1 entitlement, consumed immediately when it is charged at the door; sold ahead of the visit instead (a `single_session` invoice, migration 411, trunk round 43), it lasts as long as the price row it was sold at says — and where that row names no term, which is what the practice sells today, it never lapses (migration 412, section 4.3)
 - Buy a 20-session package → 20 entitlements, consumed over months
 - Insurance approves 8 sessions → 8 entitlements with a payer attached
 - Comp a session for a service failure → 1 entitlement, zero value, reason logged
@@ -85,6 +85,8 @@ Three deliberate choices in there:
 ### 2.3 The price list is append-only (round 7b)
 
 Prices are never edited or deleted, only superseded: a new price row must take effect today or later, and strictly after the row it replaces, and it always carries a reason. Nothing rewrites what a client was already shown or charged. The price-list screen (pull request 25, the billing stream's second piece) shows the net amount, the VAT and the gross total for each row, all from the prices route's answer; it never accepts a typed VAT figure — VAT is always resolved from the standard-rate setting and stamped onto the price at the moment it is written, per CLAUDE.md rule 6.
+
+**A price row carries its own term** (`expiry_amount` and `expiry_unit`, migration 412; section 4.3). Because a price is superseded rather than edited, the new row has to be told the term as well as the figure — so a change of price that says nothing about the term **carries forward the term the superseded row had**, and only an explicit empty term takes one away. Anything else would mean that putting a price up quietly turned a deliberate term into "never expires", with nobody having typed it.
 
 ### 2.4 Discounts (the operator's decision of 7 September 2026)
 
@@ -237,16 +239,82 @@ Refund due                              11,100
 
 They lose the volume discount on what they consumed, which is exactly what a volume discount means. State it plainly in the T&Cs at point of sale, show the number in the portal, and let the system compute it.
 
-**Expiry.** _Amended 2026-09-10 on the operator's decision 9._ A programme
-runs **six months** from purchase (`package.expiry_months`, six by default;
-a programme keeps the term it was sold with). Up to **two extensions of three
-months each**, at no charge, each with a reason written down — one row each in
-`package_extension` (migration 410), numbered one and two, so a programme runs
-twelve months at most and only by asking; a third is refused for everyone,
-the owner included. The term is said at the point of sale (the Sell drawer)
-and on the invoice's package line in both languages. Warnings at 60 and 30
-days are a later round, once households are on programmes; the notice period
-and the call-out fee are unchanged.
+**Expiry.** _Amended 2026-09-12 on the operator's ruling of 11 September 2026:
+a household keeps every session it paid for. This replaces the amendment of
+2026-09-10 (decision 9), which is described below as it stood._
+
+**A term is optional, and it belongs to the thing that was sold.** A programme
+(`package`) and a price (`price`) each carry the same pair of columns, both
+nullable — `expiry_amount`, a whole number, and `expiry_unit`, `'day'` or
+`'month'` (migration 412). **Leave them empty and the credits never expire;
+put a number with a unit beside it and that is the term, for that exact
+programme or that exact price.** Neither column takes a default, so nothing
+acquires a term by accident, and a constraint on each table refuses half of
+one: a number with no unit beside it cannot be stored at all.
+
+The arithmetic is `expiryOn(purchasedOn, term)` in `domain/billing/expiry.ts`,
+which answers a date **or null**. A term in months lands on the same day of
+the month that many months later, falling back to the last day where the
+target month is shorter — 31 August plus six months is 28 February, never 3
+March. A term in days is plain addition. A sale writes what that answers and
+nothing else: no date at all where there is no term.
+`app.oldest_available_entitlement` (migration 403) has always counted a credit
+with no expiry date as usable and sorted it `nulls last`, so what the
+catalogue can now say is what the ledger already understood.
+
+**A single session sold ahead of its visit takes the term of the price row it
+was sold at**, not a figure in the code. `SINGLE_SESSION_MONTHS` — twelve
+months, unchangeable without a build — is gone with this amendment.
+
+**What is said, and to whom.** The Add package and Add price drawers ask for a
+number and a unit, and the blank state says what blank means: *"Leave blank and
+these credits never expire."* A term is named at the point of sale (the Sell
+drawers) and on the invoice's package line in both languages **only where there
+is one**; a termless sale names no term rather than carrying a sentence about
+not having one. The console's reading screens say **"No expiry"** where a date
+would otherwise be, because a dash in a column of dates reads as a figure that
+failed to load. A household reads a whole sentence in its own language:
+*"These sessions do not expire."* / *"هذه الجلسات لا تنتهي صلاحيتها."*
+Warnings at 60 and 30 days are still a later round, once households are on
+programmes, and a credit with no date never warns at all. The notice period and
+the call-out fee are unchanged.
+
+**The five-year ceiling is in the database as well as at the wire.** A term is
+at most sixty months, or 1,825 days, which is the same five years
+`package.expiry_months`'s own check allowed from migration 401. The wire's
+`Term` shape refuses a longer one with a sentence a screen can show, and
+migration 412's `package_expiry_term_within_five_years` and
+`price_expiry_term_within_five_years` refuse it from every other writer. The
+wire alone was not enough: a data step writes past every screen, and the
+catalogue's lists parse what they read with that same strict shape, so one row
+written by hand over the ceiling would have failed both catalogue lists and
+every drawer that reads them.
+
+**Extensions are gone, one day after they shipped.** _The amendment of
+2026-09-10, in force for one day:_ a programme ran six months from purchase
+(`package.expiry_months`, six by default), with up to two extensions of three
+months each at no charge, each with a reason, one row each in
+`package_extension` (migration 410), so a programme ran twelve months at most
+and only by asking. The operator approved that on 10 September and it was
+merged the same day. On 11 September, having seen it, the operator ruled that
+credits do not expire at all unless the practice deliberately says they do,
+and on 12 September — asked directly whether an extension should survive now
+that a programme can once again carry a term — ruled that it should not: an
+extension hard-wired to three months, twice, cannot fit a term measured in
+days, and a programme with no term has nothing to extend. Migration 412 drops
+`package_extension`, `package_purchase.extended_to` and `extension_reason`,
+and the route, the drawer and the rule behind them are deleted. **Migration 410
+is not edited**: a merged migration never is
+(`.claude/rules/data-model.md`), and it had already been applied to staging and
+to production, so the only honest way to undo it is forward. If an extension is
+wanted again it is a round of its own, with a brief written against the term as
+it now is.
+
+**Nothing real had been sold when the rule changed**, on any environment:
+production had recorded no sale, and the sales staging holds are synthetic. So
+no household's credit carries a date it should not. A credit already sold would keep
+the date it was sold with in any case: `expires_on` is written once, at the
+sale, and nothing here rewrites it.
 
 **Late cancellation and no-show.** _Amended 2026-09-06 on the founder's
 decision of 4 September._ Under 24 hours carries a **call-out fee** — AED 150,
@@ -517,6 +585,6 @@ Collection rate                 invoiced vs collected
 
 1. **Final price list.** The table in §2.2 is a defensible starting point from competitor data, not a recommendation — test it.
 2. **Refund policy wording**, reviewed by a lawyer, shown at point of sale.
-3. **Expiry period** and whether extensions are discretionary or ruled.
+3. ~~**Expiry period** and whether extensions are discretionary or ruled.~~ **Answered 2026-09-11 and 2026-09-12** (§4.3): there is no expiry period unless the practice sets one, per programme and per price, in days or months; there are no extensions, because a programme with no term has nothing to extend.
 4. **Tax point on prepaid packages** — in writing, from a UAE tax advisor.
 5. **BNPL provider** — Tabby and Tamara both work; compare merchant fees at your ticket size.

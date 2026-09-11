@@ -2,7 +2,6 @@ import type { Hono } from 'hono';
 import type { ApiEnv } from '../_middleware/request-context';
 import { mountBalance } from './balance';
 import { mountDocuments, mountDocumentSending } from './documents';
-import { mountExtensions } from './extensions';
 import { mountInvoices } from './invoices';
 import { mountPackages } from './packages';
 import { mountPayments } from './payments';
@@ -42,5 +41,4 @@ export function mountBilling(api: Hono<ApiEnv>, now: () => Date = () => new Date
   mountSendOptions(api, now);
   mountRefundQuotes(api, now);
   mountWaivers(api, now);
-  mountExtensions(api, now);
 }
