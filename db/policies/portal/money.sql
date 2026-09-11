@@ -30,7 +30,7 @@
 -- The six tables are the ones a figure can be read from: what was bought, what
 -- credits remain, what was invoiced and on which lines, what was paid, and
 -- which rendered invoice or receipt exists. `package_extension` was a seventh
--- until migration 964 dropped it: a programme's term is optional from
+-- until migration 412 dropped it: a programme's term is optional from
 -- 2026-09-12 and a programme with no term has nothing to extend, so the two
 -- dates and the sentence about why a family asked for longer no longer exist
 -- to be gated. `client` itself is deliberately not here — a young person still

@@ -1,4 +1,4 @@
--- 964_optional_package_term.sql
+-- 412_optional_package_term.sql
 -- A household keeps every session it paid for.
 --
 -- The catalogue has always forced a term. `package.expiry_months` is not null
@@ -235,7 +235,7 @@ alter table public.package_purchase alter column expires_on drop not null;
 
 comment on column public.package_purchase.expires_on is
   'The day the credits from this sale stop being usable, or null when they never do (migration '
-  '964). Written at the sale from the programme''s own term and never rewritten afterwards: a '
+  '412). Written at the sale from the programme''s own term and never rewritten afterwards: a '
   'household keeps the term it was sold, whatever the catalogue says later.';
 
 -- rollback:

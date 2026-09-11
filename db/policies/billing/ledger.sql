@@ -163,7 +163,7 @@ begin
 end
 $$;
 
--- `package_extension` (410) had its three policies here until migration 964
+-- `package_extension` (410) had its three policies here until migration 412
 -- dropped the table with the rest of the extension machinery: a programme's
 -- term is optional from 2026-09-12, and a programme with no term has nothing
 -- to extend. This file is re-applied on every migrate, so the blocks had to go

@@ -11,7 +11,7 @@ import { hasRollbackBlock, isLocalDatabaseUrl, listMigrationFiles } from '../../
 import { rejectsWith, rolledBack } from '../../db/helpers';
 
 /**
- * Migration 964: a programme's term is optional.
+ * Migration 412: a programme's term is optional.
  *
  * `package` and `price` each carry a number and a unit, both nullable and
  * whole or absent, and an absent term means the credits never expire (the
@@ -22,8 +22,8 @@ import { rejectsWith, rolledBack } from '../../db/helpers';
  * schema in one pass, so there is never a package for the backfill to find —
  * right on a database that has never had one, and no proof of the backfill at
  * all. This suite does what tests/billing/db/vat-setting-backfill.test.ts does
- * for migration 400: it applies every migration up to 964, writes the rows the
- * backfill has to carry, and only then applies 964 itself. Nothing here edits
+ * for migration 400: it applies every migration up to 412, writes the rows the
+ * backfill has to carry, and only then applies 412 itself. Nothing here edits
  * db/runner; every piece it borrows is imported.
  *
  * Every identifier and every person below is synthetic (.claude/rules/testing.md).
@@ -108,10 +108,11 @@ beforeAll(async () => {
 
   const files = listMigrationFiles(await readdir(MIGRATIONS_DIR));
   const before400 = files.filter((file) => file.number < 400);
-  const between = files.filter((file) => file.number >= 400 && file.number < 964);
-  const nine64 = files.filter((file) => file.number === 964);
-  if (nine64.length !== 1) {
-    throw new Error('db/migrations/964_optional_package_term.sql is missing.');
+  const between = files.filter((file) => file.number >= 400 && file.number < 412);
+  const target = files.filter((file) => file.number === 412);
+  const after = files.filter((file) => file.number > 412);
+  if (target.length !== 1) {
+    throw new Error('db/migrations/412_optional_package_term.sql is missing.');
   }
 
   for (const file of before400) {
@@ -161,9 +162,17 @@ beforeAll(async () => {
   await credit(CREDIT_DATED, '2027-01-31');
   await credit(CREDIT_NEVER, null);
 
-  await applyMigrationFile(owner, nine64[0]?.filename ?? '');
+  await applyMigrationFile(owner, target[0]?.filename ?? '');
+
+  // Then everything after it. 412 sits inside billing's own range rather than
+  // at the end of the tree, so the tables the later migrations build — and the
+  // policy files below that name them — do not exist yet.
+  for (const file of after) {
+    await applyMigrationFile(owner, file.filename);
+  }
+
   // The policy pass, as db:migrate runs it: proof that no policy file still
-  // names the table 964 dropped, which would fail the whole pass.
+  // names the table 412 dropped, which would fail the whole pass.
   await applyPolicies(owner);
 });
 
@@ -171,7 +180,7 @@ afterAll(async () => {
   await owner.end();
 });
 
-describe("964's backfill", () => {
+describe("412's backfill", () => {
   it('carries every term a programme already had into the pair, unchanged', async () => {
     const { rows } = await owner.query<{
       code: string;
