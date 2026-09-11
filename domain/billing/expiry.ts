@@ -1,10 +1,13 @@
 /**
- * When a prepaid package runs out of time, and when to say so
- * (docs/SPEC/billing.md section 4.3; the operator's decision 9 of
- * 2026-09-10, docs/PLAN/package-terms.md: a programme runs six months from
- * purchase, extendable twice by exactly three months each with a reason;
- * warnings at sixty and thirty days). The extension's arithmetic lives
- * beside this file, in `extension.ts`.
+ * How long a prepaid credit lasts, and when the practice says something about
+ * it (docs/SPEC/billing.md section 4.3; the operator's ruling of 12 September
+ * 2026, docs/superpowers/plans/2026-09-12-optional-terms.md).
+ *
+ * A term is optional. A programme or a price may carry one — a whole number
+ * with a unit beside it — and where it carries none, the credits it sells
+ * never expire. That is not a very long term: it is no date at all, written
+ * as null, which is exactly what `app.oldest_available_entitlement` has
+ * always read as "always valid".
  *
  * The warning thresholds are data, not a rule buried in a screen: the
  * numbers sit here as named constants, and the screens ask this file rather
@@ -19,16 +22,18 @@ import type { IsoDate } from '../shared';
 export const DEFAULT_EXPIRY_MONTHS = 6;
 
 /**
- * How long a session sold on its own can be used: twelve months from the day
- * it was bought. Fixed, not read from a package's own term — a single credit
- * has no package behind it to take a term from, and package terms are free to
- * move (they did, from twelve months to six, in the operator's decision 9
- * above) without pulling a one-off sale's expiry along with them. The
- * operator's decision of 10 September 2026 to sell one session ahead of its
- * visit set this figure at twelve months
- * (.superpowers/sdd/2026-09-10-walk-fixes-3-sell-session/task-2-brief.md).
+ * The two units the practice counts a term in. The catalogue holds the same
+ * pair on `package` and on `price` (migration 412), and nothing else is
+ * accepted at either end.
  */
-export const SINGLE_SESSION_MONTHS = 12;
+export type ExpiryUnit = 'day' | 'month';
+
+/**
+ * A term as the catalogue carries it: a whole number with its unit beside it.
+ * Never half a term — a number with no unit is the way this goes wrong, and
+ * both the database and the drawer refuse it before it reaches here.
+ */
+export type ExpiryTerm = { amount: number; unit: ExpiryUnit };
 
 /** The two moments the practice says something. Both counted in whole days remaining. */
 export const EXPIRY_WARNING_DAYS = { first: 60, second: 30 } as const;
@@ -58,20 +63,41 @@ function daysInMonth(year: number, month: number): number {
 }
 
 /**
- * The day a package bought on `purchasedOn` stops being usable: the same day
- * of the month, `months` later. A day that does not exist in the target month
- * (31 August plus six months) falls back to that month's last day, which is
- * the reading that never gives the client less time than the calendar allows.
+ * The day a credit bought on `purchasedOn` stops being usable, or null when
+ * it never does.
+ *
+ * A `null` term is the whole answer on its own: no term, no date, and every
+ * caller writes null rather than inventing one.
+ *
+ * A term in **months** lands on the same day of the month, that many months
+ * later. A day that does not exist in the target month (31 August plus six
+ * months) falls back to that month's last day, which is the reading that
+ * never gives the household less time than the calendar allows.
+ *
+ * A term in **days** is plain addition and nothing else: thirty days from 31
+ * January is 2 March, because there is no shorter month for it to be pulled
+ * back into.
  */
-export function expiryOn(purchasedOn: IsoDate, months: number): IsoDate {
-  if (!Number.isSafeInteger(months) || months < 1) {
-    throw new RangeError(`An expiry period must be a whole number of months, received ${months}.`);
+export function expiryOn(purchasedOn: IsoDate, term: ExpiryTerm | null): IsoDate | null {
+  if (term === null) {
+    return null;
+  }
+  const { amount, unit } = term;
+  if (!Number.isSafeInteger(amount) || amount < 1) {
+    throw new RangeError(`A term is a whole number of ${unit}s, received ${amount}.`);
   }
   const { year, month, day } = parts(purchasedOn);
-  const total = month - 1 + months;
-  const targetYear = year + Math.floor(total / 12);
-  const targetMonth = (total % 12) + 1;
-  return format(targetYear, targetMonth, Math.min(day, daysInMonth(targetYear, targetMonth)));
+  if (unit === 'month') {
+    const total = month - 1 + amount;
+    const targetYear = year + Math.floor(total / 12);
+    const targetMonth = (total % 12) + 1;
+    return format(targetYear, targetMonth, Math.min(day, daysInMonth(targetYear, targetMonth)));
+  }
+  if (unit === 'day') {
+    const at = new Date(Date.UTC(year, month - 1, day + amount));
+    return format(at.getUTCFullYear(), at.getUTCMonth() + 1, at.getUTCDate());
+  }
+  throw new RangeError(`A term is counted in days or in months, not in "${String(unit)}".`);
 }
 
 /** Whole days from `from` to `to`; negative when `to` is the earlier day. */

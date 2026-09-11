@@ -10,15 +10,12 @@ export type { AllocatedEntitlement, PackageComponent } from './allocation';
 export {
   DEFAULT_EXPIRY_MONTHS,
   EXPIRY_WARNING_DAYS,
-  SINGLE_SESSION_MONTHS,
   daysBetween,
   expiryOn,
   expiryWarningFor,
   isUsableOn,
 } from './expiry';
-export type { ExpiryWarning } from './expiry';
-export { EXTENSION_MONTHS, MAX_EXTENSIONS, nextExtension, termWords } from './extension';
-export type { Extension } from './extension';
+export type { ExpiryTerm, ExpiryUnit, ExpiryWarning } from './expiry';
 export {
   CONSUMPTION_KINDS,
   ENTITLEMENT_STATUSES,
