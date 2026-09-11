@@ -1278,3 +1278,67 @@ tidy-up, and the strings prove the code is served, not that each screen reads
 the live rows well. The first sign-in to Billing — the programme and price
 lists showing "No expiry", a programme's drawer opening with its term blank — is
 that check.
+
+## What was done on 2026-09-12: the eighteenth live pass — a section lists its pages
+
+At 23:25 UTC on 11 September (07:25 on the operator's clock, 12 September), on
+the operator's word — *"go live"* — `main` at `66b8a0d` was built and served:
+pull request 161, the rail's page rows, and nothing else.
+
+**Why.** The operator, earlier the same morning: *"i need the sub menu in
+schedule, billing and books to be as well visible in the sidebar. once i click
+one of these, i need the submenu to expand and show underneath as well, keep
+the current layout in addition to the sidebar submenu."* Settings joined the
+three on their answer, having three screens of its own.
+
+**What it does.** Four sections list their pages beneath themselves in the
+rail: Schedule (Day, Week, Board, Day map), Billing (Prices, Packages,
+Balances, Invoices, Receipts), Books (Overview, Journal, Accounts, Statements,
+Books settings) and Settings (Practice, Practitioners, Team). The list showing
+is the one for the section being read, derived from the address on every render
+rather than remembered, so nothing can drift out of step with the page and no
+third fact joins the rail's open and pinned. Each page's own tabs are exactly
+as they were: the rail is a second door, which is what was asked for.
+
+**No migration, and nothing touched the database.** `schema_migration` stands
+at 97 rows where round 44's pass left it, no policy file changed, and no data
+step ran. This pass therefore had none of the seventeenth's window, in which
+the running code and the schema disagreed for about five minutes.
+
+**Walked in a browser before it was merged.** Signed in against a local
+database as a seeded person and read all three widths: the desk column with
+Billing's five rows and Invoices marked; the 64px strip, where a label-only row
+has nothing to show and the list is not drawn at all; and the rail covering the
+page on a tablet, where the rows return. The DOM was asked rather than the
+picture trusted: exactly one section and one page row carried `aria-current`.
+
+**One thing seen once and not reproduced.** In the first, uninstrumented run a
+click on the collapse toggle appeared to change Billing's section. With the
+page instrumented to record every address change, neither the toggle nor a
+resize produced any navigation at all, and the address held. It is recorded
+here as a stray click rather than as an explained fault.
+
+**The review's finding, and the guard it earned.** The rail lists Billing's and
+Books' sections by hand — the shell otherwise knows nothing about either screen,
+and importing their constants would give it a bundle dependency on two pages it
+never renders. Nothing made the resulting drift loud: renaming a section on the
+page would have left a dead rail row, an unmarked page and a green test suite.
+`tests/lint/rail-pages-match.test.ts` now reads both files and fails if they
+part company.
+
+**The pass.** Hold protocol clear. Archive `mcwellness-66b8a0d.tar.gz`
+(6,208,948 bytes); TUS create 201 and PATCH 204 with the offset equal to the
+size; build `01a092c9` with the stored settings. The served bundle flipped from
+`index-8E9aID3n.js` to `index-Cn-nc2fr.js` in about seventy seconds. No restart
+needed: `/api/health` 200 in 0.44 s and `/api/health/deep` 200 in 0.55 s, and
+`/admin/schedule/map` still serves its widened policy. **The served code was
+read, not assumed:** the bundle and its 56 chunks carry the page rows' own
+markup, all five Billing rows, all five Books rows and Schedule's week, board
+and map.
+
+**Two things left open, deliberately.** The rail now scrolls when a section's
+pages are showing: on a 900px-tall window Portal, Kit and Today fall below the
+fold. The rows are the console's own 44px and shortening them would save forty
+pixels, which does not fix it; it waits on the operator's eye. And the check
+still owed from the seventeenth pass stands — nobody has signed in and opened
+Billing against the live catalogue to see the three programmes read "No expiry".
