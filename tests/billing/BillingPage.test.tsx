@@ -201,6 +201,34 @@ describe('BillingPage', () => {
     expect(screen.getAllByText('765.00')).toHaveLength(2);
   });
 
+  it('says how long a credit sold at each price runs, and "No expiry" where the price sets none', async () => {
+    // A term set on a price carries forward through every amendment, so the
+    // list is where it has to be seen. The words are domain/billing/term.ts's,
+    // exactly as the Packages list's "Runs for" column reads them.
+    mount(OWNER, {
+      body: {
+        vatRegistered: true,
+        prices: [
+          NF_PRICE,
+          {
+            ...NF_PRICE,
+            id: '00000004-0000-4000-8000-000000000103',
+            serviceTypeId: '00000004-0000-4000-8000-000000000006',
+            serviceTypeCode: 'qeeg',
+            serviceTypeName: 'Brain map (QEEG)',
+            serviceTypeNameAr: null,
+            term: { amount: 30, unit: 'day' },
+          },
+        ],
+      },
+    });
+    await screen.findByText('Brain map (QEEG)');
+    expect(screen.getByText('Runs for')).toBeTruthy();
+    expect(screen.getByText('30 days')).toBeTruthy();
+    // The neurofeedback price sets no term: said in words, not left blank.
+    expect(screen.getAllByText('No expiry')).toHaveLength(1);
+  });
+
   it('offers "Add price" to the owner, as the page header\'s secondary action', async () => {
     mount(OWNER, { body: PRICES });
     const button = await screen.findByRole('button', { name: 'Add price' });

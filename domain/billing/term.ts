@@ -19,20 +19,23 @@
 import type { ExpiryTerm } from './expiry';
 
 /**
- * The Arabic forms, per unit. The language counts one, two, three-to-ten and
- * eleven-upwards differently, so each unit needs all four; the two units are
- * written out side by side rather than assembled from fragments, because a
- * reader of this file should be able to see every word the practice puts on a
- * document.
+ * The Arabic forms, per unit. The language counts one, two, a few and many
+ * differently, and from a hundred upward it agrees with the number's last two
+ * digits rather than with the whole of it — so each unit needs five forms, not
+ * four. The two units are written out side by side rather than assembled from
+ * fragments, because a reader of this file should be able to see every word
+ * the practice puts on a document.
  */
 const WORDS = {
   month: {
     one: 'شهر واحد',
     two: 'شهران',
-    /** Three to ten: the plural of paucity. */
+    /** Last two digits three to ten: the plural of paucity. */
     few: (amount: number) => `${amount} أشهر`,
-    /** Eleven upwards: the singular in the accusative. */
+    /** Last two digits eleven to ninety-nine: the singular in the accusative. */
     many: (amount: number) => `${amount} شهرًا`,
+    /** An exact hundred, or one or two above one: the singular in the genitive. */
+    hundred: (amount: number) => `${amount} شهر`,
     en: (amount: number) => (amount === 1 ? '1 month' : `${amount} months`),
   },
   day: {
@@ -40,9 +43,38 @@ const WORDS = {
     two: 'يومان',
     few: (amount: number) => `${amount} أيام`,
     many: (amount: number) => `${amount} يومًا`,
+    hundred: (amount: number) => `${amount} يوم`,
     en: (amount: number) => (amount === 1 ? '1 day' : `${amount} days`),
   },
 } as const;
+
+/**
+ * Which of the five forms an amount takes, the same for either unit so the two
+ * cannot drift apart.
+ *
+ * One and two have words of their own. Past them the form follows the last two
+ * digits: three to ten take the plural (`103 أيام`), eleven to ninety-nine the
+ * accusative singular (`365 يومًا`), and what is left — an exact hundred, or a
+ * hundred and one or two — the genitive singular (`100 يوم`). A term in days
+ * runs to 1,825, so this is a document's everyday case; a term in months stops
+ * at sixty and never reaches it, and follows the same rule regardless.
+ */
+function arabicForm(amount: number): 'one' | 'two' | 'few' | 'many' | 'hundred' {
+  if (amount === 1) {
+    return 'one';
+  }
+  if (amount === 2) {
+    return 'two';
+  }
+  const lastTwo = amount % 100;
+  if (lastTwo >= 3 && lastTwo <= 10) {
+    return 'few';
+  }
+  if (lastTwo >= 11) {
+    return 'many';
+  }
+  return 'hundred';
+}
 
 /**
  * A term's length in words, or null when there is no term.
@@ -64,13 +96,7 @@ export function termWords(term: ExpiryTerm | null): { en: string; ar: string } |
   if (!Number.isSafeInteger(amount) || amount < 1) {
     throw new RangeError(`A term is a whole number of ${unit}s, received ${amount}.`);
   }
-  const ar =
-    amount === 1
-      ? words.one
-      : amount === 2
-        ? words.two
-        : amount <= 10
-          ? words.few(amount)
-          : words.many(amount);
+  const form = arabicForm(amount);
+  const ar = form === 'one' ? words.one : form === 'two' ? words.two : words[form](amount);
   return { en: words.en(amount), ar };
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { termWords } from '@domain/billing';
 import { canActor } from '@domain/shared/actor';
 import { PricesResponse, type PriceRow } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
@@ -173,6 +174,16 @@ export function BillingPage() {
         numeric: true,
         align: 'end',
         render: (row) => formatFils(row.grossFils),
+      },
+      {
+        // How long a credit sold at this price lasts, in the rule's own words,
+        // and "No expiry" where the price sets no term. A term on a price is
+        // carried forward through every amendment, so this list is where it is
+        // seen — read exactly as the Packages list's own "Runs for" column is.
+        key: 'term',
+        header: 'Runs for',
+        numeric: true,
+        render: (row) => termWords(row.term)?.en ?? 'No expiry',
       },
       {
         key: 'validFrom',

@@ -12,8 +12,12 @@ import { termWords } from './term';
  * nothing.
  *
  * Arabic counts one, two, three-to-ten and eleven-upwards differently, and
- * each unit has all four forms. Every one of them is here, in both units, at
- * the boundaries that separate them.
+ * from a hundred upward it agrees with the number's last two digits: an exact
+ * hundred, or one or two above it, takes the singular in the genitive, and a
+ * remainder of three to ten takes the plural again. Each unit has all five
+ * forms, and every one of them is here, in both units, at the boundaries that
+ * separate them. Days run to 1,825, so the hundreds are a document's everyday
+ * case, not a curiosity.
  */
 
 describe('termWords', () => {
@@ -39,6 +43,17 @@ describe('termWords', () => {
       expect(termWords({ amount: 11, unit: 'month' })).toEqual({ en: '11 months', ar: '11 شهرًا' });
       expect(termWords({ amount: 12, unit: 'month' })).toEqual({ en: '12 months', ar: '12 شهرًا' });
     });
+
+    it('follows the rule the days follow from a hundred upward, though a month term stops at sixty', () => {
+      // Never reached from a screen or from the database, both of which stop
+      // a month term at sixty. Tested so the two units cannot drift apart if
+      // that ceiling ever moves.
+      expect(termWords({ amount: 60, unit: 'month' })?.ar).toBe('60 شهرًا');
+      expect(termWords({ amount: 100, unit: 'month' })?.ar).toBe('100 شهر');
+      expect(termWords({ amount: 102, unit: 'month' })?.ar).toBe('102 شهر');
+      expect(termWords({ amount: 103, unit: 'month' })?.ar).toBe('103 أشهر');
+      expect(termWords({ amount: 111, unit: 'month' })?.ar).toBe('111 شهرًا');
+    });
   });
 
   describe('a term counted in days', () => {
@@ -53,6 +68,34 @@ describe('termWords', () => {
       expect(termWords({ amount: 10, unit: 'day' })).toEqual({ en: '10 days', ar: '10 أيام' });
       expect(termWords({ amount: 11, unit: 'day' })).toEqual({ en: '11 days', ar: '11 يومًا' });
       expect(termWords({ amount: 30, unit: 'day' })).toEqual({ en: '30 days', ar: '30 يومًا' });
+    });
+
+    // A term in days runs to 1,825, so "eleven upwards" is not one form. The
+    // form follows the amount's last two digits: three to ten take the
+    // plural, eleven to ninety-nine the singular in the accusative, and an
+    // exact hundred — or one or two above it — the singular in the genitive.
+    it.each([
+      [1, 'يوم واحد'],
+      [2, 'يومان'],
+      [3, '3 أيام'],
+      [10, '10 أيام'],
+      [11, '11 يومًا'],
+      [99, '99 يومًا'],
+      [100, '100 يوم'],
+      [101, '101 يوم'],
+      [102, '102 يوم'],
+      [103, '103 أيام'],
+      [110, '110 أيام'],
+      [111, '111 يومًا'],
+      [180, '180 يومًا'],
+      [365, '365 يومًا'],
+      [1000, '1000 يوم'],
+      [1825, '1825 يومًا'],
+    ] as const)('says %i days as %s', (amount, ar) => {
+      expect(termWords({ amount, unit: 'day' })).toEqual({
+        en: amount === 1 ? '1 day' : `${amount} days`,
+        ar,
+      });
     });
   });
 
