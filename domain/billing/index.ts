@@ -16,6 +16,7 @@ export {
   isUsableOn,
 } from './expiry';
 export type { ExpiryTerm, ExpiryUnit, ExpiryWarning } from './expiry';
+export { termWords } from './term';
 export {
   CONSUMPTION_KINDS,
   ENTITLEMENT_STATUSES,

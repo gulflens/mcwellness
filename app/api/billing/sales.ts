@@ -3,8 +3,6 @@ import {
   allocateEntitlements,
   combineDiscounts,
   expiryOn,
-  MAX_EXTENSIONS,
-  nextExtension,
   resolveSaleVat,
   termWords,
   type AppliedDiscount,
@@ -109,11 +107,10 @@ function isDuplicateKey(error: unknown): boolean {
 }
 
 /**
- * A programme as the database holds it, with the count of the extensions it
- * has had. Every statement that reads a purchase selects these columns and
- * this count — `EXTENSIONS_USED_SQL` below — and hands the row to
- * `purchaseRow` rather than mapping it again: three copies of one mapping
- * were three places for a new field to be forgotten.
+ * A programme as the database holds it. Every statement that reads a purchase
+ * selects these columns and hands the row to `purchaseRow` rather than
+ * mapping it again: three copies of one mapping were three places for a new
+ * field to be forgotten.
  */
 export type PurchaseDbRow = {
   id: string;
@@ -127,27 +124,14 @@ export type PurchaseDbRow = {
   list_price_fils: number;
   discount_basis_points: number | null;
   discount_reason: string | null;
-  expires_on: string;
-  extended_to: string | null;
-  extension_reason: string | null;
-  extensions_used: number;
+  /** Null when the programme was sold with no term at all (migration 412). */
+  expires_on: string | null;
   status: PurchaseRow['status'];
   invoice_id: string | null;
 };
 
-/**
- * The correlated count of a programme's extensions, for the select list of
- * any statement that reads a purchase as `p`. Tenant-scoped like every other
- * join in this module: row security would answer the same, and the predicate
- * says so where a reader can see it.
- */
-export const EXTENSIONS_USED_SQL =
-  '(select count(*)::int from package_extension x ' +
-  'where x.tenant_id = app.current_tenant_id() and x.purchase_id = p.id) as extensions_used';
-
 /** One programme, as every screen and every response says it. */
 export function purchaseRow(row: PurchaseDbRow): PurchaseRow {
-  const currentEnd = row.extended_to ?? row.expires_on;
   return {
     id: row.id,
     clientId: row.client_id,
@@ -164,14 +148,9 @@ export function purchaseRow(row: PurchaseDbRow): PurchaseRow {
     discountFils: Math.max(0, row.list_price_fils - row.net_fils),
     discountBasisPoints: row.discount_basis_points,
     discountReason: row.discount_reason,
+    // Null travels as null: a programme with no term has no date, and the
+    // screen says so in words rather than showing an empty cell.
     expiresOn: row.expires_on,
-    extendedTo: row.extended_to,
-    extensionReason: row.extension_reason,
-    extensionsUsed: row.extensions_used,
-    extensionsAllowed: MAX_EXTENSIONS,
-    // The date the screen offers before anybody asks for it, and the null
-    // that tells it there is nothing left to offer.
-    extendsTo: nextExtension(currentEnd, row.extensions_used)?.toOn ?? null,
     status: row.status,
     invoiceId: row.invoice_id,
   };
@@ -180,10 +159,8 @@ export function purchaseRow(row: PurchaseDbRow): PurchaseRow {
 const REPLAY_SQL =
   'select p.id, p.client_id, p.package_id, p.package_name, p.package_name_ar, p.purchased_on, ' +
   'p.net_fils, p.vat_fils, p.list_price_fils, p.discount_basis_points, p.discount_reason, ' +
-  'p.expires_on, p.extended_to, p.extension_reason, ' +
-  'p.status, p.invoice_id, i.reference, ' +
-  EXTENSIONS_USED_SQL +
-  ', (select count(*)::int from entitlement e where e.package_purchase_id = p.id) as credits ' +
+  'p.expires_on, p.status, p.invoice_id, i.reference, ' +
+  '(select count(*)::int from entitlement e where e.package_purchase_id = p.id) as credits ' +
   'from package_purchase p left join invoice i on i.id = p.invoice_id ' +
   'where p.tenant_id = app.current_tenant_id() and p.idempotency_key = $1';
 
@@ -388,7 +365,11 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
       { vatRegistered: stamped.rows[0]?.vat_registered === true },
     );
 
-    const expiresOn = expiryOn(input.purchasedOn, bundle.expiryMonths);
+    // The bundle's own term, whatever it is — or none, in which case the
+    // credits never expire and no date is written anywhere (the operator's
+    // ruling of 12 September 2026). The rule is the domain's; the route reads
+    // the row and writes what it answers.
+    const expiresOn = expiryOn(input.purchasedOn, bundle.term);
 
     // Two presses at the same moment both read no purchase for the key, and
     // both go on to insert one. The second blocks on the unique index until
@@ -467,10 +448,13 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     //
     // The term is said here too, in both languages: the operator's decision 9
     // (docs/PLAN/package-terms.md) is that a programme's length is on the
-    // invoice, not only in the Sell drawer the family saw once.
-    const term = termWords(bundle.expiryMonths);
-    const description = `${bundle.name}, ${term.en}`;
-    const descriptionAr = bundle.nameAr ? `${bundle.nameAr}، ${term.ar}` : null;
+    // invoice, not only in the Sell drawer the family saw once. A programme
+    // with no term names none — the line is the bundle's name and nothing
+    // after it, rather than a form of words about credits that never expire.
+    const term = termWords(bundle.term);
+    const description = term ? `${bundle.name}, ${term.en}` : bundle.name;
+    const descriptionAr =
+      bundle.nameAr === null ? null : term ? `${bundle.nameAr}، ${term.ar}` : bundle.nameAr;
     await db.query(INSERT_LINE_SQL, [
       invoiceId,
       input.clientId,
@@ -530,13 +514,6 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
           discountBasisPoints: applied.basisPoints,
           discountReason: input.extraDiscount?.reason ?? null,
           expiresOn,
-          extendedTo: null,
-          extensionReason: null,
-          // A programme sold a moment ago has had none of its two, so the
-          // first extension it could be given runs from the date above.
-          extensionsUsed: 0,
-          extensionsAllowed: MAX_EXTENSIONS,
-          extendsTo: nextExtension(expiresOn, 0)?.toOn ?? null,
           status: 'active',
           invoiceId,
         },

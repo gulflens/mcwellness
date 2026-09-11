@@ -65,7 +65,9 @@ type PackageDbRow = {
   name: string;
   name_ar: string | null;
   list_price_fils: number;
-  expiry_months: number;
+  /** Both null together, which is the bundle saying its credits never expire. */
+  expiry_amount: number | null;
+  expiry_unit: 'day' | 'month' | null;
   status: 'active' | 'inactive';
 };
 
@@ -94,8 +96,8 @@ type PriceDbRow = {
 };
 
 const PACKAGES_SQL =
-  'select id, code, name, name_ar, list_price_fils, expiry_months, status from package ' +
-  'where tenant_id = app.current_tenant_id() order by list_price_fils, name';
+  'select id, code, name, name_ar, list_price_fils, expiry_amount, expiry_unit, status ' +
+  'from package where tenant_id = app.current_tenant_id() order by list_price_fils, name';
 
 // The components, each carrying what its service costs on its own today: the
 // price with the greatest valid_from at or before today, which is exactly
@@ -185,7 +187,13 @@ export async function readPackages(
       name: row.name,
       nameAr: row.name_ar,
       listPriceFils: row.list_price_fils,
-      expiryMonths: row.expiry_months,
+      // Whole or absent, never half: migration 412's
+      // `package_expiry_term_is_whole` is what lets the pair be put back
+      // together here, and null is the bundle whose credits never expire.
+      term:
+        row.expiry_amount !== null && row.expiry_unit !== null
+          ? { amount: row.expiry_amount, unit: row.expiry_unit }
+          : null,
       status: row.status,
       components: own.map((c) => ({
         serviceTypeId: c.service_type_id,
@@ -430,9 +438,19 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     }
 
     const inserted = await db.query<{ id: string }>(
-      'insert into package (tenant_id, code, name, name_ar, list_price_fils, expiry_months, created_by) ' +
-        'values (app.current_tenant_id(), $1, $2, $3, $4, $5, app.current_actor_id()) returning id',
-      [input.code, input.name, input.nameAr ?? null, input.listPriceFils, input.expiryMonths],
+      'insert into package (tenant_id, code, name, name_ar, list_price_fils, expiry_amount, ' +
+        'expiry_unit, created_by) values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, ' +
+        'app.current_actor_id()) returning id',
+      [
+        input.code,
+        input.name,
+        input.nameAr ?? null,
+        input.listPriceFils,
+        // Both columns or neither, which is what the drawer sends and what the
+        // database's own wholeness constraint insists on.
+        input.term?.amount ?? null,
+        input.term?.unit ?? null,
+      ],
     );
     const packageId = inserted.rows[0]?.id;
     if (!packageId) {

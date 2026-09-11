@@ -1,10 +1,10 @@
 import type { Hono } from 'hono';
 import {
-  SINGLE_SESSION_MONTHS,
   combineDiscounts,
   expiryOn,
   resolveSaleVat,
   type AppliedDiscount,
+  type ExpiryTerm,
 } from '../../../domain/billing';
 import { fils, isoDateIn } from '../../../domain/shared';
 import type { ApiEnv, Db } from '../_middleware/request-context';
@@ -30,9 +30,13 @@ import { IdempotencyKey, SellSessionInput, SellSessionResponse } from './ledger-
  * null` — the package sale's own key lives on `package_purchase` instead,
  * because a package sale always writes one).
  *
- * The one-off term is fixed at `SINGLE_SESSION_MONTHS` (twelve months,
- * `domain/billing/expiry.ts`) rather than any package's own term: a single
- * credit has no package behind it to take a term from.
+ * **The term comes off the price row** (migration 412). A single credit has
+ * no package behind it to take a term from, so the price it was sold at
+ * carries its own — and where the price carries none, which is how every
+ * price starts, the credit never expires and no date is written at all (the
+ * operator's ruling of 12 September 2026). Nothing is fixed in the code any
+ * more: the twelve months this route used to add came from a constant that
+ * could not be changed without a build.
  *
  * Nothing changes for a visit with no credit: `app.charge_single_visit`
  * still invoices it when it closes (migration 404).
@@ -58,8 +62,8 @@ const CLIENT_SQL =
 // dropped, since nothing downstream names the price row again.
 const PRICE_SQL =
   'select p.list_price_fils, p.discount_fils, p.discount_basis_points, ' +
-  'p.vat_rate_basis_points, p.vat_setting_version, st.name as service_type_name, ' +
-  'st.name_ar as service_type_name_ar, ' +
+  'p.vat_rate_basis_points, p.vat_setting_version, p.expiry_amount, p.expiry_unit, ' +
+  'st.name as service_type_name, st.name_ar as service_type_name_ar, ' +
   'app.tenant_charges_vat(app.current_tenant_id()) as vat_registered ' +
   'from price p join service_type st on st.id = p.service_type_id ' +
   'where p.tenant_id = app.current_tenant_id() and st.tenant_id = app.current_tenant_id() ' +
@@ -132,7 +136,8 @@ async function replay(db: Db, key: string): Promise<SellSessionResponse | null> 
     vat_fils: number;
     gross_fils: number;
     entitlement_id: string;
-    expires_on: string;
+    /** Null when the price this was sold at carried no term (migration 412). */
+    expires_on: string | null;
     service_type_name: string;
   }>(REPLAY_SQL, [key]);
   const row = found.rows[0];
@@ -193,6 +198,9 @@ export function mountSessionSales(api: Hono<ApiEnv>, now: () => Date = () => new
       discount_basis_points: number | null;
       vat_rate_basis_points: number;
       vat_setting_version: number;
+      /** Both null together, which is the price saying its credits never expire. */
+      expiry_amount: number | null;
+      expiry_unit: ExpiryTerm['unit'] | null;
       service_type_name: string;
       service_type_name_ar: string | null;
       vat_registered: boolean;
@@ -221,7 +229,15 @@ export function mountSessionSales(api: Hono<ApiEnv>, now: () => Date = () => new
       { rateBasisPoints: price.vat_rate_basis_points, version: price.vat_setting_version },
       { vatRegistered: price.vat_registered },
     );
-    const expiresOn = expiryOn(input.purchasedOn, SINGLE_SESSION_MONTHS);
+    // Whole or absent, never half: the database's own constraint
+    // (`price_expiry_term_is_whole`, migration 412) is what makes reading one
+    // column enough to know about the other, and the pair is put back
+    // together here before the rule is asked.
+    const term: ExpiryTerm | null =
+      price.expiry_amount !== null && price.expiry_unit !== null
+        ? { amount: price.expiry_amount, unit: price.expiry_unit }
+        : null;
+    const expiresOn = expiryOn(input.purchasedOn, term);
 
     // Same defence sales.ts's own sale takes for the same reason: two presses
     // at once both read no invoice for the key and both go on to insert one;

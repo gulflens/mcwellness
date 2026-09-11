@@ -53,10 +53,14 @@ const LEDGER_SQL =
   'select client_id, sum(amount_fils)::int as outstanding_fils from app.billing_ledger ' +
   'where tenant_id = app.current_tenant_id() and client_id = any($1::uuid[]) group by client_id';
 
+// `to_char` of a null date is null, and that null is the answer: a programme
+// sold with no term has no end, and the screen says "No expiry" rather than
+// showing a household an empty cell or a date nobody agreed to (the
+// operator's ruling of 12 September 2026, migration 412).
 const PURCHASES_SQL =
   'select pp.id, pp.client_id, pp.package_name, pp.package_name_ar, ' +
   "to_char(pp.purchased_on, 'YYYY-MM-DD') as purchased_on, " +
-  "to_char(coalesce(pp.extended_to, pp.expires_on), 'YYYY-MM-DD') as expires_on " +
+  "to_char(pp.expires_on, 'YYYY-MM-DD') as expires_on " +
   'from package_purchase pp ' +
   "where pp.tenant_id = app.current_tenant_id() and pp.status = 'active' " +
   'and pp.client_id = any($1::uuid[]) order by pp.purchased_on desc, pp.id';
@@ -119,7 +123,7 @@ export async function householdMoney(db: Db, household: Household): Promise<Hous
       package_name: string;
       package_name_ar: string | null;
       purchased_on: string;
-      expires_on: string;
+      expires_on: string | null;
     }>(PURCHASES_SQL, [clientIds]),
     db.query<{
       package_purchase_id: string | null;

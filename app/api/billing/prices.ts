@@ -90,8 +90,10 @@ const LIST_SQL =
   "and st.status = 'active' and p.valid_from <= $1 " +
   'order by p.service_type_id, p.valid_from desc';
 
+// The term comes back with the figure because the row about to supersede this
+// one has to carry it forward: see INSERT_PRICE_SQL below.
 const LATEST_FOR_SERVICE_SQL =
-  'select id, unit_price_fils, valid_from from price ' +
+  'select id, unit_price_fils, valid_from, expiry_amount, expiry_unit from price ' +
   'where tenant_id = app.current_tenant_id() and service_type_id = $1 ' +
   'and jurisdiction = $2 and recipient_type = $3 ' +
   'order by valid_from desc limit 1';
@@ -104,11 +106,23 @@ const VAT_SETTING_ON_DATE_SQL =
   'where tenant_id = app.current_tenant_id() and effective_from <= $1 ' +
   'order by effective_from desc, version desc limit 1';
 
+/**
+ * **The term is written here, carried from the row this one supersedes.**
+ *
+ * A price amendment is a new row, not an edit (docs/SPEC/billing.md section
+ * 2). The practice's term lives on the price row as of migration 412, so a
+ * column list that did not name it would make every change of figure quietly
+ * reset a deliberate term to "never expires" — a household's credits becoming
+ * eternal, or a practice's intent discarded, with nobody having typed
+ * anything. The term follows the figure until somebody changes it on purpose.
+ */
 const INSERT_PRICE_SQL =
   'insert into price (tenant_id, service_type_id, jurisdiction, recipient_type, ' +
   'list_price_fils, discount_fils, discount_basis_points, unit_price_fils, ' +
-  'vat_rate_basis_points, vat_setting_version, valid_from, supersedes_id, amendment_reason) ' +
-  'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id';
+  'vat_rate_basis_points, vat_setting_version, valid_from, supersedes_id, amendment_reason, ' +
+  'expiry_amount, expiry_unit) ' +
+  'values (app.current_tenant_id(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) ' +
+  'returning id';
 
 function toPriceRow(
   row: {
@@ -212,10 +226,13 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
       return c.json({ error: 'not_found', requestId }, 404);
     }
 
-    const existing = await db.query<{ id: string; unit_price_fils: number; valid_from: string }>(
-      LATEST_FOR_SERVICE_SQL,
-      [body.data.serviceTypeId, JURISDICTION, RECIPIENT_TYPE],
-    );
+    const existing = await db.query<{
+      id: string;
+      unit_price_fils: number;
+      valid_from: string;
+      expiry_amount: number | null;
+      expiry_unit: 'day' | 'month' | null;
+    }>(LATEST_FOR_SERVICE_SQL, [body.data.serviceTypeId, JURISDICTION, RECIPIENT_TYPE]);
     const currentRow = existing.rows[0];
     const currentPrice: Price | null = currentRow
       ? {
@@ -275,6 +292,11 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
       body.data.validFrom,
       currentPrice?.id ?? null,
       body.data.amendmentReason,
+      // The superseded row's term, unchanged. Null on a first price, and null
+      // on every price the practice has never given a term to, which is all
+      // of them until somebody sets one.
+      currentRow?.expiry_amount ?? null,
+      currentRow?.expiry_unit ?? null,
     ]);
     const id = inserted.rows[0]?.id;
     if (!id) {

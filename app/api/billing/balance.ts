@@ -9,7 +9,7 @@ import type { ApiEnv } from '../_middleware/request-context';
 import { logRead } from '../_middleware/audit';
 import { mayReadBalance } from './access';
 import { BalanceResponse } from './ledger-schema';
-import { EXTENSIONS_USED_SQL, purchaseRow, type PurchaseDbRow } from './sales';
+import { purchaseRow, type PurchaseDbRow } from './sales';
 
 /**
  * `GET /api/billing/clients/:clientId/balance` — what a family has left and
@@ -38,11 +38,12 @@ const CLIENT_SQL = 'select id from client where tenant_id = app.current_tenant_i
 const ENTITLEMENTS_SQL =
   'select e.service_type_id, st.code as service_type_code, st.name as service_type_name, ' +
   'st.name_ar as service_type_name_ar, e.status, e.allocated_net_fils, e.consumption_kind, ' +
-  // A purchase the coordinator extended runs to the new date; the original
-  // stays on the row, so what was granted and what was agreed are both legible.
-  'coalesce(pp.extended_to, e.expires_on) as expires_on ' +
+  // The credit's own date and nothing else. It is null when the thing it was
+  // sold from carried no term, and null is the answer a household is owed:
+  // `domain/billing/balance.ts` reads it as a credit that never lapses, and
+  // so does `app.oldest_available_entitlement` when the visit is delivered.
+  'e.expires_on ' +
   'from entitlement e join service_type st on st.id = e.service_type_id ' +
-  'left join package_purchase pp on pp.id = e.package_purchase_id ' +
   'where e.tenant_id = app.current_tenant_id() and e.client_id = $1 ' +
   'order by e.created_at, e.id';
 
@@ -53,9 +54,8 @@ const LEDGER_SQL =
 const PURCHASES_SQL =
   'select p.id, p.client_id, p.package_id, p.package_name, p.package_name_ar, p.purchased_on, ' +
   'p.net_fils, p.vat_fils, p.list_price_fils, p.discount_basis_points, p.discount_reason, ' +
-  'p.expires_on, p.extended_to, p.extension_reason, p.status, p.invoice_id, ' +
-  EXTENSIONS_USED_SQL +
-  ' from package_purchase p where p.tenant_id = app.current_tenant_id() and p.client_id = $1 ' +
+  'p.expires_on, p.status, p.invoice_id ' +
+  'from package_purchase p where p.tenant_id = app.current_tenant_id() and p.client_id = $1 ' +
   'order by p.purchased_on desc, p.id';
 
 type EntitlementDbRow = {
