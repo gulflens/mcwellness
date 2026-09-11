@@ -211,9 +211,29 @@ table as live costs someone an afternoon.
 **Which spec.** `docs/SECURITY.md` "Who may read what" and
 `docs/SPEC/00-data-model.md` section 5.
 
-**The file.** `docs/SECURITY.md`, `docs/SPEC/00-data-model.md` and
-`docs/HANDOVER.md`, the trunk's (`docs/SPEC/OWNERSHIP.md`: `docs/**`): *applied
-on the branch* by the round's closing task.
+**The file.** Three trunk pages, none of them in billing's paths. There is no
+`docs/**` row in `docs/SPEC/OWNERSHIP.md` to cite for them; what OWNERSHIP
+actually says of each is this:
+
+- **`docs/SPEC/00-data-model.md`** — the shared zone's own row, *"`docs/SPEC/00-data-model.md`,
+  `docs/SPEC/OWNERSHIP.md` | The contract"*, under *"Edited only in the trunk
+  session or by the integrator (the owner) on `main`. No worktree touches
+  these."* This edit rides in this pull request **by the integrator's explicit
+  acceptance** in PR 159, because it is the contract: the pull request merges
+  to `main`, and `main` is where OWNERSHIP says the contract is changed. It is
+  not a precedent for a stream changing the contract on its own word.
+- **`docs/SECURITY.md`** — named in no row of either table. The one place
+  OWNERSHIP names it is the trunk's round 34 widening note, which lists it in
+  *"The trunk's own half"*; no stream's "Owns exclusively" cell includes it, so
+  it is the trunk's. It is edited here under the page's own closing rule,
+  quoted under **Why** above, as `billing-10.md` item 3 edited it before.
+- **`docs/HANDOVER.md`** — named in no row either. OWNERSHIP cites it only as
+  the source of *"the cost rules of `docs/HANDOVER.md` section 6"*, under which
+  the integrator has let a piece's shared-zone edits ride in its own pull
+  request; no stream's owned paths include it, so it is the trunk's.
+
+*Applied on the branch* by the round's closing task, and recorded here so the
+integrator reviews each of the three as the trunk's page it is.
 
 ---
 
@@ -242,6 +262,15 @@ Named so nothing is lost. None of them is a defect on this branch.
   not before this round either. If the operator wants the two consistent, the
   fix is `PHRASES.sessionOf` and item 4's sentence together, in the
   client-portal stream.
+- **A backdated single session words today's term and writes the term in force
+  on the day it was sold.** The Sell session drawer names the term of the price
+  in force today (`app/admin/billing/SellSessionDrawer.tsx`, the `term` it reads
+  from `/api/billing/prices`), but the sale writes the term of the price in
+  force on `purchasedOn` (`app/api/billing/session-sales.ts`'s `PRICE_SQL`,
+  `valid_from <= $4`). Where a price's term changed between the two days, the
+  drawer's sentence names one term and the credit carries another. The price
+  figure has the same gap already; closing both means changing how a backdated
+  sale reads the catalogue, which this round does not do.
 - **At the staging pass**, confirm that `package_purchase_extension_reason_check`
   — a name Postgres generated for 403's inline check, which 412 drops by name —
   is spelt the same on staging and production: `select conname from

@@ -19,7 +19,7 @@ import { isUuid } from './ids';
  * card shows "Session 3 of 15" and what is owed at the door, and until now it
  * read `GET /api/billing/clients/:id/balance` to get them. That route answers
  * the console's whole picture — every purchase with its net, its VAT and its
- * list price, the reason a coordinator extended one, invoice ids, the
+ * list price, the reason any extra discount was given, invoice ids, the
  * recognised and deferred figures — which is the practice's commercial position
  * and has no business sitting in a phone at somebody's front door. The
  * permission was never the problem: a practitioner is entitled to both figures,

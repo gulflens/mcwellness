@@ -310,8 +310,9 @@ to production, so the only honest way to undo it is forward. If an extension is
 wanted again it is a round of its own, with a brief written against the term as
 it now is.
 
-**Nothing had been sold when the rule changed**, on any environment, so no
-credit anywhere carries a date it should not. A credit already sold would keep
+**Nothing real had been sold when the rule changed**, on any environment:
+production had recorded no sale, and the sales staging holds are synthetic. So
+no household's credit carries a date it should not. A credit already sold would keep
 the date it was sold with in any case: `expires_on` is written once, at the
 sale, and nothing here rewrites it.
 

@@ -385,7 +385,9 @@ export function mountSales(api: Hono<ApiEnv>, now: () => Date = () => new Date()
     try {
       purchase = await db.query<{
         id: string;
-        expires_on: string;
+        // Null for a programme sold with no term: its credits never expire
+        // (migration 412), so there is no end date to return.
+        expires_on: string | null;
         status: PurchaseRow['status'];
       }>(INSERT_PURCHASE_SQL, [
         input.clientId,
