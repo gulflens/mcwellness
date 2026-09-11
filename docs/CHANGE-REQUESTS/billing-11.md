@@ -213,7 +213,7 @@ table as live costs someone an afternoon.
 
 **The file.** Three trunk pages, none of them in billing's paths. There is no
 `docs/**` row in `docs/SPEC/OWNERSHIP.md` to cite for them; what OWNERSHIP
-actually says of each is this:
+actually says of each is this: The integrator's acceptance covers all three trunk pages, not only the contract: `docs/SECURITY.md` and `docs/HANDOVER.md` ride in this pull request on the same footing, and all three were read in round 44's whole-branch review.
 
 - **`docs/SPEC/00-data-model.md`** — the shared zone's own row, *"`docs/SPEC/00-data-model.md`,
   `docs/SPEC/OWNERSHIP.md` | The contract"*, under *"Edited only in the trunk
