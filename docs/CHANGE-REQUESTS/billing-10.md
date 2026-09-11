@@ -1,5 +1,16 @@
 # billing-10: the seed's term moves with the round, and the live catalogue owes its own data step
 
+> **Superseded, 12 September 2026.** Everything below was true of the round
+> that shipped on 10 September, and it is kept as written because a decision
+> reversed is worth being able to read. Two days later the operator ruled that
+> credits do not expire unless the practice deliberately says they do, and the
+> whole extension feature was removed: the six months item 1 seeded became no
+> term at all, the data step item 2 owed was never run and has been replaced,
+> and items 3 and 4 were undone when `package_extension` was dropped. What
+> became of each is set out at the foot of this file, and the round that did it
+> is `docs/CHANGE-REQUESTS/billing-11.md`. Read the four items below as the
+> record of a decision that stood for one day.
+
 Four facts this round could not settle inside `mcwellness-billing`: the seed
 that every database is built from is a trunk file, not this worktree's to own
 outright; the three programmes already on the live price list are real rows
@@ -226,3 +237,35 @@ them is a defect on this branch.
   minuted. `package_extension` is the seventh table in that array as of item 4
   above, with a case in `tests/portal/db/money_visibility.test.ts` that fails
   without it. Nothing is left here.
+
+---
+
+## What became of these four (12 September 2026)
+
+The operator ruled on 11 September that a household keeps every session it
+paid for, and on 12 September that a programme's term is optional and the
+extension feature goes. `docs/CHANGE-REQUESTS/billing-11.md` is the round that
+did it. Each item above, in its own words, and what it is now:
+
+1. **The seed's six months** became no term at all. `PACKAGE_EXPIRY_MONTHS` is
+   deleted rather than translated into the new columns, and the test named
+   *"sells six-month programmes from this round"* now asserts that the seeded
+   programmes never expire (billing-11 item 1).
+2. **The production data step to six months was never run.** Production's
+   three programmes still read the twelve months they were created with on
+   2026-09-07, and migration 412 carries that across unchanged. The step that
+   blanks them replaces this one (billing-11 item 2).
+3. **The Money row's `package_extension`** is gone from `docs/SECURITY.md`,
+   replaced by a sentence saying the table stood for two days and why it went.
+4. **The seventh table in `portal_money_adults`** left the array when
+   migration 412 dropped the table (billing-11 item 3). The note above that
+   migration 702's rollback block was "one line short" is no longer true: it
+   lists exactly the six tables the policy narrows again.
+
+Of the seven notes under "Left for the billing stream", six are moot, because
+the table, the route and the drawer they describe no longer exist: the
+extension's unchained `client_id`, its hand-copied policies, its dead
+`set_updated_at`, `EXTEND_SQL`'s missing tenant, `extended_by_someone_else`'s
+missing console case, and the adults-only gate that did not name the table.
+The seventh — `app/api/billing/payments.ts` still testing a bare `23505` — is
+unaffected by any of this, and is carried forward into billing-11.
