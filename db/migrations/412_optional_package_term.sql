@@ -28,6 +28,16 @@
 -- has no term, which is what the practice runs today. Nothing acquires a term
 -- by accident, and nothing has to remember to clear one.
 --
+-- **Five years is the longest term either table holds** — sixty months, or
+-- 1,825 days, the same five years `package.expiry_months` allowed from 401.
+-- It is refused here as well as at the wire, because the wire alone did not
+-- keep a longer term out: a data step writes past every screen and every
+-- request shape, and the catalogue's lists parse what they read with the same
+-- strict shape they parse what they are sent. One row written by hand over the
+-- ceiling would then fail both catalogue lists, and every drawer that reads
+-- them, at once. A limit the read path depends on belongs where every writer
+-- meets it, not only the ones that come through a screen.
+--
 -- **What already understood an empty term.** `app.oldest_available_entitlement`
 -- (403) has always counted a credit with no expiry as usable and sorted it
 -- `nulls last`, and `entitlement.expires_on` has always been nullable. This
@@ -84,6 +94,10 @@ alter table public.package add constraint package_expiry_unit_is_known
   check (expiry_unit is null or expiry_unit in ('day', 'month'));
 alter table public.package add constraint package_expiry_term_is_whole
   check ((expiry_amount is null) = (expiry_unit is null));
+alter table public.package add constraint package_expiry_term_within_five_years
+  check (expiry_unit is null
+         or (expiry_unit = 'month' and expiry_amount <= 60)
+         or (expiry_unit = 'day'   and expiry_amount <= 1825));
 
 update public.package
    set expiry_amount = expiry_months,
@@ -100,6 +114,10 @@ comment on column public.package.expiry_unit is
 comment on constraint package_expiry_term_is_whole on public.package is
   'A term is whole or absent, never half. A number with no unit beside it is the one way a '
   'two-column term goes wrong, and it is refused here rather than guessed at by a reader.';
+comment on constraint package_expiry_term_within_five_years on public.package is
+  'Five years at most: sixty months or 1,825 days. Held here as well as at the wire, because a '
+  'data step writes past the wire and the catalogue''s lists parse what they read strictly, so '
+  'one row over the ceiling would fail every screen that reads the catalogue.';
 
 ------------------------------------------------------------------------------
 -- 2. The same term on a price.
@@ -121,6 +139,10 @@ alter table public.price add constraint price_expiry_unit_is_known
   check (expiry_unit is null or expiry_unit in ('day', 'month'));
 alter table public.price add constraint price_expiry_term_is_whole
   check ((expiry_amount is null) = (expiry_unit is null));
+alter table public.price add constraint price_expiry_term_within_five_years
+  check (expiry_unit is null
+         or (expiry_unit = 'month' and expiry_amount <= 60)
+         or (expiry_unit = 'day'   and expiry_amount <= 1825));
 
 comment on column public.price.expiry_amount is
   'How long a credit sold at this price lasts, as a number to read beside expiry_unit. Null '
@@ -132,6 +154,9 @@ comment on column public.price.expiry_unit is
 comment on constraint price_expiry_term_is_whole on public.price is
   'A term is whole or absent, never half. The same rule public.package carries, stated where a '
   'price is written so the two halves of the catalogue cannot drift apart.';
+comment on constraint price_expiry_term_within_five_years on public.price is
+  'Five years at most: sixty months or 1,825 days. The same ceiling public.package carries, and '
+  'for the same reason: the price list parses what it reads strictly, whoever wrote the row.';
 
 ------------------------------------------------------------------------------
 -- 3. The extension machinery goes.
@@ -378,6 +403,7 @@ comment on column public.package_purchase.expires_on is
 --   grant execute on function app.oldest_available_entitlement(uuid, uuid, date) to app_role;
 --
 --   -- Section 2. The term on a price, which nothing had before this file.
+--   alter table public.price drop constraint if exists price_expiry_term_within_five_years;
 --   alter table public.price drop constraint if exists price_expiry_term_is_whole;
 --   alter table public.price drop constraint if exists price_expiry_unit_is_known;
 --   alter table public.price drop constraint if exists price_expiry_amount_is_positive;
@@ -400,6 +426,7 @@ comment on column public.package_purchase.expires_on is
 --     check (expiry_months between 1 and 60);
 --   comment on column public.package.expiry_months is
 --     'How many months a programme runs from purchase. Six by default (the operator, 2026-09-10); a programme keeps the term it was sold with.';
+--   alter table public.package drop constraint if exists package_expiry_term_within_five_years;
 --   alter table public.package drop constraint if exists package_expiry_term_is_whole;
 --   alter table public.package drop constraint if exists package_expiry_unit_is_known;
 --   alter table public.package drop constraint if exists package_expiry_amount_is_positive;

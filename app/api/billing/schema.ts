@@ -31,10 +31,12 @@ export type ServiceTypeOptionsResponse = z.infer<typeof ServiceTypeOptionsRespon
  * at all.
  *
  * Five years is the ceiling in either unit — the sixty months the bundle
- * catalogue always allowed, said in days as well. The database refuses only a
- * non-positive amount and an unknown unit; this is the practice's own limit
- * in front of it, so a mistyped 3650 in a field set to months is refused here
- * rather than stored.
+ * catalogue always allowed, said in days as well. Migration 412 holds the same
+ * ceiling in the database, because the catalogue's lists parse what they read
+ * with this very shape: a row written over it by hand, as a data step writes,
+ * would otherwise fail every list that reads it. Here it is said first, so a
+ * mistyped 3650 in a field set to months is refused with a sentence rather
+ * than a constraint violation.
  *
  * It lives in this file rather than in `ledger-schema.ts`, which re-exports
  * it, because that file imports this one and both catalogues need the one

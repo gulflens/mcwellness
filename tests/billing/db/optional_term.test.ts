@@ -316,6 +316,43 @@ describe('a term on a programme', () => {
       );
     });
   });
+
+  it('is accepted at five years exactly, in either unit', async () => {
+    await rolledBack(owner, async () => {
+      const { rows } = await owner.query<{ expiry_amount: number; expiry_unit: string }>(
+        'insert into package (tenant_id, code, name, list_price_fils, expiry_amount, expiry_unit) ' +
+          "values ($1, 'term-sixty-months', 'Five years in months', 90000, 60, 'month'), " +
+          "($1, 'term-1825-days', 'Five years in days', 90000, 1825, 'day') " +
+          'returning expiry_amount, expiry_unit',
+        [TENANT_ID],
+      );
+      expect(rows).toEqual([
+        { expiry_amount: 60, expiry_unit: 'month' },
+        { expiry_amount: 1825, expiry_unit: 'day' },
+      ]);
+    });
+  });
+
+  it('refuses a term longer than five years, in either unit', async () => {
+    // A data step writes past every screen and past the wire's own shape, and
+    // the catalogue's lists parse what they read strictly: one row over the
+    // ceiling would fail every screen that reads the catalogue. So the
+    // database holds the ceiling as well.
+    await rolledBack(owner, async () => {
+      for (const [amount, unit] of [
+        [61, 'month'],
+        [1826, 'day'],
+      ] as const) {
+        await rejectsWith(
+          owner,
+          CHECK_VIOLATION,
+          'insert into package (tenant_id, code, name, list_price_fils, expiry_amount, expiry_unit) ' +
+            "values ($1, 'term-too-long', 'Longer than five years', 90000, $2, $3)",
+          [TENANT_ID, amount, unit],
+        );
+      }
+    });
+  });
 });
 
 describe('the same term on a price', () => {
@@ -386,6 +423,52 @@ describe('the same term on a price', () => {
         );
       }
     });
+  });
+
+  it('is accepted at five years exactly, in either unit', async () => {
+    await rolledBack(owner, async () => {
+      const { rows } = await owner.query<{ expiry_amount: number; expiry_unit: string }>(
+        `${PRICE}, expiry_amount, expiry_unit) ` +
+          "values ($1, $2, 90000, 90000, 500, 1, $3, 'Five years in months.', 60, 'month'), " +
+          "($1, $2, 90000, 90000, 500, 1, $4, 'Five years in days.', 1825, 'day') " +
+          'returning expiry_amount, expiry_unit',
+        [TENANT_ID, SERVICE_TYPE_ID, TODAY, '2026-09-13'],
+      );
+      expect(rows).toEqual([
+        { expiry_amount: 60, expiry_unit: 'month' },
+        { expiry_amount: 1825, expiry_unit: 'day' },
+      ]);
+    });
+  });
+
+  it('refuses a term longer than five years, in either unit', async () => {
+    await rolledBack(owner, async () => {
+      for (const [amount, unit] of [
+        [61, 'month'],
+        [1826, 'day'],
+      ] as const) {
+        await rejectsWith(
+          owner,
+          CHECK_VIOLATION,
+          `${PRICE}, expiry_amount, expiry_unit) ` +
+            "values ($1, $2, 90000, 90000, 500, 1, $3, 'Longer than five years.', $4, $5)",
+          [TENANT_ID, SERVICE_TYPE_ID, TODAY, amount, unit],
+        );
+      }
+    });
+  });
+});
+
+describe('the five-year ceiling', () => {
+  it('is one named constraint on each table, the names the rollback drops', async () => {
+    const { rows } = await owner.query<{ conname: string }>(
+      'select conname from pg_constraint ' +
+        "where conname like '%\\_expiry\\_term\\_within\\_five\\_years' order by conname",
+    );
+    expect(rows.map((row) => row.conname)).toEqual([
+      'package_expiry_term_within_five_years',
+      'price_expiry_term_within_five_years',
+    ]);
   });
 });
 

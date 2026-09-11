@@ -279,12 +279,16 @@ Warnings at 60 and 30 days are still a later round, once households are on
 programmes, and a credit with no date never warns at all. The notice period and
 the call-out fee are unchanged.
 
-**The five-year ceiling is at the wire, not in the database.** A term is at
-most sixty months, or 1,825 days, which is the same five years
-`package.expiry_months`'s own check allowed from migration 401. The database
-refuses only a non-positive amount and an unknown unit, deliberately: an empty
-term now expresses "forever" properly, so an absurd term is a typing mistake
-for a screen to catch rather than a corruption the database must refuse.
+**The five-year ceiling is in the database as well as at the wire.** A term is
+at most sixty months, or 1,825 days, which is the same five years
+`package.expiry_months`'s own check allowed from migration 401. The wire's
+`Term` shape refuses a longer one with a sentence a screen can show, and
+migration 412's `package_expiry_term_within_five_years` and
+`price_expiry_term_within_five_years` refuse it from every other writer. The
+wire alone was not enough: a data step writes past every screen, and the
+catalogue's lists parse what they read with that same strict shape, so one row
+written by hand over the ceiling would have failed both catalogue lists and
+every drawer that reads them.
 
 **Extensions are gone, one day after they shipped.** _The amendment of
 2026-09-10, in force for one day:_ a programme ran six months from purchase
