@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { termWords } from '@domain/billing';
 import { canActor } from '@domain/shared/actor';
 import { PricesResponse, type PriceRow } from '../../api/billing/schema';
@@ -63,8 +64,8 @@ type State =
   | { kind: 'ready'; response: PricesResponse };
 
 /** The section named in the address bar, or the first one. */
-function sectionFromHash(): SectionKey {
-  const named = window.location.hash.replace(/^#/, '');
+function sectionFrom(hash: string): SectionKey {
+  const named = hash.replace(/^#/, '');
   return SECTIONS.some((entry) => entry.key === named) ? (named as SectionKey) : 'prices';
 }
 
@@ -72,17 +73,36 @@ export function BillingPage() {
   const { apiFetch, session } = useAuth();
   // In the address bar, so a reload — or a link sent to a colleague — lands
   // on the section the person was looking at rather than back on Prices.
-  const [section, setSectionState] = useState<SectionKey>(sectionFromHash);
-  const setSection = useCallback((next: SectionKey) => {
-    setSectionState(next);
-    window.history.replaceState(null, '', `#${next}`);
-  }, []);
+  // **The address is the section.** It was a piece of state with the address
+  // written behind it, which cost this page a listener and could not hear the
+  // rail at all: the rail links to a section by hash
+  // (app/shell/components/Rail.tsx), and an in-app navigation fires no
+  // `hashchange`, so the page would have sat on prices while the rail marked
+  // something else. Read from the router instead, there is one fact, and the
+  // tabs below and the rail beside each other cannot disagree.
+  const { hash } = useLocation();
+  const navigate = useNavigate();
+  const section = sectionFrom(hash);
+  const setSection = useCallback(
+    (next: SectionKey) => {
+      // Replace, not push: moving between the sections of one screen is not a
+      // place in the history, and Back should leave the screen rather than walk
+      // the tabs the reader has already looked at.
+      navigate({ hash: `#${next}` }, { replace: true });
+    },
+    [navigate],
+  );
 
+  // A hash typed into the address bar is a same-document navigation: it fires
+  // `hashchange` and no `popstate`, which is the one change the router cannot
+  // see by itself. Handing it straight back to the router keeps a single
+  // source for the section, and a reload or a link sent to a colleague still
+  // lands where it says it will.
   useEffect(() => {
-    const onHashChange = () => setSectionState(sectionFromHash());
+    const onHashChange = () => navigate({ hash: window.location.hash }, { replace: true });
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+  }, [navigate]);
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Names the service and the new price once a save succeeds (the design

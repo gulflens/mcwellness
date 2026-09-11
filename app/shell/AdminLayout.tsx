@@ -3,11 +3,15 @@ import { Outlet } from 'react-router';
 import {
   canOpenAudit,
   canOpenBilling,
+  canOpenBoard,
   canOpenBooks,
   canOpenEnquiries,
   canOpenKit,
   canOpenPortalAccess,
+  canOpenPractitioners,
   canOpenSchedule,
+  canOpenSettings,
+  canOpenTeam,
   canOpenToday,
   settingsHomeFor,
 } from './adminAccess';
@@ -50,7 +54,7 @@ function store(): Storage | undefined {
  * could only be reached by typing its address (the review of pull request 126,
  * finding B1).
  */
-function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
+export function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
   const settingsHome = settingsHomeFor(actor, now);
   return ADMIN_SECTIONS.filter((section) => {
     if (section.key === 'billing') return canOpenBilling(actor, now);
@@ -63,9 +67,43 @@ function visibleSections(actor: Actor, now: Date): readonly RailSection[] {
     if (section.key === 'audit') return canOpenAudit(actor, now);
     if (section.key === 'enquiries') return canOpenEnquiries(actor, now);
     return true;
-  }).map((section) =>
-    section.key === 'settings' && settingsHome ? { ...section, to: settingsHome } : section,
-  );
+  })
+    .map((section) =>
+      section.key === 'settings' && settingsHome ? { ...section, to: settingsHome } : section,
+    )
+    .map((section) => visiblePages(section, actor, now));
+}
+
+/**
+ * The same promise, one level down: a section lists only the pages this person
+ * may open (the operator's instruction of 2026-09-12).
+ *
+ * Two of the four sections need asking. The board has a rule of its own,
+ * `appointment.board.read`, which admits the same three roles the schedule's
+ * does today but is a separate action and may narrow without it. Settings'
+ * three screens have three audiences — a practitioner who is not the office
+ * sees Practitioners alone — and these are the rules `SettingsNav` asks on the
+ * page itself, so the rail and the page agree about what exists.
+ *
+ * Billing's and Books' pages are not asked about: each of those sections is
+ * one screen behind one rule, already asked above, and a second gate per row
+ * would be a rule that does not exist.
+ */
+function visiblePages(section: RailSection, actor: Actor, now: Date): RailSection {
+  if (section.key === 'schedule') {
+    return canOpenBoard(actor, now)
+      ? section
+      : { ...section, children: section.children?.filter((page) => page.key !== 'board') };
+  }
+  if (section.key === 'settings') {
+    const open: Record<string, boolean> = {
+      practice: canOpenSettings(actor, now),
+      practitioners: canOpenPractitioners(actor, now),
+      team: canOpenTeam(actor, now),
+    };
+    return { ...section, children: section.children?.filter((page) => open[page.key]) };
+  }
+  return section;
 }
 
 /** The ledger: rail on the inline start, content beside it. */

@@ -218,4 +218,97 @@ describe('Rail', () => {
     );
     expect(document.querySelector('.rail__logo')).toBeTruthy();
   });
+
+  it('lists the pages of the section you are on, and of no other', () => {
+    // The operator's instruction of 2026-09-12: the submenu expands under the
+    // section you choose. It is the address that decides, so nothing is
+    // remembered and the rail cannot disagree with the page beside it.
+    render(
+      <MemoryRouter initialEntries={['/admin/billing']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Prices' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/billing#prices'),
+    );
+    expect(screen.getByRole('link', { name: 'Receipts' })).toBeTruthy();
+    // Schedule's own pages belong to Schedule, and it is not the section open.
+    expect(screen.queryByRole('link', { name: 'Week' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Day map' })).toBeNull();
+  });
+
+  it('marks the page the address names, and the first when it names none', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/billing#invoices']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Invoices' }).getAttribute('aria-current')).toBe(
+      'page',
+    );
+    expect(screen.getByRole('link', { name: 'Prices' }).getAttribute('aria-current')).toBeNull();
+    cleanup();
+    // No hash: BillingPage opens on its first section, so the rail says so too
+    // rather than marking nothing at all.
+    render(
+      <MemoryRouter initialEntries={['/admin/billing']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Prices' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('keeps the day from being marked on the week, and leaves the map an anchor', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/schedule/week']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Week' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'Day' }).getAttribute('aria-current')).toBeNull();
+    // The map is served as its own document with the wider policy a browser
+    // map needs, so it is a plain anchor: a client-side navigation would carry
+    // this screen's stricter policy into it.
+    const map = screen.getByRole('link', { name: 'Day map' });
+    expect(map.getAttribute('href')).toBe('/admin/schedule/map');
+    expect(map.getAttribute('aria-current')).toBeNull();
+  });
+
+  it('tells the layout when a page is chosen, so a covering rail puts itself away', () => {
+    const onChoose = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/admin/billing']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+          onChoose={onChoose}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'Receipts' }));
+    expect(onChoose).toHaveBeenCalledTimes(1);
+  });
 });

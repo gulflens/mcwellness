@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BillingPage } from '../../app/admin/billing/BillingPage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
@@ -102,7 +103,17 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function mount(me: unknown, pricesStatus: { body: unknown; status?: number }) {
+/**
+ * `at` is the address the page is opened at. The rail links to a section of
+ * this page by its hash (app/shell/components/Rail.tsx), which is an in-app
+ * navigation and fires no `hashchange`, so the page has to read the router's
+ * own address as well — this is what mounts it somewhere that has one.
+ */
+function mount(
+  me: unknown,
+  pricesStatus: { body: unknown; status?: number },
+  at = '/admin/billing',
+) {
   const posted: unknown[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -119,9 +130,11 @@ function mount(me: unknown, pricesStatus: { body: unknown; status?: number }) {
     throw new Error(`Unexpected fetch: ${url}`);
   }) as unknown as typeof fetch;
   render(
-    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <BillingPage />
-    </AuthProviderBoundary>,
+    <MemoryRouter initialEntries={[at]}>
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <BillingPage />
+      </AuthProviderBoundary>
+    </MemoryRouter>,
   );
   return { fetchImpl, posted };
 }
@@ -309,5 +322,20 @@ describe('the money screen’s four sections', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Balances' }));
     expect(screen.queryByRole('button', { name: 'Add price' })).toBeNull();
     expect(screen.getByText('Find a client to see what they have left.')).toBeTruthy();
+  });
+
+  it('opens the section the address names, so a rail link lands on it', async () => {
+    // The rail's Billing rows link to /admin/billing#invoices and the like.
+    // Reaching one is an in-app navigation: `hashchange` does not fire, so a
+    // page that listened for that alone would sit on Prices and say Invoices.
+    mount(OWNER, { body: { prices: [NF_PRICE] } }, '/admin/billing#invoices');
+    // These suites carry vitest's own matchers and not jest-dom's, so the
+    // attribute is read rather than asserted on with toHaveAttribute.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Invoices' }).getAttribute('aria-current')).toBe(
+        'page',
+      ),
+    );
+    expect(screen.getByRole('button', { name: 'Prices' }).getAttribute('aria-current')).toBeNull();
   });
 });

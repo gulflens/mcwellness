@@ -120,6 +120,10 @@
   --r-3: 10px;
   --hairline: 1px;
   --row: 44px;
+  /* A rail icon's own box, so the pages listed under a section can line their
+     labels up with their section's label rather than with its icon
+     (app/shell/components/Icons.tsx draws every icon at this size). */
+  --rail-icon: 20px;
   /* The rail at its two sizes. shell.css picks one from data-rail; the tier
      and the person's own choice decide which (docs/SPEC/responsive-console.md
      sections 4 and 6). */

@@ -138,6 +138,44 @@ a.rail__item.rail__item--active {
   font-weight: var(--w-medium);
 }
 
+/* The pages of the section you are on (docs/SPEC/coloured-shell.md section
+   7.1). Indented under their section, label only: an icon beside each would
+   compete with the section's own, and the indent is what says these belong to
+   the row above. The rail's own list already scrolls, so a tall section costs
+   the rail nothing. */
+.rail__children {
+  display: flex;
+  flex-direction: column;
+  margin-block: var(--s-1);
+  /* The indent lines a page's label up with its section's label rather than
+     with the section's icon: the icon's own width plus the gap beside it. */
+  margin-inline-start: calc(var(--s-3) + var(--rail-icon) + var(--s-3));
+}
+
+.rail__child {
+  display: flex;
+  align-items: center;
+  /* A section's own row height. The design brief's 44px is the console's row
+     everywhere and a touch target as well, and the rail's list already scrolls
+     when a tall section is open, so there is nothing to buy by shrinking it. */
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  border-radius: var(--r-2);
+  text-decoration: none;
+  color: var(--brand-pale);
+  font-size: var(--t-small);
+}
+
+/* The page you are on takes the same white pill its section takes, for the
+   same measured reason: no violet ground reaches 3.0 against the rail
+   (spec section 4.2). */
+.rail__child--current,
+a.rail__child.rail__child--current {
+  color: var(--brand);
+  background: var(--surface);
+  font-weight: var(--w-medium);
+}
+
 .rail__person {
   flex: none;
   margin-block-start: var(--s-4);
@@ -520,6 +558,13 @@ a.rail__item.rail__item--active {
 /* Closed: the icons stay and the words stand down. Every label is still in the
    markup and hidden the visually-hidden way, so a section closed to an icon
    keeps its accessible name. */
+/* The strip is 64px of icons: a page row has only a label, so there is
+   nothing for it to show and it is not drawn at all. It comes back with the
+   labels, including when the rail covers the page on a tablet or a phone. */
+.admin[data-rail='closed'] .rail__children {
+  display: none;
+}
+
 .admin[data-rail='closed'] .rail__label {
   position: absolute;
   inline-size: 1px;
@@ -574,6 +619,10 @@ a.rail__item.rail__item--active {
 /* Covering, the labels are shown whatever data-rail says: the attribute means
    "the labels are out", and over the page they always are. These undo the
    strip's own hiding, which would otherwise still apply on the way open. */
+.admin[data-rail-mode='overlay'] .rail__children {
+  display: flex;
+}
+
 .admin[data-rail-mode='overlay'] .rail__label {
   position: static;
   inline-size: auto;
