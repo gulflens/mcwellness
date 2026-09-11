@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BooksPage } from '../../app/admin/accounting/BooksPage';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
@@ -323,6 +324,8 @@ function mount(
     overviewStatus?: number;
     csvStatus?: number;
     settings?: unknown;
+    /** The address the page is opened at, for the sections the rail links to. */
+    at?: string;
   } = {},
 ): Mounted {
   const calls: string[] = [];
@@ -375,9 +378,11 @@ function mount(
     throw new Error(`Unexpected fetch: ${url}`);
   }) as unknown as typeof fetch;
   render(
-    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <BooksPage />
-    </AuthProviderBoundary>,
+    <MemoryRouter initialEntries={[options.at ?? '/admin/books']}>
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <BooksPage />
+      </AuthProviderBoundary>
+    </MemoryRouter>,
   );
   return { calls, posted };
 }
@@ -719,5 +724,22 @@ describe('the books’ settings', () => {
     expect(await screen.findByText('The books start on')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Lock through' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Close 2026' })).toBeNull();
+  });
+
+  it('opens the section the address names, so a rail link lands on it', async () => {
+    // The rail lists this page's sections and links to them by hash. Reaching
+    // one is an in-app navigation, which fires no `hashchange`: a page reading
+    // only that would stay on the overview while the rail marked the journal.
+    mount(OWNER, { at: '/admin/books#journal' });
+    // These suites carry vitest's own matchers and not jest-dom's, so the
+    // attribute is read rather than asserted on with toHaveAttribute.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Journal' }).getAttribute('aria-current')).toBe(
+        'page',
+      ),
+    );
+    expect(
+      screen.getByRole('button', { name: 'Overview' }).getAttribute('aria-current'),
+    ).toBeNull();
   });
 });

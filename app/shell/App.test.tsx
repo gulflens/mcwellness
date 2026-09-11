@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from './auth/AuthContext';
@@ -338,16 +338,30 @@ describe('App — /admin/settings/practitioners', () => {
 
   it('offers a practitioner the one settings screen they may open', async () => {
     mount(PRACTITIONER, '/admin/settings/practitioners');
-    expect(await screen.findByRole('link', { name: 'Practitioners' })).toBeTruthy();
+    // Two places offer it since 2026-09-12 — the strip on the page and the
+    // rail's own list of the section's pages — so each is asked by name.
+    const strip = within(await screen.findByRole('navigation', { name: 'Settings' }));
+    const rail = within(screen.getByRole('navigation', { name: 'Sections' }));
+    expect(strip.getByRole('link', { name: 'Practitioners' })).toBeTruthy();
+    expect(rail.getByRole('link', { name: 'Practitioners' })).toBeTruthy();
     // Practice is the owner's and an admin's, so it is not offered to somebody
-    // the route would bounce straight back out of it.
-    expect(screen.queryByRole('link', { name: 'Practice' })).toBeNull();
+    // the route would bounce straight back out of it — in neither place.
+    expect(strip.queryByRole('link', { name: 'Practice' })).toBeNull();
+    expect(rail.queryByRole('link', { name: 'Practice' })).toBeNull();
+    // Nor Team, which is the office's own.
+    expect(rail.queryByRole('link', { name: 'Team' })).toBeNull();
   });
 
   it('offers the office both, from either screen', async () => {
     mount(OWNER, '/admin/settings/practice');
-    expect(await screen.findByRole('link', { name: 'Practice' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Practitioners' })).toBeTruthy();
+    const strip = within(await screen.findByRole('navigation', { name: 'Settings' }));
+    expect(strip.getByRole('link', { name: 'Practice' })).toBeTruthy();
+    expect(strip.getByRole('link', { name: 'Practitioners' })).toBeTruthy();
+    // And the rail lists the same screens beneath Settings.
+    const rail = within(screen.getByRole('navigation', { name: 'Sections' }));
+    expect(rail.getByRole('link', { name: 'Practice' })).toBeTruthy();
+    expect(rail.getByRole('link', { name: 'Practitioners' })).toBeTruthy();
+    expect(rail.getByRole('link', { name: 'Team' })).toBeTruthy();
   });
 });
 
@@ -387,9 +401,10 @@ describe('App — the rail offers Settings to everyone who may open a settings s
 
   it('offers a practitioner no way to the Practice screen, and no way in by address', async () => {
     mount(PRACTITIONER, '/admin/settings/practitioners');
-    await screen.findByRole('link', { name: 'Practitioners' });
+    await screen.findByRole('navigation', { name: 'Settings' });
     // Not in the strip of settings links, and not in the rail either: the rail's
-    // Settings entry is their own screen, never the practice's.
+    // Settings entry is their own screen, never the practice's, and the pages it
+    // lists beneath that entry are the ones they may open and no others.
     expect(screen.queryByRole('link', { name: 'Practice' })).toBeNull();
     cleanup();
     // And typing the address still bounces them to their own day.

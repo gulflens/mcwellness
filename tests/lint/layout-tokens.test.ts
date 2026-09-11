@@ -61,4 +61,15 @@ describe('layout tokens', () => {
   it('keeps the sections scrolling inside the rail', () => {
     expect(shell).toMatch(/\.rail__list\s*\{[^}]*overflow-y:\s*auto/);
   });
+
+  it('draws no page rows on the strip, where there are no labels to draw', () => {
+    // 64px of icons has nothing to show a label-only row, so the list of a
+    // section's pages is not drawn at all there; it returns with the labels,
+    // including when the rail covers the page (docs/SPEC/coloured-shell.md
+    // section 7.1).
+    expect(shell).toMatch(/\[data-rail='closed'\]\s+\.rail__children\s*\{[^}]*display:\s*none/);
+    expect(shell).toMatch(
+      /\[data-rail-mode='overlay'\]\s+\.rail__children\s*\{[^}]*display:\s*flex/,
+    );
+  });
 });

@@ -3628,3 +3628,48 @@ reports 95 migration files checked against `origin/main`, none edited,
 deleted or renamed after the merge — and `db/migrations/` remains untouched
 by every commit this round makes of its own.
 
+---
+
+## Round 45 — the pages under a section, 2026-09-12
+
+**What the operator asked for.** *"For the UI, i need the sub menu in schedule,
+billing and books to be as well visible in the sidebar. once i click one of
+these, i need the submenu to expand and show underneath as well, keep the
+current layout in addition to the sidebar submenu."* Asked whether Settings —
+which also holds several screens — should be treated the same way, the operator
+said yes.
+
+**The trunk's own work** is `app/shell/**`: `railChildren.ts` (new, with its
+test) holds the two pure questions, `components/Rail.tsx` lists a section's
+pages, `AdminLayout.tsx` keeps only the pages a reader may open, `shell.css` and
+`tokens.css` carry the rows, and `docs/SPEC/coloured-shell.md` gains section
+7.1. `tests/lint/layout-tokens.test.ts` is the trunk's own guard.
+
+**Four files outside the trunk's paths**, and why each had to change:
+
+1. `app/admin/billing/BillingPage.tsx` (billing) and
+2. `app/admin/accounting/BooksPage.tsx` (accounting) — about twenty lines each. Both
+   pages hold their sections after a hash and listened for `hashchange`, which
+   the browser fires for a hash typed or followed as a link, and **not** for the
+   `history.pushState` an in-app navigation makes. A rail link to
+   `/admin/billing#invoices` would therefore have changed the address and left
+   the page sitting on Prices. Each page now reads the section from the router's
+   address rather than holding it in state with the address written behind it,
+   and its tabs navigate through the router as well, so there is one fact and
+   not two. An address naming none of that page's sections — no hash at all, or
+   one renamed since a link was sent — shows the page's first section, which is
+   what both pages have always done with a hash they do not recognise; the rail
+   reads it the same way, so the two cannot disagree.
+3. `tests/billing/BillingPage.test.tsx` and
+4. `tests/accounting/BooksPage.test.tsx` — each mounts its page inside a
+   `MemoryRouter`, which reading a router's address requires, and each gains one
+   case: opening at `#invoices` (or `#journal`) shows that section, which is the
+   behaviour the rail's links depend on.
+
+**Nothing else in either module is touched**: no route, no request shape, no
+figure, no permission. The sections listed under Billing and Books are each
+page's own `SECTIONS` in its own order, so if either page adds or renames a
+section the rail's list is the thing to update beside it — a duplication worth
+stating, and deliberate: the alternative was for the shell to import both
+pages' constants and take a bundle dependency on two screens it otherwise
+knows nothing about.

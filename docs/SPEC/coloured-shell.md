@@ -274,6 +274,63 @@ expanded. It is a `button` with `aria-pressed` and the accessible name "Keep
 sections open". The strip shows the toggle alone; there is no room for two
 controls in 64px and nothing for the second to do.
 
+### 7.1 The pages under a section
+
+*Added 2026-09-12 on the operator's instruction: "the sub menu in schedule,
+billing and books to be as well visible in the sidebar… once I click one of
+these, I need the submenu to expand and show underneath as well, keep the
+current layout in addition to the sidebar submenu." Settings was added to the
+three at the same time, on the operator's answer.*
+
+Four sections hold more than one page, and each lists its pages in the rail
+beneath itself:
+
+| Section | Pages |
+|---|---|
+| Schedule | Day, Week, Board, Day map |
+| Billing | Prices, Packages, Balances, Invoices, Receipts |
+| Books | Overview, Journal, Accounts, Statements, Books settings |
+| Settings | Practice, Practitioners, Team |
+
+**The list showing is the list of the section you are on.** Choosing Billing
+goes to Billing and opens its pages; leaving for Books closes Billing's and
+opens Books'. Nothing is remembered and nothing is stored: the open list is
+derived from the address on every render, so the rail cannot come to disagree
+with the page standing beside it, and there is no third remembered fact after
+`mcwellness.rail` and `mcwellness.rail.pinned`.
+
+**The page's own tabs stay exactly as they are.** The rail is a second door
+into the same views, not a replacement for the row of tabs on the page. That
+was the operator's instruction in as many words.
+
+**Which row is marked.** `NavLink` decides from the path alone, and Billing and
+Books hold their sections after a hash — every row of those two would be marked
+at once. `childIsCurrent` (`app/shell/railChildren.ts`) reads the hash as well,
+and when the address names none it marks the section's first page, because that
+is the one those pages open on.
+
+**A page the reader may not open is not listed**, which is the promise the rail
+has always made one level up. The board is asked of `appointment.board.read`,
+its own rule; Settings' three are asked of the same rules `SettingsNav` asks on
+the page. Billing's and Books' pages are not asked about separately: each of
+those sections is one screen behind one rule.
+
+**The day map is a plain anchor**, as the Schedule header's link to it is: it
+is served as its own document with the wider content security policy a browser
+map needs (`docs/SPEC/route-planning.md` section 4.1).
+
+**On the strip there is nothing to draw.** A page row is a label and no icon,
+and 64px holds no labels, so the list is not drawn there at all. It returns
+wherever the labels do, including when the rail covers the page on a tablet or
+a phone — where choosing a page closes the rail behind you, exactly as choosing
+a section does.
+
+**The look.** A page row is indented to line its label up with its section's
+label, takes the rail's own `--brand-pale` at `--t-small`, and the row you are
+on takes the same white pill the current section takes, for the same measured
+reason (section 4.2). The rail's list already scrolls, so a tall section costs
+the rail nothing.
+
 ## 8. The console on a phone
 
 `app/shell/viewport.ts` and its test are deleted, and `index.html` keeps the
