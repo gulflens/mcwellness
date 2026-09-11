@@ -37,7 +37,17 @@ export type RailChild = {
  * rail would otherwise open the wrong list on a screen nobody has written yet.
  */
 export function sectionHolds(base: string, pathname: string): boolean {
-  return pathname === base || pathname.startsWith(`${base}/`);
+  const path = withoutTrailingSlash(pathname);
+  return path === base || path.startsWith(`${base}/`);
+}
+
+/**
+ * `/admin/billing/` is `/admin/billing`. The router matches a path with a
+ * trailing slash and renders the same screen, so a pasted address ending in one
+ * must not leave the rail marking nothing.
+ */
+function withoutTrailingSlash(pathname: string): string {
+  return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
 }
 
 /**
@@ -55,17 +65,18 @@ export function childIsCurrent(
   first: boolean,
 ): boolean {
   const [childPath, childHash] = splitAddress(child.to);
+  const path = withoutTrailingSlash(pathname);
   if (childHash !== null) {
-    if (pathname !== childPath) {
+    if (path !== childPath) {
       return false;
     }
     const named = hash.replace(/^#/, '');
     return named === '' ? first : named === childHash;
   }
-  if (pathname === childPath) {
+  if (path === childPath) {
     return true;
   }
-  return child.end === true ? false : pathname.startsWith(`${childPath}/`);
+  return child.end === true ? false : path.startsWith(`${childPath}/`);
 }
 
 /** A `to` split into its path and its hash, the hash null when it carries none. */

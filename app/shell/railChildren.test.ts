@@ -73,3 +73,14 @@ describe('childIsCurrent', () => {
     expect(childIsCurrent(week, '/admin/schedule/week', '', false)).toBe(true);
   });
 });
+
+describe('an address with a trailing slash', () => {
+  it('is the same address', () => {
+    // The router renders /admin/billing/ as /admin/billing, so the rail must
+    // not go blank on one pasted with a slash on the end.
+    expect(sectionHolds('/admin/billing', '/admin/billing/')).toBe(true);
+    expect(childIsCurrent(prices, '/admin/billing/', '', true)).toBe(true);
+    expect(childIsCurrent(week, '/admin/schedule/week/', '', false)).toBe(true);
+    expect(childIsCurrent(day, '/admin/schedule/week/', '', false)).toBe(false);
+  });
+});

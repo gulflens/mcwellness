@@ -3648,15 +3648,18 @@ pages, `AdminLayout.tsx` keeps only the pages a reader may open, `shell.css` and
 **Four files outside the trunk's paths**, and why each had to change:
 
 1. `app/admin/billing/BillingPage.tsx` (billing) and
-2. `app/admin/accounting/BooksPage.tsx` (accounting) — six lines each. Both
+2. `app/admin/accounting/BooksPage.tsx` (accounting) — about twenty lines each. Both
    pages hold their sections after a hash and listened for `hashchange`, which
    the browser fires for a hash typed or followed as a link, and **not** for the
    `history.pushState` an in-app navigation makes. A rail link to
    `/admin/billing#invoices` would therefore have changed the address and left
-   the page sitting on Prices. Each page now reads the router's address as
-   well, and only when it names one of that page's own sections, so an address
-   with no hash leaves the page exactly where it is — which is what the pages'
-   own tabs rely on when they rewrite the address themselves.
+   the page sitting on Prices. Each page now reads the section from the router's
+   address rather than holding it in state with the address written behind it,
+   and its tabs navigate through the router as well, so there is one fact and
+   not two. An address naming none of that page's sections — no hash at all, or
+   one renamed since a link was sent — shows the page's first section, which is
+   what both pages have always done with a hash they do not recognise; the rail
+   reads it the same way, so the two cannot disagree.
 3. `tests/billing/BillingPage.test.tsx` and
 4. `tests/accounting/BooksPage.test.tsx` — each mounts its page inside a
    `MemoryRouter`, which reading a router's address requires, and each gains one

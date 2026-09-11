@@ -179,7 +179,9 @@ function Covering({
  * **Why one of them is a plain anchor.** The day map is served as its own
  * document, carrying the wider content security policy a browser map needs, so
  * a client-side navigation would take this page's stricter policy into it —
- * the same reason the Schedule header links to it with an anchor.
+ * the same reason the Schedule header links to it with an anchor. It carries no
+ * `aria-current`, and needs none: that document renders no rail, so there is
+ * never a rail on screen while the map is the page.
  */
 function Pages({
   section,
@@ -192,10 +194,17 @@ function Pages({
   hash: string;
   onChoose?: () => void;
 }) {
+  const named = hash.replace(/^#/, '');
+  const holdsHash = (section.children ?? []).some((child) => child.to.split('#')[1] === named);
   return (
     <ul className="rail__children" aria-label={`${section.label} pages`}>
       {(section.children ?? []).map((child, index) => {
-        const current = childIsCurrent(child, pathname, hash, index === 0);
+        // An address naming a section this page does not hold — `#nonsense`, or
+        // one renamed since the link was sent — is read as naming none, because
+        // that is what the page does with it: `sectionFrom` falls back to its
+        // first section, so the rail marks the row the reader is looking at
+        // rather than marking nothing at all.
+        const current = childIsCurrent(child, pathname, holdsHash ? hash : '', index === 0);
         const className = current ? 'rail__child rail__child--current' : 'rail__child';
         return (
           <li key={child.key}>
@@ -310,7 +319,9 @@ export function Rail({
               {section.icon}
               <span className="rail__label">{section.label}</span>
             </NavLink>
-            {section.children && sectionHolds(section.base ?? section.to, pathname) ? (
+            {section.children !== undefined &&
+            section.children.length > 0 &&
+            sectionHolds(section.base ?? section.to, pathname) ? (
               <Pages section={section} pathname={pathname} hash={hash} onChoose={onChoose} />
             ) : null}
           </li>
