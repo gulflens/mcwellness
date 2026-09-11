@@ -124,6 +124,11 @@ export const WORDS = {
   document: t('Document', 'المستند'),
   open: t('Open', 'فتح'),
   expires: t('Expires', 'ينتهي في'),
+  // A programme sold with no term. The credits never stop being usable, which
+  // is a fact about what the household bought, not a favour done to them: it
+  // is stated once, plainly, and nothing is made of it (the operator's ruling
+  // of 12 September 2026, and the tone above).
+  neverExpires: t('These sessions do not expire.', 'هذه الجلسات لا تنتهي صلاحيتها.'),
   noInvoices: t('No invoices yet.', 'لا توجد فواتير بعد.'),
   noPayments: t('No payments yet.', 'لا توجد مدفوعات بعد.'),
   noPackages: t('No programme is running.', 'لا يوجد برنامج جارٍ.'),

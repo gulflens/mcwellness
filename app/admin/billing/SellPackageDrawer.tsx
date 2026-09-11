@@ -39,6 +39,13 @@ import {
  * section 2.4). The preview combines it with the price list's own discount
  * through `domain/billing/discount.ts` — the arithmetic the server runs — so
  * what the coordinator reads out is what the invoice will say.
+ *
+ * **The term is the bundle's own, and a bundle may have none.** Where it
+ * carries one the drawer says how long the credits last, in the rule's own
+ * words (`domain/billing/term.ts`, the same function the invoice line uses);
+ * where it carries none the credits never expire and the drawer says nothing
+ * at all rather than a sentence about not having a term (the operator's
+ * ruling of 12 September 2026).
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -126,6 +133,9 @@ export function SellPackageDrawer({
   const contents = bundle.components
     .map((component) => `${component.quantity} × ${component.serviceTypeName}`)
     .join(', ');
+  // Null for a bundle with no term: the credits never expire, and nothing is
+  // printed. The drawer words nothing itself.
+  const term = termWords(bundle.term);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -380,10 +390,7 @@ export function SellPackageDrawer({
 
           {formError ? <Note tone="critical">{formError}</Note> : null}
 
-          <p className="sell__term">
-            Runs {termWords(bundle.expiryMonths).en} from today. Two extensions of three months each
-            on request.
-          </p>
+          {term ? <p className="sell__term">Runs {term.en} from today.</p> : null}
 
           <div className="drawer__actions">
             <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>

@@ -157,6 +157,16 @@ describe('Visits', () => {
   });
 });
 
+/**
+ * The same answer with the programme sold under no term at all, which is what
+ * the practice's own catalogue now carries: the credits never expire
+ * (the operator's ruling of 12 September 2026).
+ */
+const MONEY_NO_EXPIRY = {
+  ...MONEY,
+  packages: [{ ...MONEY.packages[0], expiresOn: null }],
+};
+
 describe('Money', () => {
   it('shows what is owed, the programme and the papers', async () => {
     mountPortal(<MoneyScreen />, { answers: { '/api/portal/money': () => json(MONEY) } });
@@ -166,6 +176,32 @@ describe('Money', () => {
     expect(screen.getByText('INV-000001')).toBeTruthy();
     expect(screen.getByText('Bank transfer')).toBeTruthy();
     expect(screen.getByText('RCT-000001')).toBeTruthy();
+  });
+
+  it('says when a programme runs out, where it does', async () => {
+    mountPortal(<MoneyScreen />, { answers: { '/api/portal/money': () => json(MONEY) } });
+    expect(await screen.findByText('Expires')).toBeTruthy();
+    expect(screen.getByText('1 August 2027')).toBeTruthy();
+  });
+
+  it('says plainly that a programme with no term does not run out', async () => {
+    // A household should read a fact, not a favour: no date, said in words,
+    // and nothing about being lucky to have it (docs/SPEC/client-portal.md
+    // section 4, and the tone rule at the top of the dictionary).
+    mountPortal(<MoneyScreen />, {
+      answers: { '/api/portal/money': () => json(MONEY_NO_EXPIRY) },
+    });
+    expect(await screen.findByText('These sessions do not expire.')).toBeTruthy();
+    expect(screen.queryByText('Expires')).toBeNull();
+  });
+
+  it('says the same thing in Arabic', async () => {
+    mountPortal(<MoneyScreen />, {
+      locale: 'ar',
+      answers: { '/api/portal/money': () => json(MONEY_NO_EXPIRY) },
+    });
+    expect(await screen.findByText('هذه الجلسات لا تنتهي صلاحيتها.')).toBeTruthy();
+    expect(screen.queryByText('ينتهي في')).toBeNull();
   });
 
   it('says a forgiven charge was forgiven, with the day, and leaves the figure on the row', () => {

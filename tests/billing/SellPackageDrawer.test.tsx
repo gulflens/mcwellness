@@ -21,7 +21,9 @@ const SILVER = {
   name: 'Silver',
   nameAr: 'الفضية',
   listPriceFils: 1_215_000,
-  expiryMonths: 6,
+  // The term as the catalogue now carries it: a number with its unit beside
+  // it, or null for a programme whose credits never expire (migration 412).
+  term: { amount: 6, unit: 'month' } as { amount: number; unit: 'day' | 'month' } | null,
   status: 'active' as const,
   components: [
     {
@@ -120,11 +122,6 @@ function mount(
               discountBasisPoints: null,
               discountReason: null,
               expiresOn: '2027-09-02',
-              extendedTo: null,
-              extensionReason: null,
-              extensionsUsed: 0,
-              extensionsAllowed: 2,
-              extendsTo: '2027-12-02',
               status: 'active',
               invoiceId: '00000004-0000-4000-8000-000000000501',
             },
@@ -161,13 +158,21 @@ describe('SellPackageDrawer', () => {
     expect(screen.getByText('10,841.25')).toBeTruthy();
   });
 
-  it('says the term and the two extensions above the button', async () => {
+  it('says the term above the button, and nothing about an extension', async () => {
     mount();
-    expect(
-      await screen.findByText(
-        'Runs 6 months from today. Two extensions of three months each on request.',
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText('Runs 6 months from today.')).toBeTruthy();
+    // The feature is gone; a sentence still promising it would be a promise
+    // nothing on the screen can keep (the plan of 12 September 2026).
+    expect(screen.queryByText(/extension/i)).toBeNull();
+  });
+
+  it('says nothing at all about a term where the programme has none', async () => {
+    // An empty term means the credits never expire, and the drawer words
+    // nothing rather than inventing a sentence about not having one
+    // (domain/billing/term.ts returns null, and the caller prints nothing).
+    mount(() => undefined, { ...SILVER, term: null });
+    await screen.findByText('Sell Silver');
+    expect(screen.queryByText(/^Runs /)).toBeNull();
   });
 
   it('names no rate while nothing is charged at it', () => {
