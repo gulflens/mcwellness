@@ -112,7 +112,9 @@ export type SeedPackage = {
   nameAr: string;
   /** What the contents come to bought one at a time. Set by the practice, never derived. */
   listPriceFils: number;
-  expiryMonths: number;
+  /** The term, or null when the credits never expire (the operator, 2026-09-11). */
+  expiryAmount: number | null;
+  expiryUnit: 'day' | 'month' | null;
   components: SeedPackageComponent[];
   /** What it is selling for today, with the reason behind the figure. */
   price: {
@@ -541,8 +543,14 @@ const VAT_RATE_BASIS_POINTS = 500;
 const VAT_SETTING_VERSION = 1;
 /** The price list opens before the seed's own "today", so every price is in force. */
 const PRICED_FROM = '2026-01-01';
-/** Six months, the operator's decision 9 of 2026-09-10 (docs/PLAN/package-terms.md); twelve from 2026-09-03 until then. package.expiry_months carries it per programme. */
-const PACKAGE_EXPIRY_MONTHS = 6;
+/**
+ * No term. A household keeps every session it paid for (the operator,
+ * 2026-09-11), so the seeded programmes carry none and a fresh environment
+ * starts the way the practice runs. A term is something the practice sets
+ * deliberately, per programme or per price, never a default it inherits.
+ */
+const PACKAGE_EXPIRY_AMOUNT: number | null = null;
+const PACKAGE_EXPIRY_UNIT: 'day' | 'month' | null = null;
 
 const CONSENT_PURPOSES: readonly ConsentPurpose[] = [
   'participation',
@@ -748,7 +756,8 @@ export function generateSeed(options: SeedOptions = {}): SeedData {
       name: bundle.name,
       nameAr: bundle.nameAr,
       listPriceFils: bundle.listFils,
-      expiryMonths: PACKAGE_EXPIRY_MONTHS,
+      expiryAmount: PACKAGE_EXPIRY_AMOUNT,
+      expiryUnit: PACKAGE_EXPIRY_UNIT,
       components: bundle.contents.map((line, lineNo) => ({
         id: seedId('d2', ++componentCount),
         packageId: id,
