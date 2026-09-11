@@ -1220,3 +1220,61 @@ the offset equal to the size; build `01a08cc2` with the stored settings. The
 served bundle flipped from `index-Bw4G3Mcz.js` to `index-ClUTgBuE.js`. No
 restart needed: `/api/health` 200 in 0.58 s and `/api/health/deep` 200 in
 0.66 s, and `/admin/schedule/map` still serves its widened policy.
+
+## What was done on 2026-09-12: the seventeenth live pass — a programme's term is optional
+
+At 21:36 UTC on 11 September (05:36 on the operator's clock, 12 September), on
+the operator's word — *"Deploy and blank all three"* — `main` at `0fcbc68` was
+built and served: pull request 159, billing round 44.
+
+**Why.** On 11 September the operator ruled that a household keeps every
+session it paid for, and on 12 September set the shape: an empty term means the
+credits never expire; a number with a unit beside it — days or months, chosen
+per programme or price — means that term, for that exact programme or price.
+The Extend feature is removed entirely. This reverses the six-month programmes
+of the fourteenth pass.
+
+**The migration.** `412_optional_package_term.sql`, after the nineteenth
+staging pass (`docs/STAGING.md`), applied with the runner's bookkeeping row
+(sha256 `f24cbb84…1495`) in the same transaction; its pre-flight read no
+extension and no purchase, as the controller's own reading had. Then
+`db/policies/billing/ledger.sql` and `db/policies/portal/money.sql`. Read
+back: 97 rows. The fingerprint across `package`, `price`, `package_purchase`,
+`entitlement` and the dropped `package_extension`, with the body of
+`app.oldest_available_entitlement`, is **`ecbb3fcf5b6eb1518102acec561ea585`,
+209 items — identical to staging and to a freshly migrated local database**.
+
+**The data step, on the operator's word.** At 21:35:22 UTC, under the
+production tenant, the terms of `gold`, `platinum` and `silver` were cleared —
+both columns in one statement, because `package_expiry_term_is_whole` refuses
+one without the other. Three audit rows, one per programme, each an `update`
+of `expiry_amount` and `expiry_unit` from `12 month` to empty, carrying the
+reason *"operator 2026-09-12: credits never expire unless the practice sets a
+term; blank the three live programmes' terms (billing-11 item 2)"* and a
+request id. `app.verify_audit_chain()` returned null. No purchase existed, so
+no household's credit was touched, and nothing in this pass rewrites the date
+of anything already sold.
+
+**The window, stated.** 412 drops `package.expiry_months`, which the previous
+build read, so for about five minutes between the migration and the flip the
+catalogue screens on the old build could not load. One person uses the console
+today and there are no clients; a pass that drops a column the running code
+reads should keep that gap as short as this one did.
+
+**The pass.** Hold protocol clear. Archive `mcwellness-0fcbc68.tar.gz`
+(6,197,704 bytes); TUS create 201 and PATCH 204 with the offset equal to the
+size; build `01a09266` with the stored settings. The served bundle flipped from
+`index-ClUTgBuE.js` to `index-8E9aID3n.js`. No restart needed: `/api/health`
+200 in 1.65 s and `/api/health/deep` 200 in 0.75 s, and `/admin/schedule/map`
+still serves its widened policy. **The served code was read, not assumed:** the
+bundle and its 56 lazily loaded chunks carry *"Leave blank and these credits
+never expire."*, *"No expiry"*, *"Runs for"*, *"Counted in"* and the
+household's *"These sessions do not expire."*, and nothing of the Extend drawer
+or its route.
+
+**Not done.** Nobody has signed in and opened the changed screens against the
+live catalogue: staging has had no running server since the 11 September
+tidy-up, and the strings prove the code is served, not that each screen reads
+the live rows well. The first sign-in to Billing — the programme and price
+lists showing "No expiry", a programme's drawer opening with its term blank — is
+that check.

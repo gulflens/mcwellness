@@ -2160,3 +2160,43 @@ owner with two flagged primaries.
 
 Production was checked for the same shape **before** it was touched and had
 none, so 963 ran there first try. Staging did exactly the job staging is for.
+
+## What was done on 2026-09-12: the nineteenth staging pass — billing round 44
+
+At about 21:30 UTC on 11 September (05:30 on the operator's clock), staging was
+brought level with `main` at `0fcbc68` — pull request 159, a programme's term
+is optional — ahead of the seventeenth live pass. `schema_migration` read 96
+rows; the gap against `main` was exactly one file.
+
+**Read first.** No `package_extension` row, no purchase carrying
+`extended_to`, and no purchase at all; `gold`, `platinum` and `silver` at
+twelve months each; `price` with no term column yet. The same reading came
+back from production, so neither environment could meet 412's pre-flight
+refusal.
+
+`412_optional_package_term.sql` was applied through Supabase's migration tool,
+with the runner's bookkeeping row (sha256 `f24cbb84…1495`) **in the same
+transaction** as the file — the laptop still holds no owner password — so the
+schema change and the record of it land together or not at all. Its pre-flight
+passed. Then the two policy files this round changed,
+`db/policies/billing/ledger.sql` and `db/policies/portal/money.sql`. Read
+back: **97 rows**; `package_extension` gone; the three programmes carried
+across as `12 month`; five prices, none with a term; `package_purchase.expires_on`
+nullable.
+
+**Fingerprinted, not assumed.** Every column, constraint, index, policy and
+trigger across `package`, `price`, `package_purchase`, `entitlement` and
+`package_extension` (now absent), with the body of
+`app.oldest_available_entitlement`, hashed to
+**`ecbb3fcf5b6eb1518102acec561ea585`, 209 items — identical to a freshly
+migrated local database**.
+
+**The rehearsal.** The production data step ran here first, under the staging
+tenant: the three programmes' terms cleared in one statement — both columns
+together, because `package_expiry_term_is_whole` refuses one without the
+other. It left three audit rows, one per programme, each an `update` of
+`expiry_amount` and `expiry_unit` from `12 month` to empty, carrying the step's
+reason and a request id, and `app.verify_audit_chain()` still returned null.
+That is what made the production step safe to run: the audit context a
+hand-written step sets was shown to produce an audited, chained write before
+it touched real data.
