@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_EXPIRY_MONTHS,
-  daysBetween,
-  expiryOn,
-  expiryWarningFor,
-  isUsableOn,
-} from './expiry';
+import { daysBetween, expiryOn, expiryWarningFor, isUsableOn } from './expiry';
 import type { ExpiryTerm } from './expiry';
 
 /**
@@ -25,10 +19,7 @@ describe('expiryOn', () => {
 
   describe('a term counted in months', () => {
     it('lands on the same day of the month, the stated number of months later', () => {
-      expect(DEFAULT_EXPIRY_MONTHS).toBe(6);
-      expect(expiryOn('2026-09-03', { amount: DEFAULT_EXPIRY_MONTHS, unit: 'month' })).toBe(
-        '2027-03-03',
-      );
+      expect(expiryOn('2026-09-03', { amount: 6, unit: 'month' })).toBe('2027-03-03');
     });
 
     it('crosses the year end without losing a day', () => {

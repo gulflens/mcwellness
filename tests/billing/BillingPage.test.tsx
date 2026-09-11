@@ -47,6 +47,9 @@ const NF_PRICE = {
   validFrom: '2026-09-02',
   supersedesId: null,
   amendmentReason: 'Setting the launch price.',
+  // No term: the credits a single session sells never expire unless the
+  // practice sets one on this row (migration 412).
+  term: null,
 };
 
 // A practice registered for VAT: the rate is stamped on the row and it is
@@ -79,6 +82,7 @@ const CREATED_PRICE = {
   validFrom: '2026-12-01',
   supersedesId: '00000004-0000-4000-8000-000000000101',
   amendmentReason: 'Adjusting for the new season.',
+  term: null,
 };
 
 const VAT_RATE = { rateBasisPoints: 500, effectiveFrom: '2018-01-01' };

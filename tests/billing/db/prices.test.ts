@@ -370,6 +370,88 @@ describe('POST /api/billing/prices', () => {
     expect(rows[0]).toEqual({ expiry_amount: null, expiry_unit: null });
   });
 
+  it('writes the term the catalogue drawer sends, over whatever the superseded row carried', async () => {
+    // The other side of the optional shape: a term that IS sent is the term
+    // written, and it replaces the one carried forward rather than joining it.
+    const svc = serviceTypeId('results-call');
+    const first = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 21_000,
+      validFrom: '2027-03-01',
+      amendmentReason: 'A figure to hang a term on.',
+      term: { amount: 30, unit: 'day' },
+    });
+    expect(first.status).toBe(201);
+    const firstId = ((await first.json()) as CreatePriceResponse).price.id;
+
+    const second = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 21_500,
+      validFrom: '2027-04-01',
+      amendmentReason: 'The practice lengthens the term deliberately.',
+      term: { amount: 3, unit: 'month' },
+    });
+    expect(second.status).toBe(201);
+    const secondId = ((await second.json()) as CreatePriceResponse).price.id;
+
+    const { rows } = await owner.query<{
+      id: string;
+      expiry_amount: number | null;
+      expiry_unit: string | null;
+    }>('select id, expiry_amount, expiry_unit from price where id = any($1)', [
+      [firstId, secondId],
+    ]);
+    expect(rows.find((row) => row.id === firstId)).toMatchObject({
+      expiry_amount: 30,
+      expiry_unit: 'day',
+    });
+    expect(rows.find((row) => row.id === secondId)).toMatchObject({
+      expiry_amount: 3,
+      expiry_unit: 'month',
+    });
+  });
+
+  it('takes a term away when the screen sends none deliberately', async () => {
+    // `null` is not absence: absent carries forward, null says the practice
+    // has decided these credits never expire (the controller's ruling of
+    // 12 September 2026).
+    const svc = serviceTypeId('compassionate-inquiry');
+    const first = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 30_000,
+      validFrom: '2027-03-01',
+      amendmentReason: 'A course place that runs out.',
+      term: { amount: 6, unit: 'month' },
+    });
+    expect(first.status).toBe(201);
+
+    const second = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: svc,
+      listPriceFils: 30_000,
+      validFrom: '2027-04-01',
+      amendmentReason: 'A household keeps every place it paid for.',
+      term: null,
+    });
+    expect(second.status).toBe(201);
+    const secondId = ((await second.json()) as CreatePriceResponse).price.id;
+    const { rows } = await owner.query<{
+      expiry_amount: number | null;
+      expiry_unit: string | null;
+    }>('select expiry_amount, expiry_unit from price where id = $1', [secondId]);
+    expect(rows[0]).toEqual({ expiry_amount: null, expiry_unit: null });
+  });
+
+  it('refuses half a term at the door, the way the database refuses it', async () => {
+    const res = await call('POST', '/api/billing/prices', authIdOf(0), {
+      serviceTypeId: serviceTypeId('results-call'),
+      listPriceFils: 21_000,
+      validFrom: '2027-06-01',
+      amendmentReason: 'A number with no unit beside it.',
+      term: { amount: 30 },
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('cannot price a service type in a tenant it does not belong to', async () => {
     const res = await call('POST', '/api/billing/prices', ADMIN_B_AUTH, {
       serviceTypeId: serviceTypeId('nf-session'),

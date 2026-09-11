@@ -265,7 +265,15 @@ export function BillingPage() {
               empty="No prices are set yet."
             />
           ) : null}
-          {drawerOpen ? <PriceDrawer onClose={closeDrawer} onCreated={onCreated} /> : null}
+          {drawerOpen ? (
+            <PriceDrawer
+              onClose={closeDrawer}
+              onCreated={onCreated}
+              // The rows already on screen, so the drawer can show the term
+              // the price it supersedes carries without asking for it again.
+              currentPrices={state.kind === 'ready' ? state.response.prices : []}
+            />
+          ) : null}
         </>
       ) : null}
 

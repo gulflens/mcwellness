@@ -18,9 +18,6 @@
 
 import type { IsoDate } from '../shared';
 
-/** Six months from purchase — the operator's decision 9 of 2026-09-10 (docs/PLAN/package-terms.md); twelve until then. The package row carries its own term; this is the default a new one takes. */
-export const DEFAULT_EXPIRY_MONTHS = 6;
-
 /**
  * The two units the practice counts a term in. The catalogue holds the same
  * pair on `package` and on `price` (migration 412), and nothing else is

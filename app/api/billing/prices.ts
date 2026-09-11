@@ -73,6 +73,8 @@ type PriceListRow = {
   valid_from: string;
   supersedes_id: string | null;
   amendment_reason: string;
+  expiry_amount: number | null;
+  expiry_unit: 'day' | 'month' | null;
 };
 
 // One row per service type: the price with the greatest valid_from at or
@@ -84,7 +86,7 @@ const LIST_SQL =
   'st.code as service_type_code, st.name as service_type_name, st.name_ar as service_type_name_ar, ' +
   'p.list_price_fils, p.discount_fils, p.discount_basis_points, ' +
   'p.unit_price_fils, p.vat_rate_basis_points, p.vat_setting_version, p.valid_from, ' +
-  'p.supersedes_id, p.amendment_reason ' +
+  'p.supersedes_id, p.amendment_reason, p.expiry_amount, p.expiry_unit ' +
   'from price p join service_type st on st.id = p.service_type_id ' +
   'where p.tenant_id = app.current_tenant_id() and p.jurisdiction = $2 and p.recipient_type = $3 ' +
   "and st.status = 'active' and p.valid_from <= $1 " +
@@ -107,14 +109,16 @@ const VAT_SETTING_ON_DATE_SQL =
   'order by effective_from desc, version desc limit 1';
 
 /**
- * **The term is written here, carried from the row this one supersedes.**
+ * **The term is written here: the one the body names, or the one the row this
+ * supersedes already carried.**
  *
  * A price amendment is a new row, not an edit (docs/SPEC/billing.md section
  * 2). The practice's term lives on the price row as of migration 412, so a
  * column list that did not name it would make every change of figure quietly
  * reset a deliberate term to "never expires" — a household's credits becoming
  * eternal, or a practice's intent discarded, with nobody having typed
- * anything. The term follows the figure until somebody changes it on purpose.
+ * anything. The term follows the figure until somebody changes it on purpose,
+ * and `term: null` in the body is that somebody saying so.
  */
 const INSERT_PRICE_SQL =
   'insert into price (tenant_id, service_type_id, jurisdiction, recipient_type, ' +
@@ -140,6 +144,8 @@ function toPriceRow(
     valid_from: string;
     supersedes_id: string | null;
     amendment_reason: string;
+    expiry_amount: number | null;
+    expiry_unit: 'day' | 'month' | null;
   },
   vatRegistered: boolean,
 ): PriceRow {
@@ -173,6 +179,13 @@ function toPriceRow(
     validFrom: row.valid_from,
     supersedesId: row.supersedes_id,
     amendmentReason: row.amendment_reason,
+    // Whole or absent, never half: migration 412's
+    // `price_expiry_term_is_whole` is what lets the pair be put back together
+    // here without a third state to answer for.
+    term:
+      row.expiry_amount !== null && row.expiry_unit !== null
+        ? { amount: row.expiry_amount, unit: row.expiry_unit }
+        : null,
   };
 }
 
@@ -279,6 +292,18 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
       version: setting.version,
     });
 
+    /**
+     * Absent is not the same as null (the controller's ruling of 12 September
+     * 2026). A body that says nothing about the term leaves it exactly as the
+     * superseded row had it; a body that sends `null` takes it away, which is
+     * a thing only a person clearing the field on purpose does.
+     */
+    const carriedForward =
+      currentRow?.expiry_amount != null && currentRow.expiry_unit != null
+        ? { amount: currentRow.expiry_amount, unit: currentRow.expiry_unit }
+        : null;
+    const term = body.data.term === undefined ? carriedForward : body.data.term;
+
     const inserted = await db.query<{ id: string }>(INSERT_PRICE_SQL, [
       body.data.serviceTypeId,
       JURISDICTION,
@@ -292,11 +317,8 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
       body.data.validFrom,
       currentPrice?.id ?? null,
       body.data.amendmentReason,
-      // The superseded row's term, unchanged. Null on a first price, and null
-      // on every price the practice has never given a term to, which is all
-      // of them until somebody sets one.
-      currentRow?.expiry_amount ?? null,
-      currentRow?.expiry_unit ?? null,
+      term?.amount ?? null,
+      term?.unit ?? null,
     ]);
     const id = inserted.rows[0]?.id;
     if (!id) {
@@ -324,6 +346,8 @@ export function mountPrices(api: Hono<ApiEnv>, now: () => Date = () => new Date(
             valid_from: body.data.validFrom,
             supersedes_id: currentPrice?.id ?? null,
             amendment_reason: body.data.amendmentReason,
+            expiry_amount: term?.amount ?? null,
+            expiry_unit: term?.unit ?? null,
           },
           vatRegistered,
         ),

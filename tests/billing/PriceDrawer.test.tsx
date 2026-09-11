@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PriceDrawer } from '../../app/admin/billing/PriceDrawer';
+import type { PriceRow } from '../../app/api/billing/schema';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
 
@@ -16,6 +17,7 @@ const ME = {
 };
 
 const NF_SESSION_ID = '00000004-0000-4000-8000-000000000005';
+const BRAIN_MAP_ID = '00000004-0000-4000-8000-000000000003';
 const SERVICE_TYPES = {
   serviceTypes: [
     {
@@ -24,10 +26,11 @@ const SERVICE_TYPES = {
       name: 'Neurofeedback session',
       nameAr: 'جلسة التغذية الراجعة العصبية',
     },
+    { id: BRAIN_MAP_ID, code: 'brain-map', name: 'Brain map', nameAr: null },
   ],
 };
 
-const CREATED_PRICE = {
+const CREATED_PRICE: PriceRow = {
   id: '00000004-0000-4000-8000-000000000102',
   serviceTypeId: NF_SESSION_ID,
   serviceTypeCode: 'nf-session',
@@ -43,6 +46,22 @@ const CREATED_PRICE = {
   validFrom: '2026-12-01',
   supersedesId: '00000004-0000-4000-8000-000000000101',
   amendmentReason: 'Testing conversion.',
+  term: null,
+};
+
+/**
+ * The price this drawer's next row will supersede: the one in force for the
+ * neurofeedback session today, carrying a term the practice set on purpose.
+ * It is what the term fields prefill from — an amendment that forgot to would
+ * wipe that term without anybody typing anything.
+ */
+const CURRENT_PRICE: PriceRow = {
+  ...CREATED_PRICE,
+  id: '00000004-0000-4000-8000-000000000101',
+  validFrom: '2026-09-02',
+  supersedesId: null,
+  amendmentReason: 'Opening price list.',
+  term: { amount: 30, unit: 'day' as const },
 };
 
 const STANDARD_VAT_RATE = { rateBasisPoints: 500, effectiveFrom: '2018-01-01' };
@@ -69,6 +88,13 @@ type Posted = {
   discount: { kind: 'percent'; basisPoints: number } | { kind: 'amount'; fils: number } | null;
   validFrom: string;
   amendmentReason: string;
+  /**
+   * Absent when the term was not touched, which is how the drawer says
+   * "leave whatever the superseded row carries alone"; `null` only when
+   * somebody cleared it deliberately (the controller's ruling of
+   * 12 September 2026).
+   */
+  term?: { amount: number; unit: 'day' | 'month' } | null;
 };
 
 /** Every GET /api/billing/vat-rate?date=... call this mount received. */
@@ -81,6 +107,8 @@ type VatRateAnswer =
 function mount(
   postResponse: { body: unknown; status: number },
   vatRateResponse: VatRateAnswer = { body: STANDARD_VAT_RATE, status: 200 },
+  // The prices in force, which the page already has open behind the drawer.
+  currentPrices: readonly PriceRow[] = [],
 ) {
   const posted: Posted[] = [];
   const vatRateCalls: VatRateCall[] = [];
@@ -105,7 +133,7 @@ function mount(
   }) as unknown as typeof fetch;
   render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <PriceDrawer onClose={onClose} onCreated={onCreated} />
+      <PriceDrawer onClose={onClose} onCreated={onCreated} currentPrices={currentPrices} />
     </AuthProviderBoundary>,
   );
   return { posted, vatRateCalls, onClose, onCreated };
@@ -403,5 +431,111 @@ describe('a discount on a price', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
     expect(await screen.findByText('The discount is larger than the list price.')).toBeTruthy();
     expect(onCreated).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The term on a price: how long a single session bought ahead stays usable
+ * (migration 412; the operator's ruling of 12 September 2026). A price has
+ * never carried one before, and most never will — blank means the credit
+ * never expires.
+ *
+ * The shape on the wire is **optional**, and the two halves of that are what
+ * these cases hold apart: a term the coordinator never touched is not sent at
+ * all, so the server carries the superseded row's forward, and a term is only
+ * taken away when somebody clears it on purpose.
+ */
+describe('the term a price sells its credits with', () => {
+  it('prefills from the price it supersedes, and says the term in words', async () => {
+    mount({ body: { price: CREATED_PRICE }, status: 201 }, undefined, [CURRENT_PRICE]);
+    await fillPriceAndDate('700');
+    expect((screen.getByLabelText('Runs for') as HTMLInputElement).value).toBe('30');
+    expect((screen.getByLabelText('Counted in') as HTMLSelectElement).value).toBe('day');
+    expect(
+      screen.getByText('These credits last 30 days from the day they are bought.'),
+    ).toBeTruthy();
+  });
+
+  it('leaves the term alone when the figure is amended and the term is not touched', async () => {
+    // The screen half of the trap task 3 closed in SQL: no `term` key at all,
+    // so the server carries forward rather than being told "none".
+    const { posted, onCreated } = mount(
+      { body: { price: CREATED_PRICE }, status: 201 },
+      undefined,
+      [CURRENT_PRICE],
+    );
+    await fillPriceAndDate('750');
+    fireEvent.change(screen.getByLabelText('Why this price changes'), {
+      target: { value: 'A figure changes; the term does not.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(posted[0] && 'term' in posted[0]).toBe(false);
+  });
+
+  it('takes the term away only when it is cleared deliberately, and then says so', async () => {
+    const { posted, onCreated } = mount(
+      { body: { price: CREATED_PRICE }, status: 201 },
+      undefined,
+      [CURRENT_PRICE],
+    );
+    await fillPriceAndDate('700');
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Counted in'), { target: { value: '' } });
+    expect(screen.getByText('Leave blank and these credits never expire.')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Why this price changes'), {
+      target: { value: 'These credits stop expiring.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(posted[0]?.term).toBeNull();
+  });
+
+  it('sets a term on a price that never had one, number and unit together', async () => {
+    const { posted, onCreated } = mount({ body: { price: CREATED_PRICE }, status: 201 });
+    await fillPriceAndDate('700');
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Counted in'), { target: { value: 'month' } });
+    fireEvent.change(screen.getByLabelText('Why this price changes'), {
+      target: { value: 'A session bought ahead runs for a quarter.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(posted[0]?.term).toEqual({ amount: 3, unit: 'month' });
+  });
+
+  it('goes back to the chosen service\u2019s own term when the service changes', async () => {
+    // The term belongs to the price, not to the form: a term typed against
+    // one service must not follow the coordinator to another.
+    mount({ body: { price: CREATED_PRICE }, status: 201 }, undefined, [CURRENT_PRICE]);
+    await fillPriceAndDate('700');
+    expect((screen.getByLabelText('Runs for') as HTMLInputElement).value).toBe('30');
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '6' } });
+    fireEvent.change(screen.getByLabelText('Counted in'), { target: { value: 'month' } });
+
+    fireEvent.change(screen.getByLabelText('Service'), { target: { value: BRAIN_MAP_ID } });
+    expect((screen.getByLabelText('Runs for') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Counted in') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByText('Leave blank and these credits never expire.')).toBeTruthy();
+  });
+
+  it('refuses a number with no unit, and a unit with no number, before anything is sent', async () => {
+    const { posted } = mount({ body: { price: CREATED_PRICE }, status: 201 });
+    await fillPriceAndDate('700');
+    fireEvent.change(screen.getByLabelText('Why this price changes'), {
+      target: { value: 'Half a term, twice over.' },
+    });
+
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    expect(await screen.findByText('Choose days or months.')).toBeTruthy();
+    expect(posted).toHaveLength(0);
+
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Counted in'), { target: { value: 'day' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }));
+    expect(await screen.findByText('Say how many, or leave both blank.')).toBeTruthy();
+    expect(posted).toHaveLength(0);
   });
 });

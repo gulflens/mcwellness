@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { cleanText } from '../_middleware/text';
-import { DiscountInput, IsoDate, isRealText, MINIMUM_REASON } from './schema';
+import { DiscountInput, IsoDate, isRealText, MINIMUM_REASON, Term } from './schema';
 
 /**
  * The shapes the packages, sales, payments, balance, invoice and refund
@@ -50,30 +50,13 @@ const PaymentReference = z
 export const IdempotencyKey = z.uuid();
 
 /**
- * How long the credits something sells last: a whole number with its unit
- * beside it (migration 412, the operator's ruling of 12 September 2026). A
- * `package` carries one and so does a `price`, and both may carry none — and
- * none is expressed as `null` on the field this shape sits in, never as a
- * half-filled pair. That is the point of sending the two together: a number
- * with no unit is the way a term goes wrong, and it cannot be put on the wire
- * at all.
- *
- * Five years is the ceiling in either unit — the sixty months the bundle
- * catalogue always allowed, said in days as well. The database refuses only a
- * non-positive amount and an unknown unit; this is the practice's own limit
- * in front of it, so a mistyped 3650 in a field set to months is refused here
- * rather than stored.
+ * How long the credits something sells last, declared once in `schema.ts`
+ * and re-exported here because a `package` and a `price` carry the same pair
+ * (migration 412, the operator's ruling of 12 September 2026). Whole or
+ * absent, never half; `null` on the field it sits in is how the practice says
+ * these credits never expire.
  */
-export const Term = z
-  .object({
-    amount: z.number().int().min(1),
-    unit: z.enum(['day', 'month']),
-  })
-  .refine(
-    (term) => term.amount <= (term.unit === 'month' ? 60 : 1825),
-    'A term is at most five years, in either unit.',
-  );
-export type Term = z.infer<typeof Term>;
+export { Term };
 
 // ---------------------------------------------------------------------------
 // The bundle catalogue

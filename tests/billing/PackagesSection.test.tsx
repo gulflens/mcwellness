@@ -21,7 +21,9 @@ const SILVER = {
   name: 'Silver',
   nameAr: 'الفضية',
   listPriceFils: 1_215_000,
-  expiryMonths: 12,
+  // The term as the catalogue now carries it: a number with its unit beside
+  // it (migration 412). The three live programmes will end up with none.
+  term: { amount: 12, unit: 'month' as const },
   status: 'active' as const,
   components: [
     {
@@ -119,6 +121,15 @@ describe('PackagesSection', () => {
       screen.getByText('1 × Consultation, 2 × Brain map (QEEG), 15 × Neurofeedback session'),
     ).toBeTruthy();
     expect(screen.getByText('12 months')).toBeTruthy();
+  });
+
+  it('says a programme whose credits never expire has no expiry, rather than leaving a blank', async () => {
+    // What every live programme reads as after the operator's ruling of
+    // 12 September 2026: no term at all, and a column that says so in words.
+    mount(OWNER, [{ ...SILVER, term: null }]);
+    await screen.findByText('Silver');
+    expect(screen.getByText('No expiry')).toBeTruthy();
+    expect(screen.queryByText('12 months')).toBeNull();
   });
 
   it('shows the list price and the price now as two separate figures', async () => {

@@ -2,7 +2,6 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PackageDrawer } from '../../app/admin/billing/PackageDrawer';
-import { DEFAULT_EXPIRY_MONTHS, termWords } from '../../domain/billing';
 import { json, mountWith, OWNER } from './harness';
 
 afterEach(cleanup);
@@ -38,6 +37,9 @@ function price(serviceTypeId: string, name: string, unitPriceFils: number, n: nu
     validFrom: '2026-09-02',
     supersedesId: null,
     amendmentReason: 'Opening price list.',
+    // What a single one of these sells with: nothing, until the practice sets
+    // a term on the price itself (migration 412).
+    term: null,
   };
 }
 
@@ -77,23 +79,6 @@ function mount(onCreated: (row: unknown) => void = () => undefined) {
 }
 
 describe('PackageDrawer', () => {
-  it("starts a new programme at the practice's own default term", async () => {
-    // Asserted against `DEFAULT_EXPIRY_MONTHS` rather than the figure it
-    // holds today: the field, the hint and the constant are one fact, and a
-    // test that typed six would let them come apart the day the operator
-    // changes it.
-    mount();
-    await screen.findByLabelText(/Brain map/);
-    expect((await screen.findByLabelText('Runs for (months)')).getAttribute('value')).toBe(
-      String(DEFAULT_EXPIRY_MONTHS),
-    );
-    expect(
-      screen.getByText(
-        `How long a family has to use it. ${termWords(DEFAULT_EXPIRY_MONTHS).en} unless the practice decides otherwise.`,
-      ),
-    ).toBeTruthy();
-  });
-
   it("offers the contents' total as the list price, grouped as money is written", async () => {
     mount();
     await screen.findByLabelText(/Brain map/);
@@ -226,5 +211,111 @@ describe('the discount and the price now', () => {
       ),
     ).toBeTruthy();
     expect(requests.some((request) => request.url === '/api/billing/packages')).toBe(false);
+  });
+});
+
+/**
+ * How long a programme's credits last, and the plain fact that they may last
+ * for ever (the operator's ruling of 12 September 2026,
+ * docs/superpowers/plans/2026-09-12-optional-terms.md).
+ *
+ * A new programme starts with **no term at all** — there is no default, and
+ * no default unit either, because a field pre-set to days is how somebody
+ * types 6 meaning months and sells a week's credits by accident. Both halves
+ * are typed on purpose or neither is.
+ */
+describe('the term a new programme runs for', () => {
+  /** Every term the drawer sent, in order. */
+  function sentTerms(requests: { url: string; body: unknown }[]) {
+    return requests
+      .filter((request) => request.url === '/api/billing/packages')
+      .map((request) => (request.body as { term: unknown }).term);
+  }
+
+  it('starts blank, with no unit chosen, and says on screen what blank means', async () => {
+    mount();
+    await screen.findByLabelText(/Brain map/);
+    expect((screen.getByLabelText('Runs for') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Counted in') as HTMLSelectElement).value).toBe('');
+    expect(screen.getByText('Leave blank and these credits never expire.')).toBeTruthy();
+  });
+
+  it('sends no term for a programme left blank, and the sentence still says so', async () => {
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    buildSilver();
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+    await waitFor(() => expect(sentTerms(requests)).toHaveLength(1));
+    expect(sentTerms(requests)[0]).toBeNull();
+    expect(screen.getByText('Leave blank and these credits never expire.')).toBeTruthy();
+  });
+
+  it('sends the number and the unit together, and says the term in words', async () => {
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    buildSilver();
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '6' } });
+    fireEvent.change(screen.getByLabelText('Counted in'), { target: { value: 'month' } });
+    // The wording is domain/billing/term.ts's, not the drawer's own.
+    expect(
+      screen.getByText('These credits last 6 months from the day they are bought.'),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+    await waitFor(() => expect(sentTerms(requests)).toHaveLength(1));
+    expect(sentTerms(requests)[0]).toEqual({ amount: 6, unit: 'month' });
+  });
+
+  it('counts a short term in days, and sends the unit that was chosen', async () => {
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    buildSilver();
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('Counted in'), { target: { value: 'day' } });
+    expect(
+      screen.getByText('These credits last 30 days from the day they are bought.'),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+    await waitFor(() => expect(sentTerms(requests)).toHaveLength(1));
+    expect(sentTerms(requests)[0]).toEqual({ amount: 30, unit: 'day' });
+  });
+
+  it('refuses a number with no unit beside it, before anything is sent', async () => {
+    // The database refuses half a term too (migration 412's wholeness
+    // constraint), but a coordinator should not have to learn that from a 400.
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    buildSilver();
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '6' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+
+    expect(await screen.findByText('Choose days or months.')).toBeTruthy();
+    expect(sentTerms(requests)).toHaveLength(0);
+    expect(document.activeElement).toBe(screen.getByLabelText('Counted in'));
+  });
+
+  it('refuses a unit with no number beside it, before anything is sent', async () => {
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    buildSilver();
+    fireEvent.change(screen.getByLabelText('Counted in'), { target: { value: 'month' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+
+    expect(await screen.findByText('Say how many, or leave both blank.')).toBeTruthy();
+    expect(sentTerms(requests)).toHaveLength(0);
+    expect(document.activeElement).toBe(screen.getByLabelText('Runs for'));
+  });
+
+  it('refuses a term longer than the five years the wire allows', async () => {
+    const { requests } = mount();
+    await screen.findByLabelText(/Brain map/);
+    buildSilver();
+    fireEvent.change(screen.getByLabelText('Runs for'), { target: { value: '120' } });
+    fireEvent.change(screen.getByLabelText('Counted in'), { target: { value: 'month' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save package' }));
+
+    expect(await screen.findByText('A term is at most five years, in either unit.')).toBeTruthy();
+    expect(sentTerms(requests)).toHaveLength(0);
   });
 });
