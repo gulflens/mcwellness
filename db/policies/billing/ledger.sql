@@ -163,37 +163,12 @@ begin
 end
 $$;
 
--- package_extension (410): read by whoever reads the purchase; written by
--- whoever may extend (the roles app/api/billing/access.ts's mayExtend admits,
--- which the route checks first; this is the floor beneath it). mayExtend rides
--- on billing.waiver.write, and domain/shared/actor.ts gives that to the owner,
--- an admin and finance — the three money roles, and no lead practitioner.
---
--- The read is `ledger_readers`' audience exactly, because the row is the more
--- telling half of the pair: it names a household and carries a sentence about
--- why they asked for longer. `tenant_isolation` alone would let anybody in the
--- practice count it, which is wider than the purchase it extends.
-drop policy if exists tenant_isolation on public.package_extension;
-create policy tenant_isolation on public.package_extension for all to app_role
-  using (tenant_id = app.current_tenant_id())
-  with check (tenant_id = app.current_tenant_id());
-
-drop policy if exists package_extension_readers on public.package_extension;
-create policy package_extension_readers on public.package_extension
-  as restrictive for select to app_role using (
-    app.client_erasure_gate(app.client_status_for(client_id)) and (
-      app.actor_has_role('owner') or app.actor_has_role('admin')
-      or app.actor_has_role('lead_practitioner') or app.actor_has_role('finance')
-      or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
-      or (app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id))
-    )
-  );
-
-drop policy if exists package_extension_writers on public.package_extension;
-create policy package_extension_writers on public.package_extension as restrictive for insert to app_role
-  with check (
-    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('finance')
-  );
+-- `package_extension` (410) had its three policies here until migration 964
+-- dropped the table with the rest of the extension machinery: a programme's
+-- term is optional from 2026-09-12, and a programme with no term has nothing
+-- to extend. This file is re-applied on every migrate, so the blocks had to go
+-- in the same pull request as the migration or the policy pass would fail on a
+-- table that is no longer there.
 
 ------------------------------------------------------------------------------
 -- 4. The exception queue. An office matter: something the practice owes an
