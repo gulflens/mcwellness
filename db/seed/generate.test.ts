@@ -238,15 +238,21 @@ describe('generateSeed', () => {
       expect(bundle.price.amountFils, bundle.code).toBe(selling[i]);
       expect(bundle.price.amountFils).toBeLessThan(bundle.listPriceFils);
       expect(bundle.price.amendmentReason).toContain('Launch pricing');
-      expect(bundle.expiryMonths).toBe(6);
+      expect(bundle.expiryAmount, bundle.code).toBeNull();
+      expect(bundle.expiryUnit, bundle.code).toBeNull();
       expect(bundle.components.map((c) => c.lineNo)).toEqual([1, 2, 3]);
       for (const component of bundle.components) expect(component.packageId).toBe(bundle.id);
     });
   });
 
-  it('sells six-month programmes from this round', () => {
+  it('sells programmes that never expire, which is what the practice does', () => {
+    // The operator's ruling of 11 September 2026: a household keeps every
+    // session it paid for. A seeded default of six months would quietly teach
+    // every new environment the opposite, so the seed carries none and a term
+    // is something the practice sets deliberately, per programme or per price.
     const data = generateSeed();
-    expect(data.packages.map((p) => p.expiryMonths)).toEqual([6, 6, 6]);
+    expect(data.packages.map((p) => p.expiryAmount)).toEqual([null, null, null]);
+    expect(data.packages.map((p) => p.expiryUnit)).toEqual([null, null, null]);
   });
 
   it('places a home in every emirate, with a Makani number only in Dubai', () => {
