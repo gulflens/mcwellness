@@ -213,7 +213,7 @@ table as live costs someone an afternoon.
 
 **The file.** Three trunk pages, none of them in billing's paths. There is no
 `docs/**` row in `docs/SPEC/OWNERSHIP.md` to cite for them; what OWNERSHIP
-actually says of each is this: The integrator's acceptance covers all three trunk pages, not only the contract: `docs/SECURITY.md` and `docs/HANDOVER.md` ride in this pull request on the same footing, and all three were read in round 44's whole-branch review.
+actually says of each is this:
 
 - **`docs/SPEC/00-data-model.md`** — the shared zone's own row, *"`docs/SPEC/00-data-model.md`,
   `docs/SPEC/OWNERSHIP.md` | The contract"*, under *"Edited only in the trunk
@@ -231,6 +231,11 @@ actually says of each is this: The integrator's acceptance covers all three trun
   the source of *"the cost rules of `docs/HANDOVER.md` section 6"*, under which
   the integrator has let a piece's shared-zone edits ride in its own pull
   request; no stream's owned paths include it, so it is the trunk's.
+
+**The integrator's acceptance** covers all three pages, not only the contract:
+`docs/SECURITY.md` and `docs/HANDOVER.md` ride in this pull request on the same
+footing, and all three were read in round 44's whole-branch review. That is the
+integrator's word in PR 159, not something OWNERSHIP grants.
 
 *Applied on the branch* by the round's closing task, and recorded here so the
 integrator reviews each of the three as the trunk's page it is.

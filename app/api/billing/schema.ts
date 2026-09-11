@@ -129,9 +129,9 @@ export const IsoDate = z
  * ".", "aaaaaaaa". In billing these appear on price changes, on an extra
  * discount given at a sale, and on waivers — the places where somebody gave
  * money away or took a charge back — and the whole purpose of the field is
- * that a person later can see what happened. So: at least eight characters after trimming, and not the same
- * character repeated, which is what a required field collects when nobody
- * means to fill it in.
+ * that a person later can see what happened. So: at least eight characters
+ * after trimming, and not the same character repeated, which is what a
+ * required field collects when nobody means to fill it in.
  */
 export const MINIMUM_REASON = 8;
 
