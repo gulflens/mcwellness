@@ -8,26 +8,42 @@
  * byte for byte, so a number whose country was guessed wrong is still the same
  * number.
  *
+ * That losslessness is why `joinE164` is pure composition and never strips a
+ * leading zero: some countries' national significant numbers legitimately
+ * keep one inside E.164 (Italian mobiles are the standard example — see the
+ * test file's `+390612345678` case). Stripping a trunk zero someone TYPED is
+ * a different question, answered by `stripTrunkPrefix`, and it is the
+ * caller's decision to apply it, made where the typing happens — not
+ * `joinE164`'s to make on a value that might equally be a stored remainder
+ * handed back by `splitE164`.
+ *
  * Pure and browser-safe: no I/O, no Node built-in.
  */
 
 /**
- * A national number with its trunk prefix removed. A UAE mobile is written
- * `050 000 1234` on a card and `+971500001234` in E.164; concatenating the
- * written form yields `+9710500001234`, which looks plausible and cannot be
- * dialled. Exactly one leading zero goes, because a second is a typo rather
- * than a convention.
+ * Removes a trunk zero from what a PERSON TYPED. A UAE mobile is written
+ * `050 000 1234` on a card and `500001234` in E.164; exactly one leading zero
+ * goes, because a second is a typo rather than a convention. Apply this to
+ * typed input before calling `joinE164` — `joinE164` itself never strips a
+ * leading zero, because a value it is given might be a stored remainder that
+ * legitimately keeps one (see the module docstring).
  */
 export function stripTrunkPrefix(national: string): string {
   const digits = national.replace(/[^0-9]/g, '');
   return digits.startsWith('0') ? digits.slice(1) : digits;
 }
 
-/** The stored form. Empty in, empty out — an optional number stays optional. */
+/**
+ * The stored form: concatenates `diallingCode` with the digits of `national`,
+ * unchanged. Never removes a leading zero — some national significant numbers
+ * legitimately keep one inside E.164, and this function cannot tell such a
+ * number apart from one a caller forgot to strip. Empty in, empty out — an
+ * optional number stays optional.
+ */
 export function joinE164(diallingCode: string, national: string): string {
-  const rest = stripTrunkPrefix(national);
-  if (rest === '') return '';
-  return `${diallingCode}${rest}`;
+  const digits = national.replace(/[^0-9]/g, '');
+  if (digits === '') return '';
+  return `${diallingCode}${digits}`;
 }
 
 /**
