@@ -46,3 +46,20 @@ export function formatEmiratesId(input: string): string {
   const d = normaliseEmiratesId(input);
   return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7, 14)}-${d.slice(14)}`;
 }
+
+/**
+ * The display grouping of however many digits have been typed so far:
+ * `784`, `784-1900`, `784-1900-0000001-7`.
+ *
+ * Total where `formatEmiratesId` is strict. That one normalises first and
+ * throws unless handed all fifteen digits, which is right for the value that is
+ * hashed and sealed and useless for a box someone is still typing into. Both
+ * group `3-4-7-1`; only their tolerance differs.
+ */
+export function groupEmiratesIdDigits(input: string): string {
+  const d = toLatinDigits(input)
+    .replace(/[^0-9]/g, '')
+    .slice(0, EMIRATES_ID_DIGITS);
+  const parts = [d.slice(0, 3), d.slice(3, 7), d.slice(7, 14), d.slice(14)];
+  return parts.filter((part) => part !== '').join('-');
+}

@@ -29,6 +29,7 @@ export type { KnownMimeType } from './fileSignature';
 export {
   EMIRATES_ID_DIGITS,
   formatEmiratesId,
+  groupEmiratesIdDigits,
   normaliseEmiratesId,
   toLatinDigits,
 } from './emirates-id';

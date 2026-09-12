@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { formatEmiratesId, normaliseEmiratesId, toLatinDigits } from './emirates-id';
+import {
+  formatEmiratesId,
+  groupEmiratesIdDigits,
+  normaliseEmiratesId,
+  toLatinDigits,
+} from './emirates-id';
 
 // Synthetic throughout: the 784-1900 range is reserved for fakes.
 const ID = '784-1900-0000001-7';
@@ -31,5 +36,33 @@ describe('toLatinDigits and Arabic-Indic input', () => {
     const latin = normaliseEmiratesId('784-1900-0000013-4');
     expect(normaliseEmiratesId('٧٨٤-١٩٠٠-٠٠٠٠٠١٣-٤')).toBe(latin);
     expect(normaliseEmiratesId('۷۸۴-۱۹۰۰-۰۰۰۰۰۱۳-۴')).toBe(latin);
+  });
+});
+
+describe('groupEmiratesIdDigits', () => {
+  it('inserts the dashes as the digits arrive', () => {
+    expect(groupEmiratesIdDigits('')).toBe('');
+    expect(groupEmiratesIdDigits('784')).toBe('784');
+    expect(groupEmiratesIdDigits('7841')).toBe('784-1');
+    expect(groupEmiratesIdDigits('7841900')).toBe('784-1900');
+    expect(groupEmiratesIdDigits('78419000000001')).toBe('784-1900-0000001');
+    expect(groupEmiratesIdDigits('784190000000017')).toBe('784-1900-0000001-7');
+  });
+
+  it('never throws on a partial run, unlike formatEmiratesId', () => {
+    expect(() => groupEmiratesIdDigits('7')).not.toThrow();
+    expect(() => groupEmiratesIdDigits('123')).not.toThrow();
+  });
+
+  it('reads through separators, folds Arabic-Indic, and stops at fifteen digits', () => {
+    expect(groupEmiratesIdDigits('784-1900-0000001-7')).toBe('784-1900-0000001-7');
+    expect(groupEmiratesIdDigits('٧٨٤١٩٠٠٠٠٠٠٠٠١٧')).toBe('784-1900-0000001-7');
+    expect(groupEmiratesIdDigits('7841900000000179999')).toBe('784-1900-0000001-7');
+  });
+
+  it('stays independent of formatEmiratesId: one throws on a partial run, the other does not', () => {
+    const partial = '784190';
+    expect(() => formatEmiratesId(partial)).toThrow('fifteen digits');
+    expect(groupEmiratesIdDigits(partial)).toBe('784-190');
   });
 });
