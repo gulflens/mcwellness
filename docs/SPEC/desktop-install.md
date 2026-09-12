@@ -65,3 +65,31 @@ No badge, no push, no file handlers, no protocol handlers: none is asked for.
 If the amplifier is ever to talk to the app directly, that needs WebUSB or Web
 Serial, which Chrome and Edge have and Safari does not — a decision for the day
 someone wants it, not before.
+
+## 5. How the PNGs are made, and why not with a thumbnailer
+
+They are rendered by an exact rasteriser rather than converted by a tool that
+happened to be installed. The first attempt used macOS Quick Look, which
+**composites onto a white matte**: the three icons came out with opaque white
+wedges in the corners where the mark's rounded square is transparent, which on
+a dark Windows taskbar or in a dark tab strip is precisely the poor icon this
+was meant to end. The review of pull request 165 measured it — pixel (0,0)
+opaque white, no transparent pixel anywhere — before it shipped.
+
+The mark is a rounded square and one glyph of straight lines only, so both are
+computable: the corners are four circles of radius 96 in a 512 box, the glyph
+is a thirteen-point polygon, and a 4×4 supersample gives the edges. Nothing is
+drawn by hand twice and nothing is traced.
+
+**Each file is what its platform wants, and they differ:**
+
+| File | Shape | Corners | Why |
+|---|---|---|---|
+| `icon-192.png`, `icon-512.png` | rounded | transparent | The icon is the mark, and a browser puts it on whatever ground it likes. |
+| `icon-512-maskable.png` | full bleed | opaque | Android applies its own mask; a maskable icon that is already rounded is cropped twice. |
+| `apple-touch-icon.png` | full bleed | opaque | Apple renders transparency as black and applies its own rounding. |
+
+The glyph's farthest corner is 155px from the centre of a 512 box, inside the
+205px radius a maskable icon's safe zone allows, so no mask can clip it.
+`tests/lint/manifest-installs-the-console.test.ts` holds each file's size and
+whether its corner is transparent, which is the property that went wrong.

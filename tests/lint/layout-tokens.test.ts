@@ -79,8 +79,12 @@ describe('layout tokens', () => {
     // pointer is precise — and back to the console's 44px wherever it is not
     // (docs/SPEC/coloured-shell.md section 7.1).
     expect(shell).toMatch(/\.rail__child\s*\{[^}]*min-block-size:\s*36px/);
+    // `any-pointer`, not `pointer`: a touchscreen laptop's primary pointer is
+    // its trackpad, so `pointer: coarse` never matches there and the finger
+    // would get the short row (the review of pull request 165).
     expect(shell).toMatch(
-      /@media\s*\(pointer:\s*coarse\)\s*\{\s*\.rail__child\s*\{[^}]*min-block-size:\s*var\(--row\)/,
+      /@media\s*\(any-pointer:\s*coarse\)\s*\{\s*\.rail__child\s*\{[^}]*min-block-size:\s*var\(--row\)/,
     );
+    expect(shell).not.toMatch(/@media\s*\(pointer:\s*coarse\)/);
   });
 });

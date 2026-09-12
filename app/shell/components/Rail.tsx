@@ -200,12 +200,18 @@ function Pages({
   // scrolls, and the pages that just appeared could open below the fold. This
   // brings them back into view. `nearest` moves the least that will do, so a
   // rail with room to spare does not jump.
+  //
+  // On mount and only on mount: this component is rendered for the one section
+  // the reader is in, keyed by that section, so it unmounts and remounts when
+  // they move to another. Moving between pages *within* a section therefore
+  // does not re-fire it, which is what keeps it from fighting somebody who has
+  // deliberately scrolled the rail.
   useEffect(() => {
     // Optional because jsdom does not implement it: the tests render this rail
     // constantly and a hard call throws there, which is a test environment's
     // gap rather than anything a browser lacks.
     list.current?.scrollIntoView?.({ block: 'nearest' });
-  }, [section.key]);
+  }, []);
   const named = hash.replace(/^#/, '');
   const holdsHash = (section.children ?? []).some((child) => child.to.split('#')[1] === named);
   return (

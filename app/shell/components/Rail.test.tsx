@@ -334,8 +334,13 @@ describe('Rail', () => {
         />
       </MemoryRouter>,
     );
-    // `nearest`: move the least that will do, so a rail with room does not jump.
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
-    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    try {
+      // `nearest`: move the least that will do, so a rail with room does not jump.
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    } finally {
+      // Even when the assertion fails: a stub left on the prototype would
+      // follow every later test in this worker.
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
   });
 });

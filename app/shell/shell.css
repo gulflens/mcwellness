@@ -169,12 +169,19 @@ a.rail__item.rail__item--active {
   font-size: var(--t-small);
 }
 
-/* A finger is not a mouse. Where the pointer is coarse — the tablet and the
-   phone, which are also where the rail covers the page — a page row keeps the
-   console's full 44px, which is the floor docs/DESIGN-BRIEF.md section 6.2
-   gives every other target. Nothing is gained by saving pixels on a screen
-   that has the rail floating over the page anyway. */
-@media (pointer: coarse) {
+/* A finger is not a mouse: wherever one is available at all, a page row keeps
+   the console's full 44px, the floor docs/DESIGN-BRIEF.md section 6.2 gives
+   every other target.
+
+   `any-pointer`, not `pointer`: a touchscreen laptop's primary pointer is its
+   trackpad, so `pointer: coarse` never matches there and the finger would get
+   36px. This asks whether a coarse pointer exists at all, which is the
+   question that was meant.
+
+   It is not the same question as whether the rail is covering the page —
+   that is width, below 1200px (app/shell/railState.ts), so a 1100px window on
+   a desk has the covering rail and the shorter rows, which is right for it. */
+@media (any-pointer: coarse) {
   .rail__child {
     min-block-size: var(--row);
   }
