@@ -118,6 +118,47 @@ describe('DateField', () => {
     expect(onChange).toHaveBeenLastCalledWith('');
   });
 
+  // Fix round 3, symptom A: `min`/`max` are legal as `''` — exactly what an
+  // unset from/to range bound to component state holds before anything is
+  // picked — and `''` is not `undefined`, so a definedness check ran the
+  // bound comparison anyway. `iso > ''` is true for every ISO date, so an
+  // empty-string `max` swallowed every typed date forever.
+  it('does not swallow a typed date when max is an empty string', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} max="" />);
+    await user.type(screen.getByLabelText('Date of birth'), '12091988');
+    expect(onChange).toHaveBeenLastCalledWith('1988-09-12');
+  });
+
+  // Fix round 3, symptom B: folding the bound check into the same `resolve`
+  // the resync guard used meant a value loaded outside `min`/`max` and then
+  // genuinely reset to `''` left the stale, out-of-bounds date on screen —
+  // `resolve(typed)` was already `''` (out of bounds) and read as matching
+  // the new, equally empty `value`, so the guard skipped the redraw.
+  it('clears the box on a genuine reset even when the shown date is out of bounds', () => {
+    const { rerender } = render(
+      <DateField
+        id="d"
+        label="Date of birth"
+        value="2026-08-01"
+        max="2020-01-01"
+        onChange={() => undefined}
+      />,
+    );
+    expect((screen.getByLabelText('Date of birth') as HTMLInputElement).value).toBe('01/08/2026');
+    rerender(
+      <DateField
+        id="d"
+        label="Date of birth"
+        value=""
+        max="2020-01-01"
+        onChange={() => undefined}
+      />,
+    );
+    expect((screen.getByLabelText('Date of birth') as HTMLInputElement).value).toBe('');
+  });
+
   it('opens the native picker when the calendar button is pressed', async () => {
     const user = userEvent.setup();
     const showPicker = vi.fn();

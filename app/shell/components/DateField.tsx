@@ -38,17 +38,28 @@ export function DateField({
   const [priorValue, setPriorValue] = useState(value);
   const native = useRef<HTMLInputElement>(null);
 
-  // What `typed` actually resolves to: `''` for an incomplete or impossible
-  // date, exactly as `''` for one that parses but sits outside `min`/`max`
+  // What `typed` resolves to for *emission*: `''` for an incomplete or
+  // impossible date, or for one that parses but sits outside `min`/`max`
   // (Finding 4 — the bound used to reach only the hidden native input, so a
   // date typed straight into the text box could sit outside it and still be
-  // emitted). Shared by the resync guard below and by `take`, so the two
-  // never disagree about what a given `typed` string is worth.
+  // emitted). `min`/`max` are checked for truthiness rather than
+  // definedness: both are legal as `''` (exactly what an unset from/to
+  // range bound to component state holds before anything is picked), and
+  // `iso > ''` is true for every date, so a definedness check would refuse
+  // every typed date once a caller wired up an empty-string bound.
+  //
+  // Used by `take` only. The resync guard below asks a different question —
+  // "has the caller's value changed under me", not "is the typed text
+  // currently valid" — so it parses `typed` on its own rather than through
+  // this bound-aware helper: folding the two together meant a value loaded
+  // outside `min`/`max` and then genuinely reset to `''` left the stale,
+  // out-of-bounds date on screen, because `resolve(typed)` was already `''`
+  // and read as matching the new, equally empty `value`.
   function resolve(display: string): string {
     const iso = isoFromDisplay(display);
     if (iso === null) return '';
-    if (min !== undefined && iso < min) return '';
-    if (max !== undefined && iso > max) return '';
+    if (min && iso < min) return '';
+    if (max && iso > max) return '';
     return iso;
   }
 
@@ -60,15 +71,15 @@ export function DateField({
   // pattern, keyed off a tracked prior value so this fires only on an actual
   // change and not on every render.
   //
-  // Finding 1: this used to compare `isoFromDisplay(typed)` (`null` for an
-  // incomplete date) directly against `value` (`''` once `take` empties it)
-  // and read `null !== ''` as a real change, blanking a date mid-edit on the
-  // very next backspace. Comparing `resolve(typed)` — which folds `null` to
-  // `''` the same way `take` already does — against `value` compares like
-  // with like.
+  // A parse-only comparison, not `resolve(typed)`: this used to compare
+  // `isoFromDisplay(typed)` (`null` for an incomplete date) directly against
+  // `value` (`''` once `take` empties it) and read `null !== ''` as a real
+  // change, blanking a date mid-edit on the very next backspace. Folding in
+  // `?? ''` fixes that without pulling in the bound check `resolve` also
+  // does — see the comment on `resolve` for why the two must stay apart.
   if (value !== priorValue) {
     setPriorValue(value);
-    if (resolve(typed) !== value) setTyped(displayFromIso(value));
+    if ((isoFromDisplay(typed) ?? '') !== value) setTyped(displayFromIso(value));
   }
 
   function take(next: string) {
