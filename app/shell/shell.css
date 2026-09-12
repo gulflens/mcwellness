@@ -446,6 +446,49 @@ a.rail__child.rail__child--current {
   cursor: default;
 }
 
+/* A date box with its calendar button at the end, and the native control it
+   borrows the calendar from kept out of the layout entirely. */
+.datefield {
+  position: relative;
+  display: block;
+}
+
+.datefield__text .field__input {
+  inline-size: 100%;
+  padding-inline-end: calc(var(--s-2) + var(--row));
+  font-variant-numeric: tabular-nums;
+}
+
+.datefield__picker {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  inline-size: var(--row);
+  block-size: var(--row);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.datefield__picker:hover {
+  color: var(--ink);
+}
+
+.datefield__native {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .button {
   display: inline-flex;
   align-items: center;

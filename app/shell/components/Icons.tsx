@@ -173,3 +173,11 @@ export const PinIcon = (p: IconProps) => (
     <path d="M10 11.25v6" />
   </Icon>
 );
+
+/** A calendar: the button that lends `DateField` the native picker's popup. */
+export const CalendarIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="4.5" width="14" height="12.5" rx="1.5" />
+    <path d="M3 8.5h14M7 2.75v3.5M13 2.75v3.5M7 11.75h1.5" />
+  </Icon>
+);
