@@ -500,7 +500,8 @@ describe('the journal', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Post an entry' }));
     await screen.findByRole('dialog');
 
-    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '2026-06-30' } });
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '30062026' } });
     expect(
       await screen.findByText('The books are locked through 30 Jun 2026. Choose a later day.'),
     ).toBeTruthy();
@@ -528,7 +529,7 @@ describe('the journal', () => {
     expect(mounted.posted.some((call) => call.path === '/api/accounting/entries')).toBe(false);
 
     // A day the lock leaves open takes the sentence away again.
-    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '2026-07-01' } });
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '01072026' } });
     await waitFor(() =>
       expect(
         screen.queryByText('The books are locked through 30 Jun 2026. Choose a later day.'),
@@ -683,8 +684,9 @@ describe('the books’ settings', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Lock through' }));
     await screen.findByRole('dialog');
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
     fireEvent.change(screen.getByLabelText('Lock the books through'), {
-      target: { value: '2030-01-01' },
+      target: { value: '01012030' },
     });
     fireEvent.change(screen.getByLabelText('Why the lock moves'), {
       target: { value: 'The quarter has been filed.' },

@@ -11,6 +11,7 @@ import {
 } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { DiscountFields } from './DiscountFields';
 import { focusFirstInvalid } from './refusal';
@@ -406,13 +407,12 @@ export function PriceDrawer({
             }}
           />
 
-          <Field
+          <DateField
             id="price-valid-from"
             label="Effective from"
-            type="date"
             value={validFrom}
-            onChange={(e) => {
-              setValidFrom(e.target.value);
+            onChange={(next) => {
+              setValidFrom(next);
               clearFieldError('validFrom');
             }}
             error={fieldErrors.validFrom}

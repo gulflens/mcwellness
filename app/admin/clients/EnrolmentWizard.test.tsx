@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
@@ -311,6 +312,7 @@ describe('EnrolmentWizard', () => {
   });
 
   it('refuses a date of birth in the future, naming the field', async () => {
+    const user = userEvent.setup();
     mountWithRecord(baseRecord());
     const future = new Date(
       Date.now() +
@@ -319,15 +321,19 @@ describe('EnrolmentWizard', () => {
     )
       .toISOString()
       .slice(0, 10);
+    const [futureYear, futureMonth, futureDay] = future.split('-');
     fireEvent.change(screen.getByLabelText('Given name'), { target: { value: 'Laurel' } });
     fireEvent.change(screen.getByLabelText('Family name'), { target: { value: 'Meadow' } });
     fireEvent.change(screen.getByLabelText('Relationship to the client'), {
       target: { value: 'self' },
     });
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971500000058' } });
-    fireEvent.change(screen.getByLabelText('Date of birth (optional)'), {
-      target: { value: future },
-    });
+    // The box now holds DD/MM/YYYY, so the digits are typed in that order
+    // rather than the ISO value being written straight in.
+    await user.type(
+      screen.getByLabelText('Date of birth (optional)'),
+      `${futureDay}${futureMonth}${futureYear}`,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     expect(await screen.findByText('A date of birth is in the past.')).toBeTruthy();
   });

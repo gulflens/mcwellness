@@ -57,7 +57,8 @@ function mount(status = 200) {
 describe('IdentityForm', () => {
   it('sends only what changed, parsed by the route’s own schema', async () => {
     const { calls, onSaved } = mount();
-    fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '1990-03-12' } });
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
+    fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '12031990' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(calls[0]?.url).toBe(`/api/clients/${CLIENT_ID}`);
@@ -69,7 +70,8 @@ describe('IdentityForm', () => {
 
   it('refuses a date of birth in the future before sending anything', async () => {
     const { calls } = mount();
-    fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '2999-01-01' } });
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
+    fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '01012999' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(calls).toHaveLength(0);

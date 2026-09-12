@@ -12,6 +12,7 @@ import {
 } from '../../api/practice/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { useDrawer } from '../../shell/components/useDrawer';
 import { EMIRATE_LABELS } from './emirates';
@@ -412,12 +413,11 @@ export function PracticeDrawer({
             error={fieldErrors.website}
           />
 
-          <Field
+          <DateField
             id="practice-licence-expires"
             label="Licence expires (optional)"
-            type="date"
             value={licenceExpiresOn}
-            onChange={(e) => setLicenceExpiresOn(e.target.value)}
+            onChange={setLicenceExpiresOn}
           />
 
           <Field

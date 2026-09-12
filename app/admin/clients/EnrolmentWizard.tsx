@@ -17,6 +17,7 @@ import {
 import { RELATIONSHIPS, type CreateClientResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { ActivationSummary } from './ActivationSummary';
 import { canActivate, practiceToday, toActivationRecord } from './activation';
@@ -389,13 +390,12 @@ export function EnrolmentWizard({
               }}
               error={identityErrors.familyName}
             />
-            <Field
+            <DateField
               id="wizard-dob"
               label="Date of birth (optional)"
-              type="date"
               value={dateOfBirth}
-              onChange={(e) => {
-                setDateOfBirth(e.target.value);
+              onChange={(next) => {
+                setDateOfBirth(next);
                 clearIdentityError('dateOfBirth');
               }}
               hint="Not needed to save a lead, but needed before this client can be activated."

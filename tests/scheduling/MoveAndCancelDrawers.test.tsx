@@ -157,7 +157,8 @@ describe('MoveAppointmentDrawer', () => {
     // thing here that a change of locale data could move.
     expect(screen.getAllByText(/09:00–09:45/)).toHaveLength(2);
     expect(screen.getByText(/Iris Cliff/)).toBeTruthy();
-    expect((screen.getByLabelText('New date') as HTMLInputElement).value).toBe('2026-09-10');
+    // The box now shows DD/MM/YYYY, not the ISO value it holds underneath.
+    expect((screen.getByLabelText('New date') as HTMLInputElement).value).toBe('10/09/2026');
     expect((screen.getByLabelText('New start time') as HTMLInputElement).value).toBe('09:00');
     // Moving a visit tells nobody — not the household, and not the
     // practitioner driving there — and the screen says so rather than leaving

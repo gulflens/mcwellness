@@ -4,6 +4,7 @@ import { isoDateIn } from '@domain/shared';
 import { isRealText, MINIMUM_REASON, type LockResponse } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { focusFirstInvalid } from './refusal';
 import { useDrawer } from './useDrawer';
@@ -111,14 +112,13 @@ export function LockDrawer({
             No entry may be dated on or before the day you name, in an open year or a closed one.
             Moving the lock back is allowed, and is recorded as such.
           </p>
-          <Field
+          <DateField
             id="lock-date"
             label="Lock the books through"
-            type="date"
             value={date}
             error={dateError ?? undefined}
-            onChange={(e) => {
-              setDate(e.target.value);
+            onChange={(next) => {
+              setDate(next);
               setDateError(null);
             }}
           />

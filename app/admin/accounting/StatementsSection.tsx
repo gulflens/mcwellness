@@ -7,6 +7,7 @@ import {
 } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { Table } from '../../shell/components/Table';
 import { DOWNLOAD_REFUSED, downloadCsv } from './download';
 import { formatFils } from './money';
@@ -123,20 +124,8 @@ export function StatementsSection() {
   return (
     <>
       <div className="filters">
-        <Field
-          id="statements-from"
-          label="From"
-          type="date"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-        <Field
-          id="statements-to"
-          label="To"
-          type="date"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-        />
+        <DateField id="statements-from" label="From" value={from} onChange={setFrom} />
+        <DateField id="statements-to" label="To" value={to} onChange={setTo} />
       </div>
 
       {state.kind === 'loading' ? <Note>Reading the books.</Note> : null}

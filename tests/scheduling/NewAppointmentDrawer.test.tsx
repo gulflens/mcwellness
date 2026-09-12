@@ -213,9 +213,11 @@ describe('NewAppointmentDrawer', () => {
     );
 
     // Defaults to the day the schedule was showing when the panel opened.
+    // The box shows DD/MM/YYYY, not the ISO value it holds underneath.
     const dateField = screen.getByLabelText('Date') as HTMLInputElement;
-    expect(dateField.value).toBe('2026-09-10');
-    fireEvent.change(dateField, { target: { value: '2026-09-11' } });
+    expect(dateField.value).toBe('10/09/2026');
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
+    fireEvent.change(dateField, { target: { value: '11092026' } });
 
     // Same walk as "books on submit" above: client, service, location, practitioner, time.
     fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Iris' } });
@@ -288,7 +290,8 @@ describe('NewAppointmentDrawer', () => {
     const practitionerSelect = screen.getByLabelText('Practitioner') as HTMLSelectElement;
     expect(practitionerSelect.value).toBe(practitioner.id);
 
-    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-09-11' } });
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '11092026' } });
 
     // A practitioner certified on one day may be away on another: the choice
     // is cleared the moment the date changes, not left showing a stale pick.

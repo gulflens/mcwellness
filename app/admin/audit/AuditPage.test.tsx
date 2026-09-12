@@ -147,7 +147,8 @@ describe('the activity feed', () => {
     const urls = mount();
     await screen.findByText('Hazel Harbour opened this client record');
     fireEvent.change(screen.getByLabelText('Kind of row'), { target: { value: 'session' } });
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-09-01' } });
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '01092026' } });
     await waitFor(() => {
       const asked = urls.filter((url) => url.startsWith('/api/audit/activity'));
       expect(asked.some((url) => url.includes('entityType=session'))).toBe(true);

@@ -4,6 +4,7 @@ import type { AccountRow, EntryResponse, SettingsResponse } from '../../api/acco
 import { isRealText, MINIMUM_REASON } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { formatDate, formatFils, isAedAmountTooLarge, parseAedToFils } from './money';
 import { focusFirstInvalid } from './refusal';
@@ -221,17 +222,16 @@ export function EntryDrawer({
             </Select>
           ) : null}
 
-          <Field
+          <DateField
             id="entry-day"
             label="Day"
-            type="date"
             value={day}
             disabled={kind === 'opening'}
             error={lockedOut ? lockSentence : undefined}
             hint={
               kind === 'opening' ? 'An opening entry is dated the day the books start.' : undefined
             }
-            onChange={(e) => setEnteredOn(e.target.value)}
+            onChange={setEnteredOn}
           />
 
           <Field

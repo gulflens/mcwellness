@@ -178,8 +178,9 @@ describe('the drawer', () => {
     const save = screen.getByRole('button', { name: 'Save' });
     expect(save.hasAttribute('disabled')).toBe(true);
 
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
     fireEvent.change(screen.getByLabelText('Calibration runs out'), {
-      target: { value: '2027-06-30' },
+      target: { value: '30062027' },
     });
     fireEvent.change(screen.getByLabelText('Reason'), {
       target: { value: 'Calibration certificate received.' },
@@ -201,9 +202,13 @@ describe('the drawer', () => {
     // that instant would show — and send back — the day before. The fixture is
     // a Dubai midnight for exactly that reason: read in UTC it is the 4th, so
     // this line fails if the zone is ever dropped.
-    expect((screen.getByLabelText('Last calibrated') as HTMLInputElement).value).toBe('2026-01-05');
+    // The box shows DD/MM/YYYY, not the ISO value it holds underneath.
+    expect((screen.getByLabelText('Last calibrated') as HTMLInputElement).value).toBe('05/01/2026');
     const due = screen.getByLabelText('Calibration runs out') as HTMLInputElement;
-    expect(due.value).toBe(new Date(IN_DATE).toLocaleDateString('en-CA', { timeZone: DUBAI }));
+    const [dueYear, dueMonth, dueDay] = new Date(IN_DATE)
+      .toLocaleDateString('en-CA', { timeZone: DUBAI })
+      .split('-');
+    expect(due.value).toBe(`${dueDay}/${dueMonth}/${dueYear}`);
 
     // A reason, and nothing else touched: the drawer closes and asks for
     // nothing, because there is nothing to say.

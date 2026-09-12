@@ -3,6 +3,7 @@ import { KIT_KINDS, isCalibrationOverdue, type KitKind } from '@domain/session';
 import { KitListResponse, KitOptionsResponse, type KitRow } from '../../api/kit/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { StatusChip, type StatusTone } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
@@ -284,20 +285,18 @@ function KitDrawer({
               </option>
             ))}
           </Select>
-          <Field
+          <DateField
             id="kit-last-calibrated"
             label="Last calibrated"
-            type="date"
             value={draft.lastCalibratedAt}
-            onChange={(e) => setDraft({ ...draft, lastCalibratedAt: e.target.value })}
+            onChange={(next) => setDraft({ ...draft, lastCalibratedAt: next })}
           />
-          <Field
+          <DateField
             id="kit-due"
             label="Calibration runs out"
             hint="Leave both empty for anything that is never calibrated."
-            type="date"
             value={draft.calibrationDueAt}
-            onChange={(e) => setDraft({ ...draft, calibrationDueAt: e.target.value })}
+            onChange={(next) => setDraft({ ...draft, calibrationDueAt: next })}
           />
           {item === null ? null : (
             <>
