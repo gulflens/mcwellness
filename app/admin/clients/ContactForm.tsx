@@ -327,6 +327,11 @@ export function ContactForm({
           setEmiratesId(next);
           clear('emiratesId');
         }}
+        hint={
+          editing && contact?.hasEmiratesId
+            ? 'One is already on file. Leave blank to keep it, or type a new one to replace it.'
+            : undefined
+        }
         error={fieldErrors.emiratesId}
       />
       {editing && contact?.hasEmiratesId ? (
