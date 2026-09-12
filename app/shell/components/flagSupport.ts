@@ -13,9 +13,20 @@
  */
 let answer: boolean | null = null;
 
+/**
+ * Test-only: clears the memoised answer so a test can force a fresh
+ * measurement instead of reusing whatever an earlier test in the same file
+ * already decided.
+ */
+export function resetFlagsRenderForTests(): void {
+  answer = null;
+}
+
 export function flagsRender(): boolean {
   if (answer !== null) return answer;
-  if (typeof document === 'undefined') return (answer = false);
+  // document.body is null until <body> exists (e.g. a script running in
+  // <head>); either absence answers false rather than throwing.
+  if (typeof document === 'undefined' || document.body === null) return (answer = false);
   const probe = document.createElement('span');
   probe.style.cssText = 'position:absolute;visibility:hidden;font-size:32px;white-space:nowrap';
   document.body.appendChild(probe);

@@ -8,15 +8,19 @@
  * number means — that rule (the leading-zero strip, the join, the split) is
  * already committed and tested in `domain/shared/phone.ts`.
  *
- * Order matters. The UAE leads, the rest of the GCC follows, then every
- * other country and territory is alphabetical by common English name — that
- * is the order a country selector lists them in, and it is also the order
- * `splitE164` walks when more than one row shares a dialling code (`+1` for
- * the United States, Canada and about two dozen Caribbean and Atlantic
- * territories; `+7` for Russia and Kazakhstan): ties resolve to whichever of
- * those rows comes first, which is a guess about which the split can never
- * actually recover, not a defect (see `domain/shared/phone.ts`'s own doc
- * comment on `splitE164`).
+ * Order matters, but only for the dropdown. The UAE leads, the rest of the
+ * GCC follows, then every other country and territory is alphabetical by
+ * common English name — that is the order a country selector lists them in.
+ * It is deliberately NOT the order used to read a dialling code backwards
+ * (`countryForDialling`, below): several codes have more than one member
+ * (`+1` for the United States, Canada and about two dozen Caribbean and
+ * Atlantic territories; `+7` for Russia and Kazakhstan; a few smaller ones),
+ * and alphabetically-first is rarely who anyone means — it would draw
+ * Guernsey's flag beside a London mobile. `countryForDialling` consults an
+ * explicit `CANONICAL` table first and only falls back to table order
+ * (effectively arbitrary) for codes nobody has had to pick a default for.
+ * `splitE164` (`domain/shared/phone.ts`) never returns a country at all —
+ * only the code string and the remainder — so none of this affects it.
  */
 
 export type Country = { iso: string; name: string; dialling: string; flag: string };
@@ -293,3 +297,47 @@ export const COUNTRIES: readonly Country[] = ROWS.map(([iso, name, dialling]) =>
 }));
 
 export const DIALLING_CODES: readonly string[] = COUNTRIES.map((c) => c.dialling);
+
+/**
+ * The country a shared dialling code should resolve to when it is read
+ * backwards. E.164 records no country, so a code with several members needs
+ * a stated default; without one the alphabetically-first territory wins,
+ * which puts Guernsey beside a London number. Named here, each because the
+ * alphabetical winner is a small territory sharing a code with a clearly
+ * larger, clearly-intended member:
+ *
+ * - `+1`  American Samoa (pop. ~45k) alphabetises ahead of the United States.
+ * - `+7`  Kazakhstan alphabetises ahead of Russia.
+ * - `+44` Guernsey alphabetises ahead of the United Kingdom.
+ * - `+262` Mayotte alphabetises ahead of Reunion, the more populous and more
+ *   commonly meant of the two.
+ * - `+599` Caribbean Netherlands alphabetises ahead of Curacao, the larger
+ *   and better-known constituent country of the two.
+ *
+ * `+590` (Guadeloupe, Saint Martin, Saint Barthelemy) is also shared, but
+ * Guadeloupe — already the alphabetical winner — is the largest and most
+ * commonly meant of the three, so it needs no override.
+ */
+const CANONICAL: Record<string, string> = {
+  '+1': 'US',
+  '+7': 'RU',
+  '+44': 'GB',
+  '+262': 'RE',
+  '+599': 'CW',
+};
+
+/**
+ * The country to show for a dialling code — e.g. to draw a flag beside a
+ * stored phone number. Prefers the stated `CANONICAL` member for a shared
+ * code; otherwise the first row in table order. A code with only one member
+ * has nothing to disambiguate, so it always resolves to that member. An
+ * unrecognised code resolves to `undefined` rather than guessing.
+ */
+export function countryForDialling(dialling: string): Country | undefined {
+  const canonicalIso = CANONICAL[dialling];
+  if (canonicalIso !== undefined) {
+    const canonical = COUNTRIES.find((c) => c.iso === canonicalIso);
+    if (canonical !== undefined) return canonical;
+  }
+  return COUNTRIES.find((c) => c.dialling === dialling);
+}

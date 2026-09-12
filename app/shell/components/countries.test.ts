@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { splitE164 } from '@domain/shared';
-import { COUNTRIES, DIALLING_CODES } from './countries';
+import { COUNTRIES, countryForDialling, DIALLING_CODES } from './countries';
 
 /**
  * A hand-entered table of ~236 rows is exactly the kind of thing that rots
@@ -63,5 +63,27 @@ describe('DIALLING_CODES', () => {
       diallingCode: '+971',
       national: '500001234',
     });
+  });
+});
+
+/**
+ * A shared dialling code needs a stated default when it is read backwards —
+ * without one, the alphabetically-first territory wins (Guernsey, ahead of
+ * the United Kingdom), which is a visible wrongness on a code a Dubai
+ * practice sees often.
+ */
+describe('countryForDialling', () => {
+  it('resolves a shared code to its stated canonical member, not the alphabetical winner', () => {
+    expect(countryForDialling('+44')?.name).toBe('United Kingdom');
+    expect(countryForDialling('+1')?.name).toBe('United States');
+    expect(countryForDialling('+7')?.name).toBe('Russia');
+  });
+
+  it('resolves a single-member code to that member', () => {
+    expect(countryForDialling('+971')?.name).toBe('United Arab Emirates');
+  });
+
+  it('resolves an unknown code to undefined rather than guessing', () => {
+    expect(countryForDialling('+0')).toBeUndefined();
   });
 });
