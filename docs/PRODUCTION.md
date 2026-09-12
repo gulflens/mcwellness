@@ -1466,15 +1466,27 @@ been since the 8 September passes. `/api/health` 200 in 0.46 s and
 corner and the maskable and Apple ones opaque, which is the property that went
 wrong in the first cut.
 
-**One thing observed and not explained, and it is the host's.** The PNG bytes
-served are not the bytes committed — 2,740 against 1,802 for `icon-192.png`,
-origin-direct as well as through the edge, so it is not the CDN. Every property
-checked is identical: dimensions, colour type, corner alpha, PNG validity.
-`public/brand/mark.png`, untouched since 8 September, is re-encoded the same
-way (28,446 bytes against 29,956), so **the host re-encodes every PNG it
-serves** and this deploy did not cause it. Recorded because the next person to
-diff a deployed asset against the repository will otherwise think something is
-wrong.
+**One thing observed and only partly explained.** The PNG bytes served are not
+the bytes committed — 2,740 against 1,802 for `icon-192.png`. Every property
+checked is identical: dimensions, colour type, corner alpha, PNG validity. And
+`public/brand/mark.png`, untouched since 8 September, is transformed the same
+way (28,446 bytes against 29,956), so this deploy did not cause it.
+
+**What is ruled out, and what is not.** The app's build is ruled out by
+reading it: `build:production` is a plain `vite build` with no pre- or post-step,
+the icons live in `public/` which Vite copies verbatim, there is no image
+tooling in the dependencies at all, and `vite-plugin-pwa` runs
+`injectManifest` with `manifest: false`, so it writes the asset list into the
+worker and generates nothing. Fetching origin-direct, bypassing the edge,
+returns the same transformed bytes — but that does **not** clear the serving
+layer, because LiteSpeed is the origin: it is the same layer that serves
+`/manifest.webmanifest` off disk as `text/plain`, above. Whether the change
+happens at extraction, on disk, or on the way out is untested: the hosting
+file API exposes only the document root, which holds `.htaccess` and nothing
+else, so the extracted file's size on disk cannot be read with the tools here.
+Recorded as observed rather than attributed, because the next person to diff a
+deployed asset against the repository will otherwise think the build is at
+fault.
 
 **And one that is already known.** `/manifest.webmanifest` still comes back as
 `text/plain`: LiteSpeed serves it straight off disk and the app's own content
