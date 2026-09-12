@@ -1342,3 +1342,66 @@ fold. The rows are the console's own 44px and shortening them would save forty
 pixels, which does not fix it; it waits on the operator's eye. And the check
 still owed from the seventeenth pass stands — nobody has signed in and opened
 Billing against the live catalogue to see the three programmes read "No expiry".
+
+## What was done on 2026-09-12: the nineteenth live pass — one switcher, and the violet on the one you are on
+
+At 00:24 UTC on 12 September (08:24 on the operator's clock), on the operator's
+word — *"go live"* — `main` at `aad77b9` was built and served: pull request
+163, and nothing else.
+
+**Why.** The operator, the same morning: *"enhance the UI of the submenu in the
+setting, books, schedule,... make it look like tabs or buttons and make the
+active 1 inherit the violet color."* Three variants were built in a browser and
+shown to them; they chose buttons. A resting tab is a white button with a
+hairline border, hover turns it violet, and the one being read is filled
+`--brand` with white text — on Billing, Books, Settings, the client record and
+the schedule's week, board and day map.
+
+**Why a violet fill here when the rail refuses one.** These sit on the page's
+light paper, where white on the brand's violet measures 14.65. The rail's own
+violet ground is what cannot carry a violet state — every candidate measured
+1.14 to 1.99 against a floor of 3.0 (`docs/SPEC/coloured-shell.md` section 4.2)
+— so the rail keeps its white pill and this is no precedent against it.
+
+**A defect this fixed, older than the round.** `.sections__tab` was defined in
+`app/admin/billing/billing.css`, which only `BillingPage` imports, while
+`BooksPage` renders those classes and imports only its own stylesheet. Screens
+are code-split, so **Books' tabs were styled only for a reader who had opened
+Billing first**. Measured in a browser before the change: on a fresh load of
+`/admin/books`, no stylesheet in the document defined them at all and five bare
+browser buttons rendered. Four copies of the pattern existed in all. They are
+now defined once, in the stylesheet `main.tsx` loads at start-up, and
+`tests/lint/tabs-are-always-styled.test.ts` refuses them any other home — a
+guard proved by negative control, since the review of PR 163 showed the first
+version of it was porous enough to miss a re-added modifier rule.
+
+**The operator's own decision inside the round.** The client record's drawer
+carries nine tabs; as buttons they wrap to three rows and take 172px of the
+drawer against 128px before. That measurement was put to them with the
+alternatives, and they chose one look everywhere.
+
+**No migration, no policy file, no data step.** `schema_migration` stands at 97
+rows where the seventeenth pass left it; the database was not touched.
+
+**The hold protocol earned its keep.** `ListAgents` showed a peer session
+running on the same machine. It was asked, in as many words, whether it was
+deploying; it answered that it held no upload and was doing read-only work.
+Nothing was sent to the host until that answer came back — which is the whole
+point of the rule written after two sessions built twelve seconds apart on
+8 September.
+
+**The pass.** Archive `mcwellness-aad77b9.tar.gz` (6,214,207 bytes); TUS create
+201 and PATCH 204 with the offset equal to the size; build `01a09300` with the
+stored settings. The served bundle flipped from `index-Cn-nc2fr.js` to
+`index-B5pQpsPt.js` in about a hundred seconds. No restart was needed — the peer
+session's warning about a completed build serving stale output did not arise,
+as it has not since the 8 September passes. `/api/health` 200 in 0.95 s and
+`/api/health/deep` 200 in 1.05 s, and `/admin/schedule/map` still serves its
+widened policy. **The served stylesheet was read, not assumed:**
+`/assets/index-lrxFLvP_.css` carries the one shared rule, with the current tab
+filled `var(--brand)`, and none of the old ink-underline rules remain.
+
+**Still open, and unchanged by this pass.** The rail scrolls when a section's
+pages are showing, which waits on the operator's eye; and the check owed since
+the seventeenth pass stands — nobody has signed in and read Billing against the
+live catalogue to see the three programmes say "No expiry".
