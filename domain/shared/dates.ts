@@ -62,3 +62,21 @@ export function displayFromIso(iso: string): string {
   if (match === null) return '';
   return `${match[3]}/${match[2]}/${match[1]}`;
 }
+
+const TIME_DIGITS = 4;
+
+/** The typed time, grouped as far as the digits reach: `14`, `14:3`, `14:30`. Total. */
+export function groupTimeDigits(input: string): string {
+  const d = toLatinDigits(input)
+    .replace(/[^0-9]/g, '')
+    .slice(0, TIME_DIGITS);
+  if (d.length <= 2) return d;
+  return `${d.slice(0, 2)}:${d.slice(2)}`;
+}
+
+/** A complete twenty-four hour wall clock, `00:00` to `23:59`. No meridiem anywhere. */
+export function isValidTime(display: string): boolean {
+  const match = /^(\d{2}):(\d{2})$/.exec(display);
+  if (match === null) return false;
+  return Number(match[1]) <= 23 && Number(match[2]) <= 59;
+}
