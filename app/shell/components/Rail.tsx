@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
 import type { ReactNode } from 'react';
 import { childIsCurrent, sectionHolds, type RailChild } from '../railChildren';
@@ -194,10 +194,28 @@ function Pages({
   hash: string;
   onChoose?: () => void;
 }) {
+  const list = useRef<HTMLUListElement | null>(null);
+  // With a section open the rail can be taller than the window — ten sections
+  // and five pages do not fit 900px at the console's row height — so the list
+  // scrolls, and the pages that just appeared could open below the fold. This
+  // brings them back into view. `nearest` moves the least that will do, so a
+  // rail with room to spare does not jump.
+  //
+  // On mount and only on mount: this component is rendered for the one section
+  // the reader is in, keyed by that section, so it unmounts and remounts when
+  // they move to another. Moving between pages *within* a section therefore
+  // does not re-fire it, which is what keeps it from fighting somebody who has
+  // deliberately scrolled the rail.
+  useEffect(() => {
+    // Optional because jsdom does not implement it: the tests render this rail
+    // constantly and a hard call throws there, which is a test environment's
+    // gap rather than anything a browser lacks.
+    list.current?.scrollIntoView?.({ block: 'nearest' });
+  }, []);
   const named = hash.replace(/^#/, '');
   const holdsHash = (section.children ?? []).some((child) => child.to.split('#')[1] === named);
   return (
-    <ul className="rail__children" aria-label={`${section.label} pages`}>
+    <ul className="rail__children" aria-label={`${section.label} pages`} ref={list}>
       {(section.children ?? []).map((child, index) => {
         // An address naming a section this page does not hold — `#nonsense`, or
         // one renamed since the link was sent — is read as naming none, because

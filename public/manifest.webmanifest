@@ -1,14 +1,26 @@
 {
-  "comment": "background_color and theme_color are the practitioner ground's --paper, copied verbatim from app/shell/tokens.css. A manifest is JSON and cannot read a CSS custom property, so the value is written out here; the other two such places are public/icon.svg and the Static Maps style in app/api/_middleware/routing/google.ts. If the token changes, all three change with it. Browsers ignore a member they do not know.",
+  "comment": "background_color and theme_color are the practitioner ground's --paper and the mark's own ink, copied verbatim from app/shell/tokens.css. A manifest is JSON and cannot read a CSS custom property, so the value is written out here; the other two such places are public/icon.svg and the Static Maps style in app/api/_middleware/routing/google.ts. If the token changes, all three change with it. Browsers ignore a member they do not know.",
   "name": "McWellness",
   "short_name": "McWellness",
-  "start_url": "/today",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#10191d",
   "theme_color": "#10191d",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Clients", "url": "/admin/clients" },
+    { "name": "Schedule", "url": "/admin/schedule" },
+    { "name": "Billing", "url": "/admin/billing" }
   ]
 }

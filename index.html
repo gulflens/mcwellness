@@ -5,16 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>McWellness</title>
-    <link rel="icon" href="data:," />
+
     <!--
-      The practitioner app is installable and opens with no signal
-      (docs/SPEC/practitioner-phone.md sections 3.1 and 3.3). iOS additionally
-      wants a raster apple-touch-icon (180x180 PNG); that is a binary asset for
-      the operator to supply, and its absence costs the home-screen icon's
-      polish, not installability.
+      The app installs on a phone, a tablet and a desk
+      (docs/SPEC/practitioner-phone.md sections 3.1 and 3.3, and
+      docs/SPEC/desktop-install.md). Safari accepts no SVG here, and Windows
+      wants a square raster for the taskbar and the Start menu, so the icons
+      beside the manifest are PNGs rendered from public/icon.svg at the sizes
+      each platform asks for.
     -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
   </head>
   <body>
     <!--

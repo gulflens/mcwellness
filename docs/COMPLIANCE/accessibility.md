@@ -73,7 +73,12 @@ minimum tap target (`docs/DESIGN-BRIEF.md` section 4.3).
 - **Focus is always visible**, through one `--focus` token applied by
   `:focus-visible` in `app/shell/base.css`.
 - **Density has a floor.** Rows, inputs and buttons are 44px; the sign-out and
-  drawer-close controls are 48px.
+  drawer-close controls are 48px. One exception, taken deliberately on
+  2026-09-12: a page listed under its section in the rail is 36px where the
+  only pointer is a mouse, and the full 44px wherever a coarse pointer exists
+  at all (`any-pointer: coarse`). It is a label with no icon, in a rail that
+  otherwise outgrows the window with a section open
+  (`docs/SPEC/coloured-shell.md` section 7.1).
 
 ## 6. What has never been checked
 

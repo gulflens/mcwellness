@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -81,6 +81,25 @@ describe('serving the built app', () => {
     expect(html).toContain(`<style nonce="${nonce}"></style>`);
     const plain = await (await api.request('/admin/clients')).text();
     expect(plain).not.toContain('nonce=');
+  });
+  it('serves a raster icon as bytes, byte for byte', async () => {
+    // A PNG read as utf8 does not throw: it corrupts, and the icon simply
+    // never renders. The icons were added to ROOT_FILES on 2026-09-12
+    // (docs/SPEC/desktop-install.md), and this is the property that would go
+    // wrong quietly if someone read them as text again.
+    const root = build();
+    const icon = readFileSync('public/icon-192.png');
+    writeFileSync(join(root, 'icon-192.png'), icon);
+    const api = createApi(deps);
+    mountApp(api, root);
+
+    const res = await api.request('/icon-192.png');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    expect(res.headers.get('cache-control')).toContain('max-age=');
+    const served = Buffer.from(await res.arrayBuffer());
+    expect(served.length).toBe(icon.length);
+    expect(served.equals(icon)).toBe(true);
   });
 });
 

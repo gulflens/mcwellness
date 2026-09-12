@@ -146,7 +146,8 @@ a.rail__item.rail__item--active {
 .rail__children {
   display: flex;
   flex-direction: column;
-  margin-block: var(--s-1);
+  gap: 2px;
+  margin-block: 2px;
   /* The indent lines a page's label up with its section's label rather than
      with the section's icon: the icon's own width plus the gap beside it. */
   margin-inline-start: calc(var(--s-3) + var(--rail-icon) + var(--s-3));
@@ -155,15 +156,35 @@ a.rail__item.rail__item--active {
 .rail__child {
   display: flex;
   align-items: center;
-  /* A section's own row height. The design brief's 44px is the console's row
-     everywhere and a touch target as well, and the rail's list already scrolls
-     when a tall section is open, so there is nothing to buy by shrinking it. */
-  min-block-size: var(--row);
+  /* Shorter than a section's own 44px row, because with a section open the
+     rail was taller than a 900px window: on 2026-09-12 Billing's five pages
+     pushed Portal, Kit and Today below the fold, and the operator asked for it
+     back. A page row is a label with no icon and the mouse hits it precisely;
+     44px returns wherever the pointer is a finger, below. */
+  min-block-size: 36px;
   padding-inline: var(--s-3);
   border-radius: var(--r-2);
   text-decoration: none;
   color: var(--brand-pale);
   font-size: var(--t-small);
+}
+
+/* A finger is not a mouse: wherever one is available at all, a page row keeps
+   the console's full 44px, the floor docs/DESIGN-BRIEF.md section 6.2 gives
+   every other target.
+
+   `any-pointer`, not `pointer`: a touchscreen laptop's primary pointer is its
+   trackpad, so `pointer: coarse` never matches there and the finger would get
+   36px. This asks whether a coarse pointer exists at all, which is the
+   question that was meant.
+
+   It is not the same question as whether the rail is covering the page —
+   that is width, below 1200px (app/shell/railState.ts), so a 1100px window on
+   a desk has the covering rail and the shorter rows, which is right for it. */
+@media (any-pointer: coarse) {
+  .rail__child {
+    min-block-size: var(--row);
+  }
 }
 
 /* The page you are on takes the same white pill its section takes, for the

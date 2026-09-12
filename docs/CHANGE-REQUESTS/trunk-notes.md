@@ -3722,3 +3722,43 @@ anything:
 asserted on any of these class names before this round. The markup of Billing,
 Books, Settings and the client record is unchanged: the classes they already
 rendered are simply defined once now, and in a stylesheet that is always there.
+
+---
+
+## Round 47 — the rail's rows, and the app that installs on a desk, 2026-09-12
+
+**What the operator asked for**, in one word — *"fix"* — against three things
+left open: the rail scrolling when a section's pages are showing, the manifest
+that made a PC install open on the practitioner's day sheet with no proper
+icon, and the Billing check owed on production since the seventeenth pass.
+
+**The trunk's own work.** `app/shell/shell.css` (a page row is 36px with a
+mouse and 44px with a finger; tighter spacing), `app/shell/components/Rail.tsx`
+(the pages that open are scrolled into view), `public/manifest.webmanifest`
+(opens at `/`, no orientation, four icons, three taskbar shortcuts),
+`public/icon.svg` (see below), `public/icon-192.png`, `public/icon-512.png` and
+`public/apple-touch-icon.png` (new, rendered from the SVG), `index.html`,
+`docs/SPEC/desktop-install.md` (new), and three guards in `tests/lint/`.
+
+**A defect found while rasterising the icon, older than everything here.**
+`public/icon.svg`'s comment named two design tokens by their CSS spelling, with
+two leading hyphens. **A double hyphen is illegal inside an XML comment**, and
+an SVG document is parsed as XML, so the file has never parsed: every browser
+asked for the installable icon got a parse error instead of a mark, on the live
+site as well as in the repository. Nothing caught it because the console draws
+its own mark from a PNG and a browser that cannot parse an icon simply shows
+none. `tests/lint/svg-parses.test.ts` now refuses an SVG that does not parse.
+
+**One file outside the trunk's paths**: `docs/SPEC/practitioner-phone.md`
+section 3.1, which described the manifest as first written — `start_url`
+`/today`, portrait, one SVG icon. It gains a dated note saying what the
+manifest says now and where to read it. The practitioner is unaffected by the
+change itself: `/` sends each person to their own home by role, which for her
+is the day sheet she had before.
+
+**The Billing check, done rather than deferred.** Signed in on production as
+the founder and read what the Billing screen reads: `GET /api/billing/packages`
+returns Silver, Gold and Platinum each with no term, and `GET
+/api/billing/prices` returns five prices, none carrying one. The endpoints
+answer normally, which is the thing round 44's ceiling was written to protect —
+a term over the cap would have failed the response shape and returned 500.

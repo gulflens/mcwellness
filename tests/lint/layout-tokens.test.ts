@@ -72,4 +72,19 @@ describe('layout tokens', () => {
       /\[data-rail-mode='overlay'\]\s+\.rail__children\s*\{[^}]*display:\s*flex/,
     );
   });
+
+  it('gives a page row less height for a mouse and the full row for a finger', () => {
+    // The operator, 2026-09-12: with a section open the rail outgrew a 900px
+    // window. A page row is a label with no icon, so it is 36px where the
+    // pointer is precise — and back to the console's 44px wherever it is not
+    // (docs/SPEC/coloured-shell.md section 7.1).
+    expect(shell).toMatch(/\.rail__child\s*\{[^}]*min-block-size:\s*36px/);
+    // `any-pointer`, not `pointer`: a touchscreen laptop's primary pointer is
+    // its trackpad, so `pointer: coarse` never matches there and the finger
+    // would get the short row (the review of pull request 165).
+    expect(shell).toMatch(
+      /@media\s*\(any-pointer:\s*coarse\)\s*\{\s*\.rail__child\s*\{[^}]*min-block-size:\s*var\(--row\)/,
+    );
+    expect(shell).not.toMatch(/@media\s*\(pointer:\s*coarse\)/);
+  });
 });
