@@ -1405,3 +1405,116 @@ filled `var(--brand)`, and none of the old ink-underline rules remain.
 pages are showing, which waits on the operator's eye; and the check owed since
 the seventeenth pass stands — nobody has signed in and read Billing against the
 live catalogue to see the three programmes say "No expiry".
+
+## What was done on 2026-09-12: the twentieth live pass — the rail's rows, and an app that installs
+
+At 01:08 UTC on 12 September (09:08 on the operator's clock), on the operator's
+word — *"go"* — `main` at `771d0b1` was built and served: pull request 165.
+
+**Why.** The operator, against three things left open, wrote one word: *"fix"*.
+
+**The rail's rows.** A page listed under its section is 36px where the only
+pointer is a mouse and the console's full 44px wherever a coarse pointer exists
+at all. With tighter spacing the rail's overflow at 1440×900 falls from 135px
+to 99px, and at 1137px — an ordinary desk monitor — there is none. The
+arithmetic is in `docs/SPEC/coloured-shell.md` section 7.1 rather than implied:
+ten sections at 44px and five pages do not fit a 900px window and no honest row
+height makes them, so the pages that open are scrolled into view as well.
+
+**An app that installs.** The manifest opened at `/today` — the practitioner's
+day sheet, because it was written for her phone — so installing it on the
+office's PC opened the wrong screen every launch. It opens at `/` now, which
+routes each person home by role. The portrait lock is gone, three shortcuts put
+Clients, Schedule and Billing on a taskbar right-click, and four PNG icons
+carry the sizes Windows, Android and Safari each ask for.
+
+**And the icon had never worked.** `public/icon.svg`'s comment named two design
+tokens by their CSS spelling, and a double hyphen is illegal inside an XML
+comment, so the file has never parsed — here or on the live site. Every browser
+asked for the installable icon got a parse error rather than a mark, and
+nothing caught it because the console draws its own mark from a PNG and a
+browser that cannot parse an icon simply shows none. Found while rasterising
+it; `tests/lint/svg-parses.test.ts` now refuses one that does not parse.
+
+**The icons were nearly shipped wrong twice.** The first rasterisation used
+macOS Quick Look, which composites onto a white matte: all three came out with
+opaque white wedges where the mark's rounded square is transparent — on a dark
+Windows taskbar, precisely the poor icon the round set out to end. The review
+of the pull request measured it before it shipped. They are rendered by an
+exact rasteriser now, and each file is what its own platform wants: rounded
+with transparent corners for a browser, full bleed and opaque for the maskable
+icon Android crops itself and for Apple, which paints transparency black.
+
+**The hold protocol, with three peers.** `ListAgents` showed three other
+sessions on the machine. One (`t-ca`) ended before it could be asked; the other
+two were asked in as many words and both answered that they held no upload and
+were doing read-only work, and both stayed off the host until they were told
+the build had finished. One of them checked the other before answering, which
+is the rule working as written. The archive was uploaded while waiting — it
+carries its own commit in its name and can overwrite nobody — and **the build,
+which is the destructive step, was held until both answers were in**.
+
+**The pass.** Archive `mcwellness-771d0b1.tar.gz` (6,232,820 bytes); TUS create
+201 and PATCH 204 with the offset equal to the size; build `01a09328` with the
+stored settings. The served bundle flipped from `index-B5pQpsPt.js` to
+`index-Sda6hf_P.js` in about two minutes. No restart was needed, as none has
+been since the 8 September passes. `/api/health` 200 in 0.46 s and
+`/api/health/deep` 200 in 0.52 s.
+
+**The icons were read back from the live site**, not assumed: all four answer
+`image/png` at their declared sizes, with the two plain ones transparent in the
+corner and the maskable and Apple ones opaque, which is the property that went
+wrong in the first cut.
+
+**One thing observed and only partly explained.** The PNG bytes served are not
+the bytes committed — 2,740 against 1,802 for `icon-192.png`. Every property
+checked is identical: dimensions, colour type, corner alpha, PNG validity. And
+`public/brand/mark.png`, untouched since 8 September, is transformed the same
+way (28,446 bytes against 29,956), so this deploy did not cause it.
+
+**Found while the record was being written, and it is the CDN.** The same
+address serves two formats: `GET /icon-192.png` with `Accept: image/webp`
+returns **`content-type: image/webp`**, 1,428 bytes, RIFF/WEBP magic, and with
+`Accept: image/png` returns PNG, 2,740 bytes. Every response says `server:
+hcdn`. Two things in that are worse than the byte counts:
+
+- **No `Vary: Accept` on either variant**, with `cache-control: max-age=31536000,
+  public`. Two formats at one URL, a year-long shared TTL, and nothing telling a
+  downstream cache that the answer depends on the request. A corporate proxy or
+  an ISP cache may store the WebP body and later hand it to a client that asked
+  for PNG only, labelled `image/webp` at a `.png` address.
+- **It often costs bytes rather than saving them.** `brand/mark.png` is 28,446
+  committed and 33,956 as WebP; its PNG variant is 29,956.
+
+That is an operator-level hosting setting rather than anything in this
+repository, and it is recorded in `docs/SPEC/hosting.md` beside the manifest's
+content type, which is the same layer.
+
+**What is ruled out, and what is not.** The app's build is ruled out by
+reading it: `build:production` is a plain `vite build` with no pre- or post-step,
+the icons live in `public/` which Vite copies verbatim, there is no image
+tooling in the dependencies at all, and `vite-plugin-pwa` runs
+`injectManifest` with `manifest: false`, so it writes the asset list into the
+worker and generates nothing. Fetching origin-direct, bypassing the edge,
+returns the same transformed bytes — but that does **not** clear the serving
+layer, because LiteSpeed is the origin: it is the same layer that serves
+`/manifest.webmanifest` off disk as `text/plain`, above. The WebP proves the CDN transforms images; it does **not**
+prove the PNG variant is its doing, and the origin-direct reading of 2,740
+argues the file on disk may already be 2,740 with the CDN adding only the WebP.
+The hosting file API exposes only the document root, which holds `.htaccess` and
+nothing else, so the extracted file's size cannot be read with the tools here:
+the CDN transcoding is confirmed, the PNG re-encode's origin is not.
+Recorded as observed rather than attributed, because the next person to diff a
+deployed asset against the repository will otherwise think the build is at
+fault.
+
+**And one that is already known.** `/manifest.webmanifest` still comes back as
+`text/plain`: LiteSpeed serves it straight off disk and the app's own content
+type never applies. That is the open operator item in `docs/SPEC/hosting.md`,
+unchanged by this pass.
+
+**The check owed since the seventeenth pass is done.** Signed in on production
+as the founder and read what the Billing screen reads: Silver, Gold and
+Platinum each return no term, and none of the five prices carries one. The
+endpoints answer normally, which is what round 44's five-year ceiling exists to
+protect.
