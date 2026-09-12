@@ -25,12 +25,29 @@ function dateDigitsOf(input: string): string {
     .slice(0, DATE_DIGITS);
 }
 
+// An unambiguous ISO paste, `1988-09-12`, ahead of the digit fold below: a
+// plain digit fold reads year-month-day as if it were day-first and produces
+// `19/88/0912`, which is not a real date and folds to `''`. Deliberately the
+// exact `\d{4}-\d{2}-\d{2}` shape and nothing looser — `12-09-1988` keeps its
+// existing day-first reading (its first group is two digits, not four), and a
+// still-typing partial (`1988-09-1`) is left to the digit fold too, exactly
+// as it was before this fix.
+const ISO_PASTE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** An unambiguous `YYYY-MM-DD` paste, reordered to the day-first digit run this module groups. */
+function dayFirstDigitsFromIsoPaste(input: string): string | null {
+  const match = ISO_PASTE.exec(input);
+  if (match === null) return null;
+  const [, year, month, day] = match;
+  return `${day}${month}${year}`;
+}
+
 /**
  * The typed form, grouped as far as the digits reach: `12`, `12/0`, `12/09/1988`.
  * Total — it never throws, because it formats a date that is still being typed.
  */
 export function groupDateDigits(input: string): string {
-  const d = dateDigitsOf(input);
+  const d = dayFirstDigitsFromIsoPaste(input) ?? dateDigitsOf(input);
   if (d.length <= 2) return d;
   if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
   return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;

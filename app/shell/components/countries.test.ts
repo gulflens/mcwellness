@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { splitE164 } from '@domain/shared';
-import { COUNTRIES, countryForDialling, DIALLING_CODES } from './countries';
+import { CANONICAL, COUNTRIES, countryForDialling, DIALLING_CODES } from './countries';
 
 /**
  * A hand-entered table of ~236 rows is exactly the kind of thing that rots
@@ -85,5 +85,19 @@ describe('countryForDialling', () => {
 
   it('resolves an unknown code to undefined rather than guessing', () => {
     expect(countryForDialling('+0')).toBeUndefined();
+  });
+
+  // Fix round finding 8, 2026-09-12: `countryForDialling` falls through
+  // silently to table order for an ISO that `CANONICAL` names but the table
+  // does not actually carry, so a typo'd override would draw the WRONG
+  // country from the list rather than fail — exactly the kind of rot the
+  // module's own docstring warns a hand-entered table invites.
+  it('names an ISO in CANONICAL that the table actually carries', () => {
+    for (const iso of Object.values(CANONICAL)) {
+      expect(
+        COUNTRIES.some((country) => country.iso === iso),
+        `CANONICAL names ${iso}, which is not in COUNTRIES`,
+      ).toBe(true);
+    }
   });
 });

@@ -15,7 +15,12 @@
 // on contact.phone (db/migrations/060_client.sql).
 const E164 = /^\+[1-9][0-9]{6,14}$/;
 
-export const PHONE_ERROR = `Enter the phone number with its country code, for example +971500001234.`;
+// The split phone control (app/shell/components/PhoneField.tsx) already holds
+// the country in its own selector, so this names the two halves it draws
+// rather than showing a full E.164 string — the very shape that, typed
+// whole into the number box, is what fix round finding 1 (2026-09-12) had to
+// stop the control from silently doubling up.
+export const PHONE_ERROR = 'Choose the country, then enter the rest of the number.';
 export const EMAIL_ERROR =
   'Enter an email address, for example name@example.com, or leave it blank.';
 export const FUTURE_DATE_ERROR = 'A date of birth is in the past.';

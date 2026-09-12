@@ -41,6 +41,20 @@ describe('groupDateDigits', () => {
   it('never exceeds eight digits', () => {
     expect(groupDateDigits('120919889999')).toBe('12/09/1988');
   });
+
+  // Fix round finding 5, 2026-09-12: the spec promises an ISO paste
+  // (`1988-09-12`) is accepted, but the plain digit fold read it day-first
+  // regardless of shape — `19/88/0912`, not a real date, folding to `''`.
+  // Narrow to the exact `\d{4}-\d{2}-\d{2}` shape so a day-first date with
+  // hyphens (`12-09-1988`, whose first group is two digits, not four) keeps
+  // reading exactly as it always has.
+  it('reads an unambiguous ISO paste day-first, rather than folding it blind', () => {
+    expect(groupDateDigits('1988-09-12')).toBe('12/09/1988');
+  });
+
+  it('still reads a day-first date with hyphens as day-first, not as ISO', () => {
+    expect(groupDateDigits('12-09-1988')).toBe('12/09/1988');
+  });
 });
 
 describe('isRealDate', () => {

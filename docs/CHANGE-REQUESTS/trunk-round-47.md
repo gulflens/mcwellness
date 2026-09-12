@@ -112,6 +112,18 @@ touched (twenty-six dates, two times, three phones) — each was a swap of
 one control for another with its value unchanged. This is what makes it defensible to edit the screens where money
 is taken (billing, accounting) in the same round as the enrolment screen.
 
+### One control does not keep the value contract, harmlessly
+
+`EmiratesIdField` is the exception to "each new control speaks exactly the string the
+control it replaced spoke" above (fix round finding 4, 2026-09-12): it sends the GROUPED
+display form, `784-1900-1234567-1`, not the bare fifteen digits its predecessor sent. Both
+call sites fold with `toLatinDigits` before sending, and that function does not strip
+separators, so the dashed string is what reaches `POST /api/clients` and the contacts
+route. It is harmless — `record-schema.ts` accepts up to forty characters and
+`normaliseEmiratesId` strips every non-digit before the fingerprint is hashed and sealed,
+so the stored value is unchanged either way — but it is a real wire-format change, and it
+went undocumented until this note.
+
 ### No migration, no policy file, no API route
 
 Nothing this round decided is a database's to enforce. The stored value on

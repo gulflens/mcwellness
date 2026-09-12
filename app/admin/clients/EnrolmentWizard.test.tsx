@@ -311,9 +311,7 @@ describe('EnrolmentWizard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
 
     expect(
-      await screen.findByText(
-        'Enter the phone number with its country code, for example +971500001234.',
-      ),
+      await screen.findByText('Choose the country, then enter the rest of the number.'),
     ).toBeTruthy();
     // Nothing was sent: the rule the server holds is checked before the request.
     expect(calls.some((c) => c.url === '/api/clients')).toBe(false);

@@ -247,13 +247,20 @@ describe('Practice settings — the save', () => {
     );
     await openTheDrawer();
     // PhoneField holds the country in its own control (default +971), so a
-    // string of letters no longer reaches the E.164 check at all — typing it
-    // into the number box leaves no digits, and an empty number is the
-    // optional field's "not given" rather than a refusal. What the check
-    // still catches is a number too short to be real once the country is
-    // joined on.
+    // number too short to be real once the country is joined on is caught
+    // here.
     type('WhatsApp number (optional)', '12');
     type('Why this changes', 'The practice number changed.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(await screen.findByText('A WhatsApp number is +971 50 000 0000.')).toBeTruthy();
+    expect(saves(calls)).toHaveLength(0);
+
+    // A string of letters folds to no digits at all, so PhoneField resolves
+    // it to '' — the optional field's own "not given". Left unchecked that
+    // used to save `null` with no refusal, silently clearing a number that
+    // was never actually blanked (fix round finding 6, 2026-09-12): the box
+    // itself, still showing the letters, is what the form now checks.
+    type('WhatsApp number (optional)', 'not a number');
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
     expect(await screen.findByText('A WhatsApp number is +971 50 000 0000.')).toBeTruthy();
     expect(saves(calls)).toHaveLength(0);

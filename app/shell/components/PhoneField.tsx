@@ -129,6 +129,36 @@ export function PhoneField({
   }
 
   function takeNumber(nextTyped: string) {
+    // The whole number, typed or pasted straight into this box, is the
+    // likeliest single mistake this control invites: for months the number
+    // lived in one free-text box, and `+971 50 000 1234` is exactly the habit
+    // that box trained. Concatenated blindly with whatever the selector
+    // already holds, that produces `+971971500001234` — fifteen digits,
+    // still inside `isValidPhone`'s and the server's E.164 range, still
+    // undialable, and nothing downstream refuses it (fix round finding 1,
+    // 2026-09-12). A leading `+` is unambiguous, so it is the one shape this
+    // control re-splits rather than concatenates: `splitE164` on the typed
+    // text decides both halves at once, and the selector moves with the
+    // number rather than staying wherever it happened to be. A code typed
+    // WITHOUT the plus (`971500001234`) is left as plain digits and folded
+    // onto whatever country is already selected — bare digits are ambiguous
+    // (a national number can legitimately start with the same digits as a
+    // dialling code) and guessing wrong there would silently attach the
+    // number to a different country, the more dangerous failure. When the
+    // text does not yet resolve to a complete number (`+9`, still being
+    // typed) `splitE164` returns null and this falls through to the existing
+    // behaviour unchanged, so an incomplete paste is never treated as if it
+    // were a doomed match.
+    const trimmed = nextTyped.trim();
+    if (trimmed.startsWith('+')) {
+      const split = splitE164(trimmed.replace(/\s/g, ''), DIALLING_CODES);
+      if (split) {
+        setDiallingCode(split.diallingCode);
+        setTyped(split.national);
+        onChange(resolve(split.diallingCode, split.national));
+        return;
+      }
+    }
     setTyped(nextTyped);
     onChange(resolve(diallingCode, nextTyped));
   }

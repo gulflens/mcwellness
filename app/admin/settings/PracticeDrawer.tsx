@@ -176,7 +176,20 @@ export function PracticeDrawer({
       errors.vatTrn = typedVatTrn.length === 0 ? VAT_TRN_REQUIRED_MESSAGE : VAT_TRN_LENGTH_MESSAGE;
     }
     const typedWhatsapp = whatsappNumber.replace(/[\s()-]/g, '');
+    // PhoneField folds whatever the number box holds to digits before it
+    // resolves anything, so text with none in it — a paste that missed, a
+    // stray letter — leaves the box showing something while the value this
+    // form sees is '', the field's own "not given". Left unchecked that
+    // reads as an ordinary clear and the optional field would silently save
+    // `null` where a refusal used to stand (fix round finding 6, 2026-09-12).
+    // The box itself, not just what it resolved to, is what says whether
+    // that happened.
+    const whatsappBox = document.getElementById(FIELD_IDS.whatsappNumber);
+    const whatsappBoxHasText =
+      whatsappBox instanceof HTMLInputElement && whatsappBox.value.trim().length > 0;
     if (typedWhatsapp.length > 0 && !/^\+[1-9][0-9]{6,14}$/.test(typedWhatsapp)) {
+      errors.whatsappNumber = WHATSAPP_MESSAGE;
+    } else if (typedWhatsapp.length === 0 && whatsappBoxHasText) {
       errors.whatsappNumber = WHATSAPP_MESSAGE;
     }
     // The same three checks app/api/practice/schema.ts makes, so the drawer

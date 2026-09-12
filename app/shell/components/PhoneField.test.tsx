@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -138,5 +138,45 @@ describe('PhoneField', () => {
     await user.type(screen.getByLabelText('Phone'), '0612345678');
     await user.selectOptions(screen.getByLabelText(/country/i), 'IT');
     expect(onChange).toHaveBeenLastCalledWith('+390612345678');
+  });
+
+  // Fix round finding 1, 2026-09-12 (CRITICAL): this box replaced a single
+  // free-text one that asked for the whole number, `+971…` included, and
+  // that habit does not stop just because the box changed shape. Pasted (or
+  // typed) whole into the number box, `+971 50 000 1234` used to concatenate
+  // blindly onto whichever country the selector already held — producing
+  // `+971971500001234`, fifteen digits, inside every check this shape
+  // passes, and undialable. A leading `+` is unambiguous, so the whole text
+  // is re-split through the same `splitE164` the resync guard already
+  // trusts, and both halves are set from the result.
+  it('re-splits a whole number pasted into the number box, instead of doubling the country code', () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971 50 000 1234' } });
+    expect(onChange).toHaveBeenLastCalledWith('+971500001234');
+    expect((screen.getByLabelText('Phone') as HTMLInputElement).value).toBe('500001234');
+    expect((screen.getByLabelText(/country/i) as HTMLSelectElement).value).toBe('AE');
+  });
+
+  it('moves the selector to match a whole number pasted from a different country', () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+44 7700 900123' } });
+    expect((screen.getByLabelText(/country/i) as HTMLSelectElement).value).toBe('GB');
+    expect(onChange).toHaveBeenLastCalledWith('+447700900123');
+    expect((screen.getByLabelText('Phone') as HTMLInputElement).value).toBe('7700900123');
+  });
+
+  // The other half of the same guard: `splitE164` returns null for a code
+  // that has not finished arriving, and a still-typing paste must not be
+  // read as a doomed match for one. This falls through to the pre-existing
+  // digit fold, unchanged — the same outcome a leading `+` produced before
+  // this fix, not a new guess.
+  it('leaves a partial "+9" alone rather than guessing at a country', () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+9' } });
+    expect((screen.getByLabelText(/country/i) as HTMLSelectElement).value).toBe('AE');
+    expect(onChange).toHaveBeenLastCalledWith('+9719');
   });
 });

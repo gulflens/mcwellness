@@ -52,6 +52,15 @@ API test and no database test is touched by the sweep, and each of the thirty-th
 sites is a one-line import swap with its props unchanged. This is what makes it defensible
 to edit the screens where money is taken in the same round as the enrolment screen.
 
+One control is the exception to the sentence above, stated plainly rather than left for a
+reviewer to find (fix round finding 4, 2026-09-12): `EmiratesIdField` sends the GROUPED
+form, `784-1900-1234567-1`, not the bare digits its predecessor sent, because both call
+sites fold digits with `toLatinDigits` before sending and that function does not strip the
+dashes. This is benign in fact — `record-schema.ts` accepts up to forty characters and
+`normaliseEmiratesId` strips every non-digit before the value is hashed and sealed, so the
+stored fingerprint is unchanged either way — but it is a real, if harmless, wire-format
+change, and the sentence above should not be read as covering it.
+
 **Splitting a phone number apart is lossless even when the country guess is wrong.** A
 stored `+1…` cannot be attributed to a country: the United States, Canada and a couple of
 dozen Caribbean and Atlantic territories all share `+1`, and E.164 keeps no record of which. The control therefore treats

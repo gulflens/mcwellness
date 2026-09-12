@@ -318,7 +318,10 @@ export const DIALLING_CODES: readonly string[] = COUNTRIES.map((c) => c.dialling
  * Guadeloupe — already the alphabetical winner — is the largest and most
  * commonly meant of the three, so it needs no override.
  */
-const CANONICAL: Record<string, string> = {
+// Exported only so its own integrity test (countries.test.ts) can check every
+// ISO named here is actually a row in COUNTRIES — `countryForDialling` itself
+// still reads it as a private lookup.
+export const CANONICAL: Record<string, string> = {
   '+1': 'US',
   '+7': 'RU',
   '+44': 'GB',
