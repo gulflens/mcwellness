@@ -16,7 +16,7 @@ application has no say at all. On a machine whose browser is set to English (Uni
 States) — which is the default on a Mac sold anywhere — the date of birth box on the
 enrolment wizard reads `MM/DD/YYYY`. The same record, opened on a second machine, reads
 `DD/MM/YYYY`. The stored value is identical and correct in both; only the person reading
-it is misled. There are twenty-seven such boxes. Two `<input type="time">` boxes have the
+it is misled. There are twenty-six such boxes. Two `<input type="time">` boxes have the
 same defect in the twelve-hour form, and they sit on the screens where a visit is booked
 and moved.
 
@@ -48,7 +48,7 @@ This round fixes the input side. The display side is already right and is not to
 control speaks exactly the string the control it replaces spoke: `DateField` takes and
 returns `1988-09-12`, `TimeField` takes and returns `14:30`, `PhoneField` takes and returns
 `+971500001234`. Only the drawing changes. No route, no zod schema, no database column, no
-API test and no database test is touched by the sweep, and each of the thirty-four call
+API test and no database test is touched by the sweep, and each of the thirty-three call
 sites is a one-line import swap with its props unchanged. This is what makes it defensible
 to edit the screens where money is taken in the same round as the enrolment screen.
 
@@ -69,10 +69,15 @@ plausible to the eye, accepted by a naive check, and undialable. Stripping that 
 decision about what a phone number means, which rule 4 of `CLAUDE.md` puts in `domain/`
 as a pure function with tests written first, not in a component.
 
-**The Emirates ID mask is a pure function too, and it already has a home.** Grouping fifteen
-digits as `784-1900-1234567-1` is `3-4-7-1`. The function goes in
-`domain/shared/emirates-id.ts` beside `normaliseEmiratesId`, which already folds
-Arabic-Indic digits; the field wrapper stays in `app/admin/clients/`. The existing checksum
+**The Emirates ID mask is a new function beside an existing one that cannot do the job.**
+`domain/shared/emirates-id.ts` already exports `formatEmiratesId`, which groups `3-4-7-1`
+and is exported from the barrel — but it calls `normaliseEmiratesId` first and *throws*
+unless it is handed exactly fifteen digits starting `784`. Masking as someone types means
+formatting three digits, then seven, then twelve, so that function is unusable here and
+must not be altered: the seal and the fingerprint in `domain/shared/identity.ts` depend on
+its strictness. The mask is therefore a second, total function in the same file —
+`groupEmiratesIdDigits`, which never throws and formats whatever partial run it is given.
+The field wrapper stays in `app/admin/clients/`. The existing checksum
 validation, the `409` for an identity number already on file and the `503` when the identity
 service is unconfigured are untouched — this round changes how the digits are grouped on
 screen and nothing about what they mean.
@@ -123,7 +128,7 @@ in `domain/shared/` and tests written first.
   where that method is absent the button focuses the hidden input instead.
 - `min` and `max` are honoured — the audit range and the activation gate both rely on them.
 - `TimeField` is the same shape in `HH:MM`, twenty-four hour, with no meridiem anywhere.
-- The twenty-seven date sites and two time sites are swapped, and the guard test lands here.
+- The twenty-six date sites and two time sites are swapped, and the guard test lands here.
 
 ### Pull request 2: the control that takes a phone number
 
@@ -139,7 +144,7 @@ leading-zero rule as pure functions in `domain/shared/` and tests written first.
 
 ### Pull request 3: the identity number, and the wizard's rhythm
 
-- `formatEmiratesId` in `domain/shared/emirates-id.ts`, tests first, grouping `3-4-7-1` and
+- `groupEmiratesIdDigits` in `domain/shared/emirates-id.ts`, tests first, grouping `3-4-7-1` and
   capping at fifteen digits.
 - `EmiratesIdField` in `app/admin/clients/`, used by the enrolment wizard and the contact
   form.
@@ -182,7 +187,7 @@ leading-zero rule as pure functions in `domain/shared/` and tests written first.
 
 ## Ownership
 
-`app/shell/**` and `domain/shared/**` are the shared zone, and the thirty-four call sites lie
+`app/shell/**` and `domain/shared/**` are the shared zone, and the thirty-three call sites lie
 in nine modules that different streams own. This is therefore a trunk round with a one-round
 widening and a change request in `docs/CHANGE-REQUESTS/`, following rounds 31, 33, 34 and 41.
 No migration, no policy file and no API route: nothing this round decides is a database's to
