@@ -328,8 +328,21 @@ a section does.
 **The look.** A page row is indented to line its label up with its section's
 label, takes the rail's own `--brand-pale` at `--t-small`, and the row you are
 on takes the same white pill the current section takes, for the same measured
-reason (section 4.2). The rail's list already scrolls, so a tall section costs
-the rail nothing.
+reason (section 4.2).
+
+**The height, amended 2026-09-12 on the operator's instruction.** A page row is
+36px where the pointer is a mouse, and the console's full 44px wherever the
+pointer is coarse — the tablet and the phone, which are also where the rail
+covers the page and has room to spare. A page row is a label with no icon and a
+mouse hits it precisely; a finger does not.
+
+**And the arithmetic, stated rather than implied.** Ten sections at 44px, five
+pages and the gaps between them do not fit a 900px window, and no honest row
+height makes them: shorter pages and tighter spacing recover about 56px of the
+135px that overflowed. On a desk monitor that is the difference between
+scrolling and not; on a laptop the rail still scrolls, and the pages that have
+just opened are scrolled into view so that what does not fit is never what the
+reader is looking at.
 
 ### 7.2 The page's own switcher
 

@@ -311,4 +311,31 @@ describe('Rail', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Receipts' }));
     expect(onChoose).toHaveBeenCalledTimes(1);
   });
+
+  it("brings a section's pages into view when they open, where the browser can", () => {
+    // With a section open the rail can be taller than the window, so the pages
+    // that just appeared may be below the fold (the operator, 2026-09-12).
+    // jsdom implements no scrolling at all, so the call is stubbed here and
+    // made optional in the component — a gap in the test environment rather
+    // than anything a browser lacks.
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      writable: true,
+      value: scrollIntoView,
+    });
+    render(
+      <MemoryRouter initialEntries={['/admin/billing#receipts']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    // `nearest`: move the least that will do, so a rail with room does not jump.
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
 });
