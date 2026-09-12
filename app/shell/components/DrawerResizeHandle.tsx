@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import {
   MIN_DRAWER_WIDTH,
   clampDrawerWidth,
@@ -98,6 +98,15 @@ function widthFromPointer(handle: Element, clientX: number): number {
  */
 export function DrawerResizeHandle() {
   const [width, setWidth] = useState(() => currentWidth());
+  // Whether a drag is in progress — the one thing `onPointerMove` and
+  // `finishDrag` both ask, rather than `hasPointerCapture`: a `pointercancel`
+  // is not guaranteed to have released capture yet by the time it fires, so
+  // a check that depends on capture state can disagree with itself between
+  // the two events it is meant to treat alike (round-three review finding 5,
+  // 2026-09-12). Mirrors the `drawing` ref
+  // `app/admin/clients/SignaturePad.tsx` already uses for the same pair of
+  // events, rather than inventing a second shape for one hook over.
+  const dragging = useRef(false);
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     // The browser's other default action for a mousedown-and-drag is
@@ -105,24 +114,41 @@ export function DrawerResizeHandle() {
     // nowhere near a drawer, but this handle spends its whole life sitting
     // over the ledger (round-two review finding 4, 2026-09-12).
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // Optional, as SignaturePad's own call is: a browser that cannot capture
+    // the pointer still gets a working drag, just without the guarantee that
+    // leaving the handle's own bounds keeps tracking it.
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragging.current = true;
     setWidth(currentWidth());
   }
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (!dragging.current) {
       return;
     }
     setWidth(applyDrawerWidth(widthFromPointer(event.currentTarget, event.clientX)));
   }
 
-  function onPointerUp(event: PointerEvent<HTMLDivElement>) {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-      // The one write a drag makes, now that every `pointermove` along the
-      // way only applied the width and left storage alone.
-      writeDrawerWidth(width);
+  /**
+   * The end of a drag, however it ends. `onPointerUp` and `onPointerCancel`
+   * both call this rather than each doing its own half: a `pointercancel` —
+   * a touch a system gesture interrupts, a stylus leaving range, the browser
+   * taking the pointer back — skipped `onPointerUp` entirely under the
+   * previous, up-only write, so the whole drag was forgotten on the next
+   * load with nothing on screen to say so (round-three review finding 5,
+   * 2026-09-12, worse than the per-frame write finding 5 of round two
+   * removed, since that one at least never lost a width outright). Guarded
+   * by `dragging` rather than by whether capture is still held, so a cancel
+   * followed by an up — or either firing twice, which the spec does not
+   * rule out — commits once, from whichever width was last applied, never
+   * stale and never doubled.
+   */
+  function finishDrag() {
+    if (!dragging.current) {
+      return;
     }
+    dragging.current = false;
+    writeDrawerWidth(width);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -154,7 +180,8 @@ export function DrawerResizeHandle() {
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
+      onPointerUp={finishDrag}
+      onPointerCancel={finishDrag}
       onKeyDown={onKeyDown}
       onFocus={() => setWidth(currentWidth())}
     />
