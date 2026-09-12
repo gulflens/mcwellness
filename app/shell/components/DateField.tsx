@@ -38,6 +38,20 @@ export function DateField({
   const [priorValue, setPriorValue] = useState(value);
   const native = useRef<HTMLInputElement>(null);
 
+  // What `typed` actually resolves to: `''` for an incomplete or impossible
+  // date, exactly as `''` for one that parses but sits outside `min`/`max`
+  // (Finding 4 — the bound used to reach only the hidden native input, so a
+  // date typed straight into the text box could sit outside it and still be
+  // emitted). Shared by the resync guard below and by `take`, so the two
+  // never disagree about what a given `typed` string is worth.
+  function resolve(display: string): string {
+    const iso = isoFromDisplay(display);
+    if (iso === null) return '';
+    if (min !== undefined && iso < min) return '';
+    if (max !== undefined && iso > max) return '';
+    return iso;
+  }
+
   // A value changed by the caller — a record loading, a form resetting — is
   // redrawn; a value the caller merely echoed back is left alone, so the caret
   // does not jump while someone is still typing. Done during render rather
@@ -45,23 +59,38 @@ export function DateField({
   // setState there): the documented "adjusting state when a prop changes"
   // pattern, keyed off a tracked prior value so this fires only on an actual
   // change and not on every render.
+  //
+  // Finding 1: this used to compare `isoFromDisplay(typed)` (`null` for an
+  // incomplete date) directly against `value` (`''` once `take` empties it)
+  // and read `null !== ''` as a real change, blanking a date mid-edit on the
+  // very next backspace. Comparing `resolve(typed)` — which folds `null` to
+  // `''` the same way `take` already does — against `value` compares like
+  // with like.
   if (value !== priorValue) {
     setPriorValue(value);
-    if (isoFromDisplay(typed) !== value) setTyped(displayFromIso(value));
+    if (resolve(typed) !== value) setTyped(displayFromIso(value));
   }
 
   function take(next: string) {
     const grouped = groupDateDigits(next);
     setTyped(grouped);
-    onChange(isoFromDisplay(grouped) ?? '');
+    onChange(resolve(grouped));
   }
 
   function openPicker() {
     const element = native.current;
     if (element === null) return;
     if (typeof element.showPicker === 'function') {
-      element.showPicker();
-      return;
+      // Finding 3: a real browser's showPicker() can throw — SecurityError
+      // with no user activation, NotAllowedError in a cross-origin frame —
+      // and the press must still land on the same fallback rather than
+      // propagate.
+      try {
+        element.showPicker();
+        return;
+      } catch {
+        // Fall through to focus().
+      }
     }
     element.focus();
   }
