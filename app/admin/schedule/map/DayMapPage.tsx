@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router';
 import { AppointmentListResponse, type AppointmentRow } from '../../../api/appointments/schema';
 import { PracticeDayResponse, type PracticeDayPractitioner } from '../../../api/routing/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
-import { Button, Field, Note, PageHeader, Select } from '../../../shell/components/Controls';
+import { Button, Note, PageHeader, Select } from '../../../shell/components/Controls';
 import { DateField } from '../../../shell/components/DateField';
 import { StatusChip } from '../../../shell/components/StatusChip';
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from '../appointmentStatus';

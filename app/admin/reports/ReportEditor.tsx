@@ -9,7 +9,7 @@ import {
   type VisitChoice,
 } from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { Button, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { Ribbon } from './Ribbon';
 import { mayOfferSigning } from './reportsAccess';

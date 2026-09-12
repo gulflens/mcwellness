@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccountsResponse, LedgerResponse, type AccountRow } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note } from '../../shell/components/Controls';
+import { Button, Note } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate, formatFils } from './money';

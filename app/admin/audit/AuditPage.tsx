@@ -9,7 +9,7 @@ import {
   type ActivityEvent,
 } from '../../api/audit/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
+import { Button, Note, PageHeader, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { Table, type Column } from '../../shell/components/Table';
 import { describeRoles } from '../../shell/routing';

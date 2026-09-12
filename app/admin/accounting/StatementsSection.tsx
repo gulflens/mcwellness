@@ -6,7 +6,7 @@ import {
   TrialBalanceResponse,
 } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note } from '../../shell/components/Controls';
+import { Button, Note } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { Table } from '../../shell/components/Table';
 import { DOWNLOAD_REFUSED, downloadCsv } from './download';
