@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { joinE164, splitE164, stripTrunkPrefix } from '@domain/shared';
 import { Field } from './Controls';
-import { COUNTRIES, DIALLING_CODES, type Country } from './countries';
+import { COUNTRIES, DIALLING_CODES, countryForDialling, type Country } from './countries';
 import { flagsRender } from './flagSupport';
 
 /**
@@ -79,6 +79,18 @@ export function PhoneField({
   const [priorValue, setPriorValue] = useState(value);
   const countryId = `${id}-country`;
 
+  // The select is keyed and driven by ISO code, not by `diallingCode` itself:
+  // ~25 rows share `+1`, four share `+44`, and a few others repeat too, so a
+  // controlled `<select>` given a shared value resolves to the FIRST option
+  // in document order — table order — which drew Guernsey's flag beside a
+  // London number and snapped a chosen "United Kingdom" back to Guernsey the
+  // moment the select closed. `countryForDialling` exists precisely to name
+  // the one country a shared code should display as; `diallingCode` stays
+  // the value `resolve`/the guard above work with (a dialling code, not a
+  // country, is what E.164 actually stores), and this is purely a display
+  // projection of it.
+  const selectedIso = countryForDialling(diallingCode)?.iso ?? 'AE';
+
   // A value changed by the caller — a record loading, a form resetting — is
   // redrawn; a value this control merely echoed back through its own
   // `onChange` is left alone, so neither half jumps while someone is still
@@ -105,9 +117,15 @@ export function PhoneField({
     }
   }
 
-  function takeCountry(nextDialling: string) {
-    setDiallingCode(nextDialling);
-    onChange(resolve(nextDialling, typed));
+  function takeCountry(nextIso: string) {
+    // The select hands back an ISO code (see `selectedIso` above); mapped
+    // back to a dialling code here by a direct `.find` on `iso`, which is
+    // unique per row — unlike a dialling code, an ISO code never needs
+    // `countryForDialling`'s tie-breaking.
+    const country = COUNTRIES.find((c) => c.iso === nextIso);
+    if (!country) return;
+    setDiallingCode(country.dialling);
+    onChange(resolve(country.dialling, typed));
   }
 
   function takeNumber(nextTyped: string) {
@@ -124,12 +142,12 @@ export function PhoneField({
         <select
           id={countryId}
           className="field__input"
-          value={diallingCode}
+          value={selectedIso}
           disabled={disabled}
           onChange={(event) => takeCountry(event.target.value)}
         >
           {COUNTRIES.map((country) => (
-            <option key={country.iso} value={country.dialling}>
+            <option key={country.iso} value={country.iso}>
               {optionLabel(country)}
             </option>
           ))}

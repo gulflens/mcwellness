@@ -1304,12 +1304,27 @@ a.rail__item.rail__item--active:active {
    the remainder. */
 .phonefield {
   display: flex;
+  /* `.phonefield__number` is a whole `.field` — a visible label above its
+     input, then an optional hint/error line below. `.phonefield__code` has
+     no visible label of its own (just a visually-hidden one, which takes no
+     space), so the default `stretch` would centre it against the *whole*
+     `.field` column and leave it sitting above the number box's own input,
+     worse still once a hint or error adds a line beneath it. `flex-start`
+     plus the code box's own top offset (below) is what keeps the two inputs
+     level regardless of what grows underneath either one. */
+  align-items: flex-start;
   gap: var(--s-2);
 }
 
 .phonefield__code {
   flex: none;
   inline-size: 9rem;
+  /* Pushes the select down past where `.field__label`'s line box plus
+     `.field`'s own `--s-1` row gap would sit, the same offset `DateField`
+     anchors its calendar button from (`.datefield__picker`) and for the same
+     reason: this is the only way to line up with an input that has a real
+     label above it without measuring anything at runtime. */
+  padding-block-start: calc(var(--lh-small) + var(--s-1));
 }
 
 .phonefield__code .field__input {
