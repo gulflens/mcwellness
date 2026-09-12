@@ -5,6 +5,7 @@ import { RELATIONSHIPS, type Contact, IdResponse } from '../../api/clients/recor
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { PhoneField } from '../../shell/components/PhoneField';
+import { EmiratesIdField } from './EmiratesIdField';
 import { Checkbox } from './FormAtoms';
 import {
   EMAIL_ERROR,
@@ -318,20 +319,14 @@ export function ContactForm({
         }}
         error={fieldErrors.email}
       />
-      <Field
+      <EmiratesIdField
         id="contact-emirates-id"
         label="Emirates ID (optional)"
-        type="text"
         value={emiratesId}
-        onChange={(e) => {
-          setEmiratesId(e.target.value);
+        onChange={(next) => {
+          setEmiratesId(next);
           clear('emiratesId');
         }}
-        hint={
-          editing && contact?.hasEmiratesId
-            ? 'For example 784-1900-1234567-1. One is already on file. Leave blank to keep it, or type a new one to replace it.'
-            : 'For example 784-1900-1234567-1. Only when the practice must verify this adult. Never required.'
-        }
         error={fieldErrors.emiratesId}
       />
       {editing && contact?.hasEmiratesId ? (

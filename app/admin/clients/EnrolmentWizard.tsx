@@ -24,6 +24,7 @@ import { canActivate, practiceToday, toActivationRecord } from './activation';
 import { Checkbox } from './FormAtoms';
 import { ConsentTab } from './ConsentTab';
 import { ContactsTab } from './ContactsTab';
+import { EmiratesIdField } from './EmiratesIdField';
 import { GoalsTab } from './GoalsTab';
 import { IdentityForm } from './IdentityForm';
 import { LocationsTab } from './LocationsTab';
@@ -398,7 +399,7 @@ export function EnrolmentWizard({
                 setDateOfBirth(next);
                 clearIdentityError('dateOfBirth');
               }}
-              hint="Not needed to save a lead, but needed before this client can be activated."
+              hint="Needed to activate."
               error={identityErrors.dateOfBirth}
             />
             <Field
@@ -447,15 +448,14 @@ export function EnrolmentWizard({
               }}
               error={identityErrors.email}
             />
-            <Field
+            <EmiratesIdField
               id="wizard-emirates-id"
               label="Emirates ID (optional)"
               value={emiratesId}
-              onChange={(e) => {
-                setEmiratesId(e.target.value);
+              onChange={(next) => {
+                setEmiratesId(next);
                 clearIdentityError('emiratesId');
               }}
-              hint="For example 784-1900-1234567-1. Only when the practice must verify this adult. Never required."
               error={identityErrors.emiratesId}
             />
             <Checkbox

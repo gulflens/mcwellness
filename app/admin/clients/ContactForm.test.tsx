@@ -116,12 +116,10 @@ describe('ContactForm', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('shows example values as hints, never as grey text inside the box', () => {
+  it('carries the Emirates ID example as a placeholder now, not as a hint', () => {
     mount();
-    const phone = screen.getByLabelText('Phone (optional)') as HTMLInputElement;
     const emiratesId = screen.getByLabelText('Emirates ID (optional)') as HTMLInputElement;
-    expect(phone.placeholder).toBe('');
-    expect(emiratesId.placeholder).toBe('');
-    expect(screen.getByText(/for example 784-1900-1234567-1/i)).toBeTruthy();
+    expect(emiratesId.placeholder).toBe('784-1900-1234567-1');
+    expect(screen.queryByText(/for example 784-1900-1234567-1/i)).toBeNull();
   });
 });
