@@ -459,10 +459,19 @@ a.rail__child.rail__child--current {
   font-variant-numeric: tabular-nums;
 }
 
+/* `.datefield` wraps a whole `Field` — label, input, then an optional hint
+   or error line below it (`.field` is a column with a `--s-1` gap) — unlike
+   `.password`, whose span wraps the input alone. Anchoring from the block
+   end would sit the button under that message instead of on the input, so
+   both the button and the hidden native input are anchored from the block
+   start instead, offset past the label's own line box plus the column gap:
+   exactly the input's top edge, whatever the label's size. Do not "fix"
+   this back to `inset-block-end: 0` — that is the bug this note exists to
+   prevent. */
 .datefield__picker {
   position: absolute;
   inset-inline-end: 0;
-  inset-block-end: 0;
+  inset-block-start: calc(var(--lh-small) + var(--s-1));
   inline-size: var(--row);
   block-size: var(--row);
   display: inline-flex;
@@ -482,7 +491,7 @@ a.rail__child.rail__child--current {
 .datefield__native {
   position: absolute;
   inset-inline-end: 0;
-  inset-block-end: 0;
+  inset-block-start: calc(var(--lh-small) + var(--s-1));
   inline-size: 1px;
   block-size: 1px;
   opacity: 0;
