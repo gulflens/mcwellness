@@ -67,6 +67,16 @@ export function useDrawer(
           holdsTheDrawer = child;
           continue;
         }
+        // The width handle (`DrawerResizeHandle`) sits beside `.admin__main`
+        // rather than inside the drawer it resizes — one mounted in the
+        // shell for every screen rather than one nested in each of the 27
+        // that render a drawer (round of 2026-09-12) — so it is never an
+        // ancestor of `drawer.current` and this walk would otherwise inert
+        // it the instant a drawer opens, which is the one moment it is
+        // visible and needs to keep working.
+        if (child.classList.contains('drawer__resize')) {
+          continue;
+        }
         // `!child.inert` so a drawer opened above another drawer does not
         // un-inert, on the way out, what the first one had already marked.
         if (!child.inert) {

@@ -17,7 +17,9 @@ import {
 } from './adminAccess';
 import type { Actor } from './auth/AuthContext';
 import { useAuth } from './auth/AuthContext';
+import { DrawerResizeHandle } from './components/DrawerResizeHandle';
 import { ADMIN_SECTIONS, Rail, type RailSection } from './components/Rail';
+import { readDrawerWidth } from './components/useDrawerWidth';
 import {
   closesOnChoice,
   railMode,
@@ -123,6 +125,17 @@ export function AdminLayout({ actorName }: { actorName: string }) {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+  // The drawer's own remembered width (the operator's ask of 2026-09-12), read
+  // once and applied before any drawer has a reason to open — `--drawer`
+  // otherwise stays at tokens.css's clamp() until `DrawerResizeHandle` first
+  // moves it, which would show the wrong width on the very first drawer of a
+  // visit that had already been resized on a previous one.
+  useEffect(() => {
+    const stored = readDrawerWidth(window.innerWidth);
+    if (stored !== null) {
+      document.documentElement.style.setProperty('--drawer', `${stored}px`);
+    }
+  }, []);
   const tier = tierOf(width);
   const mode = railMode(tier, railOpen, pinned);
   const toggleRail = () => {
@@ -193,6 +206,15 @@ export function AdminLayout({ actorName }: { actorName: string }) {
           <Outlet />
         </Suspense>
       </main>
+      {/*
+       * One handle for every drawer (the operator's ask of 2026-09-12), a
+       * sibling of the content rather than nested in each of the 27 screens
+       * that render one. It draws itself only when a drawer is actually on
+       * screen — shell.css's `.admin:has(.drawer)` rule, not any state kept
+       * here — and useDrawer.ts knows its class by name so the drawer it
+       * resizes does not disable it the moment it opens.
+       */}
+      <DrawerResizeHandle />
     </div>
   );
 }
