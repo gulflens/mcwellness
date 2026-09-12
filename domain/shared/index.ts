@@ -57,4 +57,5 @@ export {
   passwordProblemKey,
 } from './password';
 export type { PasswordProblemKey } from './password';
+export { joinE164, splitE164, stripTrunkPrefix } from './phone';
 export { MAP_DOCUMENT_PATHS } from './widened-document-paths';
