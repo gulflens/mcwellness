@@ -18,7 +18,39 @@ import { describe, expect, it } from 'vitest';
  * So: every selector below is defined once, in `app/shell/shell.css`, which
  * `app/shell/main.tsx` imports at start-up and no split can strand.
  */
-const SWITCHER = ['.sections__tab', '.settings-nav__link', '.tabs__tab', '.schedule__week-link'];
+const SWITCHER = [
+  '.sections',
+  '.sections__tab',
+  '.settings-nav',
+  '.settings-nav__link',
+  '.tabs',
+  '.tabs__tab',
+  '.schedule__week-link',
+];
+
+/**
+ * Whether a stylesheet declares a rule for this class.
+ *
+ * A matcher over each rule's selector list rather than a substring search,
+ * because the review of pull request 163 probed the substring version and found
+ * it porous: it missed `.sections__tab{` with no space before the brace, a
+ * newline before it, a selector list, a compound like `.sections__tab.is-x`,
+ * and — the one that mattered — the modifier alone, so
+ * `.sections__tab--current { background: red }` could be re-added to a module
+ * stylesheet with this guard still green and Books diverging again on a fresh
+ * load.
+ *
+ * A modifier counts as the class, being the same rule's other half; a longer
+ * name that merely starts the same does not, so `.tabs__panel` stays where it
+ * belongs in the client record's own stylesheet.
+ */
+function declares(css: string, className: string): boolean {
+  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const token = new RegExp(`${className.replace('.', '\\.')}(?:--[\\w-]+)?(?![\\w-])`);
+  return [...withoutComments.matchAll(/([^{}]+)\{[^{}]*\}/g)].some((rule) =>
+    token.test(rule[1] ?? ''),
+  );
+}
 
 /** The stylesheets `main.tsx` imports, which are therefore always present. */
 function alwaysLoaded(): string[] {
@@ -44,12 +76,9 @@ describe('the page switcher', () => {
   it('is defined in an always-loaded stylesheet and nowhere else', () => {
     const offenders = everyStylesheet()
       .filter((file) => !always.includes(file))
-      .filter((file) => {
-        const css = readFileSync(file, 'utf8');
-        return SWITCHER.some(
-          (selector) => css.includes(`${selector} {`) || css.includes(`${selector}:`),
-        );
-      });
+      .filter((file) =>
+        SWITCHER.some((selector) => declares(readFileSync(file, 'utf8'), selector)),
+      );
     expect(offenders).toEqual([]);
   });
 

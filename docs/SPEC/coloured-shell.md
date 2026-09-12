@@ -361,6 +361,13 @@ fresh load of `/admin/books`, no stylesheet in the document defined
 at start-up, which no split can strand, and
 `tests/lint/tabs-are-always-styled.test.ts` refuses any other home for them.
 
+**The hairline under the strip is gone**, and the height is the console's own
+44px row. The rule separated a row of quiet words from the content beneath it;
+a row of buttons carries its own edges, and a line as well reads as a second and
+emptier border. 44px is what the compact-tier walk of 9 September 2026
+prescribed when it measured the settings strip at 35px; the 48px floor is the
+practitioner app's.
+
 **The schedule's three ways through stay links** — they go somewhere, and the
 sidebar lists the same views (section 7.1) — but they wear the switcher's look
 and drop the underline, so the page does not carry two vocabularies for the

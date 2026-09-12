@@ -234,6 +234,9 @@ a.rail__child.rail__child--current {
   flex-wrap: wrap;
   gap: var(--s-2);
   margin-block-end: var(--s-6);
+  /* No rule beneath the strip. It separated a row of quiet words from the page
+     under it; buttons carry their own edges, and a line as well reads as a
+     second and emptier border. */
 }
 
 .sections__tab,
@@ -242,7 +245,14 @@ a.rail__child.rail__child--current {
 .schedule__week-link {
   display: inline-flex;
   align-items: center;
-  /* The console's own row, so a tab is as easy to hit as a table row. */
+  /* Three of these are buttons and one is an anchor: they must not differ by
+     which element a screen happened to reach for. */
+  appearance: none;
+  /* The console's own row (docs/DESIGN-BRIEF.md section 6.2), so a tab is as
+     easy to hit as a table row — and the figure the compact-tier walk of
+     2026-09-09 prescribed when it measured the settings strip at 35px. The
+     48px floor beside it in the tokens is the practitioner app's, not this
+     console's. */
   min-block-size: var(--row);
   padding-inline: var(--s-4);
   border: var(--hairline) solid var(--rule);
