@@ -331,6 +331,48 @@ on takes the same white pill the current section takes, for the same measured
 reason (section 4.2). The rail's list already scrolls, so a tall section costs
 the rail nothing.
 
+### 7.2 The page's own switcher
+
+*Added 2026-09-12 on the operator's instruction: "make it look like tabs or
+buttons and make the active 1 inherit the violet color." They chose buttons
+from three variants shown in a browser.*
+
+Four screens carry a switcher above their content, and all four now look the
+same: Billing's and Books' sections, Settings' three screens, the client
+record's tabs, and the schedule's other views (the week, the board, the day
+map). A resting one is a white button with a hairline border; hover turns the
+border and the text violet; **the one you are on is filled `--brand` with white
+text**.
+
+**Why a violet fill is allowed here and refused on the rail.** These sit on the
+page's light paper, where white on the brand's violet measures **14.65**. The
+rail's own ground is what refuses a violet state — every candidate measured
+between 1.14 and 1.99 against `--brand-deep`, under a floor of 3.0 (section
+4.2) — so the rail keeps its white pill and this is not a precedent against it.
+
+**One definition, in `app/shell/shell.css`.** It was four copies of one
+quiet-words-with-a-rule pattern, in `billing.css`, `settings.css`,
+`clients.css` and `schedule.css`. Screens are code-split (PR 152), and
+`BooksPage` renders `.sections` while importing only its own stylesheet — so a
+reader who opened Books **without having opened Billing first** got five
+unstyled browser buttons. Measured in a browser on 12 September 2026: on a
+fresh load of `/admin/books`, no stylesheet in the document defined
+`.sections__tab` at all. The rules now live in the stylesheet `main.tsx` loads
+at start-up, which no split can strand, and
+`tests/lint/tabs-are-always-styled.test.ts` refuses any other home for them.
+
+**The hairline under the strip is gone**, and the height is the console's own
+44px row. The rule separated a row of quiet words from the content beneath it;
+a row of buttons carries its own edges, and a line as well reads as a second and
+emptier border. 44px is what the compact-tier walk of 9 September 2026
+prescribed when it measured the settings strip at 35px; the 48px floor is the
+practitioner app's.
+
+**The schedule's three ways through stay links** — they go somewhere, and the
+sidebar lists the same views (section 7.1) — but they wear the switcher's look
+and drop the underline, so the page does not carry two vocabularies for the
+same act.
+
 ## 8. The console on a phone
 
 `app/shell/viewport.ts` and its test are deleted, and `index.html` keeps the

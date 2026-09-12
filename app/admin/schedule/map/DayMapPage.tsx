@@ -254,7 +254,7 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
             {/* A plain anchor, not a Link: this document carries the map's own
                 policy and the Schedule page carries the strict one, so each is
                 entered as its own document (section 4.1). */}
-            <a className="link schedule__week-link" href={`/admin/schedule?date=${date}`}>
+            <a className="schedule__week-link" href={`/admin/schedule?date=${date}`}>
               Schedule
             </a>
             {practitioners.length > 1 ? (

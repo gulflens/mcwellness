@@ -4,45 +4,11 @@
   which this worktree does not edit). Tokens only, logical properties only
   (.claude/rules/ui.md, DESIGN.md), reused across the drawer's tabs and the
   enrolment wizard rather than forked per screen.
+
+  The record's own tab strip is no longer styled here: from 2026-09-12 the
+  console has one switcher, in app/shell/shell.css, shared with Billing, Books
+  and Settings. `.tabs__panel` below is this module's own.
 */
-
-/* A real tab strip (task brief item 1): the ledger's own rhythm, an
-   underline on the selected tab rather than a filled pill (DESIGN-BRIEF's
-   Do's and Don'ts: no colour-only meaning). */
-/* Wraps rather than scrolls: a strip that ran off the drawer's edge hid
-   Documents and Timeline with nothing to say they were there. */
-.tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-4);
-  border-block-end: var(--hairline) solid var(--rule);
-  margin-block-end: var(--s-4);
-}
-
-.tabs__tab {
-  appearance: none;
-  background: none;
-  border: none;
-  border-block-end: 2px solid transparent;
-  /* The console's own tap floor (docs/DESIGN-BRIEF.md section 6.2), not a
-     padding that happens to look right. */
-  min-block-size: var(--tap);
-  padding-block: var(--s-2);
-  color: var(--slate);
-  font: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.tabs__tab:hover {
-  color: var(--ink);
-}
-
-.tabs__tab--selected {
-  color: var(--ink);
-  font-weight: var(--w-medium);
-  border-block-end-color: var(--ink);
-}
 
 .tabs__panel {
   outline: none;

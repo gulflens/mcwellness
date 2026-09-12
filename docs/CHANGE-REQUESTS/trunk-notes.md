@@ -3673,3 +3673,52 @@ section the rail's list is the thing to update beside it — a duplication worth
 stating, and deliberate: the alternative was for the shell to import both
 pages' constants and take a bundle dependency on two screens it otherwise
 knows nothing about.
+
+---
+
+## Round 46 — one switcher, and the violet on the one you are on, 2026-09-12
+
+**What the operator asked for.** *"enhance the UI of the submenu in the
+setting, books, schedule,... make it look like tabs or buttons and make the
+active 1 inherit the violet color."* Three variants were built in a browser and
+shown; they chose buttons.
+
+**A defect found while doing it, older than this round.** `.sections` and
+`.sections__tab` lived in `app/admin/billing/billing.css`, which only
+`BillingPage.tsx` imports. `BooksPage` renders those classes and imports only
+`books.css`, and screens are code-split — so Books' tabs were styled **only if
+the reader had opened Billing first**. On a fresh load of `/admin/books` no
+stylesheet in the document defined them at all, and the five tabs rendered as
+bare browser buttons. The same pattern was copied in `settings.css` and
+`clients.css`, so the console carried four definitions of one thing.
+
+**The trunk's own work** is `app/shell/shell.css` (one definition of the
+switcher, as buttons with a violet current state),
+`docs/SPEC/coloured-shell.md` section 7.2, and
+`tests/lint/tabs-are-always-styled.test.ts` — the trunk's own guard, which
+refuses the switcher a home outside a stylesheet `main.tsx` always loads.
+
+**Six files outside the trunk's paths**, each losing a copy rather than gaining
+anything:
+
+1. `app/admin/billing/billing.css` (billing) — the four `.sections*` rules
+   removed; its own section header rewritten to say where they went.
+2. `app/admin/settings/settings.css` (the settings row) — the five
+   `.settings-nav*` rules removed.
+3. `app/admin/clients/clients.css` (client record) — the four `.tabs*` rules
+   removed; the file's header kept and amended. `.tabs__panel` stays: it is
+   this module's own.
+4. `app/admin/schedule/schedule.css` (scheduling) — `.schedule__week-link`'s
+   rule removed; its one layout property (`align-self: end`, which aligns the
+   links with the date field beside them) moves into the shell next to the
+   shared look, so the switcher keeps exactly one home.
+5. `app/admin/schedule/SchedulePage.tsx` and
+6. `app/admin/schedule/map/DayMapPage.tsx` (scheduling) — four links drop
+   `className="link"`, which sits later in `shell.css` and overrode the
+   switcher's look with an underline. They remain `Link`s and anchors; only
+   their appearance changes.
+
+**No route, request shape, permission or figure is touched**, and no test
+asserted on any of these class names before this round. The markup of Billing,
+Books, Settings and the client record is unchanged: the classes they already
+rendered are simply defined once now, and in a stylesheet that is always there.
