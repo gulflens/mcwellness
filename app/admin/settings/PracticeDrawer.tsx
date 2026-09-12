@@ -14,6 +14,7 @@ import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
+import { PhoneField } from '../../shell/components/PhoneField';
 import { useDrawer } from '../../shell/components/useDrawer';
 import { EMIRATE_LABELS } from './emirates';
 
@@ -353,16 +354,13 @@ export function PracticeDrawer({
             onChange={(e) => setLicensingAuthority(e.target.value)}
           />
 
-          <Field
+          <PhoneField
             id={FIELD_IDS.whatsappNumber}
             label="WhatsApp number (optional)"
             hint="What the client portal's ask-for-a-visit button opens. Leave it empty and the portal says to contact the practice, without a button."
-            type="tel"
-            inputMode="tel"
-            maxLength={40}
             value={whatsappNumber}
-            onChange={(e) => {
-              setWhatsappNumber(e.target.value);
+            onChange={(next) => {
+              setWhatsappNumber(next);
               clearFieldError('whatsappNumber');
             }}
             error={fieldErrors.whatsappNumber}

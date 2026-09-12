@@ -204,7 +204,10 @@ async function fillIdentity() {
   fireEvent.change(screen.getByLabelText('Relationship to the client'), {
     target: { value: 'self' },
   });
-  fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971500000058' } });
+  // PhoneField holds the country in its own control (default +971), so only
+  // the national part is typed here — the box would double up the code if
+  // the full E.164 string were typed into it.
+  fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '500000058' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
 }
 
@@ -290,14 +293,21 @@ describe('EnrolmentWizard', () => {
     expect(await screen.findByRole('button', { name: 'Add goal' })).toBeTruthy();
   });
 
-  it('names a phone typed without its country code, rather than looping on a generic line', async () => {
+  it('names a phone that is too short to be a real number, rather than looping on a generic line', async () => {
+    // PhoneField always attaches a country (the select defaults to +971), so
+    // there is no longer a way through this control to submit a number
+    // missing its country code — that was the original bug this check
+    // guarded against (design review of pull request 35). What isValidPhone
+    // still catches is a number too short to be real once the country is
+    // joined on, and the field still names it rather than looping on a
+    // generic line.
     const { calls } = mountWithRecord(baseRecord());
     fireEvent.change(screen.getByLabelText('Given name'), { target: { value: 'Laurel' } });
     fireEvent.change(screen.getByLabelText('Family name'), { target: { value: 'Meadow' } });
     fireEvent.change(screen.getByLabelText('Relationship to the client'), {
       target: { value: 'self' },
     });
-    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '0500001234' } });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '12' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
 
     expect(
@@ -327,7 +337,7 @@ describe('EnrolmentWizard', () => {
     fireEvent.change(screen.getByLabelText('Relationship to the client'), {
       target: { value: 'self' },
     });
-    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971500000058' } });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '500000058' } });
     // The box now holds DD/MM/YYYY, so the digits are typed in that order
     // rather than the ISO value being written straight in.
     await user.type(

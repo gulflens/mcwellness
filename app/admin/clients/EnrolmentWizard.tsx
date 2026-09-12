@@ -5,7 +5,6 @@ import {
   EMAIL_ERROR,
   FUTURE_DATE_ERROR,
   PHONE_ERROR,
-  PHONE_HINT,
   fieldOf,
   focusFirstError,
   isPastDate,
@@ -18,6 +17,7 @@ import { RELATIONSHIPS, type CreateClientResponse } from '../../api/clients/reco
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
+import { PhoneField } from '../../shell/components/PhoneField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { ActivationSummary } from './ActivationSummary';
 import { canActivate, practiceToday, toActivationRecord } from './activation';
@@ -426,16 +426,14 @@ export function EnrolmentWizard({
                 </option>
               ))}
             </Select>
-            <Field
+            <PhoneField
               id="wizard-phone"
               label="Phone"
-              type="tel"
               value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
+              onChange={(next) => {
+                setPhone(next);
                 clearIdentityError('phone');
               }}
-              hint={PHONE_HINT}
               error={identityErrors.phone}
             />
             <Field

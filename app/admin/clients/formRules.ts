@@ -15,7 +15,6 @@
 // on contact.phone (db/migrations/060_client.sql).
 const E164 = /^\+[1-9][0-9]{6,14}$/;
 
-export const PHONE_HINT = 'Include the country code, for example +971 50 000 1234';
 export const PHONE_ERROR = `Enter the phone number with its country code, for example +971500001234.`;
 export const EMAIL_ERROR =
   'Enter an email address, for example name@example.com, or leave it blank.';

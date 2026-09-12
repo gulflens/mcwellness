@@ -241,19 +241,25 @@ describe('Practice settings — the save', () => {
     expect(screen.getByText('Synthetic Wellness Studio FZ-LLC')).toBeTruthy();
   });
 
-  it("saves the practice's WhatsApp number, and refuses one that is not a number", async () => {
+  it("saves the practice's WhatsApp number, and refuses one that is too short", async () => {
     const { calls } = mount(() =>
       json({ practice: { ...PRACTICE, whatsappNumber: '+971500000024' } }),
     );
     await openTheDrawer();
-    type('WhatsApp number (optional)', 'not a number');
+    // PhoneField holds the country in its own control (default +971), so a
+    // string of letters no longer reaches the E.164 check at all — typing it
+    // into the number box leaves no digits, and an empty number is the
+    // optional field's "not given" rather than a refusal. What the check
+    // still catches is a number too short to be real once the country is
+    // joined on.
+    type('WhatsApp number (optional)', '12');
     type('Why this changes', 'The practice number changed.');
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
     expect(await screen.findByText('A WhatsApp number is +971 50 000 0000.')).toBeTruthy();
     expect(saves(calls)).toHaveLength(0);
 
-    // The spaces a person types are stripped: the column holds E.164.
-    type('WhatsApp number (optional)', '+971 50 000 0024');
+    // The country is +971 by default; only the national part is typed.
+    type('WhatsApp number (optional)', '500000024');
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
     await waitFor(() => expect(saves(calls)).toHaveLength(1));
     expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({

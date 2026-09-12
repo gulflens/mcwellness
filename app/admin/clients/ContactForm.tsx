@@ -4,11 +4,11 @@ import { toLatinDigits } from '../../api/clients/emirates-id-shape';
 import { RELATIONSHIPS, type Contact, IdResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { PhoneField } from '../../shell/components/PhoneField';
 import { Checkbox } from './FormAtoms';
 import {
   EMAIL_ERROR,
   PHONE_ERROR,
-  PHONE_HINT,
   fieldOf,
   focusFirstError,
   isValidEmail,
@@ -297,16 +297,14 @@ export function ContactForm({
           </option>
         ))}
       </Select>
-      <Field
+      <PhoneField
         id="contact-phone"
         label="Phone (optional)"
-        type="tel"
         value={phone}
-        onChange={(e) => {
-          setPhone(e.target.value);
+        onChange={(next) => {
+          setPhone(next);
           clear('phone');
         }}
-        hint={PHONE_HINT}
         error={fieldErrors.phone}
       />
       <Field
