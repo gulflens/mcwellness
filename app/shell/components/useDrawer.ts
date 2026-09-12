@@ -100,6 +100,28 @@ export function useDrawer(
       const focusable = [...drawer.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
         (element) => element.offsetParent !== null || element === document.activeElement,
       );
+      // The width handle joins the cycle last: `inert` alone (above) only
+      // kept the mouse working on it, since being marked inert and being
+      // reachable by Tab are two different guarantees and this hook only
+      // controls the second one by walking `drawer.current`'s own subtree —
+      // which the handle, sitting beside `.admin__main`, is never part of
+      // (round-one review finding 1, 2026-09-12). Queried by this one class
+      // and nothing else, so the cycle cannot pick up anything further.
+      //
+      // Visibility is asked through `display`, not `offsetParent` the way
+      // `focusable`'s own filter above does: `offsetParent` is `null` for
+      // *every* `position: fixed` element, by specification, whether it is
+      // showing or not — a fixed box is not affiliated with an offset
+      // parent at all — and the handle is fixed. Checked in a real browser
+      // for this round: with `offsetParent`, the handle never joined the
+      // cycle, drawer open or not (round-two review's own suggested check
+      // for this, verified and replaced rather than copied as written).
+      // `display` correctly reflects both shell.css's `:has()` rule and the
+      // tablet-tier media query that hides it below 768px.
+      const handle = document.querySelector<HTMLElement>('.drawer__resize');
+      if (handle && getComputedStyle(handle).display !== 'none') {
+        focusable.push(handle);
+      }
       const start = focusable[0];
       const end = focusable[focusable.length - 1];
       if (!start || !end) {

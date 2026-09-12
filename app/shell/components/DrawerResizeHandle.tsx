@@ -35,10 +35,23 @@ function currentWidth(): number {
   return width !== undefined && width > 0 ? Math.round(width) : MIN_DRAWER_WIDTH;
 }
 
-/** Clamps, applies to every drawer at once, and remembers the choice. */
-function setDrawerWidth(width: number): number {
+/**
+ * Clamps and applies to every drawer at once, live — the part every set
+ * needs, drag included. Never writes to storage on its own: a drag calls
+ * this on each `pointermove`, and a synchronous write on every one of those
+ * is a write per frame for no reader who is not already looking at the
+ * screen (round-two review finding 5, 2026-09-12) — `commitDrawerWidth`
+ * below is where a width actually becomes the remembered choice.
+ */
+function applyDrawerWidth(width: number): number {
   const clamped = clampDrawerWidth(width, window.innerWidth);
   document.documentElement.style.setProperty('--drawer', `${clamped}px`);
+  return clamped;
+}
+
+/** Applies and remembers: every discrete choice — a key press, a drag's end. */
+function commitDrawerWidth(width: number): number {
+  const clamped = applyDrawerWidth(width);
   writeDrawerWidth(clamped);
   return clamped;
 }
@@ -87,6 +100,11 @@ export function DrawerResizeHandle() {
   const [width, setWidth] = useState(() => currentWidth());
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+    // The browser's other default action for a mousedown-and-drag is
+    // selecting whatever text the pointer crosses on its way — harmless
+    // nowhere near a drawer, but this handle spends its whole life sitting
+    // over the ledger (round-two review finding 4, 2026-09-12).
+    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     setWidth(currentWidth());
   }
@@ -95,12 +113,15 @@ export function DrawerResizeHandle() {
     if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
       return;
     }
-    setWidth(setDrawerWidth(widthFromPointer(event.currentTarget, event.clientX)));
+    setWidth(applyDrawerWidth(widthFromPointer(event.currentTarget, event.clientX)));
   }
 
   function onPointerUp(event: PointerEvent<HTMLDivElement>) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
+      // The one write a drag makes, now that every `pointermove` along the
+      // way only applied the width and left storage alone.
+      writeDrawerWidth(width);
     }
   }
 
@@ -108,16 +129,16 @@ export function DrawerResizeHandle() {
     const from = currentWidth();
     if (event.key === 'ArrowRight') {
       event.preventDefault();
-      setWidth(setDrawerWidth(from + STEP));
+      setWidth(commitDrawerWidth(from + STEP));
     } else if (event.key === 'ArrowLeft') {
       event.preventDefault();
-      setWidth(setDrawerWidth(from - STEP));
+      setWidth(commitDrawerWidth(from - STEP));
     } else if (event.key === 'Home') {
       event.preventDefault();
-      setWidth(setDrawerWidth(MIN_DRAWER_WIDTH));
+      setWidth(commitDrawerWidth(MIN_DRAWER_WIDTH));
     } else if (event.key === 'End') {
       event.preventDefault();
-      setWidth(setDrawerWidth(maxDrawerWidth(window.innerWidth)));
+      setWidth(commitDrawerWidth(maxDrawerWidth(window.innerWidth)));
     }
   }
 
