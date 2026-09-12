@@ -1472,6 +1472,24 @@ checked is identical: dimensions, colour type, corner alpha, PNG validity. And
 `public/brand/mark.png`, untouched since 8 September, is transformed the same
 way (28,446 bytes against 29,956), so this deploy did not cause it.
 
+**Found while the record was being written, and it is the CDN.** The same
+address serves two formats: `GET /icon-192.png` with `Accept: image/webp`
+returns **`content-type: image/webp`**, 1,428 bytes, RIFF/WEBP magic, and with
+`Accept: image/png` returns PNG, 2,740 bytes. Every response says `server:
+hcdn`. Two things in that are worse than the byte counts:
+
+- **No `Vary: Accept` on either variant**, with `cache-control: max-age=31536000,
+  public`. Two formats at one URL, a year-long shared TTL, and nothing telling a
+  downstream cache that the answer depends on the request. A corporate proxy or
+  an ISP cache may store the WebP body and later hand it to a client that asked
+  for PNG only, labelled `image/webp` at a `.png` address.
+- **It often costs bytes rather than saving them.** `brand/mark.png` is 28,446
+  committed and 33,956 as WebP; its PNG variant is 29,956.
+
+That is an operator-level hosting setting rather than anything in this
+repository, and it is recorded in `docs/SPEC/hosting.md` beside the manifest's
+content type, which is the same layer.
+
 **What is ruled out, and what is not.** The app's build is ruled out by
 reading it: `build:production` is a plain `vite build` with no pre- or post-step,
 the icons live in `public/` which Vite copies verbatim, there is no image
@@ -1480,10 +1498,12 @@ tooling in the dependencies at all, and `vite-plugin-pwa` runs
 worker and generates nothing. Fetching origin-direct, bypassing the edge,
 returns the same transformed bytes — but that does **not** clear the serving
 layer, because LiteSpeed is the origin: it is the same layer that serves
-`/manifest.webmanifest` off disk as `text/plain`, above. Whether the change
-happens at extraction, on disk, or on the way out is untested: the hosting
-file API exposes only the document root, which holds `.htaccess` and nothing
-else, so the extracted file's size on disk cannot be read with the tools here.
+`/manifest.webmanifest` off disk as `text/plain`, above. The WebP proves the CDN transforms images; it does **not**
+prove the PNG variant is its doing, and the origin-direct reading of 2,740
+argues the file on disk may already be 2,740 with the CDN adding only the WebP.
+The hosting file API exposes only the document root, which holds `.htaccess` and
+nothing else, so the extracted file's size cannot be read with the tools here:
+the CDN transcoding is confirmed, the PNG re-encode's origin is not.
 Recorded as observed rather than attributed, because the next person to diff a
 deployed asset against the repository will otherwise think the build is at
 fault.
