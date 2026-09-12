@@ -199,49 +199,6 @@
   justify-content: flex-start;
   gap: var(--s-3);
 }
-
-/*
-  The strip of links between the two settings screens (SettingsNav.tsx). Text
-  and a rule under the current one: two links are a strip, not a second rail,
-  so there is no box, no fill and no icon competing with the page heading
-  beneath them.
-*/
-/* Wraps rather than overflowing: on a phone two tabs fit, and a third would
-   not (the compact-tier walk of 9 September 2026, docs/QA/compact-tier.md). */
-.settings-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--s-4);
-  margin-block-end: var(--s-3);
-}
-
-/* A full row's height. It was 35px, which is under the 44px this console gives
-   every other target and short of what a finger can reliably hit; the walk of
-   9 September 2026 measured it. The underline still sits on the text, because
-   the padding is inside the box and the border is on its end edge. */
-.settings-nav__link {
-  display: inline-flex;
-  align-items: center;
-  min-block-size: var(--row);
-  color: var(--ink-2);
-  text-decoration: none;
-  border-block-end: var(--hairline) solid transparent;
-}
-
-.settings-nav__link:hover {
-  color: var(--ink);
-}
-
-.settings-nav__link:focus-visible {
-  box-shadow: var(--focus);
-  border-radius: var(--r-1);
-}
-
-.settings-nav__link--current {
-  color: var(--ink);
-  border-block-end-color: var(--ink);
-}
-
 /* Settings › Team: the add-a-person form and the row actions. */
 .team__form {
   display: grid;

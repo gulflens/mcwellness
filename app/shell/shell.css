@@ -207,6 +207,94 @@ a.rail__child.rail__child--current {
   color: var(--brand-pale);
 }
 
+/* The switcher a page carries above its own content: Billing's and Books'
+   sections, Settings' three screens, a client record's tabs, and the other
+   views of the schedule. **Buttons, with the one you are on filled violet**
+   (the operator, 2026-09-12: "make it look like tabs or buttons and make the
+   active 1 inherit the violet color").
+
+   **Why it lives here and not beside each screen.** It was four copies of one
+   quiet-words-with-a-rule pattern, in billing.css, settings.css, clients.css
+   and schedule.css. Screens are code-split (PR 152), so Books — which renders
+   `.sections` but imports only its own stylesheet — had *no* tab styling at
+   all unless the reader had opened Billing first and pulled billing.css in
+   behind them; opening Books directly gave five unstyled browser buttons.
+   One definition in the stylesheet `main.tsx` always loads cannot be stranded
+   by a split, and cannot drift into four looks.
+   `tests/lint/tabs-are-always-styled.test.ts` holds that.
+
+   **Why a violet fill is allowed here when the rail forbids it.** These sit on
+   the page's light paper, where white on `--brand` measures 14.65 — the rail's
+   own violet ground is what refuses a violet state (spec section 4.2), and
+   that rule is untouched. */
+.sections,
+.settings-nav,
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-block-end: var(--s-6);
+}
+
+.sections__tab,
+.settings-nav__link,
+.tabs__tab,
+.schedule__week-link {
+  display: inline-flex;
+  align-items: center;
+  /* The console's own row, so a tab is as easy to hit as a table row. */
+  min-block-size: var(--row);
+  padding-inline: var(--s-4);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sections__tab:hover,
+.settings-nav__link:hover,
+.tabs__tab:hover,
+.schedule__week-link:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.sections__tab:focus-visible,
+.settings-nav__link:focus-visible,
+.tabs__tab:focus-visible,
+.schedule__week-link:focus-visible {
+  box-shadow: var(--focus);
+}
+
+/* The one you are on. White on the brand's violet measures 14.65 on paper. */
+.sections__tab--current,
+.settings-nav__link--current,
+.tabs__tab--selected {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--surface);
+  font-weight: var(--w-medium);
+}
+
+.sections__tab--current:hover,
+.settings-nav__link--current:hover,
+.tabs__tab--selected:hover {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: var(--surface);
+}
+
+/* The schedule's three ways through — the week, the board, the day map — sit
+   in a toolbar beside the date field, so they align to its end. Links still,
+   because they go somewhere; they only take the switcher's look. */
+.schedule__week-link {
+  align-self: end;
+}
+
 /* Page furniture. The rhythm between blocks opened on 2026-09-08: a heading
    and the toolbar beneath it were 24px apart and read as one undifferentiated
    stack. Groups stay tight and the separations grew, which is the whole of the

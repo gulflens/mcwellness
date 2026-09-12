@@ -49,43 +49,12 @@
   padding-block-start: var(--s-2);
   border-block-start: var(--hairline) solid var(--rule);
 }
-
 /*
-  The money screen's four sections, and the pieces only it uses. Everything
-  below is a token from app/shell/tokens.css and a logical property, so the
-  layout mirrors for Arabic without a second rule.
+  The money screen's own pieces. Everything below is a token from
+  app/shell/tokens.css and a logical property, so the layout mirrors for Arabic
+  without a second rule. The switcher above them is the shell's from
+  2026-09-12, shared with Books, Settings and the client record.
 */
-
-/* The section switcher: a row of quiet words with a rule beneath the current
-   one. No pill, no fill — the page's own hierarchy already says where you are. */
-.sections {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s-5);
-  margin-block-end: var(--s-6);
-  border-block-end: var(--hairline) solid var(--rule);
-}
-
-.sections__tab {
-  min-block-size: var(--row);
-  padding: 0 0 var(--s-2);
-  border: 0;
-  border-block-end: 2px solid transparent;
-  background: none;
-  color: var(--ink-2);
-  font: inherit;
-  cursor: pointer;
-}
-
-.sections__tab:hover {
-  color: var(--ink);
-}
-
-.sections__tab--current {
-  color: var(--ink);
-  font-weight: var(--w-medium);
-  border-block-end-color: var(--ink);
-}
 
 /* A section's own action sits above its table, where the page header's
    action sits above the page. */

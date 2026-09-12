@@ -100,15 +100,6 @@
   white-space: nowrap;
 }
 
-/* The way through to the week. A link, not a button: it goes somewhere, and
-   the toolbar's one control is the date. */
-.schedule__week-link {
-  align-self: end;
-  min-block-size: var(--row);
-  display: inline-flex;
-  align-items: center;
-}
-
 /* The week: seven days across, and seven days across. Not a grid of time slots
    — the practice runs at most a handful of visits a day, so a column of the
    day's stops in time order says more than an hour scale mostly made of blank
