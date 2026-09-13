@@ -1518,3 +1518,77 @@ as the founder and read what the Billing screen reads: Silver, Gold and
 Platinum each return no term, and none of the five prices carries one. The
 endpoints answer normally, which is what round 44's five-year ceiling exists to
 protect.
+
+## What was done on 2026-09-13: the twenty-first live pass — the country's own formats
+
+**Why.** A native `<input type="date">` draws itself in the locale of the
+browser, not of the page. `lang` does not move it and the application has no
+say, so on a machine whose browser is set to English (United States) the date
+of birth on the enrolment wizard read `MM/DD/YYYY` while the same record on
+another machine read `DD/MM/YYYY`. The stored value was identical and correct
+in both; only the person reading it was misled. Twenty-six date boxes and two
+time boxes were affected. The display side was already right everywhere and was
+not touched.
+
+**What went live.** Round 48, merged as `47d567f` (pull request 169). Every
+date box is a masked `DD/MM/YYYY` field with a calendar button; both time boxes
+are twenty-four hour; three phone boxes are a country selector beside the rest
+of the number; the Emirates ID groups itself as it is typed; and every drawer
+has a draggable width remembered on the machine. Browser-side only: **no
+migration, no policy file, no API route, no schema.**
+
+**The hold protocol.** Two other sessions were live. Both were asked in as many
+words and both answered clear; one of them checked the other before answering.
+The archive was uploaded while the answers were outstanding — it carries its
+own commit in its name and can overwrite nobody — and the build, which is the
+destructive step, was held until both were in.
+
+**The pass.** Archive `mcwellness-47d567f.tar.gz` (6,333,404 bytes); TUS create
+201 and PATCH 204 with the offset equal to the size; build `01a09a5b` with the
+stored settings, 10:41:09Z to 10:42:11Z. The served bundle flipped from
+`index-Sda6hf_P.js` to `index-D4Rebdzl.js` and the stylesheet from
+`index-9wyYdq0f.css` to `index-DfMyZ8W0.css`. No restart was needed — the
+fourth consecutive pass where it flipped on its own. `/api/health` 200 in
+0.49 s and `/api/health/deep` 200 in 0.51 s.
+
+**The archive needs the root folder, and this nearly cost the pass.** The
+stored build settings say `root_directory: "mcwellness"`, not `.`. The archive
+must therefore contain a top-level `mcwellness/` folder holding
+`package.json`. A `git archive` without `--prefix=mcwellness/` puts every file
+at the root of the tar, the host finds no manifest where it expects one, and
+the build fails in a way that reads like a broken tree rather than a wrong
+shape. **Read the stored settings back before building rather than
+reconstructing them from memory**; that is what caught it here.
+
+**A moved hash proves a build happened, not that it was yours.** Three markers
+were read back off the live site to prove round 48's own code is being served:
+`drawer__resize`, a class that did not exist before this round, is in the main
+bundle; `DD/MM/YYYY` is in the code-split chunk `DateField-Bzgv7edf.js`; and
+the Emirates ID placeholder is in `ClientsPage-DNYMsLo5.js`.
+
+**Two checks worth making the default, from the session that held the watch.**
+The old bundle `index-Sda6hf_P.js` now answers **404**, which rules out a
+half-extracted state where the old and new assets coexist and the page happens
+to reference the new one. A deliberately nonsense asset path also answers 404,
+which proves the host is not blanket-200ing and makes the two 200s evidence
+rather than noise. A baseline armed before the upload also gave a flip
+timestamp of 10:42:16Z, which a check run afterwards cannot.
+
+**Not chased, and neither is new.** The CDN transcodes images — the same
+address returns `image/webp` or PNG depending on the `Accept` header, with no
+`Vary` and a year-long cache — so a served asset's bytes never match the
+committed bytes and a default `curl` and a browser see different files at one
+URL. `/manifest.webmanifest` still serves as `text/plain` off disk. Both are
+recorded in `docs/SPEC/hosting.md`, both predate this round, and both are
+operator-level switches.
+
+**Owed from this round.** A `00`-prefixed **foreign** number whose length lands
+inside the E.164 range is still accepted (`0012125551234` becomes
+`+971012125551234`). The UAE case overflows the range and is refused loudly, so
+the practice's own numbers are unaffected. Two lines, and it belongs to a later
+round. Separately, `useDrawer.ts` exists in three copies — `app/shell/components`,
+`app/admin/accounting`, `app/admin/billing` — and this round demonstrated the
+cost: a focus-trap fix landed in one copy and left the drag handle
+keyboard-unreachable in eleven drawers until a whole-branch review caught it.
+Three copies of a behavioural hook is three chances to be one edit behind, and
+no test would say so.
