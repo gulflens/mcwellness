@@ -211,13 +211,10 @@
 }
 
 /* Money changing hands, and what a family has bought. */
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  min-block-size: var(--row);
-  cursor: pointer;
-}
+/* `.checkbox` lived here as a copy of the shell's own, byte-identical to it.
+   Removed 2026-09-13: the shell's definition is the single one now, so the row
+   height and the tick's size cannot drift between this module and the client
+   record's. */
 
 .purchases__list {
   list-style: none;

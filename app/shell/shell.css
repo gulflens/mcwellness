@@ -389,21 +389,37 @@ a.rail__child.rail__child--current {
   color: var(--critical);
 }
 
-/* A checkbox and its words on one 44px row. The two module copies of this rule
-   (app/admin/clients/clients.css, app/admin/billing/billing.css) predate the
-   shell's own; they are identical, and this one is where a shared control
-   belongs. */
+/* A checkbox and its words on one row. This is now the ONLY definition: the two
+   module copies (app/admin/clients/clients.css, app/admin/billing/billing.css)
+   were byte-identical to it and are removed, which is what the previous comment
+   here said should happen when a stream was next in those files. Three copies of
+   one rule is three chances for them to drift, and load order decides the winner.
+
+   The row is 32px, not the console's 44px. That 44 is the TABLE row height
+   (docs/DESIGN-BRIEF.md section 6.2, .claude/rules/ui.md), and a checkbox in a
+   form drawer is not a table row — forcing it that tall put two stacked
+   checkboxes 56px apart, which the operator asked to close up on 2026-09-13.
+   32px still clears the 24px minimum target size. The 48px floor in the brief's
+   section 4.3 is the practitioner app's, not the console's. */
 .checkbox {
   display: flex;
   align-items: center;
   gap: var(--s-2);
-  min-block-size: var(--row);
+  min-block-size: var(--s-8);
   cursor: pointer;
 }
 
 /* The tick takes the page's own ink rather than the browser's blue, as the
-   session rating's slider already does (app/therapist/session/SessionRunner.css). */
+   session rating's slider already does (app/therapist/session/SessionRunner.css),
+   and it is drawn at the label's own line height so the box and its words share
+   one optical line rather than the browser's ~14px default sitting half the
+   height of the text beside it. `--lh-body` steps up with the type scale, so the
+   box follows it. */
 .checkbox input {
+  flex: none;
+  inline-size: var(--lh-body);
+  block-size: var(--lh-body);
+  margin: 0;
   accent-color: var(--ink);
 }
 
