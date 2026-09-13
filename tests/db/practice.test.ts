@@ -309,3 +309,37 @@ describe('the practice’s contact details', () => {
     }
   });
 });
+
+/**
+ * `tenant.record_readings` (migration 918): whether a visit asks the
+ * practitioner to enter signal, artefact and reward figures, off by default
+ * because the practice now takes its readings on its own software instead
+ * (docs/SPEC/session-capture.md section 3.3's amendment). The read side is
+ * covered against a real database already (the seed ships it false, and
+ * `app/therapist/session/steps.ts` is exercised against both values); this is
+ * the write side — the coalesce that turns it back on — round-tripped the
+ * same way `contactPhone` is above.
+ */
+describe('tenant.record_readings', () => {
+  it('starts false, and a save carrying it true turns the switch on', async () => {
+    expect((await read(authIdOf(0))).recordReadings).toBe(false);
+
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'The practice is bringing its own readings back into the app.',
+      body: await form({ recordReadings: true }),
+    });
+    expect(res.status).toBe(200);
+    const saved = ((await res.json()) as PracticeResponse).practice;
+    expect(saved.recordReadings).toBe(true);
+    // Read back through a second request, not from the answer to the first.
+    expect((await read(authIdOf(0))).recordReadings).toBe(true);
+
+    // And a save that never mentions it leaves the switch exactly as it
+    // stands, the same coalesce shape as the three contact fields above.
+    await call('PATCH', authIdOf(0), {
+      reason: 'An ordinary save from the settings screen.',
+      body: await form({ legalNameAr: 'استوديو العافية' }),
+    });
+    expect((await read(authIdOf(0))).recordReadings).toBe(true);
+  });
+});

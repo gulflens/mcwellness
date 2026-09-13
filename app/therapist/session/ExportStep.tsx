@@ -5,7 +5,11 @@ import {
   ASSESSMENT_FILE_MIME_TYPE,
   RECORDING_MIME_TYPE,
 } from '@domain/assessment';
-import { ExportFiledResponse, SESSION_EXPORT_LIMIT_BYTES } from '../../api/sessions/schema';
+import {
+  ExportFiledResponse,
+  SESSION_EXPORT_LIMIT_BYTES,
+  type ExportRefusalCode,
+} from '../../api/sessions/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Note } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
@@ -65,8 +69,19 @@ const MESSAGES = {
  * wording follows the console's own (app/admin/assessments/copy.ts): the same
  * three kinds of file, refused for the same three reasons, should not be
  * described two different ways to two different people.
+ *
+ * Typed against `ExportRefusalCode` rather than `Record<string, string>`, so
+ * this must name every code the route's own vocabulary carries — a code added
+ * to `EXPORT_REFUSAL_CODES` (schema.ts) with no line added here fails to
+ * compile instead of shipping a route that answers a screen with nothing to
+ * say. The four keys past the union are the door's other, non-export-specific
+ * refusals (a body-cap or role check that never reaches the export's own
+ * vocabulary), named here because this screen still owes them a sentence.
  */
-const REFUSALS: Record<string, string> = {
+const REFUSALS: Record<
+  ExportRefusalCode | 'payload_too_large' | 'storage_unavailable' | 'forbidden' | 'not_found',
+  string
+> = {
   not_a_pdf: 'That is not a PDF. A report is the software’s own PDF.',
   not_a_recording:
     'That is not a recording this door takes. A recording is an EDF file or the amplifier ' +
@@ -87,6 +102,17 @@ const REFUSALS: Record<string, string> = {
   forbidden: 'Attaching an export to this visit is not yours to do.',
   not_found: 'That visit is no longer there.',
 };
+
+/**
+ * `REFUSALS[code]`, but for a `code` that is a plain string from the wire
+ * rather than a known member of it — the door can in principle answer
+ * anything, and a screen must not throw over a word it does not recognise.
+ * The cast is confined to this one read; `REFUSALS`'s own declaration stays
+ * exact, so an unhandled code still fails the build there.
+ */
+function messageFor(code: string): string {
+  return (REFUSALS as Record<string, string>)[code] ?? MESSAGES.failed;
+}
 
 /** The extension a chosen file carries, lower-cased and without its dot. */
 function extensionOf(name: string): string {
@@ -169,7 +195,7 @@ export function ExportStep({
             code?: string;
             error?: string;
           } | null;
-          setError(REFUSALS[answer?.code ?? answer?.error ?? ''] ?? MESSAGES.failed);
+          setError(messageFor(answer?.code ?? answer?.error ?? ''));
           return;
         }
         // Parsed rather than trusted, so a door that answered something else

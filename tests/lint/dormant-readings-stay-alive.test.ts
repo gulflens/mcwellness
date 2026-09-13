@@ -75,6 +75,7 @@ const DERIVE_OBSERVATION_FLAG = read('domain/session/deriveObservationFlag.ts');
 const EVENTS = read('domain/session/events.ts');
 const RUN_STEP = read('app/therapist/session/RunStep.tsx');
 const POST_STEP = read('app/therapist/session/PostStep.tsx');
+const SUMMARY_STEP = read('app/therapist/session/SummaryStep.tsx');
 const SESSION_RUNNER = read('app/therapist/session/SessionRunner.tsx');
 const CLOSE_ROUTE = read('app/api/sessions/close.ts');
 
@@ -161,13 +162,14 @@ check(
   has(EVENTS_TEST, "describe('telemetry_chunk'"),
 );
 
-// --- The two dormant sections inside living files ------------------------
-// RunStep.tsx and PostStep.tsx are not dormant files — they are screens a
-// readings-off visit still uses for everything else. Only one section of
-// each is dormant, so what is checked here is that section's own markers:
-// the mid-run reading toggle and its two sliders (RunStep), and the
-// end-of-session summary reading and its two sliders (PostStep). A file
-// existence check would prove nothing, since the file is never absent.
+// --- The three dormant sections inside living files ----------------------
+// RunStep.tsx, PostStep.tsx and SummaryStep.tsx are not dormant files — they
+// are screens a readings-off visit still uses for everything else. Only one
+// section of each is dormant, so what is checked here is that section's own
+// markers: the mid-run reading toggle and its two sliders (RunStep), the
+// end-of-session summary reading and its two sliders (PostStep), and the
+// setup-quality and session-quality rows (SummaryStep). A file existence
+// check would prove nothing, since the file is never absent.
 check("RunStep.tsx still renders the 'Record a reading' toggle", has(RUN_STEP, 'Record a reading'));
 check('RunStep.tsx still renders the reading-reward slider', has(RUN_STEP, 'id="reading-reward"'));
 check(
@@ -186,6 +188,18 @@ check(
   'PostStep.tsx still renders the summary-artefact slider',
   has(POST_STEP, 'id="summary-artefact"'),
 );
+check(
+  "SummaryStep.tsx still gates its reading rows on recordReadings ('recordReadings ? (')",
+  has(SUMMARY_STEP, 'recordReadings ? ('),
+);
+check(
+  "SummaryStep.tsx still renders the 'Signal at setup' row",
+  has(SUMMARY_STEP, 'Signal at setup'),
+);
+check(
+  "SummaryStep.tsx still renders the 'Session quality' row",
+  has(SUMMARY_STEP, 'Session quality'),
+);
 
 // --- The switch's own plumbing: the one place stepsFor is consulted -----
 // See the file comment's "What is not here" for the scope of this one check.
@@ -200,7 +214,7 @@ check(
  * short-circuited (an early return, a loop that never iterates) would still
  * report zero offenders and pass, unless the count itself is pinned.
  */
-const EXPECTED_CHECK_COUNT = 25;
+const EXPECTED_CHECK_COUNT = 28;
 
 describe('the dormant reading capability stays alive, not just switched off', () => {
   it('ran every check this guard is built from', () => {
