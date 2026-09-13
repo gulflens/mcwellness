@@ -1,4 +1,4 @@
-## Round 47 — the country's own formats (2026-09-12)
+## Round 48 — the country's own formats (2026-09-12)
 
 ### Why the round happened
 

@@ -1,4 +1,4 @@
-# UAE formats (round 47) Implementation Plan
+# UAE formats (round 48) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -840,7 +840,7 @@ import { describe, expect, it } from 'vitest';
 /**
  * A native `<input type="date">` or `type="time"` draws itself in the browser's
  * locale, not the practice's: on a machine set to English (United States) a
- * date of birth reads MM/DD/YYYY and a visit time carries a meridiem. Round 47
+ * date of birth reads MM/DD/YYYY and a visit time carries a meridiem. Round 48
  * replaced all twenty-eight of them with `DateField` and `TimeField`, which
  * always read DD/MM/YYYY and a twenty-four hour clock.
  *
@@ -1615,7 +1615,7 @@ gh pr create --title "feat(shell): a drawer whose width you choose" --body "..."
 ## Task 14: The change request, and the round's record
 
 **Files:**
-- Create: `docs/CHANGE-REQUESTS/trunk-round-47.md`
+- Create: `docs/CHANGE-REQUESTS/trunk-round-48.md`
 
 - [ ] **Step 1: Write it**
 
@@ -1626,7 +1626,7 @@ Following the shape of the round 41 entry in `docs/CHANGE-REQUESTS/trunk-notes.m
 ```bash
 npx prettier --write docs
 git add docs
-git commit -m "docs: round 47 in the shared zone, and what it touched outside it"
+git commit -m "docs: round 48 in the shared zone, and what it touched outside it"
 ```
 
 ---
