@@ -1604,3 +1604,63 @@ cost: a focus-trap fix landed in one copy and left the drag handle
 keyboard-unreachable in eleven drawers until a whole-branch review caught it.
 Three copies of a behavioural hook is three chances to be one edit behind, and
 no test would say so.
+
+## What was done on 2026-09-13: the twenty-second live pass — the checkbox
+
+**Why.** The operator sent a screenshot of the enrolment step's two checkboxes:
+they sat 56px apart, and the tick box was about half the height of the words
+beside it. Both were asked to be closed up.
+
+**What went live.** Main `feb79ab` (pull request 171). The checkbox row is 32px
+rather than 44px — that 44 is the console's **table** row height
+(`docs/DESIGN-BRIEF.md` section 6.2), applied to something that is not a table
+row, and 32px still clears the 24px minimum target size; the 48px floor in the
+brief belongs to the practitioner app. The tick is drawn at `--lh-body`, the
+label's own line height, so the box and its words share one optical line and the
+box follows the type scale. Three CSS files, no TypeScript, no schema.
+
+**`.checkbox` was defined three times** — `app/shell/shell.css`,
+`app/admin/clients/clients.css`, `app/admin/billing/billing.css` — byte-identical,
+so nothing looked wrong until someone edited one. The two copies are removed and
+the shell's is the only one, with a guard in
+`tests/lint/tabs-are-always-styled.test.ts` refusing it any other home and a
+second asserting the tick is sized from `--lh-body`. Both were proved to fail
+before they were trusted. This is the same shape as `.sections__tab`, removed the
+previous day, and as `useDrawer.ts`, which still exists three times.
+
+**The pass.** Archive `mcwellness-feb79ab.tar.gz` (6,336,219 bytes); TUS create
+201 and PATCH 204 with the offset equal to the size; build `01a09a8f`. Stylesheet
+`index-DfMyZ8W0.css` → `index-BWDEBIWx.css`, bundle `index-D4Rebdzl.js` →
+`index-CTFM9aAd.js`. `/api/health` 200 in 0.76 s, `/api/health/deep` 200 in
+0.86 s. No restart — the fifth consecutive pass.
+
+**A clause the corrected 404 rule still needed.** The twenty-first pass's
+correction said a CSS-only round leaves the JS hash alone. It does not, and this
+pass proved it: the entry chunk carries the **filenames of the code-split CSS
+chunks** — `ClientsPage-*.css`, `BillingPage-*.css` and a dozen more. Editing a
+module stylesheet changes that chunk's hash, which changes the name embedded in
+the entry JS, which changes the entry JS hash. The tell was the byte count:
+475,526 before and after, identical, because Vite hashes are fixed length. So on
+a CSS-only pass **a moved JS hash is only suspicious when the SIZE also moved and
+no CSS chunk explains it**. Only a change confined to an always-loaded stylesheet
+leaves the JS untouched.
+
+**Verified per asset, by the corrected rule.** Both hashes moved, so both old
+addresses must 404 and both did; the two new addresses answer 200 at 35,491 and
+475,526 bytes; a deliberately nonsense asset path answers 404, so the 200s are
+evidence rather than noise.
+
+**And read back in the served bytes rather than inferred from a hash.** The
+shell stylesheet now serves
+`.checkbox{…min-block-size:var(--s-8)…}` and
+`.checkbox input{inline-size:var(--lh-body);block-size:var(--lh-body);…}`, and
+`ClientsPage-DZrJMDfv.css` contains **zero** `.checkbox` rules — so the duplicate
+is genuinely gone rather than merely edited.
+
+**Not verified: how it looks.** No screenshot was taken. The enrolment screen is
+behind authentication, and the browser tooling available to this session hung
+without responding — twice, in two different sessions. The computed values are
+certain and were read out of the served stylesheet; whether 32px and 26px are the
+right numbers to the eye is the operator's judgement, and they have not yet given
+it. If they are still too far apart the next step is dropping the minimum row
+height entirely, which puts the two about 38px apart.
