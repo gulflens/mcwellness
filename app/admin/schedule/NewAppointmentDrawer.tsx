@@ -72,6 +72,51 @@ type SubmitError =
 
 type FetchState = 'idle' | 'loading' | 'ready' | 'error';
 
+/**
+ * The choice to keep, or the one to default to (the usability pass of
+ * 2026-09-14). A choice already made survives if the fresh options still
+ * offer it. Failing that: the single option, where there is exactly one; then
+ * the remembered one, where the options still offer it; then nothing, so the
+ * select stays empty and asks — a default is never a guess among several.
+ */
+export function keepOrDefault(
+  current: string | null,
+  offered: readonly { id: string }[],
+  remembered: string | null,
+): string | null {
+  if (current && offered.some((o) => o.id === current)) return current;
+  if (offered.length === 1) return offered[0]?.id ?? null;
+  if (remembered && offered.some((o) => o.id === remembered)) return remembered;
+  return null;
+}
+
+/**
+ * What the last booking on this device chose, kept in the browser and nowhere
+ * else: two ids of the practice's own catalogue and roster, nothing about any
+ * household. A device that refuses storage simply offers no default.
+ */
+const LAST_SERVICE = 'mcwellness.booking.service';
+const LAST_PRACTITIONER = 'mcwellness.booking.practitioner';
+
+function remembered(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+const rememberedService = () => remembered(LAST_SERVICE);
+const rememberedPractitioner = () => remembered(LAST_PRACTITIONER);
+
+function rememberChoice(serviceTypeId: string | null, practitionerId: string | null): void {
+  try {
+    if (serviceTypeId) localStorage.setItem(LAST_SERVICE, serviceTypeId);
+    if (practitionerId) localStorage.setItem(LAST_PRACTITIONER, practitionerId);
+  } catch {
+    // Nothing to do: the next booking asks, as it did before.
+  }
+}
+
 export function NewAppointmentDrawer({
   date,
   onClose,
@@ -168,8 +213,22 @@ export function NewAppointmentDrawer({
           setOptionsState('error');
           return;
         }
-        setOptions(AppointmentOptionsResponse.parse(await res.json()));
+        const loaded = AppointmentOptionsResponse.parse(await res.json());
+        setOptions(loaded);
         setOptionsState('ready');
+        // Defaults, so a booking is not four picks when three of them have
+        // one honest answer (the usability pass of 2026-09-14). A choice the
+        // person already made is kept if the new options still offer it;
+        // otherwise the only option is taken, and for the service, the one
+        // used last time. Nothing is guessed where there are several and no
+        // history: the select stays empty and asks.
+        setSelectedServiceTypeId((current) =>
+          keepOrDefault(current, loaded.serviceTypes, rememberedService()),
+        );
+        setSelectedLocationId((current) => keepOrDefault(current, loaded.locations, null));
+        setSelectedPractitionerId((current) =>
+          keepOrDefault(current, loaded.practitioners, rememberedPractitioner()),
+        );
       })
       .catch(() => {
         if (live) setOptionsState('error');
@@ -183,7 +242,9 @@ export function NewAppointmentDrawer({
     setSelectedClient(client);
     setClientResults(null);
     setClientQuery('');
-    setSelectedServiceTypeId(null);
+    // The service is kept: it is the visit being booked, not the household,
+    // that decides it. Location is the household's and is re-derived from
+    // their options; the practitioner follows service and day and is too.
     setSelectedLocationId(null);
     setSelectedPractitionerId(null);
     setStartTime('');
@@ -202,6 +263,10 @@ export function NewAppointmentDrawer({
   }
 
   function selectService(id: string) {
+    // Choosing what is already chosen changes nothing, and must not: the
+    // practitioner list below is cleared here on the promise that a changed
+    // service refetches it, and an unchanged one does not.
+    if ((id || null) === selectedServiceTypeId) return;
     setSelectedServiceTypeId(id || null);
     setSelectedLocationId(null);
     setSelectedPractitionerId(null);
@@ -263,6 +328,7 @@ export function NewAppointmentDrawer({
         }),
       });
       if (res.status === 201) {
+        rememberChoice(selectedServiceTypeId, selectedPractitionerId);
         onCreated(AppointmentRow.parse(await res.json()));
         return;
       }

@@ -5,7 +5,13 @@ import { NewAppointmentDrawer } from '../../app/admin/schedule/NewAppointmentDra
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // A booking that lands remembers its service and practitioner on the device
+  // (NewAppointmentDrawer.tsx); one case's memory must not become the next
+  // case's default.
+  localStorage.clear();
+});
 
 const provider: AuthProvider = {
   kind: 'development',
@@ -52,7 +58,7 @@ function optionsResponse(url: URL) {
 
 /** Every scenario shares the same client search and options doors; only the
  * POST /api/appointments answer differs between tests. */
-function buildFetch(postResponse: () => Response) {
+function buildFetch(postResponse: () => Response, options = optionsResponse) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost');
     const method = init?.method ?? 'GET';
@@ -60,7 +66,7 @@ function buildFetch(postResponse: () => Response) {
       return new Response(JSON.stringify({ clients: [client], note: null }), { status: 200 });
     }
     if (url.pathname === '/api/appointments/options' && method === 'GET') {
-      return new Response(JSON.stringify(optionsResponse(url)), { status: 200 });
+      return new Response(JSON.stringify(options(url)), { status: 200 });
     }
     if (url.pathname === '/api/appointments' && method === 'POST') {
       return postResponse();
@@ -89,29 +95,33 @@ async function walkToStartTime(fetchImpl: ReturnType<typeof buildFetch>) {
   });
   fireEvent.click(screen.getByRole('button', { name: 'Iris Cliff' }));
 
-  // A client alone still doesn't unlock the practitioner step — that needs a service.
+  // The practice offers one service, so it is chosen the moment the options
+  // arrive (the usability pass of 2026-09-14) — and a chosen service is what
+  // unlocks the practitioner step. The rule "no service, no practitioner" is
+  // proved with two services in its own case below, where nothing is chosen.
   await waitFor(() =>
-    expect((screen.getByLabelText('Service') as HTMLSelectElement).options).toHaveLength(2),
+    expect((screen.getByLabelText('Service') as HTMLSelectElement).value).toBe(serviceType.id),
   );
-  expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).disabled).toBe(true);
-
-  fireEvent.change(screen.getByLabelText('Service'), { target: { value: serviceType.id } });
-
-  // Choosing the service unlocks both location and practitioner together.
   expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).disabled).toBe(false);
   await waitFor(() =>
     expect((screen.getByLabelText('Location') as HTMLSelectElement).options).toHaveLength(3),
   );
+  // One practitioner is credentialed for it on this day, so they are chosen
+  // too, once the options for that service come back.
   await waitFor(() =>
-    expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).options).toHaveLength(2),
+    expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).value).toBe(
+      practitioner.id,
+    ),
   );
 
+  // Two locations, so that one is the person's to pick — and until it is, the
+  // final step stays shut.
+  expect((screen.getByLabelText('Location') as HTMLSelectElement).value).toBe('');
   expect((screen.getByLabelText('Start time') as HTMLInputElement).disabled).toBe(true);
 
   fireEvent.change(screen.getByLabelText('Location'), { target: { value: homeLocation.id } });
-  fireEvent.change(screen.getByLabelText('Practitioner'), { target: { value: practitioner.id } });
 
-  // Only once both are chosen does the final step open.
+  // Only once every choice is made does the final step open.
   expect((screen.getByLabelText('Start time') as HTMLInputElement).disabled).toBe(false);
   fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '09:00' } });
   expect(screen.getByText('Arrival window 09:00–09:45')).toBeTruthy();
@@ -527,5 +537,96 @@ describe('NewAppointmentDrawer', () => {
     fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Ir' } });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());
     expect(screen.queryByText('Keep typing: search starts at two characters.')).toBeNull();
+  });
+
+  it('leaves a choice to the person when there are several and nothing is remembered', async () => {
+    // A default is never a guess among several: with two services the select
+    // stays empty and the practitioner step stays locked, which is the rule
+    // the single-service walk above can no longer show.
+    const secondService = {
+      id: '00000008-0000-4000-8000-000000000020',
+      name: 'Brain map',
+      deliveryModes: ['studio'],
+    };
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+      (url) => ({
+        serviceTypes: [serviceType, secondService],
+        locations: url.searchParams.has('clientId') ? [homeLocation, studioLocation] : [],
+        practitioners: url.searchParams.has('serviceTypeId') ? [practitioner] : [],
+      }),
+    );
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <NewAppointmentDrawer date="2026-09-10" onClose={vi.fn()} onCreated={vi.fn()} />
+      </AuthProviderBoundary>,
+    );
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Iris' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy(), {
+      timeout: 1000,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Cliff' }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Service') as HTMLSelectElement).options).toHaveLength(3),
+    );
+    expect((screen.getByLabelText('Service') as HTMLSelectElement).value).toBe('');
+    expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).disabled).toBe(true);
+  });
+
+  it('offers what the last booking on this device chose, where the options still offer it', async () => {
+    const secondService = {
+      id: '00000008-0000-4000-8000-000000000020',
+      name: 'Brain map',
+      deliveryModes: ['studio'],
+    };
+    localStorage.setItem('mcwellness.booking.service', secondService.id);
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+      (url) => ({
+        serviceTypes: [serviceType, secondService],
+        locations: url.searchParams.has('clientId') ? [homeLocation, studioLocation] : [],
+        practitioners: url.searchParams.has('serviceTypeId') ? [practitioner] : [],
+      }),
+    );
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <NewAppointmentDrawer date="2026-09-10" onClose={vi.fn()} onCreated={vi.fn()} />
+      </AuthProviderBoundary>,
+    );
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Iris' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy(), {
+      timeout: 1000,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Cliff' }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Service') as HTMLSelectElement).value).toBe(secondService.id),
+    );
+  });
+
+  it('takes the only location when a household has one', async () => {
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+      (url) => ({
+        serviceTypes: [serviceType],
+        locations: url.searchParams.has('clientId') ? [homeLocation] : [],
+        practitioners: url.searchParams.has('serviceTypeId') ? [practitioner] : [],
+      }),
+    );
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <NewAppointmentDrawer date="2026-09-10" onClose={vi.fn()} onCreated={vi.fn()} />
+      </AuthProviderBoundary>,
+    );
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Iris' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy(), {
+      timeout: 1000,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Cliff' }));
+    // One service, one home, one practitioner: three picks the person never
+    // has to make, and the only thing left to type is the time.
+    await waitFor(() =>
+      expect((screen.getByLabelText('Start time') as HTMLInputElement).disabled).toBe(false),
+    );
+    expect((screen.getByLabelText('Location') as HTMLSelectElement).value).toBe(homeLocation.id);
   });
 });

@@ -27,6 +27,7 @@ import {
   previewVat,
   type DiscountKind,
 } from './money';
+import { readReference } from '../../shell/referenceCache';
 
 /**
  * The practice runs in one time zone; today's date on this form is that
@@ -141,14 +142,17 @@ export function PriceDrawer({
 
   useEffect(() => {
     let live = true;
-    void apiFetch('/api/billing/service-types')
-      .then(async (res) => {
+    // Through the reference cache: the list is the practice's own and does not
+    // change between one open of this drawer and the next, so the second open
+    // costs no round trip (app/shell/referenceCache.ts).
+    void readReference(apiFetch, '/api/billing/service-types')
+      .then((answer) => {
         if (!live) return;
-        if (!res.ok) {
+        if (!answer.ok) {
           setServiceTypes({ kind: 'error' });
           return;
         }
-        const body = ServiceTypeOptionsResponse.parse(await res.json());
+        const body = ServiceTypeOptionsResponse.parse(answer.body);
         setServiceTypes({ kind: 'ready', options: body.serviceTypes });
       })
       .catch(() => {
@@ -171,18 +175,18 @@ export function PriceDrawer({
   useEffect(() => {
     if (!validFrom) return;
     let live = true;
-    void apiFetch(`/api/billing/vat-rate?date=${encodeURIComponent(validFrom)}`)
-      .then(async (res) => {
+    void readReference(apiFetch, `/api/billing/vat-rate?date=${encodeURIComponent(validFrom)}`)
+      .then((answer) => {
         if (!live) return;
-        if (res.status === 404) {
+        if (answer.status === 404) {
           setVatRate({ kind: 'none' });
           return;
         }
-        if (!res.ok) {
+        if (!answer.ok) {
           setVatRate({ kind: 'error' });
           return;
         }
-        const body = VatRateResponse.parse(await res.json());
+        const body = VatRateResponse.parse(answer.body);
         setVatRate({ kind: 'ready', rateBasisPoints: body.rateBasisPoints });
       })
       .catch(() => {

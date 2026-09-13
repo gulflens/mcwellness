@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GoalCategoryListResponse, type GoalCategory } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
+import { readReference } from '../../shell/referenceCache';
 
 export type GoalCategoriesState =
   { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; categories: readonly GoalCategory[] };
@@ -12,14 +13,17 @@ export function useGoalCategories(): GoalCategoriesState {
 
   useEffect(() => {
     let live = true;
-    void apiFetch('/api/clients/goal-categories')
-      .then(async (res) => {
+    // Through the reference cache (app/shell/referenceCache.ts): the list is
+    // the practice's and every drawer and wizard step that needs it opens it
+    // again, so the second and every later open costs no round trip.
+    void readReference(apiFetch, '/api/clients/goal-categories')
+      .then((answer) => {
         if (!live) return;
-        if (!res.ok) {
+        if (!answer.ok) {
           setState({ kind: 'error' });
           return;
         }
-        const body = GoalCategoryListResponse.parse(await res.json());
+        const body = GoalCategoryListResponse.parse(answer.body);
         setState({ kind: 'ready', categories: body.categories });
       })
       .catch(() => {
