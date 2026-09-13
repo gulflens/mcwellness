@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { APPOINTMENT_STATUSES, BOARD_STATES } from '@domain/scheduling';
+import { HEALTH_QUESTIONS } from '../clients/record-schema';
 
 /** The shapes the appointment routes return. Imported by the routes and by
  * the two screens that read them: the admin console's day schedule and the
@@ -147,6 +148,18 @@ export const DayStop = z.object({
     entrancePoint: GeoPoint,
     parkingPoint: GeoPoint.nullable(),
   }),
+  /**
+   * Which of the six health questions the household answered "yes" to, by
+   * key, from their newest declaration (docs/SPEC/client-record.md section
+   * 4.6; the operator's decision of 2026-09-14 that a "yes" shows on the
+   * visit card so the person at the door is not surprised, and blocks
+   * nothing). Empty when every answer was no and empty when nobody has asked
+   * — the card does not tell those apart, because neither is a thing to say
+   * at a front door. The notes never travel: they are the record's, and a
+   * doorstep phone has no room for a paragraph. The own scope alone carries
+   * it; the coordinator's ledger has no door to stand at.
+   */
+  declared: z.array(z.enum(HEALTH_QUESTIONS)),
 });
 export type DayStop = z.infer<typeof DayStop>;
 

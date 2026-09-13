@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
+  CONCERN_STATUSES,
   GOAL_STATUSES,
   IdResponse,
   type ClientRecordResponse,
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { ConcernForm } from './ConcernForm';
 import { GoalForm } from './GoalForm';
 import { useGoalCategories } from './useGoalCategories';
 
@@ -14,6 +16,10 @@ const STATUS_LABELS: Record<string, string> = {
   achieved: 'Achieved',
   dropped: 'Dropped',
 };
+const CONCERN_STATUS_LABELS: Record<string, string> = {
+  open: 'Open',
+  resolved: 'Resolved',
+};
 
 /**
  * Goals (docs/SPEC/client-record.md sections 4.2 and 6): the category from
@@ -21,12 +27,20 @@ const STATUS_LABELS: Record<string, string> = {
  * sensitive action and needs a reason (section 9); the client-record tab
  * gates on that action, unlike the other tabs, because it is the one that
  * writes a status change directly.
+ *
+ * And, beneath them, the household's **concerns** (section 4.6, built
+ * 2026-09-14): what they are worried about, in the same category-and-words
+ * shape, with a status of its own — open or resolved, never achieved. Section
+ * 4.2 has always said this tab holds "goals and concerns"; until that round a
+ * concern went into a goal's description. Resolving one needs no reason: a
+ * worry that has passed is not a sensitive act, where dropping a goal is.
  */
 export function GoalsTab({
   clientId,
   record,
   onChanged,
   mayWrite,
+  mayWriteConcerns,
   erased = false,
 }: {
   clientId: string;
@@ -34,6 +48,12 @@ export function GoalsTab({
   onChanged: () => void;
   /** False for a role the goal routes would refuse: read the goals, change nothing. */
   mayWrite: boolean;
+  /**
+   * False for a role the concern routes would refuse. Wider than `mayWrite`:
+   * an admin records a concern at enrolment and may not set a goal
+   * (docs/SPEC/client-record.md section 4.6).
+   */
+  mayWriteConcerns: boolean;
   /**
    * Whether this record has been erased. Passed rather than read from
    * `record.status`, because the drawer knows it one act before the record
@@ -51,6 +71,7 @@ export function GoalsTab({
     [categories],
   );
   const [adding, setAdding] = useState(false);
+  const [addingConcern, setAddingConcern] = useState(false);
   // The goal whose "dropped" is waiting on a reason, so the select keeps showing the
   // choice that was made rather than snapping back to the old status while the
   // prompt is open.
@@ -97,12 +118,38 @@ export function GoalsTab({
     }
   }
 
+  async function setConcernStatus(concernId: string, status: string) {
+    setBusyId(concernId);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/clients/${clientId}/concerns/${concernId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (res.status === 200) {
+        IdResponse.parse(await res.json());
+        onChanged();
+        return;
+      }
+      setError(
+        res.status === 403
+          ? 'Only the owner, an admin or the lead practitioner may change a concern.'
+          : 'This concern could not be updated. Try again.',
+      );
+    } catch {
+      setError('This concern could not be updated. Try again.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="tab-section">
       {erased || record.status === 'erased' ? (
         <Note tone="attention">
-          This record has been erased. The goals below have kept their category and lost what was
-          written beside them.
+          This record has been erased. The goals and concerns below have kept their category and
+          lost what was written beside them.
         </Note>
       ) : null}
       {record.goals.length === 0 ? (
@@ -184,6 +231,49 @@ export function GoalsTab({
             onChanged();
           }}
           onCancel={() => setAdding(false)}
+        />
+      )}
+
+      <h4 className="drawer__section">Concerns</h4>
+      {record.concerns.length === 0 ? (
+        <Note>No concerns noted.</Note>
+      ) : (
+        <ul className="record-rows">
+          {record.concerns.map((concern) => (
+            <li key={concern.id} className="record-row">
+              <div className="record-row__main">
+                <p>{categoryNames.get(concern.categoryCode) ?? concern.categoryCode}</p>
+                <p className="small muted">{concern.description}</p>
+              </div>
+              <Select
+                id={`concern-status-${concern.id}`}
+                label="Status"
+                value={concern.status}
+                disabled={!mayWriteConcerns || busyId === concern.id}
+                onChange={(e) => void setConcernStatus(concern.id, e.target.value)}
+              >
+                {CONCERN_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {CONCERN_STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </Select>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!mayWriteConcerns ? null : !addingConcern ? (
+        <Button variant="secondary" onClick={() => setAddingConcern(true)}>
+          Add concern
+        </Button>
+      ) : (
+        <ConcernForm
+          clientId={clientId}
+          onSaved={() => {
+            setAddingConcern(false);
+            onChanged();
+          }}
+          onCancel={() => setAddingConcern(false)}
         />
       )}
     </div>

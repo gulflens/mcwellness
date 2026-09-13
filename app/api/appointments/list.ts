@@ -13,6 +13,7 @@ import {
   type DayStop,
   type DeliveryMode,
 } from './schema';
+import { HEALTH_QUESTIONS, type HealthQuestion } from '../clients/record-schema';
 
 /**
  * GET /api/appointments: one tenant-local calendar day of appointments, in
@@ -94,6 +95,13 @@ type OwnRow = BaseRow & {
   entrance_lat: number;
   parking_lng: number | null;
   parking_lat: number | null;
+  // The newest declaration's six answers, or six nulls where nobody has asked.
+  hd_seizures: boolean | null;
+  hd_implanted_device: boolean | null;
+  hd_head_injury: boolean | null;
+  hd_pregnancy: boolean | null;
+  hd_medication: boolean | null;
+  hd_scalp: boolean | null;
 };
 
 const BASE_COLUMNS =
@@ -120,7 +128,36 @@ const OWN_COLUMNS =
   'extensions.st_x(l.entrance_point::extensions.geometry) as entrance_lng, ' +
   'extensions.st_y(l.entrance_point::extensions.geometry) as entrance_lat, ' +
   'extensions.st_x(l.parking_point::extensions.geometry) as parking_lng, ' +
-  'extensions.st_y(l.parking_point::extensions.geometry) as parking_lat';
+  'extensions.st_y(l.parking_point::extensions.geometry) as parking_lat, ' +
+  'h.seizures as hd_seizures, h.implanted_device as hd_implanted_device, ' +
+  'h.head_injury as hd_head_injury, h.pregnancy as hd_pregnancy, ' +
+  'h.medication as hd_medication, h.scalp as hd_scalp';
+
+// The household's newest health declaration, for the own scope alone
+// (schema.ts's note on `declared`). Read under the practitioner's own row
+// rules: db/policies/client/readers.sql admits them to a declaration through
+// app.client_visible_to_practitioner, and OWN_STATUS_FILTER below is a subset
+// of the statuses that function grants on, so every stop this query returns
+// has a readable declaration behind it or none at all — never one hidden by
+// the policy and mistaken for "never asked". Six booleans and not the notes:
+// the card names what was said yes to, and the record holds the rest.
+// Repeats the tenant predicate for the reason every other join here does.
+const DECLARED_JOIN =
+  // Leading space, spliced in the same way MOVED_TO_JOIN is.
+  ' left join lateral (select h.seizures, h.implanted_device, h.head_injury, h.pregnancy, ' +
+  'h.medication, h.scalp from health_declaration h ' +
+  'where h.client_id = c.id and h.tenant_id = app.current_tenant_id() ' +
+  'order by h.asked_at desc limit 1) h on true';
+
+/** The wire's key for each answer column the own scope reads. */
+const DECLARED_COLUMN: Record<HealthQuestion, keyof OwnRow> = {
+  seizures: 'hd_seizures',
+  implantedDevice: 'hd_implanted_device',
+  headInjury: 'hd_head_injury',
+  pregnancy: 'hd_pregnancy',
+  medication: 'hd_medication',
+  scalp: 'hd_scalp',
+};
 
 // Every joined table repeats the tenant_id predicate, not only the driving
 // appointment row: a join condition alone (c.id = a.client_id) trusts that
@@ -189,7 +226,7 @@ const PRACTICE_SQL =
 const OWN_SQL =
   BASE_COLUMNS +
   OWN_COLUMNS +
-  FROM_AND_WHERE +
+  FROM_AND_WHERE.replace(' where ', DECLARED_JOIN + ' where ') +
   'and a.practitioner_id = $3 ' +
   OWN_STATUS_FILTER +
   ORDER;
@@ -266,6 +303,7 @@ function toDayStop(r: OwnRow, today: string): DayStop {
       entrancePoint: { lat: r.entrance_lat, lng: r.entrance_lng },
       parkingPoint: point(r.parking_lng, r.parking_lat),
     },
+    declared: HEALTH_QUESTIONS.filter((question) => r[DECLARED_COLUMN[question]] === true),
   };
 }
 

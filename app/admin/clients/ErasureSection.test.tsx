@@ -342,6 +342,7 @@ describe('the other tabs of an erased record', () => {
           record={erased}
           onChanged={vi.fn()}
           mayWrite={false}
+          mayWriteConcerns={false}
           erased
         />,
         /kept their category and lost what was written beside them/,

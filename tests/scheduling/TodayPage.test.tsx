@@ -65,6 +65,7 @@ function stop(overrides: Partial<DayStop> & { id: string }): DayStop {
       familyInitialAr: null,
       age: 9,
     },
+    declared: [],
     serviceType: {
       id: '00000009-0000-4000-8000-000000000103',
       code: 'nf-session',

@@ -22,6 +22,27 @@ import { Button, Note } from '../../shell/components/Controls';
 import { ChevronIcon } from '../../shell/components/Icons';
 import { describeRoles, homeFor } from '../../shell/routing';
 import './today.css';
+import type { HealthQuestion } from '../../api/clients/record-schema';
+
+/**
+ * The words for a "yes" on the card, one line under the service name: *Told
+ * us about: seizures, medication.* Plain ink, not the note colours — hue on
+ * this screen is the three status states' (docs/DESIGN-BRIEF.md), and this
+ * is not a warning: it blocks nothing and is there so the person at the door
+ * is not surprised (docs/SPEC/client-record.md section 4.6). The record holds
+ * the full question and any note; the card has room for a word each.
+ */
+const DECLARED_WORDS: Record<HealthQuestion, string> = {
+  seizures: 'seizures',
+  implantedDevice: 'an implanted device',
+  headInjury: 'a head injury',
+  pregnancy: 'pregnancy',
+  medication: 'medication',
+  scalp: 'scalp sensitivity',
+};
+function toldUs(declared: readonly HealthQuestion[]): string {
+  return `Told us about: ${declared.map((question) => DECLARED_WORDS[question]).join(', ')}.`;
+}
 
 /**
  * The practitioner's day (docs/SPEC/scheduling-manual.md section 5.1). One
@@ -420,6 +441,9 @@ function Stop({
     <div className="stop__detail">
       {age ? <div className="small muted numeric">{age}</div> : null}
       <div className="small muted">{stop.serviceType.name}</div>
+      {stop.declared.length > 0 ? (
+        <div className="small stop__declared">{toldUs(stop.declared)}</div>
+      ) : null}
       <div className="small muted">{describePlace(stop.location)}</div>
       {/* The slot is here from the first paint, empty, and keeps its height.
           Billing answers a moment after the day does, and a line appearing

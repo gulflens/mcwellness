@@ -3,7 +3,9 @@ import {
   canPerformErasure,
   canRecordErasureRequest,
   canWriteClientRecord,
+  canWriteConcern,
   canWriteGoal,
+  canWriteHealthDeclaration,
 } from '../../api/clients/access';
 
 /**
@@ -31,6 +33,24 @@ export function canWriteRecord(actor: Actor | null, now: Date): boolean {
 /** Setting a goal and closing one: the owner and the lead practitioner alone. */
 export function canWriteGoals(actor: Actor | null): boolean {
   return actor !== null && canWriteGoal(actor);
+}
+
+/**
+ * Writing down what the household is worried about, and resolving it: the
+ * owner, an admin and the lead practitioner — wider than a goal, because an
+ * admin enrols and a concern is the household's own words taken down at
+ * enrolment (docs/SPEC/client-record.md section 4.6).
+ */
+export function canWriteConcerns(actor: Actor | null): boolean {
+  return actor !== null && canWriteConcern(actor);
+}
+
+/**
+ * Recording the six health answers: the same three, and never a practitioner,
+ * who tells the office what they were told at the door (section 4.6).
+ */
+export function canWriteHealth(actor: Actor | null): boolean {
+  return actor !== null && canWriteHealthDeclaration(actor);
 }
 
 /**

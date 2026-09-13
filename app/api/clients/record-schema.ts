@@ -193,6 +193,22 @@ export const HealthDeclaration = z.object({
 });
 export type HealthDeclaration = z.infer<typeof HealthDeclaration>;
 
+/**
+ * The six questions by key, in the agreement's own order. The record's Health
+ * tab walks this list to draw its form, and the practitioner's day sheet
+ * names a "yes" by it (app/api/appointments/schema.ts), so a seventh question
+ * is added here once and both screens hear of it from the compiler.
+ */
+export const HEALTH_QUESTIONS = [
+  'seizures',
+  'implantedDevice',
+  'headInjury',
+  'pregnancy',
+  'medication',
+  'scalp',
+] as const;
+export type HealthQuestion = (typeof HEALTH_QUESTIONS)[number];
+
 export const ClientRecordResponse = z.object({
   id: z.uuid(),
   mrn: z.string(),

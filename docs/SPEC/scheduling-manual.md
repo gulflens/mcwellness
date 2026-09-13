@@ -44,7 +44,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 
 ## 5. Screens (practitioner PWA)
 
-**5.1 Today.** One column. Each stop: window, client first name + initial, age, service, location label, "Navigate" (opens Google Maps / Waze with parking point), "Brief" (opens client brief: protocol summary, last session notes, access notes, contacts), and the check-in button (handled by session-capture). Current stop is emphasised; past stops collapse. Offline: renders from the last sync; shows a calm "last updated HH:MM" band.
+**5.1 Today.** One column. Each stop: window, client first name + initial, age, service, location label, "Navigate" (opens Google Maps / Waze with parking point), "Brief" (opens client brief: protocol summary, last session notes, access notes, contacts), and the check-in button (handled by session-capture). Current stop is emphasised; past stops collapse. Offline: renders from the last sync; shows a calm "last updated HH:MM" band. _Amended 2026-09-14 (`docs/CHANGE-REQUESTS/client-record-05.md`):_ a stop also carries one line under the service — *Told us about: …* — naming any "yes" from the household's newest health declaration (client-record.md section 4.6), plain ink, blocking nothing; empty when every answer was no or nobody has asked.
 
 **5.2 Week.** Read-only agenda.
 

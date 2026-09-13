@@ -26,11 +26,23 @@ import { ConsentTab } from './ConsentTab';
 import { ContactsTab } from './ContactsTab';
 import { EmiratesIdField } from './EmiratesIdField';
 import { GoalsTab } from './GoalsTab';
+import { HealthTab } from './HealthTab';
 import { IdentityForm } from './IdentityForm';
 import { LocationsTab } from './LocationsTab';
 import { useClientRecord } from './useClientRecord';
 
-const STEPS = ['identity', 'contacts', 'location', 'goals', 'consent', 'summary'] as const;
+// Health sits after Consent and not beside Goals: the six answers are held
+// under the health-data consent, and the route refuses to record them
+// without it (docs/SPEC/client-record.md section 4.6).
+const STEPS = [
+  'identity',
+  'contacts',
+  'location',
+  'goals',
+  'consent',
+  'health',
+  'summary',
+] as const;
 type Step = (typeof STEPS)[number];
 const STEP_LABELS: Record<Step, string> = {
   identity: 'Identity',
@@ -38,6 +50,7 @@ const STEP_LABELS: Record<Step, string> = {
   location: 'Location',
   goals: 'Goals',
   consent: 'Consent',
+  health: 'Health',
   summary: 'Summary',
 };
 
@@ -100,6 +113,8 @@ export function EnrolmentWizard({
   onCreated,
   onActivated,
   mayWriteGoals,
+  mayWriteConcerns,
+  mayWriteHealth,
 }: {
   onDone: () => void;
   /** Called once the lead exists, so the list behind the drawer can pick it up
@@ -110,6 +125,10 @@ export function EnrolmentWizard({
   onActivated?: (name: string) => void;
   /** Whether this person may set a goal: an admin writes the record but not goals. */
   mayWriteGoals: boolean;
+  /** Whether this person may take down a concern: the office and the lead practitioner. */
+  mayWriteConcerns: boolean;
+  /** Whether this person may record the six health answers: the same three. */
+  mayWriteHealth: boolean;
 }) {
   const { apiFetch } = useAuth();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -513,6 +532,7 @@ export function EnrolmentWizard({
                     record={record}
                     onChanged={() => void refetch()}
                     mayWrite={mayWriteGoals}
+                    mayWriteConcerns={mayWriteConcerns}
                   />
                 ) : null}
                 {step === 'consent' ? (
@@ -521,6 +541,14 @@ export function EnrolmentWizard({
                     record={record}
                     onChanged={() => void refetch()}
                     mayWrite
+                  />
+                ) : null}
+                {step === 'health' ? (
+                  <HealthTab
+                    clientId={created.id}
+                    record={record}
+                    onChanged={() => void refetch()}
+                    mayWrite={mayWriteHealth}
                   />
                 ) : null}
                 {step === 'summary' && gate ? (

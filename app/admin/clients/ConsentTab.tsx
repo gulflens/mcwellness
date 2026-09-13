@@ -63,7 +63,13 @@ function PanelHeading({ children }: { children: ReactNode }) {
   );
 }
 
-function isActiveOn(consent: Consent, today: string, purpose: ConsentPurpose): boolean {
+/**
+ * Whether a consent stands today: the purpose asked for, active, and not past
+ * its expiry. Exported for the Health tab, which may only ask the six
+ * questions under a standing `health_data` consent (the route refuses
+ * otherwise), so the two screens judge "standing" by one rule.
+ */
+export function isActiveOn(consent: Consent, today: string, purpose: ConsentPurpose): boolean {
   return (
     consent.purpose === purpose &&
     consent.status === 'active' &&

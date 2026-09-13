@@ -372,3 +372,27 @@
   padding-inline-start: var(--s-4);
   border-inline-start: var(--hairline) solid var(--rule);
 }
+
+/* The six health questions (HealthTab.tsx). As a list, each row ends in its
+   answer; as a form, a fieldset per question with no border of its own — the
+   row rule is the group's edge — and the two choices side by side. */
+.health__question {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.health__question legend {
+  padding: 0;
+  margin-block-end: var(--s-1);
+}
+.health__choices {
+  display: flex;
+  gap: var(--s-4);
+}
+.health__answer {
+  flex: none;
+}
+.health__answer--yes {
+  font-weight: 600;
+}
