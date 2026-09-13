@@ -5,7 +5,6 @@ import {
   EMAIL_ERROR,
   FUTURE_DATE_ERROR,
   PHONE_ERROR,
-  PHONE_HINT,
   fieldOf,
   focusFirstError,
   isPastDate,
@@ -17,12 +16,15 @@ import {
 import { RELATIONSHIPS, type CreateClientResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
+import { PhoneField } from '../../shell/components/PhoneField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { ActivationSummary } from './ActivationSummary';
 import { canActivate, practiceToday, toActivationRecord } from './activation';
 import { Checkbox } from './FormAtoms';
 import { ConsentTab } from './ConsentTab';
 import { ContactsTab } from './ContactsTab';
+import { EmiratesIdField } from './EmiratesIdField';
 import { GoalsTab } from './GoalsTab';
 import { IdentityForm } from './IdentityForm';
 import { LocationsTab } from './LocationsTab';
@@ -389,16 +391,15 @@ export function EnrolmentWizard({
               }}
               error={identityErrors.familyName}
             />
-            <Field
+            <DateField
               id="wizard-dob"
               label="Date of birth (optional)"
-              type="date"
               value={dateOfBirth}
-              onChange={(e) => {
-                setDateOfBirth(e.target.value);
+              onChange={(next) => {
+                setDateOfBirth(next);
                 clearIdentityError('dateOfBirth');
               }}
-              hint="Not needed to save a lead, but needed before this client can be activated."
+              hint="Needed to activate."
               error={identityErrors.dateOfBirth}
             />
             <Field
@@ -426,16 +427,14 @@ export function EnrolmentWizard({
                 </option>
               ))}
             </Select>
-            <Field
+            <PhoneField
               id="wizard-phone"
               label="Phone"
-              type="tel"
               value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
+              onChange={(next) => {
+                setPhone(next);
                 clearIdentityError('phone');
               }}
-              hint={PHONE_HINT}
               error={identityErrors.phone}
             />
             <Field
@@ -449,15 +448,14 @@ export function EnrolmentWizard({
               }}
               error={identityErrors.email}
             />
-            <Field
+            <EmiratesIdField
               id="wizard-emirates-id"
               label="Emirates ID (optional)"
               value={emiratesId}
-              onChange={(e) => {
-                setEmiratesId(e.target.value);
+              onChange={(next) => {
+                setEmiratesId(next);
                 clearIdentityError('emiratesId');
               }}
-              hint="For example 784-1900-1234567-1. Only when the practice must verify this adult. Never required."
               error={identityErrors.emiratesId}
             />
             <Checkbox

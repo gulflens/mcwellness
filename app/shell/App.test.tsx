@@ -296,11 +296,41 @@ describe('App — /admin/settings/practice', () => {
     expect(document.querySelector<HTMLElement>('.page__header')?.inert).toBe(true);
     expect(document.querySelector<HTMLElement>('.practice')?.inert).toBe(true);
 
+    // The width handle (app/shell/components/DrawerResizeHandle.tsx) sits
+    // beside `.admin__main`, not inside the drawer it resizes, so it is
+    // never marked inert above — round-one review confirmed the mouse still
+    // reaches it. `inert` was only half the trap, though (round-two review
+    // finding 1, 2026-09-12): it stays out of the tab order below unless
+    // named the same way `inert` skips it.
+    const handle = document.querySelector<HTMLElement>('.drawer__resize');
+    expect(handle?.inert).toBeFalsy();
+
     // Tab does not walk out of the drawer.
     const close = screen.getByRole('button', { name: 'Close' });
     expect(document.activeElement).toBe(close);
     fireEvent.keyDown(document, { key: 'Tab' });
     expect(drawer.contains(document.activeElement)).toBe(true);
+
+    // The handle joins the cycle as its last stop. Its own visibility is
+    // asked through `display` (verified against a real browser: `offsetParent`
+    // — the round's own first suggestion — is `null` for every `position:
+    // fixed` element by specification, showing or not, so it could never
+    // have worked), which jsdom answers correctly with no stylesheet loaded
+    // at all (a bare `div`'s default is `block`, never `none`). The close
+    // button's own visibility is a different, pre-existing check
+    // (`offsetParent`, same as every other control the drawer's own
+    // `querySelectorAll` finds) that only ever passed because it was already
+    // `document.activeElement`; stubbed here so moving focus off it does not
+    // make it fail that unrelated, jsdom-only limitation.
+    Object.defineProperty(close, 'offsetParent', { value: document.body, configurable: true });
+    close.focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(handle);
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(document.activeElement).toBe(close);
+    // The trap still traps: cycling through the handle never reached the
+    // rail or anything else behind the drawer.
+    expect(rail?.inert).toBe(true);
 
     // And it all comes back when the drawer closes.
     fireEvent.keyDown(document, { key: 'Escape' });

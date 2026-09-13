@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccountsResponse, LedgerResponse, type AccountRow } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note } from '../../shell/components/Controls';
+import { Button, Note } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate, formatFils } from './money';
 import { ACCOUNT_ROLE_WORDS, ACCOUNT_TYPE_WORDS } from './words';
@@ -98,20 +99,8 @@ export function AccountsSection({ reloadKey }: { reloadKey: number }) {
       ) : null}
 
       <div className="filters">
-        <Field
-          id="ledger-from"
-          label="Ledger from"
-          type="date"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-        <Field
-          id="ledger-to"
-          label="Ledger to"
-          type="date"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-        />
+        <DateField id="ledger-from" label="Ledger from" value={from} onChange={setFrom} />
+        <DateField id="ledger-to" label="Ledger to" value={to} onChange={setTo} />
       </div>
 
       {ledger ? (

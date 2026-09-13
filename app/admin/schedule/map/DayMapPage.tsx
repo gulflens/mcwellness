@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router';
 import { AppointmentListResponse, type AppointmentRow } from '../../../api/appointments/schema';
 import { PracticeDayResponse, type PracticeDayPractitioner } from '../../../api/routing/schema';
 import { useAuth } from '../../../shell/auth/AuthContext';
-import { Button, Field, Note, PageHeader, Select } from '../../../shell/components/Controls';
+import { Button, Note, PageHeader, Select } from '../../../shell/components/Controls';
+import { DateField } from '../../../shell/components/DateField';
 import { StatusChip } from '../../../shell/components/StatusChip';
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from '../appointmentStatus';
 import { CancelAppointmentDrawer } from '../CancelAppointmentDrawer';
@@ -243,14 +244,9 @@ export function DayMapPage({ browserKey, loadMaps }: DayMapPageProps = {}) {
         <aside className="daymap__panel" aria-label="The day">
           <PageHeader title="Day map" aside={practitionerName ?? undefined} />
           <div className="toolbar">
-            <Field
-              id="daymap-date"
-              className="schedule__date"
-              label="Date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+            <div className="schedule__date">
+              <DateField id="daymap-date" label="Date" value={date} onChange={setDate} />
+            </div>
             {/* A plain anchor, not a Link: this document carries the map's own
                 policy and the Schedule page carries the strict one, so each is
                 entered as its own document (section 4.1). */}

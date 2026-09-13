@@ -241,19 +241,32 @@ describe('Practice settings — the save', () => {
     expect(screen.getByText('Synthetic Wellness Studio FZ-LLC')).toBeTruthy();
   });
 
-  it("saves the practice's WhatsApp number, and refuses one that is not a number", async () => {
+  it("saves the practice's WhatsApp number, and refuses one that is too short", async () => {
     const { calls } = mount(() =>
       json({ practice: { ...PRACTICE, whatsappNumber: '+971500000024' } }),
     );
     await openTheDrawer();
-    type('WhatsApp number (optional)', 'not a number');
+    // PhoneField holds the country in its own control (default +971), so a
+    // number too short to be real once the country is joined on is caught
+    // here.
+    type('WhatsApp number (optional)', '12');
     type('Why this changes', 'The practice number changed.');
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
     expect(await screen.findByText('A WhatsApp number is +971 50 000 0000.')).toBeTruthy();
     expect(saves(calls)).toHaveLength(0);
 
-    // The spaces a person types are stripped: the column holds E.164.
-    type('WhatsApp number (optional)', '+971 50 000 0024');
+    // A string of letters folds to no digits at all, so PhoneField resolves
+    // it to '' — the optional field's own "not given". Left unchecked that
+    // used to save `null` with no refusal, silently clearing a number that
+    // was never actually blanked (fix round finding 6, 2026-09-12): the box
+    // itself, still showing the letters, is what the form now checks.
+    type('WhatsApp number (optional)', 'not a number');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(await screen.findByText('A WhatsApp number is +971 50 000 0000.')).toBeTruthy();
+    expect(saves(calls)).toHaveLength(0);
+
+    // The country is +971 by default; only the national part is typed.
+    type('WhatsApp number (optional)', '500000024');
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
     await waitFor(() => expect(saves(calls)).toHaveLength(1));
     expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({

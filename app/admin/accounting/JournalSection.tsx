@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EntriesResponse, EntryResponse, type EntryRow } from '../../api/accounting/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note } from '../../shell/components/Controls';
+import { Button, Note } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { Table, type Column } from '../../shell/components/Table';
 import { ReasonDrawer } from './ReasonDrawer';
 import { formatDate, formatFils } from './money';
@@ -111,20 +112,8 @@ export function JournalSection({
   return (
     <>
       <div className="filters">
-        <Field
-          id="journal-from"
-          label="From"
-          type="date"
-          value={from}
-          onChange={(e) => setFrom(e.target.value)}
-        />
-        <Field
-          id="journal-to"
-          label="To"
-          type="date"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-        />
+        <DateField id="journal-from" label="From" value={from} onChange={setFrom} />
+        <DateField id="journal-to" label="To" value={to} onChange={setTo} />
       </div>
 
       {state.kind === 'loading' ? <Note>Reading the journal.</Note> : null}

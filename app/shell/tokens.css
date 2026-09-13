@@ -142,7 +142,13 @@
   --portal-rail: 240px;
   --rail: var(--rail-open);
   /* Never much more than half the screen, so the ledger stays readable beside
-     an open drawer on a tablet. */
+     an open drawer on a tablet. The default only: the operator asked to be
+     able to pull a drawer wider when it feels narrow (2026-09-12), so
+     `DrawerResizeHandle` overrides this with an inline style the moment
+     anyone drags or steps it, and `app/shell/components/useDrawerWidth.ts`
+     reads the last choice back at the next visit — this clamp is what a
+     browser with no stored choice, or storage it refuses to read, still
+     gets. */
   --drawer: clamp(320px, 55vw, 480px);
   --tap: 48px;
   --measure: 68ch;

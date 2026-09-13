@@ -9,6 +9,8 @@ import {
 } from '../../api/appointments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
+import { TimeField } from '../../shell/components/TimeField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { localConflictMessage } from './conflictMessages';
 import { composeWindowStart, PRACTICE_UTC_OFFSET, windowEndForTime } from './windows';
@@ -328,13 +330,12 @@ export function NewAppointmentDrawer({
       <div className="drawer__body">
         <div className="stepper">
           <div className="stepper__step">
-            <Field
+            <DateField
               id="new-appointment-date"
               label="Date"
-              type="date"
               value={bookingDate}
-              onChange={(e) => {
-                setBookingDate(e.target.value);
+              onChange={(next) => {
+                setBookingDate(next);
                 // A practitioner certified on one day may be away on another: the
                 // list is filtered by date on the server, so the choice is
                 // cleared and fetched again.
@@ -484,14 +485,13 @@ export function NewAppointmentDrawer({
           </div>
 
           <div className="stepper__step">
-            <Field
+            <TimeField
               id="appt-start-time"
               label="Start time"
-              type="time"
               disabled={!timeStepEnabled}
               value={startTime}
-              onChange={(e) => {
-                setStartTime(e.target.value);
+              onChange={(next) => {
+                setStartTime(next);
                 setSubmitError(null);
               }}
               hint={

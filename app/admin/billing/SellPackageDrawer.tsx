@@ -11,6 +11,7 @@ import type { ClientRow } from '../../api/clients/schema';
 import { isRealText, MINIMUM_REASON } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { ClientPicker } from './ClientPicker';
 import { DiscountFields } from './DiscountFields';
@@ -272,12 +273,11 @@ export function SellPackageDrawer({
             error={clientError}
           />
 
-          <Field
+          <DateField
             id="sell-purchased-on"
             label="Bought on"
-            type="date"
             value={purchasedOn}
-            onChange={(e) => setPurchasedOn(e.target.value)}
+            onChange={setPurchasedOn}
           />
 
           <div className="price-preview">

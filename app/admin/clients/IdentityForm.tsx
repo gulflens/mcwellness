@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { ClientRecordResponse, UpdateClientBody } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { FieldRow } from './FormAtoms';
 import { practiceToday } from './activation';
 import { FUTURE_DATE_ERROR, focusFirstError, isPastDate } from './formRules';
@@ -143,12 +144,11 @@ export function IdentityForm({
           error={errors.familyName}
         />
       </FieldRow>
-      <Field
+      <DateField
         id="identity-dob"
         label="Date of birth"
-        type="date"
         value={dateOfBirth}
-        onChange={(e) => setDateOfBirth(e.target.value)}
+        onChange={setDateOfBirth}
         hint="Needed before this client can be activated."
         error={errors.dateOfBirth}
       />

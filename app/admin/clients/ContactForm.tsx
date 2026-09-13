@@ -4,11 +4,12 @@ import { toLatinDigits } from '../../api/clients/emirates-id-shape';
 import { RELATIONSHIPS, type Contact, IdResponse } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { PhoneField } from '../../shell/components/PhoneField';
+import { EmiratesIdField } from './EmiratesIdField';
 import { Checkbox } from './FormAtoms';
 import {
   EMAIL_ERROR,
   PHONE_ERROR,
-  PHONE_HINT,
   fieldOf,
   focusFirstError,
   isValidEmail,
@@ -297,16 +298,14 @@ export function ContactForm({
           </option>
         ))}
       </Select>
-      <Field
+      <PhoneField
         id="contact-phone"
         label="Phone (optional)"
-        type="tel"
         value={phone}
-        onChange={(e) => {
-          setPhone(e.target.value);
+        onChange={(next) => {
+          setPhone(next);
           clear('phone');
         }}
-        hint={PHONE_HINT}
         error={fieldErrors.phone}
       />
       <Field
@@ -320,19 +319,18 @@ export function ContactForm({
         }}
         error={fieldErrors.email}
       />
-      <Field
+      <EmiratesIdField
         id="contact-emirates-id"
         label="Emirates ID (optional)"
-        type="text"
         value={emiratesId}
-        onChange={(e) => {
-          setEmiratesId(e.target.value);
+        onChange={(next) => {
+          setEmiratesId(next);
           clear('emiratesId');
         }}
         hint={
           editing && contact?.hasEmiratesId
-            ? 'For example 784-1900-1234567-1. One is already on file. Leave blank to keep it, or type a new one to replace it.'
-            : 'For example 784-1900-1234567-1. Only when the practice must verify this adult. Never required.'
+            ? 'One is already on file. Leave blank to keep it, or type a new one to replace it.'
+            : undefined
         }
         error={fieldErrors.emiratesId}
       />

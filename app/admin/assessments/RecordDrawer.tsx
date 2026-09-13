@@ -16,6 +16,7 @@ import {
 import { AssessmentVisitsResponse, type AssessmentVisit } from '../../api/assessments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { useDrawer } from '../../shell/components/useDrawer';
 import { BAND_LABELS, COMING_SOON, GATE_MESSAGES, REFUSAL_MESSAGES, UNIT_LABELS } from './copy';
@@ -280,12 +281,11 @@ export function RecordDrawer({
               {COMING_SOON.questionnaire}
             </option>
           </Select>
-          <Field
+          <DateField
             id="assessment-date"
             label="Taken on"
-            type="date"
             value={performedOn}
-            onChange={(e) => setPerformedOn(e.target.value)}
+            onChange={setPerformedOn}
           />
           <Select
             id="assessment-visit"

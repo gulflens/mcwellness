@@ -149,7 +149,8 @@ async function fillPriceAndDate(price: string) {
   fireEvent.change(screen.getByLabelText('List price (AED, excluding VAT)'), {
     target: { value: price },
   });
-  fireEvent.change(screen.getByLabelText('Effective from'), { target: { value: '2026-12-01' } });
+  // The box now shows DD/MM/YYYY, so the digits go in that order.
+  fireEvent.change(screen.getByLabelText('Effective from'), { target: { value: '01122026' } });
 }
 
 describe('PriceDrawer', () => {
@@ -356,7 +357,8 @@ describe('PriceDrawer', () => {
     });
     // At today's default date (the standard 5% rate): 45.00 VAT, 945.00 total.
     expect(await screen.findByText('45.00')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Effective from'), { target: { value: '2027-02-01' } });
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
+    fireEvent.change(screen.getByLabelText('Effective from'), { target: { value: '01022027' } });
     // 900 AED at 7%: 63.00 VAT, 963.00 total — the newly fetched rate, not the mount-time one.
     expect(await screen.findByText('63.00')).toBeTruthy();
     expect(screen.getByText('963.00')).toBeTruthy();

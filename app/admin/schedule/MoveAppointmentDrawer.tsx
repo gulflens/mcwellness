@@ -7,6 +7,8 @@ import {
 } from '../../api/appointments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
+import { TimeField } from '../../shell/components/TimeField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { localConflictMessage } from './conflictMessages';
 import {
@@ -209,26 +211,24 @@ export function MoveAppointmentDrawer({
           </div>
 
           <div className="stepper__step">
-            <Field
+            <DateField
               id="move-date"
               label="New date"
-              type="date"
               value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
+              onChange={(next) => {
+                setDate(next);
                 setSubmitError(null);
               }}
             />
           </div>
 
           <div className="stepper__step">
-            <Field
+            <TimeField
               id="move-start-time"
               label="New start time"
-              type="time"
               value={startTime}
-              onChange={(e) => {
-                setStartTime(e.target.value);
+              onChange={(next) => {
+                setStartTime(next);
                 setSubmitError(null);
               }}
               hint={

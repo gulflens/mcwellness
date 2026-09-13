@@ -116,12 +116,31 @@ describe('ContactForm', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('shows example values as hints, never as grey text inside the box', () => {
+  it('carries the Emirates ID example as a placeholder now, not as a hint', () => {
     mount();
-    const phone = screen.getByLabelText('Phone (optional)') as HTMLInputElement;
     const emiratesId = screen.getByLabelText('Emirates ID (optional)') as HTMLInputElement;
-    expect(phone.placeholder).toBe('');
-    expect(emiratesId.placeholder).toBe('');
-    expect(screen.getByText(/for example 784-1900-1234567-1/i)).toBeTruthy();
+    expect(emiratesId.placeholder).toBe('784-1900-1234567-1');
+    expect(screen.queryByText(/for example 784-1900-1234567-1/i)).toBeNull();
+  });
+
+  // A blank Emirates ID box means two different things depending on whether one is
+  // already on file: for a new contact it means "none given"; for a contact who
+  // already has one, saving blank KEEPS it (removeEmiratesId is a separate, explicit
+  // action). The placeholder cannot carry that distinction — it disappears once the
+  // box holds any real digits, and it says nothing about what a blank box does on
+  // save — so this is the one case that still needs a hint rather than an example.
+  it('tells an editor that a blank box keeps the identity number already on file', () => {
+    mount({ ...contact, hasEmiratesId: true });
+    expect(
+      screen.getByText(
+        'One is already on file. Leave blank to keep it, or type a new one to replace it.',
+      ),
+    ).toBeTruthy();
+  });
+
+  it('shows no Emirates ID hint at all for a new contact', () => {
+    mount();
+    expect(screen.queryByText(/one is already on file/i)).toBeNull();
+    expect(document.getElementById('contact-emirates-id-message')).toBeNull();
   });
 });

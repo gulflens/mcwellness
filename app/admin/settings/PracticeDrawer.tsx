@@ -12,7 +12,9 @@ import {
 } from '../../api/practice/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
+import { PhoneField } from '../../shell/components/PhoneField';
 import { useDrawer } from '../../shell/components/useDrawer';
 import { EMIRATE_LABELS } from './emirates';
 
@@ -174,7 +176,20 @@ export function PracticeDrawer({
       errors.vatTrn = typedVatTrn.length === 0 ? VAT_TRN_REQUIRED_MESSAGE : VAT_TRN_LENGTH_MESSAGE;
     }
     const typedWhatsapp = whatsappNumber.replace(/[\s()-]/g, '');
+    // PhoneField folds whatever the number box holds to digits before it
+    // resolves anything, so text with none in it — a paste that missed, a
+    // stray letter — leaves the box showing something while the value this
+    // form sees is '', the field's own "not given". Left unchecked that
+    // reads as an ordinary clear and the optional field would silently save
+    // `null` where a refusal used to stand (fix round finding 6, 2026-09-12).
+    // The box itself, not just what it resolved to, is what says whether
+    // that happened.
+    const whatsappBox = document.getElementById(FIELD_IDS.whatsappNumber);
+    const whatsappBoxHasText =
+      whatsappBox instanceof HTMLInputElement && whatsappBox.value.trim().length > 0;
     if (typedWhatsapp.length > 0 && !/^\+[1-9][0-9]{6,14}$/.test(typedWhatsapp)) {
+      errors.whatsappNumber = WHATSAPP_MESSAGE;
+    } else if (typedWhatsapp.length === 0 && whatsappBoxHasText) {
       errors.whatsappNumber = WHATSAPP_MESSAGE;
     }
     // The same three checks app/api/practice/schema.ts makes, so the drawer
@@ -352,16 +367,13 @@ export function PracticeDrawer({
             onChange={(e) => setLicensingAuthority(e.target.value)}
           />
 
-          <Field
+          <PhoneField
             id={FIELD_IDS.whatsappNumber}
             label="WhatsApp number (optional)"
             hint="What the client portal's ask-for-a-visit button opens. Leave it empty and the portal says to contact the practice, without a button."
-            type="tel"
-            inputMode="tel"
-            maxLength={40}
             value={whatsappNumber}
-            onChange={(e) => {
-              setWhatsappNumber(e.target.value);
+            onChange={(next) => {
+              setWhatsappNumber(next);
               clearFieldError('whatsappNumber');
             }}
             error={fieldErrors.whatsappNumber}
@@ -412,12 +424,11 @@ export function PracticeDrawer({
             error={fieldErrors.website}
           />
 
-          <Field
+          <DateField
             id="practice-licence-expires"
             label="Licence expires (optional)"
-            type="date"
             value={licenceExpiresOn}
-            onChange={(e) => setLicenceExpiresOn(e.target.value)}
+            onChange={setLicenceExpiresOn}
           />
 
           <Field

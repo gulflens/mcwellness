@@ -446,6 +446,58 @@ a.rail__child.rail__child--current {
   cursor: default;
 }
 
+/* A date box with its calendar button at the end, and the native control it
+   borrows the calendar from kept out of the layout entirely. */
+.datefield {
+  position: relative;
+  display: block;
+}
+
+.datefield__text .field__input {
+  inline-size: 100%;
+  padding-inline-end: calc(var(--s-2) + var(--row));
+  font-variant-numeric: tabular-nums;
+}
+
+/* `.datefield` wraps a whole `Field` — label, input, then an optional hint
+   or error line below it (`.field` is a column with a `--s-1` gap) — unlike
+   `.password`, whose span wraps the input alone. Anchoring from the block
+   end would sit the button under that message instead of on the input, so
+   both the button and the hidden native input are anchored from the block
+   start instead, offset past the label's own line box plus the column gap:
+   exactly the input's top edge, whatever the label's size. Do not "fix"
+   this back to `inset-block-end: 0` — that is the bug this note exists to
+   prevent. */
+.datefield__picker {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(var(--lh-small) + var(--s-1));
+  inline-size: var(--row);
+  block-size: var(--row);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.datefield__picker:hover {
+  color: var(--ink);
+}
+
+.datefield__native {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(var(--lh-small) + var(--s-1));
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -1245,4 +1297,105 @@ a.rail__item.rail__item--active:active {
   align-items: center;
   gap: var(--s-3);
   flex-wrap: wrap;
+}
+
+/* PhoneField (app/shell/components/PhoneField.tsx): the code and the rest of
+   the number as one row. The selector takes its own width, the number takes
+   the remainder. */
+.phonefield {
+  display: flex;
+  /* `.phonefield__number` is a whole `.field` — a visible label above its
+     input, then an optional hint/error line below. `.phonefield__code` has
+     no visible label of its own (just a visually-hidden one, which takes no
+     space), so the default `stretch` would centre it against the *whole*
+     `.field` column and leave it sitting above the number box's own input,
+     worse still once a hint or error adds a line beneath it. `flex-start`
+     plus the code box's own top offset (below) is what keeps the two inputs
+     level regardless of what grows underneath either one. */
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+
+.phonefield__code {
+  flex: none;
+  inline-size: 9rem;
+  /* Pushes the select down past where `.field__label`'s line box plus
+     `.field`'s own `--s-1` row gap would sit, the same offset `DateField`
+     anchors its calendar button from (`.datefield__picker`) and for the same
+     reason: this is the only way to line up with an input that has a real
+     label above it without measuring anything at runtime. */
+  padding-block-start: calc(var(--lh-small) + var(--s-1));
+}
+
+.phonefield__code .field__input {
+  inline-size: 100%;
+}
+
+.phonefield__number {
+  flex: 1 1 auto;
+}
+
+.phonefield__number .field__input {
+  inline-size: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * DrawerResizeHandle (app/shell/components/DrawerResizeHandle.tsx): the drag
+ * handle every drawer shares (the operator's ask of 2026-09-12, "be able to
+ * resize this client enrollment area … pull it with the handle slightly to
+ * make room"). Mounted once in AdminLayout as a sibling of `.admin__main`
+ * rather than once inside each of the 27 screens that render a `.drawer`, so
+ * it is fixed to the viewport rather than positioned inside the drawer it
+ * moves — `.drawer` is itself `position: fixed; inset-inline-end: 0`, so
+ * anchoring this the same way at the drawer's own width means it tracks the
+ * drawer's inner edge automatically as `--drawer` changes, with no measuring
+ * of anything at runtime.
+ */
+.drawer__resize {
+  display: none;
+  position: fixed;
+  inset-block: 0;
+  inset-inline-end: var(--drawer);
+  inline-size: var(--s-3);
+  cursor: col-resize;
+  touch-action: none;
+  /* Above the drawer (2) and the rail's own overlay (2): this is the one
+     control that must stay reachable exactly while a drawer covers it. */
+  z-index: 3;
+}
+
+/*
+ * Shown only while a drawer is actually on screen, asked of the DOM directly
+ * rather than tracked as state: nothing here has to know when a drawer opens
+ * or closes, or which of the 27 it is. The first `:has()` in this stylesheet
+ * — every browser the console targets supports it.
+ */
+.admin:has(.drawer) .drawer__resize {
+  display: block;
+}
+
+.drawer__resize::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: var(--hairline);
+  background: var(--rule);
+}
+
+.drawer__resize:hover::after,
+.drawer__resize:focus-visible::after {
+  background: var(--brand);
+  inline-size: 2px;
+}
+
+/* Below the tablet tier the drawer is already the full width; there is
+   nothing to drag. Written with the same compound selector as the rule that
+   shows the handle, and after it, so it wins the tie on specificity rather
+   than losing to source order. */
+@media (max-width: 767px) {
+  .admin:has(.drawer) .drawer__resize {
+    display: none;
+  }
 }

@@ -9,7 +9,8 @@ import {
   type VisitChoice,
 } from '../../api/reports/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { Button, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { Ribbon } from './Ribbon';
 import { mayOfferSigning } from './reportsAccess';
 
@@ -384,28 +385,17 @@ export function ReportEditor({
         </h3>
         {kind === 'progress' ? (
           <>
-            <Field
+            <DateField
               id="report-from"
               label="From"
-              type="date"
               value={editing.coverageFrom}
-              onChange={(event) => {
-                // The value is read before the updater runs: React nulls
-                // `currentTarget` once the handler returns, and a functional
-                // updater runs after it.
-                const value = event.currentTarget.value;
-                setEditing((was) => ({ ...was, coverageFrom: value }));
-              }}
+              onChange={(next) => setEditing((was) => ({ ...was, coverageFrom: next }))}
             />
-            <Field
+            <DateField
               id="report-to"
               label="To"
-              type="date"
               value={editing.coverageTo}
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                setEditing((was) => ({ ...was, coverageTo: value }));
-              }}
+              onChange={(next) => setEditing((was) => ({ ...was, coverageTo: next }))}
             />
           </>
         ) : visits.length === 0 ? (

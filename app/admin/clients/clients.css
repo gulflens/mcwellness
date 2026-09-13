@@ -126,7 +126,7 @@
 .drawer__form {
   display: flex;
   flex-direction: column;
-  gap: var(--s-5);
+  gap: var(--s-3);
 }
 
 .drawer__actions {

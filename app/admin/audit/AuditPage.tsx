@@ -9,7 +9,8 @@ import {
   type ActivityEvent,
 } from '../../api/audit/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
-import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
+import { Button, Note, PageHeader, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { Table, type Column } from '../../shell/components/Table';
 import { describeRoles } from '../../shell/routing';
 import './audit.css';
@@ -420,19 +421,17 @@ export function AuditPage() {
             </option>
           ))}
         </Select>
-        <Field
+        <DateField
           id="audit-from"
           label="From"
-          type="date"
           value={filters.from}
-          onChange={(e) => change({ from: e.target.value })}
+          onChange={(next) => change({ from: next })}
         />
-        <Field
+        <DateField
           id="audit-to"
           label="To"
-          type="date"
           value={filters.to}
-          onChange={(e) => change({ to: e.target.value })}
+          onChange={(next) => change({ to: next })}
         />
       </div>
 

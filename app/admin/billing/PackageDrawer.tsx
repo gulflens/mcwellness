@@ -9,6 +9,7 @@ import {
 } from '../../api/billing/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { DiscountFields } from './DiscountFields';
 import { focusFirstInvalid } from './refusal';
@@ -449,12 +450,11 @@ export function PackageDrawer({
             onChange={(e) => choosePriceNow(e.target.value)}
             error={fieldErrors.price}
           />
-          <Field
+          <DateField
             id="package-valid-from"
             label="On sale from"
-            type="date"
             value={validFrom}
-            onChange={(e) => setValidFrom(e.target.value)}
+            onChange={setValidFrom}
           />
           <Field
             id="package-reason"

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
@@ -203,7 +204,10 @@ async function fillIdentity() {
   fireEvent.change(screen.getByLabelText('Relationship to the client'), {
     target: { value: 'self' },
   });
-  fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971500000058' } });
+  // PhoneField holds the country in its own control (default +971), so only
+  // the national part is typed here — the box would double up the code if
+  // the full E.164 string were typed into it.
+  fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '500000058' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
 }
 
@@ -289,20 +293,25 @@ describe('EnrolmentWizard', () => {
     expect(await screen.findByRole('button', { name: 'Add goal' })).toBeTruthy();
   });
 
-  it('names a phone typed without its country code, rather than looping on a generic line', async () => {
+  it('names a phone that is too short to be a real number, rather than looping on a generic line', async () => {
+    // PhoneField always attaches a country (the select defaults to +971), so
+    // there is no longer a way through this control to submit a number
+    // missing its country code — that was the original bug this check
+    // guarded against (design review of pull request 35). What isValidPhone
+    // still catches is a number too short to be real once the country is
+    // joined on, and the field still names it rather than looping on a
+    // generic line.
     const { calls } = mountWithRecord(baseRecord());
     fireEvent.change(screen.getByLabelText('Given name'), { target: { value: 'Laurel' } });
     fireEvent.change(screen.getByLabelText('Family name'), { target: { value: 'Meadow' } });
     fireEvent.change(screen.getByLabelText('Relationship to the client'), {
       target: { value: 'self' },
     });
-    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '0500001234' } });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '12' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
 
     expect(
-      await screen.findByText(
-        'Enter the phone number with its country code, for example +971500001234.',
-      ),
+      await screen.findByText('Choose the country, then enter the rest of the number.'),
     ).toBeTruthy();
     // Nothing was sent: the rule the server holds is checked before the request.
     expect(calls.some((c) => c.url === '/api/clients')).toBe(false);
@@ -311,6 +320,7 @@ describe('EnrolmentWizard', () => {
   });
 
   it('refuses a date of birth in the future, naming the field', async () => {
+    const user = userEvent.setup();
     mountWithRecord(baseRecord());
     const future = new Date(
       Date.now() +
@@ -319,15 +329,19 @@ describe('EnrolmentWizard', () => {
     )
       .toISOString()
       .slice(0, 10);
+    const [futureYear, futureMonth, futureDay] = future.split('-');
     fireEvent.change(screen.getByLabelText('Given name'), { target: { value: 'Laurel' } });
     fireEvent.change(screen.getByLabelText('Family name'), { target: { value: 'Meadow' } });
     fireEvent.change(screen.getByLabelText('Relationship to the client'), {
       target: { value: 'self' },
     });
-    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '+971500000058' } });
-    fireEvent.change(screen.getByLabelText('Date of birth (optional)'), {
-      target: { value: future },
-    });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '500000058' } });
+    // The box now holds DD/MM/YYYY, so the digits are typed in that order
+    // rather than the ISO value being written straight in.
+    await user.type(
+      screen.getByLabelText('Date of birth (optional)'),
+      `${futureDay}${futureMonth}${futureYear}`,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Save and continue' }));
     expect(await screen.findByText('A date of birth is in the past.')).toBeTruthy();
   });

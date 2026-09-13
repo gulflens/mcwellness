@@ -500,7 +500,8 @@ describe('the journal', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Post an entry' }));
     await screen.findByRole('dialog');
 
-    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '2026-06-30' } });
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '30062026' } });
     expect(
       await screen.findByText('The books are locked through 30 Jun 2026. Choose a later day.'),
     ).toBeTruthy();
@@ -528,7 +529,7 @@ describe('the journal', () => {
     expect(mounted.posted.some((call) => call.path === '/api/accounting/entries')).toBe(false);
 
     // A day the lock leaves open takes the sentence away again.
-    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '2026-07-01' } });
+    fireEvent.change(screen.getByLabelText('Day'), { target: { value: '01072026' } });
     await waitFor(() =>
       expect(
         screen.queryByText('The books are locked through 30 Jun 2026. Choose a later day.'),
@@ -564,6 +565,43 @@ describe('the journal', () => {
     );
     const sent = mounted.posted.find((call) => call.path.endsWith('/reversal'))!;
     expect(sent.reason).toBe('It was posted against the wrong account.');
+  });
+
+  it('lets Tab reach the drawer width handle from EntryDrawer, not only the mouse', async () => {
+    // The handle (app/shell/components/DrawerResizeHandle.tsx) is mounted by
+    // the shell beside `.admin__main`, never inside a drawer — this page's
+    // own render tree has no shell around it, so a bare stand-in is used in
+    // its place, at the class name the hook looks for. Fix round finding 3,
+    // 2026-09-12: this module's own copy of the focus-trap hook scoped Tab to
+    // the drawer's subtree and never queried past it, so the handle — mouse
+    // draggable already — could not be reached from the keyboard at all.
+    const handle = document.createElement('div');
+    handle.className = 'drawer__resize';
+    handle.tabIndex = 0;
+    document.body.append(handle);
+    try {
+      mount(OWNER);
+      await screen.findByText('Result, year to date');
+      fireEvent.click(screen.getByRole('button', { name: 'Journal' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Post an entry' }));
+      await screen.findByRole('dialog');
+
+      const close = screen.getByRole('button', { name: 'Close' });
+      // jsdom does no layout, so `offsetParent` — the check this hook's own
+      // cycle otherwise uses for every ordinary control — reads `null` for
+      // anything that is not the active element; stubbed here so tabbing
+      // focus away from Close does not also drop it out of the cycle (same
+      // stub, same reason, as app/shell/App.test.tsx's own version of this
+      // check).
+      Object.defineProperty(close, 'offsetParent', { value: document.body, configurable: true });
+      close.focus();
+      fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+      expect(document.activeElement).toBe(handle);
+      fireEvent.keyDown(document, { key: 'Tab' });
+      expect(document.activeElement).toBe(close);
+    } finally {
+      handle.remove();
+    }
   });
 });
 
@@ -683,8 +721,9 @@ describe('the books’ settings', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Lock through' }));
     await screen.findByRole('dialog');
+    // The box now shows DD/MM/YYYY, so the digits go in that order.
     fireEvent.change(screen.getByLabelText('Lock the books through'), {
-      target: { value: '2030-01-01' },
+      target: { value: '01012030' },
     });
     fireEvent.change(screen.getByLabelText('Why the lock moves'), {
       target: { value: 'The quarter has been filed.' },

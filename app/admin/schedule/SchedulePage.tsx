@@ -7,7 +7,8 @@ import {
 } from '../../api/appointments/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { canOpenSettings } from '../../shell/adminAccess';
-import { Button, Field, Note, PageHeader } from '../../shell/components/Controls';
+import { Button, Note, PageHeader } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { StatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from './appointmentStatus';
@@ -304,14 +305,9 @@ export function SchedulePage() {
         }
       />
       <div className="toolbar">
-        <Field
-          id="schedule-date"
-          className="schedule__date"
-          label="Date"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <div className="schedule__date">
+          <DateField id="schedule-date" label="Date" value={date} onChange={setDate} />
+        </div>
         {/* Still links — each goes to another screen — and from 2026-09-12 they
             wear the console's one switcher look (app/shell/shell.css), so the
             schedule's other views read like every other page's sections. */}

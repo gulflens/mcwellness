@@ -29,6 +29,7 @@ export type { KnownMimeType } from './fileSignature';
 export {
   EMIRATES_ID_DIGITS,
   formatEmiratesId,
+  groupEmiratesIdDigits,
   normaliseEmiratesId,
   toLatinDigits,
 } from './emirates-id';
@@ -57,4 +58,5 @@ export {
   passwordProblemKey,
 } from './password';
 export type { PasswordProblemKey } from './password';
+export { joinE164, splitE164, stripTrunkPrefix } from './phone';
 export { MAP_DOCUMENT_PATHS } from './widened-document-paths';
