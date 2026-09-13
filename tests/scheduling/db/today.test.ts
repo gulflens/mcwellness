@@ -200,6 +200,22 @@ beforeAll(async () => {
     plus45(firstStart),
     'confirmed',
   ]);
+  // What the first household told the practice about their health, twice: an
+  // older declaration with nothing to say, and the newest with two yeses and
+  // a note. The card must carry the newest's yeses and never the note
+  // (docs/SPEC/client-record.md section 4.6).
+  await owner.query(
+    'insert into health_declaration (tenant_id, client_id, asked_at, seizures, implanted_device, ' +
+      'head_injury, pregnancy, medication, scalp, created_by) ' +
+      "values ($1, $2, now() - interval '30 days', false, false, false, false, false, false, $3)",
+    [IDS.tenantA, CLIENT_FIRST, IDS.ownerA],
+  );
+  await owner.query(
+    'insert into health_declaration (tenant_id, client_id, seizures, implanted_device, ' +
+      'head_injury, pregnancy, medication, medication_note, scalp, created_by) ' +
+      "values ($1, $2, false, false, true, false, true, 'Melatonin at night', false, $3)",
+    [IDS.tenantA, CLIENT_FIRST, IDS.ownerA],
+  );
 
   // The second stop: no date of birth, and nobody has recorded where to park.
   await seedClient(owner, IDS.tenantA, CLIENT_SECOND, IDS.ownerA, 'Second');
@@ -338,6 +354,21 @@ describe("GET /api/appointments?scope=own — the practitioner's own day", () =>
     expect(second?.location.entrancePoint).toEqual(ENTRANCE);
   });
 
+  it('names what the household told the practice about their health, by key', async () => {
+    // The newest declaration's yeses, in the agreement's order, and nothing of
+    // the notes (client-record.md section 4.6: a "yes" shows on the card and
+    // blocks nothing).
+    const stops = await stopsFrom(await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`));
+    expect(stops.find((a) => a.id === APPOINTMENT_FIRST)?.declared).toEqual([
+      'headInjury',
+      'medication',
+    ]);
+    // Never asked, or every answer no: the same empty list.
+    expect(stops.find((a) => a.id === APPOINTMENT_SECOND)?.declared).toEqual([]);
+    const raw = await rawFrom(await list(PRACTITIONER_ONE_AUTH, `date=${TODAY}&scope=own`));
+    expect(JSON.stringify(raw)).not.toContain('Melatonin');
+  });
+
   it('means own even for a role that may read every appointment in the practice', async () => {
     // The owner reads the whole practice under scheduling_read_scope, so the
     // route's own practitioner_id predicate is the only thing narrowing this.
@@ -398,6 +429,7 @@ describe('GET /api/appointments — the practice scope carries none of it', () =
       const client = raw.client as Record<string, unknown>;
       const location = raw.location as Record<string, unknown>;
       expect(client).not.toHaveProperty('mrn');
+      expect(raw).not.toHaveProperty('declared');
       expect(client).not.toHaveProperty('age');
       expect(client).not.toHaveProperty('familyInitial');
       expect(location).not.toHaveProperty('entrancePoint');

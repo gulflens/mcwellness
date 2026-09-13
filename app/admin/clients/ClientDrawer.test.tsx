@@ -193,9 +193,21 @@ describe('ClientDrawer', () => {
     // Locations, consents, goals and documents are not finance's to read
     // (docs/SPEC/client-record.md section 2 and rule 6); the read policies refuse
     // them, so a tab would open onto nothing it could fill.
-    for (const name of ['Locations', 'Consent', 'Goals', 'Documents']) {
+    for (const name of ['Locations', 'Consent', 'Health', 'Goals', 'Documents']) {
       expect(screen.queryByRole('tab', { name })).toBeNull();
     }
+  });
+
+  it('carries a Health tab after Consent, which says when nobody has asked yet', async () => {
+    // The six health answers (docs/SPEC/client-record.md section 4.6). Every
+    // client enrolled before 2026-09-14 has none, and the tab says so rather
+    // than showing six blanks.
+    mount();
+    await screen.findByRole('tablist');
+    const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
+    expect(tabs.indexOf('Health')).toBe(tabs.indexOf('Consent') + 1);
+    fireEvent.click(screen.getByRole('tab', { name: 'Health' }));
+    expect(await screen.findByText('Not asked yet.')).toBeTruthy();
   });
 
   it('offers no write action to a practitioner, and every one to an admin', async () => {

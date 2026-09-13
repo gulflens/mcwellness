@@ -9,11 +9,18 @@ import { ConsentTab } from './ConsentTab';
 import { ContactsTab } from './ContactsTab';
 import { DocumentsTab } from './DocumentsTab';
 import { GoalsTab } from './GoalsTab';
+import { HealthTab } from './HealthTab';
 import { LocationsTab } from './LocationsTab';
 import { OverviewTab } from './OverviewTab';
 import { ReportsTab } from '../reports/ReportsTab';
 import { Tabs, TabPanel, type Tab } from './Tabs';
-import { canSeeFullRecord, canWriteGoals, canWriteRecord } from './clientAccess';
+import {
+  canSeeFullRecord,
+  canWriteConcerns,
+  canWriteGoals,
+  canWriteHealth,
+  canWriteRecord,
+} from './clientAccess';
 import { clientHeadingName } from './contactName';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { useClientRecord } from './useClientRecord';
@@ -23,6 +30,10 @@ const ALL_TABS: readonly Tab[] = [
   { id: 'contacts', label: 'Contacts' },
   { id: 'locations', label: 'Locations' },
   { id: 'consent', label: 'Consent' },
+  // The six health answers (docs/SPEC/client-record.md section 4.6). After
+  // Consent because they are held under it, and before Goals because they are
+  // about the person where a goal is about the programme.
+  { id: 'health', label: 'Health' },
   { id: 'goals', label: 'Goals' },
   { id: 'documents', label: 'Documents' },
   // Piece ten's measurements (docs/SPEC/assessment.md section 3.1;
@@ -81,6 +92,8 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
   // and the policies refuse it under them, so no tab offers it either.
   const mayWrite = canWriteRecord(actor, now) && !erased;
   const mayWriteGoals = canWriteGoals(actor) && !erased;
+  const mayWriteConcerns = canWriteConcerns(actor) && !erased;
+  const mayWriteHealth = canWriteHealth(actor) && !erased;
   const tabs = canSeeFullRecord(actor) ? ALL_TABS : FINANCE_TABS;
 
   useEffect(() => {
@@ -201,12 +214,22 @@ export function ClientDrawer({ client, onClose }: { client: ClientRow; onClose: 
                 erased={erased}
               />
             </TabPanel>
+            <TabPanel id="health" idPrefix="client" selected={tab}>
+              <HealthTab
+                clientId={client.id}
+                record={state.record}
+                onChanged={() => void refetch(reason.trim() || undefined)}
+                mayWrite={mayWriteHealth}
+                erased={erased}
+              />
+            </TabPanel>
             <TabPanel id="goals" idPrefix="client" selected={tab}>
               <GoalsTab
                 clientId={client.id}
                 record={state.record}
                 onChanged={() => void refetch(reason.trim() || undefined)}
                 mayWrite={mayWriteGoals}
+                mayWriteConcerns={mayWriteConcerns}
                 erased={erased}
               />
             </TabPanel>

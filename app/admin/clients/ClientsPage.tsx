@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
-import { canWriteGoals, canWriteRecord } from './clientAccess';
+import { canWriteConcerns, canWriteGoals, canWriteHealth, canWriteRecord } from './clientAccess';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
@@ -107,6 +107,8 @@ export function ClientsPage() {
   const mayEnrol = canWriteRecord(actor, new Date());
   // An admin writes the record but never sets a goal (client-record.md section 2).
   const mayWriteGoals = canWriteGoals(actor);
+  const mayWriteConcerns = canWriteConcerns(actor);
+  const mayWriteHealth = canWriteHealth(actor);
   const [status, setStatus] = useState<string>('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<State>({ kind: 'loading' });
@@ -305,6 +307,8 @@ export function ClientsPage() {
           onCreated={wizardCreatedLead}
           onActivated={wizardActivated}
           mayWriteGoals={mayWriteGoals}
+          mayWriteConcerns={mayWriteConcerns}
+          mayWriteHealth={mayWriteHealth}
         />
       ) : null}
     </section>

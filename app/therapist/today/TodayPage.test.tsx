@@ -61,6 +61,7 @@ function stop(id: string, hour: string, clientId: string, given: string) {
       familyInitialAr: null,
       age: 9,
     },
+    declared: [],
     serviceType: {
       id: '00000004-0000-4000-8000-000000000001',
       code: 'nf-session',
@@ -173,6 +174,14 @@ describe('describeLeg', () => {
 });
 
 describe('the day sheet with the real implementation', () => {
+  it('says what a household told the practice about their health, in a word each', async () => {
+    // A "yes" shows on the card and blocks nothing (client-record.md section
+    // 4.6); a stop with nothing declared carries no line at all.
+    mount(TRAFFIC, [{ ...STOPS[0], declared: ['headInjury', 'medication'] }, STOPS[1]]);
+    expect(await screen.findByText('Told us about: a head injury, medication.')).toBeTruthy();
+    expect(screen.getAllByText(/Told us about/)).toHaveLength(1);
+  });
+
   it('shows the picture and the drive between two stops', async () => {
     mount(TRAFFIC);
     expect(await screen.findByText('Rowan M.')).toBeTruthy();

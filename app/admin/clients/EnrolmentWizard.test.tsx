@@ -194,6 +194,8 @@ function mountWithRecord(
         onCreated={onCreated}
         onActivated={onActivated}
         mayWriteGoals
+        mayWriteConcerns
+        mayWriteHealth
       />
     </AuthProviderBoundary>,
   );
@@ -223,7 +225,11 @@ async function goToSummary() {
   // The consent step is the record's own Consent tab: every purpose listed,
   // with what activation still needs at the top.
   await screen.findByText('Participation');
-  fireEvent.click(screen.getByRole('button', { name: 'Next' })); // consent -> summary
+  fireEvent.click(screen.getByRole('button', { name: 'Next' })); // consent -> health
+  // The health step is the record's own Health tab, after consent because the
+  // six answers are held under it (client-record.md section 4.6).
+  await screen.findByText('Not asked yet.');
+  fireEvent.click(screen.getByRole('button', { name: 'Next' })); // health -> summary
 }
 
 describe('EnrolmentWizard', () => {

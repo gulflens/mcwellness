@@ -193,6 +193,22 @@ export const HealthDeclaration = z.object({
 });
 export type HealthDeclaration = z.infer<typeof HealthDeclaration>;
 
+/**
+ * The six questions by key, in the agreement's own order. The record's Health
+ * tab walks this list to draw its form, and the practitioner's day sheet
+ * names a "yes" by it (app/api/appointments/schema.ts), so a seventh question
+ * is added here once and both screens hear of it from the compiler.
+ */
+export const HEALTH_QUESTIONS = [
+  'seizures',
+  'implantedDevice',
+  'headInjury',
+  'pregnancy',
+  'medication',
+  'scalp',
+] as const;
+export type HealthQuestion = (typeof HEALTH_QUESTIONS)[number];
+
 export const ClientRecordResponse = z.object({
   id: z.uuid(),
   mrn: z.string(),
@@ -376,9 +392,10 @@ const HealthNote = z.string().trim().max(500).optional();
 
 export const RecordHealthBody = z.object({
   /**
-   * Which version of the agreement asked, as told by the screen that asked.
-   * The enrolment step knows it, because it has just shown the wording; a later
-   * edit on the record does not, and leaves it out.
+   * Which version of the agreement asked, as told by the screen that asked:
+   * the standing participation consent's wording version, which both the
+   * enrolment step and the record's Health tab read off the record
+   * (app/admin/clients/HealthTab.tsx). Left out where none stands.
    */
   wordingVersion: z.string().max(40).optional(),
   seizures: z.boolean(),

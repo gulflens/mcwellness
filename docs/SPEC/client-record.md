@@ -100,6 +100,21 @@ ID gets, so that when the erasure deletes the rows nothing of them is left
 anywhere. The trail still says a declaration was recorded, for whom, by whom,
 when and why.
 
+**The screens** (built 2026-09-14, `docs/CHANGE-REQUESTS/client-record-05.md`).
+A **Health** tab on the record, after Consent: the six questions with the
+newest answers and any note, when they were asked and under which wording,
+or "Not asked yet" for every client enrolled before the round; "Record the
+answers" (or "Record a change") opens the six as yes/no pairs with an optional
+note behind each yes, all six required — "we did not ask" is not "no" — and
+the tab says in a sentence, and offers no form, while no `health_data` consent
+stands. The enrolment wizard's **Health step** is the same tab at a different
+moment, after Consent. **Concerns** sit beneath the goals on the Goals tab and
+the wizard's Goals step, with Open/Resolved and "Add concern" for the owner,
+an admin and the lead practitioner. And **the visit card** on the
+practitioner's day sheet carries one line under the service name — *Told us
+about: a head injury, medication.* — naming any yes from the newest
+declaration, in plain ink, blocking nothing; the notes stay on the record.
+
 **A change is a new row.** Each asking is its own row with who recorded it and
 when; the newest is the current answer and the older ones are what was true
 before. The table grants no update at all, and there is no route that edits
@@ -121,7 +136,7 @@ them.
 chose to tell a wellness practice, in the agreement's own words, so that the
 person at the door is not surprised.
 
-**4.3 Enrolment.** The wizard that enrols a new client (the operator's word, 2026-09-03: enrolment, never intake). Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → goals (goals and concerns, referral) → consent capture → health answers (section 4.6; after consent, because the route refuses them without it — *the step itself is the next round's, 2026-09-14*) → summary. Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
+**4.3 Enrolment.** The wizard that enrols a new client (the operator's word, 2026-09-03: enrolment, never intake). Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → goals (goals and concerns, referral) → consent capture → health answers (section 4.6; after consent, because the route refuses them without it) → summary. *The Health step was built on 2026-09-14, the same day as the data.* Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
 
 ## 5. Rules (each is a pure function in `domain/client`, each has tests)
 
