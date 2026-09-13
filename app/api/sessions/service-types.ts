@@ -32,6 +32,11 @@ import {
  * matching app/api/billing/service-types.ts's own filter and checkin.ts's own
  * service_type lookup. It carries no personal data, so nothing here is
  * audited.
+ *
+ * Also answers whether the practice records readings at all
+ * (`tenant.record_readings`, migration 964): the session runner has no other
+ * way to learn it, since `GET /api/practice` is the owner's and an admin's
+ * (`practice.settings.write`) and a practitioner holds neither.
  */
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 
@@ -128,10 +133,11 @@ export function mountServiceTypes(api: Hono<ApiEnv>, now: () => Date = () => new
       ),
     ];
 
+    const db = c.get('db');
     const rows =
       serviceTypeIds.length === 0
         ? []
-        : (await c.get('db').query<ServiceTypeRow>(SQL, [serviceTypeIds])).rows;
+        : (await db.query<ServiceTypeRow>(SQL, [serviceTypeIds])).rows;
     const serviceTypes: ServiceTypeOption[] = rows.map((row) => ({
       id: row.id,
       code: row.code,
@@ -140,6 +146,17 @@ export function mountServiceTypes(api: Hono<ApiEnv>, now: () => Date = () => new
       preflightChecklist: readChecklist(row.preflight_checklist),
       ratingQuestions: readQuestions(row.rating_questions),
     }));
-    return c.json(ServiceTypesResponse.parse({ serviceTypes }));
+
+    const tenantRow = (
+      await db.query<{ record_readings: boolean }>(
+        'select record_readings from tenant where id = app.current_tenant_id()',
+      )
+    ).rows[0];
+    return c.json(
+      ServiceTypesResponse.parse({
+        serviceTypes,
+        recordReadings: tenantRow?.record_readings ?? false,
+      }),
+    );
   });
 }

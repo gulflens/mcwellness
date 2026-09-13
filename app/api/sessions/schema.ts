@@ -137,6 +137,16 @@ export type ServiceTypeOption = z.infer<typeof ServiceTypeOption>;
 
 export const ServiceTypesResponse = z.object({
   serviceTypes: z.array(ServiceTypeOption),
+  /**
+   * `tenant.record_readings` (migration 964), carried alongside the
+   * practitioner's own service types because this is the one door a
+   * practitioner's session runner can reach: `GET /api/practice` gates on
+   * `practice.settings.write` (app/api/practice/routes.ts), the owner and an
+   * admin, and a practitioner is neither. Off by default — the practice runs
+   * its brain mapping and neurofeedback on its own software — a later pull
+   * request is what makes the runner act on it; this one only delivers it.
+   */
+  recordReadings: z.boolean(),
 });
 export type ServiceTypesResponse = z.infer<typeof ServiceTypesResponse>;
 

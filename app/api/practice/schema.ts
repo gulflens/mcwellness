@@ -164,6 +164,15 @@ export const Practice = z.object({
   vatRegistered: z.boolean(),
   vatTrn: z.string().nullable(),
   /**
+   * Whether a visit asks for a reading at all (migration 964, `tenant`'s own
+   * column — the practice IS the tenant row, there is no separate `practice`
+   * table). Off by default: the practice runs its brain mapping and
+   * neurofeedback on its own software, so the app's own reading capability
+   * is dormant rather than deleted, ready for whichever practice later wants
+   * it switched back on.
+   */
+  recordReadings: z.boolean(),
+  /**
    * What the practice has supplied, net of VAT, over the twelve months ending
    * on `vatTaxableSuppliesAsOf` (migration 953). Read-only: it is counted from
    * the invoice book, never typed, and `UpdatePracticeInput` has no such
@@ -209,6 +218,12 @@ export const UpdatePracticeInput = z
     licenceExpiresOn: IsoDate.nullable(),
     vatRegistered: z.boolean(),
     vatTrn: VatTrn,
+    /**
+     * Optional, like the three contact fields below it: a body that never
+     * mentioned the switch leaves `tenant.record_readings` as it stands
+     * rather than forcing every caller to restate it.
+     */
+    recordReadings: z.boolean().optional(),
     whatsappNumber: WhatsappNumber,
     /**
      * Optional, and the three are the only optional fields on this form.

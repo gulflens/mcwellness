@@ -50,6 +50,10 @@ const PRACTICE = {
   contactPhone: null,
   contactEmail: null,
   website: null,
+  // Off by default (migration 964): the practice runs its brain mapping and
+  // neurofeedback on its own software, so a visit does not ask for readings
+  // unless this is switched on.
+  recordReadings: false,
   defaultEmirate: 'DXB',
   timezone: 'Asia/Dubai',
   address: {
@@ -539,5 +543,27 @@ describe('Practice settings — the VAT threshold watch', () => {
     });
     expect(await screen.findByText('410,000.00')).toBeTruthy();
     expect(screen.queryByText(/duty within thirty days/)).toBeNull();
+  });
+});
+
+describe('Practice settings — recording readings', () => {
+  it('shows the switch off, and says the practice uses its own software', async () => {
+    mount();
+    await openTheDrawer();
+    const box = screen.getByLabelText('Record readings during a session') as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(screen.getByText(/uses its own software/i)).toBeTruthy();
+  });
+
+  it('sends the switch when it is turned on', async () => {
+    const { calls } = mount(() => json({ practice: { ...PRACTICE, recordReadings: true } }));
+    await openTheDrawer();
+    fireEvent.click(screen.getByLabelText('Record readings during a session'));
+    type('Why this changes', 'The practice added its own reading capability.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({
+      recordReadings: true,
+    });
   });
 });
