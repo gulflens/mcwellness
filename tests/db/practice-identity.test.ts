@@ -69,6 +69,14 @@ describe('the practice’s identity', () => {
     expect(row.licence_expires_on).toBeNull();
   });
 
+  it('records readings off by default, because the practice uses its own software', async () => {
+    // Migration 964. The app's own reading capability goes dormant, not
+    // deleted: a newly bootstrapped environment must start behaving the way
+    // this practice actually works.
+    const row = await tenantRow();
+    expect(row.record_readings).toBe(false);
+  });
+
   it('keeps the corporate tax number and the VAT number in different columns', async () => {
     // The whole point of the pair: recording one says nothing about the other.
     await rolledBack(owner, async () => {
