@@ -1604,3 +1604,69 @@ cost: a focus-trap fix landed in one copy and left the drag handle
 keyboard-unreachable in eleven drawers until a whole-branch review caught it.
 Three copies of a behavioural hook is three chances to be one edit behind, and
 no test would say so.
+
+## What was done on 2026-09-13: the twenty-third live pass — a calendar the page draws
+
+**Why.** The operator, **on Safari**, opened the calendar button on the New
+appointment drawer and got the browser's own date picker falling off the outer
+edge of the drawer, clipped by the window, and drawn as small grey browser
+chrome that matched nothing else on the page. Their words: "every calendar
+button in the app should be revised, the calendar open inward towards the
+browser window and not outside and being clipped."
+
+**Why re-anchoring it was the wrong fix, and a branch was closed to say so.**
+The first diagnosis was the anchor, and it was correct as far as it went: the
+hidden native input was a 1px dot pinned to the field's inline end, so in a
+drawer docked to the inline end of the screen the picker had almost no room and
+opened outward. Pull request 173 fixed that and was **closed unmerged**. A
+native picker's panel has **no CSS surface in any browser** — only the indicator
+icon is exposed — so moving the anchor answers the clipping and leaves the
+second complaint, that it does not match the app, permanently unanswerable. The
+whole native control is gone instead.
+
+**What went live.** Main `1e39647` (pull request 174). `CalendarPanel`, drawn in
+the page: the app's own type, `--brand` on the chosen day, a hairline for today,
+tabular figures. It portals to the body and is `position: fixed`, so the
+drawer body's `overflow: auto` cannot clip it. Placement is a **pure function**,
+`placeCalendarPanel({ anchor, panel, viewport, direction, gap, margin })`,
+unit-tested over fabricated rects — including a case written for this bug and a
+sweep of 180 combinations of position, viewport width and direction. Typing is
+untouched and still the primary way in; `value` and `onChange` remain ISO
+`YYYY-MM-DD` and all 26 call sites are unchanged.
+
+**A timezone trap handled deliberately.** `new Date('1986-09-30')` parses as UTC
+midnight and `toISOString()` on a locally-built date crosses the boundary. The
+practice is UTC+4. Every date is built with `new Date(year, monthIndex, day)`
+and read with local getters; nothing round-trips through an ISO parse. Tested at
+1 January and 31 December.
+
+**The pass.** Archive `mcwellness-1e39647.tar.gz` (6,349,125 bytes); TUS create
+201 and PATCH 204 with the offset equal to the size; build `01a09aec`. Bundle
+`index-CTFM9aAd.js` → `index-BQknus28.js`, stylesheet `index-BWDEBIWx.css` →
+`index-CxD9fCWF.css`. `/api/health` 200 in 0.76 s, `/api/health/deep` 200 in
+0.83 s. No restart — the sixth consecutive pass.
+
+**The served stylesheet hash was byte-identical to the one the local
+`pnpm build` produced** before anything was uploaded. Same input, same output:
+proof the host built this tree and not something else. Worth doing every pass —
+it costs nothing, because the build has already been run locally to verify.
+
+**A third correction to the hash rule, and the previous two were too simple.**
+The entry bundle's byte count was **identical** across this pass — 475,526
+before and after — despite a whole new component and a substantially rewritten
+`DateField`. The entry bundle does not *contain* the screen components; it
+contains their **filenames**. So an identical entry-bundle size does not mean
+"no real code changed"; it means "nothing in the entry bundle changed", which is
+nearly always true on a code-split app. **The check that works is to follow the
+chunk:** the entry named `DateField-CThzYZHq.js`, the previous
+`DateField-Bzgv7edf.js` now 404s, and the new one is 8,656 bytes carrying
+`calendar__day` and the dialog's accessible name with zero `showPicker`. That is
+the change, in the served bytes, in the file that holds it. Entry-bundle byte
+counts tell you almost nothing here.
+
+**Verified by the operator, in Safari, on the real screen.** This is the pass
+where that mattered most and where this session could not do it: WebKit could
+not be installed in the environment, so placement was proved as a pure function
+rather than measured in a live panel in the browser the defect was reported
+from. That gap was stated before the upload rather than after, and the operator
+closed it: "it work amazing".
