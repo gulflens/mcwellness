@@ -9,6 +9,7 @@ import { SessionRunner, type RunnerVisit } from './SessionRunner';
 import { useForgetDeviceOnSignOut } from './outbox/signed-out';
 import { createOutboxStore, type OutboxStore } from './outbox/store';
 import { ServiceTypeOptionsResponse, SessionErrorBody, type ServiceTypeOption } from './schema';
+import { readReference } from '../../shell/referenceCache';
 
 /**
  * The practitioner's way into a visit (docs/SPEC/session-capture.md sections
@@ -176,10 +177,10 @@ function readPosition(): Promise<Point | null> {
 // error note call this same function and apply its result, so a failed
 // load is never a dead end (design re-check on pull request 24).
 function fetchServicesState(apiFetch: ApiFetch): Promise<ServicesState> {
-  return apiFetch('/api/sessions/service-types')
-    .then(async (res) => {
-      if (!res.ok) return { kind: 'error' } as const;
-      const parsed = ServiceTypeOptionsResponse.safeParse(await res.json());
+  return readReference(apiFetch, '/api/sessions/service-types')
+    .then((answer) => {
+      if (!answer.ok) return { kind: 'error' } as const;
+      const parsed = ServiceTypeOptionsResponse.safeParse(answer.body);
       if (!parsed.success) return { kind: 'error' } as const;
       return { kind: 'ready', services: parsed.data.serviceTypes } as const;
     })

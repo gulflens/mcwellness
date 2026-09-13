@@ -3812,3 +3812,49 @@ which is the guard against the next redefinition landing below 964.
 no screen. The rest of the round is `db/migrations/108`, `db/policies/client/**`,
 `app/api/clients/**`, `tests/client/**` and the client record's own spec, all of
 which that row owns outright.
+
+## Round 50 — usability speed, part one, 2026-09-14
+
+**What the operator asked for.** *"make a pass over the entire app looking for
+usability speed"*, then *"go ahead"* on the first two findings.
+
+**What was measured first.** The live API as the founder, cold and warm, split
+by the edge's own upstream timer: about 0.15 s on the server for a list and
+0.42 s for `/api/me`, plus a round trip to a host in Europe. So a screen's
+speed is governed by how many calls it makes, not how fast any one of them
+is — and drawers were making two or three reference calls on every open, and
+the booking drawer asked for three choices that usually had one honest answer.
+
+**The trunk's own work.** `app/shell/referenceCache.ts` (new, with its test):
+a per-session cache for reference lists, keyed by the session's own `apiFetch`
+so two sign-ins on one device and two test cases in one file never share an
+answer; forgotten on any write and at sign-out
+(`app/shell/auth/AuthContext.tsx`), which is the one list of "what makes a
+reference stale" that needs no maintaining.
+
+**Five files outside the trunk's paths**, each reading one list through the
+cache and changing nothing else about what it does with the answer:
+
+1. `app/admin/billing/PriceDrawer.tsx` (billing) — the service types and the
+   VAT rate for the chosen date.
+2. `app/admin/clients/useGoalCategories.ts` (client record) — the goal
+   categories, read by the record and by the enrolment wizard.
+3. `app/admin/kit/KitPage.tsx` (kit) — the practitioner options for the
+   register's picker.
+4. `app/therapist/session/CheckInPage.tsx` (session capture) — the service
+   list at check-in.
+5. `app/admin/schedule/NewAppointmentDrawer.tsx` (scheduling), with
+   `tests/scheduling/NewAppointmentDrawer.test.tsx` — **and this one changes
+   behaviour, on the operator's word**: the drawer now takes the only service,
+   the only location and the only practitioner where there is exactly one,
+   offers what the last booking on this device chose where there are several,
+   and keeps the service when the client changes. A default is never a guess
+   among several with nothing remembered: the select stays empty and asks.
+   Choosing the service already chosen is a no-op, which it was not — it
+   cleared the practitioner list on the promise of a refetch that a changed
+   service triggers and an unchanged one did not. The two ids remembered are
+   the practice's own catalogue and roster, in the browser and nowhere else;
+   nothing about a household is kept.
+
+**Deferred to part two, by the operator's own ordering**: the five database
+round trips every request runs before its route, and `/api/me`'s 0.42 s.
