@@ -60,6 +60,8 @@ function baseRecord(overrides: Partial<Record<string, unknown>> = {}) {
     locations: [],
     consents: [],
     goals: [],
+    concerns: [],
+    health: null,
     ...overrides,
   };
 }

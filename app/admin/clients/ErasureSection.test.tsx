@@ -65,6 +65,8 @@ const record: ClientRecordResponse = {
   locations: [],
   consents: [],
   goals: [],
+  concerns: [],
+  health: null,
 };
 
 const openRequest = {
@@ -95,6 +97,8 @@ const performedRequest = {
     portalAccountsArchived: 1,
     locationsReduced: 1,
     goalsCleared: 3,
+    concernsCleared: 2,
+    healthDeclarationsDeleted: 1,
     consentsUnlinked: 1,
     documentsDeleted: 4,
     documentsKept: 2,
@@ -225,6 +229,8 @@ describe('a record that has been erased', () => {
     expect(screen.getByText('1 contact emptied')).toBeTruthy();
     expect(screen.getByText('1 portal account closed')).toBeTruthy();
     expect(screen.getByText('3 goals cleared')).toBeTruthy();
+    expect(screen.getByText('2 concerns cleared')).toBeTruthy();
+    expect(screen.getByText('1 set of health answers deleted')).toBeTruthy();
     expect(screen.getByText('6 visits cleared')).toBeTruthy();
     expect(screen.getByText('40 visit events cleared')).toBeTruthy();
     expect(screen.getByText('1 payment reference cleared')).toBeTruthy();

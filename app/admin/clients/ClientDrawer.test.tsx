@@ -64,6 +64,8 @@ const record = {
   locations: [],
   consents: [],
   goals: [],
+  concerns: [],
+  health: null,
 };
 
 /** Mounts the drawer with `fetchImpl` answering GET /api/clients/:id with `record` (or 500 if omitted). */

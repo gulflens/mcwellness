@@ -145,6 +145,8 @@ export const Consent = z.object({
 });
 export type Consent = z.infer<typeof Consent>;
 
+export const CONCERN_STATUSES = ['open', 'resolved'] as const;
+
 export const Goal = z.object({
   id: z.uuid(),
   categoryId: z.uuid(),
@@ -155,6 +157,41 @@ export const Goal = z.object({
   isPrimary: z.boolean(),
 });
 export type Goal = z.infer<typeof Goal>;
+
+/** A concern reads like a goal, because the record shows them together. */
+export const Concern = z.object({
+  id: z.uuid(),
+  categoryId: z.uuid(),
+  categoryCode: z.string(),
+  description: z.string(),
+  notedAt: z.string(),
+  status: z.enum(CONCERN_STATUSES),
+});
+export type Concern = z.infer<typeof Concern>;
+
+/**
+ * The six answers as last given, with who recorded them and when. Null where a
+ * household has never been asked — which is every client enrolled before
+ * 2026-09-14, and is why every reader of this must handle its absence.
+ */
+export const HealthDeclaration = z.object({
+  id: z.uuid(),
+  askedAt: z.string(),
+  wordingVersion: z.string().nullable(),
+  seizures: z.boolean(),
+  seizuresNote: z.string().nullable(),
+  implantedDevice: z.boolean(),
+  implantedDeviceNote: z.string().nullable(),
+  headInjury: z.boolean(),
+  headInjuryNote: z.string().nullable(),
+  pregnancy: z.boolean(),
+  pregnancyNote: z.string().nullable(),
+  medication: z.boolean(),
+  medicationNote: z.string().nullable(),
+  scalp: z.boolean(),
+  scalpNote: z.string().nullable(),
+});
+export type HealthDeclaration = z.infer<typeof HealthDeclaration>;
 
 export const ClientRecordResponse = z.object({
   id: z.uuid(),
@@ -172,6 +209,10 @@ export const ClientRecordResponse = z.object({
   locations: z.array(Location),
   consents: z.array(Consent),
   goals: z.array(Goal),
+  concerns: z.array(Concern),
+  // Null until somebody is asked: the record shows "not asked yet" rather than
+  // six confident "no"s nobody ever said.
+  health: HealthDeclaration.nullable(),
 });
 export type ClientRecordResponse = z.infer<typeof ClientRecordResponse>;
 
@@ -300,6 +341,60 @@ export const UpdateGoalBody = z
   })
   .partial();
 export type UpdateGoalBody = z.infer<typeof UpdateGoalBody>;
+
+/**
+ * A concern: what the household is worried about, in the shape a goal has —
+ * a category from the practice's own list, free text beside it. Its status is
+ * its own vocabulary: a worry is resolved, never "achieved".
+ */
+export const CreateConcernBody = z.object({
+  categoryId: z.uuid(),
+  description: FreeText,
+});
+export type CreateConcernBody = z.infer<typeof CreateConcernBody>;
+
+export const UpdateConcernBody = z
+  .object({
+    categoryId: z.uuid(),
+    description: FreeText,
+    status: z.enum(CONCERN_STATUSES),
+  })
+  .partial();
+export type UpdateConcernBody = z.infer<typeof UpdateConcernBody>;
+
+/**
+ * The six questions the signed agreement asks, in its own order and its own
+ * words (docs/CONSENT/agreement.en.md, "Please tell us before the first
+ * session, and if it changes").
+ *
+ * Every answer is required: a declaration with a question left out is not a
+ * declaration, and "we did not ask" is not the same as "no". A note is optional
+ * beside each and is short by construction — it is a sentence about what the
+ * household said, never a history.
+ */
+const HealthNote = z.string().trim().max(500).optional();
+
+export const RecordHealthBody = z.object({
+  /**
+   * Which version of the agreement asked, as told by the screen that asked.
+   * The enrolment step knows it, because it has just shown the wording; a later
+   * edit on the record does not, and leaves it out.
+   */
+  wordingVersion: z.string().max(40).optional(),
+  seizures: z.boolean(),
+  seizuresNote: HealthNote,
+  implantedDevice: z.boolean(),
+  implantedDeviceNote: HealthNote,
+  headInjury: z.boolean(),
+  headInjuryNote: HealthNote,
+  pregnancy: z.boolean(),
+  pregnancyNote: HealthNote,
+  medication: z.boolean(),
+  medicationNote: HealthNote,
+  scalp: z.boolean(),
+  scalpNote: HealthNote,
+});
+export type RecordHealthBody = z.infer<typeof RecordHealthBody>;
 
 /**
  * The bytes a document upload may carry, and why the number is what it is.
@@ -576,6 +671,8 @@ export const ErasureRequestRecord = z.object({
       portalAccountsArchived: z.number().int().nonnegative(),
       locationsReduced: z.number().int().nonnegative(),
       goalsCleared: z.number().int().nonnegative(),
+      concernsCleared: z.number().int().nonnegative(),
+      healthDeclarationsDeleted: z.number().int().nonnegative(),
       consentsUnlinked: z.number().int().nonnegative(),
       documentsDeleted: z.number().int().nonnegative(),
       documentsKept: z.number().int().nonnegative(),

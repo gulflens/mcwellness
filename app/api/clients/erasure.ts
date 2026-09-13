@@ -111,6 +111,9 @@ function summaryOf(row: RequestRow): ErasureRequestRecord['summary'] {
     portalAccountsArchived: count('portalAccountsArchived'),
     locationsReduced: count('locationsReduced'),
     goalsCleared: count('goalsCleared'),
+    // Both from 964; a summary written before it has neither and reads 0.
+    concernsCleared: count('concernsCleared'),
+    healthDeclarationsDeleted: count('healthDeclarationsDeleted'),
     consentsUnlinked: count('consentsUnlinked'),
     documentsDeleted: count('documentsDeleted'),
     documentsKept: count('documentsKept'),

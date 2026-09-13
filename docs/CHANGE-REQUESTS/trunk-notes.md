@@ -3765,6 +3765,54 @@ a term over the cap would have failed the response shape and returned 500.
 
 ---
 
+## Round 49 — one migration in the trunk's range, for the client record, 2026-09-14
+
+**What the client record needed.** Concerns and the six health answers the
+signed agreement asks for (`docs/SPEC/client-record.md` section 4.6, built in
+`db/migrations/108_concerns_and_health.sql` — the client record's own range).
+Both are erasable, so `app.erase_client` gains two steps.
+
+**Why one file is the trunk's.** `app.erase_client` belongs to the client
+record and every previous extension of it — 104, 105, 106, 107 — sits in that
+range. But **954**, a trunk migration, redefined the function last, and a
+database applies migrations in numeric order: a redefinition at 108 is
+overwritten by 954 a moment later and its steps vanish silently. That is not a
+theory. It was written at 108 first, and
+`tests/client/db/concerns_and_health.test.ts` failed against a fresh database
+with an erasure summary carrying every key except the two new ones.
+
+So `db/migrations/964_erasure_reaches_concerns_and_health.sql` is 954's body
+with two steps and two summary keys added, in the trunk's range because that is
+where the function's latest definition lives. **The rule for whoever extends it
+next: number it above the highest migration that defines it, whatever range
+that lands in.** 108 carries a comment saying where its erasure step went and
+why.
+
+**A second trunk file, from the review (2026-09-14).**
+`965_audit_redact_health_answers.sql` adds the twelve `health_declaration`
+columns — the six answers and their notes — to the list `app.audit_redact`
+drops outright, 914's precedent. 964 deletes the rows on erasure, and the
+promise that they are gone was false for as long as `audit_log.new_values`
+kept a copy of the insert for the log's five years; the trail is append-only
+and no erasure reaches it. The treatment is the Emirates ID's: the trail says a
+declaration was recorded, for whom, by whom, when and why, and never what was
+said. No other table has a column by any of the twelve names. `concern.description`
+is deliberately not on the list — it is treated exactly as `goal.description`
+is, and changing that is round 36's request, not this one's.
+
+The same review renamed the table from `health_screening` before merge:
+screening names a clinical act, and nothing here is assessed. A word now, a
+migration after.
+
+`tests/client/db/concerns_and_health.test.ts` reads the live body of
+`app.erase_client` from `pg_proc` and fails if it no longer names both tables,
+which is the guard against the next redefinition landing below 964.
+
+**Nothing else of the trunk's is touched**: no policy of another zone, no route,
+no screen. The rest of the round is `db/migrations/108`, `db/policies/client/**`,
+`app/api/clients/**`, `tests/client/**` and the client record's own spec, all of
+which that row owns outright.
+
 ## Round 50 — usability speed, part one, 2026-09-14
 
 **What the operator asked for.** *"make a pass over the entire app looking for

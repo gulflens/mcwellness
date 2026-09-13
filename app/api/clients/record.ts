@@ -106,6 +106,33 @@ type ConsentRow = {
   withdrawal_reason: string | null;
 };
 
+type ConcernRow = {
+  id: string;
+  category_id: string;
+  category_code: string;
+  description: string;
+  noted_at: Date;
+  status: 'open' | 'resolved';
+};
+
+type HealthRow = {
+  id: string;
+  asked_at: Date;
+  wording_version: string | null;
+  seizures: boolean;
+  seizures_note: string | null;
+  implanted_device: boolean;
+  implanted_device_note: string | null;
+  head_injury: boolean;
+  head_injury_note: string | null;
+  pregnancy: boolean;
+  pregnancy_note: string | null;
+  medication: boolean;
+  medication_note: string | null;
+  scalp: boolean;
+  scalp_note: string | null;
+};
+
 type GoalRow = {
   id: string;
   category_id: string;
@@ -174,6 +201,23 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
       'where g.client_id = $1 order by g.is_primary desc, g.set_at desc',
     [clientId],
   );
+  const concerns = await db.query<ConcernRow>(
+    'select c.id, c.category_id, gc.code as category_code, c.description, c.noted_at, c.status ' +
+      'from concern c join goal_category gc on gc.id = c.category_id ' +
+      "where c.client_id = $1 order by (c.status = 'open') desc, c.noted_at desc",
+    [clientId],
+  );
+  // The newest asking is the current one: a change is a new row, never an edit
+  // (108_concerns_and_health.sql). The older rows are the history, and this
+  // screen does not show them.
+  const health = await db.query<HealthRow>(
+    'select id, asked_at, wording_version, seizures, seizures_note, implanted_device, ' +
+      'implanted_device_note, head_injury, head_injury_note, pregnancy, pregnancy_note, ' +
+      'medication, medication_note, scalp, scalp_note from health_declaration ' +
+      'where client_id = $1 order by asked_at desc limit 1',
+    [clientId],
+  );
+  const latest = health.rows[0] ?? null;
 
   return ClientRecordResponse.parse({
     id: row.id,
@@ -242,6 +286,33 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
       status: g.status,
       isPrimary: g.is_primary,
     })),
+    concerns: concerns.rows.map((c) => ({
+      id: c.id,
+      categoryId: c.category_id,
+      categoryCode: c.category_code,
+      description: c.description,
+      notedAt: c.noted_at.toISOString(),
+      status: c.status,
+    })),
+    health: latest
+      ? {
+          id: latest.id,
+          askedAt: latest.asked_at.toISOString(),
+          wordingVersion: latest.wording_version,
+          seizures: latest.seizures,
+          seizuresNote: latest.seizures_note,
+          implantedDevice: latest.implanted_device,
+          implantedDeviceNote: latest.implanted_device_note,
+          headInjury: latest.head_injury,
+          headInjuryNote: latest.head_injury_note,
+          pregnancy: latest.pregnancy,
+          pregnancyNote: latest.pregnancy_note,
+          medication: latest.medication,
+          medicationNote: latest.medication_note,
+          scalp: latest.scalp,
+          scalpNote: latest.scalp_note,
+        }
+      : null,
   });
 }
 
