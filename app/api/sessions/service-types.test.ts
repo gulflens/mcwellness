@@ -8,7 +8,7 @@ import { mountServiceTypes } from './service-types';
 
 /**
  * GET /api/sessions/service-types also carries `tenant.record_readings`
- * (migration 964) alongside the practitioner's own service types — how the
+ * (migration 918) alongside the practitioner's own service types — how the
  * switch on Settings › Practice (PracticeDrawer.tsx) reaches the session
  * runner, which cannot read `/api/practice` at all (that route gates on
  * `practice.settings.write`, the owner and an admin, and a practitioner is

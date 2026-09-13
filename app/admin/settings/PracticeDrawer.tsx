@@ -126,7 +126,7 @@ export function PracticeDrawer({
   );
   const [vatRegistered, setVatRegistered] = useState(practice.vatRegistered);
   const [vatTrn, setVatTrn] = useState(practice.vatTrn ?? '');
-  // Off by default (migration 964): the practice runs its brain mapping and
+  // Off by default (migration 918): the practice runs its brain mapping and
   // neurofeedback on its own software, so a visit does not ask for readings
   // unless this is switched on.
   const [recordReadings, setRecordReadings] = useState(practice.recordReadings);

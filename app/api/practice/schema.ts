@@ -164,12 +164,15 @@ export const Practice = z.object({
   vatRegistered: z.boolean(),
   vatTrn: z.string().nullable(),
   /**
-   * Whether a visit asks for a reading at all (migration 964, `tenant`'s own
+   * Whether a visit asks for a reading at all
+   * (`db/migrations/918_practice_records_readings.sql`, `tenant`'s own
    * column — the practice IS the tenant row, there is no separate `practice`
-   * table). Off by default: the practice runs its brain mapping and
-   * neurofeedback on its own software, so the app's own reading capability
-   * is dormant rather than deleted, ready for whichever practice later wants
-   * it switched back on.
+   * table). Numbered in the trunk's 900-949 half rather than 950-999: a
+   * `tenant` column is a trunk migration a stream may build on, not one that
+   * builds on a stream's own table (OWNERSHIP.md line 109). Off by default:
+   * the practice runs its brain mapping and neurofeedback on its own
+   * software, so the app's own reading capability is dormant rather than
+   * deleted, ready for whichever practice later wants it switched back on.
    */
   recordReadings: z.boolean(),
   /**

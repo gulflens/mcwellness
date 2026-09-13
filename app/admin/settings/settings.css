@@ -157,7 +157,7 @@
 }
 
 /*
-  The readings switch, on the same screen (migration 964). Its own name for
+  The readings switch, on the same screen (migration 918). Its own name for
   the same reason the VAT switch's is its own, above: two controls in one
   stylesheet, until the shell grows one control for both.
 */

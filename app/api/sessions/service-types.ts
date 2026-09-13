@@ -34,9 +34,11 @@ import {
  * audited.
  *
  * Also answers whether the practice records readings at all
- * (`tenant.record_readings`, migration 964): the session runner has no other
- * way to learn it, since `GET /api/practice` is the owner's and an admin's
- * (`practice.settings.write`) and a practitioner holds neither.
+ * (`tenant.record_readings`, migration 918 — a `tenant` column, so it sits in
+ * the trunk's 900-949 half rather than 950-999, OWNERSHIP.md line 109): the
+ * session runner has no other way to learn it, since `GET /api/practice` is
+ * the owner's and an admin's (`practice.settings.write`) and a practitioner
+ * holds neither.
  */
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
 

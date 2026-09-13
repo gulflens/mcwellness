@@ -138,7 +138,7 @@ export type ServiceTypeOption = z.infer<typeof ServiceTypeOption>;
 export const ServiceTypesResponse = z.object({
   serviceTypes: z.array(ServiceTypeOption),
   /**
-   * `tenant.record_readings` (migration 964), carried alongside the
+   * `tenant.record_readings` (migration 918), carried alongside the
    * practitioner's own service types because this is the one door a
    * practitioner's session runner can reach: `GET /api/practice` gates on
    * `practice.settings.write` (app/api/practice/routes.ts), the owner and an

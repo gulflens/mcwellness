@@ -50,7 +50,7 @@ const PRACTICE = {
   contactPhone: null,
   contactEmail: null,
   website: null,
-  // Off by default (migration 964): the practice runs its brain mapping and
+  // Off by default (migration 918): the practice runs its brain mapping and
   // neurofeedback on its own software, so a visit does not ask for readings
   // unless this is switched on.
   recordReadings: false,
