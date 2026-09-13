@@ -36,7 +36,11 @@ Today ► [Check in] ► Pre-flight ► Signal check ► Run ► End ► Post �
 
 **3.3 Signal check.** Impedance/quality per site entered manually or from the amplifier's export (Phase 1: manual entry of the vendor software's numbers; Phase 2: file ingest). Shows the five-dot indicator from the design brief. Below threshold → warning, practitioner decides.
 
+**Amended 2026-09-13 (trunk round 49, the operator's instruction of 13 September 2026).** This step is dormant. The practice runs its brain mapping and its neurofeedback on its own professional software, on the Windows laptop the practitioner carries as part of the equipment, and no longer transcribes signal quality off that software's screen into this app — what the paragraph above describes is what stops. The step is shipped, tested and unreachable rather than removed: `tenant.record_readings` (migration 918, `db/migrations/918_practice_records_readings.sql`), off by default on a fresh environment, is what withholds it. `stepsFor(recordReadings)` (`app/therapist/session/steps.ts`) drops this screen — and the run screen's reading panel, section 3.4 below — from the sequence while the switch is false, and every piece behind them stays on disk, wired into a file that runs and covered by a test that runs: `SignalStep.tsx`, `scoreSignalQuality`, `deriveObservationFlag`, and the `reading` and `telemetry_chunk` event shapes. `tests/lint/dormant-readings-stay-alive.test.ts` checks all of that, statically, on every commit, whether or not the switch is on for anyone. Turning `record_readings` on in Settings › Practice brings this step back with no further work and no deploy. What the practice takes instead is that software's own exported result, attached to the visit at the Summary step (section 3.6).
+
 **3.4 Run.** Full-bleed: client name, session N of M, signal indicator, elapsed timer, one button "End session." Every 60 seconds a `telemetry_chunk` event is written with whatever the practitioner has entered or the amplifier exported (per-band amplitude, threshold, % time in reward, artefact %). Phase 1 accepts a single end-of-session summary if per-minute data isn't available. No navigation chrome.
+
+**Amended 2026-09-13 (trunk round 49).** The signal indicator and the reading panel behind it are dormant along with section 3.3's step, for the same reason and behind the same switch, `tenant.record_readings`. While it is false the run screen shows the client's name, session N of M, the elapsed timer and the one button, and nothing else — no indicator, no panel, no `telemetry_chunk` write. A visit that already holds readings from before the switch was turned off keeps showing them regardless of the switch's current value: nothing that displays a score reads `record_readings`, only `stepsFor` does. The panel, the event shape and the domain functions behind this screen are untouched and still tested; only whether this screen offers them to a practitioner has changed.
 
 **3.5 End & post.** Post-session ratings (same questions as pre). Structured observations: tolerance, engagement, after-session observations (none / headache / fatigue / irritability / other), each a chip; free-text note beside them. Optional setup photo (requires `photo_video` consent; blocked otherwise).
 
@@ -85,7 +89,9 @@ Check-in/out, every event replay, every block reason, session close, and any adm
 
 ## 9. Out of scope
 
-Amplifier file ingest, live signal streaming, real-time supervision, practitioner editing after close, multi-device, studio booking.
+Parsing the vendor's export to recover its figures, live signal streaming, real-time supervision, practitioner editing after close, multi-device, studio booking.
+
+*Amended 2026-09-13 (trunk round 49): this item was "amplifier file ingest" until the practice's own software took over the readings — see section 3.3's amendment. A session now takes that software's exported result as a file: `PUT /api/sessions/:id/export` (migration 307), attached at the Summary step, idempotent on the digest, and never a gate on check-out. What remains out of scope is reading the figures back out of that file — signal quality, artefact percent and time in reward, recovered from the vendor's own format rather than typed or switched off. That needs real exported files in hand to write fixtures against, and it is exactly what `record_readings` would turn back on if it is ever built.*
 
 ## 10. Done when
 
