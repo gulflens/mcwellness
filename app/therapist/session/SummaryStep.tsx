@@ -41,6 +41,7 @@ function describeQuality(quality: number | null): string {
 
 export function SummaryStep({
   durationSeconds,
+  recordReadings,
   setupQuality,
   sessionQuality,
   ratingDeltas,
@@ -50,6 +51,8 @@ export function SummaryStep({
   onConfirm,
 }: {
   durationSeconds: number | null;
+  /** `tenant.record_readings`: whether the two rows below have anything to say. */
+  recordReadings: boolean;
   /** The mean quality of the sites at setup (section 3.3). */
   setupQuality: number | null;
   /** The score of the run itself, cleanliness times time in target (section 5 rule 3). */
@@ -89,14 +92,25 @@ export function SummaryStep({
           <dt>Length</dt>
           <dd className="numeric">{describeLength(durationSeconds)}</dd>
         </div>
-        <div className="summary__row">
-          <dt>Signal at setup</dt>
-          <dd>{describeQuality(setupQuality)}</dd>
-        </div>
-        <div className="summary__row">
-          <dt>Session quality</dt>
-          <dd>{describeQuality(sessionQuality)}</dd>
-        </div>
+        {recordReadings ? (
+          <>
+            {/* Dormant along with the signal check and the run screen's
+                panel (fix round 2, finding 3): with no reading ever taken,
+                both would otherwise read "Not recorded" on every
+                readings-off visit, which reads as something the
+                practitioner forgot rather than something the practice does
+                not do. Wording and both rows are unchanged when the switch
+                is on. */}
+            <div className="summary__row">
+              <dt>Signal at setup</dt>
+              <dd>{describeQuality(setupQuality)}</dd>
+            </div>
+            <div className="summary__row">
+              <dt>Session quality</dt>
+              <dd>{describeQuality(sessionQuality)}</dd>
+            </div>
+          </>
+        ) : null}
         {ratingDeltas.map((delta) => (
           <div className="summary__row" key={delta.key}>
             <dt>{delta.label}</dt>

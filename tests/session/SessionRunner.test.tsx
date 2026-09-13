@@ -352,12 +352,40 @@ describe('when the practice does not record readings', () => {
     expect(screen.queryByLabelText('Artefact')).toBeNull();
   });
 
+  it('shows no signal indicator on the run screen either', async () => {
+    // With no signal check ever run, the ambient dots at the top of the run
+    // screen would otherwise say "Not checked" on every readings-off visit
+    // — every visit — which in a client's home reads as something the
+    // practitioner forgot, not something the practice does not do (fix
+    // round 2, finding 3). SignalDots itself is untouched: only this one
+    // render site is gated.
+    await reachRunWithoutSignal();
+    expect(screen.queryByText('Not checked')).toBeNull();
+    expect(screen.queryByRole('img', { name: /signal/i })).toBeNull();
+  });
+
+  it('shows no "Signal at setup" or "Session quality" row on the summary', async () => {
+    await reachSummaryWithoutSignal();
+    expect(screen.queryByText('Signal at setup')).toBeNull();
+    expect(screen.queryByText('Session quality')).toBeNull();
+  });
+
   it('is exactly the sequence it is today when the practice does record readings', async () => {
     mount();
     await screen.findByRole('heading', { name: 'Before you start' });
     expect(screen.getByRole('button', { name: 'Check the signal' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
     expect(await screen.findByRole('heading', { name: 'Signal' })).toBeTruthy();
+  });
+
+  it('still shows the signal indicator and both summary rows, unchanged, when the practice does record readings', async () => {
+    await reachRun();
+    expect(screen.getByRole('img', { name: /signal/i })).toBeTruthy();
+    endSession();
+    fireEvent.click(await screen.findByRole('button', { name: 'See the summary' }));
+    await screen.findByRole('heading', { name: 'Summary' });
+    expect(screen.getByText('Signal at setup')).toBeTruthy();
+    expect(screen.getByText('Session quality')).toBeTruthy();
   });
 });
 

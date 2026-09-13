@@ -92,7 +92,12 @@ export function RunStep({
       </header>
 
       <div className="run__body">
-        <SignalDots quality={quality} />
+        {/* Dormant along with the signal check itself (fix round 2, finding
+            3): with no reading ever taken, this would otherwise read "Not
+            checked" on every readings-off visit — every visit — which in a
+            client's home reads as something forgotten, not something the
+            practice does not do. */}
+        {recordReadings ? <SignalDots quality={quality} /> : null}
         <p className="run__clock numeric" aria-live="off">
           {elapsed(startedAtMs, nowMs)}
         </p>

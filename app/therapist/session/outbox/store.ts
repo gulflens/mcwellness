@@ -79,6 +79,18 @@ export type OpenVisitNote = {
    * already has.
    */
   lastSeq: number;
+  /**
+   * `tenant.record_readings` as it stood when this visit was opened (fix
+   * round 2, finding 1). Kept here for the same reason `lastSeq` is: an
+   * offline resume — the device's own note is read exactly when a live
+   * fetch of the practice's current settings has no signal to complete —
+   * must run with the value this visit actually opened with, not whatever a
+   * fetch that could not finish defaults to. Optional so a note written
+   * before this field existed still reads; a caller with no value here
+   * reads it as `false`, the same conservative default the switch itself
+   * uses.
+   */
+  recordReadings?: boolean;
 };
 
 export type OutboxStore = {

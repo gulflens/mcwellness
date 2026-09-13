@@ -41,7 +41,17 @@ type ServicesState =
 type ResumeOffer =
   | { kind: 'looking' }
   | { kind: 'none' }
-  | { kind: 'offered'; visit: RunnerVisit }
+  | {
+      kind: 'offered';
+      visit: RunnerVisit;
+      /**
+       * The value this visit opened with (fix round 2, finding 1): from the
+       * device's own note when the offer came from it — exactly the case
+       * where a live fetch has no signal to complete — and from the current
+       * services answer when the server itself confirmed the visit.
+       */
+      recordReadings: boolean;
+    }
   | { kind: 'dismissed' };
 
 type Outcome =
@@ -279,6 +289,14 @@ export function CheckInPage() {
 
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [running, setRunning] = useState<RunnerVisit | null>(null);
+  // The value the running visit above opened with (fix round 2, finding 1):
+  // set once, at the same moment as `running`, from whichever source that
+  // route into running visit has (the live services answer for a fresh
+  // check-in or a server-confirmed resume, the device's own note for an
+  // offline one) — never re-derived afterwards, so a services fetch that
+  // resolves, or changes, after the visit is under way cannot flip the
+  // switch beneath a visit already in progress.
+  const [runningRecordReadings, setRunningRecordReadings] = useState(false);
   const [resume, setResume] = useState<ResumeOffer>({ kind: 'looking' });
   const storeRef = useRef<OutboxStore | null>(null);
 
@@ -290,6 +308,15 @@ export function CheckInPage() {
   const [shareLocation, setShareLocation] = useState(false);
   const [locationNote, setLocationNote] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
+
+  // Derived, not stored: the practitioner's own pick once made, otherwise
+  // the first (usually only) certified service — computed at render rather
+  // than defaulted via an effect and a second render. Declared here, ahead
+  // of the resume-detection effect below, so a server-confirmed resume can
+  // read the current answer directly rather than through a ref.
+  const services = servicesState.kind === 'ready' ? servicesState.services : [];
+  const recordReadings = servicesState.kind === 'ready' ? servicesState.recordReadings : false;
+  const effectiveServiceId = selectedServiceId || (services[0]?.id ?? '');
 
   const loadServices = useCallback(() => fetchServicesState(apiFetch), [apiFetch]);
 
@@ -312,13 +339,22 @@ export function CheckInPage() {
   // Is there a visit already open? The server knows, and when it cannot be
   // reached the device's own outbox note does — a reload with no signal must
   // still offer to resume rather than looking like a fresh day.
+  //
+  // `recordReadings` is a dependency on purpose (fix round 2, finding 1): a
+  // server-confirmed offer is stamped with whatever the live services answer
+  // is when that happens, and if this effect fires before that answer has
+  // settled, a later change to `recordReadings` re-runs it and corrects the
+  // stamp — the practitioner has not tapped Resume yet, so nothing has been
+  // frozen for them to be wrong about. An *offline* offer never depends on
+  // this at all: it is stamped from the device's own note, which is exactly
+  // the value a live fetch with no signal to complete cannot provide.
   useEffect(() => {
     let live = true;
     void (async () => {
       const fromServer = await fetchOpenVisit(apiFetch);
       if (!live) return;
       if (fromServer) {
-        setResume({ kind: 'offered', visit: fromServer });
+        setResume({ kind: 'offered', visit: fromServer, recordReadings });
         return;
       }
       const store = await createOutboxStore();
@@ -350,20 +386,18 @@ export function CheckInPage() {
                 lastSeq: note.lastSeq,
                 shareLocation: false,
               },
+              // The value this visit opened with, off the device's own note
+              // — not the live services answer, which is exactly what has
+              // no signal to complete right now (fix round 2, finding 1).
+              // `false` only for a note written before this field existed.
+              recordReadings: note.recordReadings ?? false,
             },
       );
     })();
     return () => {
       live = false;
     };
-  }, [apiFetch]);
-
-  // Derived, not stored: the practitioner's own pick once made, otherwise
-  // the first (usually only) certified service — computed at render rather
-  // than defaulted via an effect and a second render.
-  const services = servicesState.kind === 'ready' ? servicesState.services : [];
-  const recordReadings = servicesState.kind === 'ready' ? servicesState.recordReadings : false;
-  const effectiveServiceId = selectedServiceId || (services[0]?.id ?? '');
+  }, [apiFetch, recordReadings]);
 
   const handleShareLocationChange = useCallback(async (next: boolean) => {
     setShareLocation(next);
@@ -478,6 +512,10 @@ export function CheckInPage() {
         // not a failure of the check-in: the visit runs with a plain label.
         const opened = await fetchOpenVisit(apiFetch);
         if (!mountedRef.current) return;
+        // A brand-new visit: there is no note to consult, so the current
+        // services answer is the only truth there is (fix round 2, finding
+        // 1), frozen here rather than read live for the rest of the visit.
+        setRunningRecordReadings(recordReadings);
         setRunning(opened === null ? null : { ...opened, shareLocation });
         if (opened !== null) return;
         setRunning({
@@ -496,14 +534,22 @@ export function CheckInPage() {
     } catch {
       setOutcome({ kind: 'failed' });
     }
-  }, [apiFetch, attempt, deliveryMode, effectiveServiceId, recordNumber, shareLocation]);
+  }, [
+    apiFetch,
+    attempt,
+    deliveryMode,
+    effectiveServiceId,
+    recordNumber,
+    recordReadings,
+    shareLocation,
+  ]);
 
   if (running) {
     return (
       <SessionRunner
         visit={running}
         service={services.find((s) => s.id === running.serviceTypeId) ?? null}
-        recordReadings={recordReadings}
+        recordReadings={runningRecordReadings}
         onFinished={() => navigate('/today')}
       />
     );
@@ -582,7 +628,14 @@ export function CheckInPage() {
               <Button
                 variant="primary"
                 className="checkin__primary"
-                onClick={() => setRunning(resume.visit)}
+                onClick={() => {
+                  // The value this specific offer was stamped with (fix
+                  // round 2, finding 1) — the device's own note when it came
+                  // from there, the live services answer when the server
+                  // confirmed it — frozen now rather than read live again.
+                  setRunningRecordReadings(resume.recordReadings);
+                  setRunning(resume.visit);
+                }}
               >
                 Resume
               </Button>

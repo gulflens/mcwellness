@@ -276,8 +276,12 @@ export function SessionRunner({
       number: visit.number,
       of: visit.of,
       lastSeq: highWater,
+      // What this visit opened with, so an offline resume can pick that
+      // back up rather than whatever a services fetch with no signal to
+      // complete defaults to (fix round 2, finding 1).
+      recordReadings,
     });
-  }, [highWater, outbox, visit]);
+  }, [highWater, outbox, recordReadings, visit]);
 
   const write = useCallback(
     async (kind: string, payload: unknown): Promise<void> => {
@@ -605,6 +609,7 @@ export function SessionRunner({
         {step === 'summary' ? (
           <SummaryStep
             durationSeconds={durationSeconds}
+            recordReadings={recordReadings}
             setupQuality={setupQuality}
             sessionQuality={sessionQuality}
             ratingDeltas={deltas(settings.ratingQuestions, preAnswers, postAnswers)}
