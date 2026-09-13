@@ -1,17 +1,24 @@
 import { useRef, useState } from 'react';
 import { displayFromIso, groupDateDigits, isoFromDisplay } from '@domain/shared';
+import { CalendarPanel } from './CalendarPanel';
+import { bound, todayParts, type DateParts } from './calendar';
 import { Field } from './Controls';
 import { CalendarIcon } from './Icons';
 
 /**
  * A date typed the way this country writes one: `DD/MM/YYYY`, always, on every
  * machine. A native `<input type="date">` draws itself in the browser's locale
- * and the page has no say, so the visible box is text and the native control is
- * kept beside it, hidden, purely to lend its calendar.
+ * and the page has no say, so the visible box is text.
  *
- * The value in and out is the ISO `YYYY-MM-DD` every caller already held, so a
- * screen swapping to this control changes one import and its `onChange` shape,
- * and nothing about what it sends.
+ * The calendar button opens `CalendarPanel`, drawn in the page. Until round 48
+ * it opened the browser's own picker from a hidden native input, and on Safari
+ * that picker fell off the outer edge of a right-docked drawer and was clipped
+ * — a native picker's panel has no CSS surface in any browser, so there was
+ * nothing to move and nothing to restyle. The whole native control is gone.
+ *
+ * Typing is unchanged and is still the primary way in; the calendar is an
+ * alternative, not a replacement. The value in and out is the ISO `YYYY-MM-DD`
+ * every caller already held.
  */
 export function DateField({
   id,
@@ -36,7 +43,14 @@ export function DateField({
 }) {
   const [typed, setTyped] = useState(() => displayFromIso(value));
   const [priorValue, setPriorValue] = useState(value);
-  const native = useRef<HTMLInputElement>(null);
+  // Today as read from the clock at the moment the calendar was opened, and
+  // `null` while it is shut. One piece of state rather than two, and the only
+  // place the clock is read: a component that asked the clock while rendering
+  // would be impure, and a calendar that recomputed "today" on every keystroke
+  // could move its own hairline mid-session.
+  const [openedOn, setOpenedOn] = useState<DateParts | null>(null);
+  const field = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
 
   // What `typed` resolves to for *emission*: `''` for an incomplete or
   // impossible date, or for one that parses but sits outside `min`/`max`
@@ -88,26 +102,21 @@ export function DateField({
     onChange(resolve(grouped));
   }
 
-  function openPicker() {
-    const element = native.current;
-    if (element === null) return;
-    if (typeof element.showPicker === 'function') {
-      // Finding 3: a real browser's showPicker() can throw — SecurityError
-      // with no user activation, NotAllowedError in a cross-origin frame —
-      // and the press must still land on the same fallback rather than
-      // propagate.
-      try {
-        element.showPicker();
-        return;
-      } catch {
-        // Fall through to focus().
-      }
-    }
-    element.focus();
+  function dismiss(returnFocus: boolean) {
+    // Focus is moved before the panel unmounts: a focused element that is
+    // removed leaves focus on the body, and the button would never get it.
+    if (returnFocus) trigger.current?.focus();
+    setOpenedOn(null);
+  }
+
+  function choose(iso: string) {
+    setTyped(displayFromIso(iso));
+    onChange(iso);
+    dismiss(true);
   }
 
   return (
-    <div className="datefield">
+    <div className="datefield" ref={field}>
       <Field
         id={id}
         label={label}
@@ -122,28 +131,29 @@ export function DateField({
         className="datefield__text"
       />
       <button
+        ref={trigger}
         type="button"
         className="datefield__picker"
         aria-label={`${label}: open the calendar`}
-        onClick={openPicker}
+        aria-expanded={openedOn !== null}
+        onClick={() => setOpenedOn(openedOn === null ? todayParts() : null)}
         disabled={disabled}
       >
         <CalendarIcon />
       </button>
-      <input
-        ref={native}
-        type="date"
-        className="datefield__native"
-        tabIndex={-1}
-        aria-hidden="true"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(event) => {
-          setTyped(displayFromIso(event.target.value));
-          onChange(event.target.value);
-        }}
-      />
+      {openedOn === null ? null : (
+        <CalendarPanel
+          label={label}
+          value={value}
+          today={openedOn}
+          min={bound(min)}
+          max={bound(max)}
+          field={field}
+          trigger={trigger}
+          onChoose={choose}
+          onDismiss={dismiss}
+        />
+      )}
     </div>
   );
 }

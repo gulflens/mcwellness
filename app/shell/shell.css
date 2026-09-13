@@ -462,8 +462,9 @@ a.rail__child.rail__child--current {
   cursor: default;
 }
 
-/* A date box with its calendar button at the end, and the native control it
-   borrows the calendar from kept out of the layout entirely. */
+/* A date box with its calendar button at the end. The calendar itself is
+   `.calendar` further down: drawn in the page, and rendered into the body so
+   nothing can clip it. */
 .datefield {
   position: relative;
   display: block;
@@ -479,9 +480,9 @@ a.rail__child.rail__child--current {
    or error line below it (`.field` is a column with a `--s-1` gap) — unlike
    `.password`, whose span wraps the input alone. Anchoring from the block
    end would sit the button under that message instead of on the input, so
-   both the button and the hidden native input are anchored from the block
-   start instead, offset past the label's own line box plus the column gap:
-   exactly the input's top edge, whatever the label's size. Do not "fix"
+   the button is anchored from the block start instead, offset past the
+   label's own line box plus the column gap: exactly the input's top edge,
+   whatever the label's size. Do not "fix"
    this back to `inset-block-end: 0` — that is the bug this note exists to
    prevent. */
 .datefield__picker {
@@ -504,14 +505,163 @@ a.rail__child.rail__child--current {
   color: var(--ink);
 }
 
-.datefield__native {
-  position: absolute;
-  inset-inline-end: 0;
-  inset-block-start: calc(var(--lh-small) + var(--s-1));
-  inline-size: 1px;
-  block-size: 1px;
-  opacity: 0;
-  pointer-events: none;
+/*
+ * The calendar `DateField` draws for itself (app/shell/components/CalendarPanel.tsx).
+ *
+ * `position: fixed` with coordinates measured and written by the component,
+ * and rendered into `document.body`, because the operator's complaint was that
+ * the browser's own picker fell off the outer edge of a right-docked drawer
+ * and was clipped (2026-09-13). An `overflow: auto` drawer body cannot clip a
+ * fixed panel, and the body is out of reach of the `translate` the drawer
+ * carries during its own entrance — which would otherwise make the drawer a
+ * containing block and hand the clipping straight back.
+ *
+ * `top` and `left` are placeholders that the first layout effect overwrites
+ * before the browser paints. They are physical, not logical, on purpose: the
+ * placement maths has already resolved the inline axis, and `inset-inline-start`
+ * would flip what it decided.
+ *
+ * No entrance motion. The brief allows 160ms ease-out or nothing (section 7),
+ * and a panel that must appear exactly where it was measured is better with
+ * nothing.
+ */
+.calendar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* Over the drawer (2) and its resize handle (3). */
+  z-index: 4;
+  inline-size: 21rem;
+  max-inline-size: calc(100vw - var(--s-4));
+  padding: var(--s-3);
+  background: var(--surface);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-3);
+  box-shadow: var(--lift-2);
+  color: var(--ink);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar__head {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-block-end: var(--s-2);
+}
+
+.calendar__month {
+  flex: 1 1 auto;
+  text-align: center;
+  font-weight: var(--w-medium);
+}
+
+.calendar__step {
+  flex: none;
+  inline-size: var(--row);
+  block-size: var(--row);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.calendar__step:hover {
+  color: var(--ink);
+}
+
+.calendar__step:focus-visible {
+  box-shadow: var(--focus);
+}
+
+/* `ChevronIcon` points down; a quarter turn each way makes the pair. Rotation
+   is the one physical thing here, so it is mirrored for Arabic by hand. */
+.calendar__chevron--back {
+  rotate: 90deg;
+}
+
+.calendar__chevron--forward {
+  rotate: -90deg;
+}
+
+.calendar:dir(rtl) .calendar__chevron--back {
+  rotate: -90deg;
+}
+
+.calendar:dir(rtl) .calendar__chevron--forward {
+  rotate: 90deg;
+}
+
+.calendar__week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.calendar__weekday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: var(--lh-body);
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+}
+
+.calendar__cell {
+  display: flex;
+}
+
+.calendar__day {
+  inline-size: 100%;
+  block-size: var(--row);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-2);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.calendar__day:hover {
+  background: var(--brand-wash);
+}
+
+.calendar__day:focus-visible {
+  box-shadow: var(--focus);
+}
+
+/* Today is a hairline, never a fill: a fill is what "chosen" means, and the
+   two must not be mistaken for each other at a glance. */
+.calendar__day--today {
+  box-shadow: inset 0 0 0 var(--hairline) var(--brand);
+}
+
+/* The same pairing the section switcher uses: white on the practice's violet
+   measures 14.65 on this ground. */
+.calendar__day--chosen,
+.calendar__day--chosen:hover {
+  background: var(--brand);
+  color: var(--surface);
+  font-weight: var(--w-medium);
+}
+
+/* Outside the `min`/`max` the caller set. `aria-disabled` rather than
+   `disabled`, so the roving tabindex can still land on it and a reader is
+   told why it does nothing. */
+.calendar__day--unreachable,
+.calendar__day--unreachable:hover {
+  background: none;
+  color: var(--slate);
+  cursor: default;
 }
 
 .button {
