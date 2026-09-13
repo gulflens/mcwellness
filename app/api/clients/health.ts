@@ -99,7 +99,7 @@ export function mountHealthDeclaration(api: Hono<ApiEnv>): void {
         // Cleaned like any typed text; not checked against consent_wording,
         // because the screen that asked is the one that knows which version
         // it showed, and only the office reaches this route.
-        answers.wordingVersion === undefined ? null : note(answers.wordingVersion),
+        note(answers.wordingVersion),
         answers.seizures,
         note(answers.seizuresNote),
         answers.implantedDevice,

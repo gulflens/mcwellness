@@ -40,7 +40,8 @@
 -- agreement's own words, so the person at the door is not surprised. Nothing
 -- here is assessed, scored or interpreted.
 --
--- Needs: 060 (client, app_user), 097 (app.audit_row), 100 (goal_category).
+-- Needs: 060 (client, app_user), 095 (app.audit_row), 097 (the general
+--        client_id rule that attributes these rows), 100 (goal_category).
 --
 -- The erasure step is not here — see section 5 — and neither is the audit
 -- redaction of the six answers, which is 965's; 108 creates two tables and

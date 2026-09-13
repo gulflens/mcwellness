@@ -96,9 +96,13 @@ beforeAll(async () => {
   // (app/api/clients/health.ts), so the first household has one: a contact who
   // may consent, the wording they were shown, and the consent itself.
   await seedContact(owner, IDS.tenantA, CONTACT_ID, CLIENT_ID, 'synthetic-identity-1d6');
+  // A real consent text, the shape 902 gives the practice's wording documents
+  // (tests/portal/db/support.ts seeds the same), not a made-up kind.
   await owner.query(
-    'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256) ' +
-      "values ($1, $2, null, 'consent_wording', 'routes-test/health-data.pdf', 'application/pdf', sha256('w'::bytea))",
+    'insert into document (id, tenant_id, client_id, kind, storage_key, mime_type, sha256, ' +
+      "is_immutable, purpose, locale, version, status) values ($1, $2, null, 'consent_text', " +
+      "'routes-test/health-data.md', 'text/markdown', sha256('w'::bytea), true, " +
+      "'health_data', 'en', '1.1', 'approved')",
     [WORDING_DOCUMENT, IDS.tenantA],
   );
   await owner.query(
