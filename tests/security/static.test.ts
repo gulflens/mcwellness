@@ -101,6 +101,30 @@ describe('serving the built app', () => {
     expect(served.length).toBe(icon.length);
     expect(served.equals(icon)).toBe(true);
   });
+  it('serves the manifest from an address the app owns, with a manifest content type', async () => {
+    // The shared server answers anything it finds on disk with its own idea of
+    // the type: /manifest.webmanifest comes back text/plain on production,
+    // which a browser may decline, and installability is what is at stake
+    // (docs/SPEC/hosting.md, fourth consequence). The page therefore links
+    // /app.webmanifest, which is no file at all, so the request reaches this
+    // process — which knows what a manifest is.
+    const root = build();
+    writeFileSync(join(root, 'manifest.webmanifest'), '{"name":"McWellness","start_url":"/"}');
+    const api = createApi(deps);
+    mountApp(api, root);
+
+    const res = await api.request('/app.webmanifest');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/manifest+json; charset=utf-8');
+    expect(await res.json()).toMatchObject({ start_url: '/' });
+
+    // And the real page asks for that address rather than the one on disk.
+    // (`build()` writes its own minimal shell, so the repository's own
+    // index.html is what carries the link worth asserting on.)
+    const shipped = readFileSync('index.html', 'utf8');
+    expect(shipped).toContain('href="/app.webmanifest"');
+    expect(shipped).not.toContain('href="/manifest.webmanifest"');
+  });
 });
 
 /** The policy a document actually carries, read back out of its `<head>`. */
