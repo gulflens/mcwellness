@@ -1670,3 +1670,118 @@ not be installed in the environment, so placement was proved as a pure function
 rather than measured in a live panel in the browser the defect was reported
 from. That gap was stated before the upload rather than after, and the operator
 closed it: "it work amazing".
+
+## What was done on 2026-09-14: the twenty-fourth live pass — the health answers, and the readings go dormant
+
+**The largest pass so far: five merges and five migrations at once.** Production
+had been left four merges behind while two streams worked in parallel, and the
+fifth landed on top of them. Main `1b15107` carries pull request 176 (the
+manifest the app serves), 178 (reference lists remembered for the session, and a
+booking defaulted), 177 and 179 (concerns, and the six health answers the
+agreement asks for, with their screens), and 180 (the practice's own software
+takes the readings; ours go dormant).
+
+**What the practice gets.** The six things every household is asked to disclose
+before a first session — epilepsy or any seizure, a pacemaker or any implanted
+electrical device, a head injury at any time, pregnancy, medication that affects
+mood, sleep or attention, and a skin condition or sensitivity on the scalp — now
+have somewhere to live. Until this pass they were told to a person and
+remembered by that person. A "yes" shows on the record and on the practitioner's
+own card for that visit, so it is seen at the door, and it blocks nothing.
+Concerns are stored apart from goals so that a worry can never appear in
+somebody's progress report as a goal they never set. And a visit no longer asks
+the practitioner to transcribe three figures off the vendor's screen: the
+professional software's export is attached to the visit instead.
+
+**The order the databases were done in, and why it is not arbitrary.** Staging
+first, then production, each migration through the hosted console with the
+file's own sha256 written into `schema_migration` by hand. Both went from 97 to
+**102**: `108` (concern, health_declaration), `307` (a session's export
+document), `918` (`tenant.record_readings`, shipped false), `964` (the erasure
+reaches concerns and the health answers), `965` (the six answers dropped from
+the audit trail). Then the three changed policy files under
+`db/policies/client/` — `readers.sql`, `writers.sql`, `tenant_isolation.sql` —
+re-applied by hand, **after** `108` rather than before it, because all three
+name `concern` and `health_declaration` and neither table exists until `108`
+runs. Policies are declarative and are not carried by migrations; the runner
+re-applies every file on each migrate, so a hand-applied pass must re-apply the
+changed ones or the fingerprint comes up short.
+
+**All five migrations are additive, so the window in which the schema led the
+code was the safe direction.** The upload was delayed after the databases were
+finished, and both health endpoints answered 200 throughout that gap. A pass
+that has to stop half way should stop here, not the other way round.
+
+**Fingerprint: staging and production identical on all seven categories.**
+Columns `c79efc8f` (212), constraints `83850f2b` (118), indexes `67b4a932` (90),
+policies `c5e2a4e2` (41), triggers `1bd12056`, functions `36c1780d`, comments
+`9894eac7`. Three probes on both: `app.erase_client` names
+`public.health_declaration` and `public.concern`; `app.audit_redact` drops
+`seizures`; and the new foreign key on `session.export_document_id` reads
+`confdeltype = 'n'`, which is `set null`. `app.verify_audit_chain()` returns
+null on production, which is what intact looks like.
+
+**Two databases agreeing is not a fingerprint of the file.** It proves only that
+the same text was pasted twice, which is exactly the mistake a hand-applied pass
+is prone to. `108` carries a long deliberate table comment, so the comment
+literals were extracted from the migration files themselves and hashed:
+`84407166` for the `health_declaration` table comment and `51c22d59` for
+`session.export_document_id`. Both match what the databases store, byte for
+byte. Do this on any pass that hand-applies a comment.
+
+**Why the export needs no mention in the erasure, which is a design decision and
+not an omission.** `964` is now the highest definer of `app.erase_client`, above
+`954`, and it never names `session.export_document_id`. It does not need to. The
+foreign key is `on delete set null`, so the erasure's generic
+`delete from public.document where client_id = …` takes the file and the
+reference clears itself — where `setup_photo_document_id`, whose foreign key has
+no `on delete` clause, must be unlinked by hand first or the whole erasure
+aborts on the first household that ever filed one. The export's storage key also
+lands in `storage_keys_to_delete`, so the bytes are swept with everything else.
+A column that cannot be forgotten by whoever writes migration `970` is worth the
+asymmetry.
+
+**The pass.** Archive `mcwellness-1b15107.tar.gz` (6,420,096 bytes); TUS create
+201 and PATCH 204 with the offset equal to the size; build `01a09d0d`, 66
+seconds. Bundle `index-BQknus28.js` → `index-BcybMQ1y.js`. `/api/health` 200 in
+0.50 s, `/api/health/deep` 200 in 0.52 s. **No restart — the seventh consecutive
+pass**, so the restart the 8 September pass needed keeps receding.
+
+**A third failure mode for the hash rule: both cheap checks can be blind at
+once.** The twenty-first to twenty-third passes established that the entry
+bundle's byte count proves nothing on a code-split app, and that the stylesheet
+hash is a free proof the host built this tree. This pass breaks the second one
+too. A local `pnpm build` of `1b15107` emitted `index-CxD9fCWF.css` — **already
+the stylesheet production was serving** — because two whole rounds of new
+screens added no new styles. And the entry bundle came back 475,620 bytes
+against 475,526, a 94-byte move across all of that work. So on any pass that
+happens not to touch CSS, the stylesheet trick cannot discriminate and the byte
+count cannot either, and the chunk marker is the only evidence left. Budget for
+it rather than discovering it at the end.
+
+**Capture the before state before uploading, or the marker check proves
+nothing.** An absence that was never measured is not evidence. Before the
+upload: `ClientsPage-23lzaGsu.js` contained no `Not asked yet`, and
+`PracticePage-qY3pzmOF.js` contained no `recordReadings`. After:
+`ClientsPage-CLIS61Bv.js` carries the first, and `PracticePage-Cy2y_-hh.js` and
+`CheckInPage-Bgv0-Eyk.js` both carry the second. All four previous chunk names
+now 404, which rules out a half-extracted deploy, and a nonsense asset path
+404s as well — that last check is what makes the other four mean anything,
+because a host answering 200 to everything would look identical otherwise.
+
+**The guard that locks a door nobody uses.** `.claude/hooks/no-prod-in-dev.sh`
+refuses any command naming the production project and states that production is
+never touched from a working session. It is a pre-tool hook on shell commands
+only, so it does not see the hosted console through which every live pass in
+this document has actually applied its migrations, and both locks it names guard
+`pnpm db:migrate`, which cannot reach a hosted database anyway because no owner
+password exists on the machine. It was found by tripping it while writing a
+note, not by reading it. Nothing was changed: either its wording overstates what
+it protects, or the console path needs a lock of its own, and that is the
+operator's decision rather than a thing to quietly adjust.
+
+**Still open, and deliberately untouched.** `docs/CONSENT/erasure-letter/en.md`
+and `ar.md` list what an erasure removes and do not mention the health answers,
+which `964` now deletes outright. It under-states rather than mis-states.
+Changing approved wording is a new version and the operator's call; it has been
+put to them twice and remains theirs.
