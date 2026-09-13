@@ -1574,6 +1574,18 @@ which proves the host is not blanket-200ing and makes the two 200s evidence
 rather than noise. A baseline armed before the upload also gave a flip
 timestamp of 10:42:16Z, which a check run afterwards cannot.
 
+> **Corrected the same day, before the check was used again.** As written above,
+> the 404 rule is wrong for any pass that does not change everything. It held on
+> this pass only because BOTH hashes moved. Vite hashes each asset on its own
+> content, so a CSS-only round leaves the JS hash alone — and the old JS is then
+> still the CURRENT JS, which must answer **200**. Applying "the old asset must
+> 404" to it would report a failed deploy on a good one. The rule is:
+> **for each asset whose hash MOVED, the superseded file must 404; an asset whose
+> hash did not move must still 200.** On a CSS-only pass a static JS hash is the
+> expected result and not a warning — while a JS hash that DID move is worth a
+> look, because it says something changed that was not meant to. Caught by the
+> session holding the watch for the twenty-second pass, before that pass ran.
+
 **Not chased, and neither is new.** The CDN transcodes images — the same
 address returns `image/webp` or PNG depending on the `Accept` header, with no
 `Vary` and a year-long cache — so a served asset's bytes never match the

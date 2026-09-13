@@ -82,6 +82,38 @@ describe('the page switcher', () => {
     expect(offenders).toEqual([]);
   });
 
+  /**
+   * `.checkbox` shares this file rather than getting its own, so that the
+   * `declares` matcher above — which a review of pull request 163 probed and
+   * hardened against five ways of slipping past a substring search — has one
+   * implementation. A fourth copy of a matcher, in a guard whose whole purpose
+   * is to prevent fourth copies, would be a poor joke.
+   *
+   * The defect it prevents is the same shape as the switcher's, one step
+   * earlier. `.checkbox` was defined three times — `app/shell/shell.css`,
+   * `app/admin/clients/clients.css`, `app/admin/billing/billing.css` —
+   * byte-identical, so nothing looked wrong. It only bites when someone edits
+   * one: on 2026-09-13 the operator asked for a shorter row and a bigger tick,
+   * and a change to any single copy would have left the other two screens as
+   * they were, with load order deciding which a given page got.
+   */
+  it('styles a checkbox from the shell alone, so three copies cannot drift again', () => {
+    const offenders = everyStylesheet()
+      .filter((file) => !always.includes(file))
+      .filter((file) => declares(readFileSync(file, 'utf8'), '.checkbox'));
+    expect(offenders).toEqual([]);
+  });
+
+  it('draws the tick at the label line height, not the browser default', () => {
+    // The operator's instruction of 2026-09-13, from a screenshot: the box read
+    // about half the height of the words beside it. Sized from `--lh-body` so it
+    // follows the type scale rather than being pinned to a number.
+    const shell = readFileSync('app/shell/shell.css', 'utf8');
+    const input = /\.checkbox input[^{]*\{[^}]*\}/.exec(shell)?.[0] ?? '';
+    expect(input).toContain('block-size: var(--lh-body)');
+    expect(input).toContain('inline-size: var(--lh-body)');
+  });
+
   it('gives the one you are on the brand violet', () => {
     // The operator's instruction of 2026-09-12. On the page's light paper this
     // is legible where the rail's violet ground is not (spec section 4.2).
