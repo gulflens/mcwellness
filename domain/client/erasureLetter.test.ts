@@ -44,8 +44,11 @@ describe('the erasure letter template', () => {
     ] as const) {
       const template = parseErasureLetterTemplate(read(file));
       expect(template.locale).toBe(locale);
-      // Draft until the practice's lawyer approves it (docs/CONSENT/README.md).
-      expect(template.status).toBe('draft');
+      // Approved by the operator on 2026-09-14, whose own approval is final:
+      // the practice is not engaging a lawyer (docs/CONSENT/simple/README.md).
+      // Kept as an assertion rather than deleted, because a letter that quietly
+      // slipped back to draft would print a caveat to a household unnoticed.
+      expect(template.status).toBe('approved');
       expect(template.version).toMatch(/^\d+\.\d+/);
       expect(template.body.startsWith('---')).toBe(false);
       expect(template.body.length).toBeGreaterThan(200);

@@ -128,7 +128,7 @@ are the evidence of what a person was shown.
   with its purpose, locale and version, so the consent step can name the
   exact text shown.
 - The Arabic files are the text an Arabic-speaking client signs; they are
-  faithful translations of the English, not summaries, and the lawyer's
-  review covers both.
+  faithful translations of the English, not summaries, and an approval covers
+  both languages or neither.
 - Plain language, British English, no clinical vocabulary beyond what the
   law requires; a person at a kitchen table should be able to read it.

@@ -1,14 +1,13 @@
 ---
 purpose: erasure_letter
 locale: en
-version: 0.5-draft
-status: draft
+version: 1.0
+status: approved
 written: 2026-09-06
+approved: 2026-09-14
 ---
 
 # Confirmation that your record has been erased
-
-**Draft wording, in use until the practice's lawyer approves a final version.**
 
 On {{erased_on}} we erased the record you asked us to erase. Your name, your
 date of birth, the contact details we held, the address we visited and the

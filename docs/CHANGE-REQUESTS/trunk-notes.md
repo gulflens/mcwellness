@@ -3884,12 +3884,32 @@ the Arabic reuses `الإجابات الصحية التي زوّدتنا بها`
 `health-data.ar.md` and `notices/your-information.ar.md`, so a household meets
 the same words in the consent that asked and the letter that confirms.
 
-**Still open, and named here so it is not mistaken for finished.** Both files
-still carry the line "in use until the practice's lawyer approves a final
-version", and the operator closed the lawyer route on 9 September: their own
-approval is final. That line is stale in both languages. It is a change to the
-letter's status rather than to its facts, so it was left for the operator
-rather than folded in unasked.
+**Then approved outright, the same hour.** Asked about the stale line — both
+files still said the wording stood "until the practice's lawyer approves a
+final version", though the lawyer route closed on 9 September — the operator
+answered that nothing waits on a lawyer and approved the wording themselves.
+So the letters are **`1.0`, `status: approved`**, the draft caveat is gone from
+both languages, and an `approved: 2026-09-14` line records who and when.
+
+That removed a claim from four more places, because a caveat repeated in five
+files is four chances to contradict the one that matters:
+
+- `domain/client/erasureLetter.test.ts` asserted `status` was `draft`. It now
+  asserts `approved` — kept as an assertion rather than deleted, because a
+  letter that quietly slipped back to draft would print a caveat to a household
+  and nothing would notice.
+- `app/admin/clients/ErasureSection.tsx` told the office, unconditionally, that
+  a filed letter came "from draft wording X, pending the practice's lawyer".
+  Now "from wording X". The version is still named, so a filed letter can be
+  read back against the text that produced it.
+- `app/api/clients/erasure-letter.ts` and `docs/CONSENT/README.md` said the
+  same in prose.
+
+**Left alone deliberately:** `RecordConsentForm`'s draft banner, which is
+conditional on `wording.status === 'draft'` from the database and so answers
+itself; `WORDING_IS_DRAFT` in `domain/reports/document/strings.ts`, already
+`false` since 9 September; and everything under `docs/CONSENT/superseded/`,
+which is retired text whose front matter is history.
 
 ### 2. `no-prod-in-dev.sh` said more than it does
 

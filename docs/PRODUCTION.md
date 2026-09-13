@@ -1791,10 +1791,14 @@ letter is at `0.5-draft` in both languages and now names the concerns and the
 health answers, reusing the phrasing the health-data consent already uses so a
 household meets the same words twice; the hook's message was corrected to say
 what it actually guards, with its patterns and matcher left byte-identical.
-Recorded in `docs/CHANGE-REQUESTS/trunk-notes.md`, round 52. One thing in the
-letter is still theirs and was not folded in: both languages still say the
-wording stands "until the practice's lawyer approves a final version", and the
-lawyer route was closed on 9 September, so that line is stale.
+Recorded in `docs/CHANGE-REQUESTS/trunk-notes.md`, round 52. Asked about the
+one line left over — both languages still said the wording stood "until the
+practice's lawyer approves a final version", though that route closed on 9
+September — the operator answered that nothing waits on a lawyer and approved
+the wording themselves. **The erasure letter is `1.0`, `status: approved`, in
+both languages**, and the caveat is gone from the four other places that
+repeated it. Nothing in `docs/CONSENT/` is a draft any more except the
+superseded texts, which are history.
 
 **A rule for the hold protocol, which this pass needed and did not have.** Two
 sessions were asked to stand down. One answered in under a minute; the other

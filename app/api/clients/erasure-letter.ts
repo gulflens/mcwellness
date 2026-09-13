@@ -13,9 +13,10 @@ import {
  *
  * The words are in docs/CONSENT/erasure-letter/, beside the consent wording
  * and read the same way the seed reads that (db/seed/consent-text.ts): they
- * are the practice's own text, drafts until its lawyer approves them, and a
- * copy of them inside a TypeScript string would be a second version of a
- * legal document that nobody would remember to change.
+ * are the practice's own text, approved by the operator rather than by a
+ * lawyer (docs/CONSENT/simple/README.md), and a copy of them inside a
+ * TypeScript string would be a second version of a legal document that nobody
+ * would remember to change.
  *
  * Read once per process and kept, because the file cannot change under a
  * running server without a deploy, and because the alternative is reading

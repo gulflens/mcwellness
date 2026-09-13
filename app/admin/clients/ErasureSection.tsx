@@ -462,8 +462,8 @@ export function ErasureSection({
           </div>
           <Note>
             The letter is filed as {letterFileName(record)}
-            {performed.letterVersion ? `, from draft wording ${performed.letterVersion}` : ''},
-            pending the practice&apos;s lawyer. Attach it to the message before sending.
+            {performed.letterVersion ? `, from wording ${performed.letterVersion}` : ''}. Attach it
+            to the message before sending.
           </Note>
           {performed.notifyPhone ? null : (
             <Note>
