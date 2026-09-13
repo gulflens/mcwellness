@@ -629,4 +629,74 @@ describe('NewAppointmentDrawer', () => {
     );
     expect((screen.getByLabelText('Location') as HTMLSelectElement).value).toBe(homeLocation.id);
   });
+
+  it('does not take a home for a studio-only service, and keeps the time step shut', async () => {
+    // The location select shows only the homes and studios the service can be
+    // delivered at. A default taken from the unfiltered list picked a home for
+    // a studio-only service and opened the time step on a form showing no
+    // location at all (the review of pull request 178).
+    const studioOnly = { ...serviceType, deliveryModes: ['studio'] };
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+      (url) => ({
+        serviceTypes: [studioOnly],
+        locations: url.searchParams.has('clientId') ? [homeLocation] : [],
+        practitioners: url.searchParams.has('serviceTypeId') ? [practitioner] : [],
+      }),
+    );
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <NewAppointmentDrawer date="2026-09-10" onClose={vi.fn()} onCreated={vi.fn()} />
+      </AuthProviderBoundary>,
+    );
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Iris' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy(), {
+      timeout: 1000,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Cliff' }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Service') as HTMLSelectElement).value).toBe(studioOnly.id),
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).value).toBe(
+        practitioner.id,
+      ),
+    );
+    expect((screen.getByLabelText('Location') as HTMLSelectElement).value).toBe('');
+    expect((screen.getByLabelText('Start time') as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it('keeps the time step shut with a location chosen and no practitioner', async () => {
+    // Two credentialed practitioners: neither is taken — who delivers is
+    // never guessed — so the last step waits for that choice as it always did.
+    const second = { id: '00000008-0000-4000-8000-000000000014', displayName: 'Rowan Meadow' };
+    const fetchImpl = buildFetch(
+      () => new Response(JSON.stringify({ error: 'forbidden', requestId: 'r1' }), { status: 403 }),
+      (url) => ({
+        serviceTypes: [serviceType],
+        locations: url.searchParams.has('clientId') ? [homeLocation] : [],
+        practitioners: url.searchParams.has('serviceTypeId') ? [practitioner, second] : [],
+      }),
+    );
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <NewAppointmentDrawer date="2026-09-10" onClose={vi.fn()} onCreated={vi.fn()} />
+      </AuthProviderBoundary>,
+    );
+    fireEvent.change(screen.getByLabelText('Search clients'), { target: { value: 'Iris' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy(), {
+      timeout: 1000,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Iris Cliff' }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Location') as HTMLSelectElement).value).toBe(homeLocation.id),
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).options).toHaveLength(3),
+    );
+    expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).value).toBe('');
+    expect((screen.getByLabelText('Start time') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Practitioner'), { target: { value: second.id } });
+    expect((screen.getByLabelText('Start time') as HTMLInputElement).disabled).toBe(false);
+  });
 });

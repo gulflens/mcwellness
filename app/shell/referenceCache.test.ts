@@ -79,10 +79,11 @@ describe('readReference', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps one session's answers apart from another's", async () => {
-    // A second sign-in on the same device gets a fresh apiFetch, and with it
-    // an empty cache. The same shape keeps one test case's answers out of
-    // the next.
+  it("keeps one fetcher's answers apart from another's", async () => {
+    // A test that hands each render its own fetch never sees another case's
+    // answers, and a remounted provider starts empty. (Between two people on
+    // one device it is the forgetting at sign-out that does the work, since
+    // the provider is mounted once and its fetcher persists.)
     const first = answering({ serviceTypes: ['first'] });
     const second = answering({ serviceTypes: ['second'] });
     const a = await readReference(first, '/api/billing/service-types');

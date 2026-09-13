@@ -91,27 +91,24 @@ export function keepOrDefault(
 }
 
 /**
- * What the last booking on this device chose, kept in the browser and nowhere
- * else: two ids of the practice's own catalogue and roster, nothing about any
- * household. A device that refuses storage simply offers no default.
+ * The service the last booking on this device chose, kept in the browser and
+ * nowhere else: one id from the practice's own catalogue, nothing about any
+ * household. The practitioner is deliberately not remembered (see the
+ * defaults above). A device that refuses storage simply offers no default.
  */
 const LAST_SERVICE = 'mcwellness.booking.service';
-const LAST_PRACTITIONER = 'mcwellness.booking.practitioner';
 
-function remembered(key: string): string | null {
+function rememberedService(): string | null {
   try {
-    return localStorage.getItem(key);
+    return localStorage.getItem(LAST_SERVICE);
   } catch {
     return null;
   }
 }
-const rememberedService = () => remembered(LAST_SERVICE);
-const rememberedPractitioner = () => remembered(LAST_PRACTITIONER);
 
-function rememberChoice(serviceTypeId: string | null, practitionerId: string | null): void {
+function rememberService(serviceTypeId: string | null): void {
   try {
     if (serviceTypeId) localStorage.setItem(LAST_SERVICE, serviceTypeId);
-    if (practitionerId) localStorage.setItem(LAST_PRACTITIONER, practitionerId);
   } catch {
     // Nothing to do: the next booking asks, as it did before.
   }
@@ -219,16 +216,31 @@ export function NewAppointmentDrawer({
         // Defaults, so a booking is not four picks when three of them have
         // one honest answer (the usability pass of 2026-09-14). A choice the
         // person already made is kept if the new options still offer it;
-        // otherwise the only option is taken, and for the service, the one
-        // used last time. Nothing is guessed where there are several and no
-        // history: the select stays empty and asks.
-        setSelectedServiceTypeId((current) =>
-          keepOrDefault(current, loaded.serviceTypes, rememberedService()),
+        // otherwise the only option is taken, and for the service alone, the
+        // one this device booked last time — history, not a guess. Nothing is
+        // guessed where there are several: the select stays empty and asks.
+        //
+        // The service is resolved first, from the value this effect ran for,
+        // because the location can only be defaulted from the locations the
+        // select will actually show — the ones that suit the service's
+        // delivery modes. Defaulting from the unfiltered list took a home for
+        // a studio-only service and opened the time step on a form that
+        // showed no location at all (the review of pull request 178).
+        const nextService = keepOrDefault(
+          selectedServiceTypeId,
+          loaded.serviceTypes,
+          rememberedService(),
         );
-        setSelectedLocationId((current) => keepOrDefault(current, loaded.locations, null));
-        setSelectedPractitionerId((current) =>
-          keepOrDefault(current, loaded.practitioners, rememberedPractitioner()),
-        );
+        const service = loaded.serviceTypes.find((s) => s.id === nextService) ?? null;
+        const suitable = service
+          ? loaded.locations.filter((l) => service.deliveryModes.includes(deliveryModeOf(l.label)))
+          : [];
+        setSelectedServiceTypeId(nextService);
+        setSelectedLocationId((current) => keepOrDefault(current, suitable, null));
+        // Who delivers is never remembered: a preferred practitioner is a
+        // guess about a household, where a preferred service is a fact about
+        // the visit. Only a single credentialed practitioner is taken.
+        setSelectedPractitionerId((current) => keepOrDefault(current, loaded.practitioners, null));
       })
       .catch(() => {
         if (live) setOptionsState('error');
@@ -328,7 +340,7 @@ export function NewAppointmentDrawer({
         }),
       });
       if (res.status === 201) {
-        rememberChoice(selectedServiceTypeId, selectedPractitionerId);
+        rememberService(selectedServiceTypeId);
         onCreated(AppointmentRow.parse(await res.json()));
         return;
       }

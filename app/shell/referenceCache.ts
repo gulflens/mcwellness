@@ -31,11 +31,16 @@ type Entry = { at: number; generation: number; answer: Promise<ReferenceAnswer> 
 type Fetcher = (path: string) => Promise<Response>;
 
 /**
- * Keyed by the fetcher first and the address second. `apiFetch` is one
- * function for the life of a session (app/shell/auth/AuthContext.tsx), so
- * this is a per-session cache by construction: a second sign-in on the same
- * device gets a fresh fetcher and an empty cache, and a test that hands each
- * render its own fetch never sees another case's answers. A WeakMap, so a
+ * Keyed by the fetcher first and the address second.
+ *
+ * `apiFetch` is one function for the life of the page — the auth provider is
+ * mounted once (app/shell/main.tsx) and does not remount at sign-out — so the
+ * fetcher does NOT change between one person and the next on the same device.
+ * What keeps their lists apart is the forgetting: `forgetReferences()` runs
+ * on every sign-out, the voluntary one and the one a 401 forces
+ * (app/shell/auth/AuthContext.tsx). The fetcher key earns its place elsewhere:
+ * a test that hands each render its own fetch never sees another case's
+ * answers, and a provider that is remounted starts empty. A WeakMap, so a
  * fetcher that is gone takes its entries with it.
  */
 const byFetcher = new WeakMap<Fetcher, Map<string, Entry>>();
@@ -82,7 +87,8 @@ export function readReference(
       held = Math.max(0, held - 1);
       throw error;
     });
-  if (!mine.has(path)) held += 1;
+  const before = mine.get(path);
+  if (!before || before.generation !== generation) held += 1;
   mine.set(path, { at: now(), generation, answer });
   return answer;
 }

@@ -78,6 +78,10 @@ export function AuthProviderBoundary({
       const res = await fetchImpl(path, { ...init, headers });
       if (res.status === 401) {
         await provider.signOut();
+        // A sign-out the server forced is still a sign-out: the next person to
+        // sign in on this device must not read this person's lists
+        // (app/shell/referenceCache.ts). The voluntary path below does the same.
+        forgetReferences();
         setSession({ status: 'signed-out' });
       }
       // A write is the one thing that can make a remembered reference list
