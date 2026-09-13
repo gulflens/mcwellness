@@ -51,7 +51,7 @@
 - Test: `tests/db/practice.test.ts` (extend; find the file that already asserts practice columns)
 
 **Interfaces:**
-- Produces: `practice.record_readings boolean not null default false`
+- Produces: `tenant.record_readings boolean not null default false` — the practice IS the tenant row; there is no `practice` table
 
 - [ ] **Step 1: Confirm 964 is still free across every open branch**
 
@@ -68,7 +68,7 @@ Find the existing database test that asserts the practice's columns (grep `tests
 ```ts
 it('records readings off by default, because the practice uses its own software', async () => {
   const { rows } = await sql(
-    `select record_readings from public.practice where tenant_id = $1`,
+    `select record_readings from public.tenant where id = $1`,
     [tenantId],
   );
   expect(rows[0].record_readings).toBe(false);
@@ -101,10 +101,10 @@ Expected: FAIL — `column "record_readings" does not exist`.
 -- Nothing is dropped. The reading columns, the event shapes and the domain
 -- functions all stay, and this switch turns them back on.
 
-alter table public.practice
+alter table tenant
   add column record_readings boolean not null default false;
 
-comment on column public.practice.record_readings is
+comment on column public.tenant.record_readings is
   'Whether a visit asks the practitioner to enter signal, artefact and reward figures. Off since 2026-09-13: the practice uses its own professional software and attaches its export instead.';
 ```
 
@@ -130,7 +130,7 @@ git commit -m "feat(practice): a switch for the app's own readings, off"
 - Test: `app/admin/settings/PracticePage.test.tsx` (extend)
 
 **Interfaces:**
-- Consumes: `practice.record_readings` from Task 1
+- Consumes: `tenant.record_readings` from Task 1 (the practice IS the tenant row)
 - Produces: `recordReadings: boolean` on the practice response and its update body
 
 - [ ] **Step 1: Write the failing tests**

@@ -50,6 +50,12 @@ for the half that lacks it.
 
 ## The design calls this spec makes
 
+> **Corrected during execution, 14 September.** This section originally said the
+> switch lives on a `practice` table. There is no such table: the practice IS
+> the `tenant` row, and `905_practice_identity.sql` — whose name misleads — puts
+> the practice's identity, its licence and its `vat_registered` flag on `tenant`.
+> The column is `tenant.record_readings`. Everything else below stands.
+
 **The switch is one practice-wide boolean, not a per-service one.** `record_readings`
 on the practice, default `false`. Per-service was offered and declined: today the
 answer is the same for every service, and a decision made five times is five
