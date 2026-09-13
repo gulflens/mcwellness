@@ -18,7 +18,33 @@ import type { ApiEnv } from './_middleware/request-context';
  * worker a browser holds on to is a worker that cannot be replaced, and a
  * deploy that cannot replace its own worker is a deploy nobody sees.
  */
-const ROOT_FILES: Record<string, { type: string; cacheControl: string; binary?: true }> = {
+const ROOT_FILES: Record<
+  string,
+  { type: string; cacheControl: string; binary?: true; file?: string }
+> = {
+  /**
+   * **The address the page actually links to**, and it deliberately names no
+   * file on disk.
+   *
+   * `/manifest.webmanifest` below is a real file in the build, and the shared
+   * server answers anything it finds on disk itself: measured on production, it
+   * comes back `content-type: text/plain`, which is not a manifest's type and
+   * which a browser may decline — so installability was what was at stake
+   * (docs/SPEC/hosting.md, fourth consequence). Nothing reachable through the
+   * hosting API changes that, and the app's own answer for that path is simply
+   * never asked for.
+   *
+   * A path with no file behind it has no such shortcut: it reaches this
+   * process, and this process knows what a manifest is. The file it serves is
+   * the same one; only the address differs.
+   */
+  '/app.webmanifest': {
+    type: 'application/manifest+json; charset=utf-8',
+    cacheControl: 'public, max-age=3600',
+    file: 'manifest.webmanifest',
+  },
+  // Kept, and still correct: the day the static layer stops intercepting it,
+  // this is the answer it should have been giving all along.
   '/manifest.webmanifest': {
     type: 'application/manifest+json; charset=utf-8',
     cacheControl: 'public, max-age=3600',
@@ -144,18 +170,19 @@ function assertThePolicyLands(html: string): void {
 export function mountApp(api: Hono<ApiEnv>, root = 'dist'): void {
   const index = readFileSync(join(root, 'index.html'), 'utf8');
   assertThePolicyLands(index);
-  for (const [path, { type, cacheControl, binary }] of Object.entries(ROOT_FILES)) {
+  for (const [path, { type, cacheControl, binary, file }] of Object.entries(ROOT_FILES)) {
+    const onDisk = file ?? path.slice(1);
     api.get(path, (c) => {
       let body: string | ArrayBuffer;
       try {
         if (binary) {
-          const bytes = readFileSync(join(root, path.slice(1)));
+          const bytes = readFileSync(join(root, onDisk));
           body = bytes.buffer.slice(
             bytes.byteOffset,
             bytes.byteOffset + bytes.byteLength,
           ) as ArrayBuffer;
         } else {
-          body = readFileSync(join(root, path.slice(1)), 'utf8');
+          body = readFileSync(join(root, onDisk), 'utf8');
         }
       } catch {
         // A build without one of these is a build with no worker rather than a
