@@ -504,12 +504,28 @@ a.rail__child.rail__child--current {
   color: var(--ink);
 }
 
+/* The hidden native input is not a hiding place — it is the ANCHOR the browser
+   positions and sizes its date picker from, so it must have the shape of the
+   thing the picker belongs to.
+
+   It was a 1px dot at the field's inline end, and in a drawer docked to the
+   right of the screen that put the anchor 24px from the viewport's edge with a
+   5x4px box to work from (measured in Chrome at 1200px: anchor at x=1171, the
+   drawer's right edge at 1200). The picker opened outward from there, off the
+   screen, and drew itself small because it has almost no anchor to scale
+   against. The operator hit it on the New appointment drawer, 2026-09-13.
+
+   Now it lies exactly over the visible input — same inline extent, same block
+   offset below the label, same `--row` height — so the picker anchors to a real
+   431px-wide box well inside the viewport and opens inward beneath the field it
+   belongs to. Still `opacity: 0` and `pointer-events: none`, so it is seen by
+   nobody and swallows no clicks; `tabIndex={-1}` and `aria-hidden` on the
+   element keep it out of the tab order and off the accessibility tree. */
 .datefield__native {
   position: absolute;
-  inset-inline-end: 0;
+  inset-inline: 0;
   inset-block-start: calc(var(--lh-small) + var(--s-1));
-  inline-size: 1px;
-  block-size: 1px;
+  block-size: var(--row);
   opacity: 0;
   pointer-events: none;
 }
