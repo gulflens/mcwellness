@@ -70,7 +70,7 @@ describe('the practice’s identity', () => {
   });
 
   it('records readings off by default, because the practice uses its own software', async () => {
-    // Migration 964. The app's own reading capability goes dormant, not
+    // Migration 918. The app's own reading capability goes dormant, not
     // deleted: a newly bootstrapped environment must start behaving the way
     // this practice actually works.
     const row = await tenantRow();
