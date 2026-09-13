@@ -79,7 +79,12 @@ function mount(
   options: {
     services?: unknown[];
     onPost?: PostHandler;
-    onServiceTypes?: (callIndex: number) => Response;
+    /**
+     * A plain `Response` for every existing test; a controllable pending
+     * `Promise<Response>` for one that needs the answer to settle only once
+     * the test says so (fix round 3, finding 1's own race).
+     */
+    onServiceTypes?: (callIndex: number) => Response | Promise<Response>;
     /** Router state the day sheet hands over when a stop's Check in is tapped. */
     state?: { record?: unknown };
     /** What GET /api/sessions/open answers: a visit already open, or none. */
@@ -88,11 +93,16 @@ function mount(
 ) {
   const services = options.services ?? [SERVICE_A];
   const calls: Call[] = [];
+  // One entry per GET /api/sessions/open, so a test can tell whether the
+  // resume-detection effect actually re-ran (fix round 3, finding 1: it
+  // depends on `recordReadings` and does re-run whenever that settles).
+  const openVisitCalls: true[] = [];
   let serviceTypesCalls = 0;
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
     if (url === '/api/sessions/open') {
+      openVisitCalls.push(true);
       return json({ session: options.openSession ?? null });
     }
     if (url === '/api/sessions/service-types') {
@@ -128,7 +138,7 @@ function mount(
       </MemoryRouter>
     </AuthProviderBoundary>,
   );
-  return { ...utils, fetchImpl, calls };
+  return { ...utils, fetchImpl, calls, openVisitCalls };
 }
 
 async function ready() {
@@ -664,6 +674,32 @@ describe('CheckInPage, resuming a visit', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
     expect(await screen.findByRole('button', { name: 'Start session' })).toBeTruthy();
+  });
+
+  it('keeps a declined offer declined once a slower services fetch settles (fix round 3, finding 1)', async () => {
+    // The resume-detection effect depends on `recordReadings` on purpose
+    // (fix round 2, finding 1) and genuinely re-runs once the services
+    // fetch settles — proven below by a second GET /api/sessions/open.
+    // Before this fix, that re-run unconditionally overwrote `resume`,
+    // silently bringing back a prompt the practitioner had just declined.
+    let resolveServiceTypes: (response: Response) => void = () => undefined;
+    const pendingServiceTypes = new Promise<Response>((resolve) => {
+      resolveServiceTypes = resolve;
+    });
+    const { openVisitCalls } = mount({
+      openSession: OPEN,
+      onServiceTypes: () => pendingServiceTypes,
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in someone else instead' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull());
+    const callsBeforeSettling = openVisitCalls.length;
+
+    resolveServiceTypes(json({ serviceTypes: [SERVICE_A], recordReadings: true }));
+
+    await waitFor(() => expect(openVisitCalls.length).toBeGreaterThan(callsBeforeSettling));
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    expect(screen.getByLabelText('Record number')).toBeTruthy();
   });
 });
 

@@ -299,6 +299,15 @@ export function CheckInPage() {
   const [runningRecordReadings, setRunningRecordReadings] = useState(false);
   const [resume, setResume] = useState<ResumeOffer>({ kind: 'looking' });
   const storeRef = useRef<OutboxStore | null>(null);
+  // Set once the practitioner sets the offer aside (fix round 3, finding 1):
+  // the resume-detection effect below re-runs whenever `recordReadings`
+  // settles or changes (fix round 2, finding 1's own dependency), and
+  // without this guard that re-run would silently overwrite a `dismissed`
+  // decision with a fresh `offered` the moment a slower services fetch
+  // finally answers — the exact prompt the practitioner just declined,
+  // reappearing on its own. A ref rather than state: reading it must not
+  // itself be a reason for the effect to run again.
+  const dismissedResumeRef = useRef(false);
 
   const [servicesState, setServicesState] = useState<ServicesState>({ kind: 'loading' });
   const [selectedServiceId, setSelectedServiceId] = useState('');
@@ -348,20 +357,27 @@ export function CheckInPage() {
   // frozen for them to be wrong about. An *offline* offer never depends on
   // this at all: it is stamped from the device's own note, which is exactly
   // the value a live fetch with no signal to complete cannot provide.
+  //
+  // That same re-run must never overwrite a decision already made, though
+  // (fix round 3, finding 1): `dismissedResumeRef` is checked before every
+  // `setResume` below, so a resume the practitioner has set aside stays set
+  // aside no matter how many times a slower services fetch settles
+  // afterwards — the fix cannot be "drop `recordReadings` from the
+  // dependency list", which would bring back round 2's stale-flag bug.
   useEffect(() => {
     let live = true;
     void (async () => {
       const fromServer = await fetchOpenVisit(apiFetch);
-      if (!live) return;
+      if (!live || dismissedResumeRef.current) return;
       if (fromServer) {
         setResume({ kind: 'offered', visit: fromServer, recordReadings });
         return;
       }
       const store = await createOutboxStore();
-      if (!live) return;
+      if (!live || dismissedResumeRef.current) return;
       storeRef.current = store;
       const note = await store.readOpenVisit();
-      if (!live) return;
+      if (!live || dismissedResumeRef.current) return;
       setResume(
         note === null
           ? { kind: 'none' }
@@ -642,7 +658,13 @@ export function CheckInPage() {
               <Button
                 variant="quiet"
                 className="checkin__dismiss"
-                onClick={() => setResume({ kind: 'dismissed' })}
+                onClick={() => {
+                  // Recorded before the state, so the detection effect
+                  // above can never race a re-run ahead of this decision
+                  // (fix round 3, finding 1).
+                  dismissedResumeRef.current = true;
+                  setResume({ kind: 'dismissed' });
+                }}
               >
                 Check in someone else instead
               </Button>
