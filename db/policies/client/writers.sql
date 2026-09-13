@@ -173,6 +173,50 @@ create policy client_record_update_writers on public.goal as restrictive for upd
   and (app.actor_has_role('owner') or app.actor_has_role('lead_practitioner'))
 );
 
+-- concern: the office records what it was told. Wider than `goal` above,
+-- which only the owner and the lead practitioner may set, because a concern is
+-- not a clinical decision — it is the household's own words written down at
+-- enrolment, and an admin enrols.
+drop policy if exists client_record_writers on public.concern;
+create policy client_record_writers on public.concern as restrictive for insert to app_role with check (
+  app.client_status_for(client_id) <> 'erased'
+  and (
+    app.actor_has_role('owner') or app.actor_has_role('admin')
+    or app.actor_has_role('lead_practitioner')
+  )
+);
+drop policy if exists client_record_update_writers on public.concern;
+create policy client_record_update_writers on public.concern as restrictive for update to app_role using (
+  app.client_status_for(client_id) <> 'erased'
+  and (
+    app.actor_has_role('owner') or app.actor_has_role('admin')
+    or app.actor_has_role('lead_practitioner')
+  )
+) with check (
+  app.client_status_for(client_id) <> 'erased'
+  and (
+    app.actor_has_role('owner') or app.actor_has_role('admin')
+    or app.actor_has_role('lead_practitioner')
+  )
+);
+
+-- health_screening: insert only, and no update policy at all — a change is a
+-- new row and the newest is current (108_concerns_and_health.sql section 2),
+-- so there is nothing to update and the table grants no update either.
+--
+-- **A practitioner may read these and may not write them.** Someone told at
+-- the door tells the office, and the office records it. That keeps one path in
+-- for health answers rather than two, and it is the narrower choice where the
+-- wider one had no case; it can widen the day somebody asks for it.
+drop policy if exists client_record_writers on public.health_screening;
+create policy client_record_writers on public.health_screening as restrictive for insert to app_role with check (
+  app.client_status_for(client_id) <> 'erased'
+  and (
+    app.actor_has_role('owner') or app.actor_has_role('admin')
+    or app.actor_has_role('lead_practitioner')
+  )
+);
+
 -- goal_category: the owner-editable catalogue, floored the same way
 -- service_type is (db/policies/core/role_guard.sql).
 drop policy if exists admin_inserts_only on public.goal_category;

@@ -124,6 +124,8 @@ const record: ClientRecordResponse = {
   locations: [],
   consents: [],
   goals: [],
+  concerns: [],
+  health: null,
 };
 
 type Call = { url: string; init?: RequestInit };

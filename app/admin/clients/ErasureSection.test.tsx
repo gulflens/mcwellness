@@ -65,6 +65,8 @@ const record: ClientRecordResponse = {
   locations: [],
   consents: [],
   goals: [],
+  concerns: [],
+  health: null,
 };
 
 const openRequest = {

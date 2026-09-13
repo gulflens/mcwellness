@@ -103,6 +103,8 @@ const adultRecord: ClientRecordResponse = {
   locations: [],
   consents: [],
   goals: [],
+  concerns: [],
+  health: null,
 };
 
 const childRecord: ClientRecordResponse = {
@@ -157,6 +159,8 @@ const childRecord: ClientRecordResponse = {
   locations: [],
   consents: [],
   goals: [],
+  concerns: [],
+  health: null,
 };
 
 type Call = { url: string; init?: RequestInit };

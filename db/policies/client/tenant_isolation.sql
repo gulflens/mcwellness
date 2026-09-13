@@ -9,7 +9,9 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['goal_category', 'goal', 'erasure_request'] loop
+  foreach t in array array['goal_category', 'goal', 'erasure_request',
+    'concern', 'health_screening'
+  ] loop
     execute format('drop policy if exists tenant_isolation on public.%I', t);
     execute format(
       'create policy tenant_isolation on public.%I for all to app_role '

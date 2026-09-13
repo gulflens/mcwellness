@@ -65,6 +65,8 @@ const record: ClientRecordResponse = {
       isPrimary: true,
     },
   ],
+  concerns: [],
+  health: null,
 };
 
 function mount(node: React.ReactNode, calls: { url: string; init?: RequestInit }[] = []) {

@@ -23,6 +23,26 @@ export function canWriteGoal(actor: Actor): boolean {
 }
 
 /**
+ * A concern and the six health answers: the owner, an admin and the lead
+ * practitioner (the operator, 2026-09-14).
+ *
+ * Wider than `canWriteGoal` above, and deliberately. A goal is set by whoever
+ * decides what the programme is for; a concern and the health answers are the
+ * household's own words, written down by whoever enrolled them — and an admin
+ * enrols. A practitioner may read both and writes neither: told something at
+ * the door, they tell the office, which keeps one path in for health answers
+ * rather than two (db/policies/client/writers.sql says the same).
+ */
+export function canWriteConcern(actor: Actor): boolean {
+  return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+}
+
+/** The same audience, for the same reason. */
+export function canWriteHealthScreening(actor: Actor): boolean {
+  return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
+}
+
+/**
  * Performing an erasure: the owner and an admin (docs/SPEC/client-record.md
  * section 8, "Admin action"). Deliberately narrower than `app.erase_client`,
  * which also admits the lead practitioner — the database is the floor and the

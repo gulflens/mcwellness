@@ -41,9 +41,60 @@ any ──► erased   (erasure request)
 - **Contacts** — list with relationship flags; one must be `can_consent` before activation
 - **Locations** — list; each shows Makani, entrance pin, parking pin, gate pin, access notes; "check the pin" opens the pin picker in a new tab, where the marker can be dragged or tapped into place (trunk round 43, part two); the latitude and longitude boxes stay on the panel itself, for a coordinator who already has the numbers
 - **Consent** — every purpose with status, version, who gave it, when; record new consent; withdraw with reason
-- **Goals** — the client's goals and concerns (category from the owner-editable list, free text beside it), current wellbeing notes, who referred them
+- **Goals** — the client's goals and concerns (category from the owner-editable list, free text beside it), current wellbeing notes, who referred them. *Concerns built 2026-09-14 as their own table; see section 4.6.*
 - **Documents** — upload, preview, kind, retention date shown
 - **Timeline** — the audit record for this client in plain language (AUDIT-SPEC §9.1)
+
+**4.6 Concerns, and the six health answers.** *Added 2026-09-14, on the
+operator's instruction to build what section 4.2 had always promised.*
+
+A **concern** is what the household is worried about: a category from the same
+owner-editable list a goal uses, free text beside it, and a status of its own —
+`open` or `resolved`, never "achieved", which is a word for goals and reads
+badly about a worry. It is its own table rather than a flag on `goal` because
+goals are gathered into progress reports (`app/api/reports/gather.ts`) and
+printed into signed documents a household reads: a concern in that table would
+appear in somebody's report as a goal they never set. The owner, an admin and
+the lead practitioner record one — wider than a goal, which only the owner and
+the lead practitioner set, because a concern is the household's own words
+written down at enrolment, and an admin enrols.
+
+The **health answers** are the six things `docs/CONSENT/agreement.en.md` asks
+every household to tell the practice "before the first session, and if it
+changes": epilepsy or any seizure; a pacemaker or any implanted electrical
+device; a head injury at any time; pregnancy; medication that affects mood,
+sleep or attention; a skin condition or sensitivity on the scalp. Until this
+round nothing stored the answers — they were told to somebody and remembered by
+that person.
+
+Three decisions, the operator's, taken 2026-09-14:
+
+| | |
+|---|---|
+| Who may read them | Whoever may open the record: the owner, an admin, the lead practitioner, and a practitioner for a client on their own schedule. **Not finance**, who books and takes money. Not the household's own portal login. |
+| What a "yes" does | It shows on the record and on the practitioner's own card for that visit, so it is seen at the door. It blocks nothing and warns nobody. |
+| When they are asked | At enrolment, and editable on the record whenever the household says something has changed. |
+
+**A change is a new row.** Each asking is its own row with who recorded it and
+when; the newest is the current answer and the older ones are what was true
+before. The table grants no update at all, and there is no route that edits
+one. `wording_version` records which version of the agreement asked, so an
+answer can be read against the words the household actually signed.
+
+**A practitioner reads and does not write.** Told something at the door, they
+tell the office, which keeps one path in for health answers rather than two.
+That is narrower than it could be and can widen the day somebody asks.
+
+**The erasure reaches both** (`964_erasure_reaches_concerns_and_health.sql`):
+a concern keeps its typed category and loses its words, the way a goal does,
+because "three clients came with sleep" is a figure about the practice rather
+than about a person; the health answers are deleted outright, rows and all,
+because the six of them *are* the personal part and nothing survives reducing
+them.
+
+**None of this is a diagnosis** (CLAUDE.md rule 1). It records what a household
+chose to tell a wellness practice, in the agreement's own words, so that the
+person at the door is not surprised.
 
 **4.3 Enrolment.** The wizard that enrols a new client (the operator's word, 2026-09-03: enrolment, never intake). Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → goals (goals and concerns, referral) → consent capture → summary. Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
 

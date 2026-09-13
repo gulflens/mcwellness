@@ -121,6 +121,36 @@ create policy client_record_readers on public.goal as restrictive for select to 
   )
 );
 
+-- concern: what a household is worried about, read by whoever may open the
+-- record — the office and the practitioner attending them. **Not finance**,
+-- who books and takes money and has no reason to read a worry, and not the
+-- household's own portal login: a concern is the practice's note of what it
+-- was told, and the portal shows a family their sessions and their money, not
+-- the practice's notes (the operator, 2026-09-14). The same audience `goal`
+-- has, which is the tab it sits in.
+drop policy if exists client_record_readers on public.concern;
+create policy client_record_readers on public.concern as restrictive for select to app_role using (
+  app.client_erasure_gate(app.client_status_for(client_id)) and (
+    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+    or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
+  )
+);
+
+-- health_screening: the six answers the signed agreement asks for. The
+-- operator's decision of 2026-09-14, in as many words: whoever opens the
+-- record. That is the office and the practitioner attending this client — the
+-- person at the door is the one who needs to know — and it is deliberately not
+-- finance, and deliberately not the household's own login. `client_visible_to_practitioner`
+-- keeps a practitioner to the clients on their own schedule, ninety days back
+-- and thirty forward, exactly as it does for every other part of the record.
+drop policy if exists client_record_readers on public.health_screening;
+create policy client_record_readers on public.health_screening as restrictive for select to app_role using (
+  app.client_erasure_gate(app.client_status_for(client_id)) and (
+    app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+    or (app.actor_has_role('practitioner') and app.client_visible_to_practitioner(client_id))
+  )
+);
+
 -- Erasure requests: the same short list as an erased client itself, plus
 -- admin (recording one is an admin action, section 8; reading one's own
 -- record of it follows).

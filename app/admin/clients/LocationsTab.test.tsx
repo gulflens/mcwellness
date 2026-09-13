@@ -29,6 +29,8 @@ const record: ClientRecordResponse = {
   contacts: [],
   consents: [],
   goals: [],
+  concerns: [],
+  health: null,
   locations: [
     {
       id: '00000008-0000-4000-8000-0000000000b2',
