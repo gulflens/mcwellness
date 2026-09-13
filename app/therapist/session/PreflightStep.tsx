@@ -13,6 +13,10 @@ import { midpoint, type Answers, type ServiceSettings } from './steps';
  * data (service_type), and an empty setting is a valid one, not a gap to be
  * papered over with defaults invented here.
  *
+ * The button names what happens next, which is not always the signal check:
+ * while the practice takes no readings at all (`recordReadings` off), this
+ * screen leads straight to the run, so it says so rather than promising a
+ * step that will not happen (fix round 1, finding 2).
  */
 
 export function PreflightStep({
@@ -21,6 +25,7 @@ export function PreflightStep({
   onToggle,
   answers,
   onAnswer,
+  recordReadings,
   onContinue,
 }: {
   service: ServiceSettings;
@@ -28,6 +33,8 @@ export function PreflightStep({
   onToggle: (key: string, done: boolean) => void;
   answers: Answers;
   onAnswer: (key: string, value: number) => void;
+  /** `tenant.record_readings`: whether the next step is the signal check at all. */
+  recordReadings: boolean;
   onContinue: () => void;
 }) {
   const outstanding = service.preflightChecklist.filter((item) => !checked[item.key]);
@@ -81,7 +88,7 @@ export function PreflightStep({
           </p>
         ) : null}
         <Button variant="primary" className="step__primary" onClick={onContinue}>
-          Check the signal
+          {recordReadings ? 'Check the signal' : 'Start session'}
         </Button>
       </div>
     </div>

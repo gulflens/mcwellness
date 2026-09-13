@@ -549,6 +549,7 @@ export function SessionRunner({
             onToggle={(key, done) => setChecked((all) => ({ ...all, [key]: done }))}
             answers={preAnswers}
             onAnswer={(key, value) => setPreAnswers((all) => ({ ...all, [key]: value }))}
+            recordReadings={recordReadings}
             onContinue={finishPreflight}
           />
         ) : null}
@@ -585,7 +586,12 @@ export function SessionRunner({
             onAnswer={(key, value) => setPostAnswers((all) => ({ ...all, [key]: value }))}
             observations={observations}
             onObservations={setObservations}
-            needsSummaryReading={telemetry.length === 0}
+            // Dormant along with the run screen's own panel while the
+            // practice takes no readings at all (recordReadings): the
+            // fallback that asks for one whole-session number would
+            // otherwise fire on every readings-off visit, since nothing is
+            // ever recorded live to satisfy it (fix round 1, finding 1).
+            needsSummaryReading={recordReadings && telemetry.length === 0}
             summaryReading={summaryReading}
             summaryReadingTaken={summaryReadingTaken}
             onSummaryReading={(next) => {

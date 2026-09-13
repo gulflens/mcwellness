@@ -176,12 +176,14 @@ async function reachRun(options: Parameters<typeof mount>[0] = {}) {
 /**
  * Walks pre-flight only, for a visit where the practice does not record
  * readings (`recordReadings: false`): pre-flight leads straight to the run,
- * with no signal check between them (./steps.ts's `stepsFor`).
+ * with no signal check between them (./steps.ts's `stepsFor`), behind a
+ * button that says so rather than naming a step that will not happen
+ * (PreflightStep, fix round 1 finding 2).
  */
 async function reachRunWithoutSignal(options: Parameters<typeof mount>[0] = {}) {
   const mounted = mount({ ...options, recordReadings: false });
   await screen.findByRole('heading', { name: 'Before you start' });
-  fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
   await screen.findByRole('button', { name: 'End session' });
   return mounted;
 }
@@ -311,6 +313,13 @@ describe('the run', () => {
  * (`mount`'s default is `true`).
  */
 describe('when the practice does not record readings', () => {
+  it('says "Start session" on pre-flight, not "Check the signal", since there is nothing to check', async () => {
+    mount({ recordReadings: false });
+    await screen.findByRole('heading', { name: 'Before you start' });
+    expect(screen.getByRole('button', { name: 'Start session' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Check the signal' })).toBeNull();
+  });
+
   it('goes straight from pre-flight to the run, with no signal check between them', async () => {
     await reachRunWithoutSignal();
     expect(screen.getByRole('button', { name: 'End session' })).toBeTruthy();
@@ -329,31 +338,26 @@ describe('when the practice does not record readings', () => {
     expect(kinds(posted)).not.toContain('signal_checked');
   });
 
+  it('asks for no reading after the session either, since the practice never takes one', async () => {
+    // Without this, the after-session fallback ("nothing was recorded
+    // during the run") would fire on every readings-off visit instead of
+    // never, since with the run screen's panel gone nothing is ever
+    // recorded live to satisfy it (fix round 1, finding 1). PostStep's own
+    // logic is untouched — only what SessionRunner tells it to show.
+    await reachRunWithoutSignal();
+    endSession();
+    await screen.findByRole('heading', { name: 'After the session' });
+    expect(screen.queryByText('The session as a whole')).toBeNull();
+    expect(screen.queryByLabelText('Time in reward')).toBeNull();
+    expect(screen.queryByLabelText('Artefact')).toBeNull();
+  });
+
   it('is exactly the sequence it is today when the practice does record readings', async () => {
     mount();
     await screen.findByRole('heading', { name: 'Before you start' });
+    expect(screen.getByRole('button', { name: 'Check the signal' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
     expect(await screen.findByRole('heading', { name: 'Signal' })).toBeTruthy();
-  });
-
-  it('still shows a reading a visit already holds, even with the switch off', async () => {
-    // SignalStep, SignalDots, scoreSignalQuality and the post-session
-    // fallback reading (PostStep, untouched by this change) all stay
-    // exactly as they are — only the run screen's own panel and the
-    // pre-run signal check are gone. A reading taken the other way a visit
-    // can still get one, through the after-session fallback that already
-    // exists for a run where nothing was recorded live, still scores and
-    // still displays (SummaryStep reads no switch at all).
-    const { posted } = await reachRunWithoutSignal();
-    endSession();
-    fireEvent.change(await screen.findByLabelText('Time in reward'), { target: { value: '80' } });
-    fireEvent.change(screen.getByLabelText('Artefact'), { target: { value: '20' } });
-    fireEvent.click(screen.getByRole('button', { name: 'See the summary' }));
-
-    await waitFor(() => expect(kinds(posted)).toContain('telemetry_chunk'));
-    await screen.findByRole('heading', { name: 'Summary' });
-    // cleanliness (1 - 20/100) x timeInTarget (80/100) = 0.64.
-    expect(screen.getByText('Session quality').nextElementSibling?.textContent).toBe('Good 64');
   });
 });
 
