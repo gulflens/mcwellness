@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Migration ranges are owned.** The trunk's are `000–099 and 900–999`; core is exhausted at 099 so the trunk continues at 900. **964 is the next free trunk number.** `session-capture` owns `300–399`; **307 is the next free.** Never renumber, and check every OPEN branch before claiming a number, not just `main`.
+- **Migration ranges are owned, and the trunk's range is SPLIT.** `OWNERSHIP.md` line 109: **900–949** are trunk migrations a stream may build on — `client`, `document`, `tenant`; **950–999** are trunk migrations that build on a STREAM's table — `invoice`, `appointment`, `session` — and must sort last. A `tenant` column therefore goes in 900–949, where **918 is the next free**; 964 would be the wrong half. `session-capture` owns `300–399`, where **307 is the next free**. Never renumber a merged migration, and check every OPEN branch before claiming a number, not just `main` — but check the RIGHT HALF first, because free is not the same as correct.
 - **Every migration declares `-- Needs:`** naming the migrations it depends on, and `checkNeeds` refuses a `Needs` at or above the file's own number. Follow the header shape in `db/migrations/963_backfill_primary_location.sql`.
 - **McWellness is a wellness business, not a clinic.** No code, copy, schema or fixture describes a diagnosis, a treatment, a patient or a medical claim. Clients have goals, sessions and measurements.
 - **Never write real or realistic personal data** into any file, test, fixture, seed or commit. Emirates IDs must be `784-1900-*`; UAE mobiles `+971 50 000 xxxx`. `.claude/hooks/no-real-identifiers.sh` enforces this on `Write`/`Edit` but **not** on shell heredocs.
@@ -33,7 +33,7 @@
 
 | File | Responsibility |
 |---|---|
-| `db/migrations/964_practice_records_readings.sql` | The switch's column, default `false` |
+| `db/migrations/918_practice_records_readings.sql` | The switch's column, default `false` |
 | `db/migrations/307_session_export_document.sql` | The export's `document` reference on `session` |
 | `app/api/sessions/export.ts` | The upload route for a session's export |
 | `app/therapist/session/ExportStep.tsx` | Attaching the export at the visit |
@@ -47,19 +47,19 @@
 ## Task 1: The switch's column
 
 **Files:**
-- Create: `db/migrations/964_practice_records_readings.sql`
+- Create: `db/migrations/918_practice_records_readings.sql`
 - Test: `tests/db/practice.test.ts` (extend; find the file that already asserts practice columns)
 
 **Interfaces:**
 - Produces: `tenant.record_readings boolean not null default false` — the practice IS the tenant row; there is no `practice` table
 
-- [ ] **Step 1: Confirm 964 is still free across every open branch**
+- [ ] **Step 1: Confirm 918 is still free across every open branch, in the RIGHT half**
 
 ```bash
 git fetch origin
-for b in $(git branch -r --format='%(refname:short)'); do git ls-tree --name-only "$b" db/migrations/ 2>/dev/null; done | sort -u | grep -E '^96[0-9]' 
+for b in $(git branch -r --format='%(refname:short)'); do git ls-tree --name-only "$b" db/migrations/ 2>/dev/null; done | sort -u | grep -E '^9[01][0-9]' 
 ```
-Expected: nothing at `964`. If something appears, take the next free number and say so in your report.
+Expected: nothing at `918`. A `tenant` column belongs in 900–949 per OWNERSHIP.md line 109; do not reach into 950–999, which is for trunk migrations that build on a stream's table. If 918 is taken, take the next free number BELOW 950 and say so in your report.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -83,7 +83,7 @@ Expected: FAIL — `column "record_readings" does not exist`.
 - [ ] **Step 4: Write the migration**
 
 ```sql
--- 964_practice_records_readings.sql
+-- 918_practice_records_readings.sql
 -- Needs: 905 (practice identity columns)
 --
 -- The practice runs its brain mapping and its neurofeedback on professional
@@ -117,7 +117,7 @@ Expected: PASS.
 
 ```bash
 npx prettier --write db tests
-git add db/migrations/964_practice_records_readings.sql tests/db
+git add db/migrations/918_practice_records_readings.sql tests/db
 git commit -m "feat(practice): a switch for the app's own readings, off"
 ```
 
