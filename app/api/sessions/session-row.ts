@@ -37,6 +37,8 @@ export type SessionRow = {
   closed_at: Date | null;
   signal_quality_score: string | null;
   setup_photo_document_id: string | null;
+  /** The practice software's export, or null where none was attached (migration 307). */
+  export_document_id: string | null;
   /** The projection as it currently stands, so a flush that changes nothing writes nothing. */
   projection_now: unknown;
 };
@@ -56,7 +58,7 @@ const SESSION_COLUMNS =
   'id, client_id, practitioner_id, service_type_id, appointment_id, delivery_mode, status, ' +
   'checked_in_at, checked_in_point is not null as has_checked_in_point, ' +
   'checked_out_point is not null as has_checked_out_point, ' +
-  'closed_at, signal_quality_score, setup_photo_document_id, ' +
+  'closed_at, signal_quality_score, setup_photo_document_id, export_document_id, ' +
   "jsonb_build_object('startedAt', started_at, 'endedAt', ended_at, " +
   "'checkedOutAt', checked_out_at, 'preflight', preflight, 'signalCheck', signal_check, " +
   "'preRating', pre_rating, 'postRating', post_rating, 'telemetry', telemetry, " +

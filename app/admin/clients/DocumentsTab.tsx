@@ -47,6 +47,14 @@ const KIND_LABELS: Record<string, string> = {
   report: 'Report',
   invoice: 'Invoice',
   setup_photo: 'Setup photograph',
+  // What the practice's own session software exported at a visit, attached by
+  // the practitioner on the Summary step (migration 307,
+  // app/api/sessions/export.ts). Nobody uploads one here —
+  // domain/client/documentKinds.ts does not list it, so this tab refuses it as
+  // a kind it does not know — but a filed one belongs in this list like every
+  // other document the household's record holds, under a name rather than
+  // under its column value.
+  session_export: 'Session export',
   certificate: 'Certificate',
 };
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button } from '../../shell/components/Controls';
+import { ExportStep } from './ExportStep';
 import { describeSignal } from './SignalDots';
 import { PARKING_MAX_FILS, formatFilsAsAed, parseAedToFils } from './dirhams';
 import type { Delta, Observations, VisitActuals } from './steps';
@@ -40,6 +41,7 @@ function describeQuality(quality: number | null): string {
 }
 
 export function SummaryStep({
+  sessionId,
   durationSeconds,
   recordReadings,
   setupQuality,
@@ -48,8 +50,12 @@ export function SummaryStep({
   observations,
   actuals,
   onActuals,
+  exportName,
+  onExportAttached,
   onConfirm,
 }: {
+  /** The visit the export is attached to (./ExportStep.tsx). */
+  sessionId: string;
   durationSeconds: number | null;
   /** `tenant.record_readings`: whether the two rows below have anything to say. */
   recordReadings: boolean;
@@ -61,6 +67,9 @@ export function SummaryStep({
   observations: Observations;
   actuals: VisitActuals;
   onActuals: (actuals: VisitActuals) => void;
+  /** The name of the export already attached to this visit, or null. */
+  exportName: string | null;
+  onExportAttached: (name: string) => void;
   onConfirm: () => void;
 }) {
   // The field holds what the practitioner typed; the state holds exact fils.
@@ -128,6 +137,8 @@ export function SummaryStep({
           </dd>
         </div>
       </dl>
+
+      <ExportStep sessionId={sessionId} attachedName={exportName} onAttached={onExportAttached} />
 
       <section className="ratings">
         <h2>The visit itself</h2>

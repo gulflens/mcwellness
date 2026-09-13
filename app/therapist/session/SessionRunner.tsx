@@ -205,6 +205,11 @@ export function SessionRunner({
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
   const [endedAtMs, setEndedAtMs] = useState<number | null>(null);
   const [telemetry, setTelemetry] = useState<TelemetrySample[]>([]);
+  // The export the practitioner attached on the Summary step, by the name they
+  // chose it under (./ExportStep.tsx). Held here rather than in the step so it
+  // survives a re-render of the summary, and never posted anywhere: the
+  // attaching is its own request, made and finished inside that control.
+  const [exportName, setExportName] = useState<string | null>(null);
 
   const seqRef = useRef(visit.lastSeq);
   const bufferRef = useRef<OutboxRecord[]>([]);
@@ -608,6 +613,9 @@ export function SessionRunner({
 
         {step === 'summary' ? (
           <SummaryStep
+            sessionId={visit.sessionId}
+            exportName={exportName}
+            onExportAttached={setExportName}
             durationSeconds={durationSeconds}
             recordReadings={recordReadings}
             setupQuality={setupQuality}

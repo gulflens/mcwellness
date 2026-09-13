@@ -11,6 +11,7 @@ import { logRefusal } from './audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { appendEvents } from './events';
 import { mountClose } from './close';
+import { mountSessionExport } from './export';
 import { mountOpenSession } from './open';
 import { CheckInRequest, CheckInResponse, SessionEventsRequest } from './schema';
 import { resolvePractitioner } from './session-row';
@@ -19,8 +20,8 @@ import { mountServiceTypes } from './service-types';
 /**
  * mountSessions mounts every route this stream owns: POST
  * /api/sessions/:id/events below, GET /api/sessions/open (./open.ts), POST
- * /api/sessions/:id/close (./close.ts) and GET /api/sessions/service-types
- * (./service-types.ts).
+ * /api/sessions/:id/close (./close.ts), PUT /api/sessions/:id/export
+ * (./export.ts) and GET /api/sessions/service-types (./service-types.ts).
  *
  * POST /api/sessions/:id/events — the offline outbox's server side
  * (docs/SPEC/session-capture.md sections 2 and 4): the device flushes its
@@ -92,6 +93,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
   mountServiceTypes(api, now);
   mountOpenSession(api);
   mountClose(api, now);
+  mountSessionExport(api, now);
 
   api.post('/api/sessions/:id/events', async (c) => {
     const actor = c.get('actor');

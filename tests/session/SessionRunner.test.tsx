@@ -116,6 +116,9 @@ function mount(
           durationSeconds: 1800,
           observationFlag: false,
           setupPhotoDocumentId: null,
+          // No export attached, which is the ordinary case and never a block
+          // (migration 307, app/therapist/session/ExportStep.tsx).
+          exportDocumentId: null,
         });
       }
       if (options.eventsOk === false) return json({ error: 'internal', requestId: null }, 500);

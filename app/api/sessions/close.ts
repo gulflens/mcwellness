@@ -196,6 +196,11 @@ export function mountClose(api: Hono<ApiEnv>, now: () => Date = () => new Date()
         durationSeconds: durationSeconds(projection),
         observationFlag,
         setupPhotoDocumentId: null,
+        // Whatever the practitioner attached on the Summary step, or null.
+        // The close neither writes it nor waits for it (migration 307): the
+        // export goes on an open visit or not at all, and a visit with none
+        // closes exactly as it did before that door existed.
+        exportDocumentId: session.export_document_id,
       }),
       200,
     );
@@ -213,6 +218,7 @@ function closedAnswer(session: SessionRow, projection: SessionProjection | null)
     durationSeconds: projection ? durationSeconds(projection) : null,
     observationFlag: deriveObservationFlag(projection?.observations ?? null),
     setupPhotoDocumentId: session.setup_photo_document_id,
+    exportDocumentId: session.export_document_id,
   });
 }
 
