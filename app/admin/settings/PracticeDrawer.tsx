@@ -126,6 +126,10 @@ export function PracticeDrawer({
   );
   const [vatRegistered, setVatRegistered] = useState(practice.vatRegistered);
   const [vatTrn, setVatTrn] = useState(practice.vatTrn ?? '');
+  // Off by default (migration 918): the practice runs its brain mapping and
+  // neurofeedback on its own software, so a visit does not ask for readings
+  // unless this is switched on.
+  const [recordReadings, setRecordReadings] = useState(practice.recordReadings);
   const [whatsappNumber, setWhatsappNumber] = useState(practice.whatsappNumber ?? '');
   // The three printed in the footer of every document (migration 912). Until
   // 10 September 2026 only a script could set them (billing-09 item 6).
@@ -265,6 +269,7 @@ export function PracticeDrawer({
           licenceExpiresOn: licenceExpiresOn.trim().length === 0 ? null : licenceExpiresOn,
           vatRegistered,
           vatTrn: vatRegistered ? typedVatTrn : '',
+          recordReadings,
           whatsappNumber: typedWhatsapp,
           contactPhone: typedContactPhone,
           contactEmail: typedContactEmail,
@@ -543,6 +548,31 @@ export function PracticeDrawer({
               error={fieldErrors.vatTrn}
             />
           ) : null}
+
+          <label className="readings-switch-row">
+            <span className="readings-switch-copy">
+              <span>Record readings during a session</span>
+              <span className="small muted" id="practice-record-readings-consequence">
+                The practice uses its own software for readings, so a visit does not ask for them.
+                Turning this on brings back the signal check and the artefact and reward figures.
+              </span>
+            </span>
+            <span
+              className={recordReadings ? 'readings-switch readings-switch--on' : 'readings-switch'}
+            >
+              <input
+                id="practice-record-readings"
+                type="checkbox"
+                className="readings-switch__input"
+                aria-label="Record readings during a session"
+                aria-describedby="practice-record-readings-consequence"
+                checked={recordReadings}
+                onChange={(e) => setRecordReadings(e.target.checked)}
+              />
+              <span className="readings-switch__track" aria-hidden="true" />
+              <span className="readings-switch__thumb" aria-hidden="true" />
+            </span>
+          </label>
 
           <Field
             id={FIELD_IDS.reason}

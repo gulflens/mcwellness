@@ -69,6 +69,9 @@ const PRACTICE = {
   licenceExpiresOn: null,
   vatRegistered: false,
   vatTrn: null,
+  // Off by default (migration 918): the practice runs its brain mapping and
+  // neurofeedback on its own software, so a visit does not ask for readings.
+  recordReadings: false,
   // The VAT threshold watch (migration 953): well below both marks.
   vatTaxableSuppliesFils: 4_200_000,
   vatTaxableSuppliesAsOf: '2026-09-06',

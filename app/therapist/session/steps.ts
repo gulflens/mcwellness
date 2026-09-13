@@ -40,6 +40,27 @@ export function midpoint(question: { min: number; max: number }): number {
   return Math.round((question.min + question.max) / 2);
 }
 
+/** The screens a visit can walk through, in the order they run. */
+export type VisitStep = 'preflight' | 'signal' | 'run' | 'post' | 'summary';
+
+/**
+ * The steps a visit runs through. `signal` is absent while the practice
+ * takes its readings on the vendor's own software rather than in this app
+ * (the operator, 13 September 2026, section 3.3): the step's component
+ * (SignalStep.tsx), the run screen's reading panel, and every domain
+ * function behind them (scoreSignalQuality, deriveObservationFlag, the
+ * `reading` and `telemetry_chunk` event shapes) all stay exactly as they
+ * are — only the sequence a visit walks changes. `record_readings` in
+ * Settings > Practice (tenant.record_readings, migration 918) brings the
+ * step back without a deploy, and a visit that already holds readings keeps
+ * showing them either way: nothing that displays a score reads this switch.
+ */
+export function stepsFor(recordReadings: boolean): readonly VisitStep[] {
+  return recordReadings
+    ? (['preflight', 'signal', 'run', 'post', 'summary'] as const)
+    : (['preflight', 'run', 'post', 'summary'] as const);
+}
+
 /**
  * The answers a set of questions starts with: the value each slider is
  * actually showing. Seeded rather than left empty so the summary and the

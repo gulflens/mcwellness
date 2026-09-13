@@ -24,6 +24,7 @@ afterEach(() => {
 
 const SESSION_ID = '00000000-0000-4000-8000-000000009000';
 const SERVICE_TYPE_ID = '00000000-0000-4000-8000-0000000000f1';
+const EXPORT_DOCUMENT_ID = '00000000-0000-4000-8000-000000009001';
 
 const ME = {
   userId: '00000002-0000-4000-8000-000000000009',
@@ -85,6 +86,13 @@ function mount(
     /** What POST /close answers: 200, or a status the runner must triage. */
     closeStatus?: number;
     store?: ReturnType<typeof createMemoryStore>;
+    /** `tenant.record_readings`. Defaults to true: today's behaviour, unchanged. */
+    recordReadings?: boolean;
+    /**
+     * An export upload that never comes back, for the window the summary's
+     * dock has to warn about (app/therapist/session/ExportStep.tsx).
+     */
+    uploadHangs?: boolean;
   } = {},
 ) {
   const posted: Posted[] = [];
@@ -100,6 +108,14 @@ function mount(
         headers: { 'content-type': 'application/octet-stream' },
       });
     }
+    if (init?.method === 'PUT') {
+      // The export's own door (app/api/sessions/export.ts). Raw bytes, so
+      // there is nothing to parse: what matters here is that it was called and
+      // what the file was declared as.
+      put.push({ url, type: new Headers(init.headers).get('content-type') });
+      if (options.uploadHangs) return new Promise<Response>(() => undefined);
+      return json({ documentId: EXPORT_DOCUMENT_ID }, 201);
+    }
     if (init?.method === 'POST') {
       posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
       if (url.endsWith('/close')) {
@@ -114,6 +130,9 @@ function mount(
           durationSeconds: 1800,
           observationFlag: false,
           setupPhotoDocumentId: null,
+          // No export attached, which is the ordinary case and never a block
+          // (migration 307, app/therapist/session/ExportStep.tsx).
+          exportDocumentId: null,
         });
       }
       if (options.eventsOk === false) return json({ error: 'internal', requestId: null }, 500);
@@ -145,12 +164,33 @@ function mount(
       <SessionRunner
         visit={{ ...VISIT, ...options.visit }}
         service={options.service === undefined ? SERVICE : options.service}
+        recordReadings={options.recordReadings ?? true}
         onFinished={() => undefined}
         createStore={async () => store}
       />
     </AuthProviderBoundary>,
   );
   return { ...utils, posted, put, store };
+}
+
+/**
+ * Checking out takes two taps while the export is missing or still uploading,
+ * and one otherwise (SummaryStep's dock, fix round 1 findings 1 and 2). This
+ * takes whichever is offered, so a test that is not about the export does not
+ * have to care which.
+ */
+function checkOut() {
+  fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+  const again = screen.queryByRole('button', { name: 'Tap again to check out' });
+  if (again) fireEvent.click(again);
+}
+
+/** Chooses a file in the summary's attach control. */
+function attachExport(name = 'visit-export.eeg') {
+  const input = screen.getByLabelText('Attach the export') as HTMLInputElement;
+  const file = new File([new Uint8Array([0x4e, 0x52, 0x43, 0x00])], name);
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  fireEvent.change(input);
 }
 
 /** Ending takes two taps now: the first arms the control, the second ends it. */
@@ -167,6 +207,30 @@ async function reachRun(options: Parameters<typeof mount>[0] = {}) {
   fireEvent.change(await screen.findByLabelText('Site'), { target: { value: 'Cz' } });
   fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
   await screen.findByRole('button', { name: 'End session' });
+  return mounted;
+}
+
+/**
+ * Walks pre-flight only, for a visit where the practice does not record
+ * readings (`recordReadings: false`): pre-flight leads straight to the run,
+ * with no signal check between them (./steps.ts's `stepsFor`), behind a
+ * button that says so rather than naming a step that will not happen
+ * (PreflightStep, fix round 1 finding 2).
+ */
+async function reachRunWithoutSignal(options: Parameters<typeof mount>[0] = {}) {
+  const mounted = mount({ ...options, recordReadings: false });
+  await screen.findByRole('heading', { name: 'Before you start' });
+  fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
+  await screen.findByRole('button', { name: 'End session' });
+  return mounted;
+}
+
+/** The same, as far as the summary. */
+async function reachSummaryWithoutSignal(options: Parameters<typeof mount>[0] = {}) {
+  const mounted = await reachRunWithoutSignal(options);
+  endSession();
+  fireEvent.click(await screen.findByRole('button', { name: 'See the summary' }));
+  await screen.findByRole('heading', { name: 'Summary' });
   return mounted;
 }
 
@@ -276,6 +340,92 @@ describe('the run', () => {
   });
 });
 
+/**
+ * The practice may take its readings entirely on the vendor's own software
+ * (the operator, 13 September 2026, docs/SPEC/session-capture.md section
+ * 3.3): `tenant.record_readings` off. Nothing here is deleted — `signal` is
+ * simply not in the sequence a visit walks (./steps.ts's `stepsFor`), and
+ * every test above this block, which never sets `recordReadings`, is the
+ * proof the on-behaviour is exactly what it was before this switch existed
+ * (`mount`'s default is `true`).
+ */
+describe('when the practice does not record readings', () => {
+  it('says "Start session" on pre-flight, not "Check the signal", since there is nothing to check', async () => {
+    mount({ recordReadings: false });
+    await screen.findByRole('heading', { name: 'Before you start' });
+    expect(screen.getByRole('button', { name: 'Start session' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Check the signal' })).toBeNull();
+  });
+
+  it('goes straight from pre-flight to the run, with no signal check between them', async () => {
+    await reachRunWithoutSignal();
+    expect(screen.getByRole('button', { name: 'End session' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Signal' })).toBeNull();
+    expect(screen.queryByText(/signal/i)).toBeNull();
+  });
+
+  it('offers no reading panel on the run screen', async () => {
+    await reachRunWithoutSignal();
+    expect(screen.queryByRole('button', { name: 'Record a reading' })).toBeNull();
+    expect(screen.queryByLabelText('Time in reward')).toBeNull();
+  });
+
+  it('writes no signal_checked event, since no site was ever asked for', async () => {
+    const { posted } = await reachSummaryWithoutSignal();
+    expect(kinds(posted)).not.toContain('signal_checked');
+  });
+
+  it('asks for no reading after the session either, since the practice never takes one', async () => {
+    // Without this, the after-session fallback ("nothing was recorded
+    // during the run") would fire on every readings-off visit instead of
+    // never, since with the run screen's panel gone nothing is ever
+    // recorded live to satisfy it (fix round 1, finding 1). PostStep's own
+    // logic is untouched — only what SessionRunner tells it to show.
+    await reachRunWithoutSignal();
+    endSession();
+    await screen.findByRole('heading', { name: 'After the session' });
+    expect(screen.queryByText('The session as a whole')).toBeNull();
+    expect(screen.queryByLabelText('Time in reward')).toBeNull();
+    expect(screen.queryByLabelText('Artefact')).toBeNull();
+  });
+
+  it('shows no signal indicator on the run screen either', async () => {
+    // With no signal check ever run, the ambient dots at the top of the run
+    // screen would otherwise say "Not checked" on every readings-off visit
+    // — every visit — which in a client's home reads as something the
+    // practitioner forgot, not something the practice does not do (fix
+    // round 2, finding 3). SignalDots itself is untouched: only this one
+    // render site is gated.
+    await reachRunWithoutSignal();
+    expect(screen.queryByText('Not checked')).toBeNull();
+    expect(screen.queryByRole('img', { name: /signal/i })).toBeNull();
+  });
+
+  it('shows no "Signal at setup" or "Session quality" row on the summary', async () => {
+    await reachSummaryWithoutSignal();
+    expect(screen.queryByText('Signal at setup')).toBeNull();
+    expect(screen.queryByText('Session quality')).toBeNull();
+  });
+
+  it('is exactly the sequence it is today when the practice does record readings', async () => {
+    mount();
+    await screen.findByRole('heading', { name: 'Before you start' });
+    expect(screen.getByRole('button', { name: 'Check the signal' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
+    expect(await screen.findByRole('heading', { name: 'Signal' })).toBeTruthy();
+  });
+
+  it('still shows the signal indicator and both summary rows, unchanged, when the practice does record readings', async () => {
+    await reachRun();
+    expect(screen.getByRole('img', { name: /signal/i })).toBeTruthy();
+    endSession();
+    fireEvent.click(await screen.findByRole('button', { name: 'See the summary' }));
+    await screen.findByRole('heading', { name: 'Summary' });
+    expect(screen.getByText('Signal at setup')).toBeTruthy();
+    expect(screen.getByText('Session quality')).toBeTruthy();
+  });
+});
+
 describe('ending the session', () => {
   it('takes two taps, with the clock still showing between them', async () => {
     await reachRun();
@@ -346,7 +496,7 @@ describe('after the session', () => {
 });
 
 describe('the summary and the check-out', () => {
-  it('shows what is about to be recorded, then closes the visit on one confirmation', async () => {
+  it('shows what is about to be recorded, then closes the visit when it is confirmed', async () => {
     const { posted } = await reachSummary();
     expect(screen.getByText('Sleep last night')).toBeTruthy();
     expect(screen.getByLabelText('Parking, in dirhams')).toBeTruthy();
@@ -354,7 +504,7 @@ describe('the summary and the check-out', () => {
     expect(screen.getByLabelText('Anything about getting in')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Salik crossings'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
 
     await waitFor(() => expect(kinds(posted)).toContain('checked_out'));
     const close = await waitFor(() => {
@@ -392,7 +542,7 @@ describe('the summary and the check-out', () => {
   it('takes parking in dirhams and files it in fils', async () => {
     const { posted } = await reachSummary();
     fireEvent.change(screen.getByLabelText('Parking, in dirhams'), { target: { value: '7.50' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
 
     const close = await waitFor(() => {
       const call = posted.find((c) => c.url.endsWith('/close'));
@@ -404,7 +554,7 @@ describe('the summary and the check-out', () => {
 
   it('drains the queue before it posts the close, so the first attempt is the one that lands', async () => {
     const { posted } = await reachSummary();
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
     await screen.findByRole('heading', { name: 'Checked out' });
 
     // Exactly one close, and every event went before it: no waiting thirty
@@ -417,7 +567,7 @@ describe('the summary and the check-out', () => {
 
   it('stops and says so when the server will never accept the close', async () => {
     await reachSummary({ closeStatus: 403 });
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
 
     expect(await screen.findByRole('heading', { name: 'Not checked out' })).toBeTruthy();
     expect(
@@ -430,10 +580,65 @@ describe('the summary and the check-out', () => {
 
   it('keeps waiting, and keeps the calm copy, when the close is worth retrying', async () => {
     await reachSummary({ closeStatus: 503 });
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
 
     expect(await screen.findByRole('heading', { name: 'Checking out' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Not checked out' })).toBeNull();
+  });
+});
+
+/**
+ * The export's last chance (fix round 1, findings 1 and 2).
+ *
+ * The attach control is in the middle of the summary and the dock is sticky,
+ * so on a phone the "No export attached" chip is scrolled away while Check out
+ * never is. Migration 960 means a visit checked out without its export can
+ * never be given one, so the dock has to carry the fact itself and the button
+ * has to ask twice — and must still, always, let the practitioner leave.
+ */
+describe('the export, at the moment of check-out', () => {
+  it('says in the dock that the export cannot be added later, and asks twice', async () => {
+    const { posted } = await reachSummary();
+    expect(
+      screen.getByText(
+        'No export is attached. It cannot be attached once this visit is checked out.',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    expect(screen.getByRole('button', { name: 'Tap again to check out' })).toBeTruthy();
+    // The first tap closes nothing.
+    expect(posted.some((call) => call.url.endsWith('/close'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tap again to check out' }));
+    expect(await screen.findByRole('heading', { name: 'Checked out' })).toBeTruthy();
+  });
+
+  it('checks out on one tap once the export is attached, and drops the warning', async () => {
+    const { put } = await reachSummary();
+    attachExport();
+    await screen.findByText('Export attached');
+    expect(put).toHaveLength(1);
+    expect(put[0]!.url).toBe(`/api/sessions/${SESSION_ID}/export?extension=eeg`);
+    expect(screen.queryByText(/No export is attached/)).toBeNull();
+
+    // One tap, because there is nothing left to lose by confirming.
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    expect(await screen.findByRole('heading', { name: 'Checked out' })).toBeTruthy();
+  });
+
+  it('warns while the upload is still in the air, and still lets the visit close', async () => {
+    // A 33 MB recording on a home link is minutes, and confirming unmounts the
+    // control: the request would land on a closed visit, be refused, and be
+    // reported to nobody. So the dock says so — and then takes the second tap,
+    // because nothing gates a visit's exit.
+    await reachSummary({ uploadHangs: true });
+    attachExport();
+    await screen.findByText(/The export is still uploading\./);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tap again to check out' }));
+    expect(await screen.findByRole('heading', { name: 'Checked out' })).toBeTruthy();
   });
 });
 
@@ -451,6 +656,7 @@ describe('what the device keeps', () => {
         <SessionRunner
           visit={VISIT}
           service={SERVICE}
+          recordReadings={true}
           onFinished={() => undefined}
           createStore={async () => store}
         />
@@ -541,6 +747,7 @@ describe('what the outbox is given', () => {
         <SessionRunner
           visit={VISIT}
           service={SERVICE}
+          recordReadings={true}
           onFinished={() => undefined}
           createStore={async () => {
             await ready;

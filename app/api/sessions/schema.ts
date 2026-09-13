@@ -137,6 +137,16 @@ export type ServiceTypeOption = z.infer<typeof ServiceTypeOption>;
 
 export const ServiceTypesResponse = z.object({
   serviceTypes: z.array(ServiceTypeOption),
+  /**
+   * `tenant.record_readings` (migration 918), carried alongside the
+   * practitioner's own service types because this is the one door a
+   * practitioner's session runner can reach: `GET /api/practice` gates on
+   * `practice.settings.write` (app/api/practice/routes.ts), the owner and an
+   * admin, and a practitioner is neither. Off by default — the practice runs
+   * its brain mapping and neurofeedback on its own software — a later pull
+   * request is what makes the runner act on it; this one only delivers it.
+   */
+  recordReadings: z.boolean(),
 });
 export type ServiceTypesResponse = z.infer<typeof ServiceTypesResponse>;
 
@@ -321,5 +331,67 @@ export const CloseResponse = z.object({
   observationFlag: z.boolean(),
   /** Null when no photo was taken, or when consent did not allow one. */
   setupPhotoDocumentId: z.uuid().nullable(),
+  /**
+   * The practice software's export, or null where the visit closed without
+   * one (migration 307). Optional by decision and never a gate: a
+   * practitioner in someone's home must always be able to close the visit, so
+   * this is a fact about the record rather than a condition of writing it.
+   */
+  exportDocumentId: z.uuid().nullable(),
 });
 export type CloseResponse = z.infer<typeof CloseResponse>;
+
+// ---------------------------------------------------------------------------
+// PUT /api/sessions/:id/export (app/api/sessions/export.ts): the file the
+// practice's own brain-mapping and neurofeedback software exported, attached
+// to the visit it was produced at (docs/SPEC/session-capture.md section 3.6).
+// ---------------------------------------------------------------------------
+
+/**
+ * What `document.kind` an attached export is filed under. `document.kind` is
+ * an open set (060_client.sql) and other streams file reports, invoices and
+ * setup photos under kinds of their own; this is session-capture's.
+ *
+ * Not one of `domain/client/documentKinds.ts`'s upload kinds, deliberately:
+ * a person does not file one of these by hand from the Documents tab, and
+ * that module already refuses a kind it does not know.
+ */
+export const SESSION_EXPORT_KIND = 'session_export';
+
+/**
+ * The cap the browser refuses at, before it sends anything. The server's own
+ * is `ASSESSMENT_FILE_LIMIT_BYTES` in app/api/create-api.ts — one raw-body
+ * door's cap, shared by both doors that carry a file — and the two must not
+ * drift; tests/session/db/export.test.ts asserts they are the same number.
+ * Two constants because that module is the server's and pulls in Node, while
+ * this one is read by the practitioner's screen.
+ */
+export const SESSION_EXPORT_LIMIT_BYTES = 64 * 1024 * 1024;
+
+/** What the door answers with: the document that now stands against the visit. */
+export const ExportFiledResponse = z.object({ documentId: z.uuid() });
+export type ExportFiledResponse = z.infer<typeof ExportFiledResponse>;
+
+/**
+ * Why an attach was refused, in the words the door sends back as `code`. The
+ * first three are `domain/assessment/fileType.ts`'s own refusal reasons, kept
+ * under their own names so the screen and the door say the same thing.
+ */
+export const EXPORT_REFUSAL_CODES = [
+  'unsupported_media_type',
+  'not_a_pdf',
+  'not_a_recording',
+  'digest_missing',
+  'digest_mismatch',
+  'empty_body',
+  'session_closed',
+  'export_already_filed',
+  /**
+   * The filing was refused and the door could not establish which of its three
+   * reasons applied. It names no cause deliberately: `export_already_filed`
+   * asserts a fact about the record, and asserting it wrongly sends a
+   * practitioner looking for a file that is not there.
+   */
+  'export_not_filed',
+] as const;
+export type ExportRefusalCode = (typeof EXPORT_REFUSAL_CODES)[number];

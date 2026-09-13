@@ -21,6 +21,7 @@ import {
   deltas,
   midpoint,
   seedAnswers,
+  stepsFor,
   type Answers,
   type GeoPoint,
   type Observations,
@@ -28,6 +29,7 @@ import {
   type ServiceSettings,
   type SiteReading,
   type VisitActuals,
+  type VisitStep,
 } from './steps';
 import './SessionRunner.css';
 
@@ -71,7 +73,7 @@ export type RunnerVisit = {
   shareLocation: boolean;
 };
 
-type Step = 'preflight' | 'signal' | 'run' | 'post' | 'summary' | 'finishing' | 'blocked' | 'done';
+type Step = VisitStep | 'finishing' | 'blocked' | 'done';
 
 const EMPTY_SETTINGS: ServiceSettings = { preflightChecklist: [], ratingQuestions: [] };
 
@@ -147,11 +149,14 @@ function readPosition(): Promise<GeoPoint | null> {
 export function SessionRunner({
   visit,
   service,
+  recordReadings,
   onFinished,
   createStore = createOutboxStore,
 }: {
   visit: RunnerVisit;
   service: ServiceTypeOption | null;
+  /** `tenant.record_readings` (migration 918), from the service-types door's own answer. */
+  recordReadings: boolean;
   onFinished: () => void;
   /** Injected in tests, where IndexedDB does not exist. */
   createStore?: () => Promise<OutboxStore>;
@@ -200,6 +205,17 @@ export function SessionRunner({
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
   const [endedAtMs, setEndedAtMs] = useState<number | null>(null);
   const [telemetry, setTelemetry] = useState<TelemetrySample[]>([]);
+  // The export the practitioner attached on the Summary step, by the name they
+  // chose it under (./ExportStep.tsx). Held here rather than in the step so it
+  // survives a re-render of the summary, and never posted anywhere: the
+  // attaching is its own request, made and finished inside that control.
+  const [exportName, setExportName] = useState<string | null>(null);
+  // Whether that upload is still in flight. Here rather than inside the
+  // control because the check-out button is in the summary's dock and has to
+  // know: confirming unmounts the control, the request carries on into a visit
+  // that has closed underneath it, and the file is then attachable nowhere
+  // ever (migration 960).
+  const [exportBusy, setExportBusy] = useState(false);
 
   const seqRef = useRef(visit.lastSeq);
   const bufferRef = useRef<OutboxRecord[]>([]);
@@ -271,8 +287,12 @@ export function SessionRunner({
       number: visit.number,
       of: visit.of,
       lastSeq: highWater,
+      // What this visit opened with, so an offline resume can pick that
+      // back up rather than whatever a services fetch with no signal to
+      // complete defaults to (fix round 2, finding 1).
+      recordReadings,
     });
-  }, [highWater, outbox, visit]);
+  }, [highWater, outbox, recordReadings, visit]);
 
   const write = useCallback(
     async (kind: string, payload: unknown): Promise<void> => {
@@ -323,6 +343,25 @@ export function SessionRunner({
 
   const setupQuality = useMemo(() => meanQuality(sites), [sites]);
 
+  // Shared by both routes into the run: from the signal check (a site was
+  // read) and, while readings are dormant, straight from pre-flight (no
+  // site was ever asked for, so there is nothing honest to write).
+  const beginRun = useCallback(
+    (withSignalCheck: boolean) => {
+      if (withSignalCheck) {
+        void write('signal_checked', {
+          sites: sites
+            .filter((site) => site.site.trim().length > 0)
+            .map((site) => ({ site: site.site.trim(), quality: site.quality })),
+          overridden: setupQuality !== null && setupQuality < 0.6,
+        });
+      }
+      setStartedAtMs(Date.now());
+      setStep('run');
+    },
+    [setupQuality, sites, write],
+  );
+
   const finishPreflight = useCallback(() => {
     void write('observation_recorded', {
       topic: 'preflight',
@@ -340,19 +379,17 @@ export function SessionRunner({
         })),
       });
     }
-    setStep('signal');
-  }, [checked, preAnswers, settings, write]);
+    // The sequence itself is a function of the switch (./steps.ts):
+    // `signal` is simply not in it while the practice reads its amplifier's
+    // own software, so a visit lands straight on the run screen instead.
+    if (stepsFor(recordReadings).includes('signal')) {
+      setStep('signal');
+    } else {
+      beginRun(false);
+    }
+  }, [beginRun, checked, preAnswers, recordReadings, settings, write]);
 
-  const startRun = useCallback(() => {
-    void write('signal_checked', {
-      sites: sites
-        .filter((site) => site.site.trim().length > 0)
-        .map((site) => ({ site: site.site.trim(), quality: site.quality })),
-      overridden: setupQuality !== null && setupQuality < 0.6,
-    });
-    setStartedAtMs(Date.now());
-    setStep('run');
-  }, [setupQuality, sites, write]);
+  const startRun = useCallback(() => beginRun(true), [beginRun]);
 
   const endRun = useCallback(() => {
     const started = startedAtMs ?? Date.now();
@@ -527,6 +564,7 @@ export function SessionRunner({
             onToggle={(key, done) => setChecked((all) => ({ ...all, [key]: done }))}
             answers={preAnswers}
             onAnswer={(key, value) => setPreAnswers((all) => ({ ...all, [key]: value }))}
+            recordReadings={recordReadings}
             onContinue={finishPreflight}
           />
         ) : null}
@@ -549,6 +587,7 @@ export function SessionRunner({
             of={visit.of}
             quality={setupQuality}
             startedAtMs={startedAtMs}
+            recordReadings={recordReadings}
             reading={reading}
             onReading={setReading}
             onEnd={endRun}
@@ -562,7 +601,12 @@ export function SessionRunner({
             onAnswer={(key, value) => setPostAnswers((all) => ({ ...all, [key]: value }))}
             observations={observations}
             onObservations={setObservations}
-            needsSummaryReading={telemetry.length === 0}
+            // Dormant along with the run screen's own panel while the
+            // practice takes no readings at all (recordReadings): the
+            // fallback that asks for one whole-session number would
+            // otherwise fire on every readings-off visit, since nothing is
+            // ever recorded live to satisfy it (fix round 1, finding 1).
+            needsSummaryReading={recordReadings && telemetry.length === 0}
             summaryReading={summaryReading}
             summaryReadingTaken={summaryReadingTaken}
             onSummaryReading={(next) => {
@@ -575,7 +619,13 @@ export function SessionRunner({
 
         {step === 'summary' ? (
           <SummaryStep
+            sessionId={visit.sessionId}
+            exportName={exportName}
+            exportBusy={exportBusy}
+            onExportAttached={setExportName}
+            onExportBusy={setExportBusy}
             durationSeconds={durationSeconds}
+            recordReadings={recordReadings}
             setupQuality={setupQuality}
             sessionQuality={sessionQuality}
             ratingDeltas={deltas(settings.ratingQuestions, preAnswers, postAnswers)}

@@ -35,7 +35,8 @@ import { Practice, PracticeResponse, UpdatePracticeInput } from './schema';
 const SELECT_PRACTICE =
   'select t.legal_name, t.legal_name_ar, t.trn, t.licence_number, t.licensing_authority, ' +
   "to_char(t.licence_expires_on, 'YYYY-MM-DD') as licence_expires_on, " +
-  't.vat_registered, t.vat_trn, t.whatsapp_number, t.default_emirate, t.timezone, ' +
+  't.vat_registered, t.vat_trn, t.record_readings, ' +
+  't.whatsapp_number, t.default_emirate, t.timezone, ' +
   't.contact_phone, t.contact_email, t.website, ' +
   'l.id as location_id, l.display_address, l.emirate, ' +
   'extensions.st_y(l.entrance_point::extensions.geometry) as latitude, ' +
@@ -52,6 +53,7 @@ type PracticeRow = {
   licence_expires_on: string | null;
   vat_registered: boolean;
   vat_trn: string | null;
+  record_readings: boolean;
   whatsapp_number: string | null;
   contact_phone: string | null;
   contact_email: string | null;
@@ -102,6 +104,7 @@ function view(row: PracticeRow, supplies: { fils: number; asOf: string }): Pract
     licenceExpiresOn: row.licence_expires_on,
     vatRegistered: row.vat_registered,
     vatTrn: row.vat_trn,
+    recordReadings: row.record_readings,
     vatTaxableSuppliesFils: supplies.fils,
     vatTaxableSuppliesAsOf: supplies.asOf,
     whatsappNumber: row.whatsapp_number,
@@ -196,7 +199,11 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         // is a decision for the round that puts them on the screen.
         'contact_phone = coalesce($10, contact_phone), ' +
         'contact_email = coalesce($11, contact_email), ' +
-        'website = coalesce($12, website) ' +
+        'website = coalesce($12, website), ' +
+        // Same reason, same shape: `recordReadings` is optional on this form
+        // too (schema.ts), so a caller that omits it leaves the switch as it
+        // stands rather than switching readings off by silent default.
+        'record_readings = coalesce($13, record_readings) ' +
         'where id = app.current_tenant_id()',
       [
         wanted.legalName,
@@ -211,6 +218,7 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         wanted.contactPhone ?? null,
         wanted.contactEmail ?? null,
         wanted.website ?? null,
+        wanted.recordReadings ?? null,
       ],
     );
 

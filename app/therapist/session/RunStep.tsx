@@ -18,6 +18,11 @@ import type { Reading } from './steps';
  * minute and is asked for one summary at the end instead, which is the other
  * half of the same sentence in section 3.4.
  *
+ * The toggle and its panel appear only while the practice records readings
+ * at all (`recordReadings`, tenant.record_readings) — dormant rather than
+ * removed (the operator, 13 September 2026): nothing else on this screen
+ * changes, and a switch back needs no deploy.
+ *
  * Ending takes two taps. The first arms it and the second does it, with the
  * clock still running and still visible between them: a phone held in one
  * hand with a child climbing on the practitioner is a phone that gets
@@ -42,6 +47,7 @@ export function RunStep({
   of,
   quality,
   startedAtMs,
+  recordReadings,
   reading,
   onReading,
   onEnd,
@@ -51,6 +57,8 @@ export function RunStep({
   of: number | null;
   quality: number | null;
   startedAtMs: number;
+  /** `tenant.record_readings`: whether this practice takes readings at all. */
+  recordReadings: boolean;
   reading: Reading | null;
   onReading: (reading: Reading) => void;
   onEnd: () => void;
@@ -84,36 +92,43 @@ export function RunStep({
       </header>
 
       <div className="run__body">
-        <SignalDots quality={quality} />
+        {/* Dormant along with the signal check itself (fix round 2, finding
+            3): with no reading ever taken, this would otherwise read "Not
+            checked" on every readings-off visit — every visit — which in a
+            client's home reads as something forgotten, not something the
+            practice does not do. */}
+        {recordReadings ? <SignalDots quality={quality} /> : null}
         <p className="run__clock numeric" aria-live="off">
           {elapsed(startedAtMs, nowMs)}
         </p>
         <p className="small muted">elapsed</p>
       </div>
 
-      {open ? (
-        <section className="run__reading">
-          <PercentSlider
-            id="reading-reward"
-            label="Time in reward"
-            value={draft.timeInRewardPercent}
-            onChange={(value) => onReading({ ...draft, timeInRewardPercent: value })}
-          />
-          <PercentSlider
-            id="reading-artefact"
-            label="Artefact"
-            value={draft.artefactPercent}
-            onChange={(value) => onReading({ ...draft, artefactPercent: value })}
-          />
-          <Button className="step__secondary" onClick={() => setOpen(false)}>
-            Hide the reading
+      {recordReadings ? (
+        open ? (
+          <section className="run__reading">
+            <PercentSlider
+              id="reading-reward"
+              label="Time in reward"
+              value={draft.timeInRewardPercent}
+              onChange={(value) => onReading({ ...draft, timeInRewardPercent: value })}
+            />
+            <PercentSlider
+              id="reading-artefact"
+              label="Artefact"
+              value={draft.artefactPercent}
+              onChange={(value) => onReading({ ...draft, artefactPercent: value })}
+            />
+            <Button className="step__secondary" onClick={() => setOpen(false)}>
+              Hide the reading
+            </Button>
+          </section>
+        ) : (
+          <Button className="step__secondary run__reading-toggle" onClick={() => setOpen(true)}>
+            Record a reading
           </Button>
-        </section>
-      ) : (
-        <Button className="step__secondary run__reading-toggle" onClick={() => setOpen(true)}>
-          Record a reading
-        </Button>
-      )}
+        )
+      ) : null}
 
       <div className="step__dock">
         {armed ? (

@@ -33,13 +33,25 @@ type DeliveryMode = 'home' | 'studio' | 'remote';
 type Point = { lat: number; lng: number };
 
 type ServicesState =
-  { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; services: ServiceTypeOption[] };
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | { kind: 'ready'; services: ServiceTypeOption[]; recordReadings: boolean };
 
 /** A visit already open, offered before anything else on the screen. */
 type ResumeOffer =
   | { kind: 'looking' }
   | { kind: 'none' }
-  | { kind: 'offered'; visit: RunnerVisit }
+  | {
+      kind: 'offered';
+      visit: RunnerVisit;
+      /**
+       * The value this visit opened with (fix round 2, finding 1): from the
+       * device's own note when the offer came from it — exactly the case
+       * where a live fetch has no signal to complete — and from the current
+       * services answer when the server itself confirmed the visit.
+       */
+      recordReadings: boolean;
+    }
   | { kind: 'dismissed' };
 
 type Outcome =
@@ -182,7 +194,11 @@ function fetchServicesState(apiFetch: ApiFetch): Promise<ServicesState> {
       if (!answer.ok) return { kind: 'error' } as const;
       const parsed = ServiceTypeOptionsResponse.safeParse(answer.body);
       if (!parsed.success) return { kind: 'error' } as const;
-      return { kind: 'ready', services: parsed.data.serviceTypes } as const;
+      return {
+        kind: 'ready',
+        services: parsed.data.serviceTypes,
+        recordReadings: parsed.data.recordReadings,
+      } as const;
     })
     .catch(() => ({ kind: 'error' }) as const);
 }
@@ -273,8 +289,25 @@ export function CheckInPage() {
 
   const [attempt, setAttempt] = useState<Attempt | null>(null);
   const [running, setRunning] = useState<RunnerVisit | null>(null);
+  // The value the running visit above opened with (fix round 2, finding 1):
+  // set once, at the same moment as `running`, from whichever source that
+  // route into running visit has (the live services answer for a fresh
+  // check-in or a server-confirmed resume, the device's own note for an
+  // offline one) — never re-derived afterwards, so a services fetch that
+  // resolves, or changes, after the visit is under way cannot flip the
+  // switch beneath a visit already in progress.
+  const [runningRecordReadings, setRunningRecordReadings] = useState(false);
   const [resume, setResume] = useState<ResumeOffer>({ kind: 'looking' });
   const storeRef = useRef<OutboxStore | null>(null);
+  // Set once the practitioner sets the offer aside (fix round 3, finding 1):
+  // the resume-detection effect below re-runs whenever `recordReadings`
+  // settles or changes (fix round 2, finding 1's own dependency), and
+  // without this guard that re-run would silently overwrite a `dismissed`
+  // decision with a fresh `offered` the moment a slower services fetch
+  // finally answers — the exact prompt the practitioner just declined,
+  // reappearing on its own. A ref rather than state: reading it must not
+  // itself be a reason for the effect to run again.
+  const dismissedResumeRef = useRef(false);
 
   const [servicesState, setServicesState] = useState<ServicesState>({ kind: 'loading' });
   const [selectedServiceId, setSelectedServiceId] = useState('');
@@ -284,6 +317,15 @@ export function CheckInPage() {
   const [shareLocation, setShareLocation] = useState(false);
   const [locationNote, setLocationNote] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
+
+  // Derived, not stored: the practitioner's own pick once made, otherwise
+  // the first (usually only) certified service — computed at render rather
+  // than defaulted via an effect and a second render. Declared here, ahead
+  // of the resume-detection effect below, so a server-confirmed resume can
+  // read the current answer directly rather than through a ref.
+  const services = servicesState.kind === 'ready' ? servicesState.services : [];
+  const recordReadings = servicesState.kind === 'ready' ? servicesState.recordReadings : false;
+  const effectiveServiceId = selectedServiceId || (services[0]?.id ?? '');
 
   const loadServices = useCallback(() => fetchServicesState(apiFetch), [apiFetch]);
 
@@ -306,20 +348,36 @@ export function CheckInPage() {
   // Is there a visit already open? The server knows, and when it cannot be
   // reached the device's own outbox note does — a reload with no signal must
   // still offer to resume rather than looking like a fresh day.
+  //
+  // `recordReadings` is a dependency on purpose (fix round 2, finding 1): a
+  // server-confirmed offer is stamped with whatever the live services answer
+  // is when that happens, and if this effect fires before that answer has
+  // settled, a later change to `recordReadings` re-runs it and corrects the
+  // stamp — the practitioner has not tapped Resume yet, so nothing has been
+  // frozen for them to be wrong about. An *offline* offer never depends on
+  // this at all: it is stamped from the device's own note, which is exactly
+  // the value a live fetch with no signal to complete cannot provide.
+  //
+  // That same re-run must never overwrite a decision already made, though
+  // (fix round 3, finding 1): `dismissedResumeRef` is checked before every
+  // `setResume` below, so a resume the practitioner has set aside stays set
+  // aside no matter how many times a slower services fetch settles
+  // afterwards — the fix cannot be "drop `recordReadings` from the
+  // dependency list", which would bring back round 2's stale-flag bug.
   useEffect(() => {
     let live = true;
     void (async () => {
       const fromServer = await fetchOpenVisit(apiFetch);
-      if (!live) return;
+      if (!live || dismissedResumeRef.current) return;
       if (fromServer) {
-        setResume({ kind: 'offered', visit: fromServer });
+        setResume({ kind: 'offered', visit: fromServer, recordReadings });
         return;
       }
       const store = await createOutboxStore();
-      if (!live) return;
+      if (!live || dismissedResumeRef.current) return;
       storeRef.current = store;
       const note = await store.readOpenVisit();
-      if (!live) return;
+      if (!live || dismissedResumeRef.current) return;
       setResume(
         note === null
           ? { kind: 'none' }
@@ -344,19 +402,18 @@ export function CheckInPage() {
                 lastSeq: note.lastSeq,
                 shareLocation: false,
               },
+              // The value this visit opened with, off the device's own note
+              // — not the live services answer, which is exactly what has
+              // no signal to complete right now (fix round 2, finding 1).
+              // `false` only for a note written before this field existed.
+              recordReadings: note.recordReadings ?? false,
             },
       );
     })();
     return () => {
       live = false;
     };
-  }, [apiFetch]);
-
-  // Derived, not stored: the practitioner's own pick once made, otherwise
-  // the first (usually only) certified service — computed at render rather
-  // than defaulted via an effect and a second render.
-  const services = servicesState.kind === 'ready' ? servicesState.services : [];
-  const effectiveServiceId = selectedServiceId || (services[0]?.id ?? '');
+  }, [apiFetch, recordReadings]);
 
   const handleShareLocationChange = useCallback(async (next: boolean) => {
     setShareLocation(next);
@@ -471,6 +528,10 @@ export function CheckInPage() {
         // not a failure of the check-in: the visit runs with a plain label.
         const opened = await fetchOpenVisit(apiFetch);
         if (!mountedRef.current) return;
+        // A brand-new visit: there is no note to consult, so the current
+        // services answer is the only truth there is (fix round 2, finding
+        // 1), frozen here rather than read live for the rest of the visit.
+        setRunningRecordReadings(recordReadings);
         setRunning(opened === null ? null : { ...opened, shareLocation });
         if (opened !== null) return;
         setRunning({
@@ -489,13 +550,22 @@ export function CheckInPage() {
     } catch {
       setOutcome({ kind: 'failed' });
     }
-  }, [apiFetch, attempt, deliveryMode, effectiveServiceId, recordNumber, shareLocation]);
+  }, [
+    apiFetch,
+    attempt,
+    deliveryMode,
+    effectiveServiceId,
+    recordNumber,
+    recordReadings,
+    shareLocation,
+  ]);
 
   if (running) {
     return (
       <SessionRunner
         visit={running}
         service={services.find((s) => s.id === running.serviceTypeId) ?? null}
+        recordReadings={runningRecordReadings}
         onFinished={() => navigate('/today')}
       />
     );
@@ -574,14 +644,27 @@ export function CheckInPage() {
               <Button
                 variant="primary"
                 className="checkin__primary"
-                onClick={() => setRunning(resume.visit)}
+                onClick={() => {
+                  // The value this specific offer was stamped with (fix
+                  // round 2, finding 1) — the device's own note when it came
+                  // from there, the live services answer when the server
+                  // confirmed it — frozen now rather than read live again.
+                  setRunningRecordReadings(resume.recordReadings);
+                  setRunning(resume.visit);
+                }}
               >
                 Resume
               </Button>
               <Button
                 variant="quiet"
                 className="checkin__dismiss"
-                onClick={() => setResume({ kind: 'dismissed' })}
+                onClick={() => {
+                  // Recorded before the state, so the detection effect
+                  // above can never race a re-run ahead of this decision
+                  // (fix round 3, finding 1).
+                  dismissedResumeRef.current = true;
+                  setResume({ kind: 'dismissed' });
+                }}
               >
                 Check in someone else instead
               </Button>

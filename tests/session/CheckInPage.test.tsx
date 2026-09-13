@@ -5,10 +5,40 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../app/shell/auth/AuthContext';
 import type { AuthProvider } from '../../app/shell/auth/types';
 import { CheckInPage } from '../../app/therapist/session/CheckInPage';
+import type { OpenVisitNote } from '../../app/therapist/session/outbox/store';
+
+/**
+ * The device's own open-visit note, exactly as `SessionRunner` writes it
+ * (fix round 2, finding 1's offline-resume path). This file has no
+ * injection point for the outbox store the way `SessionRunner.test.tsx`
+ * does — `CheckInPage` calls `createOutboxStore` directly — so the module is
+ * mocked instead, passing everything through unchanged except
+ * `createOutboxStore`, which seeds a fresh memory store with whatever note a
+ * test sets here (`null` between tests: see the `afterEach` below) before
+ * `CheckInPage` ever reads it.
+ */
+const { pendingOfflineNote } = vi.hoisted(() => ({
+  pendingOfflineNote: { current: null as unknown },
+}));
+
+vi.mock('../../app/therapist/session/outbox/store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/therapist/session/outbox/store')>();
+  return {
+    ...actual,
+    createOutboxStore: async () => {
+      const store = actual.createMemoryStore();
+      if (pendingOfflineNote.current) {
+        await store.writeOpenVisit(pendingOfflineNote.current as never);
+      }
+      return store;
+    },
+  };
+});
 
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  pendingOfflineNote.current = null;
 });
 
 // Synthetic throughout, in the reserved ranges (.claude/rules/testing.md).
@@ -49,7 +79,12 @@ function mount(
   options: {
     services?: unknown[];
     onPost?: PostHandler;
-    onServiceTypes?: (callIndex: number) => Response;
+    /**
+     * A plain `Response` for every existing test; a controllable pending
+     * `Promise<Response>` for one that needs the answer to settle only once
+     * the test says so (fix round 3, finding 1's own race).
+     */
+    onServiceTypes?: (callIndex: number) => Response | Promise<Response>;
     /** Router state the day sheet hands over when a stop's Check in is tapped. */
     state?: { record?: unknown };
     /** What GET /api/sessions/open answers: a visit already open, or none. */
@@ -58,11 +93,16 @@ function mount(
 ) {
   const services = options.services ?? [SERVICE_A];
   const calls: Call[] = [];
+  // One entry per GET /api/sessions/open, so a test can tell whether the
+  // resume-detection effect actually re-ran (fix round 3, finding 1: it
+  // depends on `recordReadings` and does re-run whenever that settles).
+  const openVisitCalls: true[] = [];
   let serviceTypesCalls = 0;
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') return json(ME);
     if (url === '/api/sessions/open') {
+      openVisitCalls.push(true);
       return json({ session: options.openSession ?? null });
     }
     if (url === '/api/sessions/service-types') {
@@ -98,7 +138,7 @@ function mount(
       </MemoryRouter>
     </AuthProviderBoundary>,
   );
-  return { ...utils, fetchImpl, calls };
+  return { ...utils, fetchImpl, calls, openVisitCalls };
 }
 
 async function ready() {
@@ -589,5 +629,101 @@ describe('CheckInPage, resuming a visit', () => {
         'button--primary',
       ),
     );
+  });
+
+  it('resumes with the readings switch this visit opened with, even offline (fix round 2, finding 1)', async () => {
+    // No server-confirmed visit (the default `/api/sessions/open` answer,
+    // `{ session: null }`) and no signal for the services fetch either —
+    // exactly the condition the device's own note exists for. Before this
+    // fix, both defaulted `recordReadings` to `false` regardless of what the
+    // practice's switch actually is, silently dropping the signal check, the
+    // run screen's panel and the summary ask from a resumed visit.
+    pendingOfflineNote.current = {
+      sessionId: '00000000-0000-4000-8000-000000009002',
+      clientLabel: 'Rowan M.',
+      checkedInAt: '2026-09-02T10:32:00.000Z',
+      number: 1,
+      of: null,
+      serviceTypeId: SERVICE_A.id,
+      lastSeq: 3,
+      recordReadings: true,
+    } satisfies OpenVisitNote;
+    mount({ onServiceTypes: () => json({ error: 'internal', requestId: 'r' }, 500) });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
+    expect(await screen.findByRole('button', { name: 'Check the signal' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Start session' })).toBeNull();
+  });
+
+  it('still resumes, off, from a note written before this field existed', async () => {
+    // Backward compatibility for a note already on a device when this
+    // rollout ships: `recordReadings` is optional on `OpenVisitNote`
+    // precisely so a note missing it still parses, reading as `false` — the
+    // same conservative default the rest of this feature uses, not a crash.
+    const noteWithoutTheField: Omit<OpenVisitNote, 'recordReadings'> = {
+      sessionId: '00000000-0000-4000-8000-000000009003',
+      clientLabel: 'Rowan M.',
+      checkedInAt: '2026-09-02T10:32:00.000Z',
+      number: 1,
+      of: null,
+      serviceTypeId: SERVICE_A.id,
+      lastSeq: 3,
+    };
+    pendingOfflineNote.current = noteWithoutTheField;
+    mount({ onServiceTypes: () => json({ error: 'internal', requestId: 'r' }, 500) });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
+    expect(await screen.findByRole('button', { name: 'Start session' })).toBeTruthy();
+  });
+
+  it('keeps a declined offer declined once a slower services fetch settles (fix round 3, finding 1)', async () => {
+    // The resume-detection effect depends on `recordReadings` on purpose
+    // (fix round 2, finding 1) and genuinely re-runs once the services
+    // fetch settles — proven below by a second GET /api/sessions/open.
+    // Before this fix, that re-run unconditionally overwrote `resume`,
+    // silently bringing back a prompt the practitioner had just declined.
+    let resolveServiceTypes: (response: Response) => void = () => undefined;
+    const pendingServiceTypes = new Promise<Response>((resolve) => {
+      resolveServiceTypes = resolve;
+    });
+    const { openVisitCalls } = mount({
+      openSession: OPEN,
+      onServiceTypes: () => pendingServiceTypes,
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Check in someone else instead' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull());
+    const callsBeforeSettling = openVisitCalls.length;
+
+    resolveServiceTypes(json({ serviceTypes: [SERVICE_A], recordReadings: true }));
+
+    await waitFor(() => expect(openVisitCalls.length).toBeGreaterThan(callsBeforeSettling));
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    expect(screen.getByLabelText('Record number')).toBeTruthy();
+  });
+});
+
+describe('CheckInPage, whether the practice records readings', () => {
+  // Fix round 2, finding 2: the local schema silently dropped this field
+  // once already, and every existing test in this file answers with no
+  // `recordReadings` at all (the `.default(false)` path) — nothing asserted
+  // that a response actually carrying the flag, either way, reaches the
+  // runner as that same value.
+  it('reaches the runner as true when the service-types answer says so', async () => {
+    mount({ onServiceTypes: () => json({ serviceTypes: [SERVICE_A], recordReadings: true }) });
+    await ready();
+    enterRecordNumber('MW-000123');
+    clickCheckIn();
+    expect(await screen.findByRole('heading', { name: 'Before you start' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Check the signal' })).toBeTruthy();
+  });
+
+  it('reaches the runner as false when the service-types answer says so', async () => {
+    mount({ onServiceTypes: () => json({ serviceTypes: [SERVICE_A], recordReadings: false }) });
+    await ready();
+    enterRecordNumber('MW-000123');
+    clickCheckIn();
+    expect(await screen.findByRole('heading', { name: 'Before you start' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Start session' })).toBeTruthy();
   });
 });

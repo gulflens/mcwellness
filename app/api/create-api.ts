@@ -102,16 +102,35 @@ function isAssessmentFileUpload(method: string, path: string): boolean {
   return method === 'PUT' && ASSESSMENT_FILE_PATH.test(path);
 }
 /**
- * The paths exempt from `jsonOnly`: the one raw-body door, and the website's
+ * The second door of the same shape, from 2026-09-13: the practice's own
+ * brain-mapping and neurofeedback software exports a result file at the end of
+ * a visit, and the practitioner attaches it to that visit from the Summary
+ * step (app/api/sessions/export.ts, migration 307). It is the same equipment,
+ * the same three kinds of file and the same sizes as the assessment door
+ * above, so it takes the same cap and the same clock rather than a second pair
+ * of numbers that could drift apart.
+ */
+const SESSION_EXPORT_PATH = /^\/api\/sessions\/[^/]+\/export$/;
+function isSessionExportUpload(method: string, path: string): boolean {
+  return method === 'PUT' && SESSION_EXPORT_PATH.test(path);
+}
+/** Either door whose body *is* the equipment's exported file. */
+function isEquipmentExportUpload(method: string, path: string): boolean {
+  return isAssessmentFileUpload(method, path) || isSessionExportUpload(method, path);
+}
+/**
+ * The paths exempt from `jsonOnly`: the two raw-body doors, and the website's
  * enquiry door, which arrives form-encoded by `sendBeacon` because that is the
  * one shape a browser sends without a preflight (app/api/enquiries/door.ts).
  */
 function isRawUpload(method: string, path: string): boolean {
-  return isAssessmentFileUpload(method, path) || (method === 'POST' && path === ENQUIRY_DOOR_PATH);
+  return isEquipmentExportUpload(method, path) || (method === 'POST' && path === ENQUIRY_DOOR_PATH);
 }
 export const REQUEST_TIMEOUT_MS = 10_000;
 /**
- * The one door with a longer budget, and the arithmetic behind the number.
+ * The budget the equipment's export doors get, and the arithmetic behind the
+ * number. One door until 2026-09-13 and two since, both carrying the same
+ * files off the same laptop (`isEquipmentExportUpload`).
  *
  * `timeout` races the **whole** handler, and the body read is inside it. Ten
  * seconds for an export of this size asks for better than 50 Mbit/s sustained
@@ -142,7 +161,7 @@ export const REQUEST_TIMEOUT_MS = 10_000;
 export const ASSESSMENT_FILE_TIMEOUT_MS = 420_000;
 /** The budget for one request, and the only place either number is chosen. */
 export function requestTimeoutMs(method: string, path: string): number {
-  return isAssessmentFileUpload(method, path) ? ASSESSMENT_FILE_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+  return isEquipmentExportUpload(method, path) ? ASSESSMENT_FILE_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
 }
 const MINUTE = 60_000;
 
@@ -285,7 +304,7 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
   });
   api.use('/api/*', async (c, next) => {
     if (c.req.path === LOGO_PATH) return logoBodyLimit(c, next);
-    if (isAssessmentFileUpload(c.req.method, c.req.path)) return assessmentFileLimit(c, next);
+    if (isEquipmentExportUpload(c.req.method, c.req.path)) return assessmentFileLimit(c, next);
     return defaultBodyLimit(c, next);
   });
   // The clock, chosen the same way the cap above it is: one door carries
@@ -298,11 +317,13 @@ export function createApi(deps: ApiOptions): Hono<ApiEnv> {
       ? assessmentFileTimeout(c, next)
       : ordinaryTimeout(c, next),
   );
-  // One path carries a file rather than JSON, and it is the only one: the
-  // route refuses any media type but the ones it names, checks the bytes
-  // against the type, and verifies the digest the caller declared
-  // (app/api/assessments/file.ts). The setup photograph was the other until
-  // 2026-09-09; the practice takes none, so its door is gone with it.
+  // Two paths carry a file rather than JSON, and they are the only two: the
+  // equipment's own export, against a measurement (app/api/assessments/file.ts)
+  // and against the visit it was produced at (app/api/sessions/export.ts).
+  // Each refuses any media type but the ones it names, checks the bytes
+  // against the type, and verifies the digest the caller declared. The setup
+  // photograph was a third until 2026-09-09; the practice takes none, so its
+  // door is gone with it.
   api.use('/api/*', async (c, next) =>
     isRawUpload(c.req.method, c.req.path) ? next() : jsonOnly(c, next),
   );
