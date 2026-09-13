@@ -213,7 +213,7 @@ async function loadRecord(db: Db, clientId: string): Promise<ClientRecordRespons
   const health = await db.query<HealthRow>(
     'select id, asked_at, wording_version, seizures, seizures_note, implanted_device, ' +
       'implanted_device_note, head_injury, head_injury_note, pregnancy, pregnancy_note, ' +
-      'medication, medication_note, scalp, scalp_note from health_screening ' +
+      'medication, medication_note, scalp, scalp_note from health_declaration ' +
       'where client_id = $1 order by asked_at desc limit 1',
     [clientId],
   );

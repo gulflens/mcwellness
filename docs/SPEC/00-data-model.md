@@ -140,6 +140,12 @@ Append-only but for those two handling columns, and no delete grant at all. Aski
 ### `goal`
 `client_id`, `category_id` (owner-editable reference table: focus, sleep, calm, performance, ...), `description` (free text beside the category), `set_at`, `status` (`active`, `achieved`, `dropped`), `is_primary`. What the client wants from the programme. Never a diagnosis: this is a wellness business, and VAT does not depend on it (billing.md section 5).
 
+### `concern`
+_Added 2026-09-14, migration 108; client-record.md section 4.6._ What the household is worried about: `client_id`, `category_id` (the same owner-editable list a goal uses), `description` (free text beside it, 2,000 at most, no floor — the erasure empties it), `noted_at`, `status` (`open`, `resolved`; never "achieved", a word for goals). Its own table rather than a flag on `goal` because goals are printed into signed progress reports and a concern must never appear there as a goal nobody set. Written by the owner, an admin or the lead practitioner; read by whoever may open the record, not finance, not the portal.
+
+### `health_declaration`
+_Added 2026-09-14, migration 108; client-record.md section 4.6._ The six things `docs/CONSENT/agreement.en.md` asks a household to tell the practice before the first session and if they change: `seizures`, `implanted_device`, `head_injury`, `pregnancy`, `medication`, `scalp`, each a required boolean with an optional `_note` (500 at most), plus `asked_at` and `wording_version`. One row per asking, the newest current; no update is granted at all. Recorded only under an active `health_data` consent, read at the moment of writing. Never assessed, scored or interpreted — the name says what a household *declared*, and "screening" was refused for naming a clinical act. The erasure deletes the rows outright (964) and the audit trail never holds the twelve values (965). Read by whoever may open the record, not finance, not the portal.
+
 ### `assessment`
 Any measurement: qEEG brain map, CPT, questionnaire. Questionnaires are self-report measures, never diagnoses. `client_id`, `session_id`, `performed_at`, `performed_by_practitioner_id`, `instrument` (`qeeg`, `cpt`, `conners`, `vanderbilt`, `asrs`, `gad7`, `phq9`, `isi`, …), `instrument_version`, `derived jsonb` (scores), `version`, `supersedes_id`, and its files through `assessment_document`. Versioned so pre/post comparison is exact.
 

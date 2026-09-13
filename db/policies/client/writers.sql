@@ -200,7 +200,7 @@ create policy client_record_update_writers on public.concern as restrictive for 
   )
 );
 
--- health_screening: insert only, and no update policy at all — a change is a
+-- health_declaration: insert only, and no update policy at all — a change is a
 -- new row and the newest is current (108_concerns_and_health.sql section 2),
 -- so there is nothing to update and the table grants no update either.
 --
@@ -208,8 +208,8 @@ create policy client_record_update_writers on public.concern as restrictive for 
 -- the door tells the office, and the office records it. That keeps one path in
 -- for health answers rather than two, and it is the narrower choice where the
 -- wider one had no case; it can widen the day somebody asks for it.
-drop policy if exists client_record_writers on public.health_screening;
-create policy client_record_writers on public.health_screening as restrictive for insert to app_role with check (
+drop policy if exists client_record_writers on public.health_declaration;
+create policy client_record_writers on public.health_declaration as restrictive for insert to app_role with check (
   app.client_status_for(client_id) <> 'erased'
   and (
     app.actor_has_role('owner') or app.actor_has_role('admin')

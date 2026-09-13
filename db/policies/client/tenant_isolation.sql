@@ -10,7 +10,7 @@ declare
   t text;
 begin
   foreach t in array array['goal_category', 'goal', 'erasure_request',
-    'concern', 'health_screening'
+    'concern', 'health_declaration'
   ] loop
     execute format('drop policy if exists tenant_isolation on public.%I', t);
     execute format(

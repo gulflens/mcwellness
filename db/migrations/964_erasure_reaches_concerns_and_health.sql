@@ -20,7 +20,7 @@
 -- be read as a diff of that file: same signature, same security definer, same
 -- pinned search_path, same steps in the same order.
 --
--- Needs: 108 (concern, health_screening), 954 (the version this replaces).
+-- Needs: 108 (concern, health_declaration), 954 (the version this replaces).
 
 create or replace function app.erase_client(p_client_id uuid, p_request_id uuid) returns jsonb
 language plpgsql security definer
@@ -190,10 +190,14 @@ begin
     --     in these six that survives that treatment, because the answers ARE
     --     the personal part. A row saying "seizures: yes" about a household
     --     that asked to be forgotten is what the erasure letter promises is
-    --     gone. No figure is lost: the practice counts sessions and money,
-    --     never who told it what about their health.
+    --     gone — and this delete is the whole of it only because 965 keeps the
+    --     twelve columns out of the audit trail from the first insert on; the
+    --     trail is append-only and no erasure reaches it, so a copy there
+    --     would have outlived this statement by five years. No figure is
+    --     lost: the practice counts sessions and money, never who told it
+    --     what about their health.
     with cleared as (
-      delete from public.health_screening
+      delete from public.health_declaration
        where client_id = p_client_id
       returning id
     )
@@ -511,7 +515,7 @@ begin
     'locationsReduced', v_locations_reduced,
     'goalsCleared', v_goals_cleared,
     'concernsCleared', v_concerns_cleared,
-    'healthScreeningsDeleted', v_health_cleared,
+    'healthDeclarationsDeleted', v_health_cleared,
     'consentsUnlinked', v_consents_unlinked,
     'documentsDeleted', v_documents_deleted,
     'documentsKept', v_documents_kept,
@@ -561,6 +565,6 @@ $$;
 
 -- rollback:
 --   re-create the function as 954_drop_invoice_document_id.sql defines it (no
---   concern step, no health_screening step, and neither concernsCleared nor
---   healthScreeningsDeleted in the summary). Nothing else in this migration
+--   concern step, no health_declaration step, and neither concernsCleared nor
+--   healthDeclarationsDeleted in the summary). Nothing else in this migration
 --   creates anything to drop.

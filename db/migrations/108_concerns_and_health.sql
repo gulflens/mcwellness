@@ -40,10 +40,11 @@
 -- agreement's own words, so the person at the door is not surprised. Nothing
 -- here is assessed, scored or interpreted.
 --
--- Needs: 100 (client, goal_category, erasure_request, app.erase_client),
---        104, 105, 106 and 107 (the versions of that function this one
---        replaces — this file is 107's body with two steps and two summary
---        keys added, and is meant to be read as a diff of it).
+-- Needs: 060 (client, app_user), 097 (app.audit_row), 100 (goal_category).
+--
+-- The erasure step is not here — see section 5 — and neither is the audit
+-- redaction of the six answers, which is 965's; 108 creates two tables and
+-- redefines no function.
 
 ------------------------------------------------------------------------------
 -- 1. concern — what the household is worried about, in the same shape a goal
@@ -83,7 +84,17 @@ create trigger set_updated_at before update on concern
   for each row execute function app.set_updated_at();
 
 ------------------------------------------------------------------------------
--- 2. health_screening — the agreement's six questions, as answered on one day.
+-- 2. health_declaration — the agreement's six questions, as answered on one day.
+--
+--    **The name.** The consent that covers these calls them "the health
+--    answers you gave us" (docs/CONSENT/health-data.en.md), and a row is one
+--    declaration of the six, made on one day. It was `health_screening` for a
+--    draft, and the review of pull request 177 refused the word: screening is
+--    an act of assessing somebody's health, which is a clinical act, and the
+--    comment above says in so many words that nothing here is assessed. A
+--    regulator reading the schema should find a practice recording what it was
+--    told, not one running screenings. Renamed before merge, when a rename is
+--    a word; after it, it is a migration.
 --
 --    One row per asking. The newest row for a client is the current answer;
 --    the older ones are what was true before, which is why nothing here is
@@ -91,7 +102,7 @@ create trigger set_updated_at before update on concern
 --    so an answer is readable against the words the household actually signed
 --    (docs/CONSENT/agreement.en.md, versioned in consent_wording).
 ------------------------------------------------------------------------------
-create table health_screening (
+create table health_declaration (
   id                    uuid primary key default gen_random_uuid(),
   tenant_id             uuid not null references tenant (id),
   client_id             uuid not null references client (id),
@@ -111,8 +122,13 @@ create table health_screening (
   scalp                 boolean not null,   -- a skin condition or sensitivity on the scalp
   scalp_note            text,
   created_at            timestamptz not null default now(),
+  -- Present because .claude/rules/data-model.md asks every table for it and
+  -- lists what is exempt, ending "nothing else is exempt". No update is granted
+  -- on this table, so it never moves from created_at; the column is here so
+  -- there is no exemption to record and nothing for a later grant to add.
+  updated_at            timestamptz not null default now(),
   created_by            uuid references app_user (id),
-  constraint health_screening_notes_are_short check (
+  constraint health_declaration_notes_are_short check (
     coalesce(length(seizures_note), 0) <= 500
     and coalesce(length(implanted_device_note), 0) <= 500
     and coalesce(length(head_injury_note), 0) <= 500
@@ -120,18 +136,22 @@ create table health_screening (
     and coalesce(length(medication_note), 0) <= 500
     and coalesce(length(scalp_note), 0) <= 500
   ),
-  constraint health_screening_tenant_id_id_key unique (tenant_id, id)
+  constraint health_declaration_tenant_id_id_key unique (tenant_id, id)
 );
-create index health_screening_tenant_idx on health_screening (tenant_id);
-create index health_screening_client_idx on health_screening (client_id, asked_at desc);
-create index health_screening_created_by_idx on health_screening (created_by);
+create index health_declaration_tenant_idx on health_declaration (tenant_id);
+create index health_declaration_client_idx on health_declaration (client_id, asked_at desc);
+create index health_declaration_created_by_idx on health_declaration (created_by);
+create trigger set_updated_at before update on health_declaration
+  for each row execute function app.set_updated_at();
 
-comment on column public.health_screening.wording_version is
+comment on table public.health_declaration is
+  'audited: client - carries client_id directly. What a household told the practice about their health, in the signed agreement''s own words; one row per asking, the newest current. Never assessed, scored or interpreted (CLAUDE.md rule 1). The six answers and their notes are dropped from the audit trail by app.audit_redact (965).';
+comment on column public.health_declaration.wording_version is
   'Which version of the signed agreement asked these questions, so an answer is read against the words the household signed.';
 
 ------------------------------------------------------------------------------
 -- 3. RLS, grants and revokes, matching 090_grants_and_rls.sql for tables it
---    does not know about. **No update on health_screening**: a change is a new
+--    does not know about. **No update on health_declaration**: a change is a new
 --    row, and there is no case for editing what somebody said in March.
 ------------------------------------------------------------------------------
 do $$
@@ -141,14 +161,14 @@ declare
 begin
   alter table public.concern enable row level security;
   revoke all on public.concern from public;
-  alter table public.health_screening enable row level security;
-  revoke all on public.health_screening from public;
+  alter table public.health_declaration enable row level security;
+  revoke all on public.health_declaration from public;
   if has_api_roles then
     revoke all on public.concern from anon, authenticated;
-    revoke all on public.health_screening from anon, authenticated;
+    revoke all on public.health_declaration from anon, authenticated;
   end if;
   grant select, insert, update on public.concern to app_role;
-  grant select, insert on public.health_screening to app_role;
+  grant select, insert on public.health_declaration to app_role;
 end
 $$;
 
@@ -161,7 +181,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['concern', 'health_screening'] loop
+  foreach t in array array['concern', 'health_declaration'] loop
     execute format('create trigger audit_row after insert or update or delete on public.%I '
                    'for each row execute function app.audit_row()', t);
     execute format('alter table public.%I enable always trigger audit_row', t);
@@ -170,7 +190,8 @@ end
 $$;
 
 comment on table public.concern is 'audited: client - carries client_id directly';
-comment on table public.health_screening is 'audited: client - carries client_id directly';
+-- health_declaration's classification comment is set with the table above,
+-- where it says what the table is as well.
 
 ------------------------------------------------------------------------------
 -- 5. The erasure reaches both — and not from this file.
@@ -184,16 +205,22 @@ comment on table public.health_screening is 'audited: client - carries client_id
 --
 --    The step therefore lives in 964_erasure_reaches_concerns_and_health.sql,
 --    which is 954's body with two steps added — the same "read it as a diff"
---    shape 105, 106 and 107 use. Recorded in
---    docs/CHANGE-REQUESTS/trunk-notes.md, since 900-999 is the trunk's range
---    and this stream is only passing through.
+--    shape 105, 106 and 107 use. And 965_audit_redact_health_answers.sql keeps
+--    the six answers out of the audit trail, so that when 964 deletes the rows
+--    nothing of them is left in the one table nothing can be taken out of.
+--    Both recorded in docs/CHANGE-REQUESTS/trunk-notes.md, since 900-999 is
+--    the trunk's range and this stream is only passing through.
+--
+--    tests/client/db/concerns_and_health.test.ts reads the live body of
+--    app.erase_client and fails if it no longer names these tables — the
+--    guard against the next redefinition landing below 964.
 ------------------------------------------------------------------------------
 
 -- rollback:
 --   The two tables and the enum, in that order; the audit triggers and the
 --   classification comments go with the tables they are on.
 --
---   drop table public.health_screening;
+--   drop table public.health_declaration;
 --   drop table public.concern;
 --   drop type concern_status;
 --

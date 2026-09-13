@@ -73,7 +73,32 @@ Three decisions, the operator's, taken 2026-09-14:
 |---|---|
 | Who may read them | Whoever may open the record: the owner, an admin, the lead practitioner, and a practitioner for a client on their own schedule. **Not finance**, who books and takes money. Not the household's own portal login. |
 | What a "yes" does | It shows on the record and on the practitioner's own card for that visit, so it is seen at the door. It blocks nothing and warns nobody. |
-| When they are asked | At enrolment, and editable on the record whenever the household says something has changed. |
+| When they are asked | At enrolment — **after the consent step**, see below — and editable on the record whenever the household says something has changed. |
+
+**The table is `health_declaration`.** The consent that covers these calls them
+"the health answers you gave us", and a row is one declaration of the six on
+one day. A draft called it `health_screening`, and the review of pull request
+177 refused the word before merge: screening is an act of assessing somebody's
+health, a clinical act, and nothing here is assessed. It was a rename while it
+was a word; after merge it would have been a migration.
+
+**Only under an active `health_data` consent.** `docs/CONSENT/health-data.en.md`
+names these answers as what that consent covers, and says withdrawing it means
+"we stop collecting it". The route (`app/api/clients/health.ts`) reads the
+consent at the moment of writing — never a flag on the client — and answers
+409 `consent_required` without one, so a household that has not yet agreed is
+not asked, and one that has taken its agreement back is not asked again. This
+is why the enrolment step that asks them must sit **after** the consent step
+(section 4.3), not beside goals: recorded before consent, an answer would sit
+in the table for five years past a refusal at the next step (the review of pull
+request 177, finding 1).
+
+**The audit trail never holds them** (`965_audit_redact_health_answers.sql`).
+The trail is append-only, kept five years, and reached by no erasure; the
+twelve columns are dropped from it on the way in, the treatment the Emirates
+ID gets, so that when the erasure deletes the rows nothing of them is left
+anywhere. The trail still says a declaration was recorded, for whom, by whom,
+when and why.
 
 **A change is a new row.** Each asking is its own row with who recorded it and
 when; the newest is the current answer and the older ones are what was true
@@ -96,7 +121,7 @@ them.
 chose to tell a wellness practice, in the agreement's own words, so that the
 person at the door is not surprised.
 
-**4.3 Enrolment.** The wizard that enrols a new client (the operator's word, 2026-09-03: enrolment, never intake). Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → goals (goals and concerns, referral) → consent capture → summary. Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
+**4.3 Enrolment.** The wizard that enrols a new client (the operator's word, 2026-09-03: enrolment, never intake). Steps: identity → contacts → location (with "find my Makani" helper and pin verification) → goals (goals and concerns, referral) → consent capture → health answers (section 4.6; after consent, because the route refuses them without it — *the step itself is the next round's, 2026-09-14*) → summary. Saves as `lead` at any step; activation button appears when §3 conditions are met and lists what's missing otherwise.
 
 ## 5. Rules (each is a pure function in `domain/client`, each has tests)
 

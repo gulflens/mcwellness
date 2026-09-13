@@ -38,7 +38,7 @@ export function canWriteConcern(actor: Actor): boolean {
 }
 
 /** The same audience, for the same reason. */
-export function canWriteHealthScreening(actor: Actor): boolean {
+export function canWriteHealthDeclaration(actor: Actor): boolean {
   return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
 }
 

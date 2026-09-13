@@ -7,7 +7,7 @@ import { mountContacts } from './contacts';
 import { mountDocuments } from './documents';
 import { mountErasureRequests } from './erasure';
 import { mountGoalCategories } from './goal-categories';
-import { mountHealthScreening } from './health';
+import { mountHealthDeclaration } from './health';
 import { mountGoals } from './goals';
 import { mountLocations } from './locations';
 import { mountClientRecordCore } from './record';
@@ -43,7 +43,7 @@ export function mountClientRecord(api: Hono<ApiEnv>, now: () => Date = () => new
   mountLocations(api, now);
   mountGoals(api);
   mountConcerns(api);
-  mountHealthScreening(api);
+  mountHealthDeclaration(api);
   mountConsents(api, now);
   mountDocuments(api, now);
   mountErasureRequests(api, now);

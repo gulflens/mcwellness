@@ -362,6 +362,16 @@ export function ErasureSection({
                       )}
                       {counted(performed.summary.goalsCleared, 'goal cleared', 'goals cleared')}
                       {counted(
+                        performed.summary.concernsCleared,
+                        'concern cleared',
+                        'concerns cleared',
+                      )}
+                      {counted(
+                        performed.summary.healthDeclarationsDeleted,
+                        'set of health answers deleted',
+                        'sets of health answers deleted',
+                      )}
+                      {counted(
                         performed.summary.consentsUnlinked,
                         'consent unlinked',
                         'consents unlinked',

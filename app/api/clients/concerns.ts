@@ -89,6 +89,15 @@ export function mountConcerns(api: Hono<ApiEnv>): void {
     }
     if (clientStatus === 'erased') return c.json({ error: 'erased', requestId }, 400);
 
+    // The row before its fields, as goals.ts does: a concern that is not this
+    // client's is "not found" whatever the body says, and a body that says
+    // nothing is a bad request only about a concern that exists.
+    const existing = await db.query('select 1 from concern where id = $1 and client_id = $2', [
+      concernId,
+      clientId,
+    ]);
+    if (existing.rowCount === 0) return c.json({ error: 'not_found', requestId }, 404);
+
     const sets: string[] = [];
     const values: unknown[] = [];
     if (body.data.categoryId !== undefined) {

@@ -3788,6 +3788,26 @@ next: number it above the highest migration that defines it, whatever range
 that lands in.** 108 carries a comment saying where its erasure step went and
 why.
 
+**A second trunk file, from the review (2026-09-14).**
+`965_audit_redact_health_answers.sql` adds the twelve `health_declaration`
+columns — the six answers and their notes — to the list `app.audit_redact`
+drops outright, 914's precedent. 964 deletes the rows on erasure, and the
+promise that they are gone was false for as long as `audit_log.new_values`
+kept a copy of the insert for the log's five years; the trail is append-only
+and no erasure reaches it. The treatment is the Emirates ID's: the trail says a
+declaration was recorded, for whom, by whom, when and why, and never what was
+said. No other table has a column by any of the twelve names. `concern.description`
+is deliberately not on the list — it is treated exactly as `goal.description`
+is, and changing that is round 36's request, not this one's.
+
+The same review renamed the table from `health_screening` before merge:
+screening names a clinical act, and nothing here is assessed. A word now, a
+migration after.
+
+`tests/client/db/concerns_and_health.test.ts` reads the live body of
+`app.erase_client` from `pg_proc` and fails if it no longer names both tables,
+which is the guard against the next redefinition landing below 964.
+
 **Nothing else of the trunk's is touched**: no policy of another zone, no route,
 no screen. The rest of the round is `db/migrations/108`, `db/policies/client/**`,
 `app/api/clients/**`, `tests/client/**` and the client record's own spec, all of

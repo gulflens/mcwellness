@@ -174,7 +174,7 @@ export type Concern = z.infer<typeof Concern>;
  * household has never been asked — which is every client enrolled before
  * 2026-09-14, and is why every reader of this must handle its absence.
  */
-export const HealthScreening = z.object({
+export const HealthDeclaration = z.object({
   id: z.uuid(),
   askedAt: z.string(),
   wordingVersion: z.string().nullable(),
@@ -191,7 +191,7 @@ export const HealthScreening = z.object({
   scalp: z.boolean(),
   scalpNote: z.string().nullable(),
 });
-export type HealthScreening = z.infer<typeof HealthScreening>;
+export type HealthDeclaration = z.infer<typeof HealthDeclaration>;
 
 export const ClientRecordResponse = z.object({
   id: z.uuid(),
@@ -212,7 +212,7 @@ export const ClientRecordResponse = z.object({
   concerns: z.array(Concern),
   // Null until somebody is asked: the record shows "not asked yet" rather than
   // six confident "no"s nobody ever said.
-  health: HealthScreening.nullable(),
+  health: HealthDeclaration.nullable(),
 });
 export type ClientRecordResponse = z.infer<typeof ClientRecordResponse>;
 
@@ -367,8 +367,8 @@ export type UpdateConcernBody = z.infer<typeof UpdateConcernBody>;
  * words (docs/CONSENT/agreement.en.md, "Please tell us before the first
  * session, and if it changes").
  *
- * Every answer is required: a screening with a question left out is not a
- * screening, and "we did not ask" is not the same as "no". A note is optional
+ * Every answer is required: a declaration with a question left out is not a
+ * declaration, and "we did not ask" is not the same as "no". A note is optional
  * beside each and is short by construction — it is a sentence about what the
  * household said, never a history.
  */
@@ -671,6 +671,8 @@ export const ErasureRequestRecord = z.object({
       portalAccountsArchived: z.number().int().nonnegative(),
       locationsReduced: z.number().int().nonnegative(),
       goalsCleared: z.number().int().nonnegative(),
+      concernsCleared: z.number().int().nonnegative(),
+      healthDeclarationsDeleted: z.number().int().nonnegative(),
       consentsUnlinked: z.number().int().nonnegative(),
       documentsDeleted: z.number().int().nonnegative(),
       documentsKept: z.number().int().nonnegative(),

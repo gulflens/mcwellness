@@ -33,14 +33,14 @@ let owner: pg.Client;
  */
 let category: string;
 
-/** One concern and one screening, written as the office writes them. */
+/** One concern and one declaration of the six, written as the office writes them. */
 async function seedBoth(): Promise<void> {
   await owner.query(
     "insert into concern (tenant_id, client_id, category_id, description, created_by) values ($1, $2, $3, 'Wakes at three and cannot settle', $4)",
     [IDS.tenantA, IDS.clientA, category, IDS.ownerA],
   );
   await owner.query(
-    'insert into health_screening (tenant_id, client_id, seizures, implanted_device, head_injury, ' +
+    'insert into health_declaration (tenant_id, client_id, seizures, implanted_device, head_injury, ' +
       'pregnancy, medication, scalp, head_injury_note, created_by) ' +
       "values ($1, $2, false, false, true, false, false, false, 'A fall in 2019, no lasting effect', $3)",
     [IDS.tenantA, IDS.clientA, IDS.ownerA],
@@ -73,7 +73,7 @@ describe('who may read a concern and the health answers', () => {
           IDS.tenantA,
           async () => {
             const concerns = await owner.query('select id from concern');
-            const health = await owner.query('select id from health_screening');
+            const health = await owner.query('select id from health_declaration');
             expect({ role, concerns: concerns.rowCount, health: health.rowCount }).toEqual({
               role,
               concerns: 1,
@@ -94,7 +94,7 @@ describe('who may read a concern and the health answers', () => {
         IDS.tenantA,
         async () => {
           expect((await owner.query('select id from concern')).rowCount).toBe(0);
-          expect((await owner.query('select id from health_screening')).rowCount).toBe(0);
+          expect((await owner.query('select id from health_declaration')).rowCount).toBe(0);
         },
         'finance',
       );
@@ -112,7 +112,7 @@ describe('who may read a concern and the health answers', () => {
         IDS.tenantA,
         async () => {
           expect((await owner.query('select id from concern')).rowCount).toBe(0);
-          expect((await owner.query('select id from health_screening')).rowCount).toBe(0);
+          expect((await owner.query('select id from health_declaration')).rowCount).toBe(0);
         },
         'practitioner',
       );
@@ -130,7 +130,7 @@ describe('who may read a concern and the health answers', () => {
         IDS.tenantA,
         async () => {
           expect((await owner.query('select id from concern')).rowCount).toBe(0);
-          expect((await owner.query('select id from health_screening')).rowCount).toBe(0);
+          expect((await owner.query('select id from health_declaration')).rowCount).toBe(0);
         },
         'client_contact',
       );
@@ -151,12 +151,12 @@ describe('writing them', () => {
             [IDS.tenantA, IDS.clientA, category, IDS.ownerA],
           );
           await owner.query(
-            'insert into health_screening (tenant_id, client_id, seizures, implanted_device, ' +
+            'insert into health_declaration (tenant_id, client_id, seizures, implanted_device, ' +
               'head_injury, pregnancy, medication, scalp, created_by) ' +
               'values ($1, $2, false, false, false, false, true, false, $3)',
             [IDS.tenantA, IDS.clientA, IDS.ownerA],
           );
-          expect((await owner.query('select id from health_screening')).rowCount).toBe(1);
+          expect((await owner.query('select id from health_declaration')).rowCount).toBe(1);
         },
         'admin',
       );
@@ -173,13 +173,77 @@ describe('writing them', () => {
           await rejectsWith(
             owner,
             RLS_VIOLATION,
-            'insert into health_screening (tenant_id, client_id, seizures, implanted_device, ' +
+            'insert into health_declaration (tenant_id, client_id, seizures, implanted_device, ' +
               'head_injury, pregnancy, medication, scalp, created_by) ' +
               'values ($1, $2, true, false, false, false, false, false, $3)',
             [IDS.tenantA, IDS.clientA, IDS.ownerA],
           );
         },
         'practitioner',
+      );
+    });
+  });
+
+  it('refuses a concern from anyone who is not the office', async () => {
+    // Finance books and takes money; a practitioner tells the office; a
+    // household's own login is the portal, which has no screen for this.
+    for (const role of ['finance', 'practitioner', 'client_contact']) {
+      await rolledBack(owner, async () => {
+        await setAuditContext(owner, IDS.ownerA);
+        await asApiRole(
+          owner,
+          IDS.tenantA,
+          async () => {
+            await rejectsWith(
+              owner,
+              RLS_VIOLATION,
+              "insert into concern (tenant_id, client_id, category_id, description, created_by) values ($1, $2, $3, 'Cannot settle', $4)",
+              [IDS.tenantA, IDS.clientA, category, IDS.ownerA],
+            );
+          },
+          role,
+        );
+      });
+    }
+  });
+
+  it("lets the lead practitioner change a concern, and a practitioner's change reaches no row", async () => {
+    await rolledBack(owner, async () => {
+      await seedBoth();
+      await setAuditContext(owner, IDS.ownerA);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          const changed = await owner.query("update concern set status = 'resolved'");
+          expect(changed.rowCount).toBe(1);
+        },
+        'lead_practitioner',
+      );
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          const changed = await owner.query("update concern set status = 'open'");
+          expect(changed.rowCount).toBe(0);
+        },
+        'practitioner',
+      );
+    });
+  });
+
+  it('grants no delete on either, to anyone', async () => {
+    await rolledBack(owner, async () => {
+      await seedBoth();
+      await setAuditContext(owner, IDS.ownerA);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          await rejectsWith(owner, RLS_VIOLATION, 'delete from concern');
+          await rejectsWith(owner, RLS_VIOLATION, 'delete from health_declaration');
+        },
+        'owner',
       );
     });
   });
@@ -194,7 +258,7 @@ describe('writing them', () => {
         owner,
         IDS.tenantA,
         async () => {
-          await rejectsWith(owner, RLS_VIOLATION, 'update health_screening set seizures = true');
+          await rejectsWith(owner, RLS_VIOLATION, 'update health_declaration set seizures = true');
         },
         'owner',
       );
@@ -202,7 +266,78 @@ describe('writing them', () => {
   });
 });
 
+describe('another practice', () => {
+  it('sees neither, even as its owner', async () => {
+    await rolledBack(owner, async () => {
+      await seedBoth();
+      await seedTenant(owner, IDS.tenantB, IDS.ownerB, 'Other Synthetic Practice');
+      await asApiRole(
+        owner,
+        IDS.tenantB,
+        async () => {
+          expect((await owner.query('select id from concern')).rowCount).toBe(0);
+          expect((await owner.query('select id from health_declaration')).rowCount).toBe(0);
+        },
+        'owner',
+      );
+    });
+  });
+});
+
+describe('the audit trail', () => {
+  it('records that the six were declared, and never what was said (965)', async () => {
+    await rolledBack(owner, async () => {
+      // Written as the database owner: the trigger is `enable always` and the
+      // redaction is its own, whoever writes — and asApiRole rolls its
+      // savepoint back on the way out, which would take the trail row with it.
+      await setAuditContext(owner, IDS.ownerA, 'the household told us at enrolment');
+      const inserted = await owner.query<{ id: string }>(
+        'insert into health_declaration (tenant_id, client_id, seizures, implanted_device, ' +
+          'head_injury, pregnancy, medication, scalp, seizures_note, created_by) ' +
+          "values ($1, $2, true, false, false, false, false, false, 'Two, as a child', $3) returning id",
+        [IDS.tenantA, IDS.clientA, IDS.ownerA],
+      );
+      const trail = await owner.query<{ new_values: Record<string, unknown> }>(
+        "select new_values from audit_log where entity_type = 'health_declaration' and entity_id = $1",
+        [inserted.rows[0]?.id],
+      );
+      expect(trail.rowCount).toBe(1);
+      const keys = Object.keys(trail.rows[0]?.new_values ?? {});
+      expect(keys).toEqual(expect.arrayContaining(['id', 'client_id', 'asked_at', 'created_by']));
+      for (const dropped of [
+        'seizures',
+        'seizures_note',
+        'implanted_device',
+        'implanted_device_note',
+        'head_injury',
+        'head_injury_note',
+        'pregnancy',
+        'pregnancy_note',
+        'medication',
+        'medication_note',
+        'scalp',
+        'scalp_note',
+      ]) {
+        expect(keys).not.toContain(dropped);
+      }
+    });
+  });
+});
+
 describe('the erasure reaches both', () => {
+  it('is defined by a migration numbered above every earlier definer', async () => {
+    // 108 redefined app.erase_client first and 954 overwrote it silently a
+    // moment later, which is why the step lives in 964. This reads the live
+    // body: a later redefinition numbered below 964 would drop both steps
+    // without an error, and this is what would notice.
+    const body = await owner.query<{ prosrc: string }>(
+      "select p.prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app' and p.proname = 'erase_client'",
+    );
+    expect(body.rowCount).toBe(1);
+    expect(body.rows[0]?.prosrc).toContain('public.concern');
+    expect(body.rows[0]?.prosrc).toContain('public.health_declaration');
+  });
+
   it("clears the concern's words, deletes the answers, and counts each", async () => {
     await rolledBack(owner, async () => {
       await seedBoth();
@@ -221,7 +356,7 @@ describe('the erasure reaches both', () => {
       ]);
       expect(result.rows[0]?.summary).toMatchObject({
         concernsCleared: 1,
-        healthScreeningsDeleted: 1,
+        healthDeclarationsDeleted: 1,
       });
 
       // The concern keeps its category, which is a figure about the practice;
@@ -230,7 +365,7 @@ describe('the erasure reaches both', () => {
       expect(concern.rows[0]).toMatchObject({ description: '', category_id: category });
 
       // The answers keep nothing: the six of them ARE the personal part.
-      expect((await owner.query('select id from health_screening')).rowCount).toBe(0);
+      expect((await owner.query('select id from health_declaration')).rowCount).toBe(0);
     });
   });
 });
