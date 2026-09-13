@@ -43,6 +43,14 @@ export type ServiceTypeOption = z.infer<typeof ServiceTypeOption>;
 
 export const ServiceTypeOptionsResponse = z.object({
   serviceTypes: z.array(ServiceTypeOption),
+  /**
+   * `tenant.record_readings` (migration 918), carried on the same response
+   * by `app/api/sessions/service-types.ts`'s `ServiceTypesResponse` — the one
+   * door a practitioner's own session screen can reach it through. Defaulted
+   * for a server from before the switch existed, and for this file's own
+   * fixtures, which mostly do not set it.
+   */
+  recordReadings: z.boolean().default(false),
 });
 export type ServiceTypeOptionsResponse = z.infer<typeof ServiceTypeOptionsResponse>;
 

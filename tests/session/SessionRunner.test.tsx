@@ -85,6 +85,8 @@ function mount(
     /** What POST /close answers: 200, or a status the runner must triage. */
     closeStatus?: number;
     store?: ReturnType<typeof createMemoryStore>;
+    /** `tenant.record_readings`. Defaults to true: today's behaviour, unchanged. */
+    recordReadings?: boolean;
   } = {},
 ) {
   const posted: Posted[] = [];
@@ -145,6 +147,7 @@ function mount(
       <SessionRunner
         visit={{ ...VISIT, ...options.visit }}
         service={options.service === undefined ? SERVICE : options.service}
+        recordReadings={options.recordReadings ?? true}
         onFinished={() => undefined}
         createStore={async () => store}
       />
@@ -167,6 +170,28 @@ async function reachRun(options: Parameters<typeof mount>[0] = {}) {
   fireEvent.change(await screen.findByLabelText('Site'), { target: { value: 'Cz' } });
   fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
   await screen.findByRole('button', { name: 'End session' });
+  return mounted;
+}
+
+/**
+ * Walks pre-flight only, for a visit where the practice does not record
+ * readings (`recordReadings: false`): pre-flight leads straight to the run,
+ * with no signal check between them (./steps.ts's `stepsFor`).
+ */
+async function reachRunWithoutSignal(options: Parameters<typeof mount>[0] = {}) {
+  const mounted = mount({ ...options, recordReadings: false });
+  await screen.findByRole('heading', { name: 'Before you start' });
+  fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
+  await screen.findByRole('button', { name: 'End session' });
+  return mounted;
+}
+
+/** The same, as far as the summary. */
+async function reachSummaryWithoutSignal(options: Parameters<typeof mount>[0] = {}) {
+  const mounted = await reachRunWithoutSignal(options);
+  endSession();
+  fireEvent.click(await screen.findByRole('button', { name: 'See the summary' }));
+  await screen.findByRole('heading', { name: 'Summary' });
   return mounted;
 }
 
@@ -273,6 +298,62 @@ describe('the run', () => {
     fireEvent.change(await screen.findByLabelText('Site'), { target: { value: 'Cz' } });
     fireEvent.click(screen.getByRole('button', { name: 'Start session' }));
     expect(await screen.findByText('Session 12')).toBeTruthy();
+  });
+});
+
+/**
+ * The practice may take its readings entirely on the vendor's own software
+ * (the operator, 13 September 2026, docs/SPEC/session-capture.md section
+ * 3.3): `tenant.record_readings` off. Nothing here is deleted — `signal` is
+ * simply not in the sequence a visit walks (./steps.ts's `stepsFor`), and
+ * every test above this block, which never sets `recordReadings`, is the
+ * proof the on-behaviour is exactly what it was before this switch existed
+ * (`mount`'s default is `true`).
+ */
+describe('when the practice does not record readings', () => {
+  it('goes straight from pre-flight to the run, with no signal check between them', async () => {
+    await reachRunWithoutSignal();
+    expect(screen.getByRole('button', { name: 'End session' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Signal' })).toBeNull();
+    expect(screen.queryByText(/signal/i)).toBeNull();
+  });
+
+  it('offers no reading panel on the run screen', async () => {
+    await reachRunWithoutSignal();
+    expect(screen.queryByRole('button', { name: 'Record a reading' })).toBeNull();
+    expect(screen.queryByLabelText('Time in reward')).toBeNull();
+  });
+
+  it('writes no signal_checked event, since no site was ever asked for', async () => {
+    const { posted } = await reachSummaryWithoutSignal();
+    expect(kinds(posted)).not.toContain('signal_checked');
+  });
+
+  it('is exactly the sequence it is today when the practice does record readings', async () => {
+    mount();
+    await screen.findByRole('heading', { name: 'Before you start' });
+    fireEvent.click(screen.getByRole('button', { name: 'Check the signal' }));
+    expect(await screen.findByRole('heading', { name: 'Signal' })).toBeTruthy();
+  });
+
+  it('still shows a reading a visit already holds, even with the switch off', async () => {
+    // SignalStep, SignalDots, scoreSignalQuality and the post-session
+    // fallback reading (PostStep, untouched by this change) all stay
+    // exactly as they are — only the run screen's own panel and the
+    // pre-run signal check are gone. A reading taken the other way a visit
+    // can still get one, through the after-session fallback that already
+    // exists for a run where nothing was recorded live, still scores and
+    // still displays (SummaryStep reads no switch at all).
+    const { posted } = await reachRunWithoutSignal();
+    endSession();
+    fireEvent.change(await screen.findByLabelText('Time in reward'), { target: { value: '80' } });
+    fireEvent.change(screen.getByLabelText('Artefact'), { target: { value: '20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'See the summary' }));
+
+    await waitFor(() => expect(kinds(posted)).toContain('telemetry_chunk'));
+    await screen.findByRole('heading', { name: 'Summary' });
+    // cleanliness (1 - 20/100) x timeInTarget (80/100) = 0.64.
+    expect(screen.getByText('Session quality').nextElementSibling?.textContent).toBe('Good 64');
   });
 });
 
@@ -451,6 +532,7 @@ describe('what the device keeps', () => {
         <SessionRunner
           visit={VISIT}
           service={SERVICE}
+          recordReadings={true}
           onFinished={() => undefined}
           createStore={async () => store}
         />
@@ -541,6 +623,7 @@ describe('what the outbox is given', () => {
         <SessionRunner
           visit={VISIT}
           service={SERVICE}
+          recordReadings={true}
           onFinished={() => undefined}
           createStore={async () => {
             await ready;

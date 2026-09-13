@@ -21,6 +21,7 @@ import {
   deltas,
   midpoint,
   seedAnswers,
+  stepsFor,
   type Answers,
   type GeoPoint,
   type Observations,
@@ -28,6 +29,7 @@ import {
   type ServiceSettings,
   type SiteReading,
   type VisitActuals,
+  type VisitStep,
 } from './steps';
 import './SessionRunner.css';
 
@@ -71,7 +73,7 @@ export type RunnerVisit = {
   shareLocation: boolean;
 };
 
-type Step = 'preflight' | 'signal' | 'run' | 'post' | 'summary' | 'finishing' | 'blocked' | 'done';
+type Step = VisitStep | 'finishing' | 'blocked' | 'done';
 
 const EMPTY_SETTINGS: ServiceSettings = { preflightChecklist: [], ratingQuestions: [] };
 
@@ -147,11 +149,14 @@ function readPosition(): Promise<GeoPoint | null> {
 export function SessionRunner({
   visit,
   service,
+  recordReadings,
   onFinished,
   createStore = createOutboxStore,
 }: {
   visit: RunnerVisit;
   service: ServiceTypeOption | null;
+  /** `tenant.record_readings` (migration 918), from the service-types door's own answer. */
+  recordReadings: boolean;
   onFinished: () => void;
   /** Injected in tests, where IndexedDB does not exist. */
   createStore?: () => Promise<OutboxStore>;
@@ -323,6 +328,25 @@ export function SessionRunner({
 
   const setupQuality = useMemo(() => meanQuality(sites), [sites]);
 
+  // Shared by both routes into the run: from the signal check (a site was
+  // read) and, while readings are dormant, straight from pre-flight (no
+  // site was ever asked for, so there is nothing honest to write).
+  const beginRun = useCallback(
+    (withSignalCheck: boolean) => {
+      if (withSignalCheck) {
+        void write('signal_checked', {
+          sites: sites
+            .filter((site) => site.site.trim().length > 0)
+            .map((site) => ({ site: site.site.trim(), quality: site.quality })),
+          overridden: setupQuality !== null && setupQuality < 0.6,
+        });
+      }
+      setStartedAtMs(Date.now());
+      setStep('run');
+    },
+    [setupQuality, sites, write],
+  );
+
   const finishPreflight = useCallback(() => {
     void write('observation_recorded', {
       topic: 'preflight',
@@ -340,19 +364,17 @@ export function SessionRunner({
         })),
       });
     }
-    setStep('signal');
-  }, [checked, preAnswers, settings, write]);
+    // The sequence itself is a function of the switch (./steps.ts):
+    // `signal` is simply not in it while the practice reads its amplifier's
+    // own software, so a visit lands straight on the run screen instead.
+    if (stepsFor(recordReadings).includes('signal')) {
+      setStep('signal');
+    } else {
+      beginRun(false);
+    }
+  }, [beginRun, checked, preAnswers, recordReadings, settings, write]);
 
-  const startRun = useCallback(() => {
-    void write('signal_checked', {
-      sites: sites
-        .filter((site) => site.site.trim().length > 0)
-        .map((site) => ({ site: site.site.trim(), quality: site.quality })),
-      overridden: setupQuality !== null && setupQuality < 0.6,
-    });
-    setStartedAtMs(Date.now());
-    setStep('run');
-  }, [setupQuality, sites, write]);
+  const startRun = useCallback(() => beginRun(true), [beginRun]);
 
   const endRun = useCallback(() => {
     const started = startedAtMs ?? Date.now();
@@ -549,6 +571,7 @@ export function SessionRunner({
             of={visit.of}
             quality={setupQuality}
             startedAtMs={startedAtMs}
+            recordReadings={recordReadings}
             reading={reading}
             onReading={setReading}
             onEnd={endRun}

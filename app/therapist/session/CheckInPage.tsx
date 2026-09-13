@@ -33,7 +33,9 @@ type DeliveryMode = 'home' | 'studio' | 'remote';
 type Point = { lat: number; lng: number };
 
 type ServicesState =
-  { kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; services: ServiceTypeOption[] };
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | { kind: 'ready'; services: ServiceTypeOption[]; recordReadings: boolean };
 
 /** A visit already open, offered before anything else on the screen. */
 type ResumeOffer =
@@ -182,7 +184,11 @@ function fetchServicesState(apiFetch: ApiFetch): Promise<ServicesState> {
       if (!answer.ok) return { kind: 'error' } as const;
       const parsed = ServiceTypeOptionsResponse.safeParse(answer.body);
       if (!parsed.success) return { kind: 'error' } as const;
-      return { kind: 'ready', services: parsed.data.serviceTypes } as const;
+      return {
+        kind: 'ready',
+        services: parsed.data.serviceTypes,
+        recordReadings: parsed.data.recordReadings,
+      } as const;
     })
     .catch(() => ({ kind: 'error' }) as const);
 }
@@ -356,6 +362,7 @@ export function CheckInPage() {
   // the first (usually only) certified service — computed at render rather
   // than defaulted via an effect and a second render.
   const services = servicesState.kind === 'ready' ? servicesState.services : [];
+  const recordReadings = servicesState.kind === 'ready' ? servicesState.recordReadings : false;
   const effectiveServiceId = selectedServiceId || (services[0]?.id ?? '');
 
   const handleShareLocationChange = useCallback(async (next: boolean) => {
@@ -496,6 +503,7 @@ export function CheckInPage() {
       <SessionRunner
         visit={running}
         service={services.find((s) => s.id === running.serviceTypeId) ?? null}
+        recordReadings={recordReadings}
         onFinished={() => navigate('/today')}
       />
     );
