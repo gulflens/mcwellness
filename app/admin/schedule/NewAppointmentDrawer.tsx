@@ -72,6 +72,48 @@ type SubmitError =
 
 type FetchState = 'idle' | 'loading' | 'ready' | 'error';
 
+/**
+ * The choice to keep, or the one to default to (the usability pass of
+ * 2026-09-14). A choice already made survives if the fresh options still
+ * offer it. Failing that: the single option, where there is exactly one; then
+ * the remembered one, where the options still offer it; then nothing, so the
+ * select stays empty and asks — a default is never a guess among several.
+ */
+export function keepOrDefault(
+  current: string | null,
+  offered: readonly { id: string }[],
+  remembered: string | null,
+): string | null {
+  if (current && offered.some((o) => o.id === current)) return current;
+  if (offered.length === 1) return offered[0]?.id ?? null;
+  if (remembered && offered.some((o) => o.id === remembered)) return remembered;
+  return null;
+}
+
+/**
+ * The service the last booking on this device chose, kept in the browser and
+ * nowhere else: one id from the practice's own catalogue, nothing about any
+ * household. The practitioner is deliberately not remembered (see the
+ * defaults above). A device that refuses storage simply offers no default.
+ */
+const LAST_SERVICE = 'mcwellness.booking.service';
+
+function rememberedService(): string | null {
+  try {
+    return localStorage.getItem(LAST_SERVICE);
+  } catch {
+    return null;
+  }
+}
+
+function rememberService(serviceTypeId: string | null): void {
+  try {
+    if (serviceTypeId) localStorage.setItem(LAST_SERVICE, serviceTypeId);
+  } catch {
+    // Nothing to do: the next booking asks, as it did before.
+  }
+}
+
 export function NewAppointmentDrawer({
   date,
   onClose,
@@ -168,8 +210,37 @@ export function NewAppointmentDrawer({
           setOptionsState('error');
           return;
         }
-        setOptions(AppointmentOptionsResponse.parse(await res.json()));
+        const loaded = AppointmentOptionsResponse.parse(await res.json());
+        setOptions(loaded);
         setOptionsState('ready');
+        // Defaults, so a booking is not four picks when three of them have
+        // one honest answer (the usability pass of 2026-09-14). A choice the
+        // person already made is kept if the new options still offer it;
+        // otherwise the only option is taken, and for the service alone, the
+        // one this device booked last time — history, not a guess. Nothing is
+        // guessed where there are several: the select stays empty and asks.
+        //
+        // The service is resolved first, from the value this effect ran for,
+        // because the location can only be defaulted from the locations the
+        // select will actually show — the ones that suit the service's
+        // delivery modes. Defaulting from the unfiltered list took a home for
+        // a studio-only service and opened the time step on a form that
+        // showed no location at all (the review of pull request 178).
+        const nextService = keepOrDefault(
+          selectedServiceTypeId,
+          loaded.serviceTypes,
+          rememberedService(),
+        );
+        const service = loaded.serviceTypes.find((s) => s.id === nextService) ?? null;
+        const suitable = service
+          ? loaded.locations.filter((l) => service.deliveryModes.includes(deliveryModeOf(l.label)))
+          : [];
+        setSelectedServiceTypeId(nextService);
+        setSelectedLocationId((current) => keepOrDefault(current, suitable, null));
+        // Who delivers is never remembered: a preferred practitioner is a
+        // guess about a household, where a preferred service is a fact about
+        // the visit. Only a single credentialed practitioner is taken.
+        setSelectedPractitionerId((current) => keepOrDefault(current, loaded.practitioners, null));
       })
       .catch(() => {
         if (live) setOptionsState('error');
@@ -183,7 +254,9 @@ export function NewAppointmentDrawer({
     setSelectedClient(client);
     setClientResults(null);
     setClientQuery('');
-    setSelectedServiceTypeId(null);
+    // The service is kept: it is the visit being booked, not the household,
+    // that decides it. Location is the household's and is re-derived from
+    // their options; the practitioner follows service and day and is too.
     setSelectedLocationId(null);
     setSelectedPractitionerId(null);
     setStartTime('');
@@ -202,6 +275,10 @@ export function NewAppointmentDrawer({
   }
 
   function selectService(id: string) {
+    // Choosing what is already chosen changes nothing, and must not: the
+    // practitioner list below is cleared here on the promise that a changed
+    // service refetches it, and an unchanged one does not.
+    if ((id || null) === selectedServiceTypeId) return;
     setSelectedServiceTypeId(id || null);
     setSelectedLocationId(null);
     setSelectedPractitionerId(null);
@@ -263,6 +340,7 @@ export function NewAppointmentDrawer({
         }),
       });
       if (res.status === 201) {
+        rememberService(selectedServiceTypeId);
         onCreated(AppointmentRow.parse(await res.json()));
         return;
       }

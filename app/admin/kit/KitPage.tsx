@@ -9,6 +9,7 @@ import { StatusChip, type StatusTone } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
 import { useDrawer } from '../../shell/components/useDrawer';
 import './kit.css';
+import { readReference } from '../../shell/referenceCache';
 
 /**
  * Settings › Kit — the practice's own instruments
@@ -364,10 +365,10 @@ export function KitPage() {
         setState(parsed.success ? { kind: 'ready', data: parsed.data.kit } : { kind: 'error' });
       })
       .catch(() => setState({ kind: 'error' }));
-    void apiFetch('/api/kit/options')
-      .then(async (res) => {
-        if (!res.ok) return;
-        const parsed = KitOptionsResponse.safeParse(await res.json());
+    void readReference(apiFetch, '/api/kit/options')
+      .then((answer) => {
+        if (!answer.ok) return;
+        const parsed = KitOptionsResponse.safeParse(answer.body);
         if (parsed.success) setPractitioners(parsed.data.practitioners);
       })
       .catch(() => {

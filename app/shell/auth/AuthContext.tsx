@@ -10,6 +10,7 @@ import {
 import { MeResponse } from '../../api/_middleware/actor-schema';
 import { forgetDevice } from '../../therapist/session/outbox/store';
 import type { AuthProvider } from './types';
+import { forgetReferences } from '../referenceCache';
 
 /**
  * Who is signed in, for the whole shell. On load it asks the provider for a
@@ -77,8 +78,19 @@ export function AuthProviderBoundary({
       const res = await fetchImpl(path, { ...init, headers });
       if (res.status === 401) {
         await provider.signOut();
+        // A sign-out the server forced is still a sign-out: the next person to
+        // sign in on this device must not read this person's lists
+        // (app/shell/referenceCache.ts). The voluntary path below does the same.
+        forgetReferences();
         setSession({ status: 'signed-out' });
       }
+      // A write is the one thing that can make a remembered reference list
+      // stale — a service type added, a VAT rate changed, a visit booked that
+      // takes a practitioner's slot — so any write forgets them all
+      // (app/shell/referenceCache.ts). Cheap, and it needs no list of which
+      // write touches which list.
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD') forgetReferences();
       return res;
     },
     [provider, fetchImpl],
@@ -105,6 +117,9 @@ export function AuthProviderBoundary({
   const signOut = useCallback(async () => {
     await provider.signOut();
     await forgetDevice();
+    // The reference lists are the practice's, not a person's, but the next
+    // person to sign in on this device may be a different practice.
+    forgetReferences();
     navigator.serviceWorker?.controller?.postMessage({ type: 'forget-reads' });
     setSession({ status: 'signed-out' });
   }, [provider]);
