@@ -23,9 +23,22 @@
 --
 -- Needs: 000 (schema app, role app_role, app.set_updated_at,
 -- app.current_tenant_id), 050 (practitioner, whose active row the door below
--- requires), 060 (client, document), 095 (app.current_actor_id), 300
--- (session) and 302 (session.setup_photo_document_id, the shape this column
--- copies, and the close guard this file deliberately does not touch).
+-- requires), 060 (client, document), 100 (app.current_actor_id, which the
+-- door below calls), 300 (session) and 302
+-- (session.setup_photo_document_id, the shape this column copies, and the
+-- close guard this file deliberately does not touch).
+--
+-- **100, not 095, and the two files beside this one have it wrong.** 302 and
+-- 306 both attribute `app.current_actor_id` to 095, and it is not there:
+-- 095_actor.sql creates `app.actor_has_role`, `app.resolve_actor` and a
+-- replacement `app.audit_row`, and nothing else. `app.current_actor_id()` is
+-- created exactly once, at 100_client_record.sql line 19. Both of those files
+-- are merged and a merged migration is never edited
+-- (.claude/rules/data-model.md), so the error stays where it is; this note is
+-- here so the next reader of all three does not assume the odd one out is the
+-- mistake. Nothing depends on the wrong attribution — `checkNeeds` only
+-- refuses a number at or above the file's own, and 095 and 100 are both below
+-- every one of them.
 
 ------------------------------------------------------------------------------
 -- 1. The column.

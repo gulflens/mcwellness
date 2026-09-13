@@ -167,11 +167,24 @@ export function mountSessionExport(api: Hono<ApiEnv>, now: () => Date = () => ne
     );
     const filedId = filed.rows[0]?.document_id ?? null;
     if (filedId === null) {
-      // The visit already names a different export, or it closed between the
-      // read above and this call. Either way the column is singular and a
-      // filed evidence document is never replaced (docs/SEAMS.md).
-      await logRefusal(db, 'session', sessionId, session.client_id, ['export_already_filed']);
-      return c.json({ error: 'conflict', code: 'export_already_filed', requestId }, 409);
+      // `app.file_session_export` answers null for three different reasons —
+      // the visit already names a different export, the visit closed between
+      // the read above and the call, or the caller is no longer an active
+      // practitioner on it — and they send a practitioner to three different
+      // places. So the cause is *established* here rather than assumed: the
+      // row is read back and asked which of them is true. Where none of them
+      // is (a race this transaction cannot see), the answer names no cause at
+      // all, because telling somebody their visit already has an export when
+      // it does not is worse than telling them nothing.
+      const after = await loadSession(db, sessionId);
+      const code =
+        after !== null && after.closed_at !== null
+          ? 'session_closed'
+          : after !== null && after.export_document_id !== null
+            ? 'export_already_filed'
+            : 'export_not_filed';
+      await logRefusal(db, 'session', sessionId, session.client_id, [code]);
+      return c.json({ error: 'conflict', code, requestId }, 409);
     }
     if (filedId !== documentId) {
       // These bytes are already filed against this visit: the same digest.

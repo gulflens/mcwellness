@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
@@ -50,28 +51,61 @@ function json(body: unknown, status = 200): Response {
 
 type Sent = { url: string; init: RequestInit };
 
-function mount(options: { attachedName?: string | null; answer?: () => Response } = {}): {
-  sent: Sent[];
-  attached: string[];
-} {
+/**
+ * `busy` and the attached name are the runner's, not the control's, so the
+ * harness holds them exactly as SessionRunner does — a control tested with a
+ * frozen `busy={false}` would prove nothing about the state the check-out
+ * button reads.
+ */
+function Harness({
+  attachedName,
+  onBusyChange,
+}: {
+  attachedName: string | null;
+  onBusyChange: (busy: boolean) => void;
+}) {
+  const [name, setName] = useState<string | null>(attachedName);
+  const [busy, setBusy] = useState(false);
+  return (
+    <ExportStep
+      sessionId={SESSION_ID}
+      attachedName={name}
+      busy={busy}
+      onAttached={setName}
+      onBusy={(next) => {
+        onBusyChange(next);
+        setBusy(next);
+      }}
+    />
+  );
+}
+
+function mount(
+  options: {
+    attachedName?: string | null;
+    answer?: () => Response;
+    /** An upload that never comes back, for the window the dock has to know about. */
+    hangs?: boolean;
+  } = {},
+): { sent: Sent[]; busy: boolean[] } {
   const sent: Sent[] = [];
-  const attached: string[] = [];
+  const busy: boolean[] = [];
   const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === '/api/me') return json(ME);
     sent.push({ url, init: init ?? {} });
+    if (options.hangs) return new Promise<Response>(() => undefined);
     return options.answer ? options.answer() : json({ documentId: DOCUMENT_ID }, 201);
   }) as unknown as typeof fetch;
 
   render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <ExportStep
-        sessionId={SESSION_ID}
+      <Harness
         attachedName={options.attachedName ?? null}
-        onAttached={(name) => attached.push(name)}
+        onBusyChange={(next) => busy.push(next)}
       />
     </AuthProviderBoundary>,
   );
-  return { sent, attached };
+  return { sent, busy };
 }
 
 /** A recording of the amplifier software's own kind, as far as this screen cares. */
@@ -96,7 +130,7 @@ describe('the attach control', () => {
   });
 
   it('sends the extension and the digest, and never the file’s own name', async () => {
-    const { sent, attached } = mount();
+    const { sent } = mount();
     chooseFile(chosen('visit-export.eeg'));
 
     await waitFor(() => expect(sent).toHaveLength(1));
@@ -111,7 +145,35 @@ describe('the attach control', () => {
     expect(headers.get('x-sha256')).toMatch(/^[0-9a-f]{64}$/);
     // The name is the one thing that must not travel.
     expect(JSON.stringify([request.url, [...headers]])).not.toContain('visit-export');
-    await waitFor(() => expect(attached).toEqual(['visit-export.eeg']));
+    await screen.findByText('visit-export.eeg');
+    expect(screen.getByText('Export attached')).toBeTruthy();
+  });
+
+  it('tells the runner an upload is in flight, and that it is over', async () => {
+    // The check-out button lives in the summary's dock, not here, and
+    // confirming unmounts this control — so whether a request is still in the
+    // air is the runner's to know (fix round 1, finding 2).
+    const { busy } = mount();
+    chooseFile(chosen('visit-export.eeg'));
+    await screen.findByText('Export attached');
+    expect(busy).toEqual([true, false]);
+  });
+
+  it('says it is over even when the upload failed', async () => {
+    const { busy } = mount({ answer: () => json({ error: 'internal' }, 500) });
+    chooseFile(chosen('visit-export.eeg'));
+    await screen.findByText('That export could not be filed. Try again.');
+    // Never left standing: a dock warning about a request that is over would
+    // ask the practitioner to wait for nothing.
+    expect(busy).toEqual([true, false]);
+  });
+
+  it('holds the chooser shut while an upload it cannot see the end of runs', async () => {
+    const { busy } = mount({ hangs: true });
+    chooseFile(chosen('visit-export.eeg'));
+    await waitFor(() => expect(busy).toEqual([true]));
+    expect((screen.getByLabelText('Attach the export') as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText('Attaching the export…')).toBeTruthy();
   });
 
   it('declares a PDF as one', async () => {

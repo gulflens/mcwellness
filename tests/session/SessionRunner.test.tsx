@@ -24,6 +24,7 @@ afterEach(() => {
 
 const SESSION_ID = '00000000-0000-4000-8000-000000009000';
 const SERVICE_TYPE_ID = '00000000-0000-4000-8000-0000000000f1';
+const EXPORT_DOCUMENT_ID = '00000000-0000-4000-8000-000000009001';
 
 const ME = {
   userId: '00000002-0000-4000-8000-000000000009',
@@ -87,6 +88,11 @@ function mount(
     store?: ReturnType<typeof createMemoryStore>;
     /** `tenant.record_readings`. Defaults to true: today's behaviour, unchanged. */
     recordReadings?: boolean;
+    /**
+     * An export upload that never comes back, for the window the summary's
+     * dock has to warn about (app/therapist/session/ExportStep.tsx).
+     */
+    uploadHangs?: boolean;
   } = {},
 ) {
   const posted: Posted[] = [];
@@ -101,6 +107,14 @@ function mount(
         // The local store answers this, with content-disposition: attachment.
         headers: { 'content-type': 'application/octet-stream' },
       });
+    }
+    if (init?.method === 'PUT') {
+      // The export's own door (app/api/sessions/export.ts). Raw bytes, so
+      // there is nothing to parse: what matters here is that it was called and
+      // what the file was declared as.
+      put.push({ url, type: new Headers(init.headers).get('content-type') });
+      if (options.uploadHangs) return new Promise<Response>(() => undefined);
+      return json({ documentId: EXPORT_DOCUMENT_ID }, 201);
     }
     if (init?.method === 'POST') {
       posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
@@ -157,6 +171,26 @@ function mount(
     </AuthProviderBoundary>,
   );
   return { ...utils, posted, put, store };
+}
+
+/**
+ * Checking out takes two taps while the export is missing or still uploading,
+ * and one otherwise (SummaryStep's dock, fix round 1 findings 1 and 2). This
+ * takes whichever is offered, so a test that is not about the export does not
+ * have to care which.
+ */
+function checkOut() {
+  fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+  const again = screen.queryByRole('button', { name: 'Tap again to check out' });
+  if (again) fireEvent.click(again);
+}
+
+/** Chooses a file in the summary's attach control. */
+function attachExport(name = 'visit-export.eeg') {
+  const input = screen.getByLabelText('Attach the export') as HTMLInputElement;
+  const file = new File([new Uint8Array([0x4e, 0x52, 0x43, 0x00])], name);
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  fireEvent.change(input);
 }
 
 /** Ending takes two taps now: the first arms the control, the second ends it. */
@@ -462,7 +496,7 @@ describe('after the session', () => {
 });
 
 describe('the summary and the check-out', () => {
-  it('shows what is about to be recorded, then closes the visit on one confirmation', async () => {
+  it('shows what is about to be recorded, then closes the visit when it is confirmed', async () => {
     const { posted } = await reachSummary();
     expect(screen.getByText('Sleep last night')).toBeTruthy();
     expect(screen.getByLabelText('Parking, in dirhams')).toBeTruthy();
@@ -470,7 +504,7 @@ describe('the summary and the check-out', () => {
     expect(screen.getByLabelText('Anything about getting in')).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Salik crossings'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
 
     await waitFor(() => expect(kinds(posted)).toContain('checked_out'));
     const close = await waitFor(() => {
@@ -508,7 +542,7 @@ describe('the summary and the check-out', () => {
   it('takes parking in dirhams and files it in fils', async () => {
     const { posted } = await reachSummary();
     fireEvent.change(screen.getByLabelText('Parking, in dirhams'), { target: { value: '7.50' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
 
     const close = await waitFor(() => {
       const call = posted.find((c) => c.url.endsWith('/close'));
@@ -520,7 +554,7 @@ describe('the summary and the check-out', () => {
 
   it('drains the queue before it posts the close, so the first attempt is the one that lands', async () => {
     const { posted } = await reachSummary();
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
     await screen.findByRole('heading', { name: 'Checked out' });
 
     // Exactly one close, and every event went before it: no waiting thirty
@@ -533,7 +567,7 @@ describe('the summary and the check-out', () => {
 
   it('stops and says so when the server will never accept the close', async () => {
     await reachSummary({ closeStatus: 403 });
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
 
     expect(await screen.findByRole('heading', { name: 'Not checked out' })).toBeTruthy();
     expect(
@@ -546,10 +580,65 @@ describe('the summary and the check-out', () => {
 
   it('keeps waiting, and keeps the calm copy, when the close is worth retrying', async () => {
     await reachSummary({ closeStatus: 503 });
-    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    checkOut();
 
     expect(await screen.findByRole('heading', { name: 'Checking out' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Not checked out' })).toBeNull();
+  });
+});
+
+/**
+ * The export's last chance (fix round 1, findings 1 and 2).
+ *
+ * The attach control is in the middle of the summary and the dock is sticky,
+ * so on a phone the "No export attached" chip is scrolled away while Check out
+ * never is. Migration 960 means a visit checked out without its export can
+ * never be given one, so the dock has to carry the fact itself and the button
+ * has to ask twice — and must still, always, let the practitioner leave.
+ */
+describe('the export, at the moment of check-out', () => {
+  it('says in the dock that the export cannot be added later, and asks twice', async () => {
+    const { posted } = await reachSummary();
+    expect(
+      screen.getByText(
+        'No export is attached. It cannot be attached once this visit is checked out.',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    expect(screen.getByRole('button', { name: 'Tap again to check out' })).toBeTruthy();
+    // The first tap closes nothing.
+    expect(posted.some((call) => call.url.endsWith('/close'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tap again to check out' }));
+    expect(await screen.findByRole('heading', { name: 'Checked out' })).toBeTruthy();
+  });
+
+  it('checks out on one tap once the export is attached, and drops the warning', async () => {
+    const { put } = await reachSummary();
+    attachExport();
+    await screen.findByText('Export attached');
+    expect(put).toHaveLength(1);
+    expect(put[0]!.url).toBe(`/api/sessions/${SESSION_ID}/export?extension=eeg`);
+    expect(screen.queryByText(/No export is attached/)).toBeNull();
+
+    // One tap, because there is nothing left to lose by confirming.
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    expect(await screen.findByRole('heading', { name: 'Checked out' })).toBeTruthy();
+  });
+
+  it('warns while the upload is still in the air, and still lets the visit close', async () => {
+    // A 33 MB recording on a home link is minutes, and confirming unmounts the
+    // control: the request would land on a closed visit, be refused, and be
+    // reported to nobody. So the dock says so — and then takes the second tap,
+    // because nothing gates a visit's exit.
+    await reachSummary({ uploadHangs: true });
+    attachExport();
+    await screen.findByText(/The export is still uploading\./);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check out' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Tap again to check out' }));
+    expect(await screen.findByRole('heading', { name: 'Checked out' })).toBeTruthy();
   });
 });
 

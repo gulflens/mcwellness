@@ -386,5 +386,12 @@ export const EXPORT_REFUSAL_CODES = [
   'empty_body',
   'session_closed',
   'export_already_filed',
+  /**
+   * The filing was refused and the door could not establish which of its three
+   * reasons applied. It names no cause deliberately: `export_already_filed`
+   * asserts a fact about the record, and asserting it wrongly sends a
+   * practitioner looking for a file that is not there.
+   */
+  'export_not_filed',
 ] as const;
 export type ExportRefusalCode = (typeof EXPORT_REFUSAL_CODES)[number];

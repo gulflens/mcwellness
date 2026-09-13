@@ -210,6 +210,12 @@ export function SessionRunner({
   // survives a re-render of the summary, and never posted anywhere: the
   // attaching is its own request, made and finished inside that control.
   const [exportName, setExportName] = useState<string | null>(null);
+  // Whether that upload is still in flight. Here rather than inside the
+  // control because the check-out button is in the summary's dock and has to
+  // know: confirming unmounts the control, the request carries on into a visit
+  // that has closed underneath it, and the file is then attachable nowhere
+  // ever (migration 960).
+  const [exportBusy, setExportBusy] = useState(false);
 
   const seqRef = useRef(visit.lastSeq);
   const bufferRef = useRef<OutboxRecord[]>([]);
@@ -615,7 +621,9 @@ export function SessionRunner({
           <SummaryStep
             sessionId={visit.sessionId}
             exportName={exportName}
+            exportBusy={exportBusy}
             onExportAttached={setExportName}
+            onExportBusy={setExportBusy}
             durationSeconds={durationSeconds}
             recordReadings={recordReadings}
             setupQuality={setupQuality}

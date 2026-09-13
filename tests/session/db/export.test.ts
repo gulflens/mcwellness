@@ -208,6 +208,19 @@ async function seedVisit(scenario: string): Promise<Visit> {
   return { scenario, authSub, practitionerId, clientId, contactId, sessionId };
 }
 
+/**
+ * Closes a visit the way the close route does, as the owner: the fixture for
+ * everything that has to happen to a record that is already frozen. Only
+ * `closed_at` and the status, because nothing below reads the projection —
+ * the stamp trigger (302) would fill the first in on its own, and it is
+ * written anyway so the fixture says what it means.
+ */
+async function closeVisit(sessionId: string): Promise<void> {
+  await owner.query("update session set status = 'completed', closed_at = now() where id = $1", [
+    sessionId,
+  ]);
+}
+
 async function putExport(
   sessionId: string,
   authSub: string,
@@ -401,6 +414,49 @@ describe('what the door refuses', () => {
     expect(((await res.json()) as { code?: string }).code).toBe('digest_mismatch');
   });
 
+  it('refuses a visit that has already been checked out', async () => {
+    // The boundary the whole round's shape rests on: migration 960 took away
+    // the one change a closed visit admitted, so an export goes on before
+    // check-out or nowhere. Pinned by a test rather than by reading the two
+    // `closed_at is null` predicates that enforce it.
+    const visit = await seedVisit('12');
+    await closeVisit(visit.sessionId);
+
+    const res = await putExport(visit.sessionId, visit.authSub, PDF);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { code?: string }).code).toBe('session_closed');
+
+    const session = await owner.query<{ export_document_id: string | null }>(
+      'select export_document_id from session where id = $1',
+      [visit.sessionId],
+    );
+    expect(session.rows[0]?.export_document_id).toBeNull();
+    const documents = await owner.query<{ n: string }>(
+      "select count(*)::text as n from document where kind = 'session_export' and client_id = $1",
+      [visit.clientId],
+    );
+    expect(documents.rows[0]?.n).toBe('0');
+  });
+
+  it('refuses a second, different file, and has looked before it says why', async () => {
+    const visit = await seedVisit('13');
+    expect((await putExport(visit.sessionId, visit.authSub, PDF)).status).toBe(201);
+
+    const second = await putExport(visit.sessionId, visit.authSub, EDF, {
+      type: 'application/octet-stream',
+      extension: 'edf',
+    });
+    expect(second.status).toBe(409);
+    // `export_already_filed` asserts a fact about the record, so the route
+    // reads the row back before it says it (app/api/sessions/export.ts).
+    expect(((await second.json()) as { code?: string }).code).toBe('export_already_filed');
+    const { rows } = await owner.query<{ n: string }>(
+      "select count(*)::text as n from document where kind = 'session_export' and client_id = $1",
+      [visit.clientId],
+    );
+    expect(rows[0]?.n).toBe('1');
+  });
+
   it('refuses a visit that is not this practitioner’s', async () => {
     const mine = await seedVisit('08');
     const theirs = await seedVisit('09');
@@ -414,65 +470,112 @@ describe('what the door refuses', () => {
   });
 });
 
+/**
+ * The act itself, as the assessment stream's own erasure test runs it
+ * (tests/assessment/db/erasure.test.ts): the request row, then
+ * `app.erase_client` as the owner.
+ *
+ * One transaction, and committed rather than rolled back, because the sweep
+ * afterwards reads the worklist the act writes. The settings are
+ * transaction-local — that is what `set_config(..., true)` means — so the act
+ * has to run inside one to see the role it demands.
+ */
+async function erase(clientId: string, requestId: string): Promise<Record<string, unknown>> {
+  await owner.query(
+    'insert into erasure_request (id, tenant_id, client_id, reason) values ($1, $2, $3, $4)',
+    [requestId, IDS.tenantA, clientId, 'Household asked to be forgotten'],
+  );
+  await owner.query('begin');
+  await setAuditContext(owner, IDS.ownerA);
+  await owner.query(
+    "select set_config('app.tenant_id', $1, true), set_config('app.actor_roles', $2, true)",
+    [IDS.tenantA, 'owner'],
+  );
+  const summary = await owner.query<{ erase_client: Record<string, unknown> }>(
+    'select app.erase_client($1, $2) as erase_client',
+    [clientId, requestId],
+  );
+  await owner.query('commit');
+  return summary.rows[0]!.erase_client;
+}
+
+/** What every erasure of an export has to be true of, whatever state the visit is in. */
+async function expectSwept(
+  visit: Visit,
+  documentId: string,
+  summary: Record<string, unknown>,
+): Promise<void> {
+  const key = `tenant/${IDS.tenantA}/client/${visit.clientId}/${documentId}`;
+
+  // The visit no longer names it. Nothing in app.erase_client mentions this
+  // column by name — that function is migration 954, which sorts after this
+  // stream's whole range and cannot be taught one — so what unlinks it is the
+  // foreign key's own `on delete set null` (migration 307).
+  const session = await owner.query<{ export_document_id: string | null }>(
+    'select export_document_id from session where id = $1',
+    [visit.sessionId],
+  );
+  expect(session.rows[0]?.export_document_id).toBeNull();
+
+  // The row is gone, and the key is on the list the caller then deletes.
+  const document = await owner.query<{ n: string }>(
+    'select count(*)::text as n from document where id = $1',
+    [documentId],
+  );
+  expect(document.rows[0]?.n).toBe('0');
+  const keys = summary.storage_keys_to_delete as { id: string; storageKey: string }[];
+  expect(keys.map((entry) => entry.storageKey)).toContain(key);
+
+  // And the bytes go with it. The sweep is the second attempt at removing them
+  // (app/api/clients/erasure-file-sweep.ts); running it here proves the export
+  // is on the worklist and that the store gives it up.
+  await sweepErasureFiles(owner, storage);
+  expect(await storage.exists(key)).toBe(false);
+}
+
 describe('erasure', () => {
   it('is swept by erasure like every other client document', async () => {
     const visit = await seedVisit('11');
     const filed = await putExport(visit.sessionId, visit.authSub, PDF);
     expect(filed.status).toBe(201);
     const { documentId } = (await filed.json()) as { documentId: string };
-    const key = `tenant/${IDS.tenantA}/client/${visit.clientId}/${documentId}`;
-    expect(await storage.exists(key)).toBe(true);
+    expect(
+      await storage.exists(`tenant/${IDS.tenantA}/client/${visit.clientId}/${documentId}`),
+    ).toBe(true);
 
-    // The act itself, as the assessment stream's own erasure test runs it
-    // (tests/assessment/db/erasure.test.ts): the request row, then
-    // app.erase_client as the owner.
-    const requestId = id('11', 90);
-    await owner.query(
-      'insert into erasure_request (id, tenant_id, client_id, reason) values ($1, $2, $3, $4)',
-      [requestId, IDS.tenantA, visit.clientId, 'Household asked to be forgotten'],
-    );
-    // One transaction, and committed rather than rolled back: the sweep below
-    // reads the worklist the act writes. The settings are transaction-local,
-    // which is what `set_config(..., true)` means, so the act has to run
-    // inside one to see the role it demands.
-    await owner.query('begin');
-    await setAuditContext(owner, IDS.ownerA);
-    await owner.query(
-      "select set_config('app.tenant_id', $1, true), set_config('app.actor_roles', $2, true)",
-      [IDS.tenantA, 'owner'],
-    );
-    const summary = await owner.query<{ erase_client: Record<string, unknown> }>(
-      'select app.erase_client($1, $2) as erase_client',
-      [visit.clientId, requestId],
-    );
-    await owner.query('commit');
+    await expectSwept(visit, documentId, await erase(visit.clientId, id('11', 90)));
+  });
 
-    // The visit no longer names it. Nothing in app.erase_client mentions this
-    // column by name — that function sorts after this stream's range and
-    // cannot be taught one — so what unlinks it is the foreign key's own
-    // `on delete set null` (migration 307).
-    const session = await owner.query<{ export_document_id: string | null }>(
-      'select export_document_id from session where id = $1',
+  it('is swept from a visit that has been closed, which is every visit in the end', async () => {
+    // The realistic case, and the one that actually exercises the exemption
+    // the `on delete set null` depends on. A closed session admits no change
+    // at all (migration 960) — so the referential action that nulls this
+    // column has to pass a trigger that refuses every update to a frozen row,
+    // and it does so only because 960 stands aside for a transaction named in
+    // app.erasure_active. A household asks to be forgotten years after their
+    // last visit, so this is the shape the compliance path really has, and
+    // reading the guard is the weakest evidence there is that it holds.
+    const visit = await seedVisit('14');
+    const filed = await putExport(visit.sessionId, visit.authSub, PDF);
+    expect(filed.status).toBe(201);
+    const { documentId } = (await filed.json()) as { documentId: string };
+    await closeVisit(visit.sessionId);
+
+    // Frozen, and provably so before the erasure runs: an ordinary update is
+    // refused, which is what makes the erasure's success below mean something.
+    await expect(
+      owner.query('update session set observation_flag = true where id = $1', [visit.sessionId]),
+    ).rejects.toThrow(/closed and cannot be changed/);
+
+    await expectSwept(visit, documentId, await erase(visit.clientId, id('14', 90)));
+
+    // And the visit is still there, closed, as the erasure letter promises: it
+    // is the file that goes, not the fact that a visit happened.
+    const session = await owner.query<{ status: string; closed_at: Date | null }>(
+      'select status, closed_at from session where id = $1',
       [visit.sessionId],
     );
-    expect(session.rows[0]?.export_document_id).toBeNull();
-
-    // The row is gone, and the key is on the list the caller then deletes.
-    const document = await owner.query<{ n: string }>(
-      'select count(*)::text as n from document where id = $1',
-      [documentId],
-    );
-    expect(document.rows[0]?.n).toBe('0');
-    const keys = summary.rows[0]!.erase_client.storage_keys_to_delete as {
-      id: string;
-      storageKey: string;
-    }[];
-    expect(keys.map((entry) => entry.storageKey)).toContain(key);
-
-    // And the bytes go with it. The sweep is the second attempt at removing
-    // them (app/api/clients/erasure-file-sweep.ts); running it here proves the
-    // export is on the worklist and that the store gives it up.
-    await sweepErasureFiles(owner, storage);
-    expect(await storage.exists(key)).toBe(false);
+    expect(session.rows[0]?.status).toBe('completed');
+    expect(session.rows[0]?.closed_at).not.toBeNull();
   });
 });

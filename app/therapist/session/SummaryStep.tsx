@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '../../shell/components/Controls';
 import { ExportStep } from './ExportStep';
 import { describeSignal } from './SignalDots';
@@ -19,6 +19,19 @@ import type { Delta, Observations, VisitActuals } from './steps';
  * visit. Everything above the button is a record of what is about to be
  * written; nothing here can be edited, because editing it would mean
  * rewriting an append-only event log.
+ *
+ * **The export's last chance is in the dock, not in the page.** ./ExportStep.tsx
+ * sits in the middle of this screen and the dock is sticky, so on a phone the
+ * "No export attached" marker is scrolled off while Check out never is — and
+ * migration 960 means a visit checked out without its export can never be
+ * given one. So the dock says so itself, and the button asks twice: the same
+ * arm-then-confirm RunStep uses to end a session, for the same reason, that
+ * the thing on the other side of the tap cannot be undone.
+ *
+ * **It is not a gate, in either case.** The second tap is always available;
+ * nothing here can refuse a check-out. A practitioner in a living room with no
+ * signal, or with an upload that will never finish, taps twice and leaves.
+ * `domain/session/canCheckIn.ts` gates entry and nothing gates exit.
  */
 
 const CHIP_LABELS: Record<string, string> = {
@@ -40,6 +53,15 @@ function describeQuality(quality: number | null): string {
   return `${describeSignal(quality)} ${Math.round(quality * 100)}`;
 }
 
+/** How long the armed state waits before it forgets it was armed (RunStep's own). */
+const ARMED_MS = 5000;
+
+/** What the dock says, in the dock, about a file that cannot be added later. */
+const NO_EXPORT = 'No export is attached. It cannot be attached once this visit is checked out.';
+const EXPORT_UPLOADING =
+  'The export is still uploading. Checking out now ends the visit, and the file cannot be ' +
+  'attached afterwards.';
+
 export function SummaryStep({
   sessionId,
   durationSeconds,
@@ -51,7 +73,9 @@ export function SummaryStep({
   actuals,
   onActuals,
   exportName,
+  exportBusy,
   onExportAttached,
+  onExportBusy,
   onConfirm,
 }: {
   /** The visit the export is attached to (./ExportStep.tsx). */
@@ -69,7 +93,10 @@ export function SummaryStep({
   onActuals: (actuals: VisitActuals) => void;
   /** The name of the export already attached to this visit, or null. */
   exportName: string | null;
+  /** Whether an export is uploading right now (./ExportStep.tsx). */
+  exportBusy: boolean;
   onExportAttached: (name: string) => void;
+  onExportBusy: (busy: boolean) => void;
   onConfirm: () => void;
 }) {
   // The field holds what the practitioner typed; the state holds exact fils.
@@ -78,6 +105,24 @@ export function SummaryStep({
     actuals.parkingCostFils === 0 ? '' : formatFilsAsAed(actuals.parkingCostFils),
   );
   const [parkingError, setParkingError] = useState<string | null>(null);
+  // The first tap of the two, when there is something to say before the visit
+  // closes for good. RunStep's own control, and its own reasoning: a phone in
+  // one hand in somebody's living room gets tapped by accident, and this tap
+  // is not undoable.
+  const [armed, setArmed] = useState(false);
+
+  // The export is the one thing on this screen that cannot be added later
+  // (migration 960). Uploading counts as missing, because confirming unmounts
+  // the control and the request lands on a closed visit.
+  const exportMissing = exportName === null || exportBusy;
+
+  // A control left armed by a pocket is a control that closes the next thing
+  // the practitioner touches. It disarms itself, exactly as RunStep's does.
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), ARMED_MS);
+    return () => clearTimeout(timer);
+  }, [armed]);
 
   const onParking = (typed: string) => {
     setParking(typed);
@@ -138,7 +183,13 @@ export function SummaryStep({
         </div>
       </dl>
 
-      <ExportStep sessionId={sessionId} attachedName={exportName} onAttached={onExportAttached} />
+      <ExportStep
+        sessionId={sessionId}
+        attachedName={exportName}
+        busy={exportBusy}
+        onAttached={onExportAttached}
+        onBusy={onExportBusy}
+      />
 
       <section className="ratings">
         <h2>The visit itself</h2>
@@ -204,13 +255,25 @@ export function SummaryStep({
       </section>
 
       <div className="step__dock">
+        {/* The one fact the dock has to carry: the file cannot be added
+            afterwards, and this is the last screen that can take it. Not a
+            red alert — a line of note text, the tone this app uses for
+            anything the practitioner should know and nothing they must do
+            (.claude/rules/ui.md). */}
+        {exportMissing ? (
+          <p className="note small" role={exportBusy ? 'status' : undefined}>
+            {exportBusy ? EXPORT_UPLOADING : NO_EXPORT}
+          </p>
+        ) : null}
         <Button
           variant="primary"
           className="step__primary"
           disabled={parkingError !== null}
-          onClick={onConfirm}
+          // Never refused, only asked twice. The second tap is always there,
+          // so a visit with no export and no signal still checks out.
+          onClick={() => (exportMissing && !armed ? setArmed(true) : onConfirm())}
         >
-          Check out
+          {exportMissing && armed ? 'Tap again to check out' : 'Check out'}
         </Button>
       </div>
     </div>

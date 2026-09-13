@@ -81,6 +81,9 @@ const REFUSALS: Record<string, string> = {
   storage_unavailable: 'The document store cannot be reached, so nothing was filed.',
   export_already_filed: 'This visit already has an export. Only one is kept.',
   session_closed: 'This visit is closed, so nothing more can be attached to it.',
+  // Said only when the door has established neither of the two above. It
+  // asserts no cause, because it does not know one.
+  export_not_filed: 'That export could not be attached to this visit.',
   forbidden: 'Attaching an export to this visit is not yours to do.',
   not_found: 'That visit is no longer there.',
 };
@@ -109,7 +112,9 @@ async function digestOf(bytes: ArrayBuffer): Promise<string> {
 export function ExportStep({
   sessionId,
   attachedName,
+  busy,
   onAttached,
+  onBusy,
 }: {
   sessionId: string;
   /**
@@ -118,10 +123,20 @@ export function ExportStep({
    * attach a second one the door would refuse.
    */
   attachedName: string | null;
+  /**
+   * Whether an upload is in flight. Held by the runner for the same reason the
+   * name is, and for one more: the check-out button lives in the step's dock
+   * and has to know. A 33 MB recording on a home link is minutes, this control
+   * unmounts the moment check-out is confirmed, and the request would carry on
+   * into a visit that had closed underneath it — filed nowhere, reported to
+   * nobody, and unattachable ever after (migration 960: a closed visit admits
+   * no change at all).
+   */
+  busy: boolean;
   onAttached: (name: string) => void;
+  onBusy: (busy: boolean) => void;
 }) {
   const { apiFetch } = useAuth();
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const attach = useCallback(
@@ -136,7 +151,7 @@ export function ExportStep({
         setError(MESSAGES.too_large);
         return;
       }
-      setBusy(true);
+      onBusy(true);
       try {
         const bytes = await file.arrayBuffer();
         const extension = extensionOf(file.name);
@@ -165,10 +180,13 @@ export function ExportStep({
       } catch {
         setError(MESSAGES.failed);
       } finally {
-        setBusy(false);
+        // Always, and on the runner rather than here: an upload that failed
+        // must never leave the check-out button warning about a request that
+        // is over, and this control may already have unmounted.
+        onBusy(false);
       }
     },
-    [apiFetch, onAttached, sessionId],
+    [apiFetch, onAttached, onBusy, sessionId],
   );
 
   return (
