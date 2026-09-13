@@ -392,9 +392,10 @@ const HealthNote = z.string().trim().max(500).optional();
 
 export const RecordHealthBody = z.object({
   /**
-   * Which version of the agreement asked, as told by the screen that asked.
-   * The enrolment step knows it, because it has just shown the wording; a later
-   * edit on the record does not, and leaves it out.
+   * Which version of the agreement asked, as told by the screen that asked:
+   * the standing participation consent's wording version, which both the
+   * enrolment step and the record's Health tab read off the record
+   * (app/admin/clients/HealthTab.tsx). Left out where none stands.
    */
   wordingVersion: z.string().max(40).optional(),
   seizures: z.boolean(),

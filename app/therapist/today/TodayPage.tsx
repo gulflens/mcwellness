@@ -441,9 +441,7 @@ function Stop({
     <div className="stop__detail">
       {age ? <div className="small muted numeric">{age}</div> : null}
       <div className="small muted">{stop.serviceType.name}</div>
-      {stop.declared.length > 0 ? (
-        <div className="small stop__declared">{toldUs(stop.declared)}</div>
-      ) : null}
+      {stop.declared.length > 0 ? <div className="small">{toldUs(stop.declared)}</div> : null}
       <div className="small muted">{describePlace(stop.location)}</div>
       {/* The slot is here from the first paint, empty, and keeps its height.
           Billing answers a moment after the day does, and a line appearing

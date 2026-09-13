@@ -147,7 +147,11 @@ export function HealthTab({
         session, and if they change. Written down as told; nothing here is assessed.
       </p>
       {current === null ? (
-        <Note>Not asked yet.</Note>
+        // An erased record's declarations are deleted outright (964), and the
+        // note above has already said so; "not asked yet" would contradict it.
+        isErased ? null : (
+          <Note>Not asked yet.</Note>
+        )
       ) : (
         <>
           <p className="small muted">
@@ -182,7 +186,7 @@ export function HealthTab({
       {!mayWrite || isErased ? null : !consented ? (
         <Note tone="attention">
           These are held under the household&rsquo;s health-data consent, which is not on file.
-          Record it on the Consent tab first.
+          Record it under Consent first.
         </Note>
       ) : !asking ? (
         <Button variant="secondary" onClick={() => setAsking(true)}>

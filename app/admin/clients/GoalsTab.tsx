@@ -72,6 +72,9 @@ export function GoalsTab({
   );
   const [adding, setAdding] = useState(false);
   const [addingConcern, setAddingConcern] = useState(false);
+  // The concerns' own, so a refusal is read beside the select it answers and
+  // not two lists up, under the goals.
+  const [concernError, setConcernError] = useState<string | null>(null);
   // The goal whose "dropped" is waiting on a reason, so the select keeps showing the
   // choice that was made rather than snapping back to the old status while the
   // prompt is open.
@@ -120,7 +123,7 @@ export function GoalsTab({
 
   async function setConcernStatus(concernId: string, status: string) {
     setBusyId(concernId);
-    setError(null);
+    setConcernError(null);
     try {
       const res = await apiFetch(`/api/clients/${clientId}/concerns/${concernId}`, {
         method: 'PATCH',
@@ -132,13 +135,13 @@ export function GoalsTab({
         onChanged();
         return;
       }
-      setError(
+      setConcernError(
         res.status === 403
           ? 'Only the owner, an admin or the lead practitioner may change a concern.'
           : 'This concern could not be updated. Try again.',
       );
     } catch {
-      setError('This concern could not be updated. Try again.');
+      setConcernError('This concern could not be updated. Try again.');
     } finally {
       setBusyId(null);
     }
@@ -262,6 +265,7 @@ export function GoalsTab({
           ))}
         </ul>
       )}
+      {concernError ? <Note tone="critical">{concernError}</Note> : null}
       {!mayWriteConcerns ? null : !addingConcern ? (
         <Button variant="secondary" onClick={() => setAddingConcern(true)}>
           Add concern

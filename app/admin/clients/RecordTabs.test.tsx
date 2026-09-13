@@ -364,6 +364,23 @@ describe('HealthTab', () => {
     expect(screen.queryByRole('button', { name: 'Record the answers' })).toBeNull();
   });
 
+  it('says one thing about an erased record, not two', async () => {
+    // The erasure deletes the declarations outright (964); "not asked yet"
+    // beneath "the answers went with it" would contradict it.
+    mount(
+      <HealthTab
+        clientId={CLIENT_ID}
+        record={{ ...record, status: 'erased' }}
+        onChanged={vi.fn()}
+        mayWrite
+        erased
+      />,
+    );
+    expect(await screen.findByText(/The health answers went with it/)).toBeTruthy();
+    expect(screen.queryByText('Not asked yet.')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Record/ })).toBeNull();
+  });
+
   it('shows the answers to someone who may not record them, and nothing to press', async () => {
     const asked: ClientRecordResponse = { ...record, consents: [HEALTH_CONSENT], health: ASKED };
     mount(<HealthTab clientId={CLIENT_ID} record={asked} onChanged={vi.fn()} mayWrite={false} />);
