@@ -1813,3 +1813,37 @@ archive and is recovered by re-uploading. Say plainly in the record that you
 proceeded on silence, name the session, and never write it up as a clean
 two-way handshake. If the pass had involved something a silent peer could not
 undo, silence would have meant stop and ask the operator.
+
+## What was done on 2026-09-14: the twenty-fifth live pass — the erasure letter is approved
+
+**Why a pass for a docs change.** The confirmation letter a household receives
+is read from disk at the moment of erasure, so until this pass every letter
+production cut still said the wording stood "until the practice's lawyer
+approves a final version", and the office screen still said a filed letter was
+"pending the practice's lawyer". The operator's answer on 14 September — nothing
+waits on a lawyer; their own approval is final — was in `main` at `7a1e94c`
+(pull request 182) and not on the server. Leaving that gap open would have meant
+a household erased that week receiving a caveat the practice had already
+withdrawn.
+
+**What went live.** The erasure letter at `1.0`, `status: approved`, in both
+languages, naming the concerns and the health answers migration `964` deletes;
+one line of office copy in `ErasureSection`; the corrected wording in
+`.claude/hooks/no-prod-in-dev.sh`; and the hold-protocol rule recorded in the
+twenty-fourth pass. No migration; the databases are unchanged at 102.
+
+**The pass.** Archive `mcwellness-7a1e94c.tar.gz` (6,425,531 bytes); TUS create
+201 and PATCH 204 with the offset equal to the size; build `01a09d38`, 67
+seconds; bundle `index-BcybMQ1y.js` → `index-DvdVXFyE.js`, about 70 seconds
+after the build. `/api/health` 200 in 0.46 s, `/api/health/deep` 200 in 0.49 s.
+No restart — the eighth consecutive pass.
+
+**Verified by the chunk, as the rule now says.** `ClientsPage-jU7hsZFL.js` no
+longer contains "pending the practice" and does contain "from wording"; the
+previous entry and the previous `ClientsPage` chunk both 404; a nonsense asset
+path 404s. The one string this pass removed is gone from the served bytes and
+the one it added is present, which is the whole of what a docs pass can prove.
+
+**Hold protocol.** One peer cleared earlier the same night and was told; the
+other did not answer this hold either. Proceeded on silence under the rule from
+the twenty-fourth pass — an upload harms nobody else — and recorded as silence.
