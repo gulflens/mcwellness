@@ -1,19 +1,19 @@
 ---
 purpose: erasure_letter
 locale: en
-version: 0.4-draft
-status: draft
+version: 1.0
+status: approved
 written: 2026-09-06
+approved: 2026-09-14
 ---
 
 # Confirmation that your record has been erased
 
-**Draft wording, in use until the practice's lawyer approves a final version.**
-
 On {{erased_on}} we erased the record you asked us to erase. Your name, your
 date of birth, the contact details we held, the address we visited and the
-directions to it, the notes kept with your goals, and every document and file
-on your record are gone from our systems, and the account that opened the
+directions to it, the notes kept with your goals and the concerns noted
+beside them, the health answers you gave us, and every document and file on
+your record are gone from our systems, and the account that opened the
 client portal has been closed. The record of your sessions has gone with them:
 the place we checked in and out, what the practitioner wrote afterwards, the
 files from any brain map or questionnaire we recorded, including the recordings

@@ -1785,3 +1785,31 @@ and `ar.md` list what an erasure removes and do not mention the health answers,
 which `964` now deletes outright. It under-states rather than mis-states.
 Changing approved wording is a new version and the operator's call; it has been
 put to them twice and remains theirs.
+
+**Both of the above were then answered by the operator, within the hour.** The
+letter is at `0.5-draft` in both languages and now names the concerns and the
+health answers, reusing the phrasing the health-data consent already uses so a
+household meets the same words twice; the hook's message was corrected to say
+what it actually guards, with its patterns and matcher left byte-identical.
+Recorded in `docs/CHANGE-REQUESTS/trunk-notes.md`, round 52. Asked about the
+one line left over — both languages still said the wording stood "until the
+practice's lawyer approves a final version", though that route closed on 9
+September — the operator answered that nothing waits on a lawyer and approved
+the wording themselves. **The erasure letter is `1.0`, `status: approved`, in
+both languages**, and the caveat is gone from the four other places that
+repeated it. Nothing in `docs/CONSENT/` is a draft any more except the
+superseded texts, which are history.
+
+**A rule for the hold protocol, which this pass needed and did not have.** Two
+sessions were asked to stand down. One answered in under a minute; the other
+never answered at all, across three messages and about half an hour, and the
+pass went ahead on the judgment that it was dormant rather than working. That
+judgment was right, but it was made without a rule, and the next pass should
+not have to make it again. **The rule: a peer that does not answer is not a
+peer that has cleared.** Ask twice, wait, and then treat silence as permission
+to proceed only when nothing about the pass is destructive to a third party —
+which an upload is not, because the failure mode is a build that loses its own
+archive and is recovered by re-uploading. Say plainly in the record that you
+proceeded on silence, name the session, and never write it up as a clean
+two-way handshake. If the pass had involved something a silent peer could not
+undo, silence would have meant stop and ask the operator.

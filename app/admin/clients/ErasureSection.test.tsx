@@ -242,7 +242,11 @@ describe('a record that has been erased', () => {
     expect(screen.getByRole('button', { name: 'Draft a WhatsApp message' })).toBeTruthy();
     // The letter is named, so it can be found again in a downloads folder.
     expect(screen.getByText(/erasure-letter-MW-000061\.md/)).toBeTruthy();
-    expect(screen.getByText(/pending the practice's lawyer/)).toBeTruthy();
+    // The wording it was cut from is named, so a filed letter can be read back
+    // against the version that produced it. It no longer says a lawyer is
+    // pending: the operator approved the wording on 2026-09-14.
+    expect(screen.getByText(/from wording 0\.2-draft/)).toBeTruthy();
+    expect(screen.queryByText(/lawyer/)).toBeNull();
   });
 
   it('names the record it is about, and warns an admin what they lose', async () => {

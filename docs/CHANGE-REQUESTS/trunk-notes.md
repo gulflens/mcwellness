@@ -3858,3 +3858,81 @@ cache and changing nothing else about what it does with the answer:
 
 **Deferred to part two, by the operator's own ordering**: the five database
 round trips every request runs before its route, and `/api/me`'s 0.42 s.
+
+---
+
+## Round 52, 2026-09-14 (after the twenty-fourth live pass): the erasure letter catches up, and a guard stops overstating itself
+
+Two shared-zone edits on the operator's direct instruction, both in the trunk's
+own paths (`docs/CONSENT/`, `.claude/**`). Neither touches a stream.
+
+### 1. The erasure letter now names what migration 964 deletes
+
+**The gap.** `964_erasure_reaches_concerns_and_health.sql` added two steps to
+`app.erase_client`: a client's concerns have their text emptied, and their
+`health_declaration` rows are **deleted outright**. The confirmation letter a
+household receives lists what an erasure removes and named neither. It
+under-stated rather than mis-stated — nothing it promised was untrue — but a
+letter that omits the most sensitive category it just destroyed is not the
+letter to leave alone once the omission is known.
+
+**What changed.** One clause in each language, `0.4-draft` → `0.5-draft`:
+goals now read "the notes kept with your goals **and the concerns noted beside
+them**", followed by "**the health answers you gave us**". The English reuses
+the exact phrase `docs/CONSENT/health-data.en.md` already uses for these, and
+the Arabic reuses `الإجابات الصحية التي زوّدتنا بها` from
+`health-data.ar.md` and `notices/your-information.ar.md`, so a household meets
+the same words in the consent that asked and the letter that confirms.
+
+**Then approved outright, the same hour.** Asked about the stale line — both
+files still said the wording stood "until the practice's lawyer approves a
+final version", though the lawyer route closed on 9 September — the operator
+answered that nothing waits on a lawyer and approved the wording themselves.
+So the letters are **`1.0`, `status: approved`**, the draft caveat is gone from
+both languages, and an `approved: 2026-09-14` line records who and when.
+
+That removed a claim from four more places, because a caveat repeated in five
+files is four chances to contradict the one that matters:
+
+- `domain/client/erasureLetter.test.ts` asserted `status` was `draft`. It now
+  asserts `approved` — kept as an assertion rather than deleted, because a
+  letter that quietly slipped back to draft would print a caveat to a household
+  and nothing would notice.
+- `app/admin/clients/ErasureSection.tsx` told the office, unconditionally, that
+  a filed letter came "from draft wording X, pending the practice's lawyer".
+  Now "from wording X". The version is still named, so a filed letter can be
+  read back against the text that produced it.
+- `app/api/clients/erasure-letter.ts` and `docs/CONSENT/README.md` said the
+  same in prose.
+
+**Left alone deliberately:** `RecordConsentForm`'s draft banner, which is
+conditional on `wording.status === 'draft'` from the database and so answers
+itself; `WORDING_IS_DRAFT` in `domain/reports/document/strings.ts`, already
+`false` since 9 September; and everything under `docs/CONSENT/superseded/`,
+which is retired text whose front matter is history.
+
+### 2. `no-prod-in-dev.sh` said more than it does
+
+**The gap, found by tripping it.** The hook refused a command that merely
+named the production project inside a note, with "production resources are
+never touched from a Claude Code session". It is wired on the `Bash` matcher
+alone, so it never sees the hosted Supabase console — and the console is how
+**every** live pass in `docs/PRODUCTION.md` has applied its migrations, because
+no owner database password exists on the machine and `pnpm db:migrate` cannot
+reach a hosted database at all. The hook and `db/runner/plan.ts` are two locks
+on the same door, and it is not the door a live pass walks through.
+
+**What changed: the wording only.** Every pattern and the matcher are
+byte-identical. The coverage was deliberately **not** widened: a hook cannot
+tell a deliberate operator-approved pass from an accident, so extending it to
+the console would either refuse every live pass or be waved through on a flag
+and mean nothing. The message now says what it guards, and the file records
+where the real gate lives — the operator's word for that pass, staging first,
+the hold protocol, and the fingerprint afterwards.
+
+**For whoever revisits this.** If a mechanical gate on the console path is ever
+wanted, the honest shape is not a blanket refusal but a narrow one: block the
+operations no pass has ever needed from a session — pausing, deleting or
+restoring a project — and leave `apply_migration` and `execute_sql` to the
+procedure. That is a decision, not a tidy-up, which is why it was not taken
+here.
