@@ -62,6 +62,9 @@ const INTEREST_LABELS: Record<Interest, string> = {
 type SourceFilter = 'all' | EnquirySource;
 
 const LOAD_ERROR = 'The enquiries could not be loaded. Try again.';
+/** The file is a copy the scrub and an erasure never reach, so the office is told what to do with it. */
+const FILE_NOTE =
+  'The expo leads file holds names and numbers. Keep it on the practice’s own device and delete it once the follow-up is done.';
 const ACTION_ERROR = 'That could not be done. Reload and try again.';
 
 function firstLine(text: string | null): string {
@@ -308,6 +311,7 @@ export function EnquiriesPage() {
           </div>
         }
       />
+      {expoWaiting ? <Note>{FILE_NOTE}</Note> : null}
       {outcome ? <Note tone="attention">{outcome}</Note> : null}
       {error ? <Note tone="critical">{error}</Note> : null}
       {failed ? <Note tone="critical">{LOAD_ERROR}</Note> : null}

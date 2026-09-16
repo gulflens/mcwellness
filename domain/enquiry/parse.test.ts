@@ -210,16 +210,20 @@ describe('parseEnquiry, the expo form', () => {
       reason: 'incomplete',
       missing: ['enquiring_for'],
     });
-    const other = parseEnquiry(form({ interest: '<script>' }));
-    expect(other.ok && other.enquiry.interest).toBe(null);
+    const other = parseEnquiry(expo({ interest: '<script>' }));
+    expect(other).toEqual({ ok: false, reason: 'incomplete', missing: ['interest'] });
   });
 
   it("leaves the website's forms free of the expo's two questions", () => {
-    // Absent is fine for the website; a valid answer sent anyway is kept.
+    // Absent is fine for the website, and a value sent anyway is not kept:
+    // the website's forms do not ask, so it is not an answer to anything.
     const plain = parseEnquiry(form());
     expect(plain.ok && [plain.enquiry.enquiringFor, plain.enquiry.interest]).toEqual([null, null]);
-    const answered = parseEnquiry(form({ interest: 'neurofeedback' }));
-    expect(answered.ok && answered.enquiry.interest).toBe('neurofeedback');
+    const answered = parseEnquiry(form({ interest: 'neurofeedback', enquiring_for: 'self' }));
+    expect(answered.ok && [answered.enquiry.enquiringFor, answered.enquiry.interest]).toEqual([
+      null,
+      null,
+    ]);
   });
 
   it("makes an expo enquiry's lead say it came from the expo", () => {

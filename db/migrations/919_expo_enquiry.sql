@@ -24,6 +24,15 @@
 -- stands. Still one lodging at a time per address, still no answer to a
 -- refusal.
 --
+-- **The source is a word the caller sends**, so a script that says `expo`
+-- and two list words gets the stand's budget from anywhere (schema and
+-- security reviews of this round, 2026-09-16). What bounds it is a ceiling
+-- of the practice's own: three hundred lodgings in an hour, from every
+-- address together, and the three hundred and first answers null exactly as
+-- an exhausted address does. No stand and no website comes near it; a flood
+-- does, and stops there, so the office's list of two hundred is never wholly
+-- junk. The route's own budget of ten a minute per address stands in front.
+--
 -- Trunk range, first half (900-949): it alters `enquiry`, a trunk table, and
 -- a stream may build on what it adds.
 
@@ -50,6 +59,11 @@ comment on column enquiry.interest is
 alter table enquiry add constraint enquiry_expo_says_who_and_what check (
   source <> 'expo' or status <> 'new' or (enquiring_for is not null and interest is not null)
 );
+-- And the website's rows never carry them: the forms there do not ask, so a
+-- value that arrives anyway is not an answer to anything.
+alter table enquiry add constraint enquiry_only_expo_says_who_and_what check (
+  source = 'expo' or (enquiring_for is null and interest is null)
+);
 
 -- The scrub now covers the two answers too: 916's constraint, recreated with
 -- two more names in its null list and nothing else changed.
@@ -72,6 +86,7 @@ set search_path = pg_catalog, pg_temp
 as $$
 declare
   v_tenant uuid;
+  v_hour   integer;
   v_recent integer;
   v_budget integer;
   v_id     uuid;
@@ -85,6 +100,15 @@ begin
     return null;
   end if;
   select id into v_tenant from public.tenant limit 1;
+
+  -- The practice's own ceiling, whatever the source and whoever the caller:
+  -- three hundred lodgings in an hour from every address together.
+  select count(*) into v_hour
+    from public.enquiry
+   where received_at > now() - interval '1 hour';
+  if v_hour >= 300 then
+    return null;
+  end if;
 
   -- One lodging at a time per address, so a burst cannot all pass the count
   -- before any of them is written.
@@ -127,7 +151,14 @@ revoke execute on function app.lodge_enquiry(jsonb) from public;
 grant execute on function app.lodge_enquiry(jsonb) to app_role;
 
 -- rollback:
---   -- restore app.lodge_enquiry as 916 wrote it (no v_budget, no two answers), then:
+--   -- First: the source check below refuses any row that says 'expo', actioned
+--   -- or not. Download the waiting ones (GET /api/enquiries/expo.csv) and then
+--   -- `delete from enquiry where source = 'expo'`; an actioned row carries
+--   -- nothing personal, a waiting one is a lead the office has in the file.
+--   -- Then restore app.lodge_enquiry as 916 wrote it (db/migrations/916_enquiry.sql,
+--   -- the `create function app.lodge_enquiry` block: no hourly ceiling, no
+--   -- v_budget, no two answers), and:
+--   alter table enquiry drop constraint enquiry_only_expo_says_who_and_what;
 --   alter table enquiry drop constraint enquiry_expo_says_who_and_what;
 --   alter table enquiry drop constraint enquiry_actioned_is_scrubbed;
 --   alter table enquiry add constraint enquiry_actioned_is_scrubbed check (

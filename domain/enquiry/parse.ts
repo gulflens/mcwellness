@@ -166,8 +166,10 @@ export function parseEnquiry(body: Record<string, unknown>): ParseResult {
     clamp(body.phone, LIMITS.phone),
   );
   const source = sourceOf(body.source);
-  const enquiringFor = oneOf(body.enquiring_for, ENQUIRING_FOR);
-  const interest = oneOf(body.interest, INTERESTS);
+  // The two answers are the expo form's alone: the website's forms do not
+  // ask, so a value that arrives from them is not an answer to anything.
+  const enquiringFor = source === 'expo' ? oneOf(body.enquiring_for, ENQUIRING_FOR) : null;
+  const interest = source === 'expo' ? oneOf(body.interest, INTERESTS) : null;
 
   const missing: MissingField[] = [];
   if (!name) missing.push('name');

@@ -252,8 +252,9 @@ export function ExpoEnquiryPage() {
           <span>By submitting, you agree to be contacted by McWellness about your enquiry.</span>
         </label>
         <p className="small muted">
-          We use your details only to reply to this enquiry. Once it is dealt with, the enquiry
-          itself keeps nothing personal. How we look after your information is set out in our{' '}
+          We use your details to get back to you about this enquiry. If you go on to work with us
+          they become part of your record; if not, once we have replied the enquiry keeps nothing
+          personal. How we look after your information is set out in our{' '}
           <a className="link" href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">
             privacy policy
           </a>

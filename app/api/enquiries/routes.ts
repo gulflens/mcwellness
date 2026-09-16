@@ -153,9 +153,13 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
    * The expo's leads as a file, for following up after the stand comes down:
    * every enquiry from the expo still waiting, oldest first, with the two
    * answers in words. A read of personal data by a person, so each row is
-   * logged as one, and the export itself once, under the request that made
-   * it (the same shape as the activity feed's own read, app/api/audit/activity.ts).
-   * Nothing is sent anywhere: the office downloads the file.
+   * logged as one, and the export itself once as its own kind of entity
+   * under the request that made it (the shape the activity feed's own read
+   * uses, app/api/audit/activity.ts) — its own kind, so a record's timeline
+   * never looks for an enquiry with a request's id. Nothing is sent
+   * anywhere: the office downloads the file, and the file is then a copy of
+   * these names and numbers that the scrub and an erasure cannot reach; the
+   * screen says so beside the button.
    */
   api.get('/api/enquiries/expo.csv', async (c) => {
     const actor = c.get('actor');
@@ -177,7 +181,7 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
     await logAction(
       db,
       'export',
-      { type: 'enquiry', id: requestId, clientId: null },
+      { type: 'enquiry_export', id: requestId, clientId: null },
       { source: 'expo', rows: String(rows.length) },
     );
     const table = [

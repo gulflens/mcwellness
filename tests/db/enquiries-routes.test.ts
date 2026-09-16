@@ -137,7 +137,7 @@ describe('the expo leads file', () => {
       [first.rows[0]!.id, second.rows[0]!.id].sort(),
     );
     const exported = await h.owner.query<{ new_values: { source: string; rows: string } }>(
-      "select new_values from audit_log where entity_type = 'enquiry' and action = 'export' and actor_id = $1 order by id desc limit 1",
+      "select new_values from audit_log where entity_type = 'enquiry_export' and action = 'export' and actor_id = $1 order by id desc limit 1",
       [PORTAL.admin],
     );
     expect(exported.rows[0]?.new_values).toEqual({ source: 'expo', rows: '2' });

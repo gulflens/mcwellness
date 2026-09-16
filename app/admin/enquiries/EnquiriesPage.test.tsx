@@ -251,6 +251,7 @@ describe('EnquiriesPage', () => {
       createObjectURL: () => 'blob:leads',
       revokeObjectURL: () => undefined,
     });
+    expect(screen.getByText(/Keep it on the practice’s own device/)).toBeTruthy();
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Download expo leads' }));
       await waitFor(() => expect(posts).toEqual([{ url: '/api/enquiries/expo.csv', body: null }]));
@@ -261,6 +262,7 @@ describe('EnquiriesPage', () => {
     mount({ list: [NEW, CONVERTED] });
     await screen.findByText('Hazel Harbour');
     expect(screen.queryByRole('button', { name: 'Download expo leads' })).toBeNull();
+    expect(screen.queryByText(/Keep it on the practice’s own device/)).toBeNull();
     expect(screen.getByRole('link', { name: 'Expo poster' }).getAttribute('href')).toBe(
       '/admin/enquiries/poster',
     );

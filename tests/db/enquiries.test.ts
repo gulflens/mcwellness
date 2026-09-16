@@ -186,6 +186,29 @@ describe('lodging through the door', () => {
       // The website's rows never carry the two answers and are not asked to.
       const { rows } = await owner.query<{ id: string | null }>(LODGE, [lodging()]);
       expect(rows[0]?.id).not.toBeNull();
+      await rejectsWith(owner, CHECK_VIOLATION, LODGE, [lodging({ interest: 'both' })]);
+    });
+  });
+
+  it('refuses the three hundred and first lodging of the hour from every address together, and says so to nobody', async () => {
+    // The ceiling of the practice's own: a script that says 'expo' from many
+    // addresses gets the stand's budget from each, and this is what bounds it.
+    await rolledBack(owner, async () => {
+      for (let i = 0; i < 300; i += 1) {
+        const hash = i.toString(16).padStart(64, '0');
+        const { rows } = await owner.query<{ id: string | null }>(LODGE, [
+          expoLodging({ ip_hash: hash }),
+        ]);
+        expect(rows[0]?.id, `lodging ${i + 1}`).not.toBeNull();
+      }
+      const { rows: over } = await owner.query<{ id: string | null }>(LODGE, [
+        expoLodging({ ip_hash: 'f'.repeat(64) }),
+      ]);
+      expect(over[0]?.id).toBeNull();
+      const { rows: site } = await owner.query<{ id: string | null }>(LODGE, [
+        lodging({ ip_hash: 'e'.repeat(64) }),
+      ]);
+      expect(site[0]?.id).toBeNull();
     });
   });
 
