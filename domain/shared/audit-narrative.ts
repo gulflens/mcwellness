@@ -802,6 +802,17 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
     // `session.photo_filed` against entity type `session`), so the case reads
     // doubled. Named as it actually arrives rather than tidied into something
     // that would never match.
+    // A visit that happened before the app, logged by the office from the
+    // practice's records (trunk round 51, 2026-09-16). The reason the office
+    // gave rides on the row; the sentence says what was done.
+    case 'session.session_recorded_from_records':
+      return pick(
+        t(
+          `${actor} logged a past visit from the practice's records`,
+          `${actor} سجّل زيارة سابقة من سجلات الممارسة`,
+        ),
+        locale,
+      );
     case 'session.session.photo_filed':
       // The document id is on the row and is not said: what a reader needs is
       // that a photograph of the setup was filed against this visit, and by
