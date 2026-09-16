@@ -358,3 +358,21 @@ conversion creates is audited. Once actioned, every personal field is null,
 the tick included, and the row keeps only what happened; a `new` row carries
 nothing of an action, a converted one no reason, a dismissed one no client —
 seven check constraints enforce all of it.
+
+*Amended 2026-09-16 (migration 919, trunk round 50): `source` admits `expo`,
+the form on the app itself at `/expo` that a visitor reaches from the code on
+the practice's stand. Two typed columns join the row for what only that form
+asks — `enquiring_for` (`self`, `child`, `family_member`, `someone_else`) and
+`interest` (`brain_map`, `neurofeedback`, `both`) — required on a new expo
+row by an eighth check constraint, kept off the website's rows by a ninth,
+and scrubbed with the rest once actioned. The door's budget is decided by the
+source: thirty lodgings from one address in ten minutes for the expo, whose
+visitors share a venue's Wi-Fi or a stand's tablet; five for the website, as
+before. The source is a word the caller sends, so what bounds a script that
+claims the expo is a ceiling of the practice's own, three hundred lodgings
+in an hour from every address together, answered like any refusal. Reads are
+logged as before, and the expo leads file logs every row it carries as a read
+and the export itself once, as an `enquiry_export` entity under the request
+id; the file is then a copy of names and numbers outside the system, which
+the screen tells the office to keep on the practice's own device and delete
+once the follow-up is done.*
