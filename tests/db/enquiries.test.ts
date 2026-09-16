@@ -39,7 +39,24 @@ function lodging(overrides: Record<string, unknown> = {}): string {
 
 const SCRUB =
   'name = null, whatsapp_e164 = null, email = null, area = null, message = null, ' +
-  'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null';
+  'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null, ' +
+  'enquiring_for = null, interest = null';
+
+/** What the expo form on the app sends (migration 919): the two answers, no country code. */
+function expoLodging(overrides: Record<string, unknown> = {}): string {
+  return lodging({
+    source: 'expo',
+    name: 'Rowan Meadow',
+    whatsapp_e164: '+971500000098',
+    email: '',
+    area: 'Mirdif',
+    message: 'Saw the stand',
+    enquiring_for: 'child',
+    interest: 'both',
+    ip_hash: HASH_B,
+    ...overrides,
+  });
+}
 
 let owner: pg.Client;
 
@@ -143,6 +160,53 @@ describe('lodging through the door', () => {
     });
   });
 
+  it('files an expo enquiry with its two answers', async () => {
+    await rolledBack(owner, async () => {
+      const { rows } = await owner.query<{ id: string }>(LODGE, [expoLodging()]);
+      const { rows: read } = await owner.query(
+        'select source, status, enquiring_for, interest, email from enquiry where id = $1',
+        [rows[0]?.id],
+      );
+      expect(read[0]).toEqual({
+        source: 'expo',
+        status: 'new',
+        enquiring_for: 'child',
+        interest: 'both',
+        email: null,
+      });
+    });
+  });
+
+  it('refuses a new expo enquiry that does not say who or what, at the table itself', async () => {
+    // The door parses before it lodges; this is the table's own guarantee,
+    // which holds whoever the caller is.
+    await rolledBack(owner, async () => {
+      await rejectsWith(owner, CHECK_VIOLATION, LODGE, [expoLodging({ interest: '' })]);
+      await rejectsWith(owner, CHECK_VIOLATION, LODGE, [expoLodging({ enquiring_for: 'my dog' })]);
+      // The website's rows never carry the two answers and are not asked to.
+      const { rows } = await owner.query<{ id: string | null }>(LODGE, [lodging()]);
+      expect(rows[0]?.id).not.toBeNull();
+    });
+  });
+
+  it('allows thirty expo lodgings from one address in ten minutes, and still five from the website', async () => {
+    await rolledBack(owner, async () => {
+      for (let i = 0; i < 30; i += 1) {
+        const { rows } = await owner.query<{ id: string | null }>(LODGE, [expoLodging()]);
+        expect(rows[0]?.id, `expo lodging ${i + 1}`).not.toBeNull();
+      }
+      const { rows: thirtyFirst } = await owner.query<{ id: string | null }>(LODGE, [
+        expoLodging(),
+      ]);
+      expect(thirtyFirst[0]?.id).toBeNull();
+      // The same address, through the website's form, is held to the website's five.
+      const { rows: site } = await owner.query<{ id: string | null }>(LODGE, [
+        lodging({ ip_hash: HASH_B }),
+      ]);
+      expect(site[0]?.id).toBeNull();
+    });
+  });
+
   it('gives the API role no way to insert directly', async () => {
     await rolledBack(owner, async () => {
       await asApiRole(
@@ -183,6 +247,40 @@ describe('who may read and action', () => {
     await rolledBack(owner, async () => {
       await lodgeOne();
       expect(await countAs(IDS.tenantB, 'owner')).toBe('0');
+    });
+  });
+
+  it('scrubs the two answers with the rest when actioned', async () => {
+    await rolledBack(owner, async () => {
+      const { rows } = await owner.query<{ id: string }>(LODGE, [expoLodging()]);
+      const id = rows[0]!.id;
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          // 916's scrub, without the two new names, is refused by the table.
+          await rejectsWith(
+            owner,
+            CHECK_VIOLATION,
+            "update enquiry set status = 'dismissed', dismiss_reason = 'spam', actioned_at = now(), actioned_by = $2, " +
+              'name = null, whatsapp_e164 = null, email = null, area = null, message = null, ' +
+              'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null ' +
+              'where id = $1',
+            [id, IDS.ownerA],
+          );
+          const { rowCount } = await owner.query(
+            `update enquiry set status = 'dismissed', dismiss_reason = 'spam', actioned_at = now(), actioned_by = $2, ${SCRUB} where id = $1`,
+            [id, IDS.ownerA],
+          );
+          expect(rowCount).toBe(1);
+        },
+        'admin',
+      );
+      const { rows: read } = await owner.query(
+        'select enquiring_for, interest from enquiry where id = $1',
+        [id],
+      );
+      expect(read[0]).toEqual({ enquiring_for: null, interest: null });
     });
   });
 
