@@ -3,6 +3,21 @@
  * Browser-safe, like every domain barrel: no Node built-in is reachable from
  * here, directly or through anything it imports.
  */
-export { ENQUIRY_SOURCES, leadFromEnquiry, parseEnquiry, toE164 } from './parse';
-export type { EnquirySource, LeadFromEnquiry, LodgedEnquiry, ParseResult } from './parse';
+export {
+  ENQUIRING_FOR,
+  ENQUIRY_SOURCES,
+  INTERESTS,
+  leadFromEnquiry,
+  parseEnquiry,
+  toE164,
+} from './parse';
+export type {
+  EnquiringFor,
+  EnquirySource,
+  Interest,
+  LeadFromEnquiry,
+  LodgedEnquiry,
+  MissingField,
+  ParseResult,
+} from './parse';
 export { ENQUIRY_WAITING_AFTER_DAYS, enquiryWaitingDays } from './waiting';

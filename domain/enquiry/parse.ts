@@ -22,10 +22,32 @@ const LIMITS = {
   preferredTime: 60,
   contactMethod: 60,
   source: 40,
+  // The expo form's two answers, each one word from a fixed list.
+  choice: 40,
 } as const;
 
-export const ENQUIRY_SOURCES = ['website', 'discovery_call'] as const;
+/**
+ * `website` and `discovery_call` are the two forms on the practice's site.
+ * `expo` is the form on the app itself, at `/expo`, which a visitor reaches by
+ * scanning the code on the practice's stand (amended 2026-09-16, the
+ * AccessAbilities Expo).
+ */
+export const ENQUIRY_SOURCES = ['website', 'discovery_call', 'expo'] as const;
 export type EnquirySource = (typeof ENQUIRY_SOURCES)[number];
+
+/**
+ * The two answers only the expo form asks, each from a fixed list so the
+ * office reads a word and never free text. Who the visitor is asking about:
+ * themselves, a child, another family member, or someone else. Which of the
+ * practice's two services: a brain map, neurofeedback, or both.
+ */
+export const ENQUIRING_FOR = ['self', 'child', 'family_member', 'someone_else'] as const;
+export type EnquiringFor = (typeof ENQUIRING_FOR)[number];
+export const INTERESTS = ['brain_map', 'neurofeedback', 'both'] as const;
+export type Interest = (typeof INTERESTS)[number];
+
+/** A field the door needs and the form did not give, in the form's own order. */
+export type MissingField = 'name' | 'phone' | 'enquiring_for' | 'interest';
 
 export type LodgedEnquiry = {
   name: string;
@@ -39,6 +61,9 @@ export type LodgedEnquiry = {
   /** Three-valued on purpose: a form with no consent box sends nothing, and that is "never asked", not "refused". */
   consent: boolean | null;
   source: EnquirySource;
+  /** The expo form's two answers; null from the website's forms, which never ask. */
+  enquiringFor: EnquiringFor | null;
+  interest: Interest | null;
 };
 
 export type ParseResult =
@@ -46,9 +71,12 @@ export type ParseResult =
   /**
    * `honeypot`: a hidden field was filled, so this is a script; the door
    * answers exactly as it answers a person and keeps nothing. `incomplete`:
-   * no name or no number, the two things an enquiry is for.
+   * no name or no number, the two things an enquiry is for — and, from the
+   * expo form, no answer to who it is for or what they are interested in.
+   * `missing` names each one so a page can mark the field.
    */
-  | { ok: false; reason: 'honeypot' | 'incomplete' };
+  | { ok: false; reason: 'honeypot' }
+  | { ok: false; reason: 'incomplete'; missing: readonly MissingField[] };
 
 function clamp(value: unknown, limit: number): string {
   if (typeof value !== 'string') return '';
@@ -122,6 +150,12 @@ function sourceOf(value: unknown): EnquirySource {
     : 'website';
 }
 
+/** One of a fixed list, or nothing: a value off the list is "not answered", never kept as text. */
+function oneOf<T extends string>(value: unknown, list: readonly T[]): T | null {
+  const named = clamp(value, LIMITS.choice);
+  return (list as readonly string[]).includes(named) ? (named as T) : null;
+}
+
 /** What the door keeps of a submission, or why it keeps nothing. */
 export function parseEnquiry(body: Record<string, unknown>): ParseResult {
   if (isHoneypotFilled(body)) return { ok: false, reason: 'honeypot' };
@@ -131,7 +165,18 @@ export function parseEnquiry(body: Record<string, unknown>): ParseResult {
     typeof body.country_code === 'string' ? body.country_code : '+971',
     clamp(body.phone, LIMITS.phone),
   );
-  if (!name || !whatsappE164) return { ok: false, reason: 'incomplete' };
+  const source = sourceOf(body.source);
+  const enquiringFor = oneOf(body.enquiring_for, ENQUIRING_FOR);
+  const interest = oneOf(body.interest, INTERESTS);
+
+  const missing: MissingField[] = [];
+  if (!name) missing.push('name');
+  if (!whatsappE164) missing.push('phone');
+  if (source === 'expo') {
+    if (enquiringFor === null) missing.push('enquiring_for');
+    if (interest === null) missing.push('interest');
+  }
+  if (missing.length > 0) return { ok: false, reason: 'incomplete', missing };
 
   return {
     ok: true,
@@ -145,7 +190,9 @@ export function parseEnquiry(body: Record<string, unknown>): ParseResult {
       preferredTime: orNull(clamp(body.preferred_time, LIMITS.preferredTime)),
       contactMethod: orNull(clamp(body.contact_method, LIMITS.contactMethod)),
       consent: consentOf(body.consent),
-      source: sourceOf(body.source),
+      source,
+      enquiringFor,
+      interest,
     },
   };
 }

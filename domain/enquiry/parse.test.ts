@@ -65,6 +65,8 @@ describe('parseEnquiry', () => {
       contactMethod: null,
       consent: true,
       source: 'website',
+      enquiringFor: null,
+      interest: null,
     });
   });
 
@@ -84,8 +86,16 @@ describe('parseEnquiry', () => {
   });
 
   it('requires a name and a way to reply, and nothing else', () => {
-    expect(parseEnquiry(form({ name: '' }))).toEqual({ ok: false, reason: 'incomplete' });
-    expect(parseEnquiry(form({ phone: '' }))).toEqual({ ok: false, reason: 'incomplete' });
+    expect(parseEnquiry(form({ name: '' }))).toEqual({
+      ok: false,
+      reason: 'incomplete',
+      missing: ['name'],
+    });
+    expect(parseEnquiry(form({ phone: '' }))).toEqual({
+      ok: false,
+      reason: 'incomplete',
+      missing: ['phone'],
+    });
     const bare = parseEnquiry(form({ email: '', area: '', message: '' }));
     expect(bare.ok).toBe(true);
     if (bare.ok)
@@ -133,6 +143,92 @@ describe('parseEnquiry', () => {
   it('falls back to the website as the source when none is named', () => {
     const result = parseEnquiry(form({ source: undefined }));
     expect(result.ok && result.enquiry.source).toBe('website');
+  });
+});
+
+/** What the expo form on the app itself sends: a plus-prefixed number, no country code. */
+function expo(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    source: 'expo',
+    name: 'Rowan Meadow',
+    phone: '+971500000098',
+    email: '',
+    area: 'Mirdif',
+    enquiring_for: 'child',
+    interest: 'both',
+    message: 'Saw the stand, would like to know about home visits',
+    consent: 'on',
+    website: '',
+    ...overrides,
+  };
+}
+
+describe('parseEnquiry, the expo form', () => {
+  it('reads a complete expo submission with who it is for and what they are interested in', () => {
+    const result = parseEnquiry(expo());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.enquiry).toEqual({
+      name: 'Rowan Meadow',
+      whatsappE164: '+971500000098',
+      email: null,
+      area: 'Mirdif',
+      message: 'Saw the stand, would like to know about home visits',
+      concern: null,
+      preferredTime: null,
+      contactMethod: null,
+      consent: true,
+      source: 'expo',
+      enquiringFor: 'child',
+      interest: 'both',
+    });
+  });
+
+  it('refuses an expo submission that does not say who or what, and names what is missing', () => {
+    expect(parseEnquiry(expo({ enquiring_for: '' }))).toEqual({
+      ok: false,
+      reason: 'incomplete',
+      missing: ['enquiring_for'],
+    });
+    expect(parseEnquiry(expo({ interest: undefined }))).toEqual({
+      ok: false,
+      reason: 'incomplete',
+      missing: ['interest'],
+    });
+    // Everything at once, in the form's own order, so a page can mark each field.
+    expect(parseEnquiry(expo({ name: '', phone: '', enquiring_for: '', interest: '' }))).toEqual({
+      ok: false,
+      reason: 'incomplete',
+      missing: ['name', 'phone', 'enquiring_for', 'interest'],
+    });
+  });
+
+  it('treats a value outside the fixed lists as not answered', () => {
+    // Not stored as free text, and for the expo that is an unanswered question.
+    expect(parseEnquiry(expo({ enquiring_for: 'my dog' }))).toEqual({
+      ok: false,
+      reason: 'incomplete',
+      missing: ['enquiring_for'],
+    });
+    const other = parseEnquiry(form({ interest: '<script>' }));
+    expect(other.ok && other.enquiry.interest).toBe(null);
+  });
+
+  it("leaves the website's forms free of the expo's two questions", () => {
+    // Absent is fine for the website; a valid answer sent anyway is kept.
+    const plain = parseEnquiry(form());
+    expect(plain.ok && [plain.enquiry.enquiringFor, plain.enquiry.interest]).toEqual([null, null]);
+    const answered = parseEnquiry(form({ interest: 'neurofeedback' }));
+    expect(answered.ok && answered.enquiry.interest).toBe('neurofeedback');
+  });
+
+  it("makes an expo enquiry's lead say it came from the expo", () => {
+    const parsed = parseEnquiry(expo());
+    if (!parsed.ok) throw new Error('fixture');
+    const lead = leadFromEnquiry(parsed.enquiry);
+    expect(lead.referralSource).toBe('expo');
+    expect(lead.contact.phone).toBe('+971500000098');
+    expect(lead.contact.email).toBeUndefined();
   });
 });
 
