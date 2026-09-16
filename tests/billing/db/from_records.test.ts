@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { PackagesResponse } from '../../../app/api/billing/schema';
+import type { PackagesResponse } from '../../../app/api/billing/ledger-schema';
 import { SEED_TODAY } from '../../../db/seed/generate';
 import {
   SEEDED,
