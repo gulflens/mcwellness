@@ -23,6 +23,7 @@ const NOW = () => new Date(`${SEED_TODAY}T08:00:00.000Z`);
 const REQUEST_ID = '00000000-0000-4000-8000-0000000000ee';
 const RESTRICT_VIOLATION = '23001';
 const CHECK_VIOLATION = '23514';
+const INSUFFICIENT_PRIVILEGE = '42501';
 
 let h: Harness;
 
@@ -168,6 +169,66 @@ describe('a visit logged from the records', () => {
       await h.owner.query('rollback');
     }
     expect(code).toBe(CHECK_VIOLATION);
+  });
+
+  it("judges a credit by the visit's own day: one since run out still covers it, one not yet bought does not", async () => {
+    // Every remaining Silver credit for this service runs out in June. A
+    // visit in May takes one; a visit in July finds none and is refused.
+    await h.owner.query(
+      "update entitlement set expires_on = '2026-06-01' where client_id = $1 and service_type_id = $2 and status = 'available'",
+      [h.clientId(0), h.serviceTypeId('nf-session')],
+    );
+    const may = await logPastVisit(h.clientId(0), 'nf-session', '2026-05-01', false);
+    expect((await billingFor(may)).credits).toEqual([
+      { status: 'consumed', source_type: 'package' },
+    ]);
+    await h.owner.query('begin');
+    let code: string | undefined;
+    try {
+      await logPastVisit(h.clientId(0), 'nf-session', '2026-07-01', false);
+    } catch (error) {
+      code = (error as { code?: string; constraint?: string }).code;
+      expect((error as { constraint?: string }).constraint).toBe('session_no_credit_available');
+    } finally {
+      await h.owner.query('rollback');
+    }
+    expect(code).toBe(RESTRICT_VIOLATION);
+  });
+
+  it("refuses a practitioner's own row that claims to be from the records, at the table", async () => {
+    // The route holds the office's line; the row policy says the same
+    // (db/policies/session/practitioner_scope.sql), so a row that bypassed
+    // the route could not claim the no-charge path either.
+    const user = h.data.users[SEEDED.practitioner];
+    const practitioner = h.data.practitioners.find((p) => p.userId === user?.id);
+    if (!practitioner) throw new Error('The seeded practitioner should have a practitioner row.');
+    await h.owner.query('begin');
+    let code: string | undefined;
+    try {
+      await h.owner.query('set local role app_role');
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.actor_roles', 'practitioner', true), set_config('app.request_id', $3, true)",
+        [h.data.tenant.id, user?.id ?? null, REQUEST_ID],
+      );
+      await h.owner.query(
+        'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+          'delivery_mode, status, checked_in_at, closed_at, recorded_from, settled_outside_app) values ' +
+          "($1, $2, $3, $4, $5, 'home', 'completed', now(), now(), 'records', true)",
+        [
+          '00000000-0000-4000-8000-00000000a0ff',
+          h.data.tenant.id,
+          h.clientId(1),
+          practitioner.id,
+          h.serviceTypeId('nf-session'),
+        ],
+      );
+    } catch (error) {
+      code = (error as { code?: string }).code;
+    } finally {
+      await h.owner.query('rollback');
+    }
+    expect(code).toBe(INSUFFICIENT_PRIVILEGE);
   });
 
   it('leaves a visit from the door exactly as it was: no credit, so a charge at today’s price', async () => {

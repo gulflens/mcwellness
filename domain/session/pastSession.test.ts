@@ -63,6 +63,12 @@ describe('pastSessionDateProblem', () => {
   it('refuses a day before the practice existed, which is a mistyped year', () => {
     expect(pastSessionDateProblem('2023-12-31', '2026-09-16')).toBe('too_old');
   });
+
+  it('refuses a day the calendar does not have, before comparing it with anything', () => {
+    expect(pastSessionDateProblem('2026-02-31', '2026-09-16')).toBe('not_a_day');
+    expect(pastSessionDateProblem('2025-13-01', '2026-09-16')).toBe('not_a_day');
+    expect(pastSessionDateProblem('2024-02-29', '2026-09-16')).toBeNull();
+  });
 });
 
 describe('pastSessionTimes', () => {
@@ -70,6 +76,12 @@ describe('pastSessionTimes', () => {
     expect(pastSessionTimes({ on: '2026-03-04', startTime: '15:30', durationMinutes: 60 })).toEqual(
       { startsAt: '2026-03-04T11:30:00.000Z', endsAt: '2026-03-04T12:30:00.000Z' },
     );
+  });
+
+  it('refuses to make instants out of a day that does not exist', () => {
+    expect(() =>
+      pastSessionTimes({ on: '2025-13-01', startTime: '10:00', durationMinutes: 60 }),
+    ).toThrow(RangeError);
   });
 
   it('lets a late visit run past midnight without losing the day it started on', () => {

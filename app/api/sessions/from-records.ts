@@ -47,6 +47,11 @@ import {
  * **`X-Reason` is required**: why this visit is being logged now is part of
  * the record, and the sensitive action `session_recorded_from_records`
  * carries it.
+ *
+ * **Who it is for.** A current client — active, or paused — whose
+ * practitioner is on the practice's books today; a practitioner who has
+ * since left is not offered, and a visit of theirs is logged under whoever
+ * the office decides, which the reason should say.
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
@@ -84,33 +89,40 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
     const requestId = c.get('requestId');
     const db = c.get('db');
 
+    // The session's id is minted first, so every refusal below has a row to
+    // be logged against, whether or not one is ever written (section 8:
+    // every block reason is logged). Until the client is verified to exist
+    // the refusal names no client: a claimed id is not proof of anything.
+    const sessionId = randomUUID();
+    const refuse = async (reasons: readonly RecordPastBlockReason[], clientId: string | null) => {
+      await logRefusal(db, 'session', sessionId, clientId, reasons);
+      return c.json(RecordPastSessionResponse.parse({ status: 'blocked', reasons }), 422);
+    };
+    const refuseBadRequest = async (code: RecordPastBadRequestCode, clientId: string | null) => {
+      await logRefusal(db, 'session', sessionId, clientId, [code]);
+      return badRequest(c, requestId, code);
+    };
+
     const body = RecordPastSessionRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) {
-      return badRequest(c, requestId, 'invalid_request');
+      return refuseBadRequest('invalid_request', null);
     }
     // The office's role before a single row is read; the practitioner's own
     // credential is judged by the gate once it is loaded.
     if (!hasRole(actor, 'owner', 'admin', 'lead_practitioner')) {
+      await logRefusal(db, 'session', sessionId, null, ['wrong_role']);
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     if (!(c.req.header('x-reason') ?? '').trim()) {
-      return badRequest(c, requestId, 'reason_required');
+      return refuseBadRequest('reason_required', null);
     }
 
     const input = body.data;
     const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
     const dateProblem = pastSessionDateProblem(input.on, today);
     if (dateProblem) {
-      return badRequest(c, requestId, dateProblem);
+      return refuseBadRequest(dateProblem, null);
     }
-
-    // The session's id is minted here, so every refusal below has a row to be
-    // logged against, whether or not one is ever written.
-    const sessionId = randomUUID();
-    const refuse = async (reasons: readonly RecordPastBlockReason[], clientId: string | null) => {
-      await logRefusal(db, 'session', sessionId, clientId, reasons);
-      return c.json(RecordPastSessionResponse.parse({ status: 'blocked', reasons }), 422);
-    };
 
     const clientResult = await db.query<ClientRow>(
       'select status, date_of_birth::text as date_of_birth from client where id = $1',
@@ -118,10 +130,13 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
     );
     const client = clientResult.rows[0];
     if (!client) {
-      return badRequest(c, requestId, 'client_not_found');
+      return refuseBadRequest('client_not_found', null);
     }
     await logRead(db, 'client', input.clientId, input.clientId);
-    if (client.status === 'erased' || client.status === 'closed') {
+    // A current client: active, or paused and coming back. A lead has no
+    // history with the practice yet, and a closed or erased record takes
+    // nothing more.
+    if (client.status !== 'active' && client.status !== 'paused') {
       return refuse(['client_inactive'], input.clientId);
     }
 
@@ -131,10 +146,10 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
     );
     const practitioner = practitionerResult.rows[0];
     if (!practitioner) {
-      return badRequest(c, requestId, 'practitioner_not_found');
+      return refuseBadRequest('practitioner_not_found', input.clientId);
     }
     if (practitioner.status !== 'active') {
-      return badRequest(c, requestId, 'practitioner_inactive');
+      return refuseBadRequest('practitioner_inactive', input.clientId);
     }
 
     const serviceTypeResult = await db.query<ServiceTypeRow>(
@@ -144,13 +159,13 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
     );
     const serviceType = serviceTypeResult.rows[0];
     if (!serviceType) {
-      return badRequest(c, requestId, 'service_type_not_found');
+      return refuseBadRequest('service_type_not_found', input.clientId);
     }
     if (serviceType.status !== 'active') {
-      return badRequest(c, requestId, 'service_type_inactive');
+      return refuseBadRequest('service_type_inactive', input.clientId);
     }
     if (!serviceType.delivery_modes.includes(input.deliveryMode)) {
-      return badRequest(c, requestId, 'delivery_mode_unavailable');
+      return refuseBadRequest('delivery_mode_unavailable', input.clientId);
     }
 
     // The place, held to the booking route's own rule: a home visit at the
@@ -162,16 +177,16 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
     );
     const location = locationResult.rows[0];
     if (!location) {
-      return badRequest(c, requestId, 'location_not_found');
+      return refuseBadRequest('location_not_found', input.clientId);
     }
     if (
       input.deliveryMode === 'home' &&
       !(location.owner_type === 'client' && location.owner_id === input.clientId)
     ) {
-      return badRequest(c, requestId, 'location_mismatch');
+      return refuseBadRequest('location_mismatch', input.clientId);
     }
     if (input.deliveryMode === 'studio' && input.locationId !== location.tenant_location_id) {
-      return badRequest(c, requestId, 'location_mismatch');
+      return refuseBadRequest('location_mismatch', input.clientId);
     }
 
     const credentialResult = await db.query<CredentialRow>(
@@ -271,7 +286,7 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
       await db.query('release savepoint record_past');
     } catch (error) {
       await db.query('rollback to savepoint record_past');
-      const pgError = error as { code?: string; constraint?: string; message?: string };
+      const pgError = error as { code?: string; constraint?: string };
       if (pgError.code === EXCLUSION_VIOLATION) {
         return refuse(
           [
@@ -282,7 +297,10 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
           input.clientId,
         );
       }
-      if (pgError.code === RESTRICT_VIOLATION && /no credit/.test(pgError.message ?? '')) {
+      if (
+        pgError.code === RESTRICT_VIOLATION &&
+        pgError.constraint === 'session_no_credit_available'
+      ) {
         return refuse(['no_credit_available'], input.clientId);
       }
       throw error;

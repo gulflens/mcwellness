@@ -50,6 +50,7 @@ const BILLING_LABELS: Record<PastSessionBilling, string> = {
 const BAD_REQUEST_MESSAGES: Record<RecordPastBadRequestCode, string> = {
   invalid_request: 'Something on the form is missing or invalid. Check each step and try again.',
   reason_required: 'Say why this visit is being logged now.',
+  not_a_day: 'That is not a day the calendar has. Check the date.',
   in_the_future: 'A past visit cannot be dated after today. Choose an earlier day.',
   too_old: 'That is before the practice existed. Check the year.',
   client_not_found: 'This client could not be found. Search again.',

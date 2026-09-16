@@ -424,6 +424,7 @@ export type RecordPastSessionRequest = z.infer<typeof RecordPastSessionRequest>;
 export const RECORD_PAST_BAD_REQUEST_CODES = [
   'invalid_request',
   'reason_required',
+  'not_a_day',
   'in_the_future',
   'too_old',
   'client_not_found',

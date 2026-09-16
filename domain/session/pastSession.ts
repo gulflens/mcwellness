@@ -1,4 +1,4 @@
-import { canActor, type Actor, type Capability, type IsoDate } from '@domain/shared';
+import { canActor, isRealDate, type Actor, type Capability, type IsoDate } from '@domain/shared';
 import type { CheckInConsentPurpose, DeliveryMode } from './types';
 
 /**
@@ -23,13 +23,17 @@ export const PAST_SESSION_MINUTES = { min: 5, max: 240 } as const;
 export const PAST_SESSION_BILLING = ['credit', 'settled_outside'] as const;
 export type PastSessionBilling = (typeof PAST_SESSION_BILLING)[number];
 
-export type PastSessionDateProblem = 'in_the_future' | 'too_old';
+export type PastSessionDateProblem = 'not_a_day' | 'in_the_future' | 'too_old';
 
 /**
- * Whether a day is one a past visit can be logged on: not after today in the
- * practice's zone, and not before the practice existed.
+ * Whether a day is one a past visit can be logged on: a day the calendar
+ * has (not the 31st of February, which a string comparison alone would let
+ * through), not after today in the practice's zone, and not before the
+ * practice existed.
  */
 export function pastSessionDateProblem(on: IsoDate, today: IsoDate): PastSessionDateProblem | null {
+  const [year, month, day] = on.split('-').map(Number);
+  if (!isRealDate(year ?? 0, month ?? 0, day ?? 0)) return 'not_a_day';
   if (on > today) return 'in_the_future';
   if (on < EARLIEST_PAST_SESSION_ON) return 'too_old';
   return null;
@@ -46,6 +50,9 @@ export function pastSessionTimes(input: {
   durationMinutes: number;
 }): { startsAt: string; endsAt: string } {
   const starts = new Date(`${input.on}T${input.startTime}:00${PRACTICE_UTC_OFFSET}`);
+  if (Number.isNaN(starts.getTime())) {
+    throw new RangeError(`Not a day and a time: ${input.on} ${input.startTime}`);
+  }
   const ends = new Date(starts.getTime() + input.durationMinutes * 60_000);
   return { startsAt: starts.toISOString(), endsAt: ends.toISOString() };
 }

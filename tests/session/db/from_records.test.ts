@@ -165,6 +165,7 @@ describe('logging a past visit', () => {
 
   it('refuses a visit with no credit on its day unless it was settled before the app, and writes nothing', async () => {
     const before = await countRows('session', h.clientId(WITHOUT_PACKAGE));
+    const appointmentsBefore = await countRows('appointment', h.clientId(WITHOUT_PACKAGE));
     const refused = await h.call(
       'POST',
       '/api/sessions/from-records',
@@ -175,9 +176,7 @@ describe('logging a past visit', () => {
     expect(refused.status).toBe(422);
     expect(await refused.json()).toEqual({ status: 'blocked', reasons: ['no_credit_available'] });
     expect(await countRows('session', h.clientId(WITHOUT_PACKAGE))).toBe(before);
-    expect(await countRows('appointment', h.clientId(WITHOUT_PACKAGE))).toBe(
-      await countRows('appointment', h.clientId(WITHOUT_PACKAGE)),
-    );
+    expect(await countRows('appointment', h.clientId(WITHOUT_PACKAGE))).toBe(appointmentsBefore);
     const logged = await h.owner.query<{ reason: string }>(
       "select reason from audit_log where action = 'refused' and client_id = $1 order by id desc limit 1",
       [h.clientId(WITHOUT_PACKAGE)],
@@ -212,6 +211,21 @@ describe('logging a past visit', () => {
     );
     expect(tomorrow.status).toBe(400);
     expect(await tomorrow.json()).toMatchObject({ code: 'in_the_future' });
+    // Logged before it was answered, against the visit that was never written
+    // and naming no client, since none was verified.
+    const logged = await h.owner.query<{ reason: string; client_id: string | null }>(
+      "select reason, client_id from audit_log where action = 'refused' and reason = 'in_the_future'",
+    );
+    expect(logged.rows).toEqual([{ reason: 'in_the_future', client_id: null }]);
+    const notADay = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      visit(WITH_PACKAGE, { on: '2026-02-31' }),
+      REASON,
+    );
+    expect(notADay.status).toBe(400);
+    expect(await notADay.json()).toMatchObject({ code: 'not_a_day' });
     const old = await h.call(
       'POST',
       '/api/sessions/from-records',

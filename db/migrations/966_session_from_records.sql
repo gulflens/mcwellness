@@ -38,6 +38,12 @@
 -- from `public` is not restated and not lost. A future migration that changes
 -- this function starts from **this** body.
 --
+-- **`recorded_from` is text with a check, not an enum**, the shape 070, 453
+-- and 916 use for a small closed set: two values, one writer, and a rollback
+-- that drops a column rather than a type. The refusal names its constraint,
+-- `session_no_credit_available`, so the route matches on that name and never
+-- on the sentence.
+--
 -- Trunk range, second half (950-999): it alters `session`, a stream's table
 -- (session-capture, 300-399), and replaces a function of another stream's
 -- (billing, 400-449), so it sorts after both and is the last thing applied.
@@ -92,7 +98,7 @@ begin
       end if;
     end loop;
     raise exception 'no credit is available for this visit on %', v_visit_day
-      using errcode = 'restrict_violation';
+      using errcode = 'restrict_violation', constraint = 'session_no_credit_available';
   end if;
 
   -- Take a credit, or find there is none to take. Three things make this safe
@@ -136,12 +142,65 @@ end
 $$;
 
 -- rollback:
---   -- Restore app.billing_on_session_completed as 404 wrote it
---   -- (db/migrations/404_billing_consumption.sql, the `create function
---   -- app.billing_on_session_completed` block: no v_visit_day, no records
---   -- branch), then:
+--   -- 404's function, word for word, so this block runs as pasted:
+--   create or replace function app.billing_on_session_completed() returns trigger
+--   language plpgsql security definer
+--   set search_path = pg_catalog, pg_temp
+--   as $fn$
+--   declare
+--     v_today          date := (now() at time zone 'Asia/Dubai')::date;
+--     v_entitlement_id uuid;
+--     v_attempt        integer;
+--   begin
+--     -- Already accounted for. An ordinary replay stops here; two at once are
+--     -- stopped by entitlement_one_per_session and invoice_one_per_session.
+--     if exists (select 1 from public.entitlement where consumed_by_session_id = new.id)
+--        or exists (select 1 from public.billing_exception where session_id = new.id) then
+--       return null;
+--     end if;
+--
+--     -- Take a credit, or find there is none to take. Three things make this safe
+--     -- under two visits completing at the same moment:
+--     --   1. app.oldest_available_entitlement locks the row it returns and skips
+--     --      one another transaction is holding, so the two visits are handed two
+--     --      different credits.
+--     --   2. `and status = 'available'` on the update is the second lock. If the
+--     --      row moved between the read and the write, no row is updated and this
+--     --      falls through to the charge rather than overwriting a consumption
+--     --      that has already happened — the fault this shape exists to prevent,
+--     --      where one credit paid for two visits and the second was never
+--     --      invoiced at all.
+--     --   3. A miss is re-read once before giving up, because the credit that
+--     --      moved may not have been the only one.
+--     for v_attempt in 1..2 loop
+--       v_entitlement_id :=
+--         app.oldest_available_entitlement(new.client_id, new.service_type_id, v_today);
+--       exit when v_entitlement_id is null;
+--       update public.entitlement
+--          set status = 'consumed', consumption_kind = 'session',
+--              consumed_by_session_id = new.id, consumed_at = now()
+--        where id = v_entitlement_id and status = 'available';
+--       if found then
+--         return null;
+--       end if;
+--     end loop;
+--
+--     if app.charge_single_visit(new.client_id, new.service_type_id, new.id, v_today) is null then
+--       insert into public.billing_exception (
+--         tenant_id, client_id, kind, session_id, service_type_id, detail, created_by
+--       ) values (
+--         new.tenant_id, new.client_id, 'unpriced_session', new.id, new.service_type_id,
+--         'This visit was delivered with no credit left and no price on the list for its service, '
+--           || 'so nothing was charged. Set a price, then invoice it.',
+--         app.current_actor_id()
+--       );
+--     end if;
+--     return null;
+--   end
+--   $fn$;
 --   alter table public.session drop constraint session_settled_only_from_records;
 --   alter table public.session drop column settled_outside_app;
 --   alter table public.session drop column recorded_from;
 --   -- A session row logged from records survives as an ordinary completed
---   -- row; its credit, if one was taken, stays consumed.
+--   -- row; its credit, if one was taken, stays consumed. What is lost is the
+--   -- fact that a settled row was settled: after this it reads as any other.

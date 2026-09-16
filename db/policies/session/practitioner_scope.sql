@@ -23,6 +23,19 @@ create policy practitioner_scope on public.session as restrictive for all to app
     )
   );
 
+-- A visit logged from the practice's records (migration 966) is the office's
+-- to write: `recorded_from = 'records'` is what admits `settled_outside_app`,
+-- the no-charge path, so a practitioner's own-row scope above must not reach
+-- it. The route already holds this line (app/api/sessions/from-records.ts);
+-- this is the database saying the same, so a row that bypassed the route
+-- could not claim it either.
+drop policy if exists records_are_the_office on public.session;
+create policy records_are_the_office on public.session as restrictive for insert to app_role
+  with check (
+    recorded_from = 'device'
+    or app.actor_has_role('owner') or app.actor_has_role('admin') or app.actor_has_role('lead_practitioner')
+  );
+
 drop policy if exists practitioner_scope on public.session_event;
 create policy practitioner_scope on public.session_event as restrictive for all to app_role
   using (
