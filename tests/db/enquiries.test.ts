@@ -273,14 +273,15 @@ describe('who may read and action', () => {
             [id, IDS.ownerA],
           );
           expect(rowCount).toBe(1);
+          // Read inside the same savepoint: asApiRole rolls it back on the way out.
+          const { rows: read } = await owner.query(
+            'select enquiring_for, interest from enquiry where id = $1',
+            [id],
+          );
+          expect(read[0]).toEqual({ enquiring_for: null, interest: null });
         },
         'admin',
       );
-      const { rows: read } = await owner.query(
-        'select enquiring_for, interest from enquiry where id = $1',
-        [id],
-      );
-      expect(read[0]).toEqual({ enquiring_for: null, interest: null });
     });
   });
 

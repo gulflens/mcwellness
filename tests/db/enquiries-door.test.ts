@@ -133,6 +133,60 @@ describe('the enquiry door', () => {
     await owner.query('delete from enquiry');
     const res = await api.request(DOOR, form({ ...HAZEL, phone: '' }));
     expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'incomplete', missing: ['phone'] });
+    expect(await rows()).toEqual([{ n: '0' }]);
+  });
+
+  it("lodges an expo enquiry posted as JSON from the app's own origin", async () => {
+    // The expo form is on the app itself: same origin, JSON, a number the
+    // phone control already made E.164, and the two answers only it asks.
+    await owner.query('delete from enquiry');
+    const res = await api.request(DOOR, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: 'expo',
+        name: 'Rowan Meadow',
+        phone: '+971500000098',
+        email: '',
+        area: 'Mirdif',
+        enquiring_for: 'child',
+        interest: 'both',
+        message: 'Saw the stand',
+        consent: 'on',
+        website: '',
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+    const { rows: read } = await owner.query(
+      'select source, name, whatsapp_e164, email, enquiring_for, interest, consent from enquiry',
+    );
+    expect(read).toEqual([
+      {
+        source: 'expo',
+        name: 'Rowan Meadow',
+        whatsapp_e164: '+971500000098',
+        email: null,
+        enquiring_for: 'child',
+        interest: 'both',
+        consent: true,
+      },
+    ]);
+  });
+
+  it('tells a person which expo fields are missing', async () => {
+    await owner.query('delete from enquiry');
+    const res = await api.request(DOOR, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ source: 'expo', name: 'Rowan Meadow', phone: '+971500000098' }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: 'incomplete',
+      missing: ['enquiring_for', 'interest'],
+    });
     expect(await rows()).toEqual([{ n: '0' }]);
   });
 

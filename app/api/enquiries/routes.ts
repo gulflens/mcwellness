@@ -1,9 +1,16 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { canActor } from '@domain/shared';
-import { leadFromEnquiry, type LodgedEnquiry } from '@domain/enquiry';
+import { canActor, toCsv } from '@domain/shared';
+import {
+  leadFromEnquiry,
+  type EnquiringFor,
+  type EnquirySource,
+  type Interest,
+  type LodgedEnquiry,
+} from '@domain/enquiry';
 import { logAction, logReads, refuseContactDetails } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
+import { csvResponse } from '../accounting/csv-response';
 import { createLead } from '../clients/create-lead';
 import { ConvertResponse, DismissBody, EnquiryListResponse, type Enquiry } from './schema';
 
@@ -22,7 +29,7 @@ import { ConvertResponse, DismissBody, EnquiryListResponse, type Enquiry } from 
 type Row = {
   id: string;
   received_at: Date;
-  source: 'website' | 'discovery_call';
+  source: EnquirySource;
   status: 'new' | 'converted' | 'dismissed';
   name: string | null;
   whatsapp_e164: string | null;
@@ -33,6 +40,8 @@ type Row = {
   preferred_time: string | null;
   contact_method: string | null;
   consent: boolean | null;
+  enquiring_for: EnquiringFor | null;
+  interest: Interest | null;
   actioned_at: Date | null;
   actioned_by_name: string | null;
   client_id: string | null;
@@ -41,12 +50,57 @@ type Row = {
 
 const COLUMNS =
   'e.id, e.received_at, e.source, e.status, e.name, e.whatsapp_e164, e.email, e.area, ' +
-  'e.message, e.concern, e.preferred_time, e.contact_method, e.consent, e.actioned_at, ' +
+  'e.message, e.concern, e.preferred_time, e.contact_method, e.consent, ' +
+  'e.enquiring_for, e.interest, e.actioned_at, ' +
   'u.display_name as actioned_by_name, e.client_id, e.dismiss_reason';
 
 const SCRUB =
   'name = null, whatsapp_e164 = null, email = null, area = null, message = null, ' +
-  'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null';
+  'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null, ' +
+  'enquiring_for = null, interest = null';
+
+/** The two answers in words, for the file the office follows up from. */
+const ENQUIRING_FOR_WORDS: Record<EnquiringFor, string> = {
+  self: 'Themselves',
+  child: 'A child',
+  family_member: 'A family member',
+  someone_else: 'Someone else',
+};
+const INTEREST_WORDS: Record<Interest, string> = {
+  brain_map: 'Brain map',
+  neurofeedback: 'Neurofeedback',
+  both: 'Both',
+};
+
+const PRACTICE_TIME_ZONE = 'Asia/Dubai';
+const FILE_STAMP = new Intl.DateTimeFormat('en-GB', {
+  timeZone: PRACTICE_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+/** "2026-10-14 15:20" in the practice's own time, from the parts the formatter gives. */
+function receivedStamp(at: Date): string {
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    FILE_STAMP.formatToParts(at).find((p) => p.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`;
+}
+
+const EXPO_FILE_HEADINGS = [
+  'Received',
+  'Name',
+  'WhatsApp',
+  'Email',
+  'Area',
+  'Enquiring for',
+  'Interest',
+  'Reason',
+  'Agreed to be contacted',
+] as const;
 
 function toWire(row: Row): Enquiry {
   return {
@@ -63,6 +117,8 @@ function toWire(row: Row): Enquiry {
     preferredTime: row.preferred_time,
     contactMethod: row.contact_method,
     consent: row.consent,
+    enquiringFor: row.enquiring_for,
+    interest: row.interest,
     actionedAt: row.actioned_at ? row.actioned_at.toISOString() : null,
     actionedByName: row.actioned_by_name,
     clientId: row.client_id,
@@ -91,6 +147,55 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
       'list',
     );
     return c.json(EnquiryListResponse.parse({ enquiries: rows.map(toWire) }));
+  });
+
+  /**
+   * The expo's leads as a file, for following up after the stand comes down:
+   * every enquiry from the expo still waiting, oldest first, with the two
+   * answers in words. A read of personal data by a person, so each row is
+   * logged as one, and the export itself once, under the request that made
+   * it (the same shape as the activity feed's own read, app/api/audit/activity.ts).
+   * Nothing is sent anywhere: the office downloads the file.
+   */
+  api.get('/api/enquiries/expo.csv', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    if (!canActor(actor, { type: 'enquiry.list' }, {}, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const { rows } = await db.query<Row>(
+      `select ${COLUMNS} from enquiry e left join app_user u on u.id = e.actioned_by ` +
+        "where e.source = 'expo' and e.status = 'new' order by e.received_at asc limit 1000",
+    );
+    await logReads(
+      db,
+      'enquiry',
+      rows.map((row) => ({ id: row.id, clientId: null })),
+      'list',
+    );
+    await logAction(
+      db,
+      'export',
+      { type: 'enquiry', id: requestId, clientId: null },
+      { source: 'expo', rows: String(rows.length) },
+    );
+    const table = [
+      [...EXPO_FILE_HEADINGS],
+      ...rows.map((row) => [
+        receivedStamp(row.received_at),
+        row.name ?? '',
+        row.whatsapp_e164 ?? '',
+        row.email ?? '',
+        row.area ?? '',
+        row.enquiring_for ? ENQUIRING_FOR_WORDS[row.enquiring_for] : '',
+        row.interest ? INTEREST_WORDS[row.interest] : '',
+        row.message ?? '',
+        row.consent === null ? '' : row.consent ? 'Yes' : 'No',
+      ]),
+    ];
+    const today = receivedStamp(now()).slice(0, 10);
+    return csvResponse(c, `expo-leads-${today}.csv`, toCsv(table));
   });
 
   api.post('/api/enquiries/:id/convert', async (c) => {
@@ -124,6 +229,8 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
       contactMethod: row.contact_method,
       consent: row.consent,
       source: row.source,
+      enquiringFor: row.enquiring_for,
+      interest: row.interest,
     };
     // The one read of a row's personal fields outside the list, logged as one.
     await logReads(db, 'enquiry', [{ id, clientId: null }], 'read');
