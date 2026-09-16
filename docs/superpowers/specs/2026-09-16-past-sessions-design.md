@@ -33,7 +33,9 @@ linked to it, in one transaction, and everything that reads either sees it.
 ## Shape
 
 **Migration `966_session_from_records.sql`**, trunk second half (it alters
-`session`, a stream's table, and replaces billing's function):
+`session`, a stream's table, and replaces billing's function), and one
+restrictive insert policy in `db/policies/session/practitioner_scope.sql` so
+a `records` row is the office's at the table as well as at the route:
 `session.recorded_from text not null default 'device'` (`device` | `records`)
 and `session.settled_outside_app boolean not null default false`, the second
 only ever true on a `records` row. `app.billing_on_session_completed` gains one
@@ -53,15 +55,18 @@ consents are active now: participation, minor participation when the client
 is under eighteen or has no date of birth, home visit for a home delivery,
 health data always. Consent is judged now, not on the visit date: the
 household is a current client whose consent covers their own record,
-including its history.
+including its history. A current client is one whose record is active or
+paused; a lead has no history with the practice yet, and a closed or erased
+record takes nothing more.
 
 **Route** `POST /api/sessions/from-records` (session-capture's paths, mounted
 by `mountSessions`): body `clientId`, `practitionerId`, `serviceTypeId`,
 `locationId`, `deliveryMode`, `on`, `startTime`, optional `durationMinutes`
 (the service's own length otherwise), `billing` (`credit` |
 `settled_outside`); `X-Reason` required. Refusals, each logged before the
-answer: 400 `in_the_future`, `too_old`, `reason_required`, the booking route's
-own not-found and mismatch codes; 403 for the wrong role or a practitioner
+answer against the visit's own id, naming the client only once the client is
+known to exist: 400 `not_a_day`, `in_the_future`, `too_old`,
+`reason_required`, the booking route's own not-found and mismatch codes; 403 for the wrong role or a practitioner
 without the credential; 422 `blocked` with the gate's reasons, or
 `no_credit_available`, or `practitioner_overlap` / `client_overlap` from the
 appointment's exclusion constraints. Success 201 `{ sessionId, appointmentId,
