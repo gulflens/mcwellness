@@ -1,0 +1,25 @@
+/* The expo form (app/shell/pages/ExpoEnquiryPage.tsx): the plain column the
+   sign-in page uses, one field under another, and the trap out of sight. */
+.expo__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/* A message is more than one line, so the row height is a floor, not a size. */
+.expo__message {
+  min-block-size: calc(var(--row) * 2);
+  padding-block: var(--s-2);
+  resize: vertical;
+}
+
+/* The trap is off the page for a person and in the markup for a script:
+   clipped rather than display: none, which some scripts skip. */
+.expo__trap {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

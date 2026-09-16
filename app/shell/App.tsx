@@ -94,6 +94,7 @@ const MoneyScreen = screen(() => import('../client/MoneyScreen'), 'MoneyScreen')
 const PasswordScreen = screen(() => import('../client/PasswordScreen'), 'PasswordScreen');
 const ReportsScreen = screen(() => import('../client/ReportsScreen'), 'ReportsScreen');
 const VisitsScreen = screen(() => import('../client/VisitsScreen'), 'VisitsScreen');
+const ExpoEnquiryPage = screen(() => import('./pages/ExpoEnquiryPage'), 'ExpoEnquiryPage');
 const CheckInPage = screen(() => import('../therapist/session/CheckInPage'), 'CheckInPage');
 const TodayPage = screen(() => import('../therapist/today/TodayPage'), 'TodayPage');
 const TodayLanding = screen(() => import('../therapist/TodayLanding'), 'TodayLanding');
@@ -264,6 +265,14 @@ export function App() {
       <Suspense fallback={null}>
         <Routes>
           <Route path="/sign-in" element={<SignInPage />} />
+          {/*
+            The expo form (trunk round 50): reached by scanning the code on the
+            practice's stand, by a visitor with no account, so it stands
+            outside `RequireAuth` like the sign-in page and the portal's
+            invitation. It posts to the enquiry door, which is ahead of the
+            fence for the same reason.
+          */}
+          <Route path="/expo" element={<ExpoEnquiryPage />} />
           <Route
             path="/"
             element={

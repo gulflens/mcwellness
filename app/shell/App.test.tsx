@@ -134,6 +134,14 @@ function mount(me: unknown, path = '/today/check-in', auth: AuthProvider = provi
   );
 }
 
+describe('App — /expo', () => {
+  it('opens the expo form to a visitor with no session', async () => {
+    mount(null, '/expo', signedOutProvider);
+    expect(await screen.findByRole('heading', { name: 'Good to meet you' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
+  });
+});
+
 describe('App — /today/check-in', () => {
   it('lets a practitioner reach the check-in screen', async () => {
     mount(PRACTITIONER);
