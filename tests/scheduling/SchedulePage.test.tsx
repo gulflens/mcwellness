@@ -157,6 +157,28 @@ describe('SchedulePage', () => {
     );
   });
 
+  it('offers to log a past session on a day that has passed, and not on today', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: [] }), { status: 200 });
+      }
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+
+    renderPage(fetchImpl, '2026-03-04');
+    await waitFor(() => expect(screen.getByText(/No appointments are booked/)).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Log a past session' }));
+    expect(screen.getByRole('dialog', { name: 'Log a past session' })).toBeTruthy();
+    cleanup();
+
+    // Today, in the practice's own zone: nothing is logged from records.
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(new Date());
+    renderPage(fetchImpl, today);
+    await waitFor(() => expect(screen.getByText(/No appointments are booked/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Log a past session' })).toBeNull();
+  });
+
   it('shows the empty line in plain words when no appointments are booked', async () => {
     const fetchImpl = vi.fn(
       async () => new Response(JSON.stringify({ appointments: [] }), { status: 200 }),
