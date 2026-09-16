@@ -142,6 +142,22 @@ describe('App — /expo', () => {
   });
 });
 
+describe('App — /admin/enquiries/poster', () => {
+  it('lets an admin open the expo poster, with no rail around it', async () => {
+    mount(ADMIN, '/admin/enquiries/poster');
+    expect(
+      await screen.findByRole('heading', { name: 'Scan to tell us about yourself' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('navigation')).toBeNull();
+  });
+
+  it('sends a practitioner home instead of the poster', async () => {
+    mount(PRACTITIONER, '/admin/enquiries/poster');
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Scan to tell us about yourself' })).toBeNull();
+  });
+});
+
 describe('App — /today/check-in', () => {
   it('lets a practitioner reach the check-in screen', async () => {
     mount(PRACTITIONER);

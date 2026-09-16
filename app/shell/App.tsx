@@ -71,6 +71,7 @@ const BillingPage = screen(() => import('../admin/billing/BillingPage'), 'Billin
 const ClientsPage = screen(() => import('../admin/clients/ClientsPage'), 'ClientsPage');
 const PinPickerPage = screen(() => import('../admin/clients/pin/PinPickerPage'), 'PinPickerPage');
 const EnquiriesPage = screen(() => import('../admin/enquiries/EnquiriesPage'), 'EnquiriesPage');
+const ExpoPosterPage = screen(() => import('../admin/enquiries/ExpoPosterPage'), 'ExpoPosterPage');
 const KitPage = screen(() => import('../admin/kit/KitPage'), 'KitPage');
 const TeamPage = screen(() => import('../admin/settings/TeamPage'), 'TeamPage');
 const SchedulePage = screen(() => import('../admin/schedule/SchedulePage'), 'SchedulePage');
@@ -314,6 +315,25 @@ export function App() {
               <RequirePinDocument>
                 <PinPickerPage />
               </RequirePinDocument>
+            }
+          />
+          {/*
+            The stand's poster (trunk round 50): its own document, outside the
+            `/admin` layout so there is no rail on the page when it prints,
+            behind the same rule as the enquiries screen it is linked from.
+          */}
+          <Route
+            path="/admin/enquiries/poster"
+            element={
+              <RequireAuth>
+                {(actor) =>
+                  canOpenEnquiries(actor, new Date()) ? (
+                    <ExpoPosterPage />
+                  ) : (
+                    <Navigate to={homeFor(actor)} replace />
+                  )
+                }
+              </RequireAuth>
             }
           />
           <Route

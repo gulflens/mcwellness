@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { enquiryWaitingDays } from '@domain/enquiry';
+import {
+  ENQUIRY_SOURCES,
+  enquiryWaitingDays,
+  type EnquiringFor,
+  type EnquirySource,
+  type Interest,
+} from '@domain/enquiry';
 import { EnquiryListResponse, type Enquiry } from '../../api/enquiries/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
 import { Table, type Column } from '../../shell/components/Table';
+import { DOWNLOAD_REFUSED, downloadCsv } from '../accounting/download';
 import './enquiries.css';
 
 /**
@@ -13,6 +20,11 @@ import './enquiries.css';
  * a table, new first, and for each new one the two things a person can do —
  * turn it into a lead, or dismiss it with a reason. Once actioned a row keeps
  * nothing personal, so the table shows what happened and who did it.
+ *
+ * From trunk round 50 the expo's enquiries land here too, under a filter by
+ * source so the stand's leads can be followed up as one list, with the two
+ * answers only that form asks in the Details column, a file of the expo's
+ * waiting leads to download, and the poster the stand prints its code from.
  *
  * Seen by the owner, an admin and the lead practitioner; the API refuses
  * everyone else and this screen is not offered to them. English only, like
@@ -31,7 +43,23 @@ const stamp = new Intl.DateTimeFormat('en-GB', {
 const SOURCE_LABELS: Record<Enquiry['source'], string> = {
   website: 'Website',
   discovery_call: 'Discovery call',
+  expo: 'Expo',
 };
+
+const ENQUIRING_FOR_LABELS: Record<EnquiringFor, string> = {
+  self: 'themselves',
+  child: 'a child',
+  family_member: 'a family member',
+  someone_else: 'someone else',
+};
+
+const INTEREST_LABELS: Record<Interest, string> = {
+  brain_map: 'a brain map',
+  neurofeedback: 'neurofeedback',
+  both: 'both',
+};
+
+type SourceFilter = 'all' | EnquirySource;
 
 const LOAD_ERROR = 'The enquiries could not be loaded. Try again.';
 const ACTION_ERROR = 'That could not be done. Reload and try again.';
@@ -51,6 +79,7 @@ export function EnquiriesPage() {
   const [reason, setReason] = useState('');
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<SourceFilter>('all');
 
   // Fetched once, and again after every action: the row that was just
   // converted or dismissed comes back scrubbed, and the list re-sorts itself.
@@ -133,6 +162,19 @@ export function EnquiriesPage() {
     }
   }
 
+  async function downloadExpoLeads(): Promise<void> {
+    setError(null);
+    setOutcome(null);
+    const arrived = await downloadCsv(apiFetch, '/api/enquiries/expo.csv');
+    if (!arrived) setError(DOWNLOAD_REFUSED);
+  }
+
+  const all = enquiries ?? [];
+  const shown = source === 'all' ? all : all.filter((row) => row.source === source);
+  const countOf = (of: SourceFilter): number =>
+    of === 'all' ? all.length : all.filter((row) => row.source === of).length;
+  const expoWaiting = all.some((row) => row.source === 'expo' && row.status === 'new');
+
   const columns: readonly Column<Enquiry>[] = [
     {
       key: 'received',
@@ -158,6 +200,8 @@ export function EnquiriesPage() {
         // What the discovery-call form asked, so the call goes the way the
         // person asked for it; the widget sends none of these.
         const lines = [
+          row.enquiringFor ? `For: ${ENQUIRING_FOR_LABELS[row.enquiringFor]}` : null,
+          row.interest ? `Interested in: ${INTEREST_LABELS[row.interest]}` : null,
           row.area ? `Area: ${row.area}` : null,
           row.concern ? `Asked about: ${row.concern}` : null,
           row.preferredTime ? `Prefers: ${row.preferredTime}` : null,
@@ -252,20 +296,50 @@ export function EnquiriesPage() {
     <section className="page">
       <PageHeader
         title="Enquiries"
-        aside="What the website's forms sent, newest first. Convert one to make it a lead on the client list, or dismiss it with a reason; either way the enquiry itself then keeps nothing personal."
+        aside="What the website's forms and the expo's sent, newest first. Convert one to make it a lead on the client list, or dismiss it with a reason; either way the enquiry itself then keeps nothing personal."
+        action={
+          <div className="enquiries__actions">
+            {expoWaiting ? (
+              <Button onClick={() => void downloadExpoLeads()}>Download expo leads</Button>
+            ) : null}
+            <a className="link" href="/admin/enquiries/poster" target="_blank" rel="noopener">
+              Expo poster
+            </a>
+          </div>
+        }
       />
       {outcome ? <Note tone="attention">{outcome}</Note> : null}
       {error ? <Note tone="critical">{error}</Note> : null}
       {failed ? <Note tone="critical">{LOAD_ERROR}</Note> : null}
       {!failed && enquiries === null ? <Note>Loading.</Note> : null}
       {enquiries !== null ? (
-        <Table
-          caption="Enquiries, new first"
-          columns={columns}
-          rows={enquiries}
-          rowKey={(row) => row.id}
-          empty={<Note>No enquiries yet. The website's forms land here.</Note>}
-        />
+        <>
+          <div className="enquiries__filter" role="group" aria-label="From">
+            {(['all', ...ENQUIRY_SOURCES] as const).map((of) => (
+              <Button
+                key={of}
+                variant="quiet"
+                aria-pressed={source === of}
+                onClick={() => setSource(of)}
+              >
+                {of === 'all' ? 'All' : SOURCE_LABELS[of]} ({countOf(of)})
+              </Button>
+            ))}
+          </div>
+          <Table
+            caption="Enquiries, new first"
+            columns={columns}
+            rows={shown}
+            rowKey={(row) => row.id}
+            empty={
+              source === 'expo' ? (
+                <Note>No expo enquiries yet. The code on the stand lands here.</Note>
+              ) : (
+                <Note>No enquiries yet. The website's forms and the expo's land here.</Note>
+              )
+            }
+          />
+        </>
       ) : null}
     </section>
   );
