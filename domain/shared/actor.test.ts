@@ -487,6 +487,21 @@ describe('the eight billing actions (docs/CHANGE-REQUESTS/billing-03.md section 
     expect(canActor(a, { type: 'portal.request.handle' }, ctx, NOW)).toBe(false);
   });
 
+  it('lets a contact answer the review line for their own client and nobody else', () => {
+    const a = actor(['client_contact']);
+    const ctx = { clientIds: [CLIENT] };
+    expect(canActor(a, { type: 'portal.review.answer', clientId: CLIENT }, ctx, NOW)).toBe(true);
+    expect(canActor(a, { type: 'portal.review.answer', clientId: OTHER_CLIENT }, ctx, NOW)).toBe(
+      false,
+    );
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(
+        canActor(actor([role]), { type: 'portal.review.answer', clientId: CLIENT }, ctx, NOW),
+        role,
+      ).toBe(false);
+    }
+  });
+
   it('gives handling a request to the office and access to the owner and an admin', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
       expect(canActor(actor([role]), { type: 'portal.request.handle' }, {}, NOW), role).toBe(true);
