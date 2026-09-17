@@ -71,6 +71,7 @@ const BillingPage = screen(() => import('../admin/billing/BillingPage'), 'Billin
 const ClientsPage = screen(() => import('../admin/clients/ClientsPage'), 'ClientsPage');
 const PinPickerPage = screen(() => import('../admin/clients/pin/PinPickerPage'), 'PinPickerPage');
 const EnquiriesPage = screen(() => import('../admin/enquiries/EnquiriesPage'), 'EnquiriesPage');
+const ExpoPosterPage = screen(() => import('../admin/enquiries/ExpoPosterPage'), 'ExpoPosterPage');
 const KitPage = screen(() => import('../admin/kit/KitPage'), 'KitPage');
 const TeamPage = screen(() => import('../admin/settings/TeamPage'), 'TeamPage');
 const SchedulePage = screen(() => import('../admin/schedule/SchedulePage'), 'SchedulePage');
@@ -94,6 +95,7 @@ const MoneyScreen = screen(() => import('../client/MoneyScreen'), 'MoneyScreen')
 const PasswordScreen = screen(() => import('../client/PasswordScreen'), 'PasswordScreen');
 const ReportsScreen = screen(() => import('../client/ReportsScreen'), 'ReportsScreen');
 const VisitsScreen = screen(() => import('../client/VisitsScreen'), 'VisitsScreen');
+const ExpoEnquiryPage = screen(() => import('./pages/ExpoEnquiryPage'), 'ExpoEnquiryPage');
 const CheckInPage = screen(() => import('../therapist/session/CheckInPage'), 'CheckInPage');
 const TodayPage = screen(() => import('../therapist/today/TodayPage'), 'TodayPage');
 const TodayLanding = screen(() => import('../therapist/TodayLanding'), 'TodayLanding');
@@ -264,6 +266,14 @@ export function App() {
       <Suspense fallback={null}>
         <Routes>
           <Route path="/sign-in" element={<SignInPage />} />
+          {/*
+            The expo form (trunk round 50): reached by scanning the code on the
+            practice's stand, by a visitor with no account, so it stands
+            outside `RequireAuth` like the sign-in page and the portal's
+            invitation. It posts to the enquiry door, which is ahead of the
+            fence for the same reason.
+          */}
+          <Route path="/expo" element={<ExpoEnquiryPage />} />
           <Route
             path="/"
             element={
@@ -305,6 +315,25 @@ export function App() {
               <RequirePinDocument>
                 <PinPickerPage />
               </RequirePinDocument>
+            }
+          />
+          {/*
+            The stand's poster (trunk round 50): its own document, outside the
+            `/admin` layout so there is no rail on the page when it prints,
+            behind the same rule as the enquiries screen it is linked from.
+          */}
+          <Route
+            path="/admin/enquiries/poster"
+            element={
+              <RequireAuth>
+                {(actor) =>
+                  canOpenEnquiries(actor, new Date()) ? (
+                    <ExpoPosterPage />
+                  ) : (
+                    <Navigate to={homeFor(actor)} replace />
+                  )
+                }
+              </RequireAuth>
             }
           />
           <Route

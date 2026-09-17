@@ -45,7 +45,7 @@ Edited only in the trunk session or by the integrator (the owner) on `main`. No 
 | `db/seed/**` | Synthetic generators |
 | `app/shell/**`, `app/api/_middleware/**` | Auth, audit context, routing |
 | `app/api/team/**`, `app/api/scheduler.ts`, `app/admin/settings/**`, `.github/workflows/uptime.yml` | Who works at the practice (sign-ins and roles), the two jobs run from inside the process, the settings screens, and the uptime probe (trunk round 39, 2026-09-10, `docs/CHANGE-REQUESTS/trunk-notes.md`) |
-| `domain/enquiry/**`, `app/api/enquiries/**`, `app/admin/enquiries/**`, `db/policies/enquiry/**` | The website's enquiries: the one public write path, its quarantine table (migration `916`) and the office screen that actions it (trunk round 38, 2026-09-10, `docs/CHANGE-REQUESTS/trunk-notes.md`) |
+| `domain/enquiry/**`, `app/api/enquiries/**`, `app/admin/enquiries/**`, `db/policies/enquiry/**`, `app/shell/pages/ExpoEnquiryPage.tsx` | The website's enquiries: the one public write path, its quarantine table (migration `916`) and the office screen that actions it (trunk round 38, 2026-09-10, `docs/CHANGE-REQUESTS/trunk-notes.md`). From trunk round 50 (2026-09-16, `docs/CHANGE-REQUESTS/trunk-round-50.md`) also the expo's form on the app itself, its poster, and the leads file; the file writer the books and the expo share is `domain/shared/csv.ts`, the trunk's |
 | `infra/**`, `package.json`, lockfile, CI config | Build and deploy |
 
 **If a worktree needs a change here:** write `docs/CHANGE-REQUESTS/<worktree>-NN.md` (what, why, proposed diff), commit it, and stop work that depends on it. The integrator applies it on `main`; all worktrees rebase.

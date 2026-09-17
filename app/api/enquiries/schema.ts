@@ -1,9 +1,23 @@
 import { z } from 'zod';
-import { ENQUIRY_SOURCES } from '@domain/enquiry';
+import { ENQUIRING_FOR, ENQUIRY_SOURCES, INTERESTS, type MissingField } from '@domain/enquiry';
 
 /** What the door answers, whatever happened: a thank-you, or nothing a script can learn from. */
 export const LodgeResponse = z.object({ ok: z.literal(true) });
 export type LodgeResponse = z.infer<typeof LodgeResponse>;
+
+/**
+ * The one refusal a person can see: a field the form needs and did not get,
+ * each named so the expo page can mark it. The website's script never reads
+ * this body; the app's own page does.
+ */
+export const IncompleteResponse = z.object({
+  error: z.literal('incomplete'),
+  missing: z.array(z.enum(['name', 'phone', 'enquiring_for', 'interest'] as const)),
+  requestId: z.string(),
+});
+export type IncompleteResponse = z.infer<typeof IncompleteResponse> & {
+  missing: MissingField[];
+};
 
 export const ENQUIRY_STATUSES = ['new', 'converted', 'dismissed'] as const;
 
@@ -22,6 +36,9 @@ export const Enquiry = z.object({
   preferredTime: z.string().nullable(),
   contactMethod: z.string().nullable(),
   consent: z.boolean().nullable(),
+  /** The expo form's two answers (migration 919); null from the website, and once actioned. */
+  enquiringFor: z.enum(ENQUIRING_FOR).nullable(),
+  interest: z.enum(INTERESTS).nullable(),
   actionedAt: z.iso.datetime({ offset: true }).nullable(),
   actionedByName: z.string().nullable(),
   clientId: z.uuid().nullable(),

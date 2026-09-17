@@ -88,3 +88,62 @@ data, so erasing the client leaves nothing behind it.
   writes nothing on a bot's submission.
 - Bots that pass the honeypot land as `new` rows for a person to dismiss. That
   is the quarantine doing its job.
+
+## Amended 2026-09-16: the expo (trunk round 50)
+
+**Why.** The practice takes a stand at the AccessAbilities Expo in October
+2026. A code on the stand opens a short form on a visitor's own phone; what
+they send is followed up after the expo. The owner asked for it on 15
+September and decided the shape on 16 September: English only, one pull
+request, and built on this design rather than beside it
+(`docs/CHANGE-REQUESTS/trunk-round-50.md`).
+
+**A third source, not a third table.** `enquiry.source` gains `expo`
+(migration 919). Everything this design already settled holds unchanged: the
+quarantine, the definer door, the honeypot, the clamps, the row policies, the
+office screen, Option B, the scrub. Two typed columns join the row for the two
+things only the expo form asks — `enquiring_for` (`self`, `child`,
+`family_member`, `someone_else`) and `interest` (`brain_map`,
+`neurofeedback`, `both`) — required on a new expo row by a constraint of the
+table's own, never sent by the website's forms, and scrubbed with the rest
+once actioned. The lead a conversion creates says `expo` as its referral
+source, by the function that already copies the source across.
+
+**A stand's budget.** The website's five lodgings per address in ten minutes
+would refuse the sixth visitor on the venue's Wi-Fi. `app.lodge_enquiry`
+gives the expo thirty; the website keeps five; the route's own ten-a-minute
+per address stands, since a form takes longer than six seconds to fill in.
+The source is a word the caller sends, so a script that says `expo` gets the
+stand's budget from anywhere; what bounds it is a ceiling of the practice's
+own, three hundred lodgings in an hour from every address together, refused
+as silently as an exhausted address. Below that, the quarantine does its job.
+
+**The page.** `/expo` on the app itself (`app/shell/pages/ExpoEnquiryPage.tsx`),
+outside the sign-in fence like the invitation page, posting to the same door
+as JSON with a plain `fetch` so a member of staff signed in on the stand's
+tablet is never signed out by a refusal. Name, WhatsApp number, who it is for,
+what they are interested in; optional email, area and message; the website
+forms' own tick, which is not a consent; a line saying the details are used
+only to reply and that an actioned enquiry keeps nothing personal, linking the
+website's privacy policy. The door's refusal now names each missing field, so
+the page marks it. The line under the tick says what happens to the details:
+they are used to get back to the person; if they go on to work with the
+practice they become part of their record; if not, the enquiry keeps nothing
+personal once replied to.
+
+**The office.** The enquiries screen filters by source with a count of each,
+shows the two answers in the Details column, and offers "Download expo leads"
+while any expo enquiry waits: `GET /api/enquiries/expo.csv`, oldest first, the
+answers in words, every row logged as a read and the export logged once as
+an `enquiry_export` under its request id, the number guarded as text so a
+spreadsheet never evaluates it. The file is a copy the scrub and an erasure
+never reach, so the screen says beside the button to keep it on the
+practice's own device and delete it once the follow-up is done. The poster at `/admin/enquiries/poster` draws the code for this origin's
+own `/expo` as one SVG path with the address in words beneath, prints without
+a rail, and encodes nothing about anybody. The encoder is `qrcode-generator`,
+a dependency with no dependencies of its own.
+
+**Not in this round.** A "contacted" mark on a waiting row: the row policy
+admits only the move to converted or dismissed, so it would be a policy
+change, a route, an audit action and a page state, and the file is the
+follow-up list until then. Arabic on the form, by the owner's decision.

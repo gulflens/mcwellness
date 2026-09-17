@@ -24,3 +24,13 @@
   flex-direction: column;
   gap: var(--s-1);
 }
+/* The source filter: quiet buttons, the pressed one marked by its rule. */
+.enquiries__filter {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  margin-block-end: var(--s-4);
+}
+.enquiries__filter .button[aria-pressed='true'] {
+  border-color: var(--ink);
+}

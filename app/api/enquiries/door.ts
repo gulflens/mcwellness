@@ -2,11 +2,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Context, Hono } from 'hono';
 import { parseEnquiry } from '@domain/enquiry';
 import type { ApiEnv, PoolLike } from '../_middleware/request-context';
-import { LodgeResponse } from './schema';
+import { IncompleteResponse, LodgeResponse } from './schema';
 
 /**
  * The website's enquiry door: `POST /api/enquiries`, the practice system's
  * first public write path (docs/superpowers/specs/2026-09-09-enquiries-design.md).
+ * From trunk round 50 it is the expo form's door too: `/expo` on the app
+ * itself posts here, same origin, as JSON, with `source: 'expo'` and the two
+ * answers only that form asks (migration 919).
  *
  * Mounted ahead of the authentication fence, like the portal's invitation
  * door and by the same rule: the person on the other end has no account, so
@@ -127,7 +130,12 @@ export function mountEnquiryDoor(api: Hono<ApiEnv>, options: EnquiryDoorOptions)
     const parsed = parseEnquiry(body);
     if (!parsed.ok) {
       if (parsed.reason === 'honeypot') return c.json(LodgeResponse.parse({ ok: true }));
-      return c.json({ error: 'name and phone are required', requestId }, 400);
+      // Which fields, so the app's own page can mark each one. A form error,
+      // not a defence: nothing about the budget or the practice is in it.
+      return c.json(
+        IncompleteResponse.parse({ error: 'incomplete', missing: parsed.missing, requestId }),
+        400,
+      );
     }
 
     const client = await options.pool.connect();
@@ -152,6 +160,8 @@ export function mountEnquiryDoor(api: Hono<ApiEnv>, options: EnquiryDoorOptions)
           contact_method: parsed.enquiry.contactMethod,
           consent: parsed.enquiry.consent,
           ip_hash: bucketFor(options.addressOf(c)),
+          enquiring_for: parsed.enquiry.enquiringFor,
+          interest: parsed.enquiry.interest,
         }),
       ]);
       await client.query('commit');

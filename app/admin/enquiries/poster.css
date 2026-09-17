@@ -1,0 +1,27 @@
+/* The stand's poster (app/admin/enquiries/ExpoPosterPage.tsx): the plain
+   column, the code as wide as it can be, the address beneath in the page's
+   own ink, and nothing else on paper. */
+.poster {
+  align-items: center;
+  text-align: center;
+}
+
+.poster__code {
+  inline-size: 100%;
+  max-inline-size: 20rem;
+  block-size: auto;
+  color: var(--ink);
+}
+
+.poster__address {
+  font-size: var(--t-h2);
+  line-height: var(--lh-h2);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+@media print {
+  .poster__print {
+    display: none;
+  }
+}

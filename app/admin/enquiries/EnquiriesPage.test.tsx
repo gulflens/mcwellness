@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Enquiry } from '../../api/enquiries/schema';
@@ -36,10 +36,28 @@ const NEW: Enquiry = {
   preferredTime: 'Evenings',
   contactMethod: 'WhatsApp',
   consent: true,
+  enquiringFor: null,
+  interest: null,
   actionedAt: null,
   actionedByName: null,
   clientId: null,
   dismissReason: null,
+};
+const EXPO: Enquiry = {
+  ...NEW,
+  id: '0000000e-0000-4000-8000-000000000004',
+  receivedAt: '2026-10-14T11:20:00.000Z',
+  source: 'expo',
+  name: 'Rowan Meadow',
+  whatsappE164: '+971500000098',
+  email: null,
+  area: 'Mirdif',
+  message: 'Saw the stand',
+  concern: null,
+  preferredTime: null,
+  contactMethod: null,
+  enquiringFor: 'child',
+  interest: 'both',
 };
 const CONVERTED: Enquiry = {
   ...NEW,
@@ -54,6 +72,8 @@ const CONVERTED: Enquiry = {
   preferredTime: null,
   contactMethod: null,
   consent: null,
+  enquiringFor: null,
+  interest: null,
   actionedAt: '2026-09-09T19:40:00.000Z',
   actionedByName: 'Iris Harbour',
   clientId: '00000008-0000-4000-8000-000000000011',
@@ -75,6 +95,16 @@ function mount(options: { listStatus?: number; list?: Enquiry[] } = {}) {
     }
     if (url === '/api/enquiries' && (!init || !init.method || init.method === 'GET')) {
       return json({ enquiries: list }, options.listStatus ?? 200);
+    }
+    if (url === '/api/enquiries/expo.csv') {
+      posts.push({ url, body: null });
+      return new Response('Received,Name\r\n', {
+        status: 200,
+        headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': 'attachment; filename="expo-leads-2026-10-15.csv"',
+        },
+      });
     }
     if (url.endsWith('/convert')) {
       posts.push({ url, body: init?.body });
@@ -182,6 +212,60 @@ describe('EnquiriesPage', () => {
     fireEvent.click(confirm);
     expect(await screen.findByText('Dismissed.')).toBeTruthy();
     expect(posts).toEqual([{ url: `/api/enquiries/${NEW.id}/dismiss`, body: { reason: 'Spam' } }]);
+  });
+
+  it('shows who an expo enquiry is for and what they asked about', async () => {
+    mount({ list: [EXPO, NEW, CONVERTED] });
+    expect(await screen.findByText('Rowan Meadow')).toBeTruthy();
+    expect(screen.getByText('For: a child')).toBeTruthy();
+    expect(screen.getByText('Interested in: both')).toBeTruthy();
+    expect(screen.getByText('Expo')).toBeTruthy();
+  });
+
+  it('filters by source and counts each', async () => {
+    mount({ list: [EXPO, NEW, CONVERTED] });
+    await screen.findByText('Rowan Meadow');
+    const filter = screen.getByRole('group', { name: 'From' });
+    expect(
+      within(filter).getByRole('button', { name: 'All (3)' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(within(filter).getByRole('button', { name: 'Website (2)' })).toBeTruthy();
+    expect(within(filter).getByRole('button', { name: 'Discovery call (0)' })).toBeTruthy();
+    fireEvent.click(within(filter).getByRole('button', { name: 'Expo (1)' }));
+    expect(screen.getByText('Rowan Meadow')).toBeTruthy();
+    expect(screen.queryByText('Hazel Harbour')).toBeNull();
+    fireEvent.click(within(filter).getByRole('button', { name: 'Discovery call (0)' }));
+    expect(
+      screen.getByText("No enquiries yet. The website's forms and the expo's land here."),
+    ).toBeTruthy();
+    fireEvent.click(within(filter).getByRole('button', { name: 'Expo (1)' }));
+    expect(screen.queryByText(/No enquiries yet/)).toBeNull();
+  });
+
+  it('downloads the expo leads file, and offers it only while an expo enquiry waits', async () => {
+    const { posts } = mount({ list: [EXPO, NEW] });
+    await screen.findByText('Rowan Meadow');
+    // jsdom has no object URLs; the download helper's own test covers the click.
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: () => 'blob:leads',
+      revokeObjectURL: () => undefined,
+    });
+    expect(screen.getByText(/Keep it on the practice’s own device/)).toBeTruthy();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Download expo leads' }));
+      await waitFor(() => expect(posts).toEqual([{ url: '/api/enquiries/expo.csv', body: null }]));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    cleanup();
+    mount({ list: [NEW, CONVERTED] });
+    await screen.findByText('Hazel Harbour');
+    expect(screen.queryByRole('button', { name: 'Download expo leads' })).toBeNull();
+    expect(screen.queryByText(/Keep it on the practice’s own device/)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Expo poster' }).getAttribute('href')).toBe(
+      '/admin/enquiries/poster',
+    );
   });
 
   it('says so when the list cannot be loaded', async () => {

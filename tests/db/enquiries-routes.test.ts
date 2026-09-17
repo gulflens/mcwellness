@@ -22,6 +22,21 @@ function lodging(name: string, hash: string): string {
   });
 }
 
+/** The expo form's lodging: the two answers, and the stand's own address. */
+function expoLodging(name: string, hash = 'e'.repeat(64)): string {
+  return JSON.stringify({
+    source: 'expo',
+    name,
+    whatsapp_e164: '+971500000098',
+    area: 'Mirdif',
+    message: 'Saw the stand, would like a home visit',
+    enquiring_for: 'child',
+    interest: 'both',
+    consent: 'true',
+    ip_hash: hash,
+  });
+}
+
 let h: PortalHarness;
 
 beforeAll(async () => {
@@ -59,6 +74,79 @@ describe('the enquiries a person sees', () => {
   it('lists them for the lead practitioner, and refuses a practitioner', async () => {
     expect((await h.callAs('GET', '/api/enquiries', PORTAL.leadAuth)).status).toBe(200);
     expect((await h.callAs('GET', '/api/enquiries', PORTAL.practitionerAuth)).status).toBe(403);
+  });
+
+  it('lists the two answers for an expo enquiry', async () => {
+    await h.owner.query('delete from enquiry');
+    const { rows } = await h.owner.query<{ id: string }>(LODGE, [expoLodging('Rowan Meadow')]);
+    const res = await h.callAs('GET', '/api/enquiries', PORTAL.adminAuth);
+    const body = (await res.json()) as { enquiries: Record<string, unknown>[] };
+    expect(body.enquiries[0]).toMatchObject({
+      id: rows[0]!.id,
+      source: 'expo',
+      enquiringFor: 'child',
+      interest: 'both',
+    });
+  });
+});
+
+describe('the expo leads file', () => {
+  it('downloads the new expo enquiries as a file, logs the read of each row and the export once', async () => {
+    await h.owner.query('delete from enquiry');
+    const first = await h.owner.query<{ id: string }>(LODGE, [expoLodging('Rowan Meadow')]);
+    const second = await h.owner.query<{ id: string }>(LODGE, [
+      expoLodging('Basil Valley', 'f'.repeat(64)),
+    ]);
+    // A website enquiry and an actioned expo one are not in the file.
+    await lodge('Hazel Harbour');
+    const gone = await h.owner.query<{ id: string }>(LODGE, [
+      expoLodging('Iris Creek', 'a'.repeat(64)),
+    ]);
+    expect(
+      (
+        await h.callAs('POST', `/api/enquiries/${gone.rows[0]!.id}/dismiss`, PORTAL.adminAuth, {
+          reason: 'Asked us not to call',
+        })
+      ).status,
+    ).toBe(200);
+
+    const res = await h.callAs('GET', '/api/enquiries/expo.csv', PORTAL.adminAuth);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/csv');
+    expect(res.headers.get('content-disposition')).toMatch(
+      /^attachment; filename="expo-leads-\d{4}-\d{2}-\d{2}\.csv"$/,
+    );
+    const lines = (await res.text()).split('\r\n');
+    expect(lines[0]).toBe(
+      'Received,Name,WhatsApp,Email,Area,Enquiring for,Interest,Reason,Agreed to be contacted',
+    );
+    // Oldest first; the number guarded as text; the answers in words.
+    expect(lines[1]).toMatch(
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2},Rowan Meadow,'\+971500000098,,Mirdif,A child,Both,"Saw the stand, would like a home visit",Yes$/,
+    );
+    expect(lines[2]).toContain('Basil Valley');
+    expect(lines).toHaveLength(4);
+    expect(lines[3]).toBe('');
+
+    const reads = await h.owner.query<{ entity_id: string }>(
+      "select entity_id from audit_log where entity_type = 'enquiry' and action = 'list' and actor_id = $1 " +
+        'and request_id = (select request_id from audit_log where action = $2 order by id desc limit 1) order by entity_id',
+      [PORTAL.admin, 'export'],
+    );
+    expect(reads.rows.map((r) => r.entity_id).sort()).toEqual(
+      [first.rows[0]!.id, second.rows[0]!.id].sort(),
+    );
+    const exported = await h.owner.query<{ new_values: { source: string; rows: string } }>(
+      "select new_values from audit_log where entity_type = 'enquiry_export' and action = 'export' and actor_id = $1 order by id desc limit 1",
+      [PORTAL.admin],
+    );
+    expect(exported.rows[0]?.new_values).toEqual({ source: 'expo', rows: '2' });
+  });
+
+  it('refuses the file to a practitioner', async () => {
+    expect((await h.callAs('GET', '/api/enquiries/expo.csv', PORTAL.practitionerAuth)).status).toBe(
+      403,
+    );
   });
 });
 
@@ -133,6 +221,24 @@ describe('actioning', () => {
     expect((await h.callAs('POST', `/api/enquiries/${id}/convert`, PORTAL.adminAuth)).status).toBe(
       404,
     );
+  });
+
+  it('converts an expo enquiry into a lead that says it came from the expo', async () => {
+    await h.owner.query('delete from enquiry');
+    const { rows } = await h.owner.query<{ id: string }>(LODGE, [expoLodging('Rowan Meadow')]);
+    const id = rows[0]!.id;
+    const res = await h.callAs('POST', `/api/enquiries/${id}/convert`, PORTAL.adminAuth);
+    expect(res.status).toBe(201);
+    const { clientId } = (await res.json()) as { clientId: string };
+    const client = await h.owner.query('select referral_source from client where id = $1', [
+      clientId,
+    ]);
+    expect(client.rows[0]).toEqual({ referral_source: 'expo' });
+    const enquiry = await h.owner.query(
+      'select status, enquiring_for, interest from enquiry where id = $1',
+      [id],
+    );
+    expect(enquiry.rows[0]).toEqual({ status: 'converted', enquiring_for: null, interest: null });
   });
 
   it('dismisses with a reason and scrubs, and refuses a dismissal without one', async () => {
