@@ -37,7 +37,7 @@ const SELECT_PRACTICE =
   "to_char(t.licence_expires_on, 'YYYY-MM-DD') as licence_expires_on, " +
   't.vat_registered, t.vat_trn, t.record_readings, ' +
   't.whatsapp_number, t.default_emirate, t.timezone, ' +
-  't.contact_phone, t.contact_email, t.website, ' +
+  't.contact_phone, t.contact_email, t.website, t.review_url, ' +
   'l.id as location_id, l.display_address, l.emirate, ' +
   'extensions.st_y(l.entrance_point::extensions.geometry) as latitude, ' +
   'extensions.st_x(l.entrance_point::extensions.geometry) as longitude ' +
@@ -58,6 +58,7 @@ type PracticeRow = {
   contact_phone: string | null;
   contact_email: string | null;
   website: string | null;
+  review_url: string | null;
   default_emirate: string;
   timezone: string;
   location_id: string | null;
@@ -111,6 +112,7 @@ function view(row: PracticeRow, supplies: { fils: number; asOf: string }): Pract
     contactPhone: row.contact_phone,
     contactEmail: row.contact_email,
     website: row.website,
+    reviewUrl: row.review_url,
     defaultEmirate: row.default_emirate,
     timezone: row.timezone,
     address:
@@ -203,7 +205,11 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         // Same reason, same shape: `recordReadings` is optional on this form
         // too (schema.ts), so a caller that omits it leaves the switch as it
         // stands rather than switching readings off by silent default.
-        'record_readings = coalesce($13, record_readings) ' +
+        'record_readings = coalesce($13, record_readings), ' +
+        // Written whenever the body carries it, null included: clearing the
+        // review link is how the portal's review line is switched off
+        // (migration 920), so "sent as nothing" has to mean nothing here.
+        'review_url = case when $14::boolean then $15 else review_url end ' +
         'where id = app.current_tenant_id()',
       [
         wanted.legalName,
@@ -219,6 +225,8 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
         wanted.contactEmail ?? null,
         wanted.website ?? null,
         wanted.recordReadings ?? null,
+        wanted.reviewUrl !== undefined,
+        wanted.reviewUrl ?? null,
       ],
     );
 

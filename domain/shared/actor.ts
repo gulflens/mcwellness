@@ -95,6 +95,7 @@ export type Action =
   | { type: 'accounting.settings.write' }
   | { type: 'contact.write_own'; contactUserId: string | null }
   | { type: 'portal.request.write'; clientId: string }
+  | { type: 'portal.review.answer'; clientId: string }
   | { type: 'portal.request.handle' }
   | { type: 'portal.access.manage' }
   | { type: 'kit.manage' }
@@ -387,6 +388,13 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // contact, for a client in their own household; ctx.clientIds is
       // resolved by the route from app.portal_client_ids() on every request,
       // never from anything the caller claims.
+      return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(action.clientId);
+    case 'portal.review.answer':
+      // Saying "not now" to the review line, or opening the review page
+      // (docs/SPEC/client-portal.md section 3.1, the owner's decision of 16
+      // September 2026). The same shape as asking: a contact, for a client in
+      // their own household, and never a member of the practice on a
+      // household's behalf.
       return hasRole(actor, 'client_contact') && (ctx.clientIds ?? []).includes(action.clientId);
     case 'portal.request.handle':
       // Marking one as dealt with. The office roles: the act itself —

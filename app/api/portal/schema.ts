@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { APPOINTMENT_STATUSES, INVITE_KINDS, VISIT_OUTCOMES } from '../../../domain/portal';
+import {
+  APPOINTMENT_STATUSES,
+  INVITE_KINDS,
+  REVIEW_MILESTONE_KINDS,
+  VISIT_OUTCOMES,
+} from '../../../domain/portal';
 import { cleanText } from '../_middleware/text';
 
 /**
@@ -66,6 +71,12 @@ export const Practice = z.object({
    * button rather than opening WhatsApp on nothing.
    */
   whatsappNumber: z.string().nullable(),
+  /**
+   * The practice's public review page, which the review line opens in a new
+   * tab (migration 920; section 3.1 as amended 2026-09-17). Null where the
+   * practice has recorded none, and then no line is computed or shown.
+   */
+  reviewUrl: z.string().nullable(),
   timezone: z.string(),
 });
 export type Practice = z.infer<typeof Practice>;
@@ -103,16 +114,37 @@ export const MoneySummary = z.object({
 });
 export type MoneySummary = z.infer<typeof MoneySummary>;
 
-/** Something waiting on the household (section 3.1). */
+/**
+ * Something waiting on the household (section 3.1), or — `review_prompt`, the
+ * owner's decision of 16 September 2026 — the one line the portal is allowed
+ * to offer rather than owe: `entityId` is then the milestone (the brain-map
+ * appointment or the finished purchase) and `detail` its kind.
+ */
 export const Notice = z.object({
-  kind: z.enum(['consent_newer_wording', 'request_open', 'request_handled']),
+  kind: z.enum(['consent_newer_wording', 'request_open', 'request_handled', 'review_prompt']),
   clientId: z.uuid(),
-  /** The consent or the request the notice is about. */
+  /** The consent, the request, or the milestone the notice is about. */
   entityId: z.uuid(),
-  /** A consent purpose, or a request kind: the dictionary turns it into words. */
+  /** A consent purpose, a request kind or a milestone kind: the dictionary turns it into words. */
   detail: z.string(),
 });
 export type Notice = z.infer<typeof Notice>;
+
+/**
+ * The household's answer to the review line (section 3.1): which milestone,
+ * and which way. The client is named so the route can refuse a milestone that
+ * is not this household's before anything is written.
+ */
+export const AnswerReviewPromptInput = z.object({
+  clientId: z.uuid(),
+  milestoneKind: z.enum(REVIEW_MILESTONE_KINDS),
+  milestoneId: z.uuid(),
+  outcome: z.enum(['opened', 'dismissed']),
+});
+export type AnswerReviewPromptInput = z.infer<typeof AnswerReviewPromptInput>;
+
+export const ReviewAnswerResponse = z.object({ ok: z.literal(true) });
+export type ReviewAnswerResponse = z.infer<typeof ReviewAnswerResponse>;
 
 export const HomeResponse = z.object({
   practice: Practice,

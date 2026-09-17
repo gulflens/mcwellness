@@ -6,6 +6,7 @@ import { mountPortalFamily } from './family';
 import { mountPortalHome } from './home';
 import { mountPortalMoney } from './money';
 import { mountPortalReports } from './reports';
+import { mountPortalReviewPrompt } from './review-prompt';
 import { mountPortalVisits } from './visits';
 
 export { mountPortalDoor, type PortalDoorOptions } from './door';
@@ -39,6 +40,8 @@ export function mountPortal(
   // The household's sixth screen (docs/SPEC/reports-v1.md section 7.3),
   // specified by the reports piece and mounted here with its siblings.
   mountPortalReports(api, now);
+  // The household's answer to the review line (section 3.1, amended 2026-09-17).
+  mountPortalReviewPrompt(api, now);
   // The practice's own side of the same module: household access and the asks.
   mountPortalAccess(api, now, options);
 }

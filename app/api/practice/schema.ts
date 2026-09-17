@@ -147,6 +147,18 @@ const Website = optional(200).refine(
   WEBSITE_MESSAGE,
 );
 
+/**
+ * The practice's public review page (migration 920,
+ * docs/SPEC/client-portal.md section 3.1 as amended 2026-09-17): what the
+ * portal's review line opens. The same light check as the website, because
+ * it is the same kind of thing — a page a browser can open, with its scheme.
+ */
+export const REVIEW_URL_MESSAGE = 'A review link starts https:// or http://.';
+const ReviewUrl = optional(400).refine(
+  (value) => value === null || /^https?:\/\/\S+$/.test(value),
+  REVIEW_URL_MESSAGE,
+);
+
 export const Practice = z.object({
   legalName: z.string(),
   legalNameAr: z.string().nullable(),
@@ -156,6 +168,11 @@ export const Practice = z.object({
   contactPhone: z.string().nullable(),
   contactEmail: z.string().nullable(),
   website: z.string().nullable(),
+  /**
+   * The review page the portal's review line opens, and null where the
+   * practice shows no such line (migration 920).
+   */
+  reviewUrl: z.string().nullable(),
   /** The corporate-tax registration, never the VAT one (migration 905). */
   taxRegistrationNumber: z.string().nullable(),
   licenceNumber: z.string().nullable(),
@@ -240,6 +257,13 @@ export const UpdatePracticeInput = z
     contactPhone: ContactPhone.optional(),
     contactEmail: ContactEmail.optional(),
     website: Website.optional(),
+    /**
+     * Optional too, but written whenever it is present — null included —
+     * because clearing the review link is how the owner switches the
+     * portal's review line off (migration 920). A body that never mentions
+     * it leaves it alone, as the three above.
+     */
+    reviewUrl: ReviewUrl.optional(),
     address: AddressInput.nullable(),
   })
   .refine((value) => !value.vatRegistered || value.vatTrn !== null, {

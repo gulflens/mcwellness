@@ -18,14 +18,20 @@
 --                    and writes their own client's, because a request is the
 --                    household's own sentence and it must be able to see that
 --                    the practice has it.
+--   portal_review_prompt
+--                    a household's answer to the review line (704). A contact
+--                    reads and writes their own client's; the three office
+--                    roles read. Nobody updates or deletes: the grant itself
+--                    admits neither verb, so no policy is written for them.
 --
 -- Erasure. Both tables pass their client's status through
 -- app.client_erasure_gate, exactly as db/policies/billing/ledger.sql and
 -- db/policies/client/readers.sql do, so an erased record's invitations and
 -- requests are visible only to the owner and the lead practitioner.
 --
--- Delete is granted to nobody on either table (700, 701): an invitation is
--- revoked and a request is handled, neither is removed.
+-- Delete is granted to nobody on any of the three tables (700, 701, 704): an
+-- invitation is revoked, a request is handled and an answer stands; none is
+-- removed.
 
 ------------------------------------------------------------------------------
 -- 1. Tenant isolation.
@@ -34,7 +40,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['portal_invite', 'portal_request'] loop
+  foreach t in array array['portal_invite', 'portal_request', 'portal_review_prompt'] loop
     execute format('drop policy if exists tenant_isolation on public.%I', t);
     execute format(
       'create policy tenant_isolation on public.%I for all to app_role '
@@ -121,5 +127,38 @@ create policy portal_request_handlers on public.portal_request
     and (
       app.actor_has_role('owner') or app.actor_has_role('admin')
       or app.actor_has_role('lead_practitioner')
+    )
+  );
+
+------------------------------------------------------------------------------
+-- 4. portal_review_prompt — a household answers for its own client; the
+--    office reads. The office does not answer on a household's behalf: a
+--    coordinator who wants the line gone clears the review link in Settings,
+--    which switches the feature off for everybody.
+------------------------------------------------------------------------------
+drop policy if exists portal_review_prompt_readers on public.portal_review_prompt;
+create policy portal_review_prompt_readers on public.portal_review_prompt
+  as restrictive for select to app_role using (
+    app.client_erasure_gate(app.client_status_for(client_id))
+    and (
+      app.actor_has_role('owner') or app.actor_has_role('admin')
+      or app.actor_has_role('lead_practitioner')
+      or (app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id))
+    )
+  );
+
+-- The answer names who gave it, and the trail attributes it to that person,
+-- so the row's contact has to be the person signed in, on this client: the
+-- route resolves it that way, and this says so at the table too.
+drop policy if exists portal_review_prompt_writers on public.portal_review_prompt;
+create policy portal_review_prompt_writers on public.portal_review_prompt
+  as restrictive for insert to app_role with check (
+    app.client_erasure_gate(app.client_status_for(client_id))
+    and app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id)
+    and exists (
+      select 1 from public.contact ct
+       where ct.id = portal_review_prompt.contact_id
+         and ct.client_id = portal_review_prompt.client_id
+         and ct.user_id = app.current_actor_id()
     )
   );

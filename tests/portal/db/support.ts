@@ -69,6 +69,8 @@ export const PORTAL = {
   strangerClient: '00000001-0000-4000-8000-000000000024',
 
   serviceType: '00000001-0000-4000-8000-000000000031',
+  /** The brain-map service, whose completed visit is a review milestone. */
+  brainMapService: '00000001-0000-4000-8000-000000000037',
   /** The person who drives to the visit. Never named to a household (section 7). */
   practitionerRow: '00000001-0000-4000-8000-000000000032',
   homeChildA: '00000001-0000-4000-8000-000000000033',
@@ -267,6 +269,12 @@ export async function seedPortalHousehold(
     [PORTAL.serviceType, IDS.tenantA],
   );
   await owner.query(
+    'insert into service_type (id, tenant_id, code, name, name_ar, duration_minutes, ' +
+      "delivery_modes) values ($1, $2, 'brain-map', 'Brain map', 'خريطة الدماغ', 90, " +
+      "'{studio}')",
+    [PORTAL.brainMapService, IDS.tenantA],
+  );
+  await owner.query(
     'insert into practitioner (id, tenant_id, user_id, display_name_ar) values ($1, $2, $3, $4)',
     [PORTAL.practitionerRow, IDS.tenantA, PORTAL.practitioner, 'ريحان'],
   );
@@ -305,6 +313,8 @@ export async function seedAppointment(
     inDays: number;
     hour: number;
     status: string;
+    /** The neurofeedback session unless a test says otherwise. */
+    serviceTypeId?: string;
   },
 ): Promise<void> {
   const home = PORTAL_HOMES[appointment.clientId];
@@ -319,7 +329,7 @@ export async function seedAppointment(
       IDS.tenantA,
       appointment.clientId,
       PORTAL.practitionerRow,
-      PORTAL.serviceType,
+      appointment.serviceTypeId ?? PORTAL.serviceType,
       home,
       windowStart(appointment.inDays, appointment.hour),
       appointment.status,

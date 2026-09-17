@@ -60,6 +60,10 @@ const WAIVED_FEE = '00000001-0000-4000-8000-0000000000b9';
 const FEE_FILS = 15_000;
 /** A contact row whose account is the practice's own admin: the founder's case. */
 const OFFICE_CONTACT = '00000001-0000-4000-8000-0000000000c1';
+/** The first child's brain map, a fortnight ago: the review line's milestone. */
+const BRAIN_MAP_A = '00000001-0000-4000-8000-0000000000d1';
+/** The adult's brain map, long enough ago that the line is not offered. */
+const OLD_BRAIN_MAP = '00000001-0000-4000-8000-0000000000d2';
 
 /**
  * The password every fixture chooses. Twelve characters and more, which is all
@@ -117,6 +121,22 @@ beforeAll(async () => {
     inDays: 4,
     hour: 15,
     status: 'confirmed',
+  });
+  await seedAppointment(h.owner, {
+    id: BRAIN_MAP_A,
+    clientId: PORTAL.childA,
+    inDays: -14,
+    hour: 16,
+    status: 'completed',
+    serviceTypeId: PORTAL.brainMapService,
+  });
+  await seedAppointment(h.owner, {
+    id: OLD_BRAIN_MAP,
+    clientId: PORTAL.adultClient,
+    inDays: -120,
+    hour: 16,
+    status: 'completed',
+    serviceTypeId: PORTAL.brainMapService,
   });
   await seedAppointment(h.owner, {
     id: STRANGER_VISIT,
@@ -309,6 +329,157 @@ describe('GET /api/portal/home', () => {
   });
 });
 
+/**
+ * The review line (section 3.1 as amended 2026-09-17; the owner's decision of
+ * 16 September 2026). The practice records its review page part-way through,
+ * so the first case proves the line is absent until it does.
+ */
+describe('the review line and its answer', () => {
+  async function reviewNotices(authId: string) {
+    const body = (await (await h.callAs('GET', '/api/portal/home', authId)).json()) as HomeResponse;
+    return { body, reviews: body.notices.filter((notice) => notice.kind === 'review_prompt') };
+  }
+
+  it('offers nothing while the practice has recorded no review page', async () => {
+    const { body, reviews } = await reviewNotices(PORTAL.motherAuth);
+    expect(body.practice.reviewUrl).toBeNull();
+    expect(reviews).toEqual([]);
+  });
+
+  it('offers the mother one line for the child’s brain map once the page is recorded', async () => {
+    await h.owner.query('update tenant set review_url = $1 where id = $2', [
+      'https://example.com/review',
+      IDS.tenantA,
+    ]);
+    const { body, reviews } = await reviewNotices(PORTAL.motherAuth);
+    expect(body.practice.reviewUrl).toBe('https://example.com/review');
+    expect(reviews).toEqual([
+      {
+        kind: 'review_prompt',
+        clientId: PORTAL.childA,
+        entityId: BRAIN_MAP_A,
+        detail: 'brain_map',
+      },
+    ]);
+  });
+
+  it('offers nothing for a brain map older than ninety days', async () => {
+    const { reviews } = await reviewNotices(PORTAL.adultAuth);
+    expect(reviews).toEqual([]);
+  });
+
+  it("offers a young person's own login nothing", async () => {
+    const { reviews } = await reviewNotices(PORTAL.minorAuth);
+    expect(reviews).toEqual([]);
+  });
+
+  it("refuses a young person's own login the answer, and records the refusal", async () => {
+    const before = await auditRows('refused', 'portal_review_prompt');
+    const res = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.minorAuth, {
+      clientId: PORTAL.childA,
+      milestoneKind: 'brain_map',
+      milestoneId: BRAIN_MAP_A,
+      outcome: 'dismissed',
+    });
+    expect(res.status).toBe(403);
+    expect(await auditRows('refused', 'portal_review_prompt')).toBe(before + 1);
+  });
+
+  it("answers 404 for a client that is not the household's, and writes nothing", async () => {
+    const res = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.motherAuth, {
+      clientId: PORTAL.strangerClient,
+      milestoneKind: 'brain_map',
+      milestoneId: BRAIN_MAP_A,
+      outcome: 'dismissed',
+    });
+    expect(res.status).toBe(404);
+    const rows = await h.owner.query('select id from portal_review_prompt');
+    expect(rows.rowCount).toBe(0);
+  });
+
+  it('answers 404 for a milestone the home is not offering, and writes nothing', async () => {
+    for (const milestone of [
+      // A visit of this child's that was not a brain map.
+      { milestoneKind: 'brain_map', milestoneId: PAST_A },
+      // An id nobody was shown.
+      { milestoneKind: 'package_complete', milestoneId: '00000001-0000-4000-8000-0000000000ff' },
+    ]) {
+      const res = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.motherAuth, {
+        clientId: PORTAL.childA,
+        ...milestone,
+        outcome: 'dismissed',
+      });
+      expect(res.status).toBe(404);
+    }
+    const rows = await h.owner.query('select id from portal_review_prompt');
+    expect(rows.rowCount).toBe(0);
+  });
+
+  it('refuses a member of the practice', async () => {
+    const res = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.adminAuth, {
+      clientId: PORTAL.childA,
+      milestoneKind: 'brain_map',
+      milestoneId: BRAIN_MAP_A,
+      outcome: 'dismissed',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('records "not now" once, with who answered, and shows the line no more', async () => {
+    const before = await auditRows('portal.review.answered', 'portal_review_prompt');
+    const res = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.motherAuth, {
+      clientId: PORTAL.childA,
+      milestoneKind: 'brain_map',
+      milestoneId: BRAIN_MAP_A,
+      outcome: 'dismissed',
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+
+    const rows = await h.owner.query<{ contact_id: string; outcome: string }>(
+      'select contact_id, outcome from portal_review_prompt where client_id = $1',
+      [PORTAL.childA],
+    );
+    expect(rows.rows).toEqual([{ contact_id: PORTAL.motherContact, outcome: 'dismissed' }]);
+    expect(await auditRows('portal.review.answered', 'portal_review_prompt')).toBe(before + 1);
+
+    // A second answer, from the same phone or another, is nothing new.
+    const again = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.motherAuth, {
+      clientId: PORTAL.childA,
+      milestoneKind: 'brain_map',
+      milestoneId: BRAIN_MAP_A,
+      outcome: 'opened',
+    });
+    expect(again.status).toBe(200);
+    expect((await h.owner.query('select id from portal_review_prompt')).rowCount).toBe(1);
+    expect(await auditRows('portal.review.answered', 'portal_review_prompt')).toBe(before + 1);
+
+    const { reviews } = await reviewNotices(PORTAL.motherAuth);
+    expect(reviews).toEqual([]);
+  });
+
+  it('refuses an answer that names no milestone, or a kind it does not know', async () => {
+    for (const body of [
+      { clientId: PORTAL.childA, milestoneKind: 'brain_map', outcome: 'opened' },
+      {
+        clientId: PORTAL.childA,
+        milestoneKind: 'star_rating',
+        milestoneId: BRAIN_MAP_A,
+        outcome: 'opened',
+      },
+      {
+        clientId: PORTAL.childA,
+        milestoneKind: 'brain_map',
+        milestoneId: BRAIN_MAP_A,
+        outcome: 'later',
+      },
+    ]) {
+      const res = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.motherAuth, body);
+      expect(res.status).toBe(400);
+    }
+  });
+});
+
 describe('GET /api/portal/visits', () => {
   it('splits the visits the way section 3.2 draws them', async () => {
     const res = await h.callAs('GET', '/api/portal/visits', PORTAL.motherAuth);
@@ -316,9 +487,13 @@ describe('GET /api/portal/visits', () => {
     const body = (await res.json()) as VisitsResponse;
 
     expect(body.upcoming.map((visit) => visit.id)).toEqual([FUTURE_A, FUTURE_B]);
-    // Most recent first: last week's, then the visit the used credit was
-    // spent on a month ago (db/../support.ts's seedMoney).
-    expect(body.past.map((visit) => visit.id)).toEqual([PAST_A, PORTAL_MONEY.consumedAt]);
+    // Most recent first: last week's, the brain map a fortnight ago, then the
+    // visit the used credit was spent on a month ago (support.ts's seedMoney).
+    expect(body.past.map((visit) => visit.id)).toEqual([
+      PAST_A,
+      BRAIN_MAP_A,
+      PORTAL_MONEY.consumedAt,
+    ]);
     expect(body.past[0]?.outcome).toBe('completed');
     // The proposal and the moved visit are in neither list.
     const every = [...body.upcoming, ...body.past].map((visit) => visit.id);

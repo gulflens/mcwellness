@@ -1,7 +1,21 @@
 import type { Hono } from 'hono';
+import {
+  REVIEW_PROMPT_DAYS,
+  reviewMilestones,
+  type AppointmentStatus,
+  type ReviewAnswer,
+  type ReviewMilestone,
+  type ReviewMilestoneKind,
+} from '../../../domain/portal';
 import { logReads } from '../_middleware/audit';
 import type { ApiEnv, Db } from '../_middleware/request-context';
-import { clientsFor, mayReadHousehold, readHousehold, type Household } from './household';
+import {
+  clientsFor,
+  mayReadHousehold,
+  moneyClientIds,
+  readHousehold,
+  type Household,
+} from './household';
 import { logHouseholdRefusal } from './refused';
 import { householdMoney } from './money';
 import { HomeResponse, type Notice } from './schema';
@@ -46,16 +60,130 @@ const REQUESTS_SQL =
   'where tenant_id = app.current_tenant_id() and client_id = any($1::uuid[]) ' +
   'order by created_at desc, id limit 20';
 
-/** Everything waiting on the household, in the order the screen reads it. */
+/**
+ * The review line (section 3.1 as amended 2026-09-17; the owner's decision of
+ * 16 September 2026; docs/superpowers/specs/2026-09-17-review-prompt-design.md).
+ *
+ * Three small reads and the domain's rule. The visits are the completed ones
+ * with their service's code, from a window one day wider than the rule's so
+ * the practice's own day, not UTC's, decides the edge; the credits carry the
+ * day each was used, in the practice's zone; the answers are the milestones
+ * this household has already been asked about. `reviewMilestones` does the
+ * rest and answers at most one per client.
+ *
+ * Only for the clients this person is shown money for: a review is asked of
+ * an adult, and the purchase and credit rows are refused to a young person's
+ * own login by `db/policies/portal/money.sql` in any case. Nothing at all is
+ * read where the practice has recorded no review page.
+ */
+const REVIEW_VISITS_SQL =
+  "select a.id, a.client_id, to_char(a.window_start at time zone $2, 'YYYY-MM-DD') as date, " +
+  'a.status::text as status, st.code as service_code ' +
+  'from appointment a join service_type st on st.id = a.service_type_id ' +
+  'where a.tenant_id = app.current_tenant_id() and a.client_id = any($1::uuid[]) ' +
+  "and a.status = 'completed' and a.window_start >= now() - ($3::int * interval '1 day')";
+
+const REVIEW_PURCHASES_SQL =
+  'select pp.id, pp.client_id from package_purchase pp ' +
+  "where pp.tenant_id = app.current_tenant_id() and pp.status = 'active' " +
+  'and pp.client_id = any($1::uuid[])';
+
+const REVIEW_CREDITS_SQL =
+  'select package_purchase_id, client_id, status::text as status, ' +
+  "to_char(consumed_at at time zone $2, 'YYYY-MM-DD') as consumed_on from entitlement " +
+  'where tenant_id = app.current_tenant_id() and client_id = any($1::uuid[]) ' +
+  'and package_purchase_id is not null';
+
+const REVIEW_ANSWERS_SQL =
+  'select milestone_kind, milestone_id from portal_review_prompt ' +
+  'where tenant_id = app.current_tenant_id() and client_id = any($1::uuid[])';
+
+export type ReviewState = {
+  /** The lines the home offers this household today, at most one per client. */
+  offered: ReviewMilestone[];
+  /** The milestones it has already answered, either way. */
+  answered: ReviewAnswer[];
+};
+
+/**
+ * Exported for the answer route, which refuses a milestone that is neither
+ * offered nor already answered: a household can only ever answer a line it
+ * was shown, so a forged id writes nothing.
+ */
+export async function reviewStateFor(db: Db, household: Household): Promise<ReviewState> {
+  if (household.practice.reviewUrl === null) return { offered: [], answered: [] };
+  const clientIds = moneyClientIds(household);
+  if (clientIds.length === 0) return { offered: [], answered: [] };
+  const zone = household.practice.timezone;
+
+  const [visits, purchases, credits, answers] = await Promise.all([
+    db.query<{
+      id: string;
+      client_id: string;
+      date: string;
+      status: AppointmentStatus;
+      service_code: string;
+    }>(REVIEW_VISITS_SQL, [clientIds, zone, REVIEW_PROMPT_DAYS + 1]),
+    db.query<{ id: string; client_id: string }>(REVIEW_PURCHASES_SQL, [clientIds]),
+    db.query<{
+      package_purchase_id: string;
+      client_id: string;
+      status: 'available' | 'consumed' | 'expired' | 'refunded' | 'waived';
+      consumed_on: string | null;
+    }>(REVIEW_CREDITS_SQL, [clientIds, zone]),
+    db.query<{ milestone_kind: ReviewMilestoneKind; milestone_id: string }>(REVIEW_ANSWERS_SQL, [
+      clientIds,
+    ]),
+  ]);
+
+  const answered = answers.rows.map((row) => ({ kind: row.milestone_kind, id: row.milestone_id }));
+  const offered = reviewMilestones(
+    {
+      visits: visits.rows.map((row) => ({
+        id: row.id,
+        clientId: row.client_id,
+        serviceCode: row.service_code,
+        status: row.status,
+        date: row.date,
+      })),
+      purchases: purchases.rows.map((row) => ({ id: row.id, clientId: row.client_id })),
+      entitlements: credits.rows.map((row) => ({
+        packagePurchaseId: row.package_purchase_id,
+        clientId: row.client_id,
+        status: row.status,
+        consumedOn: row.consumed_on,
+      })),
+      answered,
+    },
+    household.today,
+  );
+  return { offered, answered };
+}
+
+async function reviewNoticesFor(db: Db, household: Household): Promise<Notice[]> {
+  const { offered } = await reviewStateFor(db, household);
+  return offered.map((milestone) => ({
+    kind: 'review_prompt',
+    clientId: milestone.clientId,
+    entityId: milestone.id,
+    detail: milestone.kind,
+  }));
+}
+
+/**
+ * Everything waiting on the household, in the order the screen reads it, and
+ * then the review line, which waits on nobody and comes last.
+ */
 async function noticesFor(db: Db, household: Household): Promise<Notice[]> {
   const clientIds = household.clients.map((client) => client.id);
   if (clientIds.length === 0) return [];
 
-  const [wordings, requests] = await Promise.all([
+  const [wordings, requests, reviews] = await Promise.all([
     db.query<{ id: string; client_id: string; purpose: string }>(NEWER_WORDING_SQL, [clientIds]),
     db.query<{ id: string; client_id: string; kind: string; status: string }>(REQUESTS_SQL, [
       clientIds,
     ]),
+    reviewNoticesFor(db, household),
   ]);
 
   return [
@@ -71,6 +199,7 @@ async function noticesFor(db: Db, household: Household): Promise<Notice[]> {
       entityId: row.id,
       detail: row.kind,
     })),
+    ...reviews,
   ];
 }
 

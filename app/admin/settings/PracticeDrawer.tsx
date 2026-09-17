@@ -6,6 +6,7 @@ import {
   EMIRATES,
   type Practice,
   PracticeResponse,
+  REVIEW_URL_MESSAGE,
   VAT_TRN_DIGITS,
   WEBSITE_MESSAGE,
   WHATSAPP_MESSAGE,
@@ -49,6 +50,7 @@ type FieldErrors = {
   contactPhone?: string;
   contactEmail?: string;
   website?: string;
+  reviewUrl?: string;
   displayAddress?: string;
   latitude?: string;
   longitude?: string;
@@ -63,6 +65,7 @@ const FIELD_IDS: Record<keyof FieldErrors, string> = {
   contactPhone: 'practice-contact-phone',
   contactEmail: 'practice-contact-email',
   website: 'practice-website',
+  reviewUrl: 'practice-review-url',
   displayAddress: 'practice-address',
   latitude: 'practice-latitude',
   longitude: 'practice-longitude',
@@ -136,6 +139,9 @@ export function PracticeDrawer({
   const [contactPhone, setContactPhone] = useState(practice.contactPhone ?? '');
   const [contactEmail, setContactEmail] = useState(practice.contactEmail ?? '');
   const [website, setWebsite] = useState(practice.website ?? '');
+  // The page the portal's review line opens (migration 920). Empty means no
+  // line is shown to any household.
+  const [reviewUrl, setReviewUrl] = useState(practice.reviewUrl ?? '');
   const [displayAddress, setDisplayAddress] = useState(practice.address?.displayAddress ?? '');
   const [emirate, setEmirate] = useState<Emirate>(
     practice.address?.emirate ?? practice.defaultEmirate,
@@ -210,6 +216,10 @@ export function PracticeDrawer({
     if (typedWebsite.length > 0 && !/^https?:\/\/\S+$/.test(typedWebsite)) {
       errors.website = WEBSITE_MESSAGE;
     }
+    const typedReviewUrl = reviewUrl.trim();
+    if (typedReviewUrl.length > 0 && !/^https?:\/\/\S+$/.test(typedReviewUrl)) {
+      errors.reviewUrl = REVIEW_URL_MESSAGE;
+    }
     const typedAddress = displayAddress.trim();
     if (hasAddressOnRecord && typedAddress.length === 0) {
       errors.displayAddress = 'Give the address as it should appear on an invoice.';
@@ -274,6 +284,8 @@ export function PracticeDrawer({
           contactPhone: typedContactPhone,
           contactEmail: typedContactEmail,
           website: typedWebsite,
+          // Sent as null when cleared, so the server clears it too.
+          reviewUrl: typedReviewUrl.length === 0 ? null : typedReviewUrl,
           address,
         }),
       });
@@ -427,6 +439,21 @@ export function PracticeDrawer({
               clearFieldError('website');
             }}
             error={fieldErrors.website}
+          />
+
+          <Field
+            id={FIELD_IDS.reviewUrl}
+            label="Google review link (optional)"
+            hint="Shown on the household portal once after a brain map or a finished package. Leave it empty and no household is asked."
+            type="text"
+            inputMode="url"
+            maxLength={400}
+            value={reviewUrl}
+            onChange={(e) => {
+              setReviewUrl(e.target.value);
+              clearFieldError('reviewUrl');
+            }}
+            error={fieldErrors.reviewUrl}
           />
 
           <DateField

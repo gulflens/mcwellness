@@ -120,6 +120,7 @@ const ENTITY: Record<string, Text> = {
   // The client portal (docs/SPEC/client-portal.md section 9).
   portal_invite: t('portal invitation', 'دعوة البوابة'),
   portal_request: t('portal request', 'طلب من البوابة'),
+  portal_review_prompt: t('review line', 'سطر التقييم'),
   // The practitioner's phone (docs/SPEC/practitioner-phone.md section 10).
   // `drive_estimate` is deliberately absent: two location ids, an hour and a
   // duration are not a sentence anybody reads, so it takes the generic
@@ -755,6 +756,32 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
     }
     case 'portal_request.portal.request.handled':
       return pick(t(`${actor} handled a portal request`, `${actor} عالج طلب البوابة`), locale);
+    // The review line (docs/SPEC/client-portal.md section 3.1, amended
+    // 2026-09-17). The row trigger's insert and the route's action say the
+    // same thing; the action carries which way the household answered.
+    case 'portal_review_prompt.insert':
+    case 'portal_review_prompt.portal.review.answered':
+      return event.newValues?.outcome === 'opened'
+        ? pick(
+            t(
+              'The household opened the practice’s review page from the portal',
+              'فتحت الأسرة صفحة تقييم المركز من البوابة',
+            ),
+            locale,
+          )
+        : pick(
+            t('The household said not now to leaving a review', 'قالت الأسرة ليس الآن لترك تقييم'),
+            locale,
+          );
+    case 'portal_review_prompt.read':
+    case 'portal_review_prompt.list':
+      return pick(
+        t(
+          `${actor} read a household's answer to the review line`,
+          `${actor} اطّلع على رد الأسرة على سطر التقييم`,
+        ),
+        locale,
+      );
     case 'contact.portal.contact.corrected':
       return pick(
         t(

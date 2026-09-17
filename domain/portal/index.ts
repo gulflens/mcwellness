@@ -17,6 +17,21 @@ export type {
 export { reportsVisibleTo } from './reports';
 export type { ReportClient, ReportContact } from './reports';
 export { packageProgress } from './packages';
+export {
+  BRAIN_MAP_SERVICE_CODE,
+  REVIEW_MILESTONE_KINDS,
+  REVIEW_PROMPT_DAYS,
+  reviewMilestones,
+} from './reviewPrompt';
+export type {
+  ReviewAnswer,
+  ReviewEntitlement,
+  ReviewInput,
+  ReviewMilestone,
+  ReviewMilestoneKind,
+  ReviewPurchase,
+  ReviewVisit,
+} from './reviewPrompt';
 export type { PackageProgress, ProgressEntitlement, ProgressPurchase } from './packages';
 export {
   APPOINTMENT_STATUSES,

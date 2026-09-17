@@ -50,6 +50,7 @@ const PRACTICE = {
   contactPhone: null,
   contactEmail: null,
   website: null,
+  reviewUrl: null,
   // Off by default (migration 918): the practice runs its brain mapping and
   // neurofeedback on its own software, so a visit does not ask for readings
   // unless this is switched on.
@@ -308,6 +309,34 @@ describe('Practice settings — the save', () => {
       website: 'https://example.com',
     });
     expect(await screen.findByText('hello@example.com')).toBeTruthy();
+  });
+
+  it('saves the review link the portal opens, refuses one without a scheme, and clears it', async () => {
+    const { calls } = mount(() =>
+      json({ practice: { ...PRACTICE, reviewUrl: 'https://example.com/review' } }),
+    );
+    await openTheDrawer();
+    type('Google review link (optional)', 'g.page/synthetic-studio');
+    type('Why this changes', 'Asking households for a review.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(await screen.findByText('A review link starts https:// or http://.')).toBeTruthy();
+    expect(saves(calls)).toHaveLength(0);
+
+    type('Google review link (optional)', 'https://example.com/review');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({
+      reviewUrl: 'https://example.com/review',
+    });
+    expect(await screen.findByText('https://example.com/review')).toBeTruthy();
+
+    // Cleared: sent as null, so the server clears it too and the line stops.
+    await openTheDrawer();
+    type('Google review link (optional)', '');
+    type('Why this changes', 'Switching the review line off.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(2));
+    expect(JSON.parse(String(saves(calls)[1]?.init?.body))).toMatchObject({ reviewUrl: null });
   });
 
   it('will not save without a reason, and never reaches the API to find out', async () => {
