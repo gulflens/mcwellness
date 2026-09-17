@@ -70,6 +70,25 @@ const CASES: { name: string; event: AuditEvent; en: string; ar: string }[] = [
     ar: 'Hazel Harbour طلب من المركز، عبر البوابة، محو السجل',
   },
   {
+    name: 'a household opening the review page',
+    event: event({
+      entityType: 'portal_review_prompt',
+      action: 'portal.review.answered',
+      newValues: { milestoneKind: 'brain_map', outcome: 'opened' },
+    }),
+    en: 'The household opened the practice’s review page from the portal',
+    ar: 'فتحت الأسرة صفحة تقييم المركز من البوابة',
+  },
+  {
+    name: 'a household saying not now to a review',
+    event: event({
+      entityType: 'portal_review_prompt',
+      newValues: { milestone_kind: 'package_complete', outcome: 'dismissed' },
+    }),
+    en: 'The household said not now to leaving a review',
+    ar: 'قالت الأسرة ليس الآن لترك تقييم',
+  },
+  {
     name: 'the office marking a request handled',
     event: event({
       entityType: 'portal_request',

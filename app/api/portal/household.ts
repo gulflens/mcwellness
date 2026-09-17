@@ -49,7 +49,7 @@ export type Household = {
 };
 
 const PRACTICE_SQL =
-  'select t.legal_name, t.legal_name_ar, t.whatsapp_number, t.timezone, ' +
+  'select t.legal_name, t.legal_name_ar, t.whatsapp_number, t.review_url, t.timezone, ' +
   'u.preferred_locale from tenant t ' +
   'join app_user u on u.tenant_id = t.id and u.id = $1 ' +
   'where t.id = app.current_tenant_id()';
@@ -113,6 +113,7 @@ export async function readHousehold(db: Db, actor: Actor, now: Date): Promise<Ho
     legal_name: string;
     legal_name_ar: string | null;
     whatsapp_number: string | null;
+    review_url: string | null;
     timezone: string;
     preferred_locale: 'en' | 'ar';
   }>(PRACTICE_SQL, [actor.userId]);
@@ -133,6 +134,7 @@ export async function readHousehold(db: Db, actor: Actor, now: Date): Promise<Ho
       name: practiceRow.legal_name,
       nameAr: practiceRow.legal_name_ar,
       whatsappNumber: practiceRow.whatsapp_number,
+      reviewUrl: practiceRow.review_url,
       timezone: practiceRow.timezone,
     },
     locale: practiceRow.preferred_locale,

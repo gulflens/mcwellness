@@ -34,6 +34,11 @@ const OTHER_APPOINTMENT = '00000001-0000-4000-8000-000000000045';
 const CONSENT = '00000001-0000-4000-8000-000000000046';
 const WORDING = '00000001-0000-4000-8000-000000000047';
 const ERASURE_REQUEST = '00000001-0000-4000-8000-000000000048';
+const REVIEW_ANSWER = '00000001-0000-4000-8000-000000000049';
+const OTHER_REVIEW_ANSWER = '00000001-0000-4000-8000-00000000004a';
+/** Milestone ids: an appointment the mother's child had, and one the adult had. */
+const MILESTONE = '00000001-0000-4000-8000-00000000004b';
+const OTHER_MILESTONE = '00000001-0000-4000-8000-00000000004c';
 
 let owner: pg.Client;
 
@@ -50,6 +55,16 @@ beforeAll(async () => {
     'insert into portal_request (id, tenant_id, client_id, contact_id, kind) ' +
       "values ($1, $2, $3, $4, 'erasure')",
     [OTHER_REQUEST, IDS.tenantA, PORTAL.adultClient, PORTAL.adultContact],
+  );
+  await owner.query(
+    'insert into portal_review_prompt (id, tenant_id, client_id, contact_id, milestone_kind, ' +
+      "milestone_id, outcome) values ($1, $2, $3, $4, 'brain_map', $5, 'dismissed')",
+    [REVIEW_ANSWER, IDS.tenantA, PORTAL.childA, PORTAL.motherContact, MILESTONE],
+  );
+  await owner.query(
+    'insert into portal_review_prompt (id, tenant_id, client_id, contact_id, milestone_kind, ' +
+      "milestone_id, outcome) values ($1, $2, $3, $4, 'package_complete', $5, 'opened')",
+    [OTHER_REVIEW_ANSWER, IDS.tenantA, PORTAL.adultClient, PORTAL.adultContact, OTHER_MILESTONE],
   );
   await owner.query(
     'insert into portal_invite (id, tenant_id, client_id, contact_id, user_id, kind, ' +
@@ -286,6 +301,112 @@ describe('contact: a household corrects its own row and no other', () => {
           expect(result.rowCount).toBe(1);
         },
         'admin',
+      );
+    });
+  });
+});
+
+describe('portal_review_prompt: the household answers, the office reads', () => {
+  it('shows a contact their own answer and never another household’s', async () => {
+    await rolledBack(owner, async () => {
+      const rows = await asContact(owner, PORTAL.motherUser, () =>
+        owner.query<{ id: string }>('select id from portal_review_prompt'),
+      );
+      expect(rows.rows.map((r) => r.id)).toEqual([REVIEW_ANSWER]);
+    });
+  });
+
+  it('lets a contact answer for their own client, once per milestone', async () => {
+    await rolledBack(owner, async () => {
+      await asContact(owner, PORTAL.motherUser, () =>
+        owner.query(
+          'insert into portal_review_prompt (tenant_id, client_id, contact_id, milestone_kind, ' +
+            "milestone_id, outcome) values ($1, $2, $3, 'package_complete', $4, 'opened')",
+          [IDS.tenantA, PORTAL.childB, PORTAL.motherSecondContact, MILESTONE],
+        ),
+      );
+      // The same milestone again, from the same household: the unique key.
+      await setAuditContext(owner, PORTAL.motherUser);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          await owner.query('savepoint twice');
+          let code: string | undefined;
+          try {
+            await owner.query(
+              'insert into portal_review_prompt (tenant_id, client_id, contact_id, ' +
+                "milestone_kind, milestone_id, outcome) values ($1, $2, $3, 'brain_map', $4, 'opened')",
+              [IDS.tenantA, PORTAL.childA, PORTAL.motherContact, MILESTONE],
+            );
+          } catch (error) {
+            code = (error as { code?: string }).code;
+          } finally {
+            await owner.query('rollback to savepoint twice');
+          }
+          expect(code).toBe('23505');
+        },
+        'client_contact',
+      );
+    });
+  });
+
+  it('refuses a contact an answer for a client that is not theirs', async () => {
+    await rolledBack(owner, async () => {
+      await setAuditContext(owner, PORTAL.motherUser);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        () =>
+          expectRefused(
+            owner,
+            'insert into portal_review_prompt (tenant_id, client_id, contact_id, milestone_kind, ' +
+              "milestone_id, outcome) values ($1, $2, $3, 'brain_map', $4, 'dismissed')",
+            [IDS.tenantA, PORTAL.strangerClient, PORTAL.motherContact, OTHER_MILESTONE],
+          ),
+        'client_contact',
+      );
+    });
+  });
+
+  it('refuses the office an answer on a household’s behalf', async () => {
+    await rolledBack(owner, async () => {
+      await setAuditContext(owner, PORTAL.admin);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        () =>
+          expectRefused(
+            owner,
+            'insert into portal_review_prompt (tenant_id, client_id, contact_id, milestone_kind, ' +
+              "milestone_id, outcome) values ($1, $2, $3, 'brain_map', $4, 'dismissed')",
+            [IDS.tenantA, PORTAL.childA, PORTAL.motherContact, OTHER_MILESTONE],
+          ),
+        'admin',
+      );
+    });
+  });
+
+  it('lets the office read every answer, and nobody change or remove one', async () => {
+    await rolledBack(owner, async () => {
+      await setAuditContext(owner, PORTAL.leadPractitioner);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          const read = await owner.query('select id from portal_review_prompt order by id');
+          expect(read.rows.map((r) => r.id)).toEqual([REVIEW_ANSWER, OTHER_REVIEW_ANSWER]);
+          // No update or delete grant at all (migration 704), for anybody.
+          await expectRefused(
+            owner,
+            "update portal_review_prompt set outcome = 'opened' where id = $1",
+            [REVIEW_ANSWER],
+          );
+          await expectRefused(owner, 'delete from portal_review_prompt where id = $1', [
+            REVIEW_ANSWER,
+          ]);
+        },
+        'lead_practitioner',
       );
     });
   });
