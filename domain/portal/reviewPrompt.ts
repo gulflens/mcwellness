@@ -96,9 +96,7 @@ export function reviewMilestones(input: ReviewInput, today: IsoDate): ReviewMile
   const answered = new Set(input.answered.map((row) => `${row.kind}:${row.id}`));
 
   const maps: ReviewMilestone[] = input.visits
-    .filter(
-      (row) => row.status === 'completed' && row.serviceCode === BRAIN_MAP_SERVICE_CODE,
-    )
+    .filter((row) => row.status === 'completed' && row.serviceCode === BRAIN_MAP_SERVICE_CODE)
     .map((row) => ({ kind: 'brain_map', id: row.id, clientId: row.clientId, reachedOn: row.date }));
 
   const finished: ReviewMilestone[] = [];

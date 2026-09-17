@@ -96,9 +96,9 @@ describe('reviewMilestones', () => {
   });
 
   it('ignores a visit that was not completed, and a visit for any other service', () => {
-    expect(
-      reviewMilestones({ ...NOTHING, visits: [visit({ status: 'no_show' })] }, TODAY),
-    ).toEqual([]);
+    expect(reviewMilestones({ ...NOTHING, visits: [visit({ status: 'no_show' })] }, TODAY)).toEqual(
+      [],
+    );
     expect(
       reviewMilestones({ ...NOTHING, visits: [visit({ status: 'confirmed' })] }, TODAY),
     ).toEqual([]);
