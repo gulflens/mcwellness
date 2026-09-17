@@ -397,6 +397,24 @@ describe('the review line and its answer', () => {
     expect(rows.rowCount).toBe(0);
   });
 
+  it('answers 404 for a milestone the home is not offering, and writes nothing', async () => {
+    for (const milestone of [
+      // A visit of this child's that was not a brain map.
+      { milestoneKind: 'brain_map', milestoneId: PAST_A },
+      // An id nobody was shown.
+      { milestoneKind: 'package_complete', milestoneId: '00000001-0000-4000-8000-0000000000ff' },
+    ]) {
+      const res = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.motherAuth, {
+        clientId: PORTAL.childA,
+        ...milestone,
+        outcome: 'dismissed',
+      });
+      expect(res.status).toBe(404);
+    }
+    const rows = await h.owner.query('select id from portal_review_prompt');
+    expect(rows.rowCount).toBe(0);
+  });
+
   it('refuses a member of the practice', async () => {
     const res = await h.callAs('POST', '/api/portal/review-prompts', PORTAL.adminAuth, {
       clientId: PORTAL.childA,

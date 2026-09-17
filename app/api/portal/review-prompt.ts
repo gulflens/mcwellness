@@ -3,6 +3,7 @@ import type { Hono } from 'hono';
 import { canActor } from '../../../domain/shared';
 import { logAction } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
+import { reviewStateFor } from './home';
 import { readHousehold } from './household';
 import { logPortalRefusal } from './refused';
 import { AnswerReviewPromptInput, ReviewAnswerResponse } from './schema';
@@ -19,12 +20,13 @@ import { AnswerReviewPromptInput, ReviewAnswerResponse } from './schema';
  * idempotent rather than refused, because two phones pressing "not now" on
  * the same evening is not an error anybody needs to hear about.
  *
- * **What is not checked, and why.** The milestone id is not looked up in the
- * appointment or purchase tables. A household can only ever hide a line from
- * itself: the row is scoped to a client of its own, the policy refuses any
- * other, the unique key bounds it to one row per milestone, and the home
- * route computes the line from the visits and credits regardless of what is
- * written here. The shape of `POST /api/portal/requests` otherwise.
+ * **The milestone has to be one the home is offering, or one already
+ * answered.** The same computation the home makes (`reviewStateFor`) decides
+ * it, so an id the household was never shown — forged, another client's, a
+ * visit that was not a brain map — answers 404 and writes nothing: neither a
+ * row here nor an audit row, since no row was reached (the security review's
+ * finding). An already-answered milestone passes so a second press is the
+ * idempotent nothing above. The shape of `POST /api/portal/requests` otherwise.
  */
 export function mountPortalReviewPrompt(
   api: Hono<ApiEnv>,
@@ -61,6 +63,16 @@ export function mountPortalReviewPrompt(
       // offered. Refused, and on the trail, as a screen that is not theirs is.
       await logPortalRefusal(db, 'portal_review_prompt', randomUUID(), clientId);
       return c.json({ error: 'forbidden', requestId }, 403);
+    }
+
+    const state = await reviewStateFor(db, household);
+    const named = (row: { kind: string; id: string }) =>
+      row.kind === milestoneKind && row.id === milestoneId;
+    if (
+      !state.offered.some((row) => row.clientId === clientId && named(row)) &&
+      !state.answered.some(named)
+    ) {
+      return c.json({ error: 'not_found', requestId }, 404);
     }
 
     const id = randomUUID();

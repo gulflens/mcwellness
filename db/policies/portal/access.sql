@@ -147,9 +147,18 @@ create policy portal_review_prompt_readers on public.portal_review_prompt
     )
   );
 
+-- The answer names who gave it, and the trail attributes it to that person,
+-- so the row's contact has to be the person signed in, on this client: the
+-- route resolves it that way, and this says so at the table too.
 drop policy if exists portal_review_prompt_writers on public.portal_review_prompt;
 create policy portal_review_prompt_writers on public.portal_review_prompt
   as restrictive for insert to app_role with check (
     app.client_erasure_gate(app.client_status_for(client_id))
     and app.actor_has_role('client_contact') and app.actor_is_contact_of(client_id)
+    and exists (
+      select 1 from public.contact ct
+       where ct.id = portal_review_prompt.contact_id
+         and ct.client_id = portal_review_prompt.client_id
+         and ct.user_id = app.current_actor_id()
+    )
   );

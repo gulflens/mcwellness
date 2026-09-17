@@ -19,8 +19,24 @@
 -- purchase and is a plain uuid rather than a foreign key: it names one of two
 -- tables, and the answer must outlive neither row.
 --
+-- **Why `contact_id` beside `created_by`, and why `outcome`.** `created_by`
+-- is a sign-in; `contact_id` is the person on the record who answered, which
+-- is what the household's own timeline sentence and the office's reading of
+-- the trail attribute the answer to (the pattern of 701's `portal_request`),
+-- and the policy binds it to the person signed in. `outcome` is kept for one
+-- purpose: the narrative sentence says whether the household opened the page
+-- or said not now, and nothing else reads it. Both are ids and an enum, and
+-- neither leaves this server.
+--
+-- **Two closed sets as text with a check** rather than enum types, the
+-- shape 916's `enquiry` takes: each may gain a word when the owner names a
+-- third milestone, and a check is amended in a migration where an enum is
+-- extended in a way a rollback cannot undo.
+--
 -- **Append-only.** An answer is a statement about a moment. No update grant,
 -- no delete grant, and no guard trigger because nothing may change.
+-- `created_at` is therefore also when the answer was given; there is no
+-- second timestamp to disagree with it.
 --
 -- Needs: 000 (schema app, app.current_tenant_id, app.set_updated_at), 010
 -- (tenant), 020 (app_user), 060 (client, contact), 080 (app.audit_row), 097
@@ -40,7 +56,6 @@ create table portal_review_prompt (
   outcome         text not null
     constraint portal_review_prompt_outcome_check
     check (outcome in ('opened', 'dismissed')),
-  answered_at     timestamptz not null default now(),
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
   created_by      uuid references app_user (id),
@@ -53,6 +68,7 @@ create table portal_review_prompt (
 );
 comment on table public.portal_review_prompt is 'audited: client - carries client_id directly';
 
+create index portal_review_prompt_client_idx on portal_review_prompt (client_id, created_at);
 create index portal_review_prompt_contact_idx on portal_review_prompt (contact_id);
 create index portal_review_prompt_created_by_idx on portal_review_prompt (created_by);
 
@@ -82,8 +98,8 @@ $$;
 
 -- rollback:
 --   -- Remove the portal_review_prompt section from db/policies/portal/access.sql
---   -- first, as 700's own rollback says: the runner re-applies every policy
---   -- file on each migrate.
+--   -- first, and its entry in that file's tenant-isolation loop, as 700's own
+--   -- rollback says: the runner re-applies every policy file on each migrate.
 --   drop policy if exists tenant_isolation on public.portal_review_prompt;
 --   drop policy if exists portal_review_prompt_readers on public.portal_review_prompt;
 --   drop policy if exists portal_review_prompt_writers on public.portal_review_prompt;

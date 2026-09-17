@@ -128,7 +128,7 @@ _Amended 2026-09-17 (trunk round 52):_ `db/policies/portal/access.sql` gains `po
 
 **6.6 Migration `704_portal_review_prompt.sql` (trunk round 52, 2026-09-17).**
 
-`portal_review_prompt` — one row per answer to the review line: `id`, `tenant_id`, `client_id`, `contact_id` (who answered), `milestone_kind` (`brain_map` | `package_complete`, by check), `milestone_id` (the appointment or the package purchase; a plain uuid, because it names one of two tables and the answer must outlive neither row), `outcome` (`opened` | `dismissed`, by check), `answered_at`, the standard columns, `'audited: client'`, the audit trigger, composite foreign keys to `client` and `contact`, and `unique (tenant_id, client_id, milestone_kind, milestone_id)`: one answer per milestone per client, whichever adult of the household gave it. Append-only: select and insert are granted and nothing else. Rollback block.
+`portal_review_prompt` — one row per answer to the review line: `id`, `tenant_id`, `client_id`, `contact_id` (who answered), `milestone_kind` (`brain_map` | `package_complete`, by check), `milestone_id` (the appointment or the package purchase; a plain uuid, because it names one of two tables and the answer must outlive neither row), `outcome` (`opened` | `dismissed`, by check, kept for the narrative sentence alone), the standard columns (`created_at` is when the answer was given), `'audited: client'`, the audit trigger, composite foreign keys to `client` and `contact`, and `unique (tenant_id, client_id, milestone_kind, milestone_id)`: one answer per milestone per client, whichever adult of the household gave it. Append-only: select and insert are granted and nothing else. Rollback block.
 
 ## 7. API (`app/api/portal/`)
 

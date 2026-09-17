@@ -369,6 +369,25 @@ describe('portal_review_prompt: the household answers, the office reads', () => 
     });
   });
 
+  it('refuses an answer that names a contact other than the person signed in', async () => {
+    await rolledBack(owner, async () => {
+      await setAuditContext(owner, PORTAL.motherUser);
+      await asApiRole(
+        owner,
+        IDS.tenantA,
+        () =>
+          expectRefused(
+            owner,
+            'insert into portal_review_prompt (tenant_id, client_id, contact_id, milestone_kind, ' +
+              "milestone_id, outcome) values ($1, $2, $3, 'brain_map', $4, 'dismissed')",
+            // The father is on the same record and has no login at all.
+            [IDS.tenantA, PORTAL.childA, PORTAL.fatherContact, OTHER_MILESTONE],
+          ),
+        'client_contact',
+      );
+    });
+  });
+
   it('refuses the office an answer on a household’s behalf', async () => {
     await rolledBack(owner, async () => {
       await setAuditContext(owner, PORTAL.admin);

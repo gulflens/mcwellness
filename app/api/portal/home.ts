@@ -3,6 +3,8 @@ import {
   REVIEW_PROMPT_DAYS,
   reviewMilestones,
   type AppointmentStatus,
+  type ReviewAnswer,
+  type ReviewMilestone,
   type ReviewMilestoneKind,
 } from '../../../domain/portal';
 import { logReads } from '../_middleware/audit';
@@ -96,10 +98,22 @@ const REVIEW_ANSWERS_SQL =
   'select milestone_kind, milestone_id from portal_review_prompt ' +
   'where tenant_id = app.current_tenant_id() and client_id = any($1::uuid[])';
 
-async function reviewNoticesFor(db: Db, household: Household): Promise<Notice[]> {
-  if (household.practice.reviewUrl === null) return [];
+export type ReviewState = {
+  /** The lines the home offers this household today, at most one per client. */
+  offered: ReviewMilestone[];
+  /** The milestones it has already answered, either way. */
+  answered: ReviewAnswer[];
+};
+
+/**
+ * Exported for the answer route, which refuses a milestone that is neither
+ * offered nor already answered: a household can only ever answer a line it
+ * was shown, so a forged id writes nothing.
+ */
+export async function reviewStateFor(db: Db, household: Household): Promise<ReviewState> {
+  if (household.practice.reviewUrl === null) return { offered: [], answered: [] };
   const clientIds = moneyClientIds(household);
-  if (clientIds.length === 0) return [];
+  if (clientIds.length === 0) return { offered: [], answered: [] };
   const zone = household.practice.timezone;
 
   const [visits, purchases, credits, answers] = await Promise.all([
@@ -122,7 +136,8 @@ async function reviewNoticesFor(db: Db, household: Household): Promise<Notice[]>
     ]),
   ]);
 
-  return reviewMilestones(
+  const answered = answers.rows.map((row) => ({ kind: row.milestone_kind, id: row.milestone_id }));
+  const offered = reviewMilestones(
     {
       visits: visits.rows.map((row) => ({
         id: row.id,
@@ -138,10 +153,16 @@ async function reviewNoticesFor(db: Db, household: Household): Promise<Notice[]>
         status: row.status,
         consumedOn: row.consumed_on,
       })),
-      answered: answers.rows.map((row) => ({ kind: row.milestone_kind, id: row.milestone_id })),
+      answered,
     },
     household.today,
-  ).map((milestone) => ({
+  );
+  return { offered, answered };
+}
+
+async function reviewNoticesFor(db: Db, household: Household): Promise<Notice[]> {
+  const { offered } = await reviewStateFor(db, household);
+  return offered.map((milestone) => ({
     kind: 'review_prompt',
     clientId: milestone.clientId,
     entityId: milestone.id,

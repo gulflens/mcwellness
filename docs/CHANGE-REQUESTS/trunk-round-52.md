@@ -92,13 +92,34 @@ to 703 do; its `-- Needs:` names 000, 010, 020, 060, 080, 097 and 099 and
 nothing above its own number. `pnpm audit:migrations` finds no merged file
 edited; each rollback block runs as pasted.
 
-### Decisions written down for the reviews
+### The three reviews, and what they changed
 
-- **The milestone id is not verified against the appointment or purchase
-  tables.** A household can only ever hide a line from itself: the row is
-  scoped to a client of its own, the policy refuses any other, the unique
-  key bounds it to one row per milestone, and the home route computes the
-  line from the visits and credits regardless of what is written here.
+`compliance-reviewer`, `security-reviewer` and `schema-reviewer` each passed
+the round; every finding was taken before the pull request opened:
+
+- **An answer names a line the home is offering** (the security review's
+  one medium finding). The route first computed nothing and accepted any
+  uuid, so a signed-in household could write permanent rows — the table's,
+  the trigger's and the action's — for milestones it was never shown, one
+  per random id. Now `reviewStateFor`, the home's own computation, decides:
+  a milestone neither offered nor already answered is a 404 and nothing is
+  written. Tested with a forged id. It also makes "never a young person's
+  own login" true twice over, since that login is offered nothing.
+- **The answering contact is the person signed in**, at the table as well
+  as in the route: the writers policy binds `contact_id` to a contact row
+  on that client carrying `app.current_actor_id()`. Tested.
+- **704's header says why `contact_id` sits beside `created_by` and why
+  `outcome` is kept** (the compliance review's two stated-need gaps), and
+  why the two closed sets are text with a check (the schema review). The
+  redundant `answered_at` is gone; `created_at` is when the answer was
+  given. The `(client_id, created_at)` index the neighbours carry is added,
+  and the rollback prose names the isolation loop's entry.
+- **The vendor row names the owner and says "whichever host"**, since the
+  column accepts any page with a scheme and the register must cover the
+  destination the owner actually records.
+
+Decisions written down for the reviews:
+
 - **A second answer is idempotent, not refused.** Two phones pressing "not
   now" on the same evening is not an error anybody needs to hear about; the
   action row is written once, on the insert that landed.
