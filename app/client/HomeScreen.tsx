@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { HomeResponse, MoneySummary, Notice, PortalClient } from '../api/portal/schema';
+import { useAuth } from '../shell/auth/AuthContext';
 import { Note } from '../shell/components/Controls';
 import { ClientHeading, Screen, Sections } from './Layout';
 import { PHRASES, useWords } from './i18n';
@@ -17,6 +19,15 @@ import { usePortalHome } from './PortalRoot';
  * browser and opened in the person's own WhatsApp — a hand-off in the sending
  * seam's sense (docs/SEAMS.md), with nothing leaving this server. A practice
  * that has recorded no number gets the sentence and no button.
+ *
+ * **The review line** (section 3.1 as amended 2026-09-17; the owner's decision
+ * of 16 September 2026). One sentence and two answers, after what is waiting
+ * on the household and before how to ask for a visit; never a heading, never
+ * a colour, never twice for one milestone. "Leave a review" opens the
+ * practice's own Google page in a new tab — a hand-off like the WhatsApp
+ * button, with no referrer — and either answer is written once through
+ * `POST /api/portal/review-prompts` and removed from this screen at once. A
+ * write that fails is left silent: the line simply returns next time.
  */
 
 /** The `wa.me` link, built at the moment it is pressed and never rendered early. */
@@ -72,9 +83,59 @@ function NoticeLine({ notice }: { notice: Notice }) {
   );
 }
 
+function ReviewLine({
+  notice,
+  reviewUrl,
+  onAnswered,
+}: {
+  notice: Notice;
+  reviewUrl: string;
+  onAnswered: (notice: Notice) => void;
+}) {
+  const words = useWords();
+  const { apiFetch } = useAuth();
+
+  function answer(outcome: 'opened' | 'dismissed'): void {
+    onAnswered(notice);
+    void apiFetch('/api/portal/review-prompts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        clientId: notice.clientId,
+        milestoneKind: notice.detail,
+        milestoneId: notice.entityId,
+        outcome,
+      }),
+    }).catch(() => undefined);
+  }
+
+  return (
+    <div className="portal__review">
+      <p>{words.t('reviewInvite')}</p>
+      <p className="portal__actions">
+        <a
+          className="button button--quiet"
+          href={reviewUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => answer('opened')}
+        >
+          {words.t('leaveReview')}
+        </a>
+        <button type="button" className="button button--quiet" onClick={() => answer('dismissed')}>
+          {words.t('notNow')}
+        </button>
+      </p>
+    </div>
+  );
+}
+
 export function HomeScreen() {
   const words = useWords();
   const home = usePortalHome();
+  // Milestones answered on this screen, so a line goes the moment it is
+  // answered rather than on the next load. Keyed the way the list keys them.
+  const [answered, setAnswered] = useState<readonly string[]>([]);
 
   if (home.kind === 'loading') return <Note>{words.t('loading')}</Note>;
   if (home.kind === 'refused') return <Note tone="critical">{words.t('notYours')}</Note>;
@@ -84,6 +145,16 @@ export function HomeScreen() {
   const next = data.nextVisit;
   const nextClient = data.clients.find((client) => client.id === next?.clientId) ?? null;
   const several = data.clients.length > 1;
+  const waiting = data.notices.filter((notice) => notice.kind !== 'review_prompt');
+  const reviewUrl = data.practice.reviewUrl;
+  const reviews =
+    reviewUrl === null
+      ? []
+      : data.notices.filter(
+          (notice) =>
+            notice.kind === 'review_prompt' &&
+            !answered.includes(`${notice.detail}-${notice.entityId}`),
+        );
 
   return (
     <Screen>
@@ -126,19 +197,39 @@ export function HomeScreen() {
         </section>
       ) : null}
 
-      {data.notices.length > 0 ? (
+      {waiting.length > 0 ? (
         <section className="portal__section">
           <h2>{words.t('waitingOnYou')}</h2>
           <Sections
             clients={data.clients}
             render={(client: PortalClient) => {
-              const notices = data.notices.filter((notice) => notice.clientId === client.id);
+              const notices = waiting.filter((notice) => notice.clientId === client.id);
               return notices.length === 0 ? null : (
                 <div className="portal__list">
                   {notices.map((notice) => (
                     <NoticeLine key={`${notice.kind}-${notice.entityId}`} notice={notice} />
                   ))}
                 </div>
+              );
+            }}
+          />
+        </section>
+      ) : null}
+
+      {reviews.length > 0 && reviewUrl !== null ? (
+        <section className="portal__section">
+          <Sections
+            clients={data.clients}
+            render={(client: PortalClient) => {
+              const notice = reviews.find((row) => row.clientId === client.id);
+              return notice === undefined ? null : (
+                <ReviewLine
+                  notice={notice}
+                  reviewUrl={reviewUrl}
+                  onAnswered={(row) =>
+                    setAnswered((prev) => [...prev, `${row.detail}-${row.entityId}`])
+                  }
+                />
               );
             }}
           />

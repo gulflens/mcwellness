@@ -106,6 +106,15 @@ export const WORDS = {
   ),
   requestOpen: t('The practice has your request.', 'استلم المركز طلبك.'),
   requestHandled: t('The practice has dealt with your request.', 'عالج المركز طلبك.'),
+  // The review line (section 3.1, the owner's decision of 16 September 2026):
+  // one sentence, offered once per milestone, and two words for each answer.
+  // It is an offer, not a nudge — "if you would like to" is the whole tone.
+  reviewInvite: t(
+    'If you would like to, you can leave us a review on Google.',
+    'إن أحببت، يمكنك ترك تقييم لنا على غوغل.',
+  ),
+  leaveReview: t('Leave a review', 'اترك تقييمًا'),
+  notNow: t('Not now', 'ليس الآن'),
 
   // Money, in words before figures.
   owed: t('Owed', 'المستحق'),

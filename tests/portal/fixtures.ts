@@ -36,6 +36,7 @@ export const HOME: HomeResponse = {
     name: 'Synthetic Wellness Studio',
     nameAr: 'استوديو صناعي للعافية',
     whatsappNumber: '+971500000024',
+    reviewUrl: null,
     timezone: 'Asia/Dubai',
   },
   locale: 'en',
@@ -66,6 +67,19 @@ export const HOME: HomeResponse = {
       entityId: '00000001-0000-4000-8000-000000000041',
       detail: 'erasure',
     },
+  ],
+};
+
+/** A brain-map visit the household has not yet been asked about. */
+export const BRAIN_MAP_VISIT = '00000001-0000-4000-8000-0000000000a9';
+
+/** The same household, with the practice's review page recorded and a milestone reached. */
+export const HOME_WITH_REVIEW: HomeResponse = {
+  ...HOME,
+  practice: { ...HOME.practice, reviewUrl: 'https://example.com/review' },
+  notices: [
+    ...HOME.notices,
+    { kind: 'review_prompt', clientId: CHILD_A, entityId: BRAIN_MAP_VISIT, detail: 'brain_map' },
   ],
 };
 

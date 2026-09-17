@@ -8,10 +8,12 @@ import { MoneyScreen } from '../../app/client/MoneyScreen';
 import { VisitsScreen } from '../../app/client/VisitsScreen';
 import {
   AGREEMENTS,
+  BRAIN_MAP_VISIT,
   CHILD_A,
   FAMILY,
   HOME,
   HOME_NO_MONEY,
+  HOME_WITH_REVIEW,
   MONEY,
   MOTHER_CONTACT,
   VISITS,
@@ -107,6 +109,81 @@ describe('Home', () => {
       answers: { '/api/portal/home': () => json({ error: 'internal' }, 500) },
     });
     expect(await screen.findByText('That could not be loaded. Try again.')).toBeTruthy();
+  });
+
+  /** A body posted to the review route, parsed. */
+  function reviewAnswers(calls: { path: string; init?: RequestInit }[]) {
+    return calls
+      .filter((call) => call.path === '/api/portal/review-prompts')
+      .map((call) => JSON.parse(String(call.init?.body)) as Record<string, string>);
+  }
+
+  it('offers the review line once, with the link in a new tab, and posts "not now" when pressed', async () => {
+    const { calls } = mountPortal(<HomeScreen />, {
+      answers: {
+        '/api/portal/home': () => json(HOME_WITH_REVIEW),
+        '/api/portal/review-prompts': () => json({ ok: true }),
+      },
+    });
+    expect(
+      await screen.findByText('If you would like to, you can leave us a review on Google.'),
+    ).toBeTruthy();
+    // The line is an offer, not something waiting on the household.
+    expect(screen.getByText('Waiting on you')).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Leave a review' });
+    expect(link.getAttribute('href')).toBe('https://example.com/review');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    await waitFor(() => expect(reviewAnswers(calls)).toHaveLength(1));
+    expect(reviewAnswers(calls)[0]).toEqual({
+      clientId: CHILD_A,
+      milestoneKind: 'brain_map',
+      milestoneId: BRAIN_MAP_VISIT,
+      outcome: 'dismissed',
+    });
+    // Gone the moment it is answered, not on the next load.
+    expect(screen.queryByRole('button', { name: 'Not now' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Leave a review' })).toBeNull();
+  });
+
+  it('records that the review page was opened', async () => {
+    const { calls } = mountPortal(<HomeScreen />, {
+      answers: {
+        '/api/portal/home': () => json(HOME_WITH_REVIEW),
+        '/api/portal/review-prompts': () => json({ ok: true }),
+      },
+    });
+    fireEvent.click(await screen.findByRole('link', { name: 'Leave a review' }));
+    await waitFor(() => expect(reviewAnswers(calls)).toHaveLength(1));
+    expect(reviewAnswers(calls)[0]?.outcome).toBe('opened');
+    expect(screen.queryByRole('link', { name: 'Leave a review' })).toBeNull();
+  });
+
+  it('offers no review line where the practice has recorded no review page', async () => {
+    mountPortal(<HomeScreen />, {
+      answers: {
+        '/api/portal/home': () =>
+          json({
+            ...HOME_WITH_REVIEW,
+            practice: { ...HOME_WITH_REVIEW.practice, reviewUrl: null },
+          }),
+      },
+    });
+    expect(await screen.findByText('Your next visit')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Leave a review' })).toBeNull();
+    expect(screen.queryByText(/leave us a review/)).toBeNull();
+  });
+
+  it('offers the review line in Arabic', async () => {
+    mountPortal(<HomeScreen />, {
+      locale: 'ar',
+      answers: { '/api/portal/home': () => json(HOME_WITH_REVIEW) },
+    });
+    expect(await screen.findByText('إن أحببت، يمكنك ترك تقييم لنا على غوغل.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'اترك تقييمًا' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'ليس الآن' })).toBeTruthy();
   });
 });
 

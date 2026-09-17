@@ -314,6 +314,13 @@
   gap: var(--s-3);
 }
 
+/* The review line: a sentence and two quiet answers, no heading, no rule. */
+.portal__review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
 .portal__form {
   display: flex;
   flex-direction: column;
