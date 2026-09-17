@@ -82,6 +82,7 @@ const PRACTICE = {
   contactPhone: null,
   contactEmail: null,
   website: null,
+  reviewUrl: null,
   defaultEmirate: 'DXB',
   timezone: 'Asia/Dubai',
   address: null,

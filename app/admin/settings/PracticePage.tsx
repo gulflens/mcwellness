@@ -229,6 +229,12 @@ export function PracticePage() {
               </Fact>
               <Fact label="Email on documents">{text(practice.contactEmail)}</Fact>
               <Fact label="Website on documents">{text(practice.website)}</Fact>
+              {/*
+                The page the portal's review line opens (migration 920,
+                docs/SPEC/client-portal.md section 3.1). Empty means no
+                household is asked.
+              */}
+              <Fact label="Google review link">{text(practice.reviewUrl)}</Fact>
             </dl>
           </section>
 

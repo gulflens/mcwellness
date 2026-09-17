@@ -311,6 +311,49 @@ describe('the practice’s contact details', () => {
 });
 
 /**
+ * `tenant.review_url` (migration 920): the page the portal's review line
+ * opens. Unlike the three footer fields above it, a save that carries it as
+ * null clears it, because clearing the link is how the review line is
+ * switched off for every household; a save that never mentions it leaves it
+ * alone, as the three are.
+ */
+describe('the practice’s review link', () => {
+  it('is absent until somebody records it, and switches nothing on', async () => {
+    expect((await read(authIdOf(0))).reviewUrl).toBeNull();
+  });
+
+  it('is saved, left alone by a save that omits it, and cleared by one that sends null', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Asking households for a review after a brain map.',
+      body: await form({ reviewUrl: 'https://example.com/review' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await read(authIdOf(0))).reviewUrl).toBe('https://example.com/review');
+
+    await call('PATCH', authIdOf(0), {
+      reason: 'An ordinary save that never mentions the link.',
+      body: await form({ legalNameAr: 'استوديو العافية التجريبي' }),
+    });
+    expect((await read(authIdOf(0))).reviewUrl).toBe('https://example.com/review');
+
+    const cleared = await call('PATCH', authIdOf(0), {
+      reason: 'Switching the review line off.',
+      body: await form({ reviewUrl: null }),
+    });
+    expect(cleared.status).toBe(200);
+    expect((await read(authIdOf(0))).reviewUrl).toBeNull();
+  });
+
+  it('refuses a link with no scheme', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Trying a value the column would refuse.',
+      body: await form({ reviewUrl: 'g.page/synthetic-studio' }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+/**
  * `tenant.record_readings` (migration 918): whether a visit asks the
  * practitioner to enter signal, artefact and reward figures, off by default
  * because the practice now takes its readings on its own software instead
