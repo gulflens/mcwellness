@@ -25,7 +25,7 @@ Status: **v1 — owner decisions resolved. Ready to derive the trunk schema.**
 ## 2. Identity, tenancy and access
 
 ### `tenant`
-The practice. One row. Legal name, TRN (VAT), default emirate, timezone, studio `location_id`, and `whatsapp_number` (E.164, nullable): the number a household messages the practice on, shown on the client portal's Home as a `wa.me` hand-off and written from Practice settings by the owner or an admin (migration 910, `SPEC/client-portal.md` section 6.4).
+The practice. One row. Legal name, TRN (VAT), default emirate, timezone, studio `location_id`, and `whatsapp_number` (E.164, nullable): the number a household messages the practice on, shown on the client portal's Home as a `wa.me` hand-off and written from Practice settings by the owner or an admin (migration 910, `SPEC/client-portal.md` section 6.4). Since 2026-09-17, `review_url` (nullable, a URL with its scheme): the practice's public review page, which the portal's review line opens in a new tab after a brain map or a finished package; null switches the line off for every household (migration 920, `SPEC/client-portal.md` sections 3.1 and 6.4).
 
 ### `user`
 Anyone who logs in — staff or client contact. Auth record lives in Supabase Auth; this table holds the profile. `auth_id`, `display_name`, `email`, `phone`, `preferred_locale` (`en`/`ar`), `status` (`active`/`suspended`/`archived`).
@@ -132,6 +132,11 @@ Single use, revocable, and never deleted: a link is closed, not removed, so the 
 One row per ask a household makes of the practice (`SPEC/client-portal.md` section 6.2). `client_id`, `contact_id` (who asked), `kind` (`consent_withdrawal` | `erasure`), `consent_id` (required when the kind is a withdrawal, null otherwise, by check), `note` (200 characters, boundary-cleaned), `status` (`open` | `handled`), `handled_at`, `handled_by`.
 
 Append-only but for those two handling columns, and no delete grant at all. Asking is not doing: the withdrawal or the erasure itself is carried out through the record's own screens, and this row is the request and the fact that it was handled.
+
+### `portal_review_prompt`
+One row per answer a household gives the portal's review line (`SPEC/client-portal.md` sections 3.1 and 6.6; added 2026-09-17, migration 704). `client_id`, `contact_id` (who answered), `milestone_kind` (`brain_map` | `package_complete`), `milestone_id` (the completed brain-map appointment or the finished package purchase; a plain uuid, not a foreign key, so the answer outlives neither row), `outcome` (`opened` | `dismissed`), `answered_at`. Unique per client and milestone, whichever adult answered.
+
+Append-only: select and insert only, for a contact of the client; the three office roles read. The milestone itself is never stored — `domain/portal/reviewPrompt.ts` reads it off the visits and the credits each time — so this table is the only state the feature has: which milestones a household has already been asked about.
 
 ---
 
