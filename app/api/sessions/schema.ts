@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EVENT_PAYLOAD_SCHEMAS } from '@domain/session';
+import { EVENT_PAYLOAD_SCHEMAS, PAST_SESSION_BILLING, PAST_SESSION_MINUTES } from '@domain/session';
 
 /**
  * The shapes POST /api/sessions/:id/events accepts and returns. Imported by
@@ -395,3 +395,78 @@ export const EXPORT_REFUSAL_CODES = [
   'export_not_filed',
 ] as const;
 export type ExportRefusalCode = (typeof EXPORT_REFUSAL_CODES)[number];
+
+// POST /api/sessions/from-records (app/api/sessions/from-records.ts): a visit
+// that happened before the app, logged by the office from the practice's
+// records (docs/superpowers/specs/2026-09-16-past-sessions-design.md).
+export const RecordPastSessionRequest = z.object({
+  clientId: z.uuid(),
+  practitionerId: z.uuid(),
+  serviceTypeId: z.uuid(),
+  locationId: z.uuid(),
+  deliveryMode: z.enum(['home', 'studio', 'remote']),
+  /** The day the visit happened, YYYY-MM-DD in the practice's zone. */
+  on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** When it started, HH:MM on the clock. */
+  startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  /** How long it ran; the service's own length when left out. */
+  durationMinutes: z
+    .number()
+    .int()
+    .min(PAST_SESSION_MINUTES.min)
+    .max(PAST_SESSION_MINUTES.max)
+    .optional(),
+  billing: z.enum(PAST_SESSION_BILLING),
+});
+export type RecordPastSessionRequest = z.infer<typeof RecordPastSessionRequest>;
+
+/** Why a past visit was refused before anything was written. */
+export const RECORD_PAST_BAD_REQUEST_CODES = [
+  'invalid_request',
+  'reason_required',
+  'not_a_day',
+  'in_the_future',
+  'too_old',
+  'client_not_found',
+  'practitioner_not_found',
+  'practitioner_inactive',
+  'service_type_not_found',
+  'service_type_inactive',
+  'delivery_mode_unavailable',
+  'location_not_found',
+  'location_mismatch',
+] as const;
+export type RecordPastBadRequestCode = (typeof RECORD_PAST_BAD_REQUEST_CODES)[number];
+
+/**
+ * Why a past visit was blocked: the gate's own reasons, the ledger's one
+ * (no credit valid on that day, and the visit not marked settled), or the
+ * calendar's (the practitioner or the client already had a visit then).
+ */
+export const RECORD_PAST_BLOCK_REASONS = [
+  'not_authorised',
+  'client_inactive',
+  'consent_missing_participation',
+  'consent_missing_minor_participation',
+  'consent_missing_home_visit',
+  'consent_missing_health_data',
+  'date_of_birth_unknown',
+  'no_credit_available',
+  'practitioner_overlap',
+  'client_overlap',
+] as const;
+export type RecordPastBlockReason = (typeof RECORD_PAST_BLOCK_REASONS)[number];
+
+export const RecordPastSessionResponse = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('recorded'),
+    sessionId: z.uuid(),
+    appointmentId: z.uuid(),
+    billed: z.enum(PAST_SESSION_BILLING),
+  }),
+  z.object({
+    status: z.literal('blocked'),
+    reasons: z.array(z.enum(RECORD_PAST_BLOCK_REASONS)),
+  }),
+]);
+export type RecordPastSessionResponse = z.infer<typeof RecordPastSessionResponse>;

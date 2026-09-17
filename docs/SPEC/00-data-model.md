@@ -177,8 +177,12 @@ signal_quality_score numeric                     -- feeds the ribbon
 setup_photo_document_id                          -- RETIRED 2026-09-09: read-only history; nothing can set it
 closed_at, closed_by                             -- after which the record is immutable
 version, supersedes_id, amendment_reason
+recorded_from       'device' | 'records'         -- 2026-09-16: the phone at the door, or the office from the records
+settled_outside_app                              -- 2026-09-16: paid for before the app; only ever true on a records row
 ```
 "Session 12 of 30" is derived from history, never stored.
+
+_Amended in trunk round 51, 2026-09-16 (migration 966, `docs/superpowers/specs/2026-09-16-past-sessions-design.md`)._ A visit that happened before the app is logged by the office as a `records` row: `completed` on insert, with its own appointment, no events, and `closed_at` the moment it was logged. Billing reads the two columns: a `records` row settled outside the app is charged nothing; one not so marked takes the oldest credit valid on the visit's own day (`checked_in_at` in the practice's zone), and the insert is refused when there is none, so no invoice is ever invented for a day that has passed. A `device` row is charged as before.
 
 ### `report`
 A signed report. `client_id`, `kind` (`baseline`, `progress`, `completion`, `school`), `covers_from`, `covers_to`, `authored_by`, `reviewed_by`, `signed_by` (must hold `can_sign_report`), `signed_at`, `document_id` (the PDF), `locale`, `version`, `supersedes_id`, `amendment_reason`, `delivered_to_contact_ids`, `delivered_at`. Once signed, immutable. Corrections are a new version.

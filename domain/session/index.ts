@@ -55,3 +55,16 @@ export {
   type SessionCount,
   type SessionHistoryEntry,
 } from './sessionNumber';
+export {
+  EARLIEST_PAST_SESSION_ON,
+  PAST_SESSION_BILLING,
+  PAST_SESSION_MINUTES,
+  canRecordPastSession,
+  pastSessionDateProblem,
+  pastSessionTimes,
+  type PastSessionBilling,
+  type PastSessionBlockReason,
+  type PastSessionDateProblem,
+  type PastSessionInput,
+  type PastSessionResult,
+} from './pastSession';

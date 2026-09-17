@@ -14,6 +14,7 @@ import { Table, type Column } from '../../shell/components/Table';
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from './appointmentStatus';
 import { CancelAppointmentDrawer } from './CancelAppointmentDrawer';
 import { CancellationPolicyDrawer } from './CancellationPolicyDrawer';
+import { LogPastSessionDrawer } from './LogPastSessionDrawer';
 import { MoveAppointmentDrawer } from './MoveAppointmentDrawer';
 import { NewAppointmentDrawer } from './NewAppointmentDrawer';
 import { ScheduleClientDrawer } from './ScheduleClientDrawer';
@@ -86,6 +87,11 @@ export function SchedulePage() {
     null,
   );
   const [policyOpen, setPolicyOpen] = useState(false);
+  // A visit that happened before the app, typed up from the records: offered
+  // only on a day that has passed, to the same three roles that book
+  // (trunk round 51). Today's visits are checked in at the door.
+  const [pastOpen, setPastOpen] = useState(false);
+  const isPastDay = date < practiceDay(new Date());
   // The one row being confirmed, so its own button says so and no other row's
   // does; and what to say when it could not be. Neither is a drawer: telling
   // a household is a thing that has already happened by the time somebody
@@ -135,6 +141,7 @@ export function SchedulePage() {
 
   const openAction = useCallback((kind: 'move' | 'cancel', row: AppointmentRow) => {
     setDrawerOpen(false);
+    setPastOpen(false);
     setSelectedClient(null);
     setPolicyOpen(false);
     setActionError(null);
@@ -297,6 +304,7 @@ export function SchedulePage() {
             variant="secondary"
             onClick={() => {
               setSelectedClient(null);
+              setPastOpen(false);
               setDrawerOpen(true);
             }}
           >
@@ -324,6 +332,21 @@ export function SchedulePage() {
         <a className="schedule__week-link" href={`/admin/schedule/map?date=${date}`}>
           Open the day map
         </a>
+        {isPastDay ? (
+          <Button
+            variant="quiet"
+            className="schedule__policy-button"
+            onClick={() => {
+              setDrawerOpen(false);
+              setSelectedClient(null);
+              setActing(null);
+              setPolicyOpen(false);
+              setPastOpen(true);
+            }}
+          >
+            Log a past session
+          </Button>
+        ) : null}
         {canEditPolicy ? (
           <Button
             variant="quiet"
@@ -332,6 +355,7 @@ export function SchedulePage() {
               setDrawerOpen(false);
               setSelectedClient(null);
               setActing(null);
+              setPastOpen(false);
               setPolicyOpen(true);
             }}
           >
@@ -373,6 +397,16 @@ export function SchedulePage() {
       ) : null}
       {policyOpen ? (
         <CancellationPolicyDrawer onClose={() => setPolicyOpen(false)} onSaved={reload} />
+      ) : null}
+      {pastOpen ? (
+        <LogPastSessionDrawer
+          date={date}
+          onClose={() => setPastOpen(false)}
+          onRecorded={() => {
+            setPastOpen(false);
+            reload();
+          }}
+        />
       ) : null}
       {acting?.kind === 'cancel' ? (
         <CancelAppointmentDrawer

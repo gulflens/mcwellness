@@ -253,6 +253,32 @@ describe('the appointment and price actions', () => {
   } as const;
   const valid = { assigneeCapabilities: [capability(SERVICE)] };
 
+  const pastVisit = {
+    type: 'session.record_past',
+    practitionerId: 'p1',
+    serviceTypeId: SERVICE,
+    on: '2026-06-01',
+  } as const;
+
+  it('lets the calendar roles log a past visit for a practitioner credentialed on that day', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), pastVisit, valid, NOW)).toBe(true);
+    }
+    for (const role of ['practitioner', 'finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), pastVisit, valid, NOW)).toBe(false);
+    }
+    // A role alone never suffices: the credential is the practitioner's, on that day.
+    expect(canActor(actor(['owner']), pastVisit, {}, NOW)).toBe(false);
+    expect(
+      canActor(
+        actor(['owner']),
+        { ...pastVisit, on: '2020-01-01' },
+        { assigneeCapabilities: [capability(SERVICE)] },
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
   it('shows the whole practice to the owner, an admin and the lead practitioner only', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
       expect(canActor(actor([role]), practice, {}, NOW)).toBe(true);

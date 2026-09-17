@@ -432,6 +432,19 @@ describe('the equipment register and the setup photograph', () => {
     expect(sentence?.sentence).not.toContain('0000000000f9');
   });
 
+  it('says a past visit was logged from the records, in both languages', () => {
+    const en = narrate(
+      event({ entityType: 'session', action: 'session_recorded_from_records' }),
+      'en',
+    );
+    expect(en?.sentence).toContain("logged a past visit from the practice's records");
+    const ar = narrate(
+      event({ entityType: 'session', action: 'session_recorded_from_records' }),
+      'ar',
+    );
+    expect(/[\u0600-\u06FF]/.test(ar?.sentence ?? '')).toBe(true);
+  });
+
   it('writes all four in Arabic too', () => {
     for (const overrides of [
       { entityType: 'kit', action: 'insert', newValues: { kind: 'amplifier' } },

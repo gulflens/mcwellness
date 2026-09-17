@@ -52,6 +52,12 @@ export type Action =
       ownPractitionerId: string | null;
     }
   | { type: 'session.execute'; serviceTypeId: string; on: IsoDate }
+  /**
+   * Log a visit that happened before the app, from the practice's records
+   * (trunk round 51, 2026-09-16): the calendar's three roles, for a
+   * practitioner who held a credential for the service on the visit's date.
+   */
+  | { type: 'session.record_past'; practitionerId: string; serviceTypeId: string; on: IsoDate }
   | { type: 'report.sign'; serviceTypeId?: string }
   | { type: 'report.list'; clientId: string }
   | { type: 'report.read'; clientId: string }
@@ -276,6 +282,19 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // them deliver that service on that date: a role alone never suffices. The
       // assignee's credentials are the route's to resolve, for action.practitionerId
       // and nobody else, and pass in; like ctx.clientIds, that binding is trusted here.
+      return (
+        hasRole(actor, 'owner', 'admin', 'lead_practitioner') &&
+        (ctx.assigneeCapabilities ?? []).some(
+          (capability) =>
+            capability.serviceTypeId === action.serviceTypeId &&
+            capability.canExecuteSession &&
+            isCredentialValidOn(capability, action.on),
+        )
+      );
+    case 'session.record_past':
+      // The same shape as booking: the office's role, and the named
+      // practitioner's own credential valid on the day the visit happened,
+      // resolved by the route for action.practitionerId and nobody else.
       return (
         hasRole(actor, 'owner', 'admin', 'lead_practitioner') &&
         (ctx.assigneeCapabilities ?? []).some(
