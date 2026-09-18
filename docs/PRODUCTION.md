@@ -1847,3 +1847,91 @@ the one it added is present, which is the whole of what a docs pass can prove.
 **Hold protocol.** One peer cleared earlier the same night and was told; the
 other did not answer this hold either. Proceeded on silence under the rule from
 the twenty-fourth pass — an upload harms nobody else — and recorded as silence.
+
+## What was done on 2026-09-18: the twenty-sixth live pass — the expo's form, past sessions, the review line
+
+On the operator's word ("go", 22:04 in Dubai), production was brought level
+with `main` at `57220de` — pull requests 184, 185 and 186, three of the owner's
+four requests of 16 September, with 187 (the push notifications memo) and 188
+(the staging pass's record) beside them. The fourth request is a decision for
+the owner and is not built. The staging pass the same evening is in
+`docs/STAGING.md`, and this pass did on production exactly what that one did on
+staging.
+
+**The pass ran in two halves, an hour and a half apart, and the gap was the
+safe kind.** The databases were finished at 18:06 UTC. The next step, making
+the archive, was refused by the session's auto-mode gate as a production
+deploy, twice; it was not worked around. The operator cleared it and the upload
+ran at 19:34 UTC. In between, the 25th pass's code served a 106-migration
+database: `/api/health` and `/api/health/deep` answered 200 throughout, the
+four existing sessions read `recorded_from = device` by default, and the only
+behaviour the old code gained was the practice's ceiling of three hundred
+enquiries an hour. All four migrations are additive, which is what made
+stopping there an ordinary thing to do.
+
+**Read first.** 102 rows and none of the four new files; both constraints 919
+drops present under the names it drops them by; four enquiries, every one
+already actioned, so the rebuilt scrub constraint had nothing to refuse; one
+tenant; `app.verify_audit_chain()` null. No other session on the laptop, at
+either half.
+
+**Applied** in the runner's order — `704_portal_review_prompt`,
+`919_expo_enquiry`, `920_practice_review_url`, `966_session_from_records` —
+then the four bookkeeping rows with the sha256 of each file as staging holds
+them, then `db/policies/portal/access.sql` and
+`db/policies/session/practitioner_scope.sql` whole, as `policies_after_966`.
+Read back: **106 rows.**
+
+**Fingerprint: production, staging and a freshly migrated local database
+identical on all nine categories.** Columns `ca33becc` (143), comments
+`c1c3475c` (143), constraints `79a273a6` (112), functions `87bd3eda` (3),
+grants `187277a1` (20), indexes `2c2cb893` (60), policies `f6e4cb66` (23),
+triggers `1ca1ee9f` (29), and the whole ledger `8a2b0ce2` — 106 filenames with
+their checksums. The local database is the leg that matters: it was built by
+the runner from the files, so agreement with it says the text pasted into two
+hosted databases is the text in the repository.
+
+**The build.** Archive `mcwellness-57220de.tar.gz`, 6,537,909 bytes, made with
+`--prefix=mcwellness/`, no env file inside; TUS create 201, PATCH 204 with the
+returned offset equal to the size. Settings read back from the host before
+building and unchanged: node 24, hono, root `mcwellness`, output `.`,
+`build:production`, entry `app/api/start.mjs`, npm. Build `01a0b604`, 63
+seconds. **No restart — the ninth consecutive pass without one.** Health 200 in
+0.30 s, deep 200 in 0.18 s.
+
+**Verified by the chunks, with the absence measured first.** Before the
+upload: entry `index-DvdVXFyE.js` (475,620 bytes), stylesheet
+`index-CxD9fCWF.css`, no `ExpoEnquiryPage` chunk at all, and none of "Log a
+past session", "Expo poster", "Google review link" or "Leave a review" in the
+chunks that would carry them. After: entry `index-Cz_UgTLO.js` (476,584
+bytes), stylesheet `index-DSJRZKuA.css`, and
+
+- `SchedulePage-BVMU_c2b.js` carries "Log a past session";
+- `EnquiriesPage-Cr8OcWX-.js` carries "Expo poster", and
+  `ExpoEnquiryPage-dSuReCU3.js` and `ExpoPosterPage-BD_yzUx2.js` exist;
+- `PracticePage-BlfbxJlA.js` carries "Google review link";
+- `HomeScreen-CLjlQAWI.js` calls `review-prompts`, which the old chunk did not.
+
+The old entry, the old stylesheet and the four old chunks all 404, and a
+nonsense asset path 404s too, which is what makes the rest evidence. `/expo`
+answers 200; `POST /api/sessions/from-records`, `GET /api/enquiries/expo.csv`
+and `POST /api/portal/review-prompts` each answer 401 to a stranger.
+
+**A marker that was not where it was looked for.** "Leave a review" is absent
+from the `HomeScreen` chunk and that is correct: the portal's words live in
+`app/client/i18n/dictionary.ts`, which ships in the entry bundle, and the entry
+went from no occurrence to one in English and one in Arabic. For any portal
+string, read the entry; for any console string, read the screen's chunk.
+
+**Left as it was found.** No expo row and no records session exists on
+production: nothing was written to prove the pass, because the staging and
+local walks had already proved the behaviour and a synthetic row in the
+practice's own list is a cost. `tenant.review_url` is null, so the review line
+is off for every household until the owner records the practice's review page
+in Settings › Practice. `app.verify_audit_chain()` is null.
+
+**For the owner.** Print the stand's poster from
+`https://app.mcwellnessuae.com/admin/enquiries/poster` and from nowhere else:
+its code encodes the address of the page it is printed from. Scan it once with
+a phone before the print run. The review line appears only after the review
+link is recorded.
