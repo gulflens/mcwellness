@@ -2024,10 +2024,15 @@ of it. That is where the 180mm cap came from, and with it the fallback is one
 page of US Letter inside the browser's own margins. It was found by printing
 and would not have been found by looking.
 
-**Not tested: Safari.** It cannot be run from this machine. Safari is the
-browser most likely to take the fallback, which was proved only in imitation.
-If the owner prints from Safari, the thing to look at is that the sheet is one
-page and the address is on it.
+**Not tested: Safari — and that is where it was wrong.** It was written here
+that Safari could not be run from this machine and was the browser most likely
+to take the fallback. Both were mistaken, and the second was the fault: Safari
+passes the test the full sheet was gated on, keeps its own margins anyway, and
+printed a blank second page. It was found an hour later, on the operator's
+asking to make sure of one sheet, by driving the system's own WebKit to a PDF.
+The poster of this pass was therefore live with that fault from 21:01 to the
+twenty-eighth pass, which is the next section and mends it. Nothing else in
+this section is withdrawn.
 
 **Left as it was found.** Nothing was written to either database.
 
@@ -2037,3 +2042,109 @@ its code encodes the address of the page it is printed from, and the preview
 image made on the way to this pass holds a code for a laptop. Scan the printed
 sheet once with a phone before the print run; it should open
 `app.mcwellnessuae.com/expo`.
+
+## What was done on 2026-09-18: the twenty-eighth live pass — the poster prints on one sheet in Safari
+
+**21:32 UTC on 18 September, which is 01:32 on 19 September in Dubai**, half an
+hour after the twenty-seventh, and mending it. `main` at `42d15d2` — pull
+request 192. The operator had printed the new poster and asked, at 01:05 +04,
+to make sure it prints on one sheet; mending the poster that was live is what
+that asked for, and the pass ran on it.
+
+**No migration and no policy file; both hosted databases stay at 106.**
+Between `78cab68` and `42d15d2` three files moved: the poster's stylesheet, its
+test, and the round's note. Nothing under `db/` and no dependency manifest.
+
+**What was wrong with the twenty-seventh.** Printed from Safari, the poster
+came out whole on its first page and was followed by a blank second sheet. The
+whole sheet, 210 by 296 millimetres, was given wherever
+`@supports (page: auto)` held, on the reading that such a browser would give
+the named page its margins. Safari has understood the `page` property since
+its first release, has honoured `@page` at all only since 18.2, and refuses
+`size: A4 portrait`. The sheet sat inside Safari's own margins. The check made
+before that pass was an imitation in Chrome and could not have shown it:
+Chrome shrinks an over-wide sheet to fit, and the shrunken sheet is one page.
+The account of the mend, its bounds and its one failing case is the
+correction at the end of `docs/CHANGE-REQUESTS/trunk-round-50.md`.
+
+**Safari can be tested from this machine after all.** `docs/PRODUCTION.md` has
+said since the twenty-third pass that it cannot. A short Swift program drives
+the system's own WebKit through `WKWebView.printOperation(with:)`, with the
+job's disposition set to save and no print panel, and what comes out is
+Safari's real print pagination as a PDF. A second reads the code on a PDF's
+first page with the Vision framework. Both are kept outside the repository
+with the practice's other tools, as `wkprint.swift` and `qrdecode.swift`. Two
+things they do not reach: Safari's own date and address lines, which the app
+draws and WebKit alone does not, and any Safari but the one installed, 27.2.
+
+**Before it merged.** `verify` and `verify-db` each read SUCCESS for the head
+that merged, `95c1ad80`, and the merge was pinned to it. Security passed with
+nothing. Compliance passed with three notes, all taken before the merge: the
+bounds were looser than their own arithmetic ("at any margin" is true on A4
+only of margins equal on all four sides), decision 3 of the first amendment
+had nothing pointing to its correction, and "the cure" became "the fix". The
+commit that took them moved comments and documents only, and the built
+stylesheet's name did not change across it, which is how it is known that the
+reviewers read the rules that shipped.
+
+**The hold protocol.** `ListAgents` showed no other session on the machine.
+
+**The build.** Archive `mcwellness-42d15d2.tar.gz`, 6,544,694 bytes, made with
+`--prefix=mcwellness/`; TUS create 201, PATCH 204 with the returned offset
+equal to the size; the keys read by `curl` from a file of mode 0600 deleted in
+the same command. Settings read back before building and unchanged. Build
+`01a0b66d`: asked for at 21:30:26, completed at 21:32:06. The served name was
+seen changed at 21:32:08. **No restart — the eleventh consecutive pass without
+one.** Health 200 in 0.24 s, deep 200 in 0.25 s, and 200 at every
+fifteen-second poll across the build.
+
+**Verified by the chunk, with the absence measured first.** Before:
+`ExpoPosterPage-BSHEAOpT.css` holding `@supports (page` and `A4 portrait` and
+no `poster-paper`. After: `ExpoPosterPage-DVtRjwF2.css`, 1,990 bytes, holding
+`poster-paper` and `170mm`, with `@supports (page` and `A4 portrait` gone —
+and that is the name a local build of this tree wrote. The page's script
+moved from `ExpoPosterPage-CTvhCcV-.js` to `ExpoPosterPage-qg0W7m25.js` at the
+same 22,031 bytes, because it names the stylesheet and nothing else in it
+changed. The entry moved from `index-BxCLftPf.js` to `index-COOzlje7.js` and
+is 476,584 bytes for the third pass running. The shell's stylesheet did not
+move. The old entry and both old poster files 404, and a nonsense path 404s.
+
+**The minifier rewrote the rule, so the served bytes were printed too.** What
+was written as `(min-width: 209.5mm) and (max-width: 210.5mm)` is served as
+`(width>=209.5mm) and (width<=210.5mm)`, and every print before the pass had
+been of the unminified rule. So production's own stylesheets, its fonts and
+its lockup were fetched, set beside the poster's markup, and printed: through
+WebKit, **one page on A4 at the system's default margins, at 36 points, at 18
+and at none**; through Chrome, one full page of A4. The code was then read off
+every one of those five PDFs and says `https://app.mcwellnessuae.com/expo`,
+including from Safari's smaller sheet.
+
+**The browser's own small lines, which the operator asked next to have
+removed.** In Chrome they are gone without anybody touching a setting, and
+that was printed rather than assumed: with "Headers and footers" left on,
+Chrome draws none, because the named page leaves it no margin to draw them
+in. In Safari they cannot be removed by the page. An unnamed
+`@page { margin: 0 }`, added through the CSSOM as the app's policy would
+require, was tried in WebKit: the top margin went, the print system drew
+"Page 1 of 1" over the corner regardless, and the sheet was left against the
+top edge with the bottom of the page empty. It was not adopted. In Safari the
+lines go when "Print headers and footers" is unticked in the print dialog,
+and by no other means a page has.
+
+**A file for the printer, made outside the app.** Because Safari cannot be
+made clean from the page, a print-ready PDF was made for the operator: the
+real page and the real stylesheet, the code drawn for the production address
+by the page's own encoder, printed by Chrome as one page of A4 with no lines
+on it. Its code was read back from the finished file, and again from the copy
+as delivered, and says `https://app.mcwellnessuae.com/expo`. The earlier
+laptop-made preview was read the same way as a control and says
+`http://127.0.0.1:5199/expo`, which is why it was marked not for printing. A
+PDF opened in Preview carries no browser's lines at all.
+
+**Left as it was found.** Nothing was written to either database.
+
+**Offered and not built:** a "Download PDF" on the poster's page, made by the
+practice's own PDF writer, which would give every browser the clean sheet
+without a setting. It needs the lockup as a plain RGB PNG, which the writer
+can embed and the present palette file is not, and a route to serve it. It is
+the operator's to ask for.
