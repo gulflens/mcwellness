@@ -20,4 +20,12 @@ export type {
   MissingField,
   ParseResult,
 } from './parse';
+export {
+  ENQUIRY_PAGE,
+  ENQUIRY_STATUSES,
+  enquiryCursor,
+  readEnquiryListQuery,
+  tallyEnquiries,
+} from './list';
+export type { EnquiryCursor, EnquiryListQuery, EnquiryStatus, EnquiryTally } from './list';
 export { ENQUIRY_WAITING_AFTER_DAYS, enquiryWaitingDays } from './waiting';

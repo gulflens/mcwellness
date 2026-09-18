@@ -2,9 +2,14 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 import { canActor, toCsv } from '@domain/shared';
 import {
+  ENQUIRY_PAGE,
+  enquiryCursor,
   leadFromEnquiry,
+  readEnquiryListQuery,
+  tallyEnquiries,
   type EnquiringFor,
   type EnquirySource,
+  type EnquiryStatus,
   type Interest,
   type LodgedEnquiry,
 } from '@domain/enquiry';
@@ -134,19 +139,58 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
     if (!canActor(actor, { type: 'enquiry.list' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    // New first, then the rest newest first. Two hundred is more than a
-    // practice this size will ever hold unactioned.
-    const { rows } = await db.query<Row>(
-      `select ${COLUMNS} from enquiry e left join app_user u on u.id = e.actioned_by ` +
-        "order by (e.status = 'new') desc, e.received_at desc limit 200",
+    const asked = readEnquiryListQuery({
+      status: c.req.query('status'),
+      source: c.req.query('source'),
+      before: c.req.query('before'),
+    });
+    if (asked === null) {
+      return c.json({ error: 'bad_request', field: 'query', requestId }, 400);
+    }
+    // One status, newest first, a page at a time: the index migration 916 cut
+    // on (tenant_id, status, received_at desc) is this query's own. One row
+    // past the page is asked for and never sent, which is how the page knows
+    // whether there is another.
+    //
+    // The cursor is the database's own text for the moment, to the
+    // microsecond. A `Date` keeps milliseconds, and a cursor cut there steps
+    // over every row lodged later in the same millisecond, which at a stand
+    // with a queue is not a corner.
+    const { rows } = await db.query<Row & { cursor_at: string }>(
+      `select ${COLUMNS}, ` +
+        `to_char(e.received_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as cursor_at ` +
+        'from enquiry e left join app_user u on u.id = e.actioned_by ' +
+        'where e.status = $1 and ($2::text is null or e.source = $2) ' +
+        'and ($3::timestamptz is null or (e.received_at, e.id) < ($3::timestamptz, $4::uuid)) ' +
+        `order by e.received_at desc, e.id desc limit ${ENQUIRY_PAGE + 1}`,
+      [asked.status, asked.source, asked.before?.receivedAt ?? null, asked.before?.id ?? null],
     );
+    const page = rows.slice(0, ENQUIRY_PAGE);
+    const last = page.at(-1);
+    const older =
+      rows.length > ENQUIRY_PAGE && last
+        ? enquiryCursor({ receivedAt: last.cursor_at, id: last.id })
+        : null;
+
+    const counted = await db.query<{ status: EnquiryStatus; source: EnquirySource; count: number }>(
+      'select status, source, count(*)::int as count from enquiry group by status, source',
+    );
+
+    // Only a waiting row still carries a person, so only those are a read of
+    // one. A page of dismissed rows reads nobody and logs nothing.
     await logReads(
       db,
       'enquiry',
-      rows.filter((row) => row.status === 'new').map((row) => ({ id: row.id, clientId: null })),
+      page.filter((row) => row.status === 'new').map((row) => ({ id: row.id, clientId: null })),
       'list',
     );
-    return c.json(EnquiryListResponse.parse({ enquiries: rows.map(toWire) }));
+    return c.json(
+      EnquiryListResponse.parse({
+        enquiries: page.map(toWire),
+        counts: tallyEnquiries(counted.rows),
+        older,
+      }),
+    );
   });
 
   /**

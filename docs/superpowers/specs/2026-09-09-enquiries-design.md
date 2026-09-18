@@ -147,3 +147,53 @@ a dependency with no dependencies of its own.
 admits only the move to converted or dismissed, so it would be a policy
 change, a route, an audit action and a page state, and the file is the
 follow-up list until then. Arabic on the form, by the owner's decision.
+
+## Amended 2026-09-19: three tables, one status at a time
+
+The operator asked, with the expo a month away, for what is still waiting to
+stay in the table and what was dismissed to move to a table of its own,
+because at a stand's volume one table of everything is one nobody can work
+from.
+
+**Still one table in the database.** A dismissed row is the same row with its
+status changed and its person scrubbed from it. Moving it to a table of its
+own would cost the record its one history and buy the screen nothing a query
+does not already give it.
+
+**The list is asked for by status.** `GET /api/enquiries?status=new|converted|dismissed`,
+with `source=` to narrow it and `before=` for the next page; nothing at all is
+`status=new` from the top, which is what a screen built before this asks for.
+A status, source or cursor the list does not have is a 400. The rules for
+reading the address are `domain/enquiry/list.ts`, pure and tested.
+
+- **A hundred to the page, newest first**, by `(received_at desc, id desc)`,
+  which is the index migration 916 already cut on
+  `(tenant_id, status, received_at desc)`. No migration.
+- **The cursor is the row's moment to the microsecond, and its id.** The
+  database keeps microseconds and a `Date` keeps milliseconds; a cursor cut at
+  the millisecond steps over every row lodged later in that same millisecond.
+  A test lodges 230 rows inside one and pages them; with a millisecond cursor
+  it sees 132.
+- **Every answer counts every status by every source**, in one grouped query,
+  so the tabs and the source filter show the server's numbers and not the
+  number of rows on the page. "Download expo leads" now appears whenever an
+  expo enquiry waits anywhere, where it used to appear only if one was among
+  the two hundred on the screen.
+- **Before this, one query took two hundred rows of every status together.**
+  New rows sorted first, so nothing waiting was lost until two hundred were;
+  what was lost, silently, was every older actioned row beyond the cap.
+
+**What is logged.** As before, a read is logged for each row still carrying a
+person, which is each waiting row. A page of dismissed or converted rows
+carries nobody and logs nothing, and because those tables are not fetched
+until they are opened, opening the screen now reads fewer rows than it did.
+
+**The screen.** Active, Converted and Dismissed, in the switcher Books and
+Billing use, each with its count. The operator named two; the third is
+because a converted enquiry is neither waiting nor dismissed, and left among
+the active ones it is the same clutter. Active keeps its columns and its two
+actions. The other two have no column for a name, a number or a message,
+because no such row has one: they show when it came, from where, what
+happened and when, who did it, and either the reason or the lead. Their dates
+carry the year. Under a table longer than a page: how many of how many, and
+"Show older", which sets the next page beneath the first.
