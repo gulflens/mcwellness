@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { cleanup, render, screen } from '@testing-library/react';
 import qrcode from 'qrcode-generator';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -41,6 +42,28 @@ describe('ExpoPosterPage', () => {
     const sheet = lockup.closest('.poster__sheet');
     expect(sheet).toBeTruthy();
     expect(sheet?.contains(screen.getByRole('button', { name: 'Print' }))).toBe(false);
+  });
+
+  it('sizes the printed sheet by the paper it measures, never by what a browser claims', () => {
+    // Pagination cannot be run here, so this guards the decision instead. Safari
+    // passes `@supports (page: auto)` and still keeps its own margins; sized on
+    // that claim, the sheet was followed by a blank second page (19 September
+    // 2026, printed through WebKit). The whole sheet is for paper measured to be
+    // A4 from edge to edge, and everything else gets the sheet that fits.
+    // The rules, not the prose: the stylesheet's own comments tell this history
+    // and name the rule that went, so they are set aside before anything is read.
+    const css = readFileSync('app/admin/enquiries/poster.css', 'utf8').replace(
+      /\/\*[\s\S]*?\*\//g,
+      '',
+    );
+    expect(css).not.toContain('@supports (page');
+    expect(css).toContain('container: poster-paper / inline-size');
+    expect(css).toMatch(
+      /@container poster-paper \(min-width: 209\.5mm\) and \(max-width: 210\.5mm\)/,
+    );
+    expect(css).toContain('max-inline-size: 170mm');
+    // Safari refuses the orientation keyword and drops the declaration whole.
+    expect(css).toMatch(/@page poster \{\s*size: A4;/);
   });
 
   it('keeps a quiet zone of four modules on every side', () => {
