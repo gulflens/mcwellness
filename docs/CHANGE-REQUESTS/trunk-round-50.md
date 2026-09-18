@@ -246,6 +246,8 @@ a camera wants contrast and not brand.
    has nowhere to print its own date and address lines. Where named pages are
    not understood the sheet is capped at 180mm wide, so that its height fits
    inside the browser's own margins on A4 and on US Letter.
+   *(Corrected below, 19 September 2026: the 180mm fallback and the
+   `@supports` test it hung on are withdrawn. The named page itself stands.)*
 
 ### Checked, not claimed
 
@@ -309,8 +311,18 @@ at the sides), at 36 points, at 18 points and at none; one page on US Letter
 at 18 points. **One case fails and is left failing:** US Letter with the
 system's default margins is two pages, because the paper is 18mm shorter and
 the margins take 63mm of it. No browser prints with margins that deep, the
-paper is not the country's, and the cure would shrink every A4 poster to
-serve it. On A4 the arithmetic agrees with the test at any margin at all.
+paper is not the country's, and the fix would shrink every A4 poster to
+serve it.
+
+**The bounds, by arithmetic from the sheet's 1.39 and not by printing.** On A4
+it is one page at any margin set equally on all four sides. With narrow sides
+the sheet stays 170mm wide and 236mm tall, so it runs over once the margins
+above and below pass about 30mm each: 35mm above and below with 10mm at the
+sides would be two pages. On US Letter the same limit is about 21mm. Chrome's
+own margins are about 10mm and Firefox's 12.7mm, so neither is reached by a
+browser left alone; somebody who sets deep margins by hand can reach them. An
+earlier draft of this note said "at any margin at all", which the review of
+this round corrected.
 
 Through Chrome: one full page of A4 with the named page honoured, as before;
 one page with it ignored, on A4 and on US Letter.

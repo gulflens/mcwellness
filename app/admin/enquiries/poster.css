@@ -154,8 +154,10 @@
      a blank second page followed it out of the printer. What a browser says
      it understands is not what it was given, so the paper is measured.
 
-     On A4 this holds at any margin. On US Letter it holds until the margins
-     above and below pass 25mm each, which no browser's own do. */
+     On A4 this holds at any margin set equally on all four sides, and with
+     narrow sides until the margins above and below pass 30mm each. On US
+     Letter it holds until they pass 21mm each. No browser's own go that
+     deep: Chrome keeps about 10mm and Firefox 12.7mm. */
   .poster__sheet {
     page: poster;
     max-inline-size: 170mm;
