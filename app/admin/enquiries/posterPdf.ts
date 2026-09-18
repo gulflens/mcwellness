@@ -5,9 +5,11 @@
  * page number on every web page it prints, over whatever margins the page
  * asked for, and nothing a page can say turns them off — it was tried through
  * WebKit's own print path and the lines came out regardless
- * (docs/CHANGE-REQUESTS/trunk-round-50.md). Safari draws none of them on a
- * PDF, and neither does Preview. So the poster is also drawn here, onto a
- * canvas at print resolution, and handed over as one page of A4.
+ * (docs/CHANGE-REQUESTS/trunk-round-50.md). A PDF is not a web page, and
+ * neither Safari nor Preview has such lines to write on one: that is how both
+ * are known to behave, and is not something this round printed and saw. So
+ * the poster is also drawn here, onto a canvas at print resolution, and handed
+ * over as one page of A4.
  *
  * All of it happens in the browser. Nothing is sent anywhere, there is no
  * route and no dependency, and the code holds this origin's `/expo` address
@@ -366,15 +368,34 @@ export async function makePosterPdf({
   ctx.font = face(medium, POSTER_MM.address.size);
   setLines([inWords], layout.address.y, POSTER_MM.address);
 
-  return pdfFromJpeg(await jpegOf(canvas), canvas.width, canvas.height, 'McWellness expo poster');
+  const { width, height } = canvas;
+  const jpeg = await jpegOf(canvas);
+  // Given back at once, not left for the collector. The sheet is some 35MB of
+  // pixels, and WebKit counts every canvas not yet collected against one
+  // ceiling for the page: a dozen quick presses would otherwise reach it, and
+  // the next press would find no canvas to draw on.
+  canvas.width = 0;
+  canvas.height = 0;
+  return pdfFromJpeg(jpeg, width, height, 'McWellness expo poster');
 }
 
-/** Hands a file to the browser's own download, and lets go of it afterwards. */
+/**
+ * Hands a file to the browser's own download, and lets go of it afterwards.
+ *
+ * The press is the one `app/admin/accounting/download.ts` makes, and the
+ * report's preview and the practitioner's export make it too. Theirs are each
+ * welded to fetching the file with the session's token, and this file is made
+ * here with nothing fetched, so none of them could be called; the five lines
+ * they share now stand in four places, which is written down as owed in
+ * docs/CHANGE-REQUESTS/trunk-round-50.md rather than mended across three
+ * other streams from inside this one.
+ */
 export function savePdf(bytes: Uint8Array<ArrayBuffer>, filename: string): void {
   const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  link.rel = 'noopener';
   document.body.append(link);
   link.click();
   link.remove();

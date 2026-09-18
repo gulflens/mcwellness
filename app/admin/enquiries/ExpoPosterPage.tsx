@@ -22,7 +22,9 @@ import './poster.css';
  * writes its own date, title, address and page number over any page it prints,
  * and nothing the page says stops it; it writes none of them on a PDF. So
  * "Download PDF" draws the same sheet in the browser and hands it over as one
- * page of A4 (posterPdf.ts), and the file prints clean from anything.
+ * page of A4 (posterPdf.ts). A PDF is not a web page, so there is nothing for
+ * those lines to be written on; that is how Safari and Preview are known to
+ * treat one, and was not printed from either here.
  *
  * The code encodes this origin's own address, so staging prints a staging
  * code and production a production one; nothing about anybody is in it. The
@@ -92,14 +94,16 @@ export function ExpoPosterPage({
           </Button>
           <Button onClick={() => window.print()}>Print</Button>
         </div>
-        {file === 'failed' ? (
-          <Note tone="critical">{COULD_NOT}</Note>
-        ) : (
-          <Note>
-            The PDF prints as the poster alone. Printed from this page, Safari adds the date and the
-            web address, and only its own print window can leave them off.
-          </Note>
-        )}
+        {/*
+          The sentence stays when the file fails: "print this page instead" is
+          the moment somebody needs to know what Safari does to a printed page.
+        */}
+        {file === 'failed' ? <Note tone="critical">{COULD_NOT}</Note> : null}
+        <Note>
+          The PDF prints as the poster and nothing else. If you print this page from Safari instead,
+          Safari adds the date and the web address to the paper unless you untick “Print headers and
+          footers” in its print window.
+        </Note>
       </div>
       <article className="poster__sheet">
         <div className="poster__page">

@@ -23,6 +23,13 @@
  *
  * Pure and browser-safe: no Node built-in, no I/O. The font programs arrive as
  * bytes from `app/api/billing/fonts.ts`.
+ *
+ * **There is one other writer, and it is not a copy of this one.**
+ * `app/admin/enquiries/posterPdf.ts` wraps a single JPEG the browser has drawn
+ * in one page of A4, in the browser, for the expo's poster; its header says why
+ * it could not be this one. `docs/CHANGE-REQUESTS/billing-04.md` already
+ * foresees a JPEG passed through here as `/DCTDecode`. If that is ever built,
+ * that file is the first thing to reconsider.
  */
 
 import { isArabic, place, type Placed } from './arabic';

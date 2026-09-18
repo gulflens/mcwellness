@@ -355,7 +355,8 @@ rule a page can write.
 **What was built instead.** Safari writes none of those lines on a PDF. So the
 page gains "Download PDF" beside "Print": `posterPdf.ts` draws the same sheet
 onto a canvas at 300 dots to the inch, 2480 by 3508 pixels, and hands it over
-as one page of A4 that prints clean from Safari, Chrome or Preview.
+as one page of A4. A PDF is not a web page, so there is nothing for those
+lines to be written on.
 
 - **All of it in the browser.** No route, no dependency, nothing sent
   anywhere, and nothing about anybody in it: the code holds this origin's
@@ -394,12 +395,39 @@ paper.
 **Not checked:** Safari the application, which cannot be driven unattended.
 What was run is its engine, which makes the file; the saving of a file from a
 `blob:` address through a link with `download` is the application's, and was
-not pressed by a person here.
+not pressed by a person here. Nor was the file itself printed from
+Safari or Preview here; that neither writes its own lines on a PDF is how both
+are known to behave, not something this round observed.
 
 **Known and left:** the lockup is 960 pixels across and the sheet sets it 120
 millimetres wide, which is 203 dots to the inch, on the page and in the file
 alike. The operator's source is 1,728 across at that crop. A sharper cut for
 paper is a separate, small piece.
+
+### Taken from the round's two reviews, before the merge
+
+- **The canvas is given back at once.** The sheet is some 35MB of pixels and
+  WebKit counts every canvas not yet collected against one ceiling; a dozen
+  quick presses would have reached it. It failed safe, with the sentence, and
+  now does not fail.
+- **The sentence under the buttons stays when the file fails**, because "print
+  this page instead" is when somebody needs to know what Safari does to a
+  printed page, and it now names the box to untick rather than saying only
+  that one exists.
+- **The claim was larger than the check**, in three places, and is cut to it
+  above.
+- **`domain/shared/document/pdf.ts` now says there is one other writer** and
+  where, so that whoever opens the shared one first finds the small one. A
+  comment only: the bytes it renders are unchanged.
+
+**Owed, and not this round's to mend:** the five lines that hand a file to the
+browser — make an address for it, press a link that has `download`, let the
+address go — now stand in four places: `app/admin/accounting/download.ts`,
+`app/admin/reports/ReportEditor.tsx`, `app/therapist/today/TodayPage.tsx` and
+here. The other three are each welded to fetching the file with the session's
+token, so none could be called for a file made with nothing fetched. One
+`saveBlob` in the shell would serve all four, and is three other streams'
+paths to edit.
 
 `pnpm verify`: 253 files, 2,975 tests. No migration, no policy file, no API
 route, no dependency, no asset.
