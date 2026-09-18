@@ -210,3 +210,54 @@ enquiry files, `tests/db/schema.test.ts` and every stream's `db/` suite. The
 one failure, `tests/db/bootstrap-practice.test.ts`, inserts into `auth.users`,
 which only the Supabase image provides; it is untouched by this round and CI
 runs the pinned image on the pull request.
+
+## Amendment — the poster in the practice's own dress (2026-09-19)
+
+The operator asked, on 19 September 2026, for the stand's poster to carry the
+logo and the practice's look. The first poster was the plain column the
+sign-in page uses, on the console's grey paper, and in that 24rem column the
+address broke across two lines as `…/exp` and `o`.
+
+**What changed**: `app/admin/enquiries/ExpoPosterPage.tsx`, `poster.css` and
+the page's test, and nothing else. The poster is now one white A4 sheet
+headed by the whole lockup (`public/brand/lockup.png`, the same file sign-in
+shows; `docs/brand-assets.md`), with a violet bar above and below, the code
+in a violet frame, and the address in the violet on one line that never
+breaks. The words are the round's own and did not change. The Print button
+moved off the sheet and above it, so it is in reach without scrolling past a
+page of paper.
+
+**The code itself did not change**: the same encoder, the same path, the same
+four-module quiet zone, still drawn in `--ink` rather than the violet, because
+a camera wants contrast and not brand.
+
+**Three decisions a later reader might otherwise undo:**
+
+1. The violet is only ever a border or the colour of type, never a fill. A
+   browser leaves background fills off the paper unless "Background graphics"
+   is ticked and always prints borders and text.
+2. The sheet is a size container and every length on it is a 210th of its
+   width (`--mm`), so the screen shows the printed page at whatever size
+   fits and the stylesheet opens no breakpoint of its own
+   (`tests/lint/one-set-of-breakpoints.test.ts`).
+3. The page margins are changed by a *named* page (`@page poster`), not a bare
+   `@page`, which would have changed the margins of everything else the
+   console prints once this stylesheet had loaded. With no margin the browser
+   has nowhere to print its own date and address lines. Where named pages are
+   not understood the sheet is capped at 180mm wide, so that its height fits
+   inside the browser's own margins on A4 and on US Letter.
+
+### Checked, not claimed
+
+Printed to PDF from a local build by headless Chrome: the named page is one
+page of A4 (595 by 842 points) with no browser lines on it; the fallback,
+imitated by overriding the three declarations it differs by, is one page of
+US Letter with the browser's margins and lines. At full width the fallback
+ran onto a second page, which is where the 180mm came from. Looked at on
+screen at 1100 and 600 pixels wide. The production address was set at its
+real length (`app.mcwellnessuae.com/expo`) for those prints and fits the line
+with room to spare.
+
+**No migration, no policy file, no API route, no dependency, no new asset.**
+As before, the code encodes the origin it is shown on: print it from
+`app.mcwellnessuae.com` and from nowhere else.

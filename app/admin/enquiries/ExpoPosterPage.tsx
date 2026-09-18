@@ -9,6 +9,13 @@ import './poster.css';
  * whose camera will not read it, and a Print button. Its own document,
  * outside the console's layout, so there is no rail to hide when it prints.
  *
+ * What prints is the sheet: one A4 page headed by the practice's whole lockup
+ * (docs/brand-assets.md), which is cut for a light ground, so the sheet is
+ * white wherever it is shown. The Print button stands outside it. The violet
+ * is on the sheet as borders and type and never as a fill, because a browser
+ * leaves fills off the paper unless somebody ticks a box and always prints
+ * the other two (poster.css).
+ *
  * The code encodes this origin's own address, so staging prints a staging
  * code and production a production one; nothing about anybody is in it. The
  * encoder is `qrcode-generator`, a dependency with no dependencies of its
@@ -46,22 +53,40 @@ export function ExpoPosterPage() {
   const { d, size } = useMemo(() => qrPath(address), [address]);
   const inWords = address.replace(/^https?:\/\//, '');
   return (
-    <main className="plain poster">
-      <h1>Scan to tell us about yourself</h1>
-      <p>Leave your details and we will be in touch after the expo.</p>
-      <svg
-        className="poster__code"
-        viewBox={`0 0 ${size} ${size}`}
-        shapeRendering="crispEdges"
-        role="img"
-        aria-label={`QR code for ${inWords}`}
-      >
-        <path fill="currentColor" d={d} />
-      </svg>
-      <p className="poster__address">{inWords}</p>
-      <Button className="poster__print" onClick={() => window.print()}>
+    <main className="poster">
+      <Button variant="primary" className="poster__print" onClick={() => window.print()}>
         Print
       </Button>
+      <article className="poster__sheet">
+        <div className="poster__page">
+          {/* The alt carries the name, as on sign-in: there is no text beside it. */}
+          <img
+            className="poster__lockup"
+            src="/brand/lockup.png"
+            alt="McWellness"
+            width={960}
+            height={402}
+          />
+          <div className="poster__invite">
+            <h1 className="poster__title">Scan to tell us about yourself</h1>
+            <p className="poster__lede">
+              Leave your details and we will be in touch after the expo.
+            </p>
+          </div>
+          <div className="poster__frame">
+            <svg
+              className="poster__code"
+              viewBox={`0 0 ${size} ${size}`}
+              shapeRendering="crispEdges"
+              role="img"
+              aria-label={`QR code for ${inWords}`}
+            >
+              <path fill="currentColor" d={d} />
+            </svg>
+          </div>
+          <p className="poster__address">{inWords}</p>
+        </div>
+      </article>
     </main>
   );
 }

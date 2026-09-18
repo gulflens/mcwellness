@@ -1,27 +1,155 @@
-/* The stand's poster (app/admin/enquiries/ExpoPosterPage.tsx): the plain
-   column, the code as wide as it can be, the address beneath in the page's
-   own ink, and nothing else on paper. */
+/* The stand's poster (app/admin/enquiries/ExpoPosterPage.tsx): one A4 sheet
+   with the practice's lockup at its head, the code as wide as the sheet lets
+   it be, the address beneath in the practice's violet, and a Print button
+   that stays off the paper.
+
+   The sheet is a size container and everything on it is measured in
+   millimetres of an A4 page (`--mm`, a 210th of the sheet's width), so what
+   the screen shows is the printed page at whatever size fits, with no
+   breakpoint of its own. These are paper sizes, not the interface's type
+   scale, which is why none of the `--t-` steps appear below.
+
+   The violet is only ever a border or the colour of type. A browser leaves
+   background fills off the paper unless "Background graphics" is ticked, and
+   always prints borders and text, so the bars and the frame reach the paper
+   from any print dialog. */
 .poster {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: var(--s-6);
+  padding: var(--s-8) var(--s-6) var(--s-16);
+}
+
+.poster__sheet {
+  container-type: inline-size;
+  display: grid;
+  inline-size: 100%;
+  max-inline-size: 210mm;
+  aspect-ratio: 210 / 297;
+  /* The lockup is cut for a light ground (docs/brand-assets.md). */
+  background: var(--surface);
+  border-radius: var(--r-2);
+  box-shadow: var(--lift-1);
+}
+
+/* A length on the sheet itself would measure the sheet's own container, not
+   the sheet, so the margin the paper needs is this inner page's. */
+.poster__page {
+  --mm: calc(100cqi / 210);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--mm) * 7);
+  margin: calc(var(--mm) * 14);
+  padding-block: calc(var(--mm) * 9);
+  border-block: calc(var(--mm) * 3) solid var(--brand);
   text-align: center;
 }
 
+.poster__lockup {
+  inline-size: calc(var(--mm) * 120);
+  block-size: auto;
+}
+
+.poster__invite {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--mm) * 4);
+  max-inline-size: calc(var(--mm) * 160);
+}
+
+.poster__title {
+  margin: 0;
+  font-size: calc(var(--mm) * 14);
+  line-height: calc(var(--mm) * 17);
+  font-weight: var(--w-medium);
+  text-wrap: balance;
+}
+
+.poster__lede {
+  margin: 0;
+  font-size: calc(var(--mm) * 6.5);
+  line-height: calc(var(--mm) * 9);
+  color: var(--ink-2);
+  text-wrap: balance;
+}
+
+/* The quiet zone is inside the picture, so the frame may touch it. */
+.poster__frame {
+  display: grid;
+  inline-size: calc(var(--mm) * 104);
+  padding: calc(var(--mm) * 2);
+  border: calc(var(--mm) * 1.2) solid var(--brand);
+  border-radius: calc(var(--mm) * 4);
+}
+
+/* The code stays in the page's darkest ink: a reader wants contrast, not brand. */
 .poster__code {
   inline-size: 100%;
-  max-inline-size: 20rem;
   block-size: auto;
   color: var(--ink);
 }
 
+/* One line, always: an address broken across two is an address typed wrong. */
 .poster__address {
-  font-size: var(--t-h2);
-  line-height: var(--lh-h2);
+  margin: 0;
+  font-size: calc(var(--mm) * 9);
+  line-height: calc(var(--mm) * 12);
+  font-weight: var(--w-medium);
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  color: var(--brand);
+}
+
+/* A named page, so the margins change for this sheet and for no other page
+   the console prints. With no margin the browser has nowhere to put its own
+   date and address lines, and the sheet's inner margin is the paper's. */
+@page poster {
+  size: A4 portrait;
+  margin: 0;
 }
 
 @media print {
+  /* With "Background graphics" ticked the console's grey paper would print
+     around the sheet; while the poster is the page, the page is white. */
+  :root:has(.poster),
+  :root:has(.poster) body {
+    background: var(--surface);
+  }
+
+  .poster {
+    display: block;
+    padding: 0;
+  }
+
   .poster__print {
     display: none;
+  }
+
+  /* Where named pages are not understood the browser keeps its own margins
+     and prints its own date and address lines, so the sheet is as tall as its
+     contents and no wider than 180mm. Its contents stand 1.39 times as tall
+     as the sheet is wide, which at 180mm is 250mm: inside the margins of A4
+     and of US Letter alike. Printed at full width it ran onto a second page
+     of Letter, which is how this number was found. */
+  .poster__sheet {
+    max-inline-size: 180mm;
+    margin-inline: auto;
+    aspect-ratio: auto;
+    border-radius: 0;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+
+  @supports (page: auto) {
+    .poster__sheet {
+      page: poster;
+      max-inline-size: none;
+      inline-size: 210mm;
+      /* A millimetre short of the page, so rounding never asks for a second one. */
+      block-size: 296mm;
+    }
   }
 }
