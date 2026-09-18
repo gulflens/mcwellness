@@ -6,6 +6,7 @@ import {
   IDS,
   rejectsWith,
   rolledBack,
+  seedClient,
   seedTenant,
   setAuditContext,
 } from './helpers';
@@ -40,7 +41,9 @@ function lodging(overrides: Record<string, unknown> = {}): string {
 const SCRUB =
   'name = null, whatsapp_e164 = null, email = null, area = null, message = null, ' +
   'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null, ' +
-  'enquiring_for = null, interest = null';
+  'enquiring_for = null, interest = null, marketing_opt_in = null';
+/** A dismissal that keeps the person: only the address hash goes, which has no follow-up purpose. */
+const KEEP = 'ip_hash = null';
 
 /** What the expo form on the app sends (migration 919): the two answers, no country code. */
 function expoLodging(overrides: Record<string, unknown> = {}): string {
@@ -368,6 +371,163 @@ describe('who may read and action', () => {
       );
       // An actioned row admits no second action: the policy's `using` is status = new.
       expect(again).toBe(0);
+    });
+  });
+});
+
+/**
+ * The operator's decision of 19 September 2026: a dismissed enquiry keeps its
+ * details, so the practice can follow up or, where the person asked for it,
+ * send them its news. Kept only for a person who was told it would be
+ * (docs/superpowers/plans/2026-09-19-enquiries-keep-details.md).
+ */
+describe('what is kept, and for whom', () => {
+  const lodgeWith = async (overrides: Record<string, unknown>): Promise<string> => {
+    const { rows } = await owner.query<{ id: string }>(LODGE, [lodging(overrides)]);
+    return rows[0]!.id;
+  };
+  const dismissAs = (set: string) =>
+    `update enquiry set status = 'dismissed', dismiss_reason = 'Not now', actioned_at = now(), actioned_by = $2, ${set} where id = $1`;
+
+  it('remembers which wording a person read, and takes a form that does not say for the earlier one', async () => {
+    await rolledBack(owner, async () => {
+      const told = await lodgeWith({
+        notice_version: '2',
+        marketing_opt_in: 'true',
+        ip_hash: HASH_A,
+      });
+      const toldNo = await lodgeWith({ notice_version: '2', ip_hash: HASH_B });
+      const silent = await lodgeWith({ ip_hash: 'c'.repeat(64) });
+      // Anything but a plain 2 is the earlier wording: the safe reading of a form we do not know.
+      const odd = await lodgeWith({
+        notice_version: '7',
+        marketing_opt_in: 'true',
+        ip_hash: 'd'.repeat(64),
+      });
+      const { rows } = await owner.query<{
+        id: string;
+        notice_version: number;
+        marketing_opt_in: boolean | null;
+      }>('select id, notice_version, marketing_opt_in from enquiry where id = any($1::uuid[])', [
+        [told, toldNo, silent, odd],
+      ]);
+      const of = (id: string) => rows.find((row) => row.id === id);
+      expect(of(told)).toMatchObject({ notice_version: 2, marketing_opt_in: true });
+      // Asked, and did not tick: a refusal, which is not the same as never asked.
+      expect(of(toldNo)).toMatchObject({ notice_version: 2, marketing_opt_in: false });
+      expect(of(silent)).toMatchObject({ notice_version: 1, marketing_opt_in: null });
+      // Never asked, whatever the payload claimed: the earlier wording had no such tick.
+      expect(of(odd)).toMatchObject({ notice_version: 1, marketing_opt_in: null });
+    });
+  });
+
+  it('keeps a dismissed person only if they were told it would, and never their address hash', async () => {
+    await rolledBack(owner, async () => {
+      const told = await lodgeWith({ notice_version: '2', marketing_opt_in: 'true' });
+      // The hash has no follow-up purpose: kept with the rest, it is refused.
+      await rejectsWith(owner, CHECK_VIOLATION, dismissAs('email = email'), [told, IDS.ownerA]);
+      const kept = await owner.query(dismissAs(KEEP), [told, IDS.ownerA]);
+      expect(kept.rowCount).toBe(1);
+      const { rows } = await owner.query(
+        'select name, whatsapp_e164, email, marketing_opt_in, ip_hash from enquiry where id = $1',
+        [told],
+      );
+      expect(rows[0]).toEqual({
+        name: 'Hazel Harbour',
+        whatsapp_e164: '+971500000099',
+        email: 'hazel@example.com',
+        marketing_opt_in: true,
+        ip_hash: null,
+      });
+    });
+    await rolledBack(owner, async () => {
+      // Told "keeps nothing personal": the table itself refuses to keep them.
+      const promised = await lodgeWith({});
+      await rejectsWith(owner, CHECK_VIOLATION, dismissAs(KEEP), [promised, IDS.ownerA]);
+      expect((await owner.query(dismissAs(SCRUB), [promised, IDS.ownerA])).rowCount).toBe(1);
+    });
+    await rolledBack(owner, async () => {
+      // A lead is on the client record from that moment, whichever wording they read.
+      const told = await lodgeWith({ notice_version: '2' });
+      await seedClient(owner, IDS.tenantA, IDS.clientA, IDS.ownerA, 'Harbour');
+      await rejectsWith(
+        owner,
+        CHECK_VIOLATION,
+        `update enquiry set status = 'converted', client_id = $3, actioned_at = now(), actioned_by = $2, ${KEEP} where id = $1`,
+        [told, IDS.ownerA, IDS.clientA],
+      );
+    });
+  });
+
+  it('lets a dismissed row change in one way only: its person erased', async () => {
+    await rolledBack(owner, async () => {
+      const id = await lodgeWith({ notice_version: '2', marketing_opt_in: 'true' });
+      await owner.query(dismissAs(KEEP), [id, IDS.ownerA]);
+      // Not back to life, not onto a client, not a different reason, not different details.
+      for (const change of [
+        "status = 'new', dismiss_reason = null, actioned_at = null, actioned_by = null, ip_hash = 'e'",
+        "dismiss_reason = 'Something else'",
+        "name = 'Rowan Meadow'",
+        'marketing_opt_in = false',
+        'notice_version = 1',
+      ]) {
+        await rejectsWith(owner, CHECK_VIOLATION, `update enquiry set ${change} where id = $1`, [
+          id,
+        ]);
+      }
+      expect((await owner.query(`update enquiry set ${SCRUB} where id = $1`, [id])).rowCount).toBe(
+        1,
+      );
+      // And once erased, erased: nobody writes a person back onto the row.
+      await rejectsWith(
+        owner,
+        CHECK_VIOLATION,
+        "update enquiry set name = 'Hazel Harbour', whatsapp_e164 = '+971500000099' where id = $1",
+        [id],
+      );
+    });
+  });
+
+  it('lets an admin erase a kept person, a practitioner nothing, and nobody touch a scrubbed row', async () => {
+    await rolledBack(owner, async () => {
+      const kept = await lodgeWith({ notice_version: '2', ip_hash: HASH_A });
+      const gone = await lodgeWith({ ip_hash: HASH_B });
+      await owner.query(dismissAs(KEEP), [kept, IDS.ownerA]);
+      await owner.query(dismissAs(SCRUB), [gone, IDS.ownerA]);
+      const erase = (id: string) => owner.query(`update enquiry set ${SCRUB} where id = $1`, [id]);
+
+      const byPractitioner = await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => (await erase(kept)).rowCount,
+        'practitioner',
+      );
+      expect(byPractitioner).toBe(0);
+      // A row with nobody left on it is not the API role's to update at all, as before.
+      const scrubbedRow = await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => (await erase(gone)).rowCount,
+        'admin',
+      );
+      expect(scrubbedRow).toBe(0);
+      // Read inside the same role's block: `asApiRole` rolls its work back
+      // when it returns, so a read made afterwards sees the row as it was.
+      const byAdmin = await asApiRole(
+        owner,
+        IDS.tenantA,
+        async () => {
+          const { rowCount } = await erase(kept);
+          const { rows } = await owner.query(
+            'select name, status, dismiss_reason from enquiry where id = $1',
+            [kept],
+          );
+          return { rowCount, row: rows[0] };
+        },
+        'admin',
+      );
+      expect(byAdmin.rowCount).toBe(1);
+      expect(byAdmin.row).toEqual({ name: null, status: 'dismissed', dismiss_reason: 'Not now' });
     });
   });
 });
