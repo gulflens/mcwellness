@@ -2148,3 +2148,93 @@ practice's own PDF writer, which would give every browser the clean sheet
 without a setting. It needs the lockup as a plain RGB PNG, which the writer
 can embed and the present palette file is not, and a route to serve it. It is
 the operator's to ask for.
+
+## What was done on 2026-09-18: the twenty-ninth live pass — the poster as a file, for Safari's own lines
+
+**22:15 UTC on 18 September, which is 02:15 on 19 September in Dubai.** `main`
+at `b1a2571` — pull request 193, and with it 191, the records of the two
+passes before, which change nothing that runs. The third pass of one night on
+one screen, each asked for by the operator from the printer's side: make it
+the practice's own; make sure it is one sheet; take the small lines off.
+
+**No migration and no policy file; both hosted databases stay at 106.**
+Between `42d15d2` and `b1a2571` nothing under `db/` moved and no dependency
+manifest moved.
+
+**What the operator asked for, in their words:** to remove "McWellness", the
+date and time, the page's address and "Page 1 of 1" from the print. Those four
+are Safari's. A page cannot remove them, and the account of what was tried is
+in `docs/CHANGE-REQUESTS/trunk-round-50.md`; what a page *can* do is hand
+over a PDF, on which Safari has nothing to write. So the poster's page gained
+"Download PDF" beside "Print": the same sheet drawn in the browser at 300 dots
+to the inch and wrapped as one page of A4, with no route, no dependency and
+nothing sent anywhere.
+
+**Before it merged.** `verify` and `verify-db` each read SUCCESS for the head
+that merged, `e358306d`, and the merge was pinned to it. Both reviews passed
+on the first commit and what they found was taken in the second: security, a
+canvas of some 35MB that WebKit counts against one ceiling until it is
+collected, now given back at once; compliance, a failure message that hid the
+sentence somebody then needs, three places that claimed the file "prints
+clean" when it had been made and read and never printed, and a sentence that
+said a box exists without naming it. The second commit was run again in both
+engines, three files in a row, before it was pushed.
+
+**The hold protocol.** `ListAgents` showed no other session on the machine.
+
+**The build.** Archive `mcwellness-b1a2571.tar.gz`, 6,560,237 bytes, made with
+`--prefix=mcwellness/`; TUS create 201, PATCH 204 with the returned offset
+equal to the size; the keys read by `curl` from a file of mode 0600 deleted in
+the same command. Settings read back before building and unchanged. Build
+`01a0b695`: asked for at 22:13:55, completed at 22:15:29. The served name was
+seen changed at 22:15:38. **No restart — the twelfth consecutive pass without
+one.** Health 200 in 0.14 s, deep 200 in 0.18 s, and 200 at every
+fifteen-second poll across the build.
+
+**Verified by the chunk, with the absence measured first.** Before:
+`ExpoPosterPage-qg0W7m25.js`, 22,031 bytes, with no "Download PDF", no
+`DCTDecode` and no `poster__tools`, and holding `poster__print`. After:
+`ExpoPosterPage-DoLbIQNV.js`, 27,853 bytes, holding "Download PDF",
+`DCTDecode`, "untick" and `poster__tools`, with `poster__print` gone. The
+stylesheet moved from `ExpoPosterPage-DVtRjwF2.css` to
+`ExpoPosterPage-BNgYkyjd.css`, 2,206 bytes, **the name a local build of this
+tree wrote**, and it still holds `poster-paper`, so the twenty-eighth pass's
+mend came through. The entry moved from `index-COOzlje7.js` to
+`index-BzxO880l.js` and is 476,584 bytes for the fourth pass running. The
+shell's stylesheet did not move. The old entry and both old poster files 404,
+and a nonsense path 404s.
+
+**Why the page's script does not carry the local build's name and its
+stylesheet does.** A local build wrote `ExpoPosterPage-Bes4Kl2c.js`. The
+script imports the entry by name, the entry's name differs on the host because
+the host's `VITE_*` values are built into it, and so the script's own bytes
+differ by that one name. A stylesheet imports nothing. Compare stylesheets.
+
+**The served stylesheet, printed.** As in the twenty-eighth pass, production's
+own stylesheets, fonts and lockup were fetched and set beside the page's
+markup, this time with the buttons and the sentence above the sheet: one page
+through WebKit at the system's margins and at 18 points, one full page
+through Chrome with its headers left on. The text of each page was read out
+of the PDF and is the poster's five lines and nothing else, and the code on
+each says `https://app.mcwellnessuae.com/expo`.
+
+**The generator itself was not run from the served script**, and that is a
+limit of this record rather than an oversight. The served script imports the
+entry, which starts the whole app behind its sign-in, so it cannot be run
+alone. What was run, in Chrome and in WebKit, is the same source before the
+bundler, three files in a row, each one page of 210 by 297 millimetres with
+the code read back. A bundler renames; it does not change what a canvas
+draws.
+
+**Not checked, and the owner's to try once:** Safari the application pressing
+"Download PDF" and saving the file. It cannot be driven unattended. Its
+engine made the file here; the press is the same five lines that already
+deliver the books' CSVs and the expo's leads file in this app. Nor was the
+file printed from Safari or Preview here: that neither writes its own lines
+on a PDF is how both are known to behave.
+
+**Left as it was found.** Nothing was written to either database.
+
+**For the owner.** On `https://app.mcwellnessuae.com/admin/enquiries/poster`,
+press "Download PDF", open the file, and print it. Scan the printed sheet
+once with a phone; it should open `app.mcwellnessuae.com/expo`.
