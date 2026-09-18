@@ -82,6 +82,26 @@ const CONVERTED: Enquiry = {
   clientId: '00000008-0000-4000-8000-000000000011',
 };
 
+/** Lodged under the second wording, and asked for the practice's news. */
+const TOLD: Enquiry = {
+  ...EXPO,
+  id: '0000000e-0000-4000-8000-000000000005',
+  name: 'Iris Creek',
+  whatsappE164: '+971500000097',
+  email: 'iris@example.com',
+  noticeVersion: 2,
+  marketingOptIn: true,
+};
+/** The same person once dismissed and kept: still named, and who dismissed them and why. */
+const KEPT: Enquiry = {
+  ...TOLD,
+  id: '0000000e-0000-4000-8000-000000000006',
+  status: 'dismissed',
+  actionedAt: '2026-10-16T08:15:00.000Z',
+  actionedByName: 'Iris Harbour',
+  dismissReason: 'Not now, maybe after the summer',
+};
+
 const DISMISSED: Enquiry = {
   ...CONVERTED,
   id: '0000000e-0000-4000-8000-000000000003',
@@ -152,20 +172,52 @@ function mount(
       list = [{ ...CONVERTED, id: NEW.id, actionedByName: 'Iris Harbour' }, CONVERTED];
       return json({ clientId: CONVERTED.clientId, mrn: 'MW-000012' }, 201);
     }
-    if (url.endsWith('/dismiss')) {
-      posts.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
-      list = [
-        {
-          ...NEW,
-          status: 'dismissed',
-          name: null,
-          whatsappE164: null,
-          message: null,
-          dismissReason: 'Spam',
-          actionedByName: 'Iris Harbour',
+    if (url === '/api/enquiries/marketing.csv') {
+      posts.push({ url, body: null });
+      return new Response('Name,WhatsApp\r\n', {
+        status: 200,
+        headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': 'attachment; filename="news-list-2026-10-16.csv"',
         },
-        CONVERTED,
-      ];
+      });
+    }
+    const scrubbed = {
+      name: null,
+      whatsappE164: null,
+      email: null,
+      area: null,
+      message: null,
+      enquiringFor: null,
+      interest: null,
+      marketingOptIn: null,
+    };
+    if (url.endsWith('/dismiss')) {
+      const sent = init?.body
+        ? (JSON.parse(String(init.body)) as { reason: string; erase?: boolean })
+        : null;
+      posts.push({ url, body: sent });
+      const id = url.split('/').at(-2);
+      let kept = false;
+      list = list.map((row) => {
+        if (row.id !== id) return row;
+        // As the route does: kept only under the second wording, and only if nobody chose to erase.
+        kept = row.noticeVersion === 2 && sent?.erase !== true;
+        return {
+          ...row,
+          ...(kept ? {} : scrubbed),
+          status: 'dismissed',
+          dismissReason: sent?.reason ?? '',
+          actionedAt: '2026-10-16T08:15:00.000Z',
+          actionedByName: 'Iris Harbour',
+        };
+      });
+      return json({ ok: true, kept });
+    }
+    if (url.endsWith('/erase')) {
+      posts.push({ url, body: null });
+      const id = url.split('/').at(-2);
+      list = list.map((row) => (row.id === id ? { ...row, ...scrubbed } : row));
       return json({ ok: true });
     }
     return json({ error: 'not_found' }, 404);
@@ -202,7 +254,15 @@ function served(all: readonly Enquiry[], url: string) {
     counts[row.status][row.source] += 1;
     counts[row.status].all += 1;
   }
-  return { enquiries: page, counts, older: matching.length > 100 && last ? cursorOf(last) : null };
+  const marketable = all.filter(
+    (row) => row.marketingOptIn === true && row.name !== null && row.status !== 'converted',
+  ).length;
+  return {
+    enquiries: page,
+    counts,
+    older: matching.length > 100 && last ? cursorOf(last) : null,
+    marketable,
+  };
 }
 
 function json(body: unknown, status = 200): Response {
@@ -272,8 +332,17 @@ describe('EnquiriesPage', () => {
     expect(confirm.hasAttribute('disabled')).toBe(true);
     fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'Spam' } });
     expect(confirm.hasAttribute('disabled')).toBe(false);
+    // Lodged under the earlier wording: no choice is offered, and the screen says why.
+    expect(
+      screen.getByText(
+        'This person was told the enquiry keeps nothing personal, so dismissing erases their details.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole('radio')).toBeNull();
     fireEvent.click(confirm);
-    expect(await screen.findByText('Dismissed. It is in the Dismissed table now.')).toBeTruthy();
+    expect(
+      await screen.findByText('Dismissed, and their details erased, as this person was told.'),
+    ).toBeTruthy();
     expect(posts).toEqual([{ url: `/api/enquiries/${NEW.id}/dismiss`, body: { reason: 'Spam' } }]);
   });
 
@@ -320,13 +389,24 @@ describe('EnquiriesPage', () => {
     expect(await screen.findByText('Stand test')).toBeTruthy();
     expect(lists.at(-1)).toBe('/api/enquiries?status=dismissed');
     expect(screen.queryByText('Hazel Harbour')).toBeNull();
-    // A dismissed row holds nobody, so its table has no column for a name or a number.
+    // Who they were, where a dismissed row was allowed to keep them, and what happened.
     const dismissed = screen.getByRole('table', { name: 'Dismissed enquiries, newest first' });
     expect(
       within(dismissed)
         .getAllByRole('columnheader')
         .map((th) => th.textContent),
-    ).toEqual(['Received', 'From', 'Dismissed', 'By', 'Why']);
+    ).toEqual([
+      'Received',
+      'Name',
+      'WhatsApp',
+      'From',
+      'Message',
+      'Details',
+      'Dismissed',
+      'By',
+      'Why',
+      '',
+    ]);
     expect(within(dismissed).getByText('16 Oct 2026, 12:15')).toBeTruthy();
     expect(within(dismissed).getByText('Iris Harbour')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Convert to lead' })).toBeNull();
@@ -378,6 +458,86 @@ describe('EnquiriesPage', () => {
     expect(screen.queryByText(/could not be loaded/)).toBeNull();
   });
 
+  it('keeps a person who was told they would be kept, and shows them in the Dismissed table', async () => {
+    const { posts } = mount({ list: [TOLD] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+    // Kept unless somebody chooses otherwise.
+    const keep = screen.getByRole('radio', { name: 'Keep their details for follow-up' });
+    expect((keep as HTMLInputElement).checked).toBe(true);
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'Not now' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss' })[0]!);
+    expect(
+      await screen.findByText('Dismissed. Their details are kept in the Dismissed table.'),
+    ).toBeTruthy();
+    expect(posts).toEqual([
+      { url: `/api/enquiries/${TOLD.id}/dismiss`, body: { reason: 'Not now', erase: false } },
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismissed (1)' }));
+    const table = await screen.findByRole('table', { name: 'Dismissed enquiries, newest first' });
+    expect(within(table).getByText('Iris Creek')).toBeTruthy();
+    expect(within(table).getByText('+971500000097')).toBeTruthy();
+    expect(within(table).getByText('Email: iris@example.com')).toBeTruthy();
+    expect(within(table).getByText('Asked for news and offers')).toBeTruthy();
+    expect(within(table).getByText('Not now')).toBeTruthy();
+  });
+
+  it('erases at the moment of dismissing when that is chosen', async () => {
+    const { posts } = mount({ list: [TOLD] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Erase their details' }));
+    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'Wrong number' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss' })[0]!);
+    expect(await screen.findByText('Dismissed, and their details erased.')).toBeTruthy();
+    expect(posts.at(-1)?.body).toEqual({ reason: 'Wrong number', erase: true });
+  });
+
+  it('erases a kept person later, after asking once, and says what is left', async () => {
+    const { posts } = mount({ list: [NEW, KEPT, DISMISSED] });
+    await screen.findByText('Hazel Harbour');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismissed (2)' }));
+    await screen.findByText('Iris Creek');
+    // The row with nobody left on it says so, and has nothing to erase.
+    expect(screen.getByText('Details erased')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Erase details' })).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Erase details' }));
+    expect(screen.getByText('Erase their details? This cannot be undone.')).toBeTruthy();
+    expect(posts).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Erase' }));
+    expect(
+      await screen.findByText(
+        'Details erased. The row keeps when it came and why it was dismissed.',
+      ),
+    ).toBeTruthy();
+    expect(posts).toEqual([{ url: `/api/enquiries/${KEPT.id}/erase`, body: null }]);
+    await waitFor(() => expect(screen.queryByText('Iris Creek')).toBeNull());
+    expect(screen.getAllByText('Details erased')).toHaveLength(2);
+  });
+
+  it('offers the news list only while somebody who asked for it is on a row', async () => {
+    const { posts } = mount({ list: [TOLD, NEW] });
+    await screen.findByText('Iris Creek');
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: () => 'blob:news',
+      revokeObjectURL: () => undefined,
+    });
+    expect(screen.getByText(/people who asked for McWellness news/)).toBeTruthy();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Download news list (1)' }));
+      await waitFor(() =>
+        expect(posts).toEqual([{ url: '/api/enquiries/marketing.csv', body: null }]),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    cleanup();
+    mount({ list: [NEW, EXPO] });
+    await screen.findByText('Hazel Harbour');
+    expect(screen.queryByRole('button', { name: /Download news list/ })).toBeNull();
+  });
+
   it('leaves the table alone when the tab or the source already open is pressed again', async () => {
     const { lists } = mount({ list: [EXPO, NEW] });
     await screen.findByText('Hazel Harbour');
@@ -414,7 +574,9 @@ describe('EnquiriesPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
     fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'Spam' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss' })[0]!);
-    expect(await screen.findByText('Dismissed. It is in the Dismissed table now.')).toBeTruthy();
+    expect(
+      await screen.findByText('Dismissed, and their details erased, as this person was told.'),
+    ).toBeTruthy();
     await waitFor(() => expect(screen.queryByText('Hazel Harbour')).toBeNull());
     expect(screen.getByRole('button', { name: 'Active (0)' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Dismissed (1)' })).toBeTruthy();

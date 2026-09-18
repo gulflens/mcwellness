@@ -74,9 +74,38 @@ describe('ExpoEnquiryPage', () => {
         interest: 'both',
         message: 'Saw the stand',
         consent: 'on',
+        // The wording this form shows, so the practice knows what this person
+        // was told; and the optional tick, left alone.
+        notice: 2,
+        marketing: '',
         website: '',
       },
     });
+  });
+
+  it('says the details are kept and can be deleted, and no longer that an enquiry keeps nothing', () => {
+    mount();
+    expect(screen.getByText(/we keep them so we can follow up with you later/)).toBeTruthy();
+    expect(screen.getByText(/You can ask us to delete them at any time/)).toBeTruthy();
+    // The earlier promise. A form that showed it must not be one that says `notice: 2`.
+    expect(screen.queryByText(/keeps nothing personal/)).toBeNull();
+  });
+
+  it('asks about news separately, leaves it unticked, and does not need it to send', async () => {
+    const { posts } = mount();
+    const news = screen.getByRole('checkbox', {
+      name: 'Keep me posted about McWellness news and offers, including on social media.',
+    }) as HTMLInputElement;
+    expect(news.checked).toBe(false);
+    expect(news.required).toBe(false);
+    fillIn();
+    agree();
+    // Sendable without it: agreeing to be rung back is not agreeing to be marketed to.
+    expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+    fireEvent.click(news);
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]?.body).toMatchObject({ notice: 2, marketing: 'on', consent: 'on' });
   });
 
   it('will not send until the box is ticked', () => {

@@ -4,6 +4,7 @@ import {
   ENQUIRY_PAGE,
   ENQUIRY_SOURCES,
   ENQUIRY_STATUSES,
+  carriesAPerson,
   enquiryWaitingDays,
   type EnquiringFor,
   type EnquirySource,
@@ -11,7 +12,7 @@ import {
   type EnquiryTally,
   type Interest,
 } from '@domain/enquiry';
-import { EnquiryListResponse, type Enquiry } from '../../api/enquiries/schema';
+import { DismissResponse, EnquiryListResponse, type Enquiry } from '../../api/enquiries/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader } from '../../shell/components/Controls';
 import { StatusChip } from '../../shell/components/StatusChip';
@@ -33,6 +34,13 @@ import './enquiries.css';
  * crowd out one that is waiting, and the dismissed are not fetched at all
  * until somebody opens them. It is still one table in the database: see
  * `domain/enquiry/list.ts` for why.
+ *
+ * A dismissed enquiry keeps its person where that person was told it would
+ * (the operator's decision of 19 September 2026, migration 921): under the
+ * second wording the dismiss form offers to keep or to erase, under the first
+ * it offers nothing and says why; the Dismissed table shows who was kept, says
+ * "Details erased" of who was not, and can erase a kept person later. The
+ * people who asked for the practice's news can be downloaded as a file.
  *
  * From trunk round 50 the expo's enquiries land here too, under a filter by
  * source so the stand's leads can be followed up as one list, with the two
@@ -122,6 +130,11 @@ const LOAD_ERROR = 'The enquiries could not be loaded. Try again.';
 /** The file is a copy the scrub and an erasure never reach, so the office is told what to do with it. */
 const FILE_NOTE =
   'The expo leads file holds names and numbers. Keep it on the practice’s own device and delete it once the follow-up is done.';
+/** A copy no scrub reaches, and one step from a third party: the office is told both. */
+const NEWS_NOTE =
+  'The news list holds the names and numbers of people who asked for McWellness news. Keep it on the practice’s own device. Before it is uploaded to a social platform, that platform has to be on the practice’s approved list.';
+const PROMISED =
+  'This person was told the enquiry keeps nothing personal, so dismissing erases their details.';
 const ACTION_ERROR = 'That could not be done. Reload and try again.';
 const OLDER_ERROR = 'The older enquiries could not be loaded. Try again.';
 
@@ -138,6 +151,9 @@ export function EnquiriesPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [dismissing, setDismissing] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const [eraseOnDismiss, setEraseOnDismiss] = useState(false);
+  const [erasing, setErasing] = useState<string | null>(null);
+  const [marketable, setMarketable] = useState(0);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<SourceFilter>('all');
@@ -171,6 +187,7 @@ export function EnquiriesPage() {
           setEnquiries(parsed.data.enquiries);
           setCounts(parsed.data.counts);
           setOlder(parsed.data.older);
+          setMarketable(parsed.data.marketable);
           setFailed(false);
         } else if (live) {
           setFailed(true);
@@ -226,6 +243,7 @@ export function EnquiriesPage() {
       if (parsed?.success) {
         setEnquiries((shown) => [...(shown ?? []), ...parsed.data.enquiries]);
         setCounts(parsed.data.counts);
+        setMarketable(parsed.data.marketable);
         if (parsed.data.older === null) handFocusOn.current = true;
         setOlder(parsed.data.older);
       } else {
@@ -248,6 +266,8 @@ export function EnquiriesPage() {
     setOlder(null);
     setError(null);
     setDismissing(null);
+    setErasing(null);
+    setEraseOnDismiss(false);
     setReason('');
     if (next.status !== undefined) setStatus(next.status);
     if (next.source !== undefined) setSource(next.source);
@@ -284,16 +304,51 @@ export function EnquiriesPage() {
     setBusy(enquiry.id);
     setError(null);
     setOutcome(null);
+    // The choice exists only for a person told their details are kept. For
+    // one promised otherwise nothing is sent, and the server erases whatever
+    // this screen might have said.
+    const mayKeep = enquiry.noticeVersion === 2;
     try {
       const res = await apiFetch(`/api/enquiries/${enquiry.id}/dismiss`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ reason: reason.trim() }),
+        body: JSON.stringify(
+          mayKeep ? { reason: reason.trim(), erase: eraseOnDismiss } : { reason: reason.trim() },
+        ),
       });
-      if (res.ok) {
-        setOutcome('Dismissed. It is in the Dismissed table now.');
+      const done = res.ok ? DismissResponse.safeParse(await res.json()) : null;
+      if (done?.success) {
+        setOutcome(
+          done.data.kept
+            ? 'Dismissed. Their details are kept in the Dismissed table.'
+            : mayKeep
+              ? 'Dismissed, and their details erased.'
+              : 'Dismissed, and their details erased, as this person was told.',
+        );
         setDismissing(null);
+        setEraseOnDismiss(false);
         setReason('');
+        reload();
+      } else {
+        setError(ACTION_ERROR);
+      }
+    } catch {
+      setError(ACTION_ERROR);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Erases the person from a dismissed row that kept them. Asked about once, because it cannot be undone. */
+  async function erase(enquiry: Enquiry): Promise<void> {
+    setBusy(enquiry.id);
+    setError(null);
+    setOutcome(null);
+    try {
+      const res = await apiFetch(`/api/enquiries/${enquiry.id}/erase`, { method: 'POST' });
+      if (res.ok) {
+        setOutcome('Details erased. The row keeps when it came and why it was dismissed.');
+        setErasing(null);
         reload();
       } else {
         setError(ACTION_ERROR);
@@ -309,6 +364,13 @@ export function EnquiriesPage() {
     setError(null);
     setOutcome(null);
     const arrived = await downloadCsv(apiFetch, '/api/enquiries/expo.csv');
+    if (!arrived) setError(DOWNLOAD_REFUSED);
+  }
+
+  async function downloadNewsList(): Promise<void> {
+    setError(null);
+    setOutcome(null);
+    const arrived = await downloadCsv(apiFetch, '/api/enquiries/marketing.csv');
     if (!arrived) setError(DOWNLOAD_REFUSED);
   }
 
@@ -338,8 +400,64 @@ export function EnquiriesPage() {
     render: (row) => row.actionedByName ?? '—',
   };
 
-  // Once actioned a row holds nobody, so these two tables have no column for a
-  // name, a number or a message: only what happened, when, and who did it.
+  // The four columns a row shows while it still names somebody: the waiting
+  // table always, the dismissed one where the person was kept.
+  const who: Column<Enquiry> = {
+    key: 'name',
+    header: 'Name',
+    // A dismissed row with nobody left on it says so, rather than a dash that
+    // reads as a blank.
+    render: (row) =>
+      carriesAPerson(row) ? (
+        (row.name ?? '—')
+      ) : (
+        <span className="enquiries__erased">Details erased</span>
+      ),
+  };
+  const number: Column<Enquiry> = {
+    key: 'number',
+    header: 'WhatsApp',
+    render: (row) => row.whatsappE164 ?? '—',
+  };
+  const message: Column<Enquiry> = {
+    key: 'message',
+    header: 'Message',
+    render: (row) => (
+      <span className="enquiries__message" title={row.message ?? undefined}>
+        {firstLine(row.message)}
+      </span>
+    ),
+  };
+  const details: Column<Enquiry> = {
+    key: 'details',
+    header: 'Details',
+    render: (row) => {
+      // What the discovery-call form asked, so the call goes the way the
+      // person asked for it; the widget sends none of these.
+      const lines = [
+        row.enquiringFor ? `For: ${ENQUIRING_FOR_LABELS[row.enquiringFor]}` : null,
+        row.interest ? `Interested in: ${INTEREST_LABELS[row.interest]}` : null,
+        row.area ? `Area: ${row.area}` : null,
+        row.concern ? `Asked about: ${row.concern}` : null,
+        row.preferredTime ? `Prefers: ${row.preferredTime}` : null,
+        row.contactMethod ? `Reach by: ${row.contactMethod}` : null,
+        row.email ? `Email: ${row.email}` : null,
+        row.marketingOptIn === true ? 'Asked for news and offers' : null,
+      ].filter((line): line is string => line !== null);
+      return lines.length === 0 ? (
+        '—'
+      ) : (
+        <span className="enquiries__details">
+          {lines.map((line) => (
+            <span key={line}>{line}</span>
+          ))}
+        </span>
+      );
+    },
+  };
+
+  // A converted row holds nobody: the person is on the client record. So its
+  // table shows only what happened, when, and who did it.
   const convertedColumns: readonly Column<Enquiry>[] = [
     received,
     from,
@@ -354,10 +472,35 @@ export function EnquiriesPage() {
   ];
   const dismissedColumns: readonly Column<Enquiry>[] = [
     received,
+    who,
+    number,
     from,
+    message,
+    details,
     actioned('Dismissed'),
     by,
     { key: 'why', header: 'Why', render: (row) => row.dismissReason ?? '—' },
+    {
+      key: 'actions',
+      header: '',
+      // Only a row that still names somebody has anybody to erase.
+      render: (row) =>
+        !carriesAPerson(row) ? null : erasing === row.id ? (
+          <div className="enquiries__dismiss">
+            <span>Erase their details? This cannot be undone.</span>
+            <Button variant="quiet" disabled={busy === row.id} onClick={() => void erase(row)}>
+              Erase
+            </Button>
+            <Button variant="quiet" onClick={() => setErasing(null)}>
+              Keep
+            </Button>
+          </div>
+        ) : (
+          <Button variant="quiet" disabled={busy === row.id} onClick={() => setErasing(row.id)}>
+            Erase details
+          </Button>
+        ),
+    },
   ];
 
   const activeColumns: readonly Column<Enquiry>[] = [
@@ -366,43 +509,11 @@ export function EnquiriesPage() {
       header: 'Received',
       render: (row) => stamp.format(new Date(row.receivedAt)),
     },
-    { key: 'name', header: 'Name', render: (row) => row.name ?? '—' },
-    { key: 'number', header: 'WhatsApp', render: (row) => row.whatsappE164 ?? '—' },
-    { key: 'source', header: 'From', render: (row) => SOURCE_LABELS[row.source] },
-    {
-      key: 'message',
-      header: 'Message',
-      render: (row) => (
-        <span className="enquiries__message" title={row.message ?? undefined}>
-          {firstLine(row.message)}
-        </span>
-      ),
-    },
-    {
-      key: 'details',
-      header: 'Details',
-      render: (row) => {
-        // What the discovery-call form asked, so the call goes the way the
-        // person asked for it; the widget sends none of these.
-        const lines = [
-          row.enquiringFor ? `For: ${ENQUIRING_FOR_LABELS[row.enquiringFor]}` : null,
-          row.interest ? `Interested in: ${INTEREST_LABELS[row.interest]}` : null,
-          row.area ? `Area: ${row.area}` : null,
-          row.concern ? `Asked about: ${row.concern}` : null,
-          row.preferredTime ? `Prefers: ${row.preferredTime}` : null,
-          row.contactMethod ? `Reach by: ${row.contactMethod}` : null,
-        ].filter((line): line is string => line !== null);
-        return lines.length === 0 ? (
-          '—'
-        ) : (
-          <span className="enquiries__details">
-            {lines.map((line) => (
-              <span key={line}>{line}</span>
-            ))}
-          </span>
-        );
-      },
-    },
+    who,
+    number,
+    from,
+    message,
+    details,
     {
       key: 'status',
       header: 'Status',
@@ -430,6 +541,31 @@ export function EnquiriesPage() {
               onChange={(e) => setReason(e.target.value)}
               maxLength={200}
             />
+            {row.noticeVersion === 2 ? (
+              <fieldset className="enquiries__keep">
+                <legend className="visually-hidden">What happens to their details</legend>
+                <label className="checkbox">
+                  <input
+                    type="radio"
+                    name={`keep-${row.id}`}
+                    checked={!eraseOnDismiss}
+                    onChange={() => setEraseOnDismiss(false)}
+                  />
+                  <span>Keep their details for follow-up</span>
+                </label>
+                <label className="checkbox">
+                  <input
+                    type="radio"
+                    name={`keep-${row.id}`}
+                    checked={eraseOnDismiss}
+                    onChange={() => setEraseOnDismiss(true)}
+                  />
+                  <span>Erase their details</span>
+                </label>
+              </fieldset>
+            ) : (
+              <span className="enquiries__promised">{PROMISED}</span>
+            )}
             <Button
               variant="quiet"
               disabled={busy === row.id || reason.trim() === ''}
@@ -457,6 +593,7 @@ export function EnquiriesPage() {
               disabled={busy === row.id}
               onClick={() => {
                 setDismissing(row.id);
+                setEraseOnDismiss(false);
                 setReason('');
               }}
             >
@@ -471,11 +608,16 @@ export function EnquiriesPage() {
     <section className="page">
       <PageHeader
         title="Enquiries"
-        aside="What the website's forms and the expo's sent. What is still waiting is under Active: convert one to make it a lead on the client list, or dismiss it with a reason. Either way it moves to a table of its own, and the enquiry itself then keeps nothing personal."
+        aside="What the website's forms and the expo's sent. What is still waiting is under Active: convert one to make it a lead on the client list, or dismiss it with a reason. Either way it moves to a table of its own. A lead's details go onto the client record; a dismissed person's are kept only if they were told they would be, and can be erased."
         action={
           <div className="enquiries__actions">
             {expoWaiting ? (
               <Button onClick={() => void downloadExpoLeads()}>Download expo leads</Button>
+            ) : null}
+            {marketable > 0 ? (
+              <Button onClick={() => void downloadNewsList()}>
+                Download news list ({marketable})
+              </Button>
             ) : null}
             <a className="link" href="/admin/enquiries/poster" target="_blank" rel="noopener">
               Expo poster
@@ -504,6 +646,7 @@ export function EnquiriesPage() {
         </nav>
       ) : null}
       {expoWaiting ? <Note>{FILE_NOTE}</Note> : null}
+      {marketable > 0 ? <Note>{NEWS_NOTE}</Note> : null}
       {outcome ? <Note tone="attention">{outcome}</Note> : null}
       {error ? <Note tone="critical">{error}</Note> : null}
       {failed ? <Note tone="critical">{LOAD_ERROR}</Note> : null}
