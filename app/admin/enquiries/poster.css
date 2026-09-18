@@ -21,6 +21,24 @@
   padding: var(--s-8) var(--s-6) var(--s-16);
 }
 
+/* What is pressed and what is said about it: above the sheet, in reach
+   without scrolling past a page of paper, and never on the paper. */
+.poster__tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s-3);
+  max-inline-size: var(--measure);
+  text-align: center;
+}
+
+.poster__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-3);
+}
+
 .poster__sheet {
   container-type: inline-size;
   display: grid;
@@ -135,7 +153,7 @@
     padding: 0;
   }
 
-  .poster__print {
+  .poster__tools {
     display: none;
   }
 

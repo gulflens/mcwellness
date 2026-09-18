@@ -334,3 +334,72 @@ old rule put back by hand, and failed, before it was trusted.
 
 The program is kept outside the repository, with the practice's other tools,
 as `wkprint.swift`.
+
+## The poster as a file — Safari's own lines (2026-09-19, later the same night)
+
+The operator printed the mended poster from Safari and asked for four lines
+to go: the page's title, the date and time, the page's address, and "Page 1 of
+1". They are Safari's, not the page's.
+
+**What a page can and cannot do about them.** Chrome and Firefox write such
+lines in the page's margin, and the poster's named page leaves none, so they
+write nothing: printed with Chrome's "Headers and footers" left on, the sheet
+came out alone. Safari's are drawn by the print system over whatever the page
+asked for. An unnamed `@page { margin: 0 }`, added through the CSSOM because
+the policy forbids an inline style element, was printed through WebKit: the
+top margin went, the footer was drawn over the corner regardless, and the
+sheet was left against the top edge. It was not adopted. In Safari the lines
+go when "Print headers and footers" is unticked in its print window, and by no
+rule a page can write.
+
+**What was built instead.** Safari writes none of those lines on a PDF. So the
+page gains "Download PDF" beside "Print": `posterPdf.ts` draws the same sheet
+onto a canvas at 300 dots to the inch, 2480 by 3508 pixels, and hands it over
+as one page of A4 that prints clean from Safari, Chrome or Preview.
+
+- **All of it in the browser.** No route, no dependency, nothing sent
+  anywhere, and nothing about anybody in it: the code holds this origin's
+  `/expo`, by the page's own encoder, exactly as the page's does.
+- **Not the shared writer**, `domain/shared/document/pdf.ts`, and on purpose.
+  That writer sets type from TrueType programs that live on the server and
+  embeds a PNG's own scanlines. This sheet is a picture the browser has
+  already drawn, and PDF's `/DCTDecode` *is* JPEG, so the canvas's bytes go
+  into the file untouched and the whole writer is six objects and a
+  cross-reference table.
+- **No colour is written in it.** The canvas reads `--brand`, `--ink`,
+  `--ink-2`, `--surface`, `--font` and the two weights from the page's own
+  tokens when it draws.
+- **One sheet, described twice** — `poster.css` for the page, `POSTER_MM` for
+  the file. `posterPdf.test.ts` reads seventeen lengths out of the stylesheet
+  and fails if the two stop being the same sheet. The words are one constant,
+  used by both.
+- The buttons and the sentence under them stand in `.poster__tools`, which
+  does not print.
+
+### Checked, not claimed
+
+The real generator was run in Chrome and in WebKit, the engine Safari uses,
+and the file each made was saved and opened: one page, 210 by 297
+millimetres, and the code read back off both files with the Vision framework
+says `https://app.mcwellnessuae.com/expo`. WebKit's file is 653 kB and
+Chrome's 502 kB. Beside the page's own print they are the same sheet to the
+eye.
+
+Printing the page itself was run again with the new markup above the sheet:
+one page in Chrome with its headers left on, one page in WebKit at the
+system's margins and at 18 points, and the text layer of each holds the
+poster's five lines and nothing else — no button and no sentence reached the
+paper.
+
+**Not checked:** Safari the application, which cannot be driven unattended.
+What was run is its engine, which makes the file; the saving of a file from a
+`blob:` address through a link with `download` is the application's, and was
+not pressed by a person here.
+
+**Known and left:** the lockup is 960 pixels across and the sheet sets it 120
+millimetres wide, which is 203 dots to the inch, on the page and in the file
+alike. The operator's source is 1,728 across at that crop. A sharper cut for
+paper is a separate, small piece.
+
+`pnpm verify`: 253 files, 2,975 tests. No migration, no policy file, no API
+route, no dependency, no asset.

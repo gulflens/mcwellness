@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import qrcode from 'qrcode-generator';
-import { Button } from '../../shell/components/Controls';
+import { Button, Note } from '../../shell/components/Controls';
+import { POSTER_LEDE, POSTER_TITLE, makePosterPdf, savePdf as saveFile } from './posterPdf';
 import './poster.css';
 
 /**
@@ -15,6 +16,13 @@ import './poster.css';
  * is on the sheet as borders and type and never as a fill, because a browser
  * leaves fills off the paper unless somebody ticks a box and always prints
  * the other two (poster.css).
+ *
+ * And the sheet as a file, beside Print. Chrome and Firefox print this page as
+ * the sheet alone, because the page leaves them no margin to write in. Safari
+ * writes its own date, title, address and page number over any page it prints,
+ * and nothing the page says stops it; it writes none of them on a PDF. So
+ * "Download PDF" draws the same sheet in the browser and hands it over as one
+ * page of A4 (posterPdf.ts), and the file prints clean from anything.
  *
  * The code encodes this origin's own address, so staging prints a staging
  * code and production a production one; nothing about anybody is in it. The
@@ -48,15 +56,51 @@ export function qrPath(text: string): { d: string; size: number } {
   return { d: squares.join(''), size: modules + QUIET_ZONE * 2 };
 }
 
-export function ExpoPosterPage() {
+const COULD_NOT = 'The PDF could not be made. Print this page instead.';
+
+export function ExpoPosterPage({
+  makePdf = makePosterPdf,
+  savePdf = saveFile,
+}: {
+  /** The two halves of the download, so a test can stand in for a canvas it has not got. */
+  makePdf?: typeof makePosterPdf;
+  savePdf?: typeof saveFile;
+} = {}) {
   const address = expoAddress(window.location.origin);
-  const { d, size } = useMemo(() => qrPath(address), [address]);
+  const code = useMemo(() => qrPath(address), [address]);
   const inWords = address.replace(/^https?:\/\//, '');
+  const [file, setFile] = useState<'idle' | 'making' | 'failed'>('idle');
+
+  async function download(): Promise<void> {
+    setFile('making');
+    try {
+      savePdf(await makePdf({ inWords, code }), 'McWellness-expo-poster.pdf');
+      setFile('idle');
+    } catch {
+      // Nothing to report and nobody to report it to: the sheet holds no one's
+      // details, and Print is still there.
+      setFile('failed');
+    }
+  }
+
   return (
     <main className="poster">
-      <Button variant="primary" className="poster__print" onClick={() => window.print()}>
-        Print
-      </Button>
+      <div className="poster__tools">
+        <div className="poster__buttons">
+          <Button variant="primary" disabled={file === 'making'} onClick={() => void download()}>
+            {file === 'making' ? 'Preparing the PDF' : 'Download PDF'}
+          </Button>
+          <Button onClick={() => window.print()}>Print</Button>
+        </div>
+        {file === 'failed' ? (
+          <Note tone="critical">{COULD_NOT}</Note>
+        ) : (
+          <Note>
+            The PDF prints as the poster alone. Printed from this page, Safari adds the date and the
+            web address, and only its own print window can leave them off.
+          </Note>
+        )}
+      </div>
       <article className="poster__sheet">
         <div className="poster__page">
           {/* The alt carries the name, as on sign-in: there is no text beside it. */}
@@ -68,20 +112,18 @@ export function ExpoPosterPage() {
             height={402}
           />
           <div className="poster__invite">
-            <h1 className="poster__title">Scan to tell us about yourself</h1>
-            <p className="poster__lede">
-              Leave your details and we will be in touch after the expo.
-            </p>
+            <h1 className="poster__title">{POSTER_TITLE}</h1>
+            <p className="poster__lede">{POSTER_LEDE}</p>
           </div>
           <div className="poster__frame">
             <svg
               className="poster__code"
-              viewBox={`0 0 ${size} ${size}`}
+              viewBox={`0 0 ${code.size} ${code.size}`}
               shapeRendering="crispEdges"
               role="img"
               aria-label={`QR code for ${inWords}`}
             >
-              <path fill="currentColor" d={d} />
+              <path fill="currentColor" d={code.d} />
             </svg>
           </div>
           <p className="poster__address">{inWords}</p>
