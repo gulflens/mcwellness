@@ -11,6 +11,8 @@
  */
 
 /** Long enough for anything a person writes, short enough that the table cannot be used as free storage. */
+import { noticeOf, type NoticeVersion } from './keep';
+
 const LIMITS = {
   name: 120,
   phone: 24,
@@ -64,6 +66,10 @@ export type LodgedEnquiry = {
   /** The expo form's two answers; null from the website's forms, which never ask. */
   enquiringFor: EnquiringFor | null;
   interest: Interest | null;
+  /** Which wording the form showed; a form that does not say showed the first (`keep.ts`). */
+  noticeVersion: NoticeVersion;
+  /** The second wording's optional tick for news and offers; null under the first, which never asked. */
+  marketingOptIn: boolean | null;
 };
 
 export type ParseResult =
@@ -171,6 +177,11 @@ export function parseEnquiry(body: Record<string, unknown>): ParseResult {
   const enquiringFor = source === 'expo' ? oneOf(body.enquiring_for, ENQUIRING_FOR) : null;
   const interest = source === 'expo' ? oneOf(body.interest, INTERESTS) : null;
 
+  // The tick for news belongs to the second wording. Under the first nobody
+  // was asked, so whatever arrives in that field answers nothing.
+  const noticeVersion = noticeOf(body.notice);
+  const marketingOptIn = noticeVersion === 2 ? consentOf(body.marketing) === true : null;
+
   const missing: MissingField[] = [];
   if (!name) missing.push('name');
   if (!whatsappE164) missing.push('phone');
@@ -195,6 +206,8 @@ export function parseEnquiry(body: Record<string, unknown>): ParseResult {
       source,
       enquiringFor,
       interest,
+      noticeVersion,
+      marketingOptIn,
     },
   };
 }

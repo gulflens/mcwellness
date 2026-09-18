@@ -67,6 +67,9 @@ describe('parseEnquiry', () => {
       source: 'website',
       enquiringFor: null,
       interest: null,
+      // A form that does not say which wording it showed showed the earlier one.
+      noticeVersion: 1,
+      marketingOptIn: null,
     });
   });
 
@@ -140,6 +143,29 @@ describe('parseEnquiry', () => {
     expect(result.ok && result.enquiry.contactMethod).toBe('whatsapp');
   });
 
+  it('reads which wording the form showed, and the news tick only under the second', () => {
+    const read = (fields: Record<string, unknown>) => {
+      const result = parseEnquiry(form(fields));
+      return result.ok ? result.enquiry : null;
+    };
+    // The second wording, and its optional tick given, not given, and left alone.
+    expect(read({ notice: '2', marketing: 'on' })).toMatchObject({
+      noticeVersion: 2,
+      marketingOptIn: true,
+    });
+    expect(read({ notice: '2', marketing: '' })).toMatchObject({
+      noticeVersion: 2,
+      marketingOptIn: false,
+    });
+    expect(read({ notice: 2 })).toMatchObject({ noticeVersion: 2, marketingOptIn: false });
+    // The earlier wording had no such tick: a value that arrives under it answers nothing.
+    expect(read({ marketing: 'on' })).toMatchObject({ noticeVersion: 1, marketingOptIn: null });
+    expect(read({ notice: '3', marketing: 'on' })).toMatchObject({
+      noticeVersion: 1,
+      marketingOptIn: null,
+    });
+  });
+
   it('falls back to the website as the source when none is named', () => {
     const result = parseEnquiry(form({ source: undefined }));
     expect(result.ok && result.enquiry.source).toBe('website');
@@ -181,6 +207,8 @@ describe('parseEnquiry, the expo form', () => {
       source: 'expo',
       enquiringFor: 'child',
       interest: 'both',
+      noticeVersion: 1,
+      marketingOptIn: null,
     });
   });
 

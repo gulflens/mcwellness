@@ -28,7 +28,11 @@ export type IncompleteResponse = z.infer<typeof IncompleteResponse> & {
 /** The three an enquiry can be, from the domain, which is where the list's rules read them. */
 export { ENQUIRY_STATUSES };
 
-/** One enquiry as the console lists it. Personal fields are null once actioned. */
+/**
+ * One enquiry as the console lists it. A converted row's personal fields are
+ * null; a dismissed row's are null unless its person was told they would be
+ * kept (migration 921, the operator's decision of 19 September 2026).
+ */
 export const Enquiry = z.object({
   id: z.uuid(),
   receivedAt: z.iso.datetime({ offset: true }),
@@ -46,6 +50,10 @@ export const Enquiry = z.object({
   /** The expo form's two answers (migration 919); null from the website, and once actioned. */
   enquiringFor: z.enum(ENQUIRING_FOR).nullable(),
   interest: z.enum(INTERESTS).nullable(),
+  /** Which wording the person read: 1 promised the enquiry keeps nothing; 2 said the details are kept. */
+  noticeVersion: z.union([z.literal(1), z.literal(2)]),
+  /** The second wording's optional tick for news and offers; null is never asked. */
+  marketingOptIn: z.boolean().nullable(),
   actionedAt: z.iso.datetime({ offset: true }).nullable(),
   actionedByName: z.string().nullable(),
   clientId: z.uuid().nullable(),
@@ -72,11 +80,21 @@ export const EnquiryListResponse = z.object({
   counts: z.object({ new: SourceCounts, converted: SourceCounts, dismissed: SourceCounts }),
   /** Where this page stopped, to ask for the next with; null when it reached the end. */
   older: z.string().nullable(),
+  /** How many people asked for the practice's news and are still on a row: the news list's length. */
+  marketable: count,
 });
 export type EnquiryListResponse = z.infer<typeof EnquiryListResponse>;
 
-export const DismissBody = z.object({ reason: z.string().trim().min(1).max(200) });
+export const DismissBody = z.object({
+  reason: z.string().trim().min(1).max(200),
+  /** Chosen by the person dismissing: spam, a wrong number, somebody who asked to be forgotten. */
+  erase: z.boolean().optional(),
+});
 export type DismissBody = z.infer<typeof DismissBody>;
+
+/** What the dismissal did with the person: kept only where they were told they would be, and nobody chose to erase. */
+export const DismissResponse = z.object({ ok: z.literal(true), kept: z.boolean() });
+export type DismissResponse = z.infer<typeof DismissResponse>;
 
 export const ConvertResponse = z.object({ clientId: z.uuid(), mrn: z.string() });
 export type ConvertResponse = z.infer<typeof ConvertResponse>;

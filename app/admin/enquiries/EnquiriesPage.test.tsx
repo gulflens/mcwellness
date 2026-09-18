@@ -38,6 +38,9 @@ const NEW: Enquiry = {
   consent: true,
   enquiringFor: null,
   interest: null,
+  // Lodged under the earlier wording, as every enquiry to date was.
+  noticeVersion: 1,
+  marketingOptIn: null,
   actionedAt: null,
   actionedByName: null,
   clientId: null,

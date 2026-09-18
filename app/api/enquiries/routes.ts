@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { canActor, toCsv } from '@domain/shared';
 import {
   ENQUIRY_PAGE,
+  carriesAPerson,
+  dismissalKeeps,
   enquiryCursor,
   leadFromEnquiry,
   readEnquiryListQuery,
@@ -12,12 +14,19 @@ import {
   type EnquiryStatus,
   type Interest,
   type LodgedEnquiry,
+  type NoticeVersion,
 } from '@domain/enquiry';
 import { logAction, logReads, refuseContactDetails } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { csvResponse } from '../accounting/csv-response';
 import { createLead } from '../clients/create-lead';
-import { ConvertResponse, DismissBody, EnquiryListResponse, type Enquiry } from './schema';
+import {
+  ConvertResponse,
+  DismissBody,
+  DismissResponse,
+  EnquiryListResponse,
+  type Enquiry,
+} from './schema';
 
 /**
  * What a person does with an enquiry (docs/superpowers/specs/2026-09-09-enquiries-design.md).
@@ -47,6 +56,8 @@ type Row = {
   consent: boolean | null;
   enquiring_for: EnquiringFor | null;
   interest: Interest | null;
+  notice_version: NoticeVersion;
+  marketing_opt_in: boolean | null;
   actioned_at: Date | null;
   actioned_by_name: string | null;
   client_id: string | null;
@@ -56,13 +67,42 @@ type Row = {
 const COLUMNS =
   'e.id, e.received_at, e.source, e.status, e.name, e.whatsapp_e164, e.email, e.area, ' +
   'e.message, e.concern, e.preferred_time, e.contact_method, e.consent, ' +
-  'e.enquiring_for, e.interest, e.actioned_at, ' +
+  'e.enquiring_for, e.interest, e.notice_version, e.marketing_opt_in, e.actioned_at, ' +
   'u.display_name as actioned_by_name, e.client_id, e.dismiss_reason';
 
 const SCRUB =
   'name = null, whatsapp_e164 = null, email = null, area = null, message = null, ' +
   'concern = null, preferred_time = null, contact_method = null, consent = null, ip_hash = null, ' +
-  'enquiring_for = null, interest = null';
+  'enquiring_for = null, interest = null, marketing_opt_in = null';
+
+/**
+ * A dismissal that keeps the person (migration 921): only the address hash
+ * goes, which was there for the door's budget and has no follow-up purpose.
+ */
+const KEEP = 'ip_hash = null';
+
+/**
+ * `isMarketable` (domain/enquiry/keep.ts) in the database's terms: they
+ * ticked the box for news, they are still on the row, and they have not
+ * become a client. The two are one rule, and the route test holds them to the
+ * same answer.
+ */
+const MARKETABLE = "e.marketing_opt_in is true and e.name is not null and e.status <> 'converted'";
+
+const NEWS_FILE_HEADINGS = [
+  'Name',
+  'WhatsApp',
+  'Email',
+  'Area',
+  'From',
+  'Received',
+  'Status',
+] as const;
+const SOURCE_WORDS: Record<EnquirySource, string> = {
+  website: 'Website',
+  discovery_call: 'Discovery call',
+  expo: 'Expo',
+};
 
 /** The two answers in words, for the file the office follows up from. */
 const ENQUIRING_FOR_WORDS: Record<EnquiringFor, string> = {
@@ -124,6 +164,8 @@ function toWire(row: Row): Enquiry {
     consent: row.consent,
     enquiringFor: row.enquiring_for,
     interest: row.interest,
+    noticeVersion: row.notice_version,
+    marketingOptIn: row.marketing_opt_in,
     actionedAt: row.actioned_at ? row.actioned_at.toISOString() : null,
     actionedByName: row.actioned_by_name,
     clientId: row.client_id,
@@ -176,19 +218,24 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
       'select status, source, count(*)::int as count from enquiry group by status, source',
     );
 
-    // Only a waiting row still carries a person, so only those are a read of
-    // one. A page of dismissed rows reads nobody and logs nothing.
+    // A read of a row that names somebody is a read of somebody, and is
+    // logged. Every waiting row is one; since migration 921 a dismissed row may
+    // be. A row with nobody left on it reads nobody and logs nothing.
     await logReads(
       db,
       'enquiry',
-      page.filter((row) => row.status === 'new').map((row) => ({ id: row.id, clientId: null })),
+      page.filter(carriesAPerson).map((row) => ({ id: row.id, clientId: null })),
       'list',
+    );
+    const wantNews = await db.query<{ n: number }>(
+      `select count(*)::int as n from enquiry e where ${MARKETABLE}`,
     );
     return c.json(
       EnquiryListResponse.parse({
         enquiries: page.map(toWire),
         counts: tallyEnquiries(counted.rows),
         older,
+        marketable: wantNews.rows[0]?.n ?? 0,
       }),
     );
   });
@@ -205,6 +252,53 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
    * these names and numbers that the scrub and an erasure cannot reach; the
    * screen says so beside the button.
    */
+  /**
+   * The people who asked for the practice's news, as a file (the operator's
+   * decision of 19 September 2026). Only those who ticked the second wording's
+   * optional box and are still on a row. Every one is a read of a person, and
+   * the file is logged once as an export. What is done with it is the
+   * practice's own act: a social platform it is given to receives personal
+   * data, and docs/COMPLIANCE/approved-vendors.md says which may.
+   */
+  api.get('/api/enquiries/marketing.csv', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    if (!canActor(actor, { type: 'enquiry.list' }, {}, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const { rows } = await db.query<Row>(
+      `select ${COLUMNS} from enquiry e left join app_user u on u.id = e.actioned_by ` +
+        `where ${MARKETABLE} order by e.received_at asc limit 5000`,
+    );
+    await logReads(
+      db,
+      'enquiry',
+      rows.map((row) => ({ id: row.id, clientId: null })),
+      'list',
+    );
+    await logAction(
+      db,
+      'export',
+      { type: 'enquiry_export', id: requestId, clientId: null },
+      { list: 'news', rows: String(rows.length) },
+    );
+    const table = [
+      [...NEWS_FILE_HEADINGS],
+      ...rows.map((row) => [
+        row.name ?? '',
+        row.whatsapp_e164 ?? '',
+        row.email ?? '',
+        row.area ?? '',
+        SOURCE_WORDS[row.source],
+        receivedStamp(row.received_at),
+        row.status === 'new' ? 'Waiting' : 'Dismissed',
+      ]),
+    ];
+    const today = receivedStamp(now()).slice(0, 10);
+    return csvResponse(c, `news-list-${today}.csv`, toCsv(table));
+  });
+
   api.get('/api/enquiries/expo.csv', async (c) => {
     const actor = c.get('actor');
     const db = c.get('db');
@@ -279,6 +373,8 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
       source: row.source,
       enquiringFor: row.enquiring_for,
       interest: row.interest,
+      noticeVersion: row.notice_version,
+      marketingOptIn: row.marketing_opt_in,
     };
     // The one read of a row's personal fields outside the list, logged as one.
     await logReads(db, 'enquiry', [{ id, clientId: null }], 'read');
@@ -318,8 +414,21 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
     const idParam = z.uuid().safeParse(c.req.param('id'));
     if (!idParam.success) return c.json({ error: 'not_found', requestId }, 404);
     const id = idParam.data;
+    // Which wording this person read decides what may be kept of them, so it
+    // is read under the same lock the update takes. A person promised that the
+    // enquiry "keeps nothing personal" is erased whatever was chosen here; the
+    // table refuses anything else (migration 921).
+    const found = await db.query<{ notice_version: NoticeVersion }>(
+      "select notice_version from enquiry where id = $1 and status = 'new' for update",
+      [id],
+    );
+    const noticeVersion = found.rows[0]?.notice_version;
+    if (noticeVersion === undefined) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    const kept = dismissalKeeps({ noticeVersion, erase: body.data.erase === true });
     const updated = await db.query<{ source: string }>(
-      `update enquiry set status = 'dismissed', dismiss_reason = $2, actioned_at = now(), actioned_by = $3, ${SCRUB} ` +
+      `update enquiry set status = 'dismissed', dismiss_reason = $2, actioned_at = now(), actioned_by = $3, ${kept ? KEEP : SCRUB} ` +
         "where id = $1 and status = 'new' returning source",
       [id, body.data.reason, actor.userId],
     );
@@ -329,6 +438,39 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
     await logAction(
       db,
       'dismiss',
+      { type: 'enquiry', id, clientId: null },
+      { source: updated.rows[0]?.source ?? '', kept: kept ? 'yes' : 'no' },
+    );
+    return c.json(DismissResponse.parse({ ok: true, kept }));
+  });
+
+  /**
+   * Erases the person from a dismissed enquiry that kept them: somebody asked
+   * to be forgotten, or the row was never worth keeping. The row stays, with
+   * when it came, from where, who dismissed it and why. Once only: a row with
+   * nobody on it answers not found, as does any row that is not dismissed.
+   */
+  api.post('/api/enquiries/:id/erase', async (c) => {
+    const actor = c.get('actor');
+    const db = c.get('db');
+    const requestId = c.get('requestId');
+    if (!canActor(actor, { type: 'enquiry.action' }, {}, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const idParam = z.uuid().safeParse(c.req.param('id'));
+    if (!idParam.success) return c.json({ error: 'not_found', requestId }, 404);
+    const id = idParam.data;
+    const updated = await db.query<{ source: string }>(
+      `update enquiry set ${SCRUB} ` +
+        "where id = $1 and status = 'dismissed' and name is not null returning source",
+      [id],
+    );
+    if (updated.rowCount !== 1) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    await logAction(
+      db,
+      'erase',
       { type: 'enquiry', id, clientId: null },
       { source: updated.rows[0]?.source ?? '' },
     );

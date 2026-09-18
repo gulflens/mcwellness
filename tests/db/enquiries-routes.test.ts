@@ -203,6 +203,186 @@ describe('one status at a time', () => {
   });
 });
 
+/**
+ * The operator's decision of 19 September 2026: a dismissed enquiry keeps its
+ * person where that person was told it would
+ * (docs/superpowers/plans/2026-09-19-enquiries-keep-details.md).
+ */
+describe('what a dismissal keeps', () => {
+  /** Lodged under the second wording: "we keep them so we can follow up with you later". */
+  const told = async (name: string, hash: string, marketing: boolean): Promise<string> => {
+    const { rows } = await h.owner.query<{ id: string }>(LODGE, [
+      JSON.stringify({
+        source: 'expo',
+        name,
+        whatsapp_e164: '+971500000097',
+        email: 'rowan@example.com',
+        area: 'Mirdif',
+        message: 'Saw the stand',
+        enquiring_for: 'self',
+        interest: 'both',
+        consent: 'true',
+        notice_version: '2',
+        marketing_opt_in: marketing ? 'true' : 'false',
+        ip_hash: hash,
+      }),
+    ]);
+    return rows[0]!.id;
+  };
+  const rowOf = async (id: string) =>
+    (
+      await h.owner.query<Record<string, unknown>>(
+        'select status, name, whatsapp_e164, email, marketing_opt_in, ip_hash, dismiss_reason from enquiry where id = $1',
+        [id],
+      )
+    ).rows[0];
+  const reads = async (id: string): Promise<number> => {
+    const { rows } = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where entity_type = 'enquiry' and action = 'list' and entity_id = $1",
+      [id],
+    );
+    return Number(rows[0]?.n);
+  };
+
+  it('keeps a person who was told they would be, shows them, and logs each time they are read', async () => {
+    await h.owner.query('delete from enquiry');
+    const id = await told('Rowan Meadow', 'a'.repeat(64), true);
+    const res = await h.callAs('POST', `/api/enquiries/${id}/dismiss`, PORTAL.adminAuth, {
+      reason: 'Not now, maybe after the summer',
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, kept: true });
+    expect(await rowOf(id)).toEqual({
+      status: 'dismissed',
+      name: 'Rowan Meadow',
+      whatsapp_e164: '+971500000097',
+      email: 'rowan@example.com',
+      marketing_opt_in: true,
+      // The address hash has no follow-up purpose and goes either way.
+      ip_hash: null,
+      dismiss_reason: 'Not now, maybe after the summer',
+    });
+
+    const before = await reads(id);
+    const listed = await h.callAs('GET', '/api/enquiries?status=dismissed', PORTAL.adminAuth);
+    const body = (await listed.json()) as { enquiries: Record<string, unknown>[] };
+    expect(body.enquiries[0]).toMatchObject({
+      id,
+      name: 'Rowan Meadow',
+      whatsappE164: '+971500000097',
+      noticeVersion: 2,
+      marketingOptIn: true,
+    });
+    // A dismissed row that names somebody is a read of somebody.
+    expect(await reads(id)).toBe(before + 1);
+  });
+
+  it('erases at the moment of dismissing when asked to, and always for a person promised it', async () => {
+    await h.owner.query('delete from enquiry');
+    const spam = await told('Basil Valley', 'b'.repeat(64), false);
+    const res = await h.callAs('POST', `/api/enquiries/${spam}/dismiss`, PORTAL.adminAuth, {
+      reason: 'Wrong number',
+      erase: true,
+    });
+    expect(await res.json()).toEqual({ ok: true, kept: false });
+    expect(await rowOf(spam)).toMatchObject({
+      status: 'dismissed',
+      name: null,
+      marketing_opt_in: null,
+    });
+
+    // Lodged under "keeps nothing personal": erased, whatever was or was not asked.
+    const promised = await lodge('Hazel Harbour', 'c'.repeat(64));
+    const kept = await h.callAs('POST', `/api/enquiries/${promised}/dismiss`, PORTAL.adminAuth, {
+      reason: 'Not a client enquiry',
+      erase: false,
+    });
+    expect(await kept.json()).toEqual({ ok: true, kept: false });
+    expect(await rowOf(promised)).toMatchObject({ status: 'dismissed', name: null });
+  });
+
+  it('erases a kept person later, once, by those who may, and says so in the log', async () => {
+    await h.owner.query('delete from enquiry');
+    const id = await told('Iris Creek', 'd'.repeat(64), true);
+    const waiting = await told('Rowan Meadow', 'e'.repeat(64), false);
+    await h.callAs('POST', `/api/enquiries/${id}/dismiss`, PORTAL.adminAuth, { reason: 'Not now' });
+
+    expect(
+      (await h.callAs('POST', `/api/enquiries/${id}/erase`, PORTAL.practitionerAuth, {})).status,
+    ).toBe(403);
+    // Only a dismissed row is erased this way: a waiting one is converted or dismissed.
+    expect(
+      (await h.callAs('POST', `/api/enquiries/${waiting}/erase`, PORTAL.adminAuth, {})).status,
+    ).toBe(404);
+
+    const res = await h.callAs('POST', `/api/enquiries/${id}/erase`, PORTAL.leadAuth, {});
+    expect(res.status).toBe(200);
+    expect(await rowOf(id)).toMatchObject({
+      status: 'dismissed',
+      name: null,
+      whatsapp_e164: null,
+      email: null,
+      marketing_opt_in: null,
+      dismiss_reason: 'Not now',
+    });
+    const trail = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where entity_type = 'enquiry' and entity_id = $1 and action = 'erase' and actor_id = $2",
+      [id, PORTAL.leadPractitioner],
+    );
+    expect(trail.rows[0]?.n).toBe('1');
+    // Nobody left to erase.
+    expect(
+      (await h.callAs('POST', `/api/enquiries/${id}/erase`, PORTAL.adminAuth, {})).status,
+    ).toBe(404);
+  });
+
+  it('lists for the practice’s news only people who asked for it and are still on a row', async () => {
+    await h.owner.query('delete from enquiry');
+    const waiting = await told('Rowan Meadow', 'a'.repeat(64), true);
+    const dismissedKept = await told('Iris Creek', 'b'.repeat(64), true);
+    const saidNo = await told('Basil Valley', 'c'.repeat(64), false);
+    const erased = await told('Hazel Valley', 'd'.repeat(64), true);
+    await lodge('Hazel Harbour', 'e'.repeat(64)); // never asked
+    await h.callAs('POST', `/api/enquiries/${dismissedKept}/dismiss`, PORTAL.adminAuth, {
+      reason: 'Later',
+    });
+    await h.callAs('POST', `/api/enquiries/${erased}/dismiss`, PORTAL.adminAuth, {
+      reason: 'Asked us to',
+      erase: true,
+    });
+
+    const counted = (await (await h.callAs('GET', '/api/enquiries', PORTAL.adminAuth)).json()) as {
+      marketable: number;
+    };
+    expect(counted.marketable).toBe(2);
+
+    expect(
+      (await h.callAs('GET', '/api/enquiries/marketing.csv', PORTAL.practitionerAuth)).status,
+    ).toBe(403);
+    const before = (await reads(waiting)) + (await reads(dismissedKept));
+    const res = await h.callAs('GET', '/api/enquiries/marketing.csv', PORTAL.adminAuth);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-disposition')).toMatch(
+      /^attachment; filename="news-list-\d{4}-\d{2}-\d{2}\.csv"$/,
+    );
+    const lines = (await res.text()).trim().split('\r\n');
+    expect(lines[0]).toBe('Name,WhatsApp,Email,Area,From,Received,Status');
+    expect(lines).toHaveLength(3);
+    const text = lines.join('\n');
+    expect(text).toContain('Rowan Meadow');
+    expect(text).toContain('Iris Creek');
+    expect(text).not.toContain('Basil Valley');
+    expect(text).not.toContain('Hazel');
+    // Two people read, and the file itself logged once as an export.
+    expect((await reads(waiting)) + (await reads(dismissedKept))).toBe(before + 2);
+    const exported = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where entity_type = 'enquiry_export' and action = 'export' and new_values->>'list' = 'news'",
+    );
+    expect(exported.rows[0]?.n).toBe('1');
+    expect(saidNo).toBeTruthy();
+  });
+});
+
 describe('the expo leads file', () => {
   it('downloads the new expo enquiries as a file, logs the read of each row and the export once', async () => {
     await h.owner.query('delete from enquiry');
