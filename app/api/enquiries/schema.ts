@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { ENQUIRING_FOR, ENQUIRY_SOURCES, INTERESTS, type MissingField } from '@domain/enquiry';
+import {
+  ENQUIRING_FOR,
+  ENQUIRY_SOURCES,
+  ENQUIRY_STATUSES,
+  INTERESTS,
+  type MissingField,
+} from '@domain/enquiry';
 
 /** What the door answers, whatever happened: a thank-you, or nothing a script can learn from. */
 export const LodgeResponse = z.object({ ok: z.literal(true) });
@@ -19,7 +25,8 @@ export type IncompleteResponse = z.infer<typeof IncompleteResponse> & {
   missing: MissingField[];
 };
 
-export const ENQUIRY_STATUSES = ['new', 'converted', 'dismissed'] as const;
+/** The three an enquiry can be, from the domain, which is where the list's rules read them. */
+export { ENQUIRY_STATUSES };
 
 /** One enquiry as the console lists it. Personal fields are null once actioned. */
 export const Enquiry = z.object({
@@ -46,7 +53,26 @@ export const Enquiry = z.object({
 });
 export type Enquiry = z.infer<typeof Enquiry>;
 
-export const EnquiryListResponse = z.object({ enquiries: z.array(Enquiry) });
+const count = z.number().int().nonnegative();
+const SourceCounts = z.object({
+  all: count,
+  website: count,
+  discovery_call: count,
+  expo: count,
+});
+
+/**
+ * One status's page (the operator's ask of 19 September 2026): what is
+ * waiting, what became a lead and what was dismissed are three lists, each
+ * asked for by name, so no volume of one can crowd out another.
+ */
+export const EnquiryListResponse = z.object({
+  enquiries: z.array(Enquiry),
+  /** Every status by every source, whichever list was asked for: the tabs' and the filter's own numbers. */
+  counts: z.object({ new: SourceCounts, converted: SourceCounts, dismissed: SourceCounts }),
+  /** Where this page stopped, to ask for the next with; null when it reached the end. */
+  older: z.string().nullable(),
+});
 export type EnquiryListResponse = z.infer<typeof EnquiryListResponse>;
 
 export const DismissBody = z.object({ reason: z.string().trim().min(1).max(200) });

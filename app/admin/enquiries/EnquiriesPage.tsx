@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import {
+  ENQUIRY_PAGE,
   ENQUIRY_SOURCES,
+  ENQUIRY_STATUSES,
   enquiryWaitingDays,
   type EnquiringFor,
   type EnquirySource,
+  type EnquiryStatus,
+  type EnquiryTally,
   type Interest,
 } from '@domain/enquiry';
 import { EnquiryListResponse, type Enquiry } from '../../api/enquiries/schema';
@@ -17,9 +21,18 @@ import './enquiries.css';
 
 /**
  * The website's enquiries (docs/superpowers/specs/2026-09-09-enquiries-design.md):
- * a table, new first, and for each new one the two things a person can do —
+ * a table, newest first, and for each new one the two things a person can do —
  * turn it into a lead, or dismiss it with a reason. Once actioned a row keeps
  * nothing personal, so the table shows what happened and who did it.
+ *
+ * Three tables, one at a time (the operator's ask of 19 September 2026):
+ * what is still waiting, what became a lead, and what was dismissed. At an
+ * expo's volume one table of all three is a table nobody can work from, and a
+ * dismissed row has nothing left in it but a reason. Each is asked of the
+ * server by its status, a page at a time, so no number of dismissed rows can
+ * crowd out one that is waiting, and the dismissed are not fetched at all
+ * until somebody opens them. It is still one table in the database: see
+ * `domain/enquiry/list.ts` for why.
  *
  * From trunk round 50 the expo's enquiries land here too, under a filter by
  * source so the stand's leads can be followed up as one list, with the two
@@ -39,6 +52,50 @@ const stamp = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
   minute: '2-digit',
 });
+
+/** With the year: what was dismissed or converted is kept, and reaches back further than a season. */
+const datedStamp = new Intl.DateTimeFormat('en-GB', {
+  timeZone: PRACTICE_TIME_ZONE,
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+const STATUS_LABELS: Record<EnquiryStatus, string> = {
+  new: 'Active',
+  converted: 'Converted',
+  dismissed: 'Dismissed',
+};
+
+const CAPTIONS: Record<EnquiryStatus, string> = {
+  new: 'Active enquiries, newest first',
+  converted: 'Converted enquiries, newest first',
+  dismissed: 'Dismissed enquiries, newest first',
+};
+
+/** What an empty table says, by the table and by where the rows would have come from. */
+const NOTHING: Record<EnquiryStatus, Record<'all' | EnquirySource, string>> = {
+  new: {
+    all: 'Nothing waiting. New enquiries land here.',
+    website: 'Nothing waiting from the website.',
+    discovery_call: 'Nothing waiting from a discovery call.',
+    expo: 'Nothing waiting from the expo. The code on the stand lands here.',
+  },
+  converted: {
+    all: 'No enquiry has become a lead yet.',
+    website: 'No website enquiry has become a lead yet.',
+    discovery_call: 'No discovery call has become a lead yet.',
+    expo: 'No expo enquiry has become a lead yet.',
+  },
+  dismissed: {
+    all: 'Nothing has been dismissed.',
+    website: 'No website enquiry has been dismissed.',
+    discovery_call: 'No discovery call has been dismissed.',
+    expo: 'No expo enquiry has been dismissed.',
+  },
+};
 
 const SOURCE_LABELS: Record<Enquiry['source'], string> = {
   website: 'Website',
@@ -66,6 +123,7 @@ const LOAD_ERROR = 'The enquiries could not be loaded. Try again.';
 const FILE_NOTE =
   'The expo leads file holds names and numbers. Keep it on the practice’s own device and delete it once the follow-up is done.';
 const ACTION_ERROR = 'That could not be done. Reload and try again.';
+const OLDER_ERROR = 'The older enquiries could not be loaded. Try again.';
 
 function firstLine(text: string | null): string {
   if (!text) return '';
@@ -83,15 +141,26 @@ export function EnquiriesPage() {
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<SourceFilter>('all');
+  const [status, setStatus] = useState<EnquiryStatus>('new');
+  const [counts, setCounts] = useState<EnquiryTally | null>(null);
+  const [older, setOlder] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
-  // Fetched once, and again after every action: the row that was just
-  // converted or dismissed comes back scrubbed, and the list re-sorts itself.
+  const addressOf = (before: string | null): string => {
+    const query = new URLSearchParams({ status });
+    if (source !== 'all') query.set('source', source);
+    if (before !== null) query.set('before', before);
+    return `/api/enquiries?${query.toString()}`;
+  };
+
+  // Fetched for the table that is open, and again after every action: the row
+  // that was just converted or dismissed has left this table for its own.
   const [generation, setGeneration] = useState(0);
   const reload = () => setGeneration((g) => g + 1);
 
   useEffect(() => {
     let live = true;
-    void apiFetch('/api/enquiries')
+    void apiFetch(addressOf(null))
       .then(async (res) => {
         if (!res.ok) {
           if (live) setFailed(true);
@@ -100,6 +169,8 @@ export function EnquiriesPage() {
         const parsed = EnquiryListResponse.safeParse(await res.json());
         if (live && parsed.success) {
           setEnquiries(parsed.data.enquiries);
+          setCounts(parsed.data.counts);
+          setOlder(parsed.data.older);
           setFailed(false);
         } else if (live) {
           setFailed(true);
@@ -111,7 +182,76 @@ export function EnquiriesPage() {
     return () => {
       live = false;
     };
-  }, [apiFetch, generation]);
+    // `addressOf` is this render's status and source, which are the dependencies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiFetch, generation, status, source]);
+
+  // Which table is on the screen, for a reply to check itself against. A page
+  // asked for under Dismissed can arrive after somebody has gone back to
+  // Active, and set beneath the wrong table it would put thirty dismissed rows
+  // among the waiting ones.
+  const view = `${status}|${source}|${generation}`;
+  const onScreen = useRef(view);
+  // Written after the render that changed it, never during one: a reply is
+  // read in a later task, by which time this has run.
+  useEffect(() => {
+    onScreen.current = view;
+  }, [view]);
+
+  const pagedLine = useRef<HTMLDivElement>(null);
+  // Raised by the press that fetched the last page. The button that held the
+  // focus leaves the screen in the render that follows, so the focus is handed
+  // on after it. A ref and not state: it is a note to the next effect, and
+  // nothing on the screen reads it.
+  const handFocusOn = useRef(false);
+  useEffect(() => {
+    if (older !== null || !handFocusOn.current) return;
+    handFocusOn.current = false;
+    pagedLine.current?.focus();
+  }, [older]);
+
+  /** The next page, set beneath what is already on the screen. */
+  async function showOlder(): Promise<void> {
+    // `aria-disabled` on the button and this, not `disabled`: a disabled button
+    // drops the focus it is holding, and the person pressing it is holding it.
+    if (older === null || loadingOlder) return;
+    const askedFrom = view;
+    setLoadingOlder(true);
+    setError(null);
+    try {
+      const res = await apiFetch(addressOf(older));
+      const parsed = res.ok ? EnquiryListResponse.safeParse(await res.json()) : null;
+      // The table it was for has gone: the reply is for nobody.
+      if (onScreen.current !== askedFrom) return;
+      if (parsed?.success) {
+        setEnquiries((shown) => [...(shown ?? []), ...parsed.data.enquiries]);
+        setCounts(parsed.data.counts);
+        if (parsed.data.older === null) handFocusOn.current = true;
+        setOlder(parsed.data.older);
+      } else {
+        setError(OLDER_ERROR);
+      }
+    } catch {
+      if (onScreen.current === askedFrom) setError(OLDER_ERROR);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
+
+  /** Another table, from its top: what was on the screen belongs to the one just left. */
+  function open(next: { status?: EnquiryStatus; source?: SourceFilter }): void {
+    // Already open: there is nothing to fetch, so there must be nothing to
+    // clear. Clearing here left the table empty for good, because the fetch
+    // runs when the status or the source changes and neither had.
+    if ((next.status ?? status) === status && (next.source ?? source) === source) return;
+    setEnquiries(null);
+    setOlder(null);
+    setError(null);
+    setDismissing(null);
+    setReason('');
+    if (next.status !== undefined) setStatus(next.status);
+    if (next.source !== undefined) setSource(next.source);
+  }
 
   async function convert(enquiry: Enquiry): Promise<void> {
     setBusy(enquiry.id);
@@ -151,7 +291,7 @@ export function EnquiriesPage() {
         body: JSON.stringify({ reason: reason.trim() }),
       });
       if (res.ok) {
-        setOutcome('Dismissed.');
+        setOutcome('Dismissed. It is in the Dismissed table now.');
         setDismissing(null);
         setReason('');
         reload();
@@ -172,13 +312,55 @@ export function EnquiriesPage() {
     if (!arrived) setError(DOWNLOAD_REFUSED);
   }
 
-  const all = enquiries ?? [];
-  const shown = source === 'all' ? all : all.filter((row) => row.source === source);
-  const countOf = (of: SourceFilter): number =>
-    of === 'all' ? all.length : all.filter((row) => row.source === of).length;
-  const expoWaiting = all.some((row) => row.source === 'expo' && row.status === 'new');
+  const shown = enquiries ?? [];
+  const countOf = (of: SourceFilter): number => counts?.[status][of] ?? 0;
+  // Counted by the server over every waiting row, not over the page on the screen.
+  const expoWaiting = (counts?.new.expo ?? 0) > 0;
 
-  const columns: readonly Column<Enquiry>[] = [
+  const received: Column<Enquiry> = {
+    key: 'received',
+    header: 'Received',
+    render: (row) => datedStamp.format(new Date(row.receivedAt)),
+  };
+  const from: Column<Enquiry> = {
+    key: 'source',
+    header: 'From',
+    render: (row) => SOURCE_LABELS[row.source],
+  };
+  const actioned = (header: string): Column<Enquiry> => ({
+    key: 'actioned',
+    header,
+    render: (row) => (row.actionedAt ? datedStamp.format(new Date(row.actionedAt)) : '—'),
+  });
+  const by: Column<Enquiry> = {
+    key: 'by',
+    header: 'By',
+    render: (row) => row.actionedByName ?? '—',
+  };
+
+  // Once actioned a row holds nobody, so these two tables have no column for a
+  // name, a number or a message: only what happened, when, and who did it.
+  const convertedColumns: readonly Column<Enquiry>[] = [
+    received,
+    from,
+    actioned('Converted'),
+    by,
+    {
+      key: 'lead',
+      header: 'Lead',
+      render: (row) =>
+        row.clientId ? <Link to={`/admin/clients/${row.clientId}`}>Open the lead</Link> : '—',
+    },
+  ];
+  const dismissedColumns: readonly Column<Enquiry>[] = [
+    received,
+    from,
+    actioned('Dismissed'),
+    by,
+    { key: 'why', header: 'Why', render: (row) => row.dismissReason ?? '—' },
+  ];
+
+  const activeColumns: readonly Column<Enquiry>[] = [
     {
       key: 'received',
       header: 'Received',
@@ -225,16 +407,6 @@ export function EnquiriesPage() {
       key: 'status',
       header: 'Status',
       render: (row) => {
-        if (row.status === 'converted' && row.clientId) {
-          return <Link to={`/admin/clients/${row.clientId}`}>Lead</Link>;
-        }
-        if (row.status === 'dismissed') {
-          return (
-            <span title={row.dismissReason ?? undefined}>
-              Dismissed{row.actionedByName ? ` by ${row.actionedByName}` : ''}
-            </span>
-          );
-        }
         // Still new after thirty days: surfaced, never dismissed by itself
         // (domain/enquiry/waiting.ts, the operator's decision of 10 September).
         const waiting = enquiryWaitingDays(row.status, row.receivedAt, new Date());
@@ -299,7 +471,7 @@ export function EnquiriesPage() {
     <section className="page">
       <PageHeader
         title="Enquiries"
-        aside="What the website's forms and the expo's sent, newest first. Convert one to make it a lead on the client list, or dismiss it with a reason; either way the enquiry itself then keeps nothing personal."
+        aside="What the website's forms and the expo's sent. What is still waiting is under Active: convert one to make it a lead on the client list, or dismiss it with a reason. Either way it moves to a table of its own, and the enquiry itself then keeps nothing personal."
         action={
           <div className="enquiries__actions">
             {expoWaiting ? (
@@ -311,38 +483,83 @@ export function EnquiriesPage() {
           </div>
         }
       />
+      {/*
+        The same switcher Books and Billing use, styled by the shell's own
+        stylesheet (tests/lint/tabs-are-always-styled.test.ts). The numbers
+        are the server's count of every row, not of the page on the screen.
+      */}
+      {counts !== null ? (
+        <nav className="sections" aria-label="Enquiries by status">
+          {ENQUIRY_STATUSES.map((of) => (
+            <button
+              key={of}
+              type="button"
+              className={`sections__tab${status === of ? ' sections__tab--current' : ''}`}
+              aria-current={status === of ? 'page' : undefined}
+              onClick={() => open({ status: of })}
+            >
+              {STATUS_LABELS[of]} ({counts[of].all})
+            </button>
+          ))}
+        </nav>
+      ) : null}
       {expoWaiting ? <Note>{FILE_NOTE}</Note> : null}
       {outcome ? <Note tone="attention">{outcome}</Note> : null}
       {error ? <Note tone="critical">{error}</Note> : null}
       {failed ? <Note tone="critical">{LOAD_ERROR}</Note> : null}
+      {counts !== null ? (
+        <div className="enquiries__filter" role="group" aria-label="From">
+          {(['all', ...ENQUIRY_SOURCES] as const).map((of) => (
+            <Button
+              key={of}
+              variant="quiet"
+              aria-pressed={source === of}
+              onClick={() => open({ source: of })}
+            >
+              {of === 'all' ? 'All' : SOURCE_LABELS[of]} ({countOf(of)})
+            </Button>
+          ))}
+        </div>
+      ) : null}
       {!failed && enquiries === null ? <Note>Loading.</Note> : null}
       {enquiries !== null ? (
         <>
-          <div className="enquiries__filter" role="group" aria-label="From">
-            {(['all', ...ENQUIRY_SOURCES] as const).map((of) => (
-              <Button
-                key={of}
-                variant="quiet"
-                aria-pressed={source === of}
-                onClick={() => setSource(of)}
-              >
-                {of === 'all' ? 'All' : SOURCE_LABELS[of]} ({countOf(of)})
-              </Button>
-            ))}
-          </div>
           <Table
-            caption="Enquiries, new first"
-            columns={columns}
+            caption={CAPTIONS[status]}
+            columns={
+              status === 'new'
+                ? activeColumns
+                : status === 'converted'
+                  ? convertedColumns
+                  : dismissedColumns
+            }
             rows={shown}
             rowKey={(row) => row.id}
-            empty={
-              source === 'expo' ? (
-                <Note>No expo enquiries yet. The code on the stand lands here.</Note>
-              ) : (
-                <Note>No enquiries yet. The website's forms and the expo's land here.</Note>
-              )
-            }
+            empty={<Note>{NOTHING[status][source]}</Note>}
           />
+          {/*
+            Under any table longer than a page, and kept there once the last
+            page is in: a status a screen reader is told of each time it
+            changes, which is the only way it learns that rows were added
+            beneath. When the last page arrives the button goes, and the focus
+            it held is put here and not left to fall to the top of the page.
+          */}
+          {countOf(source) > ENQUIRY_PAGE ? (
+            <div className="enquiries__older">
+              <div role="status" tabIndex={-1} ref={pagedLine}>
+                <Note>
+                  {older !== null
+                    ? `Showing ${shown.length} of ${countOf(source)}.`
+                    : `Showing all ${shown.length}.`}
+                </Note>
+              </div>
+              {older !== null ? (
+                <Button aria-disabled={loadingOlder} onClick={() => void showOlder()}>
+                  {loadingOlder ? 'Loading' : 'Show older'}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </>
       ) : null}
     </section>

@@ -34,3 +34,13 @@
 .enquiries__filter .button[aria-pressed='true'] {
   border-color: var(--ink);
 }
+
+/* Under a long table: how much of it is on the screen, and the press that
+   fetches the next page. */
+.enquiries__older {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+  padding-block-start: var(--s-3);
+}
