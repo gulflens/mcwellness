@@ -33,6 +33,16 @@ describe('ExpoPosterPage', () => {
     expect(screen.getByRole('button', { name: 'Print' })).toBeTruthy();
   });
 
+  it("heads the sheet with the practice's lockup, named for a reader who cannot see it", () => {
+    render(<ExpoPosterPage />);
+    const lockup = screen.getByRole('img', { name: 'McWellness' });
+    expect(lockup.getAttribute('src')).toBe('/brand/lockup.png');
+    // The sheet is what prints: the lockup is on it and the Print button is not.
+    const sheet = lockup.closest('.poster__sheet');
+    expect(sheet).toBeTruthy();
+    expect(sheet?.contains(screen.getByRole('button', { name: 'Print' }))).toBe(false);
+  });
+
   it('keeps a quiet zone of four modules on every side', () => {
     const { d, size } = qrPath('https://app.mcwellnessuae.com/expo');
     const code = qrcode(0, 'M');
