@@ -105,21 +105,32 @@
 
 /* A named page, so the margins change for this sheet and for no other page
    the console prints. With no margin the browser has nowhere to put its own
-   date and address lines, and the sheet's inner margin is the paper's. */
+   date and address lines, and the sheet's inner margin is the paper's.
+
+   `A4` and not `A4 portrait`: Safari takes the paper's name and refuses the
+   orientation keyword, and a declaration it refuses is a declaration it
+   drops whole. A4 is upright unless it is told otherwise. */
 @page poster {
-  size: A4 portrait;
+  size: A4;
   margin: 0;
 }
 
 @media print {
   /* With "Background graphics" ticked the console's grey paper would print
-     around the sheet; while the poster is the page, the page is white. */
+     around the sheet; while the poster is the page, the page is white. The
+     body's floor of one screen goes too: on paper a screen is a page, and a
+     body exactly one page tall has no room left for rounding. */
   :root:has(.poster),
   :root:has(.poster) body {
+    min-block-size: 0;
     background: var(--surface);
   }
 
+  /* The paper, measured: whatever width the browser gives the page is this
+     element's width, which is the one thing a stylesheet can know about the
+     margins it was actually given. */
   .poster {
+    container: poster-paper / inline-size;
     display: block;
     padding: 0;
   }
@@ -128,14 +139,28 @@
     display: none;
   }
 
-  /* Where named pages are not understood the browser keeps its own margins
-     and prints its own date and address lines, so the sheet is as tall as its
-     contents and no wider than 180mm. Its contents stand 1.39 times as tall
-     as the sheet is wide, which at 180mm is 250mm: inside the margins of A4
-     and of US Letter alike. Printed at full width it ran onto a second page
-     of Letter, which is how this number was found. */
+  /* The sheet as it prints unless the paper proves otherwise: as tall as its
+     contents and no wider than 170mm. Its contents stand 1.39 times as tall
+     as the sheet is wide, which at 170mm is 236mm, inside the margins any
+     browser keeps on A4 or on US Letter with its own date and address lines
+     above and below. It asks the page for nothing, so it holds whether or
+     not the named page above was honoured.
+
+     This is the rule and not the fallback. The first version sized the sheet
+     to the paper wherever `@supports (page: auto)` held. Safari has
+     understood that property since its first release and, printed through
+     its own engine on 19 September 2026, did not give the named page its
+     margins: the full sheet sat inside the browser's, was shrunk to fit, and
+     a blank second page followed it out of the printer. What a browser says
+     it understands is not what it was given, so the paper is measured.
+
+     On A4 this holds at any margin set equally on all four sides, and with
+     narrow sides until the margins above and below pass 30mm each. On US
+     Letter it holds until they pass 21mm each. No browser's own go that
+     deep: Chrome keeps about 10mm and Firefox 12.7mm. */
   .poster__sheet {
-    max-inline-size: 180mm;
+    page: poster;
+    max-inline-size: 170mm;
     margin-inline: auto;
     aspect-ratio: auto;
     border-radius: 0;
@@ -143,9 +168,13 @@
     break-inside: avoid;
   }
 
-  @supports (page: auto) {
+  /* The whole sheet, only on paper measured to be A4 from edge to edge, which
+     can be so only where the margins above really are none. US Letter with no
+     margins is 216mm and is kept out, because the sheet is taller than it.
+     These are the width of a sheet of paper, not a tier of the console's
+     (docs/SPEC/responsive-console.md section 9). */
+  @container poster-paper (min-width: 209.5mm) and (max-width: 210.5mm) {
     .poster__sheet {
-      page: poster;
       max-inline-size: none;
       inline-size: 210mm;
       /* A millimetre short of the page, so rounding never asks for a second one. */
