@@ -1935,3 +1935,105 @@ in Settings › Practice. `app.verify_audit_chain()` is null.
 its code encodes the address of the page it is printed from. Scan it once with
 a phone before the print run. The review line appears only after the review
 link is recorded.
+
+## What was done on 2026-09-18: the twenty-seventh live pass — the stand's poster in the practice's own dress
+
+**21:01 UTC on 18 September, which is 01:01 on 19 September in Dubai.** On the
+operator's word, "push it live", given at 00:57 +04. `main` at `78cab68` —
+pull request 190, and with it 189, the twenty-sixth pass's own record, which
+is this file and changes nothing that runs.
+
+**No migration and no policy file; both hosted databases stay at 106.**
+Between `57220de`, which production ran, and `78cab68` nothing under `db/`
+moved and no dependency manifest moved. Five files did: the poster's page, its
+stylesheet and its test, the amendment to
+`docs/CHANGE-REQUESTS/trunk-round-50.md`, and this file. So there was no
+window in which the running code and the schema disagreed.
+
+**What the pass carries.** The stand's poster at `/admin/enquiries/poster` is
+one white A4 sheet headed by the whole lockup, with a violet bar above and
+below, the code in a violet frame, and the address in the violet on one line.
+In the old 24rem column the address broke as `…/exp` and `o`. The code, its
+encoder, its quiet zone and the words on the sheet did not change. The three
+decisions a later reader might otherwise undo are in the round's amendment.
+
+**Before it merged.** `verify` and `verify-db` each read SUCCESS, read as
+conclusions and not taken from a watcher's exit code; the merge was pinned to
+the head the reviewers read, `a7b6fdfa`. Compliance and security reviews both
+passed. Compliance left one note that is the owner's to weigh and not a gap:
+the lockup's tagline reads "Mind • Balance • Healing", and this sheet is the
+first public, printed surface it reaches. It is the owner's own mark and was
+not altered. If the word is not wanted on the stand, the rail's pairing — the
+round mark with the name set in type — is the alternative.
+
+**The hold protocol.** `ListAgents` showed no other session on the machine, so
+there was nobody to ask and nobody to collide with.
+
+**The build.** Archive `mcwellness-78cab68.tar.gz`, 6,541,979 bytes, made with
+`--prefix=mcwellness/`, no env file inside; TUS create 201, PATCH 204 with the
+returned offset equal to the size. The upload's two keys were read by `curl`
+from a file of mode 0600 that was deleted in the same command, so they were
+never on a command line. Settings read back from the host before building and
+unchanged: node 24, hono, root `mcwellness`, output `.`, `build:production`,
+entry `app/api/start.mjs`, npm. Build `01a0b651`: asked for at 20:59:27,
+running at 20:59:41, completed at 21:01:01 — eighty seconds of building.
+**No restart — the tenth consecutive pass without one.** Health 200 in 0.24 s,
+deep 200 in 0.28 s, and health answered 200 at every fifteen-second poll
+across the whole build.
+
+**The site served the new build four seconds before the host called the build
+complete.** The entry's name was seen to change at 21:00:57, and the build's
+own record says 21:01:01. The assets are in place
+before the state changes, so a poll of the served name is the earlier signal
+and the build's state the later one. Neither is wrong; do not read a build
+still marked `running` as proof the old code is still being served.
+
+**Verified by the chunk, with the absence measured first.** Before the upload:
+entry `index-Cz_UgTLO.js`, and `ExpoPosterPage-BD_yzUx2.js` (21,634 bytes)
+holding `plain poster` and neither `brand/lockup` nor `poster__sheet`, beside
+`ExpoPosterPage-FCN9khqN.css` at 295 bytes. After: entry `index-BxCLftPf.js`,
+and
+
+- `ExpoPosterPage-CTvhCcV-.js` (22,031 bytes) holds `brand/lockup` and
+  `poster__sheet`, and `plain poster` is gone;
+- `ExpoPosterPage-BSHEAOpT.css` (1,890 bytes) holds `@page poster` and
+  `100cqi` — **and that is the name a local build of this tree wrote**, which
+  says the host built this tree and not a stale one;
+- the shell's stylesheet did not move, `index-DSJRZKuA.css` before and after,
+  and still answers 200. That is the right signature: the poster's styles are
+  the screen's own and load with it, so the shell had nothing to change.
+
+The old entry and both old poster files 404, and a nonsense asset path 404s
+too, which is what makes the rest evidence. `/brand/lockup.png` answers as
+`image/png`, read by its type because an unknown path here answers 200 with
+the app's own document. `/expo` answers 200.
+
+**The entry's size would have said nothing, again.** It came back 476,584
+bytes, the figure the twenty-sixth pass recorded to the byte: the entry holds a
+chunk's name, the new name is as long as the old one, and so a whole screen
+was restyled without the entry changing length. The rule of the last five
+passes holds. Follow the chunk.
+
+**How the sheet was proved before it shipped.** Printed to PDF by headless
+Chrome from a throwaway page that rendered the component without sign-in: the
+named page came out as one page of A4, 595 by 842 points, with none of the
+browser's own lines on it. The fallback for a browser that does not understand
+a named page was imitated by overriding the three declarations it differs by,
+and at full width **it ran onto a second page**, the address alone at the top
+of it. That is where the 180mm cap came from, and with it the fallback is one
+page of US Letter inside the browser's own margins. It was found by printing
+and would not have been found by looking.
+
+**Not tested: Safari.** It cannot be run from this machine. Safari is the
+browser most likely to take the fallback, which was proved only in imitation.
+If the owner prints from Safari, the thing to look at is that the sheet is one
+page and the address is on it.
+
+**Left as it was found.** Nothing was written to either database.
+
+**For the owner.** Print the poster from
+`https://app.mcwellnessuae.com/admin/enquiries/poster` and from nowhere else:
+its code encodes the address of the page it is printed from, and the preview
+image made on the way to this pass holds a code for a laptop. Scan the printed
+sheet once with a phone before the print run; it should open
+`app.mcwellnessuae.com/expo`.
