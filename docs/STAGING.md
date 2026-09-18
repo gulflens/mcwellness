@@ -2200,3 +2200,117 @@ reason and a request id, and `app.verify_audit_chain()` still returned null.
 That is what made the production step safe to run: the audit context a
 hand-written step sets was shown to produce an audited, chained write before
 it touched real data.
+
+## What was done on 2026-09-18: the staging pass for the owner's four requests — the expo form, past sessions, the review line
+
+At 17:23 UTC on 18 September (21:23 in Dubai), staging was brought level with
+`main` at `0f2e6f19` — pull requests 184, 185 and 186, the three of the owner's
+four requests of 16 September that are code; the fourth, 187, is a decision
+memo and changes nothing here. `schema_migration` read 102 rows on staging and
+on production alike, and neither carried any of the four new files. The hold
+protocol found no other session on the laptop.
+
+**A word on the numbers.** These three rounds were written as
+`docs/CHANGE-REQUESTS/trunk-round-50.md`, `-51.md` and `-52.md`, and
+`trunk-notes.md` already holds a round 50 (usability speed) and a round 52 (the
+erasure letter), both of 14 September. The numbers collide; the names do not.
+This section says "the expo round", "the past-sessions round" and "the
+review-line round".
+
+**Read first, because two of the four replace a function whole.**
+`966_session_from_records.sql` recreates `app.billing_on_session_completed`
+and says its body is 404's word for word with one branch ahead of it;
+`919_expo_enquiry.sql` does the same to `app.lodge_enquiry` from 916. That is
+only true if no migration between them touched either function, so it was
+checked rather than believed: 404 and 966 are the only two files that define
+the first, 916 and 919 the only two that define the second. 966 also leans on
+`app.oldest_available_entitlement` as 412 left it, which asks only that a
+credit has not expired on the day named and never when it was bought — so a
+package recorded today covers a visit from last spring, which is the order the
+office will meet them in.
+
+**Applied** through Supabase's migration tool in the runner's own order —
+`704_portal_review_prompt`, `919_expo_enquiry`, `920_practice_review_url`,
+`966_session_from_records` — then the four bookkeeping rows in one statement,
+each with the file's own sha256 (`3fba5b8e…f5f5`, `514009cf…dd77`,
+`f2c76d89…5ef6`, `1e218011…2016`). The hashing was proved first against two
+rows staging already held: `shasum -a 256` of 964 and of 918 at `origin/main`
+gave exactly the checksums recorded for them on 13 September. Then the two
+policy files these rounds changed, whole, as `policies_after_966`:
+`db/policies/portal/access.sql` (the third table in the isolation loop and the
+answer's readers and writers) and `db/policies/session/practitioner_scope.sql`
+(`records_are_the_office`). Read back: **106 rows.**
+
+**Fingerprinted against a freshly migrated local database, not against
+production.** Two hosted databases agreeing proves only that the same text was
+pasted twice. A local database was reset and migrated by the runner from
+`origin/main` (106 migrations, 26 policy files), and nine categories were
+hashed across `enquiry`, `tenant`, `session`, `portal_review_prompt`,
+`session_event`, `visit_actuals`, `portal_invite` and `portal_request`.
+**All nine identical, staging against local:** columns `ca33becc` (143),
+comments `c1c3475c` (143), constraints `79a273a6` (112), functions `87bd3eda`
+(3: the two replaced and `app.oldest_available_entitlement`, each with its
+definer flag and its pinned search path), grants `187277a1` (20), indexes
+`2c2cb893` (60), policies `f6e4cb66` (23), triggers `1ca1ee9f` (29), and the
+whole ledger `8a2b0ce2` (106 filenames with their checksums). The query is one
+statement and is the one to run on production in the live pass.
+
+**The bundle and the server.** Built with `pnpm exec vite build --mode
+staging` in the `mcwellness-concerns` worktree at `0f2e6f19`, the laptop's
+`.env.staging` symlinked in, and served on port 3100 **bound to 127.0.0.1**.
+It was first started on `0.0.0.0`, as earlier passes had it, and stopped again
+at once: a staging server open to a whole network is not needed to walk it
+from the laptop, and putting a phone on it is the operator's act. Served
+bundle `index-Cgv5MBx1.js`; `/api/health` 200 and `/api/health/deep` ok;
+`POST /api/sessions/from-records`, `GET /api/enquiries/expo.csv` and
+`POST /api/portal/review-prompts` each answer 401 to a stranger, so the three
+new routes are served and closed.
+
+**Walked on staging: the expo's form, which needs no sign-in.** `/expo` at a
+phone's width: Send stays disabled until the tick; a submission with an
+invented name, "My child" and "Both" answered "Thank you", and the row read
+back `source = expo`, `enquiring_for = child`, `interest = both`, consent
+true, an address hash present. The row was then deleted, no expo row remains,
+and `app.verify_audit_chain()` returns null.
+
+**Walked on the local database, because staging has no sign-in left.** The
+demo's credentials went with the demo on 9 September, so the signed-in flows
+were driven as the seed's invented owner and an invented household:
+
+- *A past session, three ways.* On a day that has passed the toolbar offers
+  "Log a past session". For a client with no package, "A credit from the
+  client's package" is refused in the drawer — "No credit covers this visit on
+  that day. Record the package sale first, or mark the visit as settled before
+  the app." — and nothing is written. "Settled before the app" writes one
+  completed appointment and one completed session, `recorded_from = records`,
+  no invoice, no credit, no billing exception. After a Silver sale dated today,
+  a visit dated nine days **before** that sale took one credit (fifteen to
+  fourteen) and raised no invoice. Only practitioners holding the service's
+  credential were offered. The client's timeline names each step with its
+  reason, the refusal included.
+- *The review line.* Saving the link in Settings › Practice asks for a reason,
+  as every change to the practice's identity does. A brain map logged from the
+  records for nine days ago raised the line on that household's portal home —
+  in Arabic, the household's own language — between the balance and "ask for a
+  visit". The link opens in a new tab with `noopener noreferrer`. "Not now"
+  removed it, a reload did not bring it back, and the table holds one row,
+  `brain_map`, `dismissed`, with its actor. Production's brain-map service
+  carries the code `brain-map`, read on the day, which is the word the rule
+  matches on.
+
+**Two things the walk found, neither a fault.** The timeline prints a refusal
+as "recorded refused on the visit — Reason: no_credit_available", a code where
+every other line is a sentence. And the poster's code encodes the address of
+the page it is printed from (`ExpoPosterPage.tsx`, `expoAddress`), by design,
+so **the poster for the stand is printed from `app.mcwellnessuae.com` after
+the live pass and from nowhere else**; one printed from staging or a laptop
+sends a visitor's phone to an address it cannot reach.
+
+**Left for the live pass, on the operator's word:** the same four files, the
+same four bookkeeping rows, the same two policy files and the same fingerprint
+on production; then the archive, the build and the served chunks. All four
+migrations are additive and both replaced functions keep their old behaviour
+for every row the live code can write — the one thing the website's form gains
+before the new code arrives is the practice's ceiling of three hundred
+enquiries an hour — so the schema may lead the code for as long as the upload
+takes.
