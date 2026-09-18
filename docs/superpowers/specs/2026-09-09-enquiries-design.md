@@ -173,7 +173,10 @@ reading the address are `domain/enquiry/list.ts`, pure and tested.
   database keeps microseconds and a `Date` keeps milliseconds; a cursor cut at
   the millisecond steps over every row lodged later in that same millisecond.
   A test lodges 230 rows inside one and pages them; with a millisecond cursor
-  it sees 132.
+  it saw 132 on the run tried, and can never see more.
+  The moment in a cursor must also be one the calendar has: `Date.parse` takes
+  30 February for 2 March, the database refuses it, and that is a 400 here
+  rather than a 500 there.
 - **Every answer counts every status by every source**, in one grouped query,
   so the tabs and the source filter show the server's numbers and not the
   number of rows on the page. "Download expo leads" now appears whenever an
@@ -196,4 +199,7 @@ actions. The other two have no column for a name, a number or a message,
 because no such row has one: they show when it came, from where, what
 happened and when, who did it, and either the reason or the lead. Their dates
 carry the year. Under a table longer than a page: how many of how many, and
-"Show older", which sets the next page beneath the first.
+"Show older", which sets the next page beneath the first. That line is a
+status, so a screen reader is told when it changes, and it stays once the list
+is whole; the button is never `disabled`, which would drop the focus it holds,
+and when it leaves the screen the focus goes to the line.

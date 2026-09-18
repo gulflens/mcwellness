@@ -7,7 +7,7 @@ import {
   tallyEnquiries,
 } from './list';
 
-const ID = '7b1f3c52-9d0e-4a36-8c11-2f5e6a7d8b90';
+const ID = '0000000e-0000-4000-8000-000000000001';
 const AT = '2026-10-14T11:20:05.123Z';
 
 describe('readEnquiryListQuery', () => {
@@ -44,6 +44,16 @@ describe('readEnquiryListQuery', () => {
     for (const bad of ['', 'yesterday', `${AT}_not-a-uuid`, `not-a-time_${ID}`, `${AT}_${ID}_x`]) {
       expect(readEnquiryListQuery({ before: bad })).toBeNull();
     }
+    // A date the calendar does not have. V8 reads 30 February as 2 March and
+    // says nothing; the database refuses it outright, which from here would be
+    // a server error for what is only a bad address. So it is refused here.
+    for (const never of ['2026-02-30T00:00:00Z', '2026-04-31T00:00:00Z', '0000-01-01T00:00:00Z']) {
+      expect(readEnquiryListQuery({ before: `${never}_${ID}` })).toBeNull();
+    }
+    // And a real one, to the microsecond the database keeps, is still read.
+    expect(
+      readEnquiryListQuery({ before: `2028-02-29T23:59:59.999999Z_${ID}` })?.before?.receivedAt,
+    ).toBe('2028-02-29T23:59:59.999999Z');
     // Text for the database's own comparison, so it is a time and an id or it
     // is nothing: never a quote, never a second statement.
     expect(readEnquiryListQuery({ before: `${AT}'; drop table enquiry; --_${ID}` })).toBeNull();

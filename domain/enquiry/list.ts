@@ -6,10 +6,12 @@ import { ENQUIRY_SOURCES, type EnquirySource } from './parse';
  * and what became a lead in a third, because at an expo's volume one table of
  * all three is a table nobody can work from. Pure.
  *
- * One table in the database, as before. A dismissed row is the same audited
- * row with its status changed and its person scrubbed from it; moving it to a
- * table of its own would buy the screen nothing and cost the record its one
- * history. The screen asks for one status at a time instead, which the index
+ * One table in the database, as before. A dismissed row is the same row with
+ * its status changed and its person scrubbed from it, its reads and its
+ * dismissal logged by the route under the person acting (the table itself is
+ * outside the audit trigger by decision: `.claude/rules/data-model.md`).
+ * Nothing is moved and nothing is deleted; moving it to a table of its own
+ * would buy the screen nothing and cost the record its one history. The screen asks for one status at a time instead, which the index
  * `enquiry_tenant_status_received_idx` (migration 916) was already cut for.
  */
 export const ENQUIRY_STATUSES = ['new', 'converted', 'dismissed'] as const;
@@ -36,11 +38,26 @@ export function enquiryCursor(row: EnquiryCursor): string {
   return `${row.receivedAt}_${row.id}`;
 }
 
+/**
+ * A moment the database will accept, not only one this runtime will. V8 reads
+ * 30 February as 2 March and says nothing, and reads a year 0000 that the
+ * database does not have; the database refuses both, which from a route is a
+ * server error for what is only a bad address (found by the security review of
+ * this round, and checked against Postgres before it was believed). A real
+ * moment comes back from the round trip as itself, to the second; one the
+ * calendar does not have comes back as some other day.
+ */
+function isOnTheCalendar(iso: string): boolean {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms) || iso.startsWith('0000')) return false;
+  return new Date(ms).toISOString().slice(0, 19) === iso.slice(0, 19);
+}
+
 function readCursor(text: string): EnquiryCursor | null {
   const parts = text.split('_');
   const [receivedAt, id] = parts;
   if (parts.length !== 2 || receivedAt === undefined || id === undefined) return null;
-  if (!ISO.test(receivedAt) || Number.isNaN(Date.parse(receivedAt)) || !UUID.test(id)) return null;
+  if (!ISO.test(receivedAt) || !UUID.test(id) || !isOnTheCalendar(receivedAt)) return null;
   return { receivedAt, id };
 }
 

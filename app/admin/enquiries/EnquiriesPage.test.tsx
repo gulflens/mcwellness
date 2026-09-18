@@ -101,7 +101,14 @@ function crowd(size: number): Enquiry[] {
   }));
 }
 
-function mount(options: { listStatus?: number; list?: Enquiry[]; holdOlder?: Promise<void> } = {}) {
+function mount(
+  options: {
+    listStatus?: number;
+    list?: Enquiry[];
+    holdOlder?: Promise<void>;
+    failOlder?: boolean;
+  } = {},
+) {
   const posts: { url: string; body: unknown }[] = [];
   /** Every list the screen asked for, in order: what it fetched, and what it did not. */
   const lists: string[] = [];
@@ -124,6 +131,7 @@ function mount(options: { listStatus?: number; list?: Enquiry[]; holdOlder?: Pro
       lists.push(url);
       // A later page can be held back, to be let go after the screen has moved on.
       if (options.holdOlder && url.includes('before=')) await options.holdOlder;
+      if (options.failOlder && url.includes('before=')) return json({ error: 'internal' }, 500);
       return json(served(list, url), options.listStatus ?? 200);
     }
     if (url === '/api/enquiries/expo.csv') {
@@ -226,7 +234,7 @@ describe('EnquiriesPage', () => {
     }
   });
 
-  it('lists what the forms sent, new first, with the first line of the message and a link for a lead', async () => {
+  it('lists what is waiting, with the first line of the message, and no lead among them', async () => {
     mount();
     expect(await screen.findByText('Hazel Harbour')).toBeTruthy();
     expect(screen.getByText('+971500000099')).toBeTruthy();
@@ -334,13 +342,37 @@ describe('EnquiriesPage', () => {
     expect(screen.getByText('Showing 100 of 130.')).toBeTruthy();
     expect(screen.queryByText('Stand test 101')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show older' }));
+    const showOlder = screen.getByRole('button', { name: 'Show older' });
+    showOlder.focus();
+    fireEvent.click(showOlder);
+    // Never `disabled` while it fetches: a disabled button drops the focus it holds.
+    expect(showOlder.hasAttribute('disabled')).toBe(false);
     expect(await screen.findByText('Stand test 130')).toBeTruthy();
     // Added beneath what was there, not in place of it.
     expect(screen.getByText('Stand test 1')).toBeTruthy();
     expect(lists.at(-1)).toMatch(/^\/api\/enquiries\?status=dismissed&before=/);
     expect(screen.queryByRole('button', { name: 'Show older' })).toBeNull();
-    expect(screen.queryByText(/^Showing/)).toBeNull();
+    // The line stays to say the list is whole, in a region a screen reader is
+    // told of, and the focus the button held goes to it and not to the top of
+    // the page.
+    const whole = screen.getByText('Showing all 130.');
+    const region = whole.closest('[role="status"]');
+    expect(region).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(region));
+  });
+
+  it('lets go of an error about one table when another is opened', async () => {
+    mount({ list: [NEW, ...crowd(130)], failOlder: true });
+    await screen.findByText('Hazel Harbour');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismissed (130)' }));
+    await screen.findByText('Stand test 1');
+    fireEvent.click(screen.getByRole('button', { name: 'Show older' }));
+    expect(
+      await screen.findByText('The older enquiries could not be loaded. Try again.'),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Active (1)' }));
+    await screen.findByText('Hazel Harbour');
+    expect(screen.queryByText(/could not be loaded/)).toBeNull();
   });
 
   it('leaves the table alone when the tab or the source already open is pressed again', async () => {

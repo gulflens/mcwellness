@@ -54,7 +54,7 @@ async function lodge(name: string, hash = 'c'.repeat(64)): Promise<string> {
 }
 
 describe('the enquiries a person sees', () => {
-  it('lists them for an admin, new first, and logs the read of each one still carrying a person', async () => {
+  it('lists them for an admin, newest first, and logs the read of each one still carrying a person', async () => {
     await h.owner.query('delete from enquiry');
     const first = await lodge('Hazel Harbour', 'c'.repeat(64));
     const second = await lodge('Rowan Meadow', 'd'.repeat(64));
@@ -153,13 +153,25 @@ describe('one status at a time', () => {
       );
       return Number(rows[0]?.n);
     };
+    // The log is being read aright: a waiting row is one read, by this name.
+    await lodge('Iris Creek', 'f'.repeat(64));
     const before = await reads();
+    await list('?status=new');
+    expect(await reads()).toBe(before + 1);
+    // And a page of dismissed rows beside it is none.
     await list('?status=dismissed');
-    expect(await reads()).toBe(before);
+    expect(await reads()).toBe(before + 1);
   });
 
   it('refuses a status, a source or a cursor it does not know', async () => {
-    for (const query of ['?status=archived', '?source=billboard', '?before=yesterday']) {
+    // The last is a cursor in the right shape for a day that does not exist:
+    // the database would refuse it, and the screen's user is owed a 400, not a 500.
+    for (const query of [
+      '?status=archived',
+      '?source=billboard',
+      '?before=yesterday',
+      '?before=2026-02-30T00:00:00Z_0000000e-0000-4000-8000-000000000001',
+    ]) {
       const res = await h.callAs('GET', `/api/enquiries${query}`, PORTAL.adminAuth);
       expect(res.status).toBe(400);
     }

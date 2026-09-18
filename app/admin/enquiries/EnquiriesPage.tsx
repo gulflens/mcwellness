@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import {
+  ENQUIRY_PAGE,
   ENQUIRY_SOURCES,
   ENQUIRY_STATUSES,
   enquiryWaitingDays,
@@ -20,7 +21,7 @@ import './enquiries.css';
 
 /**
  * The website's enquiries (docs/superpowers/specs/2026-09-09-enquiries-design.md):
- * a table, new first, and for each new one the two things a person can do —
+ * a table, newest first, and for each new one the two things a person can do —
  * turn it into a lead, or dismiss it with a reason. Once actioned a row keeps
  * nothing personal, so the table shows what happened and who did it.
  *
@@ -197,9 +198,23 @@ export function EnquiriesPage() {
     onScreen.current = view;
   }, [view]);
 
+  const pagedLine = useRef<HTMLDivElement>(null);
+  // Raised by the press that fetched the last page. The button that held the
+  // focus leaves the screen in the render that follows, so the focus is handed
+  // on after it. A ref and not state: it is a note to the next effect, and
+  // nothing on the screen reads it.
+  const handFocusOn = useRef(false);
+  useEffect(() => {
+    if (older !== null || !handFocusOn.current) return;
+    handFocusOn.current = false;
+    pagedLine.current?.focus();
+  }, [older]);
+
   /** The next page, set beneath what is already on the screen. */
   async function showOlder(): Promise<void> {
-    if (older === null) return;
+    // `aria-disabled` on the button and this, not `disabled`: a disabled button
+    // drops the focus it is holding, and the person pressing it is holding it.
+    if (older === null || loadingOlder) return;
     const askedFrom = view;
     setLoadingOlder(true);
     setError(null);
@@ -211,6 +226,7 @@ export function EnquiriesPage() {
       if (parsed?.success) {
         setEnquiries((shown) => [...(shown ?? []), ...parsed.data.enquiries]);
         setCounts(parsed.data.counts);
+        if (parsed.data.older === null) handFocusOn.current = true;
         setOlder(parsed.data.older);
       } else {
         setError(OLDER_ERROR);
@@ -230,6 +246,7 @@ export function EnquiriesPage() {
     if ((next.status ?? status) === status && (next.source ?? source) === source) return;
     setEnquiries(null);
     setOlder(null);
+    setError(null);
     setDismissing(null);
     setReason('');
     if (next.status !== undefined) setStatus(next.status);
@@ -520,14 +537,27 @@ export function EnquiriesPage() {
             rowKey={(row) => row.id}
             empty={<Note>{NOTHING[status][source]}</Note>}
           />
-          {older !== null ? (
+          {/*
+            Under any table longer than a page, and kept there once the last
+            page is in: a status a screen reader is told of each time it
+            changes, which is the only way it learns that rows were added
+            beneath. When the last page arrives the button goes, and the focus
+            it held is put here and not left to fall to the top of the page.
+          */}
+          {countOf(source) > ENQUIRY_PAGE ? (
             <div className="enquiries__older">
-              <Note>
-                Showing {shown.length} of {countOf(source)}.
-              </Note>
-              <Button disabled={loadingOlder} onClick={() => void showOlder()}>
-                {loadingOlder ? 'Loading' : 'Show older'}
-              </Button>
+              <div role="status" tabIndex={-1} ref={pagedLine}>
+                <Note>
+                  {older !== null
+                    ? `Showing ${shown.length} of ${countOf(source)}.`
+                    : `Showing all ${shown.length}.`}
+                </Note>
+              </div>
+              {older !== null ? (
+                <Button aria-disabled={loadingOlder} onClick={() => void showOlder()}>
+                  {loadingOlder ? 'Loading' : 'Show older'}
+                </Button>
+              ) : null}
             </div>
           ) : null}
         </>
