@@ -261,3 +261,64 @@ with room to spare.
 **No migration, no policy file, no API route, no dependency, no new asset.**
 As before, the code encodes the origin it is shown on: print it from
 `app.mcwellnessuae.com` and from nowhere else.
+
+## Correction — the poster's second page in Safari (2026-09-19, an hour later)
+
+The amendment above is wrong in one place, and the poster it describes was
+live for about an hour with the fault.
+
+**What was wrong.** Decision 3 sized the sheet to the paper wherever
+`@supports (page: auto)` held, and called everything else the fallback. It
+took that test for "this browser will give the named page its margins". It is
+not. Safari has understood the `page` property since its first release, has
+honoured `@page` at all only since 18.2, and refuses `size: A4 portrait` for
+the orientation keyword. So in Safari the full sheet, 210 by 296 millimetres,
+sat inside the browser's own margins. The check above was an imitation in
+Chrome and could not have shown it: Chrome shrinks an over-wide sheet to fit,
+and on its margins the shrunken sheet is one page.
+
+**How it was found.** The operator asked, after the pass, to make sure it
+prints on one sheet. A small Swift program drove the system's own WebKit
+through `WKWebView.printOperation` to a PDF with no print panel — Safari's
+real print pagination, which had been written down as untestable from this
+machine. The poster that was live came out as **two pages at every margin
+tried: the poster whole on the first, and a blank second sheet.**
+
+**What changed**, in `poster.css` and the page's test, and nothing else:
+
+1. The sheet that fits is now the rule, not the fallback: as tall as its
+   contents, no wider than 170mm, 236mm tall, asking the page for nothing.
+2. The whole sheet is only for paper *measured* to be A4 from edge to edge.
+   `.poster` is a size container while it prints, and the whole sheet sits in
+   `@container poster-paper (min-width: 209.5mm) and (max-width: 210.5mm)`.
+   The page is that wide only where its margins really are none. US Letter
+   with no margins is 216mm and is kept out, being shorter than the sheet.
+3. `size: A4`, without the orientation keyword.
+4. The body's floor of one screen is lifted while the poster prints: on paper
+   a screen is a page, and a body exactly one page tall has no room to round.
+
+Those millimetres are the width of a sheet of paper, not a tier of the
+console's; `tests/lint/one-set-of-breakpoints.test.ts` reads `px` and `rem`
+and is right not to see them.
+
+### Checked, not claimed
+
+Through WebKit, the engine Safari prints with, Safari 27.2 on macOS 27.2: one
+page on A4 with the system's default margins (90 points above and below, 72
+at the sides), at 36 points, at 18 points and at none; one page on US Letter
+at 18 points. **One case fails and is left failing:** US Letter with the
+system's default margins is two pages, because the paper is 18mm shorter and
+the margins take 63mm of it. No browser prints with margins that deep, the
+paper is not the country's, and the cure would shrink every A4 poster to
+serve it. On A4 the arithmetic agrees with the test at any margin at all.
+
+Through Chrome: one full page of A4 with the named page honoured, as before;
+one page with it ignored, on A4 and on US Letter.
+
+A test in `ExpoPosterPage.test.tsx` reads the stylesheet's rules with its
+comments set aside and fails if `@supports (page` returns, if the container
+rule goes, or if the orientation keyword comes back. It was run against the
+old rule put back by hand, and failed, before it was trusted.
+
+The program is kept outside the repository, with the practice's other tools,
+as `wkprint.swift`.
