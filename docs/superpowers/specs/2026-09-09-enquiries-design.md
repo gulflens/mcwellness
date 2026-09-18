@@ -203,3 +203,56 @@ carry the year. Under a table longer than a page: how many of how many, and
 status, so a screen reader is told when it changes, and it stays once the list
 is whole; the button is never `disabled`, which would drop the focus it holds,
 and when it leaves the screen the focus goes to the line.
+
+## Amended 2026-09-19 (later): a dismissed enquiry may keep its person
+
+**This reverses the scrub for one case**, by the operator's decision of 19
+September 2026, and leaves it standing for every other. The plan, with what
+was found before any code was written and the two questions put to the
+operator, is `docs/superpowers/plans/2026-09-19-enquiries-keep-details.md`.
+
+**The rule.** A person is kept only if they were told they would be. The
+expo's form said until this date that an enquiry "keeps nothing personal" once
+replied, and every row lodged under that sentence is still scrubbed on
+dismissal. A row remembers which wording its person read (`notice_version`,
+migration 921), a form that does not say is the first, and only the second —
+"we keep them so we can follow up with you later. You can ask us to delete
+them at any time." — lets a dismissal keep them. The table refuses anything
+else, so this is the route and the screen agreeing with the database and not
+standing in for it.
+
+**Dismissing.** `POST /api/enquiries/:id/dismiss` takes `{ reason, erase? }`
+and answers `{ ok, kept }`. Under the second wording the screen offers to keep,
+which is the default, or to erase: spam, a wrong number, somebody who asked.
+Under the first it offers nothing and says why. What a kept row loses either
+way is its address hash, which was there for the door's budget.
+
+**Erasing later.** `POST /api/enquiries/:id/erase`, the same three roles,
+logged as `erase`. Once: a row with nobody on it, and any row not dismissed,
+answers not found. This is how a request to be forgotten is met for somebody
+who never became a client.
+
+**News.** A second tick on the form, optional and never pre-ticked, asks
+separately about news and offers, including through social platforms. Agreeing
+to be rung back is not agreeing to be marketed to. `GET
+/api/enquiries/marketing.csv` is the people who ticked, are still on a row, and
+have not become a client; each row in it is a logged read and the file a
+logged export. The app uploads nothing anywhere. A platform the file is given
+to receives personal data, and `docs/COMPLIANCE/approved-vendors.md` lists
+them, as **not approved**, from the day the file exists.
+
+**What is logged.** A read of any row that names somebody. The round-53
+sentence "a page of dismissed rows logs nothing" is now true only of rows with
+nobody left on them.
+
+**A lead's tick does not travel.** A converted row is scrubbed as before, and
+the tick for news is not carried onto the client record: a client's consents
+are the versioned documents, and a form's tick is not one. A known gap, the
+operator's to ask for.
+
+**The website is not changed by this.** Its forms carry the first tick and say
+nothing of keeping details or of news, and its privacy page says enquiry
+details are used to "Respond to your enquiries". So a website enquiry says
+nothing of its wording, is taken for the first, and is scrubbed on dismissal,
+which is the safe thing until the site's own words change.
+

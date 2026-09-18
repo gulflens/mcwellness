@@ -172,6 +172,16 @@ function mount(
       list = [{ ...CONVERTED, id: NEW.id, actionedByName: 'Iris Harbour' }, CONVERTED];
       return json({ clientId: CONVERTED.clientId, mrn: 'MW-000012' }, 201);
     }
+    // As the API itself does (`jsonOnly`, app/api/_middleware/security.ts): a
+    // POST that does not say it is JSON is refused before any route sees it.
+    // A mock that took anything let a bare POST through this screen's tests
+    // and into a browser, where the server answered 415.
+    if (init?.method === 'POST') {
+      const type = new Headers(init.headers).get('content-type') ?? '';
+      if (!type.toLowerCase().startsWith('application/json')) {
+        return json({ error: 'unsupported_media_type' }, 415);
+      }
+    }
     if (url === '/api/enquiries/marketing.csv') {
       posts.push({ url, body: null });
       return new Response('Name,WhatsApp\r\n', {

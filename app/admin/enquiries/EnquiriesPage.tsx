@@ -345,7 +345,13 @@ export function EnquiriesPage() {
     setError(null);
     setOutcome(null);
     try {
-      const res = await apiFetch(`/api/enquiries/${enquiry.id}/erase`, { method: 'POST' });
+      // Said to be JSON, with a body, as every POST here is: the API refuses
+      // one that is not with a 415 before any route sees it (`jsonOnly`).
+      const res = await apiFetch(`/api/enquiries/${enquiry.id}/erase`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
       if (res.ok) {
         setOutcome('Details erased. The row keeps when it came and why it was dismissed.');
         setErasing(null);

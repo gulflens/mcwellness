@@ -385,3 +385,27 @@ and the export itself once, as an `enquiry_export` entity under the request
 id; the file is then a copy of names and numbers outside the system, which
 the screen tells the office to keep on the practice's own device and delete
 once the follow-up is done.*
+
+*Amended 2026-09-19 (migration 921, trunk round 54, the operator's decision of
+that date): **a dismissed enquiry may keep its person, where that person was
+told it would.** Two columns join the row. `notice_version` (1 or 2, set by
+the door as the row is lodged and never changed) records which wording the
+person read: 1 promised that an enquiry "keeps nothing personal" once replied,
+and is every row lodged before this date and every form that does not say
+otherwise; 2 says the details are kept for follow-up and can be deleted on
+request. `marketing_opt_in` is the second wording's optional tick for news and
+offers, including through social platforms; three-valued like `consent`, and
+refused on a row under the first wording, which never asked. **Its need:** it
+is the only record that a person agreed to be sent the practice's news, and
+without it nobody may be. The check that every actioned row is scrubbed is
+replaced by one that an actioned row keeps only what was promised: scrubbed
+entire, as before, **or** dismissed under notice 2 and still naming its
+person. A converted row is always scrubbed; the address hash goes either way.
+A trigger holds what a policy cannot see: the wording never changes; a
+dismissed row stays dismissed, by the same person, for the same reason; its
+details are erased whole or left alone, never edited; once erased, nobody
+writes a person back. The update policy admits one more change, the erasure
+of a dismissed row that still names somebody. A read of any row that names
+somebody is logged, so a page of dismissed rows may now log reads; the news
+list logs every row it carries as a read and the file once as an export. Kept
+rows are kept until somebody erases them: nothing deletes on a timer.*
