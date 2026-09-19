@@ -175,7 +175,7 @@ export function ClientsPage() {
 
   const columns = useMemo<Column<ClientRow>[]>(
     () => [
-      { key: 'mrn', header: 'Record', numeric: true, render: (row) => row.mrn },
+      { key: 'mrn', header: 'Record', numeric: true, fit: true, render: (row) => row.mrn },
       {
         key: 'name',
         header: 'Name',
@@ -191,11 +191,13 @@ export function ClientsPage() {
         key: 'age',
         header: 'Age',
         numeric: true,
+        fit: true,
         render: (row) => (row.age === null ? '' : String(row.age)),
       },
       {
         key: 'status',
         header: 'Status',
+        fit: true,
         render: (row) => <ClientStatusChip status={row.status} />,
       },
       {

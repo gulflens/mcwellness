@@ -1128,6 +1128,20 @@ input[type='search']::-webkit-search-results-button {
   text-align: start;
 }
 
+/* A column that fits what it holds. The table is as wide as the page, and an
+   automatic layout shares the room left over among every column in proportion,
+   so a record number ends up with a third of the screen. A cell cannot be
+   narrower than content that may not wrap, and header and cells here may not,
+   so asking for next to nothing gives exactly the content and its padding; the
+   room goes to the columns that did not ask. A share, not a length: fluid in
+   place of fixed (docs/SPEC/responsive-console.md section 7). When every column
+   asks, none shrinks, so a table leaves at least one that does not. */
+.ledger th.fit,
+.ledger td.fit {
+  inline-size: 1%;
+  white-space: nowrap;
+}
+
 /* Feedback on controls, instant: the brief forbids transitions, not response. */
 a.rail__item:hover {
   background: var(--brand-lift);

@@ -30,6 +30,27 @@ describe('Table', () => {
     expect(screen.getByRole('cell', { name: 'Amber Harbour' })).toBeTruthy();
   });
 
+  it('marks a column that asks to fit its content, header and cell alike, and no other', () => {
+    render(
+      <Table
+        caption="Test"
+        columns={[{ ...columns[0]!, fit: true }, columns[1]!]}
+        rows={[{ id: '1', mrn: 'MW-000001', name: 'Amber Harbour' }]}
+        rowKey={(r) => r.id}
+      />,
+    );
+    expect(screen.getByRole('columnheader', { name: 'Record' }).classList.contains('fit')).toBe(
+      true,
+    );
+    expect(screen.getByRole('cell', { name: 'MW-000001' }).classList.contains('fit')).toBe(true);
+    expect(screen.getByRole('columnheader', { name: 'Name' }).classList.contains('fit')).toBe(
+      false,
+    );
+    expect(screen.getByRole('cell', { name: 'Amber Harbour' }).classList.contains('fit')).toBe(
+      false,
+    );
+  });
+
   it('shows the empty line when there are no rows', () => {
     render(
       <Table
