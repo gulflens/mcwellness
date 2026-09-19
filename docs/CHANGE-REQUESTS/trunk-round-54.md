@@ -360,3 +360,13 @@ register's WhatsApp row does not cover: it is scoped to invoices and receipts.
 Names from `db/seed/names.ts`; numbers in `+971 50 000 00xx`; addresses at
 `example.com` and, for the door's callers, the documentation range
 `203.0.113.0/24`; ids in the reserved ranges.
+
+### Live: 19 September 2026, 04:47 +04
+
+Staged at 00:36 UTC and live at 00:47 UTC on 19 September, in one pass with
+round 53, on the operator's word. Both hosted databases read 107 and match a
+local database the runner built, in nine categories; the trigger reads enabled
+always and the policy's `using` reads as above, on both. The accounts are
+`docs/STAGING.md` (the pass for migration 921) and `docs/PRODUCTION.md` (the
+thirtieth live pass). The Arabic privacy page is still owed and still does not
+gate the English form.

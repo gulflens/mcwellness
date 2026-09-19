@@ -2314,3 +2314,80 @@ for every row the live code can write — the one thing the website's form gains
 before the new code arrives is the practice's ceiling of three hundred
 enquiries an hour — so the schema may lead the code for as long as the upload
 takes.
+
+## What was done on 2026-09-19: the staging pass for kept enquiry details — migration 921
+
+**00:36 to 00:39 UTC on 19 September, which is 04:36 to 04:39 in Dubai**, on
+the operator's word ("go", to one pass that ships the enquiries screen's three
+tables and the keeping of a dismissed person's contact details). `main` at
+`70dee5ca`, pull request 196; 195 before it changed no database. The record of
+the round is `docs/CHANGE-REQUESTS/trunk-round-54.md`, and the gate it set on
+this pass, that the website's privacy page say what the form now says, was
+cleared at 00:30 UTC and is recorded there.
+
+**Read first.** `schema_migration` held 106 rows and no `921`; `enquiry` had
+23 columns and still carried `enquiry_actioned_is_scrubbed`; the table held no
+rows, so no row could trip the constraint that replaces it. One tenant. The
+file in the worktree and the file at `origin/main` hash alike, sha256
+`473b3eb7…8858`. The hold protocol found no other session on the laptop.
+
+**Applied** through Supabase's migration tool as `921_enquiry_kept_details`,
+the file's statements whole and in the file's order; then its bookkeeping row
+with that sha256; then the one policy file the round changed,
+`db/policies/enquiry/writers.sql`, whole, as `policies_after_921`. Read back:
+**107 rows.**
+
+**Fingerprinted against a freshly migrated local database**, for the reason
+the pass of 18 September gives: two hosted databases agreeing proves only that
+the same text was pasted twice. The local database was reset and migrated by
+the runner from `origin/main` (107 migrations), and nine categories were hashed
+over `enquiry`, the two functions the file writes, and the whole ledger. **All
+nine identical, staging against local:** columns `b0601857` (25), comments
+`2a695ed2` (16), constraints `902f69ee` (20), functions `373e23e9` (2:
+`app.lodge_enquiry` and `app.enquiry_guard_actioned`, each with its definer
+flag, its pinned search path, whether `app_role` may run it and whether
+`public` may), grants `d49c4fd3` (2), indexes `5a29c7bf` (6), policies
+`378a800f` (4), triggers `554f6608` (2, each with how it is enabled, since 921
+sets its trigger `enable always`), and the ledger `ad77ad98` (107 filenames
+with their checksums). The query is one statement; it is the one run on
+production in the live pass that followed.
+
+**What the database now refuses, tried on staging and rolled back whole.** One
+block lodged two invented people through `app.lodge_enquiry`, one under the
+second wording with the news tick and one under the first, tried each thing
+the round says cannot happen, and ended by raising an exception so that
+nothing it wrote was kept. Read out of that exception, in order:
+
+- lodged as told: notice 2 with the tick `true`; lodged as promised: notice 1
+  with the tick `null`, never asked;
+- dismissing the person who was promised erasure while keeping their name:
+  refused;
+- moving a row from the first wording to the second: refused;
+- changing the news tick in the same update that dismisses: refused;
+- keeping the person and also what they wrote: refused;
+- the kept dismissal itself: accepted, and the row then held the name, no
+  message, no address hash, and the tick as given;
+- turning a dismissed row back to `new`: refused;
+- editing the name on a kept row: refused;
+- erasing the kept person: accepted, the name gone and the dismissal's reason
+  still there;
+- writing a person back onto an erased row: refused.
+
+Every refusal was a `check_violation`, which is what the route expects.
+
+**One leg was dropped, and why.** The block first tried `set local
+session_replication_role = replica`, to see that the trigger, being `enable
+always`, fires even then. Supabase does not let the migration tool's role set
+that parameter ("permission denied to set parameter"), so the leg cannot be
+run on a hosted database. It is held instead by the fingerprint, which hashes
+how each trigger is enabled, and by `tests/db/` on a local database where the
+parameter can be set.
+
+**Left as it was found.** `enquiry` holds no rows, the ledger reads 107, and
+`app.verify_audit_chain()` returns null, which is its word for intact.
+
+**Not done here.** No bundle was built for staging and nothing was walked on
+it: staging has had no sign-in since the demo went on 9 September, and the
+round's screens were walked signed in on the local database before the pull
+request merged, which its own record describes. This pass is the database's
+half only.
