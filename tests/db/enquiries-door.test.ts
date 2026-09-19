@@ -175,6 +175,43 @@ describe('the enquiry door', () => {
     ]);
   });
 
+  it('files which wording the form showed, and the news tick only under the second', async () => {
+    // What the practice may keep of a person hangs on what they were told, so
+    // it has to arrive: from the form, through this door, onto the row.
+    const knock = async (fields: Record<string, unknown>, address: string) => {
+      const res = await api.request(DOOR, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': address },
+        body: JSON.stringify({
+          source: 'expo',
+          phone: '+971500000098',
+          enquiring_for: 'self',
+          interest: 'both',
+          consent: 'on',
+          website: '',
+          ...fields,
+        }),
+      });
+      expect(res.status).toBe(200);
+    };
+    await owner.query('delete from enquiry');
+    await knock({ name: 'Rowan Meadow', notice: 2, marketing: 'on' }, '203.0.113.10');
+    await knock({ name: 'Iris Creek', notice: 2, marketing: '' }, '203.0.113.11');
+    // The expo form as it was before 19 September 2026, still open in somebody's browser.
+    await knock({ name: 'Basil Valley' }, '203.0.113.12');
+    // A tick that arrives under the earlier wording answers a question nobody asked.
+    await knock({ name: 'Hazel Valley', marketing: 'on' }, '203.0.113.13');
+    const { rows } = await owner.query(
+      'select name, notice_version, marketing_opt_in from enquiry order by name',
+    );
+    expect(rows).toEqual([
+      { name: 'Basil Valley', notice_version: 1, marketing_opt_in: null },
+      { name: 'Hazel Valley', notice_version: 1, marketing_opt_in: null },
+      { name: 'Iris Creek', notice_version: 2, marketing_opt_in: false },
+      { name: 'Rowan Meadow', notice_version: 2, marketing_opt_in: true },
+    ]);
+  });
+
   it('tells a person which expo fields are missing', async () => {
     await owner.query('delete from enquiry');
     const res = await api.request(DOOR, {

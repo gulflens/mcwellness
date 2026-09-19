@@ -23,8 +23,29 @@ import './expo.css';
  * never `apiFetch`, which would attach a token if a member of staff happened
  * to be signed in on the stand's tablet and sign them out on a refusal.
  *
- * The tick is the same sentence the website's forms carry, and it is not a
- * consent: it records only that the box was ticked. The practice's consents
+ * What the form tells a person is what the practice may then do, so the
+ * wording has a number and the form sends it (`notice`, `domain/enquiry/keep.ts`).
+ * Until 19 September 2026 the paragraph under the tick promised that an
+ * enquiry "keeps nothing personal" once replied: that is notice 1, and a row
+ * lodged under it is erased on dismissal whatever anybody would prefer. The
+ * operator then decided dismissed enquiries should keep their details, so the
+ * paragraph now says they are kept and can be deleted on request: notice 2.
+ * **Whoever changes that paragraph again gives it a new number**; sending 2
+ * beside different words tells the database a person was told something they
+ * were not.
+ *
+ * A second tick, optional and unticked, asks separately about news and offers,
+ * and says plainly that the number or address may be shared with social
+ * platforms: "including on social media" reads as "I may see your posts", and
+ * what it has to cover is a list uploaded to one (the operator's decision of
+ * 19 September 2026, after the compliance review). Agreeing to be rung back is
+ * not agreeing to be marketed to, so it is never required and never pre-ticked.
+ *
+ * What is kept after a dismissal is contact details and not what the person
+ * wrote, so that is what the paragraph says is kept.
+ *
+ * The first tick is the same sentence the website's forms carry, and it is not
+ * a consent: it records only that the box was ticked. The practice's consents
  * are recorded on the client, from the wording filed as documents, once the
  * enquiry becomes a lead.
  *
@@ -32,6 +53,9 @@ import './expo.css';
  */
 
 const PRIVACY_URL = 'https://mcwellnessuae.com/privacy.html';
+
+/** The wording this form shows. Change the paragraph under the tick, change this. */
+const NOTICE = 2;
 
 const ENQUIRING_FOR_LABELS: Record<EnquiringFor, string> = {
   self: 'Myself',
@@ -68,6 +92,7 @@ export function ExpoEnquiryPage() {
   const [interest, setInterest] = useState<Interest | ''>('');
   const [message, setMessage] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [news, setNews] = useState(false);
   // The trap: a person never sees it, a script that fills every input fills it.
   const [trap, setTrap] = useState('');
   const [missing, setMissing] = useState<readonly MissingField[]>([]);
@@ -85,6 +110,7 @@ export function ExpoEnquiryPage() {
     setInterest('');
     setMessage('');
     setAgreed(false);
+    setNews(false);
     setTrap('');
     setMissing([]);
     setState('idle');
@@ -119,6 +145,8 @@ export function ExpoEnquiryPage() {
           interest,
           message: message.trim(),
           consent: agreed ? 'on' : '',
+          notice: NOTICE,
+          marketing: news ? 'on' : '',
           website: trap,
         }),
       });
@@ -251,10 +279,23 @@ export function ExpoEnquiryPage() {
           />
           <span>By submitting, you agree to be contacted by McWellness about your enquiry.</span>
         </label>
+        <label htmlFor="expo-news" className="checkbox">
+          <input
+            id="expo-news"
+            type="checkbox"
+            checked={news}
+            onChange={(e) => setNews(e.target.checked)}
+          />
+          <span>
+            Keep me posted about McWellness news and offers. You may share my number or email with
+            social media platforms, such as Instagram or TikTok, so I see them there.
+          </span>
+        </label>
         <p className="small muted">
-          We use your details to get back to you about this enquiry. If you go on to work with us
-          they become part of your record; if not, once we have replied the enquiry keeps nothing
-          personal. How we look after your information is set out in our{' '}
+          We use your details to get back to you about this enquiry, and we keep your contact
+          details so we can follow up with you later. If you go on to work with us they become part
+          of your record. You can ask us to delete them at any time, by replying to any message from
+          us or through the contact details in our{' '}
           <a className="link" href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">
             privacy policy
           </a>

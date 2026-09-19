@@ -385,3 +385,34 @@ and the export itself once, as an `enquiry_export` entity under the request
 id; the file is then a copy of names and numbers outside the system, which
 the screen tells the office to keep on the practice's own device and delete
 once the follow-up is done.*
+
+*Amended 2026-09-19 (migration 921, trunk round 54, the operator's decision of
+that date): **a dismissed enquiry may keep its person, where that person was
+told it would.** Two columns join the row. `notice_version` (1 or 2, set by
+the door as the row is lodged and never changed) records which wording the
+person read: 1 promised that an enquiry "keeps nothing personal" once replied,
+and is every row lodged before this date and every form that does not say
+otherwise; 2 says the details are kept for follow-up and can be deleted on
+request. `marketing_opt_in` is the second wording's optional tick for news and
+offers, including through social platforms; three-valued like `consent`, and
+refused on a row under the first wording, which never asked. **Its need:** it
+is the only record that a person agreed to be sent the practice's news, and
+without it nobody may be. The check that every actioned row is scrubbed is
+replaced by one that an actioned row keeps only what was promised: scrubbed
+entire, as before, **or** dismissed under notice 2 and still naming its
+person, with `message` and `concern` null: what is kept is how to reach
+somebody and not what they wrote. A converted row is always scrubbed; the
+address hash goes either way. A trigger, `enable always`, holds what a policy
+cannot see, for every role and at every status: the wording, the source and
+the moment never change; what the form gave is never edited, though what the
+person wrote may go while they stay; an actioned row stays what it became, by
+the same person, for the same reason and the same client; once erased, nobody
+writes a person back. The update policy admits one more change, the erasure
+of a dismissed row that still names somebody. A read of any row that names
+somebody is logged, so a page of dismissed rows may now log reads; the news
+list, which is dismissed rows only, logs every row it carries as a read and
+the file once as an export. Kept rows are kept until somebody erases them:
+nothing deletes on a timer, and after two years the screen asks whether the
+person is still needed. The table stays outside the audit trigger, for a
+stronger reason than before: the trigger would copy a kept person into the
+append-only log, where "Erase details" could not reach them.*

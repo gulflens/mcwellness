@@ -161,6 +161,8 @@ export function mountEnquiryDoor(api: Hono<ApiEnv>, options: EnquiryDoorOptions)
           consent: parsed.enquiry.consent,
           ip_hash: bucketFor(options.addressOf(c)),
           enquiring_for: parsed.enquiry.enquiringFor,
+          notice_version: String(parsed.enquiry.noticeVersion),
+          marketing_opt_in: parsed.enquiry.marketingOptIn === true ? 'true' : 'false',
           interest: parsed.enquiry.interest,
         }),
       ]);

@@ -203,3 +203,72 @@ carry the year. Under a table longer than a page: how many of how many, and
 status, so a screen reader is told when it changes, and it stays once the list
 is whole; the button is never `disabled`, which would drop the focus it holds,
 and when it leaves the screen the focus goes to the line.
+
+## Amended 2026-09-19 (later): a dismissed enquiry may keep its person
+
+**This reverses the scrub for one case**, by the operator's decision of 19
+September 2026, and leaves it standing for every other. The plan, with what
+was found before any code was written and the two questions put to the
+operator, is `docs/superpowers/plans/2026-09-19-enquiries-keep-details.md`.
+
+**The rule.** A person is kept only if they were told they would be. The
+expo's form said until this date that an enquiry "keeps nothing personal" once
+replied, and every row lodged under that sentence is still scrubbed on
+dismissal. A row remembers which wording its person read (`notice_version`,
+migration 921), a form that does not say is the first, and only the second —
+"we keep your contact details so we can follow up with you later … You can ask
+us to delete them at any time" — lets a dismissal keep them. The table refuses
+anything else, so this is the route and the screen agreeing with the database
+and not standing in for it.
+
+**What is kept is how to reach somebody, not what they wrote.** `message` and
+`concern` go at dismissal; name, number, email, area, who they asked for, what
+they were interested in, and how and when they prefer to be reached, stay. The
+address hash goes either way.
+
+**Dismissing.** `POST /api/enquiries/:id/dismiss` takes `{ reason, erase? }`
+and answers `{ ok, kept }`. Under the second wording the screen offers to keep,
+which is the default, or to erase everything: spam, a wrong number, somebody
+who asked. Under the first it offers nothing and says why, in words true of
+the website too: "This person was not told their details would be kept".
+
+**Erasing later.** `POST /api/enquiries/:id/erase`, the same three roles,
+logged as `erase`. Once: a row with nobody on it, and any row not dismissed,
+answers not found. This is how a request to be forgotten, or to stop the news,
+is met for somebody who never became a client. It does not reach a file
+already downloaded or an audience already uploaded, and the screen says so.
+
+**How long.** Until they ask. Nothing deletes on a timer. A kept row whose
+form arrived two years ago or more shows "Kept 2 years: still needed?"; it
+asks, and erases nothing (`keptReviewYears`).
+
+**News.** A second tick on the form, optional and never pre-ticked: "Keep me
+posted about McWellness news and offers. You may share my number or email with
+social media platforms, such as Instagram or TikTok, so I see them there."
+Agreeing to be rung back is not agreeing to be marketed to. `GET
+/api/enquiries/marketing.csv` is the people who ticked, **were dismissed**, and
+are still on a row: a waiting row has been looked at by nobody, and the tick is
+whatever a public form sent. Each row in the file is a logged read and the file
+a logged export. The app uploads nothing anywhere. A platform the file is given
+to receives personal data, and `docs/COMPLIANCE/approved-vendors.md` lists
+them, as **not approved**, from the day the file exists.
+
+**The gate on going live.** The practice's privacy page says "We never use it
+for advertising" and "only for as long as necessary", and this form links it.
+The new wording does not reach the public until that page says what this
+section says. `docs/CHANGE-REQUESTS/trunk-round-54.md` has it in full.
+
+**What is logged.** A read of any row that names somebody. The round-53
+sentence "a page of dismissed rows logs nothing" is now true only of rows with
+nobody left on them.
+
+**A lead's tick does not travel.** A converted row is scrubbed as before, and
+the tick for news is not carried onto the client record: a client's consents
+are the versioned documents, and a form's tick is not one. A known gap, the
+operator's to ask for.
+
+**The website is not changed by this.** Its forms carry the first tick and say
+nothing of keeping details or of news. So a website enquiry says nothing of its
+wording, is taken for the first, and is scrubbed on dismissal, which is the
+safe thing until the site's own words change.
+
