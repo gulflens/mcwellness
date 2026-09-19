@@ -2238,3 +2238,128 @@ on a PDF is how both are known to behave.
 **For the owner.** On `https://app.mcwellnessuae.com/admin/enquiries/poster`,
 press "Download PDF", open the file, and print it. Scan the printed sheet
 once with a phone; it should open `app.mcwellnessuae.com/expo`.
+
+## What was done on 2026-09-19: the thirtieth live pass — enquiries in three tables, and a dismissed person's contact details kept where they were told
+
+**00:39 to 00:50 UTC on 19 September, which is 04:39 to 04:50 in Dubai**, on
+the operator's word ("go", to one pass shipping both rounds). `main` at
+`b1e71c1f`: pull request 195 (the enquiries screen by status, with paging),
+196 (kept details, migration 921) and 197, a record, which changes nothing
+that runs. Between `70dee5ca`, where `verify` and `verify-db` had both read
+SUCCESS, and `b1e71c1f` one file moved,
+`docs/CHANGE-REQUESTS/trunk-round-54.md`; `verify` on `b1e71c1f` itself has
+since read SUCCESS as well. 197 was merged pinned to the head whose two checks
+each read SUCCESS, `97e72d71`.
+
+**The gate this pass waited on.** The expo's form now tells a visitor that
+their contact details are kept for follow-up, and the website's privacy page
+had said enquiries are never used for advertising. The page was changed first,
+with the operator's approval of the wording, at about 00:30 UTC; the account
+is in `trunk-round-54.md`. The form's new wording went live only after it.
+
+**The hold protocol.** `ListAgents` showed no other session on the machine,
+before the database and again before the upload.
+
+**The database first, after staging** (`docs/STAGING.md`, the pass of the same
+night). Read before anything was written: 106 ledger rows and no `921`; 23
+columns on `enquiry`; five rows, one waiting and four actioned, and **none of
+the four would fail the constraint that replaces
+`enquiry_actioned_is_scrubbed`**, because every one had been scrubbed whole.
+Then, through Supabase's migration tool, `921_enquiry_kept_details` at
+00:39:55, the statements staging took, word for word; its bookkeeping row with
+the file's sha256 `473b3eb7…8858` at 00:42:25; and
+`db/policies/enquiry/writers.sql`, whole, as `policies_after_921` at 00:42:32.
+Read back: **107 rows.** The two and a half minutes between the migration and
+its row are the record's to own: for that long the database had the change and
+its ledger did not say so. Nothing reads that ledger on production but these
+passes, and nothing ran between.
+
+**Fingerprinted: all nine identical, production against staging against a
+local database the runner built.** Columns `b0601857` (25), comments
+`2a695ed2` (16), constraints `902f69ee` (20), functions `373e23e9` (2), grants
+`d49c4fd3` (2), indexes `5a29c7bf` (6), policies `378a800f` (4), triggers
+`554f6608` (2), ledger `ad77ad98` (107). What each category hashes is said in
+the staging record.
+
+**And the two things the round's own checklist says a hash or a count can
+hide, read by eye on production.** `enquiry_guard_actioned` reads
+`tgenabled = 'A'`, enabled always, which a plain `create trigger` does not
+give. `enquiry_actioners` reads, in its `using`, `status = 'new' OR (status =
+'dismissed' AND name IS NOT NULL)` with the three roles: the text that lets
+"Erase details" reach a kept row, and without which it answers not found.
+Fifteen check constraints, and `enquiry_actioned_is_scrubbed` is gone.
+
+**Nothing was tried on production.** The refusals were proved on staging and
+rolled back there. Here the five rows were read after the change and are as
+they were: five, one waiting, four actioned and none of them named, all five
+under the first wording (the column's default, which is the truth: each was
+lodged under the promise that nothing personal is kept once replied to), the
+news tick set on none. `app.verify_audit_chain()` returns null, its word for
+intact.
+
+**The schema led the code for eight minutes, 00:39:55 to 00:47:37, by
+design.** The code then live lodged without naming a wording, which the new
+function reads as the first; and it dismissed by scrubbing the row whole,
+which is one of the two shapes the new constraint admits. So nothing the old
+code could write was refused.
+
+**The build.** Archive `mcwellness-b1e71c1f.tar.gz`, 6,606,592 bytes, made
+with `--prefix=mcwellness/`; TUS create 201, PATCH 204 with the returned
+offset equal to the size; the keys read by `curl` from a file of mode 0600
+deleted in the same command. Settings read back before building and
+unchanged. Build `01a0b721`: asked for at 00:46:37, completed at 00:47:42. The
+served name was seen changed at 00:47:37. **No restart — the thirteenth
+consecutive pass without one.** Health and deep health 200 throughout, deep in
+0.15 to 0.27 s across six polls after the build.
+
+**Verified by the chunk, with the absence measured first.** Before:
+`EnquiriesPage-Cr8OcWX-.js` and `ExpoEnquiryPage-dSuReCU3.js`, holding none of
+"Download news list", `sections__tab`, "Erase their details", "Show older" or
+"Keep me posted", and the form still holding "keeps nothing personal". After:
+`EnquiriesPage-_-AQd5OT.js`, 12,323 bytes, holding the first four, with "This
+person was not told their details would be kept", "Keep their contact details
+for follow-up", "Details erased" and the two-year chip's "still needed";
+`ExpoEnquiryPage-DgRgK-P-.js`, 5,363 bytes, holding "Keep me posted", "such as
+Instagram or TikTok", "we keep your contact details so we can follow up with
+you later" and "You can ask us to delete them at any time", with "keeps
+nothing personal" gone. The screen's stylesheet moved from
+`EnquiriesPage-CKTI_GyE.css` to `EnquiriesPage-HA5XWOTi.css`, **the name a
+local build of this tree wrote**; the form's, the poster's and the shell's
+stylesheets did not move, and a local build agrees on all three. The entry
+moved from `index-BzxO880l.js` to `index-DhCqp1J-.js`, 476,584 bytes for the
+fifth pass running. The old entry, both old scripts and the old stylesheet
+404, and a nonsense path 404s. `/expo` and the lockup answer 200, and the
+served document still carries its content policy as a meta tag.
+
+**That the running server is the new code was read from its own log, because
+nothing else can show it.** The three new addresses (the list by status, the
+news file, erase) each answer 401 to a stranger, but so does a made-up address
+beside them: this API refuses a stranger before it looks at the path, so a 401
+says nothing about which code is running, and earlier records that read it
+that way read too much. The files prove only what is on the disk. The runtime
+log does show it: a first line at 00:47:37.658, the process announcing its
+storage, its scheduler and "Serving the built app from dist/"; the same six
+lines three more times by 00:47:51, which reads as the host opening workers
+under this pass's own burst of requests and not as a process falling over,
+since there is no error, no line after it, and health never missed.
+
+**Not checked, and why.** No enquiry was sent through the form to production:
+it would be an invented person in the practice's real table, and the rule is
+that nothing synthetic is written there. So the door's handing of the wording
+and the tick to `app.lodge_enquiry` is held by the unit tests, the database
+tests and the signed-in walk on a local database before 196 merged, and the
+function itself by the block on staging. The first real enquiry from `/expo`
+will be the first row under the second wording; on the Enquiries screen it is
+the first that offers "Keep their contact details for follow-up" when
+dismissed.
+
+**Left as it was found.** Production's five enquiries are untouched. Staging
+holds none.
+
+**For the owner.** Enquiries now opens on Active, with Converted and Dismissed
+beside it. Dismissing someone who came through the expo's new form keeps their
+name and number unless "Erase their details" is chosen; dismissing anyone who
+enquired before tonight, or through the website, erases them as before,
+because that is what they were told. "Download news list" appears on Dismissed
+once somebody who ticked the news box has been dismissed and kept. No list
+goes to a social platform until that platform is in the vendor register.

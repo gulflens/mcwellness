@@ -129,3 +129,9 @@ takes it only if it returns as itself. A database test holds the 400.
 
 Names from `db/seed/names.ts`; numbers in `+971 50 000 00xx`; addresses at
 `example.com`; ids in the reserved ranges.
+
+### Live: 19 September 2026, 04:47 +04
+
+Live with round 54 in the thirtieth live pass (`docs/PRODUCTION.md`), `main`
+at `b1e71c1f`. The Dismissed table it shipped with is the one round 54 changed
+before either was live, so no one ever saw the first.
