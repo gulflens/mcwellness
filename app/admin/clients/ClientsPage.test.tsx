@@ -170,6 +170,16 @@ describe('ClientsPage search', () => {
     expect(calls.every((c) => c.url !== '/api/clients/lookup')).toBe(true);
   });
 
+  it('fits the record, the age and the status to what they hold, and lets the rest take the room', async () => {
+    mount();
+    await screen.findByRole('table');
+
+    const fitted = (name: string) =>
+      screen.getByRole('columnheader', { name }).classList.contains('fit');
+    expect(['Record', 'Age', 'Status'].map(fitted)).toEqual([true, true, true]);
+    expect(['Name', 'Primary contact', 'Emirate'].map(fitted)).toEqual([false, false, false]);
+  });
+
   it('says an installation without identity keys cannot search by Emirates ID', async () => {
     mount([], 503);
     await screen.findByRole('table');

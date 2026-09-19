@@ -16,6 +16,11 @@ export type Column<Row> = {
   numeric?: boolean;
   /** Quantities align end; identifiers and text align start (the default). */
   align?: 'start' | 'end';
+  /**
+   * As wide as what it holds and no wider: a record number, an age, a status.
+   * The room it gives up goes to the columns that did not ask.
+   */
+  fit?: boolean;
   render: (row: Row) => ReactNode;
 };
 
@@ -68,6 +73,10 @@ export function Table<Row>({
 }
 
 function cellClass<Row>(column: Column<Row>): string | undefined {
-  const classes = [column.numeric ? 'numeric' : null, column.align === 'end' ? 'align-end' : null];
+  const classes = [
+    column.numeric ? 'numeric' : null,
+    column.align === 'end' ? 'align-end' : null,
+    column.fit ? 'fit' : null,
+  ];
   return classes.filter(Boolean).join(' ') || undefined;
 }
