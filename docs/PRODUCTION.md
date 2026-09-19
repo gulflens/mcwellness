@@ -2363,3 +2363,123 @@ enquired before tonight, or through the website, erases them as before,
 because that is what they were told. "Download news list" appears on Dismissed
 once somebody who ticked the news box has been dismissed and kept. No list
 goes to a social platform until that platform is in the vendor register.
+
+## What was done on 2026-09-19: a data step, not a pass — the three test clients removed, and the first real client and invoice numbered one
+
+No code changed, nothing was built and nothing was uploaded. Production stays
+on `main` `b1e71c1f`, build `01a0b721`, 107 migrations. This is a record of rows
+removed and two numbers changed, on the operator's word.
+
+**What was asked.** The operator, 19:06 +04: the first three clients in the
+database were entered as tests; remove them, keep the fourth, and renumber it
+`MW-000001`. Asked whether the fourth client's invoice had reached them yet —
+on paper, by email or by WhatsApp — the operator answered that it had not.
+That answer decided the route, because the invoice's filed PDF prints the
+record number and is locked. The choice was put to the operator on that
+footing — an invoice already in a household's hands keeps its numbers, one that
+is not can be put right before it goes — and the operator chose the full
+renumbering.
+
+**What production held.** Four clients, `MW-000001` to `MW-000004`. The second
+and third were bare leads: a contact, the test enquiry each was converted from,
+an unused portal invitation. The first was a full walk of the system: four
+appointments, four sessions with 27 events and four visit records, five
+consents, a goal, a draft report, a package purchase with 30 credits, a portal
+login that had been used, a home address with four cached drive estimates, and
+`INV-000001` for AED 0 with its filed PDF. The fourth, the real one, held five
+consents, a package with 13 credits, and `INV-000002`, issued and unsent, with
+its filed PDF. No payment, no receipt and no journal entry
+existed anywhere, and both number series behind receipts and reports still
+read 1.
+
+**Rehearsed on production itself, inside a block that cannot commit.** Staging
+holds no copy of these rows, so the whole step was written as one `do` block
+whose last statement raises an exception carrying the counts. An exception
+rolls the block back, so the rehearsal runs against the real rows and the real
+foreign keys and leaves nothing. It is safe for the audit trail only because
+`audit_log.id` is handed out by the chain's own anchor inside the transaction
+and not by a sequence: `app.verify_audit_chain()` insists the ids are
+contiguous, and a sequence would have burnt 86 of them on the rollback. Check
+that before borrowing the method anywhere else. The first rehearsal failed, and
+rolled back whole, on `drive_estimate`, which references `location` and carries
+no `client_id` to find it by. The second passed, with every count matching the
+inventory taken beforehand.
+
+**The order, for whoever does this next.** Children first, since every foreign
+key to `client` is `no action`: `session_event`, `visit_actuals`,
+`entitlement`, `billing_document`, `invoice_line`, `report`; then `invoice` and
+`package_purchase` **in one statement** (a data-modifying `with`), because each
+references the other: the purchase's reference to its invoice is checked at the
+end of the statement and the invoice's reference to its purchase is
+`deferrable initially deferred` (`403_billing_entitlement.sql`) and checked at
+commit, so one statement satisfies both; then `session`, `appointment`, `consent`, `document`, `goal`, `portal_invite`,
+`enquiry`; then `client.primary_contact_id` and `primary_location_id` set to
+null, `contact`, `client`; then `drive_estimate` and `location`; then
+`user_role`, `app_user`, and the one `auth.users` row behind the login that had
+been used. The guards on `document` and `report` both stand aside for the
+owner's own maintenance, which is a connection with no `app.actor_roles` set;
+the report was a draft, which may be abandoned in any case.
+
+**The two numbers.** `client.mrn` went from `MW-000004` to `MW-000001`.
+`invoice.number` went from 2 to 1; `reference` is generated from it and reads
+`INV-000001` without being touched. `invoice_number_series.next_number` went
+from 3 back to 2. There is no series behind the record number: `app.next_mrn`
+reads the highest one in use, and answers `MW-000002`. The invoice's filed PDF
+and its `billing_document` row were removed with the rest, so that the first
+time the invoice is opened the app files it afresh through its own renderer,
+under the numbers it now carries.
+
+**Rules 7 and 8, said plainly.** Rule 7 as written covers this invoice: it was
+issued in the app, and an issued invoice gets a new version, never an edit in
+place. It was set aside for this one invoice, on the operator's choice, because
+the invoice had reached nobody; the old number and the old record number are in
+the audit trail, and this is not a precedent for an invoice that has been sent.
+Rule 8 keeps financial records five years: the rows removed were a test entry's
+AED 0 invoice, its line and its purchase, which record no supply to anyone. The
+real client's invoice, line and purchase were kept.
+
+**Counts removed.** 27 session events, 4 visit records, 30 credits, 2 billing
+documents, 1 invoice line, 1 draft report, 1 package purchase with its invoice,
+4 sessions, 4 appointments, 5 consents, 5 documents (four of the test client's
+and the real invoice's PDF), 1 goal, 4 portal invitations, 2 enquiries, 3
+contacts, 3 clients, 4 drive estimates, 1 location, 3 role grants, 3 portal
+users and 1 sign-in. The block checked its own result before it was allowed to
+finish: one client, numbered `MW-000001`; one invoice, `INV-000001`; the next
+record number `MW-000002`; the real client still holding 13 credits and 5
+consents; the audit chain verifying.
+
+**Read back afterwards.** One client, a lead. One invoice, `INV-000001`, its
+amount and issue date as they were. Next invoice number 2. Thirteen credits, five
+consents, one purchase, one invoice line, one contact. Two stored documents,
+both the real client's signatures. Three enquiries, none naming a client. No
+`client_contact` role left, and no sign-in without a user behind it.
+
+**The files.** Five objects had lost their rows: the test client's invoice PDF
+and three signature images, and the real invoice's old PDF. They were removed
+through the storage API, 200 with five names returned, the key read by `curl`
+from a file of mode 0600 deleted in the same command. Two objects remain under
+client paths and both have rows.
+
+**The audit trail.** 1,735 rows before and 1,833 after. 86 of the new rows are
+this step, every one carrying the operator's reason, a request id, the old
+values, and `system` as the actor, the same shape as the removal of
+2026-09-10. The other 12 are the operator reading the client list and a client
+record in the app while the step ran. `app.verify_audit_chain()` returns null,
+before, after the failed rehearsal, after the step and after the files went.
+`enquiry` has no audit trigger by design, so the two test enquiries leave no
+row of their own; nor do the 27 session events, whose trigger fires on insert
+only; nor does the one sign-in, which lives in `auth` and is not the app's
+table. This section is their record. That is how 86 reconciles: the other 80
+rows removed left one each, the three clients' unlinking left three more, and
+the two numbers and the series left three.
+
+**Not done, and why.** The fresh PDF was not filed from here: filing is a
+signed-in act of the invoice book's audience, and the app does it the first
+time the invoice is opened. The off-site backup's weekly dumps taken before
+tonight still hold the test rows; they were never real people, and
+`.github/workflows/backup.yml` drops a dump once it is ninety days old.
+
+**For the owner.** The client list shows one client, `MW-000001`. Open their
+invoice once before sending it: that files the new PDF, which will read
+`INV-000001` and record number `MW-000001`. The next client enrolled becomes
+`MW-000002` and the next invoice `INV-000002`.
