@@ -2483,3 +2483,70 @@ tonight still hold the test rows; they were never real people, and
 invoice once before sending it: that files the new PDF, which will read
 `INV-000001` and record number `MW-000001`. The next client enrolled becomes
 `MW-000002` and the next invoice `INV-000002`.
+
+## What was done on 2026-09-19: the thirty-first live pass — the clients list's record, age and status fit what they hold
+
+Production runs `main` `90a4a6ba`, build `01a0bacb`, on the operator's "go
+live" at 21:50 +04. Front end only: no migration, both databases stay at 107,
+and nothing was written to either.
+
+**What went live.** Pull request 201. On the clients list the Record, Age and
+Status columns are as wide as what is in them and no wider, which the operator
+asked for with a picture of the live screen at 19:31 +04. The shared `Table`'s
+`Column` gains `fit`, answered by one rule in `app/shell/shell.css`; the table
+is as wide as the page and an automatic layout had been sharing the spare room
+among every column, so a record number took 321px for a 115px value. Measured
+in a browser before it merged, at 1786px and at 390px: no spare pixel on the
+three columns, nothing clipped, the first column still pinned. Pull requests
+198 and 200 are in the same archive and are records only.
+
+**The pass.** No other session was working (one peer, idle for a day). The
+before-state was taken first: entry `index-DhCqp1J-.js`, shell stylesheet
+`index-DSJRZKuA.css`, at 17:50:36 UTC. The stored build settings were read back
+and sent unchanged. Archive `mcwellness-90a4a6ba.tar.gz`, 6,614,848 bytes, made
+with its `mcwellness/` root folder from `origin/main`; TUS create 201 and PATCH
+204 with the offset equal to the size, the keys read by `curl` from a file of
+mode 0600 deleted in the same command. Build asked 17:51:31 UTC, the served
+names changed 17:53:03, the build read `completed` 17:53:08.
+
+**Proved to be this tree, not only a build.** A local `pnpm build` of
+`90a4a6ba` wrote `index-CfzNQSKK.css`; the site serves a stylesheet of that
+name, and the two are the same bytes, 37,762 of them, with the same sha256
+(`fe6070b8…`). This round changed the shell's own stylesheet, so that is the
+file to compare. The served bytes hold
+`.ledger th.fit,.ledger td.fit{white-space:nowrap;inline-size:1%}`. The entry
+is now `index-DfRDHcin.js`; the clients screen's script, read out of it, is
+`ClientsPage-DiKvdXle.js`, and it carries the switch three times. Both old
+names answer 404, and so does a name that never existed, so the host is not
+answering 200 to everything.
+
+**The process is the new one.** The runtime log holds a fresh start-up block
+stamped 17:53:03, the second the names changed, ending "Serving the built app
+from dist/" and "API listening", with `started_at` 17:53:03 against
+`last_deployed_at` 17:53:08 and no error line. The block appears four times in
+seventeen seconds, which is the host opening workers under this pass's own
+burst of requests, as on the thirtieth. **No restart — fourteenth consecutive.**
+Health 200 in 0.24 s, deep 200 in 0.33 s.
+
+**One red run on the way, and not this change's.** Pull request 201's second
+commit, which changed two comments and a lint test, failed `verify` once on
+`tests/accounting/BooksPage.test.tsx`, the case that lets Tab reach the drawer's
+width handle. It had passed on the first commit, passes every time on a laptop,
+and is the only time this case has failed in the last sixty `verify` runs. The
+other red run in that span, on `main` on 13 September, was
+`app/shell/App.test.tsx`'s lazy-chunk case, read back from its log; a first
+attempt that failed the same evening and passed on its rerun no longer has a
+log to read. This one went green on a rerun of the failed job. The assertion showed focus still on a button after Shift+Tab, not
+on the handle, which reads as the drawer's key listener not yet attached when
+the test pressed Tab: a test that does not wait for the drawer to settle. That
+is a reading and not a finding: it was not reproduced.
+
+**Not checked, and why.** The screen was not opened signed in from here: it
+sits behind the owner's sign-in, and the served stylesheet and the screen's
+script are what a browser will be handed. The widths themselves were measured
+before merge against the same stylesheet source.
+
+**For the owner.** Reload the Clients screen. Record, Age and Status now sit
+tight to their contents and the name, the contact and the emirate take the
+room. Status grows by a few pixels when a row says "Active" or "Paused"
+rather than "Lead", because it fits whatever is in it.
