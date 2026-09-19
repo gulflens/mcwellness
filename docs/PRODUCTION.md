@@ -2497,8 +2497,8 @@ asked for with a picture of the live screen at 19:31 +04. The shared `Table`'s
 is as wide as the page and an automatic layout had been sharing the spare room
 among every column, so a record number took 321px for a 115px value. Measured
 in a browser before it merged, at 1786px and at 390px: no spare pixel on the
-three columns, nothing clipped, the first column still pinned. Pull request 200
-is in the same archive and is a record only.
+three columns, nothing clipped, the first column still pinned. Pull requests
+198 and 200 are in the same archive and are records only.
 
 **The pass.** No other session was working (one peer, idle for a day). The
 before-state was taken first: entry `index-DhCqp1J-.js`, shell stylesheet
@@ -2532,10 +2532,14 @@ Health 200 in 0.24 s, deep 200 in 0.33 s.
 commit, which changed two comments and a lint test, failed `verify` once on
 `tests/accounting/BooksPage.test.tsx`, the case that lets Tab reach the drawer's
 width handle. It had passed on the first commit, passes every time on a laptop,
-and was the only failed `verify` in the last sixty runs; it went green on a
-rerun of the failed job. The assertion showed the drawer's key listener had not
-run when the test pressed Tab, which reads as a test that does not wait for the
-drawer to settle. That is a reading and not a finding: it was not reproduced.
+and is the only time this case has failed in the last sixty `verify` runs. The
+other red run in that span, on `main` on 13 September, was
+`app/shell/App.test.tsx`'s lazy-chunk case, read back from its log; a first
+attempt that failed the same evening and passed on its rerun no longer has a
+log to read. This one went green on a rerun of the failed job. The assertion showed focus still on a button after Shift+Tab, not
+on the handle, which reads as the drawer's key listener not yet attached when
+the test pressed Tab: a test that does not wait for the drawer to settle. That
+is a reading and not a finding: it was not reproduced.
 
 **Not checked, and why.** The screen was not opened signed in from here: it
 sits behind the owner's sign-in, and the served stylesheet and the screen's
