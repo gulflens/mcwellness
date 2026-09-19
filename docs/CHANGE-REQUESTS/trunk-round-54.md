@@ -115,7 +115,10 @@ reached by scrolling sideways, as the Active table's last two already were.
 
 `pnpm verify`: 255 files, 3,005 tests after the reviews' fixes; type check and
 lint clean. **The whole database suite**, `pnpm test:db`, against the pinned
-local database, run again after the migration changed: 106 files, 1,500 tests.
+local database, run again after the migration changed: 106 files, 1,500 tests;
+and after the schema re-check added one more test, the four suites that touch
+the table again, 64 tests. That last test was run against the trigger with its
+two lines taken out before it was trusted, and failed.
 The screen's own tests were run five times over after one of them was found to
 race the counts on a loaded machine. Walked again after the three decisions:
 no news list while people only wait; a website row says "was not told their
@@ -257,6 +260,41 @@ never asked for news should say so; and that the recorded reason the table is
 outside the audit trigger described a quarantine it no longer only is. The
 exemption stands, for a stronger reason than before: the trigger would copy a
 kept person into an append-only log that "Erase details" cannot reach.
+
+### What a hand-applied pass must leave on a hosted database
+
+From the schema re-check of this round, for `docs/STAGING.md` and
+`docs/PRODUCTION.md` to be held to. **Databases before code**: the new routes
+select `notice_version`, and the old code is safe on the new schema, because
+old forms lodge as the first wording and the old scrub still satisfies the new
+constraint.
+
+- **Ledger**: one new row, `921_enquiry_kept_details.sql`, 106 to 107, with the
+  file's sha256 **taken from `main` after the merge** and not from any earlier
+  commit of this branch: the file was edited in place three times before it
+  merged. A local database that ran an earlier text refuses on the checksum:
+  `pnpm db:reset` there. No hosted database has it.
+- **Columns** on `enquiry`, 23 to 25: `notice_version smallint not null default 1`;
+  `marketing_opt_in boolean`.
+- **Check constraints**, 13 to 15: added `enquiry_notice_version_known`,
+  `enquiry_marketing_asked_only_under_second_notice` and
+  `enquiry_actioned_keeps_only_what_was_promised`; dropped
+  `enquiry_actioned_is_scrubbed`.
+- **Functions**: created `app.enquiry_guard_actioned()` (returns trigger, not a
+  definer, `search_path = pg_catalog, pg_temp`, execute revoked from public);
+  replaced `app.lodge_enquiry(jsonb)` (still a definer, same search path,
+  execute revoked from public and granted to `app_role`).
+- **Trigger**: `enquiry_guard_actioned`, before update, for each row, enabled
+  **always** — `tgenabled = 'A'`, which a plain `create trigger` does not give
+  and a fingerprint of trigger *names* does not see. Read `tgenabled`.
+- **Comments**, five: the table's; `enquiring_for` and `interest` re-issued;
+  `notice_version` and `marketing_opt_in` new.
+- **Policy**, re-applied by hand after 921, because policies are not
+  migrations: `db/policies/enquiry/writers.sql`. `enquiry_actioners` gets a new
+  `using`; the count of policies does not change, so a count will not show
+  whether it was done. **Until it is, "Erase details" answers not found on that
+  database.** Read the policy's `using` text.
+- **Unchanged**: no index, no table grant, no change to row security itself.
 
 ### Not in this round
 

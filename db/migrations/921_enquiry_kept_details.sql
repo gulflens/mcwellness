@@ -178,7 +178,7 @@ comment on column enquiry.interest is
 comment on column enquiry.notice_version is
   'Which wording the person read when they lodged: 1 promised "keeps nothing personal" once replied; 2 said the details are kept for follow-up. Set by app.lodge_enquiry and never changed.';
 comment on column enquiry.marketing_opt_in is
-  'The second wording''s optional tick for news and offers, including through social platforms. Null is never asked.';
+  'The second wording''s optional tick for news and offers, including through social platforms. Null is never asked, and null again once scrubbed.';
 
 -- The door, as 919 wrote it, with the wording and its tick. Same signature,
 -- same grants. Anything but a plain 2 is the earlier wording, which is the
@@ -291,7 +291,8 @@ grant execute on function app.lodge_enquiry(jsonb) to app_role;
 --          and actioned_at is not null and actioned_by is not null
 --        )
 --      );
---   4. Re-issue 919's two column comments ("Null once actioned").
+--   4. Re-issue 919's two column comments ("Null once actioned") and 916's
+--      table comment, which this migration replaces.
 --   5. Put `db/policies/enquiry/writers.sql` back as it was before this
 --      migration (`using (status = 'new' and …)`) and re-apply it. Left as it
 --      is, it is inert — no dismissed row names anybody — but it is wrong.

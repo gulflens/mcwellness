@@ -565,6 +565,36 @@ describe('what is kept, and for whom', () => {
     });
   });
 
+  it('lets what a person wrote go, and never be rewritten, waiting or kept', async () => {
+    // The relaxed half of "never edited": the two free-text answers may go to
+    // null while the person stays. The other half, that they are never
+    // rewritten, is the trigger's alone while a row waits, so it is tried here
+    // by itself. (Not in the loop above: beside KEEP these would be a duplicate
+    // assignment, which is a syntax error and not the refusal being tested.)
+    await rolledBack(owner, async () => {
+      const id = await lodgeWith({ notice_version: '2', concern: 'Sleep' });
+      await rejectsWith(
+        owner,
+        CHECK_VIOLATION,
+        "update enquiry set message = 'Not what they wrote' where id = $1",
+        [id],
+      );
+      await rejectsWith(
+        owner,
+        CHECK_VIOLATION,
+        "update enquiry set concern = 'Other' where id = $1",
+        [id],
+      );
+      await owner.query(dismissAs(KEEP), [id, IDS.ownerA]);
+      await rejectsWith(
+        owner,
+        CHECK_VIOLATION,
+        "update enquiry set message = 'Back again' where id = $1",
+        [id],
+      );
+    });
+  });
+
   it('holds an actioned row as it was for the table’s owner too, a lead as much as a dismissal', async () => {
     await rolledBack(owner, async () => {
       // Before migration 921 a constraint made a person on ANY actioned row
