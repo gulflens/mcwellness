@@ -83,10 +83,20 @@ describe('ExpoEnquiryPage', () => {
     });
   });
 
-  it('says the details are kept and can be deleted, and no longer that an enquiry keeps nothing', () => {
+  it('says what is kept, that a client’s go on their record, and how to ask for them to be deleted', () => {
     mount();
-    expect(screen.getByText(/we keep them so we can follow up with you later/)).toBeTruthy();
-    expect(screen.getByText(/You can ask us to delete them at any time/)).toBeTruthy();
+    // What is kept is how to reach them. What they wrote is dropped at
+    // dismissal, so the form does not claim to keep "your details" whole.
+    expect(
+      screen.getByText(/we keep your contact details so we can follow up with you later/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/If you go on to work with us they become part of your record/),
+    ).toBeTruthy();
+    // Not only that they may ask, but how.
+    expect(
+      screen.getByText(/by replying to any message from us or through the contact details in our/),
+    ).toBeTruthy();
     // The earlier promise. A form that showed it must not be one that says `notice: 2`.
     expect(screen.queryByText(/keeps nothing personal/)).toBeNull();
   });
@@ -94,7 +104,9 @@ describe('ExpoEnquiryPage', () => {
   it('asks about news separately, leaves it unticked, and does not need it to send', async () => {
     const { posts } = mount();
     const news = screen.getByRole('checkbox', {
-      name: 'Keep me posted about McWellness news and offers, including on social media.',
+      // Said plainly: a person who ticks this is agreeing to their number or
+      // address being given to a platform, not only to seeing the practice's posts.
+      name: 'Keep me posted about McWellness news and offers. You may share my number or email with social media platforms, such as Instagram or TikTok, so I see them there.',
     }) as HTMLInputElement;
     expect(news.checked).toBe(false);
     expect(news.required).toBe(false);

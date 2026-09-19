@@ -232,7 +232,7 @@ describe('what a dismissal keeps', () => {
   const rowOf = async (id: string) =>
     (
       await h.owner.query<Record<string, unknown>>(
-        'select status, name, whatsapp_e164, email, marketing_opt_in, ip_hash, dismiss_reason from enquiry where id = $1',
+        'select status, name, whatsapp_e164, email, marketing_opt_in, ip_hash, message, dismiss_reason from enquiry where id = $1',
         [id],
       )
     ).rows[0];
@@ -260,6 +260,8 @@ describe('what a dismissal keeps', () => {
       marketing_opt_in: true,
       // The address hash has no follow-up purpose and goes either way.
       ip_hash: null,
+      // How to reach them is kept; what they wrote is not.
+      message: null,
       dismiss_reason: 'Not now, maybe after the summer',
     });
 
@@ -336,50 +338,52 @@ describe('what a dismissal keeps', () => {
     ).toBe(404);
   });
 
-  it('lists for the practice’s news only people who asked for it and are still on a row', async () => {
+  it('lists for the practice’s news only people who asked, were dismissed, and are still on a row', async () => {
     await h.owner.query('delete from enquiry');
+    // Ticked, and still waiting: nobody has spoken to them, so not yet.
     const waiting = await told('Rowan Meadow', 'a'.repeat(64), true);
     const dismissedKept = await told('Iris Creek', 'b'.repeat(64), true);
     const saidNo = await told('Basil Valley', 'c'.repeat(64), false);
     const erased = await told('Hazel Valley', 'd'.repeat(64), true);
     await lodge('Hazel Harbour', 'e'.repeat(64)); // never asked
-    await h.callAs('POST', `/api/enquiries/${dismissedKept}/dismiss`, PORTAL.adminAuth, {
-      reason: 'Later',
-    });
-    await h.callAs('POST', `/api/enquiries/${erased}/dismiss`, PORTAL.adminAuth, {
-      reason: 'Asked us to',
-      erase: true,
-    });
+    for (const [id, body] of [
+      [dismissedKept, { reason: 'Later' }],
+      [saidNo, { reason: 'Later' }],
+      [erased, { reason: 'Asked us to', erase: true }],
+    ] as const) {
+      await h.callAs('POST', `/api/enquiries/${id}/dismiss`, PORTAL.adminAuth, body);
+    }
 
     const counted = (await (await h.callAs('GET', '/api/enquiries', PORTAL.adminAuth)).json()) as {
       marketable: number;
     };
-    expect(counted.marketable).toBe(2);
+    expect(counted.marketable).toBe(1);
 
     expect(
       (await h.callAs('GET', '/api/enquiries/marketing.csv', PORTAL.practitionerAuth)).status,
     ).toBe(403);
-    const before = (await reads(waiting)) + (await reads(dismissedKept));
+    const before = await reads(dismissedKept);
+    const waitingBefore = await reads(waiting);
     const res = await h.callAs('GET', '/api/enquiries/marketing.csv', PORTAL.adminAuth);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-disposition')).toMatch(
       /^attachment; filename="news-list-\d{4}-\d{2}-\d{2}\.csv"$/,
     );
     const lines = (await res.text()).trim().split('\r\n');
-    expect(lines[0]).toBe('Name,WhatsApp,Email,Area,From,Received,Status');
-    expect(lines).toHaveLength(3);
-    const text = lines.join('\n');
-    expect(text).toContain('Rowan Meadow');
-    expect(text).toContain('Iris Creek');
-    expect(text).not.toContain('Basil Valley');
-    expect(text).not.toContain('Hazel');
-    // Two people read, and the file itself logged once as an export.
-    expect((await reads(waiting)) + (await reads(dismissedKept))).toBe(before + 2);
+    expect(lines[0]).toBe('Name,WhatsApp,Email,Area,From,Received,Dismissed');
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain('Iris Creek');
+    // The number on the button is the length of the file: one rule, asked twice.
+    expect(lines.length - 1).toBe(counted.marketable);
+    // Nothing anybody wrote travels in it.
+    expect(lines.join('\n')).not.toContain('Saw the stand');
+    // One person read, the one in the file; and the file itself logged once as an export.
+    expect(await reads(dismissedKept)).toBe(before + 1);
+    expect(await reads(waiting)).toBe(waitingBefore);
     const exported = await h.owner.query<{ n: string }>(
       "select count(*)::text as n from audit_log where entity_type = 'enquiry_export' and action = 'export' and new_values->>'list' = 'news'",
     );
     expect(exported.rows[0]?.n).toBe('1');
-    expect(saidNo).toBeTruthy();
   });
 });
 

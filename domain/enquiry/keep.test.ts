@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { carriesAPerson, dismissalKeeps, isMarketable, noticeOf } from './keep';
+import {
+  KEPT_REVIEW_AFTER_DAYS,
+  carriesAPerson,
+  dismissalKeeps,
+  isMarketable,
+  keptReviewYears,
+  noticeOf,
+} from './keep';
 
 describe('noticeOf', () => {
   it('takes a plain 2 for the second wording and everything else for the first', () => {
@@ -34,16 +41,47 @@ describe('carriesAPerson', () => {
 describe('isMarketable', () => {
   const asked = { name: 'Rowan Meadow', marketingOptIn: true as boolean | null };
 
-  it('is a person who ticked, is still on the row, and has not become a client', () => {
-    expect(isMarketable({ ...asked, status: 'new' })).toBe(true);
+  it('is a person who ticked, was dismissed, and is still on the row', () => {
     expect(isMarketable({ ...asked, status: 'dismissed' })).toBe(true);
   });
 
-  it('is nobody who did not tick, was never asked, or has been erased', () => {
-    expect(isMarketable({ ...asked, status: 'new', marketingOptIn: false })).toBe(false);
-    expect(isMarketable({ ...asked, status: 'new', marketingOptIn: null })).toBe(false);
+  it('is nobody the practice has not yet spoken to', () => {
+    // The tick is whatever the form sent, and anybody can send the form with
+    // somebody else's number. A waiting row is one no person has looked at; a
+    // dismissed one has been, by somebody who could have erased it.
+    expect(isMarketable({ ...asked, status: 'new' })).toBe(false);
+  });
+
+  it('is nobody who did not tick, was never asked, was erased, or became a client', () => {
+    expect(isMarketable({ ...asked, status: 'dismissed', marketingOptIn: false })).toBe(false);
+    expect(isMarketable({ ...asked, status: 'dismissed', marketingOptIn: null })).toBe(false);
     expect(isMarketable({ ...asked, status: 'dismissed', name: null })).toBe(false);
     // A lead's consents are the client record's own documents, not an enquiry form's tick.
     expect(isMarketable({ ...asked, status: 'converted' })).toBe(false);
+  });
+});
+
+describe('keptReviewYears', () => {
+  const now = new Date('2028-10-20T08:00:00.000Z');
+  const kept = { status: 'dismissed' as const, name: 'Rowan Meadow' as string | null };
+
+  it('is the whole years a kept person has been held, once that is two or more', () => {
+    expect(KEPT_REVIEW_AFTER_DAYS).toBe(730);
+    expect(keptReviewYears({ ...kept, receivedAt: '2026-10-14T11:20:00.000Z' }, now)).toBe(2);
+    expect(keptReviewYears({ ...kept, receivedAt: '2025-01-02T00:00:00.000Z' }, now)).toBe(3);
+  });
+
+  it('is nothing before two years, and nothing for a row that holds nobody or still waits', () => {
+    expect(keptReviewYears({ ...kept, receivedAt: '2026-10-21T08:00:01.000Z' }, now)).toBeNull();
+    expect(
+      keptReviewYears({ ...kept, name: null, receivedAt: '2020-01-01T00:00:00.000Z' }, now),
+    ).toBeNull();
+    // A waiting row has its own marker: how long it has waited.
+    expect(
+      keptReviewYears(
+        { status: 'new', name: 'Iris Creek', receivedAt: '2020-01-01T00:00:00.000Z' },
+        now,
+      ),
+    ).toBeNull();
   });
 });

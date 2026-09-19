@@ -6,6 +6,7 @@ import {
   carriesAPerson,
   dismissalKeeps,
   enquiryCursor,
+  isMarketable,
   leadFromEnquiry,
   readEnquiryListQuery,
   tallyEnquiries,
@@ -79,15 +80,25 @@ const SCRUB =
  * A dismissal that keeps the person (migration 921): only the address hash
  * goes, which was there for the door's budget and has no follow-up purpose.
  */
-const KEEP = 'ip_hash = null';
+const KEEP = 'ip_hash = null, message = null, concern = null';
 
 /**
  * `isMarketable` (domain/enquiry/keep.ts) in the database's terms: they
- * ticked the box for news, they are still on the row, and they have not
- * become a client. The two are one rule, and the route test holds them to the
- * same answer.
+ * ticked the box for news, they were dismissed, and they are still on the
+ * row. The rule is the domain's. This string is only what narrows the query,
+ * and the file is then built from the rows `isMarketable` itself lets through,
+ * so a drift between the two can leave somebody out of the file and never put
+ * somebody in. The route test lodges one of every kind and holds the count on
+ * the screen to the length of the file.
  */
-const MARKETABLE = "e.marketing_opt_in is true and e.name is not null and e.status <> 'converted'";
+const MARKETABLE = "e.marketing_opt_in is true and e.name is not null and e.status = 'dismissed'";
+
+/**
+ * More than the practice will hold for years. Said rather than silent: the
+ * file is cut here, oldest first, and the count on the button is of all of
+ * them, so a list this long would show the difference.
+ */
+const NEWS_FILE_LIMIT = 5000;
 
 const NEWS_FILE_HEADINGS = [
   'Name',
@@ -96,7 +107,7 @@ const NEWS_FILE_HEADINGS = [
   'Area',
   'From',
   'Received',
-  'Status',
+  'Dismissed',
 ] as const;
 const SOURCE_WORDS: Record<EnquirySource, string> = {
   website: 'Website',
@@ -241,21 +252,10 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
   });
 
   /**
-   * The expo's leads as a file, for following up after the stand comes down:
-   * every enquiry from the expo still waiting, oldest first, with the two
-   * answers in words. A read of personal data by a person, so each row is
-   * logged as one, and the export itself once as its own kind of entity
-   * under the request that made it (the shape the activity feed's own read
-   * uses, app/api/audit/activity.ts) — its own kind, so a record's timeline
-   * never looks for an enquiry with a request's id. Nothing is sent
-   * anywhere: the office downloads the file, and the file is then a copy of
-   * these names and numbers that the scrub and an erasure cannot reach; the
-   * screen says so beside the button.
-   */
-  /**
    * The people who asked for the practice's news, as a file (the operator's
    * decision of 19 September 2026). Only those who ticked the second wording's
-   * optional box and are still on a row. Every one is a read of a person, and
+   * optional box, were dismissed, and are still on a row: a person somebody has
+   * handled, never one still waiting (`isMarketable`). Every one is a read of a person, and
    * the file is logged once as an export. What is done with it is the
    * practice's own act: a social platform it is given to receives personal
    * data, and docs/COMPLIANCE/approved-vendors.md says which may.
@@ -267,9 +267,13 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
     if (!canActor(actor, { type: 'enquiry.list' }, {}, now())) {
       return c.json({ error: 'forbidden', requestId }, 403);
     }
-    const { rows } = await db.query<Row>(
+    const found = await db.query<Row>(
       `select ${COLUMNS} from enquiry e left join app_user u on u.id = e.actioned_by ` +
-        `where ${MARKETABLE} order by e.received_at asc limit 5000`,
+        `where ${MARKETABLE} order by e.received_at asc limit ${NEWS_FILE_LIMIT}`,
+    );
+    // Who leaves the system is the domain's rule to decide, row by row.
+    const rows = found.rows.filter((row) =>
+      isMarketable({ status: row.status, name: row.name, marketingOptIn: row.marketing_opt_in }),
     );
     await logReads(
       db,
@@ -292,13 +296,25 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
         row.area ?? '',
         SOURCE_WORDS[row.source],
         receivedStamp(row.received_at),
-        row.status === 'new' ? 'Waiting' : 'Dismissed',
+        row.actioned_at ? receivedStamp(row.actioned_at) : '',
       ]),
     ];
     const today = receivedStamp(now()).slice(0, 10);
     return csvResponse(c, `news-list-${today}.csv`, toCsv(table));
   });
 
+  /**
+   * The expo's leads as a file, for following up after the stand comes down:
+   * every enquiry from the expo still waiting, oldest first, with the two
+   * answers in words. A read of personal data by a person, so each row is
+   * logged as one, and the export itself once as its own kind of entity
+   * under the request that made it (the shape the activity feed's own read
+   * uses, app/api/audit/activity.ts) — its own kind, so a record's timeline
+   * never looks for an enquiry with a request's id. Nothing is sent
+   * anywhere: the office downloads the file, and the file is then a copy of
+   * these names and numbers that the scrub and an erasure cannot reach; the
+   * screen says so beside the button.
+   */
   api.get('/api/enquiries/expo.csv', async (c) => {
     const actor = c.get('actor');
     const db = c.get('db');
@@ -405,8 +421,8 @@ export function mountEnquiries(api: Hono<ApiEnv>, now: () => Date): void {
       return c.json({ error: 'bad_request', field: 'reason', requestId }, 400);
     }
     try {
-      // A number or an address in the reason would put a person back on a
-      // row that, by its own constraint, keeps nothing personal.
+      // A number or an address in the reason would put a person on a row in a
+      // column that is never erased: the reason outlives the scrub.
       refuseContactDetails({ reason: body.data.reason });
     } catch {
       return c.json({ error: 'bad_request', field: 'reason', requestId }, 400);

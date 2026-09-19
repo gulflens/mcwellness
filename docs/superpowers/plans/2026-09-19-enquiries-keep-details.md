@@ -57,7 +57,17 @@ in this round: a client's consents are the versioned consent documents, and a
 tick on an enquiry form is not one. Recorded as a known gap, the operator's to
 ask for.
 
-## The wording (the operator chose this draft)
+## The wording
+
+**Superseded in part the same night.** After the compliance review the
+operator took three more decisions, recorded in
+`docs/CHANGE-REQUESTS/trunk-round-54.md`: the tick says plainly that a number
+or an email may be shared with social platforms; a kept person is contact
+details and not what they wrote; and kept until they ask, with a question after
+two years. What follows is the draft first chosen, kept as the record of what
+was asked.
+
+### The draft the operator first chose
 
 Under the expo form, replacing the present paragraph:
 
@@ -101,8 +111,8 @@ Each step is test-first, and each leaves the gate green.
    new `keep.ts` — `dismissalKeeps(noticeVersion, erase)`, `carriesAPerson(row)`,
    `isMarketable(row)`.
 4. **API**: the door passes the two fields; `POST …/dismiss` takes
-   `{ reason, erase? }` and answers what it did; `POST …/:id/erase` (new,
-   `enquiry.erase` in `domain/shared/actor.ts`, audited as `erase`); the list
+   `{ reason, erase? }` and answers what it did; `POST …/:id/erase` (new, under
+   the existing `enquiry.action`, the same three roles that dismiss; audited as `erase`); the list
    logs a read for **every row that carries a person**, not only the waiting
    ones; `GET /api/enquiries/marketing.csv` — rows that ticked and still carry
    a person, logged as an export, the number guarded as text.

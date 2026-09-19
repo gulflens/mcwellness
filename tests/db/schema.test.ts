@@ -166,7 +166,9 @@ describe('core schema', () => {
     // partitions, the PostGIS reference table, and the runner's own bookkeeping.
     // And `enquiry`, by the operator's Option B of 2026-09-09
     // (.claude/rules/data-model.md): a public write with no actor to name, whose
-    // reads the route logs under the reader. The exemption is tied to the
+    // reads the route logs under the reader. Since migration 921 a dismissed row
+    // may keep its person, and the exemption matters more, not less: the trigger
+    // would copy them into an append-only log that "Erase details" cannot reach. The exemption is tied to the
     // decision written on the table itself, so a table cannot slip in here by
     // name alone.
     const { rows: tables } = await client.query<{ table_name: string }>(

@@ -6,6 +6,7 @@ import {
   ENQUIRY_STATUSES,
   carriesAPerson,
   enquiryWaitingDays,
+  keptReviewYears,
   type EnquiringFor,
   type EnquirySource,
   type EnquiryStatus,
@@ -132,9 +133,13 @@ const FILE_NOTE =
   'The expo leads file holds names and numbers. Keep it on the practice’s own device and delete it once the follow-up is done.';
 /** A copy no scrub reaches, and one step from a third party: the office is told both. */
 const NEWS_NOTE =
-  'The news list holds the names and numbers of people who asked for McWellness news. Keep it on the practice’s own device. Before it is uploaded to a social platform, that platform has to be on the practice’s approved list.';
-const PROMISED =
-  'This person was told the enquiry keeps nothing personal, so dismissing erases their details.';
+  'The news list holds the names and numbers of dismissed enquiries whose form had the box for McWellness news ticked. The tick is as the form sent it: nobody has confirmed that the number belongs to the person who ticked. If anybody says they never asked, or asks to be erased or to stop the news, erase their details here and remove them from the file and from any platform it was given to. Keep the file on the practice’s own device. Before it is uploaded to a social platform, that platform has to be on the practice’s approved list.';
+/** True of the website's forms as much as the expo's old one: neither said details would be kept. */
+const PROMISED = 'This person was not told their details would be kept, so dismissing erases them.';
+const ERASED = 'Details erased. The row keeps when it came and why it was dismissed.';
+/** A person who asked for news may be in copies this system cannot reach, and the office is told. */
+const ERASED_AND_LISTED =
+  'Details erased. If they are in a news list you downloaded, or in an audience on a social platform, remove them there too.';
 const ACTION_ERROR = 'That could not be done. Reload and try again.';
 const OLDER_ERROR = 'The older enquiries could not be loaded. Try again.';
 
@@ -320,10 +325,10 @@ export function EnquiriesPage() {
       if (done?.success) {
         setOutcome(
           done.data.kept
-            ? 'Dismissed. Their details are kept in the Dismissed table.'
+            ? 'Dismissed. Their contact details are kept in the Dismissed table.'
             : mayKeep
               ? 'Dismissed, and their details erased.'
-              : 'Dismissed, and their details erased, as this person was told.',
+              : 'Dismissed, and their details erased: this person was not told they would be kept.',
         );
         setDismissing(null);
         setEraseOnDismiss(false);
@@ -353,7 +358,7 @@ export function EnquiriesPage() {
         body: JSON.stringify({}),
       });
       if (res.ok) {
-        setOutcome('Details erased. The row keeps when it came and why it was dismissed.');
+        setOutcome(enquiry.marketingOptIn === true ? ERASED_AND_LISTED : ERASED);
         setErasing(null);
         reload();
       } else {
@@ -413,12 +418,20 @@ export function EnquiriesPage() {
     header: 'Name',
     // A dismissed row with nobody left on it says so, rather than a dash that
     // reads as a blank.
-    render: (row) =>
-      carriesAPerson(row) ? (
+    render: (row) => {
+      if (!carriesAPerson(row)) return <span className="enquiries__erased">Details erased</span>;
+      // Nothing deletes on a timer. After two years the screen asks, and that is all it does
+      // (the operator's decision of 19 September 2026, domain/enquiry/keep.ts).
+      const years = keptReviewYears(row, new Date());
+      return years === null ? (
         (row.name ?? '—')
       ) : (
-        <span className="enquiries__erased">Details erased</span>
-      ),
+        <span className="enquiries__kept">
+          <span>{row.name}</span>
+          <StatusChip label={`Kept ${years} years: still needed?`} tone="attention" />
+        </span>
+      );
+    },
   };
   const number: Column<Enquiry> = {
     key: 'number',
@@ -449,6 +462,10 @@ export function EnquiriesPage() {
         row.contactMethod ? `Reach by: ${row.contactMethod}` : null,
         row.email ? `Email: ${row.email}` : null,
         row.marketingOptIn === true ? 'Asked for news and offers' : null,
+        // Kept, and never asked for news: not somebody to send offers to.
+        row.status === 'dismissed' && row.marketingOptIn !== true && carriesAPerson(row)
+          ? 'Did not ask for news: follow up about their enquiry only'
+          : null,
       ].filter((line): line is string => line !== null);
       return lines.length === 0 ? (
         '—'
@@ -481,7 +498,6 @@ export function EnquiriesPage() {
     who,
     number,
     from,
-    message,
     details,
     actioned('Dismissed'),
     by,
@@ -498,7 +514,7 @@ export function EnquiriesPage() {
               Erase
             </Button>
             <Button variant="quiet" onClick={() => setErasing(null)}>
-              Keep
+              Cancel
             </Button>
           </div>
         ) : (
@@ -543,6 +559,7 @@ export function EnquiriesPage() {
             <Field
               id={`dismiss-${row.id}`}
               label="Why"
+              hint="Do not write the person’s name or number: the reason is kept."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               maxLength={200}
@@ -557,7 +574,7 @@ export function EnquiriesPage() {
                     checked={!eraseOnDismiss}
                     onChange={() => setEraseOnDismiss(false)}
                   />
-                  <span>Keep their details for follow-up</span>
+                  <span>Keep their contact details for follow-up</span>
                 </label>
                 <label className="checkbox">
                   <input
@@ -586,7 +603,7 @@ export function EnquiriesPage() {
                 setReason('');
               }}
             >
-              Keep
+              Cancel
             </Button>
           </div>
         ) : (

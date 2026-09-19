@@ -28,6 +28,13 @@ export {
   tallyEnquiries,
 } from './list';
 export type { EnquiryCursor, EnquiryListQuery, EnquiryStatus, EnquiryTally } from './list';
-export { carriesAPerson, dismissalKeeps, isMarketable, noticeOf } from './keep';
+export {
+  KEPT_REVIEW_AFTER_DAYS,
+  carriesAPerson,
+  dismissalKeeps,
+  isMarketable,
+  keptReviewYears,
+  noticeOf,
+} from './keep';
 export type { NoticeVersion } from './keep';
 export { ENQUIRY_WAITING_AFTER_DAYS, enquiryWaitingDays } from './waiting';

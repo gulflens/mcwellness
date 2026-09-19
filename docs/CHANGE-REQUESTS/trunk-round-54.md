@@ -32,7 +32,7 @@ which wording its person read. A form that does not say showed the first.
 | Wording | What the person read | On dismissal |
 | --- | --- | --- |
 | 1 | "…once we have replied the enquiry keeps nothing personal." | Scrubbed, always. The screen offers no choice and says why. |
-| 2 | "…and we keep them so we can follow up with you later. You can ask us to delete them at any time." | Kept, unless whoever dismisses chooses to erase. |
+| 2 | "…and we keep your contact details so we can follow up with you later. … You can ask us to delete them at any time…" | Contact details kept, what they wrote dropped, unless whoever dismisses chooses to erase everything. |
 
 What follows from it, told to the operator and not open to choice: what was
 already dismissed is already scrubbed and cannot be recovered; and a row
@@ -62,8 +62,10 @@ permission: erasing is `enquiry.action`, the same three roles that dismiss.
    beside different words tells the database a person was told something they
    were not.
 2. **The default is the promise.** Anything but a plain 2 is 1, in the domain
-   and again in the door. An old form open in a browser, the website, a script:
-   all are scrubbed on dismissal.
+   and again in the door. An old form open in a browser and the website are
+   therefore scrubbed on dismissal. **A script is not**: the door is public and
+   a script can say 2 as easily as the form does. See "A limit that is not
+   closed" below.
 3. **The guards are a trigger, not a policy**, because a policy's `with check`
    sees only the new row. They hold for the table's owner too. A dismissed row
    changes in one way only: its person erased, whole.
@@ -111,25 +113,161 @@ reached by scrolling sideways, as the Active table's last two already were.
 
 ### Checked, not claimed
 
-`pnpm verify`: 255 files, 3,001 tests; type check and lint clean. **The whole
-database suite**, `pnpm test:db`, against the pinned local database: 106 files,
-1,496 tests, so the migration disturbs nothing beyond the enquiries. The walk
-above.
+`pnpm verify`: 255 files, 3,005 tests after the reviews' fixes; type check and
+lint clean. **The whole database suite**, `pnpm test:db`, against the pinned
+local database, run again after the migration changed: 106 files, 1,500 tests.
+The screen's own tests were run five times over after one of them was found to
+race the counts on a loaded machine. Walked again after the three decisions:
+no news list while people only wait; a website row says "was not told their
+details would be kept"; two dismissals under the second wording kept name,
+number, email, area and who they asked for, and the database shows `message`
+null and the address hash null on both; "my son is not sleeping well", which
+one of them wrote, is nowhere on the screen or the row; the news list counts
+the one who ticked; the audit chain intact.
+
+**One unrelated flake seen and not caused here:** `app/admin/settings/PracticeLogo.test.tsx`
+failed once in a full run on a machine also running a database and
+containers, and passed alone and in every run since.
 
 **Not checked:** no screen reader was run; the website, which this round does
 not touch; and a hosted database, which is the staging pass's to prove.
+
+### The gate on going live: the privacy page says the opposite
+
+**An earlier draft of this note misquoted the practice's privacy page, and the
+operator was told the same.** It said the page says enquiry details are used
+to "Respond to your enquiries" and that the site uses no advertising cookies,
+"and says nothing of keeping details or of news". The page had been searched
+for one word. Read whole, as the compliance review of this round read it and as
+was then checked against the live page (`https://mcwellnessuae.com/privacy.html`,
+last updated 9 September 2026), it says:
+
+> We never sell your personal information. **We never use it for advertising.**
+> We never use it for research. We never use it for anything unrelated to your
+> sessions and your account with us. If that ever changes we will ask you
+> first, separately, and you may say no.
+
+> We will not share your personal information without your consent, except
+> where required by law.
+
+> We keep personal information only for as long as necessary for the purposes
+> described in this policy, or as required by law.
+
+Showing somebody the practice's offers through a social platform is
+advertising. The expo form in this round links that page as where "how we look
+after your information is set out", so this is the app's problem and not only
+the website's.
+
+**So the new wording must not reach the public until the page matches it.**
+The privacy page first, then the app's build. The page's own "we will ask you
+first, separately, and you may say no" is what the optional tick is; what it
+needs is to say so:
+
+- enquiry details are kept until the person asks, and looked at again after
+  two years;
+- news and offers go only to people who asked for them;
+- for those people, a number or an email may be shared with named social
+  platforms so that they see the news there;
+- how to stop it, and how to be deleted;
+- and "We never use it for advertising" gains its exception: except where you
+  have asked us for our news.
+
+The migration and the console are harmless while no row under the second
+wording exists, and could ship alone. This round ships as one build, so the
+whole build waits for the page. Merging does not.
+
+### Three more decisions, the operator's, 19 September 2026 about 04:00 +04
+
+Put after the compliance review, because the second wording has never been
+live and changing it now costs nothing; afterwards it would need a new number,
+and everybody who ticked under the old one could not be uploaded.
+
+1. **The tick says plainly that details are shared:** "Keep me posted about
+   McWellness news and offers. You may share my number or email with social
+   media platforms, such as Instagram or TikTok, so I see them there."
+   "Including on social media" reads as "I may see your posts".
+2. **A kept person is how to reach them, not what they wrote.** `message` and
+   `concern` are dropped at dismissal: free text is where somebody writes "my
+   son can't sleep". Name, number, email, area, who they asked for, what they
+   were interested in, and how and when they prefer to be reached, stay. The
+   constraint requires it, the trigger allows exactly that and nothing else,
+   and the form says "we keep your contact details".
+3. **Until they ask, with a question after two years.** Nothing deletes on a
+   timer, as everywhere on this platform. A kept row whose form arrived two
+   years ago or more shows "Kept 2 years: still needed?", in the manner of
+   "Waiting 30 days". It asks; it erases nothing. **Recorded here as the
+   operator's accepted position on retention for a dismissed enquirer**, who
+   is not a client and whom CLAUDE.md rule 8 does not therefore cover.
+
+### A limit that is not closed
+
+**The tick is whatever the form sent, and the form is public.** Anybody can
+post it with somebody else's number and the box ticked (the security review).
+The budget still holds them to five or thirty lodgings in ten minutes from one
+address and three hundred an hour from all. Before this round the worst of a
+false enquiry was one call back and a scrub. Now it is a person in a list that
+says they asked for news, who did not.
+
+What was done: **the news list holds only dismissed rows**, so every person in
+it has been handled by somebody who could have erased them, and nobody still
+waiting is in it; the screen says the tick is unconfirmed and what to do when
+somebody says they never asked; and the vendor register asks for a message
+confirming the wish before any platform is approved for the list. What was not
+done, and would close it: a confirming message to the number before the tick
+counts. The operator's to ask for.
+
+**Who may download it:** `enquiry.list` is the owner, an admin and the lead
+practitioner, as for the expo file. One person holds every role today. When a
+second lead practitioner exists, an owner-and-admin-only permission for the
+two files is worth the operator's thought.
+
+**Stopping the news is erasing.** The trigger forbids un-ticking, so the way
+to record "stop" is "Erase details". And erasing here does not reach a file
+already downloaded or an audience already uploaded: the screen says so when a
+person who asked for news is erased, and whoever handles a request to be
+forgotten has to chase those copies.
+
+**The file is cut at five thousand rows**, oldest first, while the button
+counts them all. Years away, and said in the route.
+
+### Taken from the round's three reviews, before the merge
+
+**Schema and security found the same hole independently**: the rule that a
+person's details are never edited sat under "once dismissed", so the statement
+that *does* the dismissing could slip a tick in, or swap a name, and pass every
+constraint. No route does; the table is meant to hold the rule, not the route.
+The rule now holds at every status. Also from the schema review: **a converted
+row had no guard at all** against the table's owner, where until this
+migration a constraint had made a person on any actioned row impossible for
+everybody, so the guard covers every actioned row; the trigger is `enable
+always`, or a session replaying changes would skip it; where a row came from
+and when are pinned; a `Needs:` header, the revoke the repository's guards
+carry, two column comments that had become untrue, and a rollback that puts
+the door back first and says the scrub cannot be undone.
+
+**Compliance**: the privacy page, above; that `isMarketable` was called by
+nothing, so the rule deciding who leaves the system lived only in a line of
+SQL, and the file is now built from the rows the domain's own rule lets
+through, with a test holding the button's count to the file's length; that
+"this person was told the enquiry keeps nothing personal" is untrue of a
+website enquiry, which was told nothing either way, so the screen now says
+"was not told their details would be kept"; that a cancel button reading
+"Keep" under "Keep their contact details" was a trap; that a kept row which
+never asked for news should say so; and that the recorded reason the table is
+outside the audit trigger described a quarantine it no longer only is. The
+exemption stands, for a stronger reason than before: the trigger would copy a
+kept person into an append-only log that "Erase details" cannot reach.
 
 ### Not in this round
 
 **The website.** A separate codebase, not under version control, deployed
 separately. Its forms carry the first tick on eleven pages, their Arabic
-mirror and `content/site-content.json`, and say nothing of keeping details or
-of news; its privacy page says enquiry details are used to "Respond to your
-enquiries" and that the site uses no advertising cookies. Until its words
-change and its forms send `notice: 2`, a website enquiry is taken for the
-first wording and scrubbed on dismissal. **The privacy page should change
-before any news list is used**, because it is where a person is told that news
-may reach them through a social platform.
+mirror and `content/site-content.json`. Until its forms say `notice: 2`, a
+website enquiry is taken for the first wording and scrubbed on dismissal.
+**Its privacy page gates this round's going live**, as above. Carrying a
+lead's news tick onto the client record. A message confirming a tick. A
+WhatsApp broadcast of news from the practice's own phone, which the vendor
+register's WhatsApp row does not cover: it is scoped to invoices and receipts.
 
 ### Synthetic data used throughout
 

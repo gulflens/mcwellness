@@ -68,3 +68,11 @@
   font-size: var(--t-small);
   line-height: var(--lh-small);
 }
+
+/* A kept person's name with the two-year question beneath it. */
+.enquiries__kept {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1);
+}

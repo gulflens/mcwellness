@@ -97,6 +97,9 @@ const KEPT: Enquiry = {
   ...TOLD,
   id: '0000000e-0000-4000-8000-000000000006',
   status: 'dismissed',
+  // What they wrote went when they were dismissed; how to reach them stayed.
+  message: null,
+  concern: null,
   actionedAt: '2026-10-16T08:15:00.000Z',
   actionedByName: 'Iris Harbour',
   dismissReason: 'Not now, maybe after the summer',
@@ -215,7 +218,7 @@ function mount(
         kept = row.noticeVersion === 2 && sent?.erase !== true;
         return {
           ...row,
-          ...(kept ? {} : scrubbed),
+          ...(kept ? { message: null, concern: null } : scrubbed),
           status: 'dismissed',
           dismissReason: sent?.reason ?? '',
           actionedAt: '2026-10-16T08:15:00.000Z',
@@ -265,7 +268,7 @@ function served(all: readonly Enquiry[], url: string) {
     counts[row.status].all += 1;
   }
   const marketable = all.filter(
-    (row) => row.marketingOptIn === true && row.name !== null && row.status !== 'converted',
+    (row) => row.marketingOptIn === true && row.name !== null && row.status === 'dismissed',
   ).length;
   return {
     enquiries: page,
@@ -345,13 +348,15 @@ describe('EnquiriesPage', () => {
     // Lodged under the earlier wording: no choice is offered, and the screen says why.
     expect(
       screen.getByText(
-        'This person was told the enquiry keeps nothing personal, so dismissing erases their details.',
+        'This person was not told their details would be kept, so dismissing erases them.',
       ),
     ).toBeTruthy();
     expect(screen.queryByRole('radio')).toBeNull();
     fireEvent.click(confirm);
     expect(
-      await screen.findByText('Dismissed, and their details erased, as this person was told.'),
+      await screen.findByText(
+        'Dismissed, and their details erased: this person was not told they would be kept.',
+      ),
     ).toBeTruthy();
     expect(posts).toEqual([{ url: `/api/enquiries/${NEW.id}/dismiss`, body: { reason: 'Spam' } }]);
   });
@@ -405,18 +410,7 @@ describe('EnquiriesPage', () => {
       within(dismissed)
         .getAllByRole('columnheader')
         .map((th) => th.textContent),
-    ).toEqual([
-      'Received',
-      'Name',
-      'WhatsApp',
-      'From',
-      'Message',
-      'Details',
-      'Dismissed',
-      'By',
-      'Why',
-      '',
-    ]);
+    ).toEqual(['Received', 'Name', 'WhatsApp', 'From', 'Details', 'Dismissed', 'By', 'Why', '']);
     expect(within(dismissed).getByText('16 Oct 2026, 12:15')).toBeTruthy();
     expect(within(dismissed).getByText('Iris Harbour')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Convert to lead' })).toBeNull();
@@ -472,18 +466,20 @@ describe('EnquiriesPage', () => {
     const { posts } = mount({ list: [TOLD] });
     fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
     // Kept unless somebody chooses otherwise.
-    const keep = screen.getByRole('radio', { name: 'Keep their details for follow-up' });
+    const keep = screen.getByRole('radio', { name: 'Keep their contact details for follow-up' });
     expect((keep as HTMLInputElement).checked).toBe(true);
     fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'Not now' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss' })[0]!);
     expect(
-      await screen.findByText('Dismissed. Their details are kept in the Dismissed table.'),
+      await screen.findByText('Dismissed. Their contact details are kept in the Dismissed table.'),
     ).toBeTruthy();
     expect(posts).toEqual([
       { url: `/api/enquiries/${TOLD.id}/dismiss`, body: { reason: 'Not now', erase: false } },
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dismissed (1)' }));
+    // Waited for, not looked for: the sentence above is set before the counts
+    // have come back, and on a loaded machine the tab still read (0).
+    fireEvent.click(await screen.findByRole('button', { name: 'Dismissed (1)' }));
     const table = await screen.findByRole('table', { name: 'Dismissed enquiries, newest first' });
     expect(within(table).getByText('Iris Creek')).toBeTruthy();
     expect(within(table).getByText('+971500000097')).toBeTruthy();
@@ -515,9 +511,10 @@ describe('EnquiriesPage', () => {
     expect(screen.getByText('Erase their details? This cannot be undone.')).toBeTruthy();
     expect(posts).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Erase' }));
+    // They had asked for news, so they may be in a file or an audience this system cannot reach.
     expect(
       await screen.findByText(
-        'Details erased. The row keeps when it came and why it was dismissed.',
+        'Details erased. If they are in a news list you downloaded, or in an audience on a social platform, remove them there too.',
       ),
     ).toBeTruthy();
     expect(posts).toEqual([{ url: `/api/enquiries/${KEPT.id}/erase`, body: null }]);
@@ -525,16 +522,31 @@ describe('EnquiriesPage', () => {
     expect(screen.getAllByText('Details erased')).toHaveLength(2);
   });
 
-  it('offers the news list only while somebody who asked for it is on a row', async () => {
-    const { posts } = mount({ list: [TOLD, NEW] });
+  it('offers the news list only for a person who ticked and has been dismissed, and says what the tick is', async () => {
+    // Somebody who ticked and is still waiting is not on it: nobody has spoken to them.
+    mount({ list: [TOLD, NEW] });
     await screen.findByText('Iris Creek');
+    expect(screen.queryByRole('button', { name: /Download news list/ })).toBeNull();
+    cleanup();
+
+    const { posts } = mount({ list: [NEW, KEPT] });
+    await screen.findByText('Hazel Harbour');
     vi.stubGlobal('URL', {
       ...URL,
       createObjectURL: () => 'blob:news',
       revokeObjectURL: () => undefined,
     });
-    expect(screen.getByText(/people who asked for McWellness news/)).toBeTruthy();
+    // Everything after the stub is inside the `try`: a failure that left `URL`
+    // stubbed broke every test after this one, because the mock builds a URL.
     try {
+      // The office is told the tick is unconfirmed, and what to do when somebody
+      // says they never asked, asks to be erased, or asks for the news to stop.
+      expect(screen.getByText(/nobody has confirmed that the number belongs/)).toBeTruthy();
+      expect(
+        screen.getByText(
+          /erase their details here and remove them from the file and from any platform/,
+        ),
+      ).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Download news list (1)' }));
       await waitFor(() =>
         expect(posts).toEqual([{ url: '/api/enquiries/marketing.csv', body: null }]),
@@ -542,10 +554,33 @@ describe('EnquiriesPage', () => {
     } finally {
       vi.unstubAllGlobals();
     }
-    cleanup();
-    mount({ list: [NEW, EXPO] });
+  });
+
+  it('says who did not ask for news, asks after two years whether a person is still needed, and cancels with Cancel', async () => {
+    const quiet: Enquiry = {
+      ...KEPT,
+      id: '0000000e-0000-4000-8000-000000000007',
+      name: 'Basil Valley',
+      marketingOptIn: false,
+      receivedAt: '2024-01-05T09:00:00.000Z',
+    };
+    mount({ list: [NEW, KEPT, quiet] });
     await screen.findByText('Hazel Harbour');
-    expect(screen.queryByRole('button', { name: /Download news list/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismissed (2)' }));
+    await screen.findByText('Basil Valley');
+    // Kept, but never asked for news: nobody should take them for somebody to send offers to.
+    expect(
+      screen.getByText('Did not ask for news: follow up about their enquiry only'),
+    ).toBeTruthy();
+    // Held more than two years: the screen asks. It erases nothing itself.
+    expect(screen.getByText(/^Kept \d+ years: still needed\?$/)).toBeTruthy();
+    expect(screen.getAllByText(/still needed\?/)).toHaveLength(1);
+
+    // "Keep" under "Keep their contact details" read as a choice, not a way out.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Erase details' })[0]!);
+    expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByText('Erase their details? This cannot be undone.')).toBeNull();
   });
 
   it('leaves the table alone when the tab or the source already open is pressed again', async () => {
@@ -585,7 +620,9 @@ describe('EnquiriesPage', () => {
     fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'Spam' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Dismiss' })[0]!);
     expect(
-      await screen.findByText('Dismissed, and their details erased, as this person was told.'),
+      await screen.findByText(
+        'Dismissed, and their details erased: this person was not told they would be kept.',
+      ),
     ).toBeTruthy();
     await waitFor(() => expect(screen.queryByText('Hazel Harbour')).toBeNull());
     expect(screen.getByRole('button', { name: 'Active (0)' })).toBeTruthy();

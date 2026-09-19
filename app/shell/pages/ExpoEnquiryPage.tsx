@@ -35,8 +35,14 @@ import './expo.css';
  * were not.
  *
  * A second tick, optional and unticked, asks separately about news and offers,
- * including through social platforms. Agreeing to be rung back is not agreeing
- * to be marketed to, so it is never required and never pre-ticked.
+ * and says plainly that the number or address may be shared with social
+ * platforms: "including on social media" reads as "I may see your posts", and
+ * what it has to cover is a list uploaded to one (the operator's decision of
+ * 19 September 2026, after the compliance review). Agreeing to be rung back is
+ * not agreeing to be marketed to, so it is never required and never pre-ticked.
+ *
+ * What is kept after a dismissal is contact details and not what the person
+ * wrote, so that is what the paragraph says is kept.
  *
  * The first tick is the same sentence the website's forms carry, and it is not
  * a consent: it records only that the box was ticked. The practice's consents
@@ -280,12 +286,16 @@ export function ExpoEnquiryPage() {
             checked={news}
             onChange={(e) => setNews(e.target.checked)}
           />
-          <span>Keep me posted about McWellness news and offers, including on social media.</span>
+          <span>
+            Keep me posted about McWellness news and offers. You may share my number or email with
+            social media platforms, such as Instagram or TikTok, so I see them there.
+          </span>
         </label>
         <p className="small muted">
-          We use your details to get back to you about this enquiry, and we keep them so we can
-          follow up with you later. You can ask us to delete them at any time. How we look after
-          your information is set out in our{' '}
+          We use your details to get back to you about this enquiry, and we keep your contact
+          details so we can follow up with you later. If you go on to work with us they become part
+          of your record. You can ask us to delete them at any time, by replying to any message from
+          us or through the contact details in our{' '}
           <a className="link" href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">
             privacy policy
           </a>

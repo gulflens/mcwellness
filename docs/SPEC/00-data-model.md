@@ -400,12 +400,19 @@ is the only record that a person agreed to be sent the practice's news, and
 without it nobody may be. The check that every actioned row is scrubbed is
 replaced by one that an actioned row keeps only what was promised: scrubbed
 entire, as before, **or** dismissed under notice 2 and still naming its
-person. A converted row is always scrubbed; the address hash goes either way.
-A trigger holds what a policy cannot see: the wording never changes; a
-dismissed row stays dismissed, by the same person, for the same reason; its
-details are erased whole or left alone, never edited; once erased, nobody
+person, with `message` and `concern` null: what is kept is how to reach
+somebody and not what they wrote. A converted row is always scrubbed; the
+address hash goes either way. A trigger, `enable always`, holds what a policy
+cannot see, for every role and at every status: the wording, the source and
+the moment never change; what the form gave is never edited, though what the
+person wrote may go while they stay; an actioned row stays what it became, by
+the same person, for the same reason and the same client; once erased, nobody
 writes a person back. The update policy admits one more change, the erasure
 of a dismissed row that still names somebody. A read of any row that names
 somebody is logged, so a page of dismissed rows may now log reads; the news
-list logs every row it carries as a read and the file once as an export. Kept
-rows are kept until somebody erases them: nothing deletes on a timer.*
+list, which is dismissed rows only, logs every row it carries as a read and
+the file once as an export. Kept rows are kept until somebody erases them:
+nothing deletes on a timer, and after two years the screen asks whether the
+person is still needed. The table stays outside the audit trigger, for a
+stronger reason than before: the trigger would copy a kept person into the
+append-only log, where "Erase details" could not reach them.*
