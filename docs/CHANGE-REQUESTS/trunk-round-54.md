@@ -177,7 +177,55 @@ needs is to say so:
 
 The migration and the console are harmless while no row under the second
 wording exists, and could ship alone. This round ships as one build, so the
-whole build waits for the page. Merging does not.
+whole build waits for the page. Merging does not. (It waited, and the page changed first: see the next section.)
+
+### The gate, cleared for the English form: 19 September 2026, 04:30 +04
+
+The four changes the page needed were drafted and put to the operator, who
+answered "approved" at 04:25 +04. `https://mcwellnessuae.com/privacy.html` was
+changed at about 04:30 +04 (00:30 UTC), and reads "Last updated: 19 September
+2026":
+
+- under what is collected: "When you make an enquiry, we keep your contact
+  details so that we can follow up with you later. Our practice system does
+  not keep what you wrote in your message once your enquiry is closed. You can
+  ask us to delete your details at any time."
+- under sharing: "We never use it for advertising, with one exception that is
+  always your choice: if you tick the box asking for our news and offers, we
+  may share your phone number or email address with social media platforms,
+  such as Instagram or TikTok, so that you see our news there. We do this only
+  for people who ticked that box, and you can ask us to stop at any time."
+- under retention: "Enquiry contact details are kept until you ask us to delete
+  them, and we look again after two years at whether we still need them."
+- under the contact details: "To stop receiving our news, or to have your
+  details deleted, reply to any message from us or contact us using the details
+  on this page."
+
+**One departure from the words approved, told to the operator.** The draft said
+"We do not keep what you wrote in your message". The website also emails every
+enquiry to the practice's inbox through Web3Forms, which the page already
+names, so that sentence was true of the practice system and not of the inbox.
+It was narrowed to "Our practice system does not keep…", which says less and
+not more.
+
+**How it was changed, and why that way.** The website's folder on this machine
+is older than the site: it predates the redeploy of 10 September and still
+holds the admin pages and the address of the retired project. Deploying from
+it would have put those back. So the live page was fetched, changed, and
+**that one file** uploaded over itself, after the hosting account's own listing
+showed the target to be the site's root with `privacy.html` at the size of the
+copy just taken. The root also holds an `.htaccess` and a `qeeg/` folder that a
+mirror of the site cannot see and a whole-site redeploy would have removed.
+Read back afterwards: byte for byte what was uploaded, from the plain address
+too; the five sentences present and the old one gone; every other page tried
+at the size the listing gave. The page as it was and as it is are kept outside
+the repository, with a note saying how to put the old one back.
+
+**Still owed on the website, and not gating the English form:** the Arabic
+privacy page is unchanged, and its words have to be a person's and not a
+machine's; and the site's own forms still say nothing of their wording, so a
+website enquiry is scrubbed on dismissal, which agrees with the Arabic page as
+it stands.
 
 ### Three more decisions, the operator's, 19 September 2026 about 04:00 +04
 
