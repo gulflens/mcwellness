@@ -38,6 +38,14 @@ describe('layout tokens', () => {
     expect(tokens).toContain('--drawer: clamp(');
   });
 
+  // The component tests can say which columns ask to fit; jsdom computes no
+  // widths, so only this keeps the rule that answers them from being deleted.
+  it('fits a column that asks to what it holds: next to no width, and no wrapping', () => {
+    expect(shell).toMatch(
+      /\.ledger th\.fit,\s*\.ledger td\.fit\s*\{[^}]*inline-size:\s*1%;[^}]*white-space:\s*nowrap;/,
+    );
+  });
+
   it('never takes zooming away from anybody, anywhere in the app', () => {
     // A viewport that forbids zoom is the one thing the phone treatment must
     // never become: the console starts small there by design, and pinching in

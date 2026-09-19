@@ -1133,8 +1133,9 @@ input[type='search']::-webkit-search-results-button {
    so a record number ends up with a third of the screen. A cell cannot be
    narrower than content that may not wrap, and header and cells here may not,
    so asking for next to nothing gives exactly the content and its padding; the
-   room goes to the columns that did not ask. A share, not a length, so no width
-   is invented (tests/lint/one-set-of-breakpoints.test.ts). */
+   room goes to the columns that did not ask. A share, not a length: fluid in
+   place of fixed (docs/SPEC/responsive-console.md section 7). When every column
+   asks, none shrinks, so a table leaves at least one that does not. */
 .ledger th.fit,
 .ledger td.fit {
   inline-size: 1%;

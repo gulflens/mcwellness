@@ -18,7 +18,8 @@ export type Column<Row> = {
   align?: 'start' | 'end';
   /**
    * As wide as what it holds and no wider: a record number, an age, a status.
-   * The room it gives up goes to the columns that did not ask.
+   * The room it gives up goes to the columns that did not ask, so leave at
+   * least one column without it: when every column asks, none shrinks.
    */
   fit?: boolean;
   render: (row: Row) => ReactNode;
