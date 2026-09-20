@@ -5,7 +5,17 @@ import { createPool } from '../../../app/api/_middleware/db';
 import { createTokenVerifier } from '../../../app/api/_middleware/token-verifier';
 import { createApi } from '../../../app/api/create-api';
 import type { ClientListResponse } from '../../../app/api/clients/schema';
-import { IDS, AUTH, freshDatabase, seedClient, seedTenant } from '../../db/helpers';
+import {
+  AUTH,
+  IDS,
+  MORE_IDS,
+  freshDatabase,
+  seedClient,
+  seedPractitioner,
+  seedServiceType,
+  seedTenant,
+  seedUser,
+} from '../../db/helpers';
 
 /**
  * GET /api/clients?emirate=…, the owner's request of 2026-09-20: the list
@@ -24,6 +34,8 @@ const IN_ABU_DHABI = '00000000-0000-4000-8000-000000680002';
 const ACTIVE_IN_ABU_DHABI = '00000000-0000-4000-8000-000000680003';
 const NOWHERE_YET = '00000000-0000-4000-8000-000000680004';
 const LOCATION = (n: number) => `00000000-0000-4000-8000-00000068010${n}`;
+const FINANCE_USER = '00000000-0000-4000-8000-000000680201';
+const FINANCE_AUTH = '00000000-0000-4000-8000-000000680202';
 
 let owner: pg.Client;
 let pool: pg.Pool;
@@ -40,19 +52,24 @@ async function mint(sub: string): Promise<string> {
     .sign(KEY);
 }
 
-async function list(query = ''): Promise<Response> {
-  const headers: Record<string, string> = { authorization: `Bearer ${await mint(AUTH.ownerA)}` };
+async function list(query = '', as: string = AUTH.ownerA): Promise<Response> {
+  const headers: Record<string, string> = { authorization: `Bearer ${await mint(as)}` };
   return api.request(`/api/clients${query}`, { headers });
 }
 
-async function ids(query: string): Promise<string[]> {
-  const res = await list(query);
+async function ids(query: string, as: string = AUTH.ownerA): Promise<string[]> {
+  const res = await list(query, as);
   expect(res.status).toBe(200);
   const body = (await res.json()) as ClientListResponse;
   return body.clients.map((c) => c.id).sort();
 }
 
-/** A home for a client, in the emirate named; `primary` makes it the one the list shows. */
+/**
+ * A home for a client, in the emirate named; `primary` makes it the one the
+ * list shows. Both halves of "primary" are written, the flag on the address and
+ * the pointer on the client, because the app never writes one without the other
+ * (app/api/clients/locations.ts) and a fixture should not be in a state it cannot reach.
+ */
 async function home(
   locationId: string,
   clientId: string,
@@ -60,10 +77,10 @@ async function home(
   primary: boolean,
 ): Promise<void> {
   await owner.query(
-    'insert into location (id, tenant_id, owner_type, owner_id, label, emirate, entrance_point, created_by) ' +
-      "values ($1, $2, 'client', $3, 'home', $4::emirate, " +
-      "extensions.st_geogfromtext('SRID=4326;POINT(55.27 25.20)'), $5)",
-    [locationId, IDS.tenantA, clientId, emirate, IDS.ownerA],
+    'insert into location (id, tenant_id, owner_type, owner_id, label, emirate, entrance_point, ' +
+      "is_primary, created_by) values ($1, $2, 'client', $3, 'home', $4::emirate, " +
+      "extensions.st_geogfromtext('SRID=4326;POINT(55.27 25.20)'), $5, $6)",
+    [locationId, IDS.tenantA, clientId, emirate, primary, IDS.ownerA],
   );
   if (primary) {
     await owner.query('update client set primary_location_id = $1 where id = $2', [
@@ -90,6 +107,32 @@ beforeAll(async () => {
   await home(LOCATION(2), IN_DUBAI, 'SHJ', false);
   await home(LOCATION(3), IN_ABU_DHABI, 'AUH', true);
   await home(LOCATION(4), ACTIVE_IN_ABU_DHABI, 'AUH', true);
+
+  // A practitioner booked today with one of the two Abu Dhabi clients and with
+  // nobody else, and a finance account, which lists clients and reads no address.
+  await seedUser(owner, {
+    id: MORE_IDS.practitionerUserA,
+    tenantId: IDS.tenantA,
+    authId: AUTH.practitionerA,
+    displayName: 'Synthetic Practitioner',
+    roles: ['practitioner'],
+  });
+  await seedPractitioner(owner, IDS.tenantA, MORE_IDS.practitionerA, MORE_IDS.practitionerUserA);
+  await seedServiceType(owner, IDS.tenantA, MORE_IDS.serviceTypeA, 'neurofeedback');
+  await owner.query(
+    'insert into appointment (tenant_id, client_id, practitioner_id, service_type_id, location_id, ' +
+      'delivery_mode, window_start, window_end, busy_end, status) values ($1, $2, $3, $4, $5, ' +
+      "'home', date_trunc('hour', now()), date_trunc('hour', now()) + interval '45 minutes', " +
+      "date_trunc('hour', now()) + interval '60 minutes', 'confirmed')",
+    [IDS.tenantA, ACTIVE_IN_ABU_DHABI, MORE_IDS.practitionerA, MORE_IDS.serviceTypeA, LOCATION(4)],
+  );
+  await seedUser(owner, {
+    id: FINANCE_USER,
+    tenantId: IDS.tenantA,
+    authId: FINANCE_AUTH,
+    displayName: 'Synthetic Finance',
+    roles: ['finance'],
+  });
 
   const apiUrl = process.env.API_DATABASE_URL;
   if (!apiUrl) throw new Error('API_DATABASE_URL is not set.');
@@ -134,6 +177,24 @@ describe('GET /api/clients — by emirate', () => {
   it('refuses an emirate that is not one of the seven, rather than listing everybody', async () => {
     const res = await list('?emirate=Dubai');
     expect(res.status).toBe(400);
+  });
+
+  it("narrows a practitioner's own list and no wider: the client they are booked with, of the two in the emirate", async () => {
+    const res = await list('?emirate=AUH', AUTH.practitionerA);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ClientListResponse;
+    expect(body.clients.map((c) => c.id)).toEqual([ACTIVE_IN_ABU_DHABI]);
+    expect(body.note).toBe('schedule');
+    expect(await ids('?emirate=DXB', AUTH.practitionerA)).toEqual([]);
+  });
+
+  it('gives finance, who reads no address, an empty list for every emirate, and its whole list without one', async () => {
+    // Why the screen offers finance no such filter (app/admin/clients/ClientsPage.tsx):
+    // the route is honest, and for this role honesty is always "nobody".
+    expect(await ids('', FINANCE_AUTH)).toHaveLength(4);
+    for (const emirate of ['DXB', 'AUH', 'SHJ', 'AJM', 'UAQ', 'RAK', 'FUJ']) {
+      expect(await ids(`?emirate=${emirate}`, FINANCE_AUTH)).toEqual([]);
+    }
   });
 
   it('says which emirate each listed client is in, so the column agrees with the filter', async () => {

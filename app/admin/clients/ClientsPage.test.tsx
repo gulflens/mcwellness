@@ -195,6 +195,35 @@ describe('ClientsPage search', () => {
     );
   });
 
+  it('offers no emirate filter to a finance account, which reads no address and would always get nothing', async () => {
+    mount([], 200, FINANCE);
+    await screen.findByRole('table');
+    expect(screen.getByLabelText('Status')).toBeTruthy();
+    expect(screen.queryByLabelText('Emirate')).toBeNull();
+  });
+
+  it('tells a practitioner "nobody matches" once a filter is on, and "no visits booked" only when none is', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/me') return json(PRACTITIONER);
+      return json({ clients: [], note: 'schedule' });
+    }) as unknown as typeof fetch;
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <ClientsPage />
+      </AuthProviderBoundary>,
+    );
+    expect(
+      await screen.findByText(
+        'This list shows the clients you are booked with. You have no visits booked.',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Emirate'), { target: { value: 'AUH' } });
+    expect(await screen.findByText('No clients match.')).toBeTruthy();
+    expect(screen.queryByText(/You have no visits booked/)).toBeNull();
+  });
+
   it('never narrows an identity-card lookup by emirate, any more than by status', () => {
     const whole = searchRequest('active', EMIRATES_ID, 'AUH');
     expect(whole).not.toBe('partial-emirates-id');

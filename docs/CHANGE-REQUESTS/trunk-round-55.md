@@ -34,6 +34,19 @@ would answer "no such client" to someone holding that person's card.
 the order the practice lists them. Changing it reloads the table the way
 Status does.
 
+**Who is offered it, found by the security read.** A finance account lists
+clients but reads no address (`db/policies/client/readers.sql` excludes it from
+a client's locations), so its Emirate column is blank and every emirate would
+answer it an empty list. The route is left honest and the screen does not offer
+finance the select, by `canSeeFullRecord`, the rule that already says the same
+thing about the record's tabs. A practitioner's list is their own schedule, and
+the filter narrows that list and no wider.
+
+**An empty table says the right thing.** A practitioner with nobody booked is
+told so. With a filter or a search on, an empty table means nobody matched, and
+it now says that instead; status and search had the same fault before this
+round and are mended with it.
+
 ### A rule between every column
 
 The pinned first column has always had a hairline on its end edge, drawn as an
@@ -44,16 +57,20 @@ the last, by the same technique, so every line is the same weight
 no neighbour and takes none; the table has no outer frame and keeps none.
 `box-shadow` has no logical form, so right-to-left is mirrored with `:dir(rtl)`.
 
-It is the shared `.ledger` rule, not the clients list's own: every table in the
-console gains the lines, including the two written by hand
-(`app/admin/clients/DocumentsTab.tsx`, `app/admin/reports/ReportsTab.tsx`). One
-table ruled differently from the rest would be the odd one.
+It is the shared `.ledger` rule, not the clients list's own: every `.ledger`
+table gains the lines, every one drawn by the shared `Table` and the two
+written by hand (`app/admin/clients/DocumentsTab.tsx`,
+`app/admin/reports/ReportsTab.tsx`). One list ruled differently from the rest
+would be the odd one. A table that is not a ledger, such as the figures inside
+an assessment's record drawer, is not touched.
 
 ### Checked
 
 - `tests/client/db/list_emirate.test.ts`, written first and seen to fail: by
   primary address only, the addressless client in no emirate, together with
-  status and search, 400 for anything that is not one of the seven.
+  status and search, 400 for anything that is not one of the seven; a
+  practitioner booked with one of two clients in an emirate gets that one; and
+  finance gets nobody for every emirate and everybody without one.
 - `app/admin/clients/ClientsPage.test.tsx`: the select's options, the request
   it makes alone and with a status, and the lookup left unnarrowed.
 - `tests/lint/layout-tokens.test.ts` pins the rule and its mirror, since jsdom

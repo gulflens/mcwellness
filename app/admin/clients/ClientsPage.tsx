@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
-import { canWriteConcerns, canWriteGoals, canWriteHealth, canWriteRecord } from './clientAccess';
+import {
+  canSeeFullRecord,
+  canWriteConcerns,
+  canWriteGoals,
+  canWriteHealth,
+  canWriteRecord,
+} from './clientAccess';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
@@ -111,6 +117,11 @@ export function ClientsPage() {
   const mayWriteGoals = canWriteGoals(actor);
   const mayWriteConcerns = canWriteConcerns(actor);
   const mayWriteHealth = canWriteHealth(actor);
+  // A finance account lists clients but reads no address
+  // (db/policies/client/readers.sql), so its Emirate column is blank and every
+  // emirate would answer it an empty list. It is not offered a filter that can
+  // only ever say "nobody".
+  const mayFilterByEmirate = canSeeFullRecord(actor);
   const [status, setStatus] = useState<string>('');
   const [emirate, setEmirate] = useState<string>('');
   const [query, setQuery] = useState('');
@@ -291,22 +302,24 @@ export function ClientsPage() {
         </Select>
         {/* By the primary address, the one the Emirate column shows
             (app/api/clients/list.ts): the filter and the column never disagree. */}
-        <Select
-          id="client-emirate"
-          label="Emirate"
-          value={emirate}
-          onChange={(e) => {
-            setEmirate(e.target.value);
-            setNotice(null);
-          }}
-        >
-          <option value="">Any emirate</option>
-          {Object.entries(EMIRATES).map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </Select>
+        {mayFilterByEmirate ? (
+          <Select
+            id="client-emirate"
+            label="Emirate"
+            value={emirate}
+            onChange={(e) => {
+              setEmirate(e.target.value);
+              setNotice(null);
+            }}
+          >
+            <option value="">Any emirate</option>
+            {Object.entries(EMIRATES).map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
       </div>
       {state.kind === 'loading' ? <Note>Loading the client list.</Note> : null}
       {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
@@ -317,7 +330,9 @@ export function ClientsPage() {
           rows={state.response.clients}
           rowKey={(row) => row.id}
           empty={
-            state.response.note === 'schedule'
+            // "No visits booked" is only true of the whole list. With a filter or
+            // a search on, an empty table means nobody matched it, booked or not.
+            state.response.note === 'schedule' && !status && !emirate && !query.trim()
               ? 'This list shows the clients you are booked with. You have no visits booked.'
               : 'No clients match.'
           }
