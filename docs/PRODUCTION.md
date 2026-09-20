@@ -2569,10 +2569,14 @@ not changed was the operator's window: the console is run installed, with no
 reload button, and a single-page app fetches its code once. Reloading it shows
 the build. `docs/CHANGE-REQUESTS/trunk-round-56.md` has the whole of it.
 
-**The word.** Asked at 07:35 +04 whether it was done, the operator said they
-had still not seen the filter or the borders live. They had been merged and not
-deployed, which had been said but was the wrong thing to leave standing: the
-operator was looking for them on the live site, and that was taken as the word.
+**No "go" was given; one was inferred.** At 07:35 +04 the operator wrote: "so
+is it done and i can move to another edit or not yet, i still did not see the
+filter by emirate live nor the columns borders". Rounds 55 and 56 were merged
+and not deployed, which had been said. The operator was looking for them on the
+live site, and that was read as the instruction to put them there; they were
+told so before anything was uploaded, and the pass began at 07:36. That is a
+reading, not a quotation of an instruction, and the thirtieth and thirty-first
+passes had the plain word that this one did not.
 
 **What went live.**
 
@@ -2584,7 +2588,8 @@ operator was looking for them on the live site, and that was taken as the word.
   list says nobody matched when a filter is on. Every `.ledger` table gains a
   hairline between every pair of columns.
 - Round 56, pull request 204. When the window is looked at again, at most once
-  in five minutes, it fetches `/` with no cookies and no cache and reads the
+  in five minutes once it has had an answer, it fetches `/` with no cookies and
+  no cache and reads the
   entry script's name; once that differs from the one it is running, the rail's
   links load the document afresh. It never reloads by itself and does not ask
   the service worker to update.
@@ -2624,9 +2629,10 @@ ending "Serving the built app from dist/" and "API listening", with
 0.29 s.
 
 **Not checked, and why.** The filter was not used signed in on production: it
-sits behind the owner's sign-in. It was walked signed in on a laptop before
-merge (20 clients, 3 in Abu Dhabi, 1 of them active, 2 in Fujairah, 20 again),
-its route is held by nine database tests including a booked practitioner and a
+sits behind the owner's sign-in. It was walked signed in on a laptop against the
+seeded practice before merge (the seed's 20 invented clients: 3 in Abu Dhabi, 1
+of them active, 2 in Fujairah, 20 again), its route is held by nine database
+tests including a booked practitioner and a
 finance account, and an unsigned request to it answers 401 like every other,
 which says nothing either way. The new-build check was walked end to end on a
 laptop against a production build with its service worker active, and cannot be
