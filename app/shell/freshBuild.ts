@@ -23,14 +23,17 @@ import { useSyncExternalStore } from 'react';
  * Choosing a section is the one moment the person has already decided to leave
  * the screen they are on.
  *
- * **Why it leaves the service worker alone.** Asking the worker to update
- * (`registration.update()`) would work too, and would be worse: the new worker
- * takes the window over at once (`app/shell/sw.ts` skips waiting and claims),
- * and clears the old build's files out of the precache as it does. The window
- * would then be old code holding the names of screen files that no longer exist
- * anywhere, and the next screen it opened lazily would fail to load. Left
- * alone, the old window keeps the old worker and the old worker keeps every
- * file that window can ask for, until the reload replaces all three together.
+ * **Why it does not ask the service worker to update.** `registration.update()`
+ * would find the new build too, and would be worse: the new worker takes the
+ * window over at once (`app/shell/sw.ts` skips waiting and claims), and clears
+ * the old build's files out of the precache as it does. The window would then
+ * be old code holding the names of screen files that no longer exist anywhere,
+ * and the next screen it opened lazily would fail to load. This module does not
+ * bring that state about. The browser can, by itself: it re-checks the worker's
+ * script when another window in scope navigates, and on any request once the
+ * registration is a day old. A window that has been taken over that way is
+ * exactly the window this reload mends, which is the better half of the case
+ * for it.
  *
  * **What it sends.** `GET /`, with no cookies and no cache. The answer is the
  * public shell every visitor is handed before they sign in. No personal data
@@ -40,7 +43,12 @@ import { useSyncExternalStore } from 'react';
 /** Looked at again sooner than this, the window does not ask twice. */
 const AT_MOST_EVERY_MS = 5 * 60_000;
 
-const ENTRY = /<script[^>]+type="module"[^>]+src="\/assets\/(index-[A-Za-z0-9_-]+\.js)"/;
+// A `<script>` whose source is the build's hashed entry. Only the tag and its
+// `src` are asked for: the order of a tag's attributes is the bundler's to
+// choose, and a pattern that depended on it would fail silently the day that
+// changed, leaving the feature switched off with nothing to say so. A preload
+// of the same file is a `<link>`, and is not matched.
+const ENTRY = /<script\b[^>]*\ssrc="\/assets\/(index-[A-Za-z0-9_-]+\.js)"/;
 
 /** The entry script a page starts from, or null where there is no built one. */
 export function entryOf(html: string): string | null {
@@ -72,27 +80,39 @@ export function watchForNewBuild(options: {
   now?: () => number;
 }): { check: () => Promise<void>; subscribe: typeof subscribe } {
   const { running, fetchImpl = fetch, now = Date.now } = options;
-  let lastAsked: number | null = null;
+  // When an answer last *arrived*. A question that got no answer does not
+  // count, so the next look asks again at once rather than in five minutes.
+  let lastAnswered: number | null = null;
+  // Focus and visibility arrive together; one question is enough.
+  let asking = false;
 
   const check = async (): Promise<void> => {
-    if (running === null || ready) return;
+    if (running === null || ready || asking) return;
     const at = now();
-    if (lastAsked !== null && at - lastAsked < AT_MOST_EVERY_MS) return;
-    lastAsked = at;
+    if (lastAnswered !== null && at - lastAnswered < AT_MOST_EVERY_MS) return;
+    asking = true;
     try {
       const response = await fetchImpl('/', { cache: 'no-store', credentials: 'omit' });
       if (!response.ok) return;
       const served = entryOf(await response.text());
-      if (served !== null && served !== running) {
+      if (served === null) return;
+      lastAnswered = at;
+      if (served !== running) {
         ready = true;
         for (const listener of listeners) listener();
       }
     } catch {
-      // No signal, or the host mid-deploy. Nothing is known, so nothing changes;
-      // the next look asks again.
+      // No signal, or the host mid-deploy. Nothing is known, so nothing changes,
+      // and the next look asks again.
+    } finally {
+      asking = false;
     }
   };
 
+  // One watcher at a time: a second start takes the first one's listeners down
+  // rather than leaving two asking the same question.
+  stop?.();
+  stop = null;
   if (running !== null) {
     const onLook = () => {
       if (document.visibilityState === 'visible') void check();
@@ -106,6 +126,18 @@ export function watchForNewBuild(options: {
   }
 
   return { check, subscribe };
+}
+
+/**
+ * Go to an address and load the document afresh, even where the address is
+ * another part of the page already open. A link alone cannot do that: from
+ * `/admin/billing` to `/admin/billing#invoices` is a fragment move, and a
+ * fragment move loads nothing however ordinary the link is. Setting the
+ * address first keeps the row the person chose; the reload brings the build.
+ */
+export function reloadAt(to: string): void {
+  window.location.assign(to);
+  window.location.reload();
 }
 
 /** The entry script of the document this code is running in. */

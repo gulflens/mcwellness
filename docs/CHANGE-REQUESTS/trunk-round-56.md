@@ -30,6 +30,13 @@ the rail's links are ordinary links (`reloadDocument`), and the next section
 chosen loads the document afresh, which brings the new build with it.
 `app/shell/freshBuild.ts`; `app/shell/components/Rail.tsx`.
 
+**One kind of link needs more than that**, found by the security read. Billing
+and Books list their own sections in the rail as parts of one page
+(`/admin/billing#invoices`). From that page, such a link is a fragment move,
+and a fragment move loads nothing however ordinary the link is. So for a row
+of the page already open the rail sets the address and then reloads
+(`reloadAt`): the row the person chose is kept, and the build arrives.
+
 ### Two things it deliberately does not do
 
 **It never reloads by itself.** A form half filled, a drawer open, a payment
@@ -37,14 +44,19 @@ being taken: a page that reloads under somebody loses their work. Choosing a
 section is the one moment the person has already decided to leave the screen
 they are on.
 
-**It leaves the service worker alone.** Asking the worker to update would find
-the new build too, and would be worse. `app/shell/sw.ts` skips waiting and
-claims, so the new worker takes an old window over at once, and workbox clears
-the old build's files out of the precache as it activates. The window would
-then be old code holding the names of screen files that exist nowhere, on the
-host or in the cache, and the next screen it opened lazily would fail to load.
-Left alone, the old window keeps the old worker and the old worker keeps every
-file that window can ask for, until the reload replaces all three together.
+**It does not ask the service worker to update.** That would find the new
+build too, and would be worse. `app/shell/sw.ts` skips waiting and claims, so
+the new worker takes an old window over at once, and workbox clears the old
+build's files out of the precache as it activates. The window would then be old
+code holding the names of screen files that exist nowhere, on the host or in
+the cache, and the next screen it opened lazily would fail to load.
+
+This round does not bring that state about, but it cannot promise the state
+never arises, and an earlier draft of this note said more than was true. The
+browser re-checks the worker's script by itself: when another window in scope
+navigates, and on any request once the registration is a day old. A window
+taken over that way is exactly the window this reload mends, which is the
+better half of the case for it.
 
 ### Scope
 
@@ -72,9 +84,17 @@ already admits connections to its own origin.
   minutes; stops asking once it knows; no signal, a 502 and an unreadable page
   all mean "nothing new"; nothing watched on a dev server. The pattern was also
   run against the live site's own index page and reads its entry.
+- After the security read: the pattern no longer depends on the order of the
+  tag's attributes, and is not taken in by a preload or a stylesheet of the same
+  name; a question that got no answer does not start the five minutes, so the
+  next look asks again; focus and visibility arriving together ask once; and a
+  second start takes the first watcher down.
 - `app/shell/components/Rail.test.tsx`: a click is taken by the router while
   the builds agree, and left to the browser once they do not, to the same
-  address.
+  address; a row of the page already open reloads at that row.
+- That last one in a real browser, signed in: from Billing, the address set to
+  `/admin/billing#invoices` and the document reloaded. The document was new,
+  the address kept the row, the rail marked Invoices, and the session held.
 - End to end in a real browser, against a production build served on a laptop
   with its service worker active: the window opened on one build and marked;
   the app rebuilt with a throwaway change and the server restarted, so the

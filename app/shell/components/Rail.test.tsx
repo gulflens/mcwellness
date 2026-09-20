@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as freshBuild from '../freshBuild';
 import { resetFreshBuildForTests, watchForNewBuild } from '../freshBuild';
 import { Rail } from './Rail';
 
@@ -221,6 +222,40 @@ describe('Rail', () => {
       'href',
       expect.stringContaining('/admin/billing'),
     );
+  });
+
+  it('reloads for a row of the page you are already on, where a link alone would only move within it', async () => {
+    const reloadAt = vi.spyOn(freshBuild, 'reloadAt').mockImplementation(() => undefined);
+    const newer =
+      '<html><head><script type="module" crossorigin src="/assets/index-NEW.js"></script></head></html>';
+    const watch = watchForNewBuild({
+      running: 'index-OLD.js',
+      fetchImpl: vi.fn(async () => new Response(newer)),
+      now: () => 0,
+    });
+    render(
+      <MemoryRouter initialEntries={['/admin/billing']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Same build: a move within the page, which the page itself follows.
+    fireEvent.click(screen.getByRole('link', { name: 'Packages' }));
+    expect(reloadAt).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await watch.check();
+    });
+    // `/admin/billing#invoices` from `/admin/billing` is a fragment move, and a
+    // fragment move loads nothing however ordinary the link is.
+    fireEvent.click(screen.getByRole('link', { name: 'Invoices' }));
+    expect(reloadAt).toHaveBeenCalledWith('/admin/billing#invoices');
+    reloadAt.mockRestore();
   });
 
   it('closes on Escape while it is covering the page', () => {

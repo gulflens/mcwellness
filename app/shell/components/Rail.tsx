@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
-import { useNewBuildReady } from '../freshBuild';
+import * as freshBuild from '../freshBuild';
 import type { ReactNode } from 'react';
 import { childIsCurrent, sectionHolds, type RailChild } from '../railChildren';
 import { useDrawer } from './useDrawer';
@@ -195,7 +195,7 @@ function Pages({
   hash: string;
   onChoose?: () => void;
 }) {
-  const fresh = useNewBuildReady();
+  const fresh = freshBuild.useNewBuildReady();
   const list = useRef<HTMLUListElement | null>(null);
   // With a section open the rail can be taller than the window — ten sections
   // and five pages do not fit 900px at the console's row height — so the list
@@ -236,7 +236,16 @@ function Pages({
               <Link
                 className={className}
                 to={child.to}
-                onClick={onChoose}
+                onClick={(event) => {
+                  onChoose?.();
+                  // A row of the page already open is a fragment move, which
+                  // loads nothing; once a newer build is live the row is gone
+                  // to *and* the document reloaded (app/shell/freshBuild.ts).
+                  if (fresh && child.to.split('#')[0] === pathname) {
+                    event.preventDefault();
+                    freshBuild.reloadAt(child.to);
+                  }
+                }}
                 reloadDocument={fresh}
                 aria-current={current ? 'page' : undefined}
               >
@@ -289,7 +298,7 @@ export function Rail({
   // Once the site serves a newer build than this window is running, choosing a
   // section loads the document afresh instead of moving within the old app
   // (app/shell/freshBuild.ts says why here, and why nowhere more abrupt).
-  const fresh = useNewBuildReady();
+  const fresh = freshBuild.useNewBuildReady();
   // Stable, because useDrawer holds it in an effect's dependency list and a
   // fresh function every render would tear the focus trap down and rebuild it.
   const close = useCallback(() => onToggle(), [onToggle]);
