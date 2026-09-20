@@ -2550,3 +2550,97 @@ before merge against the same stylesheet source.
 tight to their contents and the name, the contact and the emirate take the
 room. Status grows by a few pixels when a row says "Active" or "Paused"
 rather than "Lead", because it fits whatever is in it.
+
+## What was done on 2026-09-20: the thirty-second live pass — an emirate filter, a rule between every column, and a window that finds out there is a newer build
+
+Production runs `main` `336dac4d`, build `01a0bce5`. No migration: `main` holds
+107 migration files and both databases stand at 107, and nothing was written to
+either.
+
+**Why it began.** The operator, 06:51 +04, nine hours after the thirty-first
+pass: the tightened client table was still not showing. The pass was sound. The
+site served the new stylesheet byte for byte; the index page is sent `no-store`
+and the host's cache marks it `DYNAMIC`; the worker's precache list was pulled
+out of `/sw.js` and all 111 files answered 200 with the right types, so a new
+worker could install; no module stylesheet overrides the rule; and the real
+Clients screen, signed in on a laptop against the seeded practice at the
+operator's window width, showed the three columns with no spare pixel. What had
+not changed was the operator's window: the console is run installed, with no
+reload button, and a single-page app fetches its code once. Reloading it shows
+the build. `docs/CHANGE-REQUESTS/trunk-round-56.md` has the whole of it.
+
+**No "go" was given; one was inferred.** At 07:35 +04 the operator wrote: "so
+is it done and i can move to another edit or not yet, i still did not see the
+filter by emirate live nor the columns borders". Rounds 55 and 56 were merged
+and not deployed, which had been said. The operator was looking for them on the
+live site, and that was read as the instruction to put them there; they were
+told so before anything was uploaded, and the pass began at 07:36. That is a
+reading, not a quotation of an instruction, and the thirtieth and thirty-first
+passes had the plain word that this one did not.
+
+**What went live.**
+
+- Round 55, pull request 203. `GET /api/clients` takes `emirate`, one of the
+  seven codes or a 400; it reads the client's primary address, the one the
+  Emirate column shows; it narrows with status and search. The Clients screen
+  gains an Emirate select beside Status, not offered to a finance account, which
+  reads no address and would always be answered "nobody". A practitioner's empty
+  list says nobody matched when a filter is on. Every `.ledger` table gains a
+  hairline between every pair of columns.
+- Round 56, pull request 204. When the window is looked at again, at most once
+  in five minutes once it has had an answer, it fetches `/` with no cookies and
+  no cache and reads the
+  entry script's name; once that differs from the one it is running, the rail's
+  links load the document afresh. It never reloads by itself and does not ask
+  the service worker to update.
+
+**The pass.** No other session was working: one peer idle for a day, one that
+opened seconds before and was not this machine's work. Before-state at 03:36:03
+UTC: entry `index-DfRDHcin.js`, shell stylesheet `index-CfzNQSKK.css`. Stored
+build settings read back and sent unchanged. Archive
+`mcwellness-336dac4d.tar.gz`, 6,629,341 bytes, with its `mcwellness/` root
+folder; TUS create 201 and PATCH 204 with the offset equal to the size, the keys
+read by `curl` from a file of mode 0600 deleted in the same command. Build asked
+03:39:42 UTC; one poll at 03:40:49 went unanswered while the host switched; the
+served names changed 03:40:58; the build read `completed` 03:41:00.
+
+**Proved to be this tree.** A local `pnpm build` of `336dac4d` wrote
+`index-DH9UTXuv.css`; the site serves a stylesheet of that name and the two are
+the same 38,332 bytes with the same sha256 (`f379810d…`). It holds the column
+rule as written and still holds the fitted-column rule. The entry is
+`index-xXdM6r0T.js`; the clients screen's script, read out of it, is
+`ClientsPage-cBdstWRH.js`, which holds "Any emirate", sets the `emirate`
+parameter beside `status` and `q`, and still carries the fit switch three
+times. The entry holds the build check, `cache: no-store` with
+`credentials: omit`, and `reloadDocument`. Both old names answer 404, and so
+does a name that never existed.
+
+**A search that finds nothing is not a finding.** Two of the first greps came
+back zero, for the `emirate` parameter and for the build check, and both were
+there: the minifier writes strings in backticks, and the patterns had asked for
+double quotes. Read a stretch of the served bytes around the word before
+believing a count of nought.
+
+**The process is the new one**, which matters more than usual because half of
+round 55 is a route. The runtime log holds fresh start-up blocks from 03:40:58,
+ending "Serving the built app from dist/" and "API listening", with
+`started_at` 03:40:58 against `last_deployed_at` 03:41:00 and no error line.
+**No restart — fifteenth consecutive.** Health 200 in 0.34 s, deep 200 in
+0.29 s.
+
+**Not checked, and why.** The filter was not used signed in on production: it
+sits behind the owner's sign-in. It was walked signed in on a laptop against the
+seeded practice before merge (the seed's 20 invented clients: 3 in Abu Dhabi, 1
+of them active, 2 in Fujairah, 20 again), its route is held by nine database
+tests including a booked practitioner and a
+finance account, and an unsigned request to it answers 401 like every other,
+which says nothing either way. The new-build check was walked end to end on a
+laptop against a production build with its service worker active, and cannot be
+seen on the live site until the pass after this one gives it something to find.
+
+**For the owner.** Reload the window once, with Cmd+R or by quitting and
+reopening: this is the last pass that needs it. Clients then has an Emirate
+filter beside Status, and every list in the console has a line between its
+columns. A client with no address yet appears only under "Any emirate". After
+future passes, clicking back into the window and choosing any section in the
+sidebar brings the new version by itself.
