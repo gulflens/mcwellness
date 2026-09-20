@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
-import { canWriteConcerns, canWriteGoals, canWriteHealth, canWriteRecord } from './clientAccess';
+import {
+  canSeeFullRecord,
+  canWriteConcerns,
+  canWriteGoals,
+  canWriteHealth,
+  canWriteRecord,
+} from './clientAccess';
 import { CLIENT_STATUSES, ClientListResponse, type ClientRow } from '../../api/clients/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader, Select } from '../../shell/components/Controls';
@@ -69,13 +75,14 @@ function isPartialEmiratesId(term: string): boolean {
  * other side). Anything else is the ordinary `?q=` search over names and
  * record numbers.
  *
- * The status filter is not applied to a lookup, deliberately: an identity
- * number names at most one client, and filtering it away would answer "no
- * such client" to someone holding that person's card.
+ * Neither filter, status nor emirate, is applied to a lookup, deliberately: an
+ * identity number names at most one client, and filtering it away would answer
+ * "no such client" to someone holding that person's card.
  */
 export function searchRequest(
   status: string,
   query: string,
+  emirate = '',
 ): { url: string; init?: RequestInit } | 'partial-emirates-id' {
   const term = query.trim();
   const digits = wholeEmiratesIdDigits(term);
@@ -94,6 +101,7 @@ export function searchRequest(
   if (isPartialEmiratesId(term)) return 'partial-emirates-id';
   const params = new URLSearchParams();
   if (status) params.set('status', status);
+  if (emirate) params.set('emirate', emirate);
   if (term) params.set('q', term);
   return { url: `/api/clients${params.size > 0 ? `?${params.toString()}` : ''}` };
 }
@@ -109,7 +117,13 @@ export function ClientsPage() {
   const mayWriteGoals = canWriteGoals(actor);
   const mayWriteConcerns = canWriteConcerns(actor);
   const mayWriteHealth = canWriteHealth(actor);
+  // A finance account lists clients but reads no address
+  // (db/policies/client/readers.sql), so its Emirate column is blank and every
+  // emirate would answer it an empty list. It is not offered a filter that can
+  // only ever say "nobody".
+  const mayFilterByEmirate = canSeeFullRecord(actor);
   const [status, setStatus] = useState<string>('');
+  const [emirate, setEmirate] = useState<string>('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [selected, setSelected] = useState<ClientRow | null>(null);
@@ -148,7 +162,7 @@ export function ClientsPage() {
 
   useEffect(() => {
     let live = true;
-    const request = searchRequest(status, query);
+    const request = searchRequest(status, query, emirate);
     if (request === 'partial-emirates-id') return;
     const timer = setTimeout(() => {
       void apiFetch(request.url, request.init)
@@ -171,7 +185,7 @@ export function ClientsPage() {
       live = false;
       clearTimeout(timer);
     };
-  }, [apiFetch, status, query, reloadToken]);
+  }, [apiFetch, status, emirate, query, reloadToken]);
 
   const columns = useMemo<Column<ClientRow>[]>(
     () => [
@@ -286,6 +300,26 @@ export function ClientsPage() {
             </option>
           ))}
         </Select>
+        {/* By the primary address, the one the Emirate column shows
+            (app/api/clients/list.ts): the filter and the column never disagree. */}
+        {mayFilterByEmirate ? (
+          <Select
+            id="client-emirate"
+            label="Emirate"
+            value={emirate}
+            onChange={(e) => {
+              setEmirate(e.target.value);
+              setNotice(null);
+            }}
+          >
+            <option value="">Any emirate</option>
+            {Object.entries(EMIRATES).map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </Select>
+        ) : null}
       </div>
       {state.kind === 'loading' ? <Note>Loading the client list.</Note> : null}
       {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
@@ -296,7 +330,9 @@ export function ClientsPage() {
           rows={state.response.clients}
           rowKey={(row) => row.id}
           empty={
-            state.response.note === 'schedule'
+            // "No visits booked" is only true of the whole list. With a filter or
+            // a search on, an empty table means nobody matched it, booked or not.
+            state.response.note === 'schedule' && !status && !emirate && !query.trim()
               ? 'This list shows the clients you are booked with. You have no visits booked.'
               : 'No clients match.'
           }

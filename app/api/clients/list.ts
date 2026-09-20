@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { ageOn, canActor, hasRole, isoDateIn } from '../../../domain/shared';
+import { EMIRATES } from '../../../domain/client/types';
 import { emiratesIdHash } from '../../../domain/shared/identity';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from './emirates-id-shape';
 import { logReads } from '../_middleware/audit';
@@ -43,6 +44,9 @@ const PAGE_SIZE = 50;
 
 const Query = z.object({
   status: z.enum(STATUSES).optional(),
+  // One of the seven, or the request is refused: a misspelt emirate must never
+  // quietly list the whole practice as if no filter had been asked for.
+  emirate: z.enum(EMIRATES).optional(),
   q: z
     .string()
     .transform((value) => cleanText(value, 80))
@@ -82,6 +86,10 @@ const SQL =
   'where ($1::client_status is null or c.status = $1::client_status) ' +
   // Erased records stay with the lead practitioner (client-record.md section 2).
   "and ($3::boolean or c.status <> 'erased') " +
+  // The emirate the column shows: the primary address's, never another address
+  // on file, so the filter and the column cannot disagree about a row. A client
+  // with no address yet is in no emirate.
+  'and ($5::emirate is null or l.emirate = $5::emirate) ' +
   "and ($2::text is null or c.mrn ilike $2 escape '\\' or c.given_name ilike $2 escape '\\' " +
   "or c.family_name ilike $2 escape '\\' or coalesce(c.given_name_ar, '') ilike $2 escape '\\' " +
   "or coalesce(c.family_name_ar, '') ilike $2 escape '\\' " +
@@ -210,6 +218,7 @@ export function mountClients(api: Hono<ApiEnv>, now: () => Date = () => new Date
         search ? likePattern(search) : null,
         hasRole(actor, 'owner', 'lead_practitioner'),
         PAGE_SIZE + 1,
+        query.data.emirate ?? null,
       ]);
     const truncated = rows.length > PAGE_SIZE;
     const page = truncated ? rows.slice(0, PAGE_SIZE) : rows;

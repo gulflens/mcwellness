@@ -1210,7 +1210,24 @@ a.rail__item.rail__item--active:active {
   position: sticky;
   inset-inline-start: 0;
   background: var(--paper);
+}
+
+/* A rule between every pair of columns, not only after the record (the owner,
+   2026-09-20). It is the pinned column's own line, now every column's: drawn
+   inside the cell's end edge rather than as a border, because the table's
+   borders are collapsed and a collapsed border belongs to the table, so it
+   stays behind when a cell sticks. One technique for every line is also what
+   keeps them the same weight. The last column has no neighbour and takes none,
+   which is what leaves the empty row's single spanning cell unruled too.
+   `box-shadow` has no logical form, so right-to-left is mirrored by hand. */
+.ledger th:not(:last-child),
+.ledger td:not(:last-child) {
   box-shadow: inset calc(-1 * var(--hairline)) 0 0 var(--rule);
+}
+
+.ledger th:not(:last-child):dir(rtl),
+.ledger td:not(:last-child):dir(rtl) {
+  box-shadow: inset var(--hairline) 0 0 var(--rule);
 }
 
 .ledger--pinned th:first-child {

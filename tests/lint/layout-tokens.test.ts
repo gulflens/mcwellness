@@ -38,6 +38,18 @@ describe('layout tokens', () => {
     expect(tokens).toContain('--drawer: clamp(');
   });
 
+  // The owner, 2026-09-20: a rule between every pair of columns, not only after
+  // the record. Drawn inside the cell, the way the pinned column's always was,
+  // because a collapsed border does not travel with a cell that sticks.
+  it('rules every column but the last, on the end side, and mirrors it for right-to-left', () => {
+    expect(shell).toMatch(
+      /\.ledger th:not\(:last-child\),\s*\.ledger td:not\(:last-child\)\s*\{[^}]*box-shadow:\s*inset calc\(-1 \* var\(--hairline\)\) 0 0 var\(--rule\);/,
+    );
+    expect(shell).toMatch(
+      /\.ledger th:not\(:last-child\):dir\(rtl\),\s*\.ledger td:not\(:last-child\):dir\(rtl\)\s*\{[^}]*box-shadow:\s*inset var\(--hairline\) 0 0 var\(--rule\);/,
+    );
+  });
+
   // The component tests can say which columns ask to fit; jsdom computes no
   // widths, so only this keeps the rule that answers them from being deleted.
   it('fits a column that asks to what it holds: next to no width, and no wrapping', () => {
