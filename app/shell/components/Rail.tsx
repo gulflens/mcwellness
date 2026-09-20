@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
+import { useNewBuildReady } from '../freshBuild';
 import type { ReactNode } from 'react';
 import { childIsCurrent, sectionHolds, type RailChild } from '../railChildren';
 import { useDrawer } from './useDrawer';
@@ -194,6 +195,7 @@ function Pages({
   hash: string;
   onChoose?: () => void;
 }) {
+  const fresh = useNewBuildReady();
   const list = useRef<HTMLUListElement | null>(null);
   // With a section open the rail can be taller than the window — ten sections
   // and five pages do not fit 900px at the console's row height — so the list
@@ -235,6 +237,7 @@ function Pages({
                 className={className}
                 to={child.to}
                 onClick={onChoose}
+                reloadDocument={fresh}
                 aria-current={current ? 'page' : undefined}
               >
                 <span className="rail__label">{child.label}</span>
@@ -283,6 +286,10 @@ export function Rail({
   // address on every render rather than remembered: there is then no second
   // fact to keep in step with the page, and nothing to migrate or store.
   const { pathname, hash } = useLocation();
+  // Once the site serves a newer build than this window is running, choosing a
+  // section loads the document afresh instead of moving within the old app
+  // (app/shell/freshBuild.ts says why here, and why nowhere more abrupt).
+  const fresh = useNewBuildReady();
   // Stable, because useDrawer holds it in an effect's dependency list and a
   // fresh function every render would tear the focus trap down and rebuild it.
   const close = useCallback(() => onToggle(), [onToggle]);
@@ -330,6 +337,7 @@ export function Rail({
               to={section.to}
               title={section.label}
               onClick={onChoose}
+              reloadDocument={fresh}
               className={({ isActive }) =>
                 isActive ? 'rail__item rail__item--active' : 'rail__item'
               }
@@ -348,7 +356,12 @@ export function Rail({
       <div className="rail__person">
         <div className="rail__name rail__label">{person.name}</div>
         <div className="micro rail__label">{person.roles}</div>
-        <NavLink to="/account/password" className="rail__signout" title="Password">
+        <NavLink
+          to="/account/password"
+          className="rail__signout"
+          title="Password"
+          reloadDocument={fresh}
+        >
           <KeyIcon />
           <span className="rail__label">Password</span>
         </NavLink>

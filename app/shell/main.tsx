@@ -10,6 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { App } from './App';
 import { AuthProviderBoundary } from './auth/AuthContext';
+import { runningEntry, watchForNewBuild } from './freshBuild';
 import { chooseProvider } from './auth/choose-provider';
 
 const root = document.getElementById('root');
@@ -34,6 +35,11 @@ createRoot(root).render(
  * production build — `import.meta.env.PROD` keeps it out of the dev server,
  * where a worker caching the shell fights hot reload.
  */
+// A window left open keeps the build it started with; this lets it find out
+// there is a newer one (app/shell/freshBuild.ts). On the dev server the page has
+// no built entry to compare, so nothing is watched.
+watchForNewBuild({ running: runningEntry() });
+
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/sw.js', { scope: '/' });

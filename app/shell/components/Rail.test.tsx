@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resetFreshBuildForTests, watchForNewBuild } from '../freshBuild';
 import { Rail } from './Rail';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  resetFreshBuildForTests();
+});
 
 describe('Rail', () => {
   it('links every section, lists none as arriving, and signs out', () => {
@@ -170,6 +174,53 @@ describe('Rail', () => {
     );
     fireEvent.click(screen.getByRole('link', { name: 'Billing' }));
     expect(onChoose).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves within the app while the window runs the build the site serves', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    // `fireEvent` answers false when something called preventDefault: the
+    // router took the click and the browser loads nothing.
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Billing' }))).toBe(false);
+  });
+
+  it('leaves the click to the browser once a newer build is live, so the document loads afresh', async () => {
+    const newer =
+      '<html><head><script type="module" crossorigin src="/assets/index-NEW.js"></script></head></html>';
+    const watch = watchForNewBuild({
+      running: 'index-OLD.js',
+      fetchImpl: vi.fn(async () => new Response(newer)),
+      now: () => 0,
+    });
+    render(
+      <MemoryRouter initialEntries={['/admin/clients']}>
+        <Rail
+          person={{ name: 'Owner', roles: 'Owner' }}
+          onSignOut={vi.fn()}
+          open
+          onToggle={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      await watch.check();
+    });
+    // Not prevented: an ordinary link, and an ordinary page load behind it.
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Billing' }))).toBe(true);
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Password' }))).toBe(true);
+    // Still a link to the same place: nothing about where it goes has changed.
+    expect(screen.getByRole('link', { name: 'Billing' })).toHaveProperty(
+      'href',
+      expect.stringContaining('/admin/billing'),
+    );
   });
 
   it('closes on Escape while it is covering the page', () => {
