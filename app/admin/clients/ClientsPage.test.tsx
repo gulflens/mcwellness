@@ -170,6 +170,39 @@ describe('ClientsPage search', () => {
     expect(calls.every((c) => c.url !== '/api/clients/lookup')).toBe(true);
   });
 
+  it('filters by emirate the way it filters by status, and by both at once', async () => {
+    const calls = mount();
+    await screen.findByRole('table');
+
+    const emirate = screen.getByLabelText('Emirate');
+    expect([...emirate.querySelectorAll('option')].map((o) => o.textContent)).toEqual([
+      'Any emirate',
+      'Dubai',
+      'Abu Dhabi',
+      'Sharjah',
+      'Ajman',
+      'Umm Al Quwain',
+      'Ras Al Khaimah',
+      'Fujairah',
+    ]);
+
+    fireEvent.change(emirate, { target: { value: 'AUH' } });
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/clients?emirate=AUH')).toBe(true));
+
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'active' } });
+    await waitFor(() =>
+      expect(calls.some((c) => c.url === '/api/clients?status=active&emirate=AUH')).toBe(true),
+    );
+  });
+
+  it('never narrows an identity-card lookup by emirate, any more than by status', () => {
+    const whole = searchRequest('active', EMIRATES_ID, 'AUH');
+    expect(whole).not.toBe('partial-emirates-id');
+    if (whole === 'partial-emirates-id') return;
+    expect(whole.url).toBe('/api/clients/lookup');
+    expect(String(whole.init?.body)).not.toContain('AUH');
+  });
+
   it('fits the record, the age and the status to what they hold, and lets the rest take the room', async () => {
     mount();
     await screen.findByRole('table');

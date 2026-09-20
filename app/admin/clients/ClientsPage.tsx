@@ -69,13 +69,14 @@ function isPartialEmiratesId(term: string): boolean {
  * other side). Anything else is the ordinary `?q=` search over names and
  * record numbers.
  *
- * The status filter is not applied to a lookup, deliberately: an identity
- * number names at most one client, and filtering it away would answer "no
- * such client" to someone holding that person's card.
+ * Neither filter, status nor emirate, is applied to a lookup, deliberately: an
+ * identity number names at most one client, and filtering it away would answer
+ * "no such client" to someone holding that person's card.
  */
 export function searchRequest(
   status: string,
   query: string,
+  emirate = '',
 ): { url: string; init?: RequestInit } | 'partial-emirates-id' {
   const term = query.trim();
   const digits = wholeEmiratesIdDigits(term);
@@ -94,6 +95,7 @@ export function searchRequest(
   if (isPartialEmiratesId(term)) return 'partial-emirates-id';
   const params = new URLSearchParams();
   if (status) params.set('status', status);
+  if (emirate) params.set('emirate', emirate);
   if (term) params.set('q', term);
   return { url: `/api/clients${params.size > 0 ? `?${params.toString()}` : ''}` };
 }
@@ -110,6 +112,7 @@ export function ClientsPage() {
   const mayWriteConcerns = canWriteConcerns(actor);
   const mayWriteHealth = canWriteHealth(actor);
   const [status, setStatus] = useState<string>('');
+  const [emirate, setEmirate] = useState<string>('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [selected, setSelected] = useState<ClientRow | null>(null);
@@ -148,7 +151,7 @@ export function ClientsPage() {
 
   useEffect(() => {
     let live = true;
-    const request = searchRequest(status, query);
+    const request = searchRequest(status, query, emirate);
     if (request === 'partial-emirates-id') return;
     const timer = setTimeout(() => {
       void apiFetch(request.url, request.init)
@@ -171,7 +174,7 @@ export function ClientsPage() {
       live = false;
       clearTimeout(timer);
     };
-  }, [apiFetch, status, query, reloadToken]);
+  }, [apiFetch, status, emirate, query, reloadToken]);
 
   const columns = useMemo<Column<ClientRow>[]>(
     () => [
@@ -283,6 +286,24 @@ export function ClientsPage() {
           {CLIENT_STATUSES.filter((s) => s !== 'erased').map((s) => (
             <option key={s} value={s}>
               {s.charAt(0).toUpperCase() + s.slice(1)}
+            </option>
+          ))}
+        </Select>
+        {/* By the primary address, the one the Emirate column shows
+            (app/api/clients/list.ts): the filter and the column never disagree. */}
+        <Select
+          id="client-emirate"
+          label="Emirate"
+          value={emirate}
+          onChange={(e) => {
+            setEmirate(e.target.value);
+            setNotice(null);
+          }}
+        >
+          <option value="">Any emirate</option>
+          {Object.entries(EMIRATES).map(([code, name]) => (
+            <option key={code} value={code}>
+              {name}
             </option>
           ))}
         </Select>
