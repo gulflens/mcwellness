@@ -124,6 +124,25 @@ edit a profile, switch a role, suspend and reactivate. `staff.manage` (owner
 or admin) keeps the list and the temporary password, the latter never for an
 owner's row unless the actor is an owner.
 
+**Open, for the operator's reading: whether an admin keeps the temporary
+password at all.** Round 57's security review pointed out that the fix
+protects ownership and nothing else. A temporary password is a sign-in, so an
+admin who mints one for a colleague holding Finance has the books, and for one
+holding Lead practitioner has the trail and the reports, by one remove; taking
+"manage the team" away from admins closes the front door and leaves this one.
+Three answers, the first recommended:
+
+1. **Owners only.** An admin sees the list and nothing else. With two owners
+   there is always somebody to ask, and the rule is one sentence.
+2. **An admin, only for somebody who holds no role the admin lacks.** Nothing
+   is gained by the reset, so nothing is escalated. Exact, and hard to explain
+   across a desk: whether the button appears depends on both people's roles.
+3. **As decided on 22 September**, with the risk recorded: the act is in the
+   trail under the admin's id, which is detection and not prevention.
+
+Until the operator answers, the table above stands and this section is the
+only place the question lives.
+
 `db/policies/core/role_guard.sql` changes to match, with one carve-out the
 portal depends on: an admin invites a household, which inserts an `app_user`
 and a `client_contact` role row and later suspends that row
