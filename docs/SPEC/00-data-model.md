@@ -32,6 +32,9 @@ Anyone who logs in — staff or client contact. Auth record lives in Supabase Au
 
 Roles are not on the user row — they're on `user_role`. One user may be several things at once.
 
+### `staff_profile`
+What the practice keeps about a member of its own staff beyond the sign-in, because `app_user` is read practice-wide and a name appears on every screen. One row per staff member: `user_id` (unique), `job_title`, `started_on`, `emergency_contact_name`, `emergency_contact_phone` (E.164, as `app_user.phone`), `private_notes`. Owners only, for reading and for writing — the person themselves excluded, deliberately: a note about somebody that they can read is a different thing from what the operator asked for. The audit trail records that `emergency_contact_name`, `emergency_contact_phone` and `private_notes` changed, never what they said (migration 922, `docs/superpowers/specs/2026-09-21-team-profiles-and-access-design.md` section 6).
+
 ### `user_role`
 `user_id`, `role` (`owner`, `admin`, `lead_practitioner`, `practitioner`, `finance`, `client_contact`), `granted_at`, `granted_by`.
 

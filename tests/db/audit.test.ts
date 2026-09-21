@@ -691,6 +691,7 @@ describe('every audited table is classified', () => {
     'credential',
     'service_type',
     'location',
+    'staff_profile',
   ];
 
   type AuditedTableRow = { table: string; client_id_type: string | null; comment: string | null };
