@@ -107,7 +107,7 @@ describe('staff_profile', () => {
     ).toBe(0);
   });
 
-  it('says in the trail that the five private columns changed, and never what they said', async () => {
+  it('says in the trail that a column changed, and never what any of the five said', async () => {
     await setAuditContext(db, IDS.ownerA);
     await db.query(
       "update staff_profile set private_notes = 'Asked about part time.', " +

@@ -38,11 +38,15 @@
 --
 -- The first is the argument above, pointed the other way: `app_user.id` is held
 -- in place by `user_role.user_id`'s foreign key for exactly as long as the
--- ownership row stands, which is the reason nothing deletes an owner's
--- `app_user` row. So the composite check in section 2 is not the only thing
--- holding the id — but it is the only thing that catches a row whose id is
--- updated rather than deleted, which no foreign key refuses while the
--- referencing row is updated to follow it in the same statement.
+-- ownership row stands, and that is the reason nothing deletes an owner's
+-- `app_user` row. It is also why the `id` half of section 2's first refusal is
+-- defence in depth rather than the only thing standing there: with no
+-- `on update cascade`, moving an owner's `id` breaks the reference and is
+-- refused for that reason too, and the referencing row cannot be brought along,
+-- because `guard_owner_role` will not let an ownership row be updated at all.
+-- The arm is written anyway — it costs nothing, it does not depend on some later
+-- reader keeping that pair of facts in mind, and the reader of this trigger is
+-- exactly the person who needs to be told that an owner's row does not move.
 --
 -- The second is who "whoever migrates the database" is on the hosted databases,
 -- where it is not one person with a psql prompt. Supabase grants its own
@@ -106,8 +110,10 @@ alter table public.user_role enable always trigger guard_owner_role;
 --    OLD holds ownership, by (user_id, tenant_id). A row whose tenant_id moved
 --    would leave its ownership row behind in the practice it came from, so the
 --    NEXT update of that row would find no ownership and refuse nothing — the
---    lock would have unlocked itself, and quietly. The primary key is held the
---    same way and for the same reason. Found by the round's schema review.
+--    lock would have unlocked itself, and quietly. `id` is named in the same
+--    breath for the same reason, and is belt and braces beside the foreign key
+--    that already holds it (the header says how). Found by the round's schema
+--    review.
 ------------------------------------------------------------------------------
 create function app.guard_owner_identity() returns trigger
 language plpgsql security definer

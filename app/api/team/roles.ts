@@ -93,8 +93,8 @@ async function switchRole(c: Context<ApiEnv>, on: boolean, now: () => Date): Pro
     // between the read and the write — another owner switching something at the
     // same moment. Which of `app.revoke_staff_role`'s seven refusals it is
     // cannot be told from the SQLSTATE, and guessing `last_role` would put a
-    // sentence on the screen
-    // that may be untrue. 23505 is the grant's own half of the same race:
+    // sentence on the screen that may be untrue. 23505 is the grant's own half
+    // of the same race:
     // `on conflict (user_id, role) do nothing` covers a duplicate that is
     // already committed, and not one committed a microsecond ago. Not retried:
     // the caller reads the profile again and sees what is actually there.

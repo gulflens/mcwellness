@@ -387,7 +387,7 @@ describe('app.revoke_staff_role', () => {
     );
   });
 
-  it('refuses no role at all', async () => {
+  it('refuses a null role, which is not a working role either', async () => {
     await asApiRole(
       db,
       IDS.tenantA,

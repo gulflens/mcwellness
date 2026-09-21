@@ -16,7 +16,7 @@
 -- edited or the person leaves.
 --
 -- **Why the job title and the start date are on the list too**, which the
--- round's security review is what settled. The row rule says the owners and
+-- round's security review settled. The row rule says the owners and
 -- nobody else, and it means it; but `audit_log` admits an owner, an admin and
 -- the lead practitioner (db/policies/core/audit_log.sql), and
 -- `app/api/audit/activity.ts` answers the old and the new values for every
