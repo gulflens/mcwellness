@@ -152,6 +152,51 @@ describe('the fallback, which is what a laptop and the tests run', () => {
   it('says nothing about a sign-in that was never there', async () => {
     await expect(fakeAuthAdmin().deleteUser(AUTH_ID)).resolves.toBeUndefined();
   });
+
+  it('moves the address, freeing the old one and taking the new', async () => {
+    const provider = fakeAuthAdmin();
+    const { authId } = await provider.createUser({
+      email: 'iris.cliff@example.com',
+      password: CHOSEN,
+    });
+    await provider.setEmail(authId, 'olive.ridge@example.com');
+
+    // The old address is free again.
+    await expect(
+      provider.createUser({ email: 'iris.cliff@example.com', password: CHOSEN }),
+    ).resolves.toHaveProperty('authId');
+    // The new one is this sign-in's, and nobody else's to take.
+    await expect(
+      provider.createUser({ email: 'olive.ridge@example.com', password: CHOSEN }),
+    ).rejects.toSatisfy(isEmailInUse);
+  });
+
+  it('refuses to move onto an address another sign-in already holds', async () => {
+    const provider = fakeAuthAdmin();
+    const { authId } = await provider.createUser({
+      email: 'cedar.quarry@example.com',
+      password: CHOSEN,
+    });
+    await provider.createUser({ email: 'willow.harbour@example.com', password: CHOSEN });
+
+    await expect(provider.setEmail(authId, 'willow.harbour@example.com')).rejects.toSatisfy(
+      isEmailInUse,
+    );
+  });
+
+  it("is a no-op when the address is already this sign-in's own", async () => {
+    const provider = fakeAuthAdmin();
+    const { authId } = await provider.createUser({
+      email: 'rowan.summit@example.com',
+      password: CHOSEN,
+    });
+
+    await expect(provider.setEmail(authId, 'ROWAN.SUMMIT@example.com')).resolves.toBeUndefined();
+    // Still theirs, and nobody else's to take.
+    await expect(
+      provider.createUser({ email: 'rowan.summit@example.com', password: CHOSEN }),
+    ).rejects.toSatisfy(isEmailInUse);
+  });
 });
 
 describe('the real one, against an injected fetch', () => {
@@ -225,5 +270,35 @@ describe('the real one, against an injected fetch', () => {
     await expect(
       provider(() => new Response('', { status: 404 })).deleteUser(AUTH_ID),
     ).resolves.toBeUndefined();
+  });
+
+  it('changes the address through the admin endpoint, confirmed without a message', async () => {
+    let seen = '';
+    let method = '';
+    let body: unknown;
+    await provider((url, init) => {
+      seen = url;
+      method = init.method ?? '';
+      body = JSON.parse(String(init.body));
+      return new Response('', { status: 200 });
+    }).setEmail(AUTH_ID, 'iris.cliff@example.com');
+
+    expect(seen).toBe(`https://project.supabase.co/auth/v1/admin/users/${AUTH_ID}`);
+    expect(method).toBe('PUT');
+    expect(body).toEqual({ email: 'iris.cliff@example.com', email_confirm: true });
+  });
+
+  it('reports an address that is already taken as its own refusal', async () => {
+    await expect(
+      provider(
+        () => new Response(JSON.stringify({ error_code: 'email_exists' }), { status: 422 }),
+      ).setEmail(AUTH_ID, 'iris.cliff@example.com'),
+    ).rejects.toSatisfy(isEmailInUse);
+  });
+
+  it('calls any other refusal an outage', async () => {
+    await expect(
+      provider(() => new Response('', { status: 500 })).setEmail(AUTH_ID, 'iris.cliff@example.com'),
+    ).rejects.toSatisfy(isAuthAdminUnavailable);
   });
 });
