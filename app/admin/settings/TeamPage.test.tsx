@@ -125,9 +125,11 @@ describe('TeamPage', () => {
     ).toHaveLength(3);
   });
 
-  // Trunk round 57, 2026-09-21: a temporary password is the sign-in itself, so
-  // an admin is offered none for an owner (domain/shared/staff.ts).
-  it("offers an admin no temporary password on an owner's row", async () => {
+  // Trunk round 57, narrowed by the operator on 21 September 2026: a
+  // temporary password is the sign-in itself, and minting one is the owner's
+  // alone, so an admin is offered none at all — not even on their own row
+  // (domain/shared/staff.ts).
+  it('offers an admin no temporary password at all', async () => {
     mount({
       members: [
         { ...OWNER, isYou: false },
@@ -135,8 +137,7 @@ describe('TeamPage', () => {
       ],
     });
     expect(await screen.findByText('Hazel Harbour')).toBeTruthy();
-    // Two active rows, one button: the admin's own.
-    expect(screen.getAllByRole('button', { name: 'New temporary password' })).toHaveLength(1);
+    expect(screen.queryAllByRole('button', { name: 'New temporary password' })).toHaveLength(0);
   });
 
   it('mints a new temporary password for a colleague and shows it once', async () => {

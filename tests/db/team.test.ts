@@ -177,14 +177,14 @@ describe('who works at the practice', () => {
 
     // A lost temporary password is replaced, the act is in the trail, the
     // password is not.
-    const reset = await h.callAs('POST', `/api/team/${userId}/password`, PORTAL.adminAuth);
+    const reset = await h.callAs('POST', `/api/team/${userId}/password`, OWNER_AUTH);
     expect(reset.status).toBe(200);
     const fresh = (await reset.json()) as { temporaryPassword: string };
     expect(fresh.temporaryPassword.length).toBeGreaterThanOrEqual(12);
     const resetTrail = await h.owner.query<{ n: string; leaked: string }>(
       "select count(*)::text as n, count(*) filter (where new_values::text like '%' || $3 || '%')::text as leaked " +
         "from audit_log where action = 'password_reset' and entity_id = $1 and actor_id = $2",
-      [userId, PORTAL.admin, fresh.temporaryPassword],
+      [userId, IDS.ownerA, fresh.temporaryPassword],
     );
     expect(resetTrail.rows[0]).toEqual({ n: '1', leaked: '0' });
     expect((await h.callAs('GET', '/api/me', authId)).status).toBe(200);

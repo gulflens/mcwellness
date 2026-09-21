@@ -64,13 +64,20 @@ describe('canActor', () => {
     expect(canActor(actor([]), { type: 'audit.activity' }, {}, NOW)).toBe(false);
   });
 
-  it('lets the owner and an admin read and write clients and grant roles', () => {
+  it('lets the owner and an admin read and write clients, and only the owner grant a working role', () => {
     for (const role of ['owner', 'admin'] as const) {
       const a = actor([role]);
       expect(canActor(a, { type: 'client.read', clientId: CLIENT }, {}, NOW)).toBe(true);
       expect(canActor(a, { type: 'client.write', clientId: CLIENT }, {}, NOW)).toBe(true);
-      expect(canActor(a, { type: 'user_role.grant', role: 'finance' }, {}, NOW)).toBe(true);
     }
+    // Every working role is the owner's to hand out (operator, 21 September
+    // 2026); a household contact stays the admin's, since an admin invites one.
+    expect(canActor(actor(['owner']), { type: 'user_role.grant', role: 'finance' }, {}, NOW)).toBe(
+      true,
+    );
+    expect(canActor(actor(['admin']), { type: 'user_role.grant', role: 'finance' }, {}, NOW)).toBe(
+      false,
+    );
   });
 
   it('lets practitioners read clients but never write them or grant roles', () => {
@@ -82,16 +89,19 @@ describe('canActor', () => {
     }
   });
 
-  it('lets only the owner hand out ownership', () => {
+  it('lets only the owner hand out ownership or a working role, and leaves a household contact to an admin', () => {
     expect(canActor(actor(['admin']), { type: 'user_role.grant', role: 'owner' }, {}, NOW)).toBe(
       false,
     );
     expect(canActor(actor(['admin']), { type: 'user_role.grant', role: 'finance' }, {}, NOW)).toBe(
-      true,
+      false,
     );
     expect(canActor(actor(['owner']), { type: 'user_role.grant', role: 'owner' }, {}, NOW)).toBe(
       true,
     );
+    expect(
+      canActor(actor(['admin']), { type: 'user_role.grant', role: 'client_contact' }, {}, NOW),
+    ).toBe(true);
   });
 
   it('lets finance read a client but never write one, execute a session or read the audit trail', () => {
@@ -130,6 +140,22 @@ describe('canActor', () => {
       'client_contact',
     ] as const) {
       expect(canActor(actor([role]), { type: 'staff.manage' }, {}, NOW)).toBe(false);
+    }
+  });
+
+  it('lets the owner manage a colleague’s access — grant, edit, suspend, reset — and nobody else', () => {
+    // Adding a person, editing a profile, switching a role, suspending and
+    // minting a temporary password: the owner's alone (operator, 21 September
+    // 2026), narrower than staff.manage above.
+    expect(canActor(actor(['owner']), { type: 'staff.access.manage' }, {}, NOW)).toBe(true);
+    for (const role of [
+      'admin',
+      'lead_practitioner',
+      'finance',
+      'practitioner',
+      'client_contact',
+    ] as const) {
+      expect(canActor(actor([role]), { type: 'staff.access.manage' }, {}, NOW)).toBe(false);
     }
   });
 

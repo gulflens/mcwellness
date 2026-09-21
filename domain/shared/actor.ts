@@ -100,6 +100,7 @@ export type Action =
   | { type: 'portal.access.manage' }
   | { type: 'kit.manage' }
   | { type: 'staff.manage' }
+  | { type: 'staff.access.manage' }
   | { type: 'kit.read'; assignedToSelf: boolean }
   | { type: 'routing.day.read'; scope: 'own' }
   | { type: 'routing.practiceDay.read' }
@@ -153,11 +154,10 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'client.write':
       return hasRole(actor, 'owner', 'admin');
     case 'user_role.grant':
-      // Ownership is handed out by the owner alone; RLS says the same.
-      if (action.role === 'owner') {
-        return hasRole(actor, 'owner');
-      }
-      return hasRole(actor, 'owner', 'admin');
+      // A household's contact row is the portal's, and an admin invites a
+      // household. Every other role is the owner's to hand out; RLS says the same.
+      if (action.role === 'client_contact') return hasRole(actor, 'owner', 'admin');
+      return hasRole(actor, 'owner');
     case 'practice.settings.write':
       // The practice's own identity: its legal name, its trade licence and
       // whether it charges VAT. The owner and an admin, and nobody else —
@@ -412,6 +412,11 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     // owner's alone to grant, and no screen offers it (domain/shared/staff.ts).
     case 'staff.manage':
       return hasRole(actor, 'owner', 'admin');
+    // Adding a person, editing a profile, switching a role, suspending and
+    // minting a temporary password: the owner's alone (operator, 21 September
+    // 2026). `staff.manage` above keeps the list for an admin and nothing else.
+    case 'staff.access.manage':
+      return hasRole(actor, 'owner');
     case 'kit.manage':
       // The equipment register: listing it, adding an item, editing one,
       // assigning it and recording a calibration
