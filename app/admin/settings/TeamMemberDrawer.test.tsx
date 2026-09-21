@@ -65,6 +65,8 @@ function mount(
     saveRefusal?: { status: number; error: string };
     /** What a role switch answers instead of `{ ok: true }`. */
     roleRefusal?: { status: number; error: string };
+    /** Every read after this many answers 500: the re-read that does not land. */
+    readsBeforeFailing?: number;
   } = {},
 ) {
   const calls: Call[] = [];
@@ -95,6 +97,9 @@ function mount(
     }
     if (url === `/api/team/${profile.id}` && method === 'GET') {
       reads += 1;
+      if (options.readsBeforeFailing !== undefined && reads > options.readsBeforeFailing) {
+        return json({ error: 'server_error' }, 500);
+      }
       return json(profile);
     }
     if (url === `/api/team/${profile.id}` && method === 'PATCH') {
@@ -182,6 +187,74 @@ describe('TeamMemberDrawer', () => {
     );
   });
 
+  /*
+   * The three boxes whose control hands back `''` for both "empty" and "I
+   * cannot make sense of that". Without the guard each of these saves as
+   * "nothing recorded" and the person watches their own typing vanish on the
+   * next read — a silent loss, and the only thing anchoring the guard is that
+   * `DateField` and `PhoneField` keep their `id` on the visible input. These
+   * three cases are what would go red the day either of them moves it.
+   */
+  it('refuses a start date the calendar does not have, and sends nothing', async () => {
+    const { calls } = mount();
+    await opened();
+    fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '31/02/2026' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save the profile' }));
+    expect(await screen.findByText('That day is not on the calendar.')).toBeTruthy();
+    const box = screen.getByLabelText('Start date') as HTMLInputElement;
+    expect(document.activeElement).toBe(box);
+    // What was typed is still on screen, not quietly emptied.
+    expect(box.value).toBe('31/02/2026');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses a telephone box holding text that is not a number, and sends nothing', async () => {
+    const { calls } = mount();
+    await opened();
+    fireEvent.change(screen.getByLabelText('Telephone'), { target: { value: 'ask the office' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save the profile' }));
+    expect(
+      await screen.findByText('A telephone number needs its country and the rest of the number.'),
+    ).toBeTruthy();
+    const box = screen.getByLabelText('Telephone') as HTMLInputElement;
+    expect(document.activeElement).toBe(box);
+    expect(box.value).toBe('ask the office');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses an emergency contact number that is text, and sends nothing', async () => {
+    const { calls } = mount();
+    await opened();
+    fireEvent.change(screen.getByLabelText('Emergency contact number'), {
+      target: { value: 'her mother' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save the profile' }));
+    expect(
+      await screen.findByText('A telephone number needs its country and the rest of the number.'),
+    ).toBeTruthy();
+    const box = screen.getByLabelText('Emergency contact number') as HTMLInputElement;
+    expect(document.activeElement).toBe(box);
+    expect(box.value).toBe('her mother');
+    expect(calls).toHaveLength(0);
+  });
+
+  // The save landed; the re-read that follows it did not. The screen must not
+  // suggest otherwise — and must not replace a profile that is already on it.
+  it('keeps the saved values on screen when the profile cannot be read back', async () => {
+    mount({ readsBeforeFailing: 1 });
+    await opened();
+    fireEvent.change(screen.getByLabelText('Job title'), { target: { value: 'Office manager' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save the profile' }));
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+    await waitFor(() =>
+      expect((screen.getByLabelText('Job title') as HTMLInputElement).value).toBe('Office manager'),
+    );
+    expect(screen.queryByText('The profile could not be loaded. Try again.')).toBeNull();
+    // The header reads the saved job title too, not the one it opened on.
+    expect(screen.getByRole('heading', { name: 'Iris Harbour' })).toBeTruthy();
+    expect(screen.getAllByText('Office manager').length).toBeGreaterThan(0);
+  });
+
   it('keeps what was typed when the reader looks at Access and comes back', async () => {
     mount();
     await opened();
@@ -236,22 +309,47 @@ describe('TeamMemberDrawer', () => {
     expect(calls[1]?.contentType).toBe('application/json');
   });
 
-  it('puts a refused switch back and says a person keeps at least one role', async () => {
+  it('puts a refused switch back and says why beside that switch, not at the top', async () => {
     mount({
       profile: { roles: ['admin', 'finance'] },
       roleRefusal: { status: 409, error: 'last_role' },
     });
     await opened();
     await onAccess();
+    // The region that will hold the sentence, taken BEFORE the press: it is the
+    // same element afterwards, which is the whole of what makes a live region
+    // work — a region created together with its text announces nothing.
+    const block = screen.getByRole('switch', { name: 'Finance' }).closest('.team-access__role');
+    const live = block?.querySelector('[role="alert"]');
+    expect(live?.textContent).toBe('');
+
     fireEvent.click(screen.getByRole('switch', { name: 'Finance' }));
-    expect(
-      await screen.findByText(
+    await waitFor(() =>
+      expect(live?.textContent).toBe(
         'A person keeps at least one role. To shut somebody out, suspend them.',
       ),
-    ).toBeTruthy();
+    );
+    // Back where it was.
     expect(screen.getByRole('switch', { name: 'Finance' }).getAttribute('aria-checked')).toBe(
       'true',
     );
+    // Beside that switch and nowhere else: nothing at the head of the tab, where
+    // at the drawer's narrower widths it would render off-screen.
+    expect(document.querySelector('.note--critical')).toBeNull();
+  });
+
+  // A live region announces only if it was in the document before the text
+  // landed in it, so each switch has an empty one from the first render.
+  it('keeps a region for each switch’s refusal in the document before there is one', async () => {
+    mount({ profile: { roles: ['admin', 'finance'] } });
+    await opened();
+    await onAccess();
+    for (const role of ['Admin', 'Finance', 'Practitioner', 'Lead practitioner']) {
+      const block = screen.getByRole('switch', { name: role }).closest('.team-access__role');
+      const live = block?.querySelector('[role="alert"]');
+      expect(live).not.toBeNull();
+      expect(live?.textContent).toBe('');
+    }
   });
 
   it('reads the profile again when somebody else changed the access first', async () => {
@@ -271,22 +369,63 @@ describe('TeamMemberDrawer', () => {
     await waitFor(() => expect(readCount()).toBe(2));
   });
 
-  it('shows an owner’s row as locked, with no switch to press and nothing to suspend', async () => {
-    mount({ profile: { roles: ['owner', 'lead_practitioner'], locked: true } });
+  it('shows the other owner’s row as locked, with no switch to press and nothing to suspend', async () => {
+    const { calls } = mount({ profile: { roles: ['owner', 'lead_practitioner'], locked: true } });
     await opened();
     await onAccess();
     expect(screen.getByText('Owner. Full access. Cannot be changed.')).toBeTruthy();
     for (const control of screen.getAllByRole('switch')) {
-      expect((control as HTMLButtonElement).disabled).toBe(true);
+      // Refused, and still reachable by a keyboard, so the reason under it can
+      // be heard: aria-disabled and focusable, never the `disabled` attribute.
+      expect(control.getAttribute('aria-disabled')).toBe('true');
+      expect((control as HTMLButtonElement).disabled).toBe(false);
     }
-    // Off still reads as off to a screen reader, disabled or not.
+    // Off still reads as off to a screen reader, refused or not.
     expect(screen.getByRole('switch', { name: 'Finance' }).getAttribute('aria-checked')).toBe(
       'false',
     );
     expect(
       screen.getByRole('switch', { name: 'Lead practitioner' }).getAttribute('aria-checked'),
     ).toBe('true');
+    // A press on a refused switch does nothing at all, and says nothing.
+    fireEvent.click(screen.getByRole('switch', { name: 'Finance' }));
+    expect(calls).toHaveLength(0);
+    expect(screen.getByRole('switch', { name: 'Finance' }).getAttribute('aria-checked')).toBe(
+      'false',
+    );
     expect(screen.queryByRole('button', { name: 'Suspend' })).toBeNull();
+    // An owner locked out of their own sign-in is let back in by the other one.
+    expect(screen.getByRole('button', { name: 'New temporary password' })).toBeTruthy();
+  });
+
+  // The owner reading their own row: the lock covers the switches, nobody
+  // suspends themselves, and a password of one's own belongs on the Password
+  // screen rather than beside a colleague's controls.
+  it('offers an owner no button at all on their own row', async () => {
+    mount({ profile: { roles: ['owner', 'lead_practitioner'], locked: true, isYou: true } });
+    await opened();
+    await onAccess();
+    expect(screen.getByText('Owner. Full access. Cannot be changed.')).toBeTruthy();
+    for (const control of screen.getAllByRole('switch')) {
+      expect(control.getAttribute('aria-disabled')).toBe('true');
+    }
+    expect(screen.queryByRole('button', { name: 'New temporary password' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Suspend' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reactivate' })).toBeNull();
+  });
+
+  it('ties the reason a switch will not move to the switch itself', async () => {
+    mount({ profile: { roles: ['admin'] } });
+    await opened();
+    await onAccess();
+    const only = screen.getByRole('switch', { name: 'Admin' });
+    const described = (only.getAttribute('aria-describedby') ?? '').split(' ');
+    expect(described).toHaveLength(2);
+    const lines = described.map((id) => document.getElementById(id)?.textContent);
+    expect(lines).toContain(STAFF_ROLE_OPENS.admin);
+    expect(lines).toContain(
+      'A person keeps at least one role. To shut somebody out, suspend them.',
+    );
   });
 
   it('reads back a profile that is not the reader’s to change, with no Save', async () => {

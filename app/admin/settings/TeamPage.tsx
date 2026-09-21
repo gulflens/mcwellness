@@ -184,7 +184,17 @@ export function TeamPage() {
             fit: true,
             render: (row: TeamMember) => (
               <span className="team__actions">
-                <Button variant="quiet" onClick={() => setOpenId(row.id)}>
+                {/* The word on the button stays "Open", which is all a reader
+                    of the row needs; the name goes in the label, because a
+                    screen reader's list of this page's buttons would otherwise
+                    read "Open, Open, Open, Open" with nothing to choose
+                    between them. The visible text is inside the label, as
+                    WCAG's Label in Name asks. */}
+                <Button
+                  variant="quiet"
+                  aria-label={`Open ${row.displayName}`}
+                  onClick={() => setOpenId(row.id)}
+                >
                   Open
                 </Button>
               </span>

@@ -379,21 +379,35 @@
   padding-block-start: var(--s-4);
 }
 
+/*
+  A switch and the lines under it. Margins rather than a flex gap, because one
+  of those lines is a live region that is in the document from the first render
+  and empty nearly all the time: a gap would keep a hole open under every
+  switch for a sentence that is usually not there, where an empty element with
+  no margin takes no room at all.
+*/
 .team-access__role {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2);
+  display: block;
+}
+
+.team-access__role > p {
+  margin-block: var(--s-2) 0;
+}
+
+.team-access__role > p:empty {
+  margin-block: 0;
 }
 
 /*
-  Why a role cannot be switched off, said under the switch it is about. Ink and
-  medium against the slate regular of the line above it: a rule about this
-  person is a different kind of statement from a description of the role, and
-  the difference is weight rather than colour (docs/DESIGN-BRIEF.md section 2 —
-  hue carries meaning from the data and nothing else).
+  Why a role will not move, said under the switch it is about — the standing
+  rule (somebody's last role) and the refusal that has just come back from the
+  server, which reads the same way. Ink and medium against the slate regular of
+  the line above it: a rule about this person is a different kind of statement
+  from a description of the role, and the difference is weight rather than
+  colour (docs/DESIGN-BRIEF.md section 2 — hue carries meaning from the data
+  and nothing else).
 */
 .team-access__refusal {
-  margin: 0;
   color: var(--ink);
   font-weight: var(--w-medium);
 }
@@ -435,7 +449,7 @@
   cursor: pointer;
 }
 
-.access-switch:hover:enabled {
+.access-switch:not([aria-disabled='true']):hover {
   border-color: var(--brand);
 }
 
@@ -484,8 +498,13 @@
   background: var(--paper);
 }
 
-/* Greyed: a switch the rule refuses. It still says which way it is set. */
-.access-switch:disabled {
+/*
+  Greyed: a switch the rule refuses. It is `aria-disabled` rather than
+  `disabled`, so it keeps its place in the tab order and the line beneath it
+  can actually be reached; the press is refused in the handler. Every rule
+  below therefore reads the attribute, not the pseudo-class.
+*/
+.access-switch[aria-disabled='true'] {
   color: var(--slate);
   cursor: not-allowed;
 }
@@ -496,20 +515,20 @@
   track when this was walked in a browser — a switch nobody may press must
   still say, at a glance, which way it is set.
 */
-.access-switch:disabled::after {
+.access-switch[aria-disabled='true']::after {
   border-color: var(--rule);
   background: var(--surface);
 }
 
-.access-switch:disabled[aria-checked='true']::after {
+.access-switch[aria-disabled='true'][aria-checked='true']::after {
   border-color: var(--slate);
   background: var(--slate);
 }
 
-.access-switch:disabled::before {
+.access-switch[aria-disabled='true']::before {
   background: var(--slate);
 }
 
-.access-switch:disabled[aria-checked='true']::before {
+.access-switch[aria-disabled='true'][aria-checked='true']::before {
   background: var(--paper);
 }

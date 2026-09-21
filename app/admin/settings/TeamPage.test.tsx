@@ -137,8 +137,10 @@ describe('TeamPage', () => {
     expect(screen.getByText('Owner')).toBeTruthy();
     // A job title reads under the name when there is one; the admin has none.
     expect(screen.getByText('Founder')).toBeTruthy();
-    // One press per row, and no row of "Add …" buttons anywhere.
-    expect(screen.getAllByRole('button', { name: 'Open' })).toHaveLength(2);
+    // One press per row, each named after the person it opens, and no row of
+    // "Add …" buttons anywhere.
+    expect(screen.getAllByRole('button', { name: /^Open / })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Open Iris Harbour' })).toBeTruthy();
     expect(
       screen.queryAllByRole('button', {
         name: /^Add (admin|finance|practitioner|lead practitioner)$/,
@@ -162,7 +164,7 @@ describe('TeamPage', () => {
     });
     expect(await screen.findByText('Hazel Harbour')).toBeTruthy();
     expect(screen.getByText('Iris Harbour')).toBeTruthy();
-    expect(screen.queryAllByRole('button', { name: 'Open' })).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: /^Open / })).toHaveLength(0);
     expect(screen.queryAllByRole('button', { name: 'Add a person' })).toHaveLength(0);
     expect(screen.queryAllByRole('button', { name: 'New temporary password' })).toHaveLength(0);
     expect(screen.queryAllByRole('button', { name: 'Suspend' })).toHaveLength(0);
@@ -170,8 +172,7 @@ describe('TeamPage', () => {
 
   it('opens the drawer on the row that was pressed', async () => {
     const { gets } = mount();
-    const opens = await screen.findAllByRole('button', { name: 'Open' });
-    fireEvent.click(opens[1] as HTMLElement);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Iris Harbour' }));
     expect(await screen.findByRole('dialog')).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Iris Harbour' })).toBeTruthy();
     expect(gets).toContain(`/api/team/${ADMIN.id}`);
@@ -179,8 +180,7 @@ describe('TeamPage', () => {
 
   it('closes the drawer on Escape and puts focus back on the row’s Open button', async () => {
     mount();
-    const opens = await screen.findAllByRole('button', { name: 'Open' });
-    const pressed = opens[1] as HTMLElement;
+    const pressed = await screen.findByRole('button', { name: 'Open Iris Harbour' });
     // A browser focuses a button it is given a click; jsdom does not.
     pressed.focus();
     fireEvent.click(pressed);

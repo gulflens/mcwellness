@@ -47,7 +47,7 @@ const UNAVAILABLE_MESSAGE =
 const CHECK_MESSAGE = 'Check the details above, then try again.';
 const GENERIC_MESSAGE = 'The profile could not be saved. Try again.';
 
-export const NOTES_HINT =
+const NOTES_HINT =
   'Contract terms and reminders. Nothing about health. The person may ask to see what is written here.';
 
 const FIELD_IDS = {
@@ -141,8 +141,14 @@ export function TeamProfileTab({
   profile: TeamProfile;
   draft: ProfileDraft;
   onDraft: (draft: ProfileDraft) => void;
-  /** Saved: read the profile back and tell the list its row has changed. */
-  onSaved: () => void;
+  /**
+   * Saved, carrying what was written. The drawer folds it into the profile it
+   * holds rather than waiting for the re-read: the two happen in one batch, so
+   * a screen that waited would draw the *old* job title once, beside the word
+   * "Saved.", for as long as the round trip takes — and would have nothing at
+   * all to show if the re-read then failed.
+   */
+  onSaved: (saved: ProfileBody) => void;
 }) {
   const { apiFetch } = useAuth();
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -225,7 +231,7 @@ export function TeamProfileTab({
       });
       if (res.ok) {
         setSaved(true);
-        onSaved();
+        onSaved(parsed.data);
         return;
       }
       const body = (await res.json().catch(() => null)) as { error?: string } | null;

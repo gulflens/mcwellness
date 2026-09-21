@@ -5,6 +5,7 @@ import {
   STAFF_ROLE_OPENS,
   canReactivate,
   canResetPassword,
+  canSuspend,
   canSwitchRole,
   type Role,
   type StaffRole,
@@ -76,7 +77,24 @@ export function TeamAccessTab({
   onChanged: () => void;
 }) {
   const { apiFetch } = useAuth();
+  /**
+   * A refusal about the whole tab — a sign-in that would not suspend, a
+   * password that could not be minted, and a `conflict`, which is about the
+   * role set rather than about one role.
+   */
   const [error, setError] = useState<string | null>(null);
+  /**
+   * A refusal about one switch, said beside that switch.
+   *
+   * Not at the top of the tab, which is where this started: at the drawer's
+   * narrower widths a refusal on Lead practitioner rendered above the fold and
+   * a sighted person saw only the snap-back, with no sentence anywhere on
+   * screen. Each switch therefore carries its own `role="alert"` region, empty
+   * and in the document from the first render — a live region mounted together
+   * with its text is the case screen readers handle least reliably, which the
+   * Profile tab's own saved-note comment says in as many words.
+   */
+  const [switchError, setSwitchError] = useState<{ role: StaffRole; message: string } | null>(null);
   const [password, setPassword] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<StaffRole | null>(null);
@@ -101,6 +119,7 @@ export function TeamAccessTab({
     if (inFlight.current) return;
     inFlight.current = true;
     setError(null);
+    setSwitchError(null);
     setPending(role);
     setBusy(true);
     // The switch moves first, because a press that answers nothing for half a
@@ -119,11 +138,19 @@ export function TeamAccessTab({
       // Back where it was: `held` is what was true before the press.
       onRoles(held);
       const code = await refusalCode(res);
-      setError(REFUSALS[code] ?? ACTION_ERROR);
-      if (code === 'conflict') onReload();
+      const message = REFUSALS[code] ?? ACTION_ERROR;
+      // A conflict is about the whole set — somebody else moved it underneath
+      // this press — so it is said once for the tab and the profile is read
+      // again. Everything else is about the one switch that moved.
+      if (code === 'conflict') {
+        setError(message);
+        onReload();
+      } else {
+        setSwitchError({ role, message });
+      }
     } catch {
       onRoles(held);
-      setError(ACTION_ERROR);
+      setSwitchError({ role, message: ACTION_ERROR });
     } finally {
       inFlight.current = false;
       setPending(null);
@@ -135,6 +162,7 @@ export function TeamAccessTab({
     if (inFlight.current) return;
     inFlight.current = true;
     setError(null);
+    setSwitchError(null);
     setBusy(true);
     try {
       const res = await apiFetch(`/api/team/${profile.id}/status`, {
@@ -160,6 +188,7 @@ export function TeamAccessTab({
     if (inFlight.current) return;
     inFlight.current = true;
     setError(null);
+    setSwitchError(null);
     setBusy(true);
     try {
       // Declared as JSON with an empty body, as every write on this API must be
@@ -183,8 +212,24 @@ export function TeamAccessTab({
     }
   }
 
-  const mayReset = profile.status === 'active' && canResetPassword(viewerRoles, held);
-  const maySuspend = !profile.locked && !profile.isYou && profile.status !== 'archived';
+  /**
+   * A temporary password is offered for a colleague and never for oneself.
+   * The API would allow it — `canResetPassword` is about who the reader is and
+   * whose sign-in it is, not about this — but Settings already has a Password
+   * screen for one's own, and resetting one's own sign-in from beside a
+   * colleague's controls is a surprise nobody asked for. `isYou` rather than a
+   * pure rule, because this is a decision about what to offer on this screen
+   * and `domain/shared` holds no rule that says it.
+   */
+  const mayReset =
+    !profile.isYou && profile.status === 'active' && canResetPassword(viewerRoles, held);
+  /**
+   * `canSuspend` rather than `!profile.isYou` spelled out again: the round's
+   * principle is that the pure rules decide, and this is the rule the route
+   * asks (`app/api/team/routes.ts`) before it answers `not_yourself`.
+   */
+  const maySuspend =
+    !profile.locked && canSuspend(viewerUserId, profile.id) && profile.status !== 'archived';
 
   return (
     <div className="team-access">
@@ -211,30 +256,54 @@ export function TeamAccessTab({
               on: !on,
             });
             const opensId = `team-access-${role}-opens`;
+            const whyId = `team-access-${role}-why`;
+            const showWhy = refusal === 'last_role';
             return (
               <div key={role} className="team-access__role">
                 <button
                   type="button"
                   role="switch"
                   aria-checked={on}
-                  aria-describedby={opensId}
+                  // Both, when there is a reason: the line saying what the role
+                  // opens, and the line saying why this one will not move.
+                  aria-describedby={showWhy ? `${opensId} ${whyId}` : opensId}
                   aria-busy={pending === role}
-                  disabled={refusal !== null}
+                  // `aria-disabled`, not `disabled`, so the switch keeps its
+                  // place in the tab order: a `disabled` button cannot be
+                  // focused, and the whole point of the line beneath it is that
+                  // somebody has to be able to reach it to hear why. The press
+                  // is refused here instead — it does nothing and leaves focus
+                  // exactly where it is, which is what the attribute promises.
+                  aria-disabled={refusal !== null}
                   className="access-switch"
-                  onClick={() => void flip(role, !on)}
+                  onClick={() => {
+                    if (refusal !== null) return;
+                    void flip(role, !on);
+                  }}
                 >
                   <span className="access-switch__label">{STAFF_ROLE_LABELS[role]}</span>
                 </button>
                 <p id={opensId} className="small muted">
                   {STAFF_ROLE_OPENS[role]}
                 </p>
-                {/* The one refusal that is about this role rather than about the
+                {/* The one rule that is about this role rather than about the
                     whole row, so it is said where it applies. The lock line
                     above already covers an owner's row, and an owner reading
                     their own row is that same line. */}
-                {refusal === 'last_role' ? (
-                  <p className="small team-access__refusal">{REFUSALS.last_role}</p>
+                {showWhy ? (
+                  <p id={whyId} className="small team-access__refusal">
+                    {REFUSALS.last_role}
+                  </p>
                 ) : null}
+                {/*
+                  This switch's own refusal, in the document from the first
+                  render so a screen reader has somewhere to announce into, and
+                  beside the control it is about so a sighted person reads it
+                  without scrolling back to the top of the tab.
+                */}
+                <p role="alert" className="small team-access__refusal">
+                  {switchError?.role === role ? switchError.message : ''}
+                </p>
               </div>
             );
           })}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Role } from '@domain/shared';
-import { TeamProfile } from '../../api/team/schema';
+import { TeamProfile, type ProfileBody } from '../../api/team/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Note } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
@@ -67,24 +67,33 @@ export function TeamMemberDrawer({
    */
   const [draft, setDraft] = useState<ProfileDraft | null>(null);
   const [generation, setGeneration] = useState(0);
-  // A re-read never blanks what is on screen: the drawer keeps showing the
-  // profile it has until the next answer lands, or says it could not be read.
+  /**
+   * Read the profile again. Only the FIRST read can leave the drawer saying it
+   * could not be read: once a profile is on screen it stays there, because a
+   * re-read that fails says nothing about what is already true — and the one
+   * that follows a save would otherwise replace a profile that was just
+   * written with "could not be loaded", leaving the person unable to tell
+   * whether it landed. It did.
+   */
   const reload = () => setGeneration((g) => g + 1);
 
   useEffect(() => {
     let live = true;
+    const failed = (was: State): State => (was.kind === 'ready' ? was : { kind: 'error' });
     void apiFetch(`/api/team/${memberId}`)
       .then(async (res) => {
         if (!res.ok) {
-          if (live) setState({ kind: 'error' });
+          if (live) setState(failed);
           return;
         }
         const parsed = TeamProfile.safeParse(await res.json());
         if (live)
-          setState(parsed.success ? { kind: 'ready', profile: parsed.data } : { kind: 'error' });
+          setState((was) =>
+            parsed.success ? { kind: 'ready', profile: parsed.data } : failed(was),
+          );
       })
       .catch(() => {
-        if (live) setState({ kind: 'error' });
+        if (live) setState(failed);
       });
     return () => {
       live = false;
@@ -100,6 +109,13 @@ export function TeamMemberDrawer({
   function applyStatus(status: TeamProfile['status']) {
     setState((was) =>
       was.kind === 'ready' ? { kind: 'ready', profile: { ...was.profile, status } } : was,
+    );
+  }
+
+  /** What was just written, folded in, so the screen is true before the re-read lands. */
+  function applySaved(saved: ProfileBody) {
+    setState((was) =>
+      was.kind === 'ready' ? { kind: 'ready', profile: { ...was.profile, ...saved } } : was,
     );
   }
 
@@ -151,9 +167,12 @@ export function TeamMemberDrawer({
                 profile={state.profile}
                 draft={draft ?? draftFrom(state.profile)}
                 onDraft={setDraft}
-                onSaved={() => {
-                  // Saved, so the boxes and the row agree again: drop the draft
-                  // and let what comes back from the server show through.
+                onSaved={(saved) => {
+                  // Saved, so the boxes and the row agree again: fold what was
+                  // written into the profile this drawer holds, drop the draft
+                  // so it shows through, and read the row back for anything the
+                  // server decided that this did not send.
+                  applySaved(saved);
                   setDraft(null);
                   reload();
                   onChanged();
