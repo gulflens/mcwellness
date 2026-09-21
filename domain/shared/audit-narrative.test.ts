@@ -934,23 +934,36 @@ describe('staff management (round 58, docs/superpowers/specs/2026-09-21-team-pro
   // A working role taken away for the first time (app.revoke_staff_role,
   // migration 923), a colleague's staff profile (staff_profile, migration
   // 922) and the two application actions app/api/team/routes.ts already
-  // writes with logAction: password_reset and password_reset_refused. Every
-  // one of these five is Settings › Team's own trail, a screen that is
-  // English only like every console screen
-  // (tests/lint/console-is-english.test.ts) — so unlike every other sentence
-  // in this file, the Arabic slot deliberately holds the same English words
-  // rather than a translation nobody at the practice would ever read; both
-  // locales are still exercised so a locale switch is proven to change
-  // nothing here.
+  // writes with logAction: password_reset and password_reset_refused.
+  //
+  // Fix round 1 (review of round 58, 2026-09-22): the first draft of these
+  // five put the same English words in the Arabic slot, on the theory that
+  // Settings › Team is a console screen and console screens are English
+  // only. That broke the catalogue's own convention — every comparable
+  // staff-only, never-household-facing sentence elsewhere in this file
+  // (`audit_log.audit.activity`, the equipment register, the books) carries
+  // real Arabic regardless of who is likely to read it — so these five now
+  // do too, reusing the house's own words rather than inventing synonyms:
+  // `ENTITY.user_role`/`app_user` for "role"/"user", the `أزال ... عن ...`
+  // shape that already removes a mark from a person
+  // (contact.update's is_legal_guardian case), `سجّل`/`غيّر` for
+  // "recorded"/"changed" (consent.insert, portal_invite.update), `أصدر` for
+  // "issued" (report.report.issued), `رُفض له` for a refusal
+  // (report.report.supersede_refused/deliver_refused), `كلمة مرور` for
+  // "password" (app/client/i18n/dictionary.ts) and `موظف` for the person the
+  // practice employs (docs/CONSENT/health-data.ar.md and its siblings).
   it('says a working role was taken away, naming no role', () => {
     const event1 = event({ entityType: 'user_role', action: 'delete' });
     expect(narrate(event1, 'en')?.sentence).toBe('Hazel Harbour took a role away from a colleague');
-    expect(narrate(event1, 'ar')?.sentence).toBe('Hazel Harbour took a role away from a colleague');
+    expect(narrate(event1, 'ar')?.sentence).toBe('Hazel Harbour أزال دورًا عن موظف');
   });
 
   it("tells recording a colleague's staff profile from changing one", () => {
     expect(narrate(event({ entityType: 'staff_profile', action: 'insert' }), 'en')?.sentence).toBe(
       "Hazel Harbour recorded a colleague's staff profile",
+    );
+    expect(narrate(event({ entityType: 'staff_profile', action: 'insert' }), 'ar')?.sentence).toBe(
+      'Hazel Harbour سجّل ملف موظف',
     );
     expect(
       narrate(
@@ -958,6 +971,12 @@ describe('staff management (round 58, docs/superpowers/specs/2026-09-21-team-pro
         'en',
       )?.sentence,
     ).toBe("Hazel Harbour changed a colleague's staff profile");
+    expect(
+      narrate(
+        event({ entityType: 'staff_profile', action: 'update', changedFields: ['job_title'] }),
+        'ar',
+      )?.sentence,
+    ).toBe('Hazel Harbour غيّر ملف موظف');
   });
 
   it('says a temporary password was minted, and says a refusal of one', () => {
@@ -965,8 +984,14 @@ describe('staff management (round 58, docs/superpowers/specs/2026-09-21-team-pro
       narrate(event({ entityType: 'app_user', action: 'password_reset' }), 'en')?.sentence,
     ).toBe('Hazel Harbour minted a temporary password for a colleague');
     expect(
+      narrate(event({ entityType: 'app_user', action: 'password_reset' }), 'ar')?.sentence,
+    ).toBe('Hazel Harbour أصدر كلمة مرور مؤقتة لموظف');
+    expect(
       narrate(event({ entityType: 'app_user', action: 'password_reset_refused' }), 'en')?.sentence,
     ).toBe('Hazel Harbour was refused a temporary password for a colleague');
+    expect(
+      narrate(event({ entityType: 'app_user', action: 'password_reset_refused' }), 'ar')?.sentence,
+    ).toBe('Hazel Harbour رُفض له إصدار كلمة مرور مؤقتة لموظف');
   });
 
   it('names no role, no field value and no person in any of the five sentences', () => {
@@ -982,6 +1007,23 @@ describe('staff management (round 58, docs/superpowers/specs/2026-09-21-team-pro
       expect(sentence, one.action).not.toMatch(/admin|finance|practitioner|owner/i);
       expect(sentence, one.action).not.toContain('job_title');
       expect(sentence, one.action).not.toContain('private_notes');
+    }
+  });
+
+  it('writes all five in Arabic too', () => {
+    const events: AuditEvent[] = [
+      event({ entityType: 'user_role', action: 'delete' }),
+      event({ entityType: 'staff_profile', action: 'insert' }),
+      event({ entityType: 'staff_profile', action: 'update', changedFields: ['job_title'] }),
+      event({ entityType: 'app_user', action: 'password_reset' }),
+      event({ entityType: 'app_user', action: 'password_reset_refused' }),
+    ];
+    for (const one of events) {
+      const sentence = narrate(one, 'ar')?.sentence ?? '';
+      expect(/[؀-ۿ]/.test(sentence), one.action).toBe(true);
+      // Not the English-in-both-slots defect fix round 1 found: the Arabic
+      // sentence must actually differ from the English one.
+      expect(sentence, one.action).not.toBe(narrate(one, 'en')?.sentence);
     }
   });
 
