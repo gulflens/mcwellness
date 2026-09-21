@@ -53,7 +53,7 @@ export function canGrantTo(actorUserId: string, targetUserId: string): boolean {
  * button. So an admin never mints one for an owner: that would be an admin
  * becoming the owner in one press, and unlike suspending, nothing in the
  * database stands beneath this act — the password is set at the sign-in
- * service, past row security (trunk round 57, 2026-09-22). An owner may, for
+ * service, past row security (trunk round 57, 2026-09-21). An owner may, for
  * another owner, which is how a locked-out owner gets back in.
  *
  * The rule permits by the absence of `owner` from a list, so an empty list is

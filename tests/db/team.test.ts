@@ -203,7 +203,7 @@ describe('who works at the practice', () => {
     ).toBe(404);
   });
 
-  // Trunk round 57, 2026-09-22. Suspending the owner is refused by row
+  // Trunk round 57, 2026-09-21. Suspending the owner is refused by row
   // security; a password is set at the sign-in service, past row security, so
   // the route is the only thing that can refuse it.
   it("never lets an admin mint a password for the owner's sign-in", async () => {

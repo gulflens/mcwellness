@@ -125,7 +125,7 @@ describe('TeamPage', () => {
     ).toHaveLength(3);
   });
 
-  // Trunk round 57, 2026-09-22: a temporary password is the sign-in itself, so
+  // Trunk round 57, 2026-09-21: a temporary password is the sign-in itself, so
   // an admin is offered none for an owner (domain/shared/staff.ts).
   it("offers an admin no temporary password on an owner's row", async () => {
     mount({
