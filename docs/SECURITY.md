@@ -232,14 +232,39 @@ whatever else the cell allows (`app.client_erasure_gate`, migration 100).
 | **Reports** | all | all | all | own schedule | — | issued reports about a client they are the legal guardian of, or about themselves once they are an adult, and a superseded version the household was actually sent | `db/policies/reports/reports.sql` (`report_readers`); a delivery record is the practice's own and no household reads it (`report_delivery_readers`). Erasure-gated. The superseded half is `status = 'superseded' and app.report_was_delivered(id)` in `report_readers`: section 7.3's "never a superseded version they were not sent", which means a version the practice did send stays readable, because the household may already be holding the paper. **The API is wider**: `report.list` and `report.read` admit any contact of the record and any practitioner, so a non-guardian contact passes the route and the row refuses. A draft is nobody's but the practice's. |
 | **Portal invitations and requests** | all | all | requests only; **—** for invitations | — | — | its own record's requests; **—** for invitations | `db/policies/portal/access.sql` (`portal_access_readers`, `portal_request_readers`), erasure-gated. An invitation is the owner's and an admin's alone — not the lead practitioner's, and above all not a household's, even its own: handing out access to a record is the practice's act, and a household that could read the table could read the state of every invitation the practice has ever issued. A request is the household's own sentence, so a contact reads and writes its own client's and the three office roles read and handle; **a household may ask and may see that the practice has the ask, and may not mark it handled** (`portal_request_handlers`). A practitioner and a finance account read neither table at all. |
 | **The audit trail**, the activity feed and the access report | all | all | all | — | — | — | `db/policies/core/audit_log.sql` (`audit_log_readers`). The role lists agree with `audit.read` and `audit.activity` exactly. **Everything else about the trail lives in the routes and not in the policy**: the erasure gate, the reason a sensitive read must carry, and the 404 for a record the caller may not name are all in `app/api/audit/activity.ts` and `app/api/audit/timeline.ts`, so a query issued outside those routes has only the role test above. Writing to the trail is a different matter: every role inserts its own read rows, which is what makes the access report possible. |
+| **A member of staff's own profile** — job title, start date, an emergency contact, the owners' notes | all | — | — | — | — | — | `db/policies/core/staff_profile.sql` (`owners_only`, restrictive, `for all to app_role`, `using` and `with check` both `app.actor_has_role('owner')`), with `tenant_isolation` beneath it. An owner and nobody else, **the person themselves excluded**: a note about somebody that they can read is a different thing from the one the operator asked for on 21 September 2026, and the columns are on a table of their own for exactly that reason — `app_user`, which the paragraphs below say everybody reads, is no place for a third person's telephone number or an owner's notes about a colleague. One owner reads the other owner's profile. **The API is narrower on writing**: the policy admits any owner, and `canEditProfile` (`PATCH /api/team/:id`) refuses one owner saving the other's, so an owner's own details are that owner's alone to change. `GET /api/team` selects `job_title` only when the reader is an owner rather than leaning on the row rule to answer null. The trail records that the emergency contact's name, their number and the notes changed, and never what they said (migration `967`). |
 
-Two more things are true of the whole table. `app_user`, `user_role`,
+Three more things are true of the whole table. `app_user`, `user_role`,
 `practitioner`, `credential` and `service_type` carry tenant isolation and no
 read narrowing at all, so anybody signed in to the practice — a household
 included — can read who works there and what they are certified for; that is
 the practice's own staff list rather than a household's data, and it is written
-down here so it reads as a fact somebody checked. And every read of personal
-data is itself logged (layer 7), so this table says who may look, not who has.
+down here so it reads as a fact somebody checked. `staff_profile` is the one
+staff table that is not like that, which is the row above.
+
+**Who may change those rows is a different question, and since trunk round 58
+(2026-09-21) the answer is the owners.** The team **list** is an owner's and an
+admin's (`staff.manage`). Everything else on Settings › Team — adding a person,
+opening and saving a profile, switching a role on or off, suspending and
+reactivating a sign-in, and minting a temporary password — is an owner's alone
+(`staff.access.manage`), because a temporary password is a sign-in, so an admin
+who minted one for a colleague holding Finance would have the books by one
+remove. `db/policies/core/role_guard.sql` says the same beneath: an insert on
+`user_role` is an owner's, except a `client_contact` row, which an admin still
+inserts because an admin invites a household; an update on `app_user` is an
+owner's, except a row holding no role but `client_contact`. `credential` and
+`service_type` keep the older rule, the owner or an admin. **And an ownership
+row and an owner's sign-in are locked for every caller**, not only for
+`app_role`: the triggers of migration `923` refuse any update or delete of a
+row whose role is `owner`, and refuse for a row holding ownership any status
+other than `active`, any move of a linked `auth_id`, and any change of the name,
+address or telephone by anybody but that person. They are `enable always` and
+carry no bypass setting, so undoing them is a migration's act. A working role is
+taken away only by `app.revoke_staff_role`, which is the owners' and leaves
+everyone with at least one working role.
+
+And every read of personal data is itself logged (layer 7), so this table says
+who may look, not who has.
 
 ### The two absences, which are decisions
 
