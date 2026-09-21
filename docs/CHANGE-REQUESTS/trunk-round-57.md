@@ -1,6 +1,6 @@
-## Round 57 — an admin never mints a password for an owner (2026-09-22)
+## Round 57 — an admin never mints a password for an owner (2026-09-21)
 
-Found by reading, on 22 September 2026, while designing the profile the
+Found by reading, on 21 September 2026, while designing the profile the
 operator asked Settings › Team to become (the round 58 design, section 2; not
 yet merged). Not by an incident: nothing in the trail suggests it was ever
 done.

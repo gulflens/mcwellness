@@ -2644,3 +2644,98 @@ filter beside Status, and every list in the console has a line between its
 columns. A client with no address yet appears only under "Any emirate". After
 future passes, clicking back into the window and choosing any section in the
 sidebar brings the new version by itself.
+
+## What was done on 2026-09-21: the thirty-third live pass — an admin never mints a password for an owner
+
+Production runs `main` `190620fb`, build `01a0c518`. No migration and no policy
+file: `main` holds 107 migration files and both databases stand at 107, and
+nothing was written to either.
+
+**Why it began.** The operator asked for Settings › Team to become an
+employee's profile with access that switches on and off. Reading the team's
+routes to design that found a fault in one of them, which was fixed first, by
+the operator's choice, as round 57 (pull request 207,
+`docs/CHANGE-REQUESTS/trunk-round-57.md`). It was found by reading. Nothing in
+the trail suggests it was ever used.
+
+**The word was one word.** With round 57 merged, the operator was told that
+production still had the fault until a build and a restart, that the repository
+is public and the merge describes it, and was asked when it should go live,
+with the recommendation "soon". The answer, at 21:49 +04, was "Soon". That was
+read as the instruction, said back to the operator as such before anything was
+uploaded, and the pass began at 21:50. It is a reading of one word, not a
+quotation of "go live".
+
+**What went live.**
+
+- `POST /api/team/:id/password` reads the target's roles and answers 403 for an
+  owner unless the person asking is an owner, before a password is minted and
+  before the sign-in service is called. Until this pass an admin could be shown
+  a working password for the owner's sign-in: suspending an owner was always
+  refused by row security underneath, and a password is set at the sign-in
+  service, where nothing is underneath.
+- The refusal is written to the trail as `password_reset_refused`, under the
+  asker's id. With the button gone from the screen, that 403 can only be a
+  request made by hand.
+- The rule refuses an empty list of roles, so a check that could not see the
+  target never answers yes.
+- Settings › Team offers an admin no **New temporary password** on an owner's
+  row. An owner may still mint one for another owner.
+
+**The pass.** No other session was running on this machine. Before-state at
+17:50:44 UTC: entry `index-xXdM6r0T.js`, shell stylesheet `index-DH9UTXuv.css`,
+team screen `TeamPage-CZ6CXZet.js`, health 200. Stored build settings read back
+and sent unchanged (Node 24, `hono`, root `mcwellness`, output `.`,
+`build:production`, `app/api/start.mjs`, npm). Archive
+`mcwellness-190620fb.tar.gz`, 6,600,315 bytes, with its `mcwellness/` root
+folder, and `canResetPassword` read back out of the archive before it left. TUS
+create 201 and PATCH 204 with the offset equal to the size. The upload keys were
+passed on the command line this time and not from a file of mode 0600 as the
+thirty-second pass did; they are the file browser's own, scoped to the upload
+and expiring in six hours. That was a lapse and not a variant: this file's own
+recipe says never on a command line, and the file of mode 0600 remains the
+recipe. Build asked 17:51:59 UTC, read `completed` 17:52:54;
+the served names changed by 17:53:17.
+
+**Proved to be this tree.** The stylesheet's name did not move, and should not
+have: the round changed no style. So the proof is the rule itself, read off the
+live site. The entry is `index-7HRUk0iB.js`; the team screen's script, read out
+of it, is `TeamPage-MhA2bxdf.js`, 5,957 bytes against the old 5,816, and it
+holds
+
+``t.length===0?!1:!t.includes(`owner`)||e.includes(`owner`)``
+
+which is `canResetPassword` as the minifier writes it, the empty-list refusal
+from the round's reviews included. The old chunk, saved before the upload,
+holds no `includes` of `owner` at all. Both old names answer 404, and so does a
+name that never existed.
+
+**The process is the new one**, which is the half that matters: the rule on the
+screen is a courtesy and the rule in the route is the boundary, and both came
+out of one archive into one build. The runtime log holds fresh start-up blocks
+at 17:52:49, 17:52:55 and 17:53:17, each ending "Serving the built app from
+dist/" and "API listening", with `started_at` 17:52:49 against
+`last_deployed_at` 17:52:54 and no error line. **No restart — sixteenth
+consecutive.** Health 200 in 0.49 s, deep 200 in 0.39 s.
+
+**Not checked, and why.** The refusal was not provoked on production: it takes
+an admin's sign-in, which is a colleague's, and an attempt on the owner's
+password is not something to stage against the practice's real sign-in service.
+It was watched answering 200 and then 403 against a real database before merge,
+with the sign-in provider spied on and never called, and CI's `verify-db` ran
+the same test on the merged commit. Round 56's new-build check, which the
+thirty-second pass said could first be seen on the pass after it, was not
+watched either: it needs the owner's own open window.
+
+**Corrected in this record's pull request.** Round 57's note, one comment in
+`domain/shared/staff.ts` and two in its tests were dated 22 September. The
+laptop they were written on keeps a clock ten hours ahead of UTC, six ahead of
+Dubai; in the
+practice's time the round, its merge (21:45 +04) and this pass all fell on the
+21st. Dates only.
+
+**For the owner.** Nothing to do, and nothing looks different on your own
+screen. Click back into the window and choose any section in the sidebar and it
+brings this version by itself; this is the first pass where that can be seen.
+For an admin, the owner's row on Settings › Team no longer shows **New temporary
+password**.
