@@ -13,7 +13,7 @@ import { HealthTab } from './HealthTab';
 import { LocationsTab } from './LocationsTab';
 import { OverviewTab } from './OverviewTab';
 import { ReportsTab } from '../reports/ReportsTab';
-import { Tabs, TabPanel, type Tab } from './Tabs';
+import { Tabs, TabPanel, type Tab } from '../../shell/components/Tabs';
 import {
   canSeeFullRecord,
   canWriteConcerns,

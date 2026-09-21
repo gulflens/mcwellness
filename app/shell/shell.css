@@ -319,6 +319,15 @@ a.rail__child.rail__child--current {
   color: var(--surface);
 }
 
+/* The panel a tab strip switches between (round 58,
+   docs/SPEC/OWNERSHIP.md): a plain focus target, no border or fill of its
+   own, so it never competes with what it holds. Copied from
+   app/admin/clients/clients.css, which keeps its own identical rule for that
+   stream to remove later — the CoordinateFields precedent. */
+.tabs__panel {
+  outline: none;
+}
+
 /* The schedule's three ways through — the week, the board, the day map — sit
    in a toolbar beside the date field, so they align to its end. Links still,
    because they go somewhere; they only take the switcher's look. */

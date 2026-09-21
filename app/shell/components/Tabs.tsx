@@ -5,8 +5,10 @@ export type Tab = { id: string; label: string };
 /**
  * A real tab strip (task brief item 1): `role="tablist"`, arrow-key
  * movement between tabs (Home/End to the ends), automatic activation on
- * focus — the WAI-ARIA authoring practice, and the shell has no tab
- * component of its own yet to reuse (app/shell/components/Controls.tsx).
+ * focus — the WAI-ARIA authoring practice. Moved here from the client
+ * record (trunk round 58, docs/SPEC/OWNERSHIP.md) because two modules need
+ * it: the client record's own drawer and Settings › Team's new profile
+ * drawer.
  */
 export function Tabs({
   tabs,
