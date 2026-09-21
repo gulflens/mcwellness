@@ -23,12 +23,24 @@ import { readTarget, toMember } from './target';
  * see the `catch` below for what that covers and what it does not.
  *
  * `staff_profile` is the owners' alone for reading and for writing
- * (db/policies/core/staff_profile.sql), and its emergency contact and private
- * notes never reach the trail's values (migration 967). Opening a profile is a
- * read of a person and is logged as one, as the list already is.
+ * (db/policies/core/staff_profile.sql), and none of its five columns reaches the
+ * trail's values (migration 967). Opening a profile is a read of a person and of
+ * the profile row, and both are logged, as the list already is.
+ *
+ * **A staff row whose `app_user.email` is null cannot have its profile saved at
+ * all**, because `ProfileBody.email` is required and this route sends whatever
+ * it parsed. That is unreachable today and is a reachable column state, which is
+ * why it is written down rather than guarded: `app.bootstrap_practice` refuses
+ * an owner with no address, `POST /api/team` always writes one, and the one
+ * insert in the platform that leaves `email` null makes a household's contact
+ * (`app/api/portal/access.ts`), whom `STAFF_CLAUSES` answers 404 for. The day a
+ * member of staff arrives without an address, this form is the thing that cannot
+ * represent them, and the fix is a nullable address on the wire rather than
+ * anything here.
  */
 
 type ProfileColumns = {
+  id: string;
   job_title: string | null;
   started_on: string | null;
   emergency_contact_name: string | null;
@@ -37,7 +49,7 @@ type ProfileColumns = {
 };
 
 const PROFILE_SQL =
-  'select job_title, started_on::text as started_on, emergency_contact_name, ' +
+  'select id, job_title, started_on::text as started_on, emergency_contact_name, ' +
   'emergency_contact_phone, private_notes from staff_profile ' +
   'where user_id = $1 and tenant_id = app.current_tenant_id()';
 
@@ -73,6 +85,14 @@ export function mountTeamProfile(api: Hono<ApiEnv>, deps: TeamProfileDeps): void
     // (design section 6).
     await logReads(db, 'app_user', [{ id: target.id, clientId: null }], 'read');
     const held = (await db.query<ProfileColumns>(PROFILE_SQL, [target.id])).rows[0];
+    // And a read of the profile row itself, which is the more sensitive of the
+    // two: an emergency contact is a third person's name and number, and the
+    // notes are the owners' own words about a colleague. Logged only when a row
+    // came back, because a read row for a row that is not there would say
+    // somebody looked at something that does not exist.
+    if (held !== undefined) {
+      await logReads(db, 'staff_profile', [{ id: held.id, clientId: null }], 'read');
+    }
     const member = toMember(
       {
         id: target.id,

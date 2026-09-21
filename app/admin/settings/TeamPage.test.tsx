@@ -117,6 +117,12 @@ function mount(
     if (url === `/api/team/${ADMIN.id}` && method === 'GET') {
       return json(ADMIN_PROFILE);
     }
+    // A role switched on: the drawer's own request, answered the way the API
+    // answers it, so the list behind the drawer reloads for real.
+    if (url === `/api/team/${ADMIN.id}/roles/finance` && method === 'PUT') {
+      posts.push({ url, body: JSON.parse(String(init?.body)) });
+      return json({ ok: true });
+    }
     return json({ error: 'not_found' }, 404);
   }) as unknown as typeof fetch;
   render(
@@ -188,6 +194,40 @@ describe('TeamPage', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(document.activeElement).toBe(pressed);
+  });
+
+  /*
+   * The one fault of this round that a browser found and no test could: a
+   * successful role switch reloads the list behind the drawer, and that reload
+   * used to throw the keyboard from the switch it had just pressed to the
+   * drawer's close button. It happens because `useDrawer` lists `onClose` among
+   * its effect's dependencies, so a fresh arrow function on every render of this
+   * page tears the effect down and sets it up again — and setting it up again
+   * focuses the drawer's first control. Holding `closeDrawer` and
+   * `drawerChanged` still across renders is the whole fix, and nothing but this
+   * case would go red the day somebody inlines either of them again.
+   */
+  it('leaves focus on the switch that was pressed while the list reloads behind the drawer', async () => {
+    const { gets } = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Iris Harbour' }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    await screen.findByRole('heading', { name: 'Iris Harbour' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+
+    const finance = screen.getByRole('switch', { name: 'Finance' });
+    // A browser focuses a button it is given a click; jsdom does not.
+    finance.focus();
+    expect(document.activeElement).toBe(finance);
+
+    const listReads = () => gets.filter((url) => url === '/api/team').length;
+    const before = listReads();
+    fireEvent.click(finance);
+    // The list really does reload: that is what this case needs to have happened
+    // before it asks where the keyboard is.
+    await waitFor(() => expect(listReads()).toBeGreaterThan(before));
+    expect(finance.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(finance);
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
   it('creates a sign-in and shows the temporary password once', async () => {

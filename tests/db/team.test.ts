@@ -428,6 +428,50 @@ describe('who works at the practice', () => {
     expect((await h.callAs('GET', `/api/team/${PORTAL.motherUser}`, OWNER_AUTH)).status).toBe(404);
   });
 
+  it('logs a read of the profile row as well, and only where there is one', async () => {
+    const profileReads = async (): Promise<number> => {
+      const { rows } = await h.owner.query<{ n: string }>(
+        "select count(*)::text as n from audit_log where action = 'read' " +
+          "and entity_type = 'staff_profile'",
+      );
+      return Number(rows[0]?.n);
+    };
+    const readsOf = async (entityType: string, entityId: string): Promise<number> => {
+      const { rows } = await h.owner.query<{ n: string }>(
+        "select count(*)::text as n from audit_log where action = 'read' " +
+          'and entity_type = $1 and entity_id = $2 and actor_id = $3',
+        [entityType, entityId, IDS.ownerA],
+      );
+      return Number(rows[0]?.n);
+    };
+
+    // Nobody's profile row yet: one read, of the person, and nothing else — a
+    // read row for a row that was not there would say somebody looked at
+    // something that does not exist.
+    const bare = await addColleague('Basil Creek', 'basil.creek@example.com', ['practitioner']);
+    const before = await profileReads();
+    expect((await h.callAs('GET', `/api/team/${bare.userId}`, OWNER_AUTH)).status).toBe(200);
+    expect(await readsOf('app_user', bare.userId)).toBe(1);
+    expect(await profileReads()).toBe(before);
+
+    // And with a row: `staff_profile` holds the most sensitive rows this round
+    // adds, so opening one is logged as a read of them and not only of the
+    // person, by the row's own id, as every other read on this platform is.
+    const held = await addColleague('Willow Orchard', 'willow.orchard@example.com', ['finance']);
+    await h.owner.query(
+      'insert into staff_profile (tenant_id, user_id, job_title, created_by) ' +
+        'values ($1, $2, $3, $4)',
+      [IDS.tenantA, held.userId, 'Coordinator', IDS.ownerA],
+    );
+    const { rows: profileRow } = await h.owner.query<{ id: string }>(
+      'select id from staff_profile where user_id = $1',
+      [held.userId],
+    );
+    expect((await h.callAs('GET', `/api/team/${held.userId}`, OWNER_AUTH)).status).toBe(200);
+    expect(await readsOf('app_user', held.userId)).toBe(1);
+    expect(await readsOf('staff_profile', profileRow[0]?.id ?? '')).toBe(1);
+  });
+
   it('saves the name, the phone and all five profile fields, empties a note to null, and keeps the note out of the trail', async () => {
     const { userId } = await addColleague('Sage Ridge', 'sage.ridge@example.com', ['practitioner']);
     const full = profileBody('Sage Quarry', 'sage.ridge@example.com', {
@@ -547,17 +591,20 @@ describe('who works at the practice', () => {
     const { userId, authId } = await addColleague('Maple Dune', 'maple.dune@example.com', [
       'practitioner',
     ]);
-    // A constraint that exists for this one case, added and dropped by the
-    // superuser around the call. The failure has to be the DATABASE refusing a
-    // write that reached it, after the address has already moved — not a body
-    // the route could have refused itself, which is what ruling R6 of round
-    // 58's review took out of this test.
-    await h.owner.query(
-      'alter table staff_profile add constraint zz_test_refuses ' +
-        "check (job_title is distinct from 'Refuse this title')",
-    );
     const setEmail = vi.spyOn(h.authAdmin, 'setEmail');
     try {
+      // A constraint that exists for this one case, added and dropped by the
+      // superuser around the call. The failure has to be the DATABASE refusing
+      // a write that reached it, after the address has already moved — not a
+      // body the route could have refused itself, which is what ruling R6 of
+      // round 58's review took out of this test. Added INSIDE the try whose
+      // finally drops it: added outside, a failure between the two statements
+      // would leave the constraint on the table and take every case after this
+      // one down with it.
+      await h.owner.query(
+        'alter table staff_profile add constraint zz_test_refuses ' +
+          "check (job_title is distinct from 'Refuse this title')",
+      );
       const res = await h.callAs(
         'PATCH',
         `/api/team/${userId}`,

@@ -994,6 +994,21 @@ describe('staff management (round 58, docs/superpowers/specs/2026-09-21-team-pro
     ).toBe('Hazel Harbour رُفض له إصدار كلمة مرور مؤقتة لموظف');
   });
 
+  it('reads a staff profile as a sentence and never as a table name', () => {
+    // Opening a profile logs a read of the row as well as of the person (round
+    // 58's final review, F2). There is no case of its own for it — the generic
+    // read sentence is the right one — but without a word in `ENTITY` the
+    // generic branch falls back to the table's own name, which reads as an
+    // English word dropped into the middle of an Arabic sentence. `ملف موظف` is
+    // the phrase this round's own five sentences already use.
+    const read = event({ entityType: 'staff_profile', action: 'read' });
+    expect(narrate(read, 'en')?.sentence).toBe('Hazel Harbour viewed the staff profile');
+    expect(narrate(read, 'ar')?.sentence).toBe('Hazel Harbour اطّلع على ملف موظف');
+    for (const locale of ['en', 'ar'] as const) {
+      expect(narrate(read, locale)?.sentence, locale).not.toContain('staff_profile');
+    }
+  });
+
   it('names no role, no field value and no person in any of the five sentences', () => {
     const events: AuditEvent[] = [
       event({ entityType: 'user_role', action: 'delete' }),

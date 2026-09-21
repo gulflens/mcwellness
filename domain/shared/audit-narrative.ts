@@ -149,6 +149,14 @@ const ENTITY: Record<string, Text> = {
   fiscal_year: t('financial year', 'السنة المالية'),
   account: t('account', 'الحساب'),
   accounting_setting: t("the books' settings", 'إعدادات الدفاتر'),
+  // Settings › Team (round 58,
+  // docs/superpowers/specs/2026-09-21-team-profiles-and-access-design.md
+  // section 6). It needs a word of its own even though the generic read
+  // sentence is the right sentence: without one, the fallback below is the
+  // table's own name, and "اطّلع على staff profile" is an English word dropped
+  // into the middle of an Arabic sentence. `ملف موظف` is the phrase this file's
+  // five staff sentences already use.
+  staff_profile: t('staff profile', 'ملف موظف'),
 };
 
 /** The two kinds a report can be (docs/SPEC/reports-v1.md section 1). */

@@ -91,8 +91,9 @@ async function switchRole(c: Context<ApiEnv>, on: boolean, now: () => Date): Pro
     // 42501 either way: the rule above already said yes, so what stands beneath
     // disagrees, which means the role set or the actor's own roles moved
     // between the read and the write — another owner switching something at the
-    // same moment. Which of the guard's six refusals it is cannot be told from
-    // the SQLSTATE, and guessing `last_role` would put a sentence on the screen
+    // same moment. Which of `app.revoke_staff_role`'s seven refusals it is
+    // cannot be told from the SQLSTATE, and guessing `last_role` would put a
+    // sentence on the screen
     // that may be untrue. 23505 is the grant's own half of the same race:
     // `on conflict (user_id, role) do nothing` covers a duplicate that is
     // already committed, and not one committed a microsecond ago. Not retried:
@@ -105,7 +106,10 @@ async function switchRole(c: Context<ApiEnv>, on: boolean, now: () => Date): Pro
   return c.json({ ok: true });
 }
 
-export function mountTeamRoles(api: Hono<ApiEnv>, now: () => Date = () => new Date()): void {
+// `now` is injected and has no default: `routes.ts` always passes the clock it
+// was given, and that is the convention across this folder — a default here
+// would be a second, unreachable source of the time that nothing tests.
+export function mountTeamRoles(api: Hono<ApiEnv>, now: () => Date): void {
   api.put('/api/team/:id/roles/:role', (c) => switchRole(c, true, now));
   api.delete('/api/team/:id/roles/:role', (c) => switchRole(c, false, now));
 }
