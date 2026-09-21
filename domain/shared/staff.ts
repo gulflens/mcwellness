@@ -48,6 +48,21 @@ export function canGrantTo(actorUserId: string, targetUserId: string): boolean {
   return actorUserId !== targetUserId;
 }
 
+/**
+ * A temporary password is the sign-in itself, handed to whoever pressed the
+ * button. So an admin never mints one for an owner: that would be an admin
+ * becoming the owner in one press, and unlike suspending, nothing in the
+ * database stands beneath this act — the password is set at the sign-in
+ * service, past row security (trunk round 57, 2026-09-22). An owner may, for
+ * another owner, which is how a locked-out owner gets back in.
+ */
+export function canResetPassword(
+  actorRoles: readonly Role[],
+  targetRoles: readonly Role[],
+): boolean {
+  return !targetRoles.includes('owner') || actorRoles.includes('owner');
+}
+
 /** `archived` is the end of a sign-in; only `suspended` comes back. */
 export function canReactivate(status: 'active' | 'suspended' | 'archived'): boolean {
   return status === 'suspended';

@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { STAFF_ROLES, STAFF_ROLE_LABELS, type Role, type StaffRole } from '@domain/shared';
+import {
+  STAFF_ROLES,
+  STAFF_ROLE_LABELS,
+  canResetPassword,
+  type Role,
+  type StaffRole,
+} from '@domain/shared';
 import { InviteResponse, TeamListResponse, type TeamMember } from '../../api/team/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, PageHeader } from '../../shell/components/Controls';
@@ -144,6 +150,10 @@ export function TeamPage() {
     }
   }
 
+  // Who is looking, from the list's own row for them: the same roles the API
+  // will ask the same rule about, so no button is offered that it would refuse.
+  const myRoles = ((members ?? []).find((member) => member.isYou)?.roles ?? []) as Role[];
+
   const columns: readonly Column<TeamMember>[] = [
     { key: 'name', header: 'Name', render: (row) => row.displayName },
     { key: 'email', header: 'Email', render: (row) => row.email ?? '—' },
@@ -181,7 +191,7 @@ export function TeamPage() {
                   Add {roleLabel(role).toLowerCase()}
                 </Button>
               ))}
-          {row.status === 'active' ? (
+          {row.status === 'active' && canResetPassword(myRoles, row.roles as Role[]) ? (
             <Button variant="quiet" disabled={busy} onClick={() => void resetPassword(row)}>
               New temporary password
             </Button>

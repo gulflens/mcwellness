@@ -15,6 +15,7 @@ export {
   STAFF_ROLE_LABELS,
   canGrantTo,
   canReactivate,
+  canResetPassword,
   canSuspend,
   isStaffRole,
 } from './staff';

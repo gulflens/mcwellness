@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { canActor, canGrantTo, canSuspend } from '@domain/shared';
+import { canActor, canGrantTo, canResetPassword, canSuspend, type Role } from '@domain/shared';
 import { logAction, logReads } from '../_middleware/audit';
 import type { ApiEnv } from '../_middleware/request-context';
 import { isAuthAdminUnavailable, isEmailInUse, type AuthAdminProvider } from '../portal/auth-admin';
@@ -41,7 +41,10 @@ import {
  * both tables carry the audit trigger. Nobody suspends themselves and nobody
  * widens their own roles (domain/shared/staff.ts). A temporary password that
  * never reached the person, or was lost, is replaced by
- * `POST /api/team/:id/password`, which mints another and logs that it did.
+ * `POST /api/team/:id/password`, which mints another and logs that it did —
+ * and never for an owner unless an owner asks (`canResetPassword`, trunk round
+ * 57): a password is set at the sign-in service, where no row policy stands
+ * beneath the route, so this is the one act here the route alone can refuse.
  */
 
 type Row = {
@@ -225,8 +228,10 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     }
     const id = z.uuid().safeParse(c.req.param('id'));
     if (!id.success) return c.json({ error: 'not_found', requestId }, 404);
-    const target = await db.query<{ auth_id: string | null }>(
-      'select u.auth_id from app_user u where u.id = $1 and u.tenant_id = app.current_tenant_id() ' +
+    const target = await db.query<{ auth_id: string | null; roles: Role[] }>(
+      'select u.auth_id, ' +
+        '(select array_agg(r.role::text) from user_role r where r.user_id = u.id and r.tenant_id = u.tenant_id) as roles ' +
+        'from app_user u where u.id = $1 and u.tenant_id = app.current_tenant_id() ' +
         "and u.status = 'active' " +
         "and exists (select 1 from user_role r where r.user_id = u.id and r.role <> 'client_contact')",
       [id.data],
@@ -234,6 +239,12 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     const authId = target.rows[0]?.auth_id ?? null;
     if (target.rowCount !== 1 || authId === null) {
       return c.json({ error: 'not_found', requestId }, 404);
+    }
+    // Nothing in the database stands beneath this act — the password is set at
+    // the sign-in service, past row security — so the rule is asked here, of
+    // the roles just read and never of anything the caller sent.
+    if (!canResetPassword(actor.roles, target.rows[0]?.roles ?? [])) {
+      return c.json({ error: 'forbidden', requestId }, 403);
     }
     const password = temporaryPassword();
     try {

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { STAFF_ROLES, canGrantTo, canReactivate, canSuspend, isStaffRole } from './staff';
+import {
+  STAFF_ROLES,
+  canGrantTo,
+  canReactivate,
+  canResetPassword,
+  canSuspend,
+  isStaffRole,
+} from './staff';
 
 describe('the roles Settings › Team may grant', () => {
   it('are the four working roles, never ownership and never a household contact', () => {
@@ -31,5 +38,22 @@ describe('suspending a sign-in', () => {
     const me = '00000002-0000-4000-8000-000000000010';
     expect(canSuspend(me, me)).toBe(false);
     expect(canSuspend(me, '00000002-0000-4000-8000-000000000011')).toBe(true);
+  });
+});
+
+describe('minting a temporary password', () => {
+  it("is never an admin's to do for an owner, because the password is the sign-in", () => {
+    expect(canResetPassword(['admin'], ['owner', 'lead_practitioner'])).toBe(false);
+    expect(canResetPassword(['admin', 'lead_practitioner'], ['owner'])).toBe(false);
+  });
+
+  it("is an owner's for another owner, which is how a locked-out owner gets back in", () => {
+    expect(canResetPassword(['owner'], ['owner'])).toBe(true);
+  });
+
+  it("is an admin's and an owner's for everybody else", () => {
+    expect(canResetPassword(['admin'], ['finance'])).toBe(true);
+    expect(canResetPassword(['admin'], ['admin', 'practitioner'])).toBe(true);
+    expect(canResetPassword(['owner'], ['practitioner'])).toBe(true);
   });
 });
