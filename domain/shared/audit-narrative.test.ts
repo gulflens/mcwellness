@@ -929,3 +929,72 @@ describe('the books (docs/SPEC/accounting.md section 11)', () => {
     }
   });
 });
+
+describe('staff management (round 58, docs/superpowers/specs/2026-09-21-team-profiles-and-access-design.md)', () => {
+  // A working role taken away for the first time (app.revoke_staff_role,
+  // migration 923), a colleague's staff profile (staff_profile, migration
+  // 922) and the two application actions app/api/team/routes.ts already
+  // writes with logAction: password_reset and password_reset_refused. Every
+  // one of these five is Settings › Team's own trail, a screen that is
+  // English only like every console screen
+  // (tests/lint/console-is-english.test.ts) — so unlike every other sentence
+  // in this file, the Arabic slot deliberately holds the same English words
+  // rather than a translation nobody at the practice would ever read; both
+  // locales are still exercised so a locale switch is proven to change
+  // nothing here.
+  it('says a working role was taken away, naming no role', () => {
+    const event1 = event({ entityType: 'user_role', action: 'delete' });
+    expect(narrate(event1, 'en')?.sentence).toBe('Hazel Harbour took a role away from a colleague');
+    expect(narrate(event1, 'ar')?.sentence).toBe('Hazel Harbour took a role away from a colleague');
+  });
+
+  it("tells recording a colleague's staff profile from changing one", () => {
+    expect(narrate(event({ entityType: 'staff_profile', action: 'insert' }), 'en')?.sentence).toBe(
+      "Hazel Harbour recorded a colleague's staff profile",
+    );
+    expect(
+      narrate(
+        event({ entityType: 'staff_profile', action: 'update', changedFields: ['job_title'] }),
+        'en',
+      )?.sentence,
+    ).toBe("Hazel Harbour changed a colleague's staff profile");
+  });
+
+  it('says a temporary password was minted, and says a refusal of one', () => {
+    expect(
+      narrate(event({ entityType: 'app_user', action: 'password_reset' }), 'en')?.sentence,
+    ).toBe('Hazel Harbour minted a temporary password for a colleague');
+    expect(
+      narrate(event({ entityType: 'app_user', action: 'password_reset_refused' }), 'en')?.sentence,
+    ).toBe('Hazel Harbour was refused a temporary password for a colleague');
+  });
+
+  it('names no role, no field value and no person in any of the five sentences', () => {
+    const events: AuditEvent[] = [
+      event({ entityType: 'user_role', action: 'delete' }),
+      event({ entityType: 'staff_profile', action: 'insert' }),
+      event({ entityType: 'staff_profile', action: 'update', changedFields: ['private_notes'] }),
+      event({ entityType: 'app_user', action: 'password_reset' }),
+      event({ entityType: 'app_user', action: 'password_reset_refused' }),
+    ];
+    for (const one of events) {
+      const sentence = narrate(one, 'en')?.sentence ?? '';
+      expect(sentence, one.action).not.toMatch(/admin|finance|practitioner|owner/i);
+      expect(sentence, one.action).not.toContain('job_title');
+      expect(sentence, one.action).not.toContain('private_notes');
+    }
+  });
+
+  it('leaves the plain role addition and the generic user change exactly as they were', () => {
+    // The brief's own check, done from the code and not from a guess: this
+    // round adds no case for user_role.insert or app_user.update, so both
+    // still fall to the generic branch precisely as before.
+    expect(narrate(event({ entityType: 'user_role', action: 'insert' }), 'en')?.sentence).toBe(
+      'Hazel Harbour added a role',
+    );
+    expect(
+      narrate(event({ entityType: 'app_user', action: 'update', changedFields: ['status'] }), 'en')
+        ?.sentence,
+    ).toBe('Hazel Harbour changed the user (status)');
+  });
+});

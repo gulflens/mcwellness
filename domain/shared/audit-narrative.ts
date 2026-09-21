@@ -1056,6 +1056,57 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         locale,
       );
     }
+    // Settings › Team's own trail (round 58,
+    // docs/superpowers/specs/2026-09-21-team-profiles-and-access-design.md):
+    // a working role taken away for the first time
+    // (app.revoke_staff_role, migration 923), a colleague's staff profile
+    // (staff_profile, migration 922), and the two application actions
+    // app/api/team/routes.ts writes with logAction. That screen is English
+    // only, like every console screen (tests/lint/console-is-english.test.ts),
+    // so unlike every other sentence in this file these five are not
+    // translated: `t()` still carries the shape every other case uses, but
+    // both of its arguments are the same English words, on purpose, rather
+    // than an Arabic sentence nobody at the practice would read.
+    case 'user_role.delete':
+      return pick(
+        t(
+          `${actor} took a role away from a colleague`,
+          `${actor} took a role away from a colleague`,
+        ),
+        locale,
+      );
+    case 'staff_profile.insert':
+      return pick(
+        t(
+          `${actor} recorded a colleague's staff profile`,
+          `${actor} recorded a colleague's staff profile`,
+        ),
+        locale,
+      );
+    case 'staff_profile.update':
+      return pick(
+        t(
+          `${actor} changed a colleague's staff profile`,
+          `${actor} changed a colleague's staff profile`,
+        ),
+        locale,
+      );
+    case 'app_user.password_reset':
+      return pick(
+        t(
+          `${actor} minted a temporary password for a colleague`,
+          `${actor} minted a temporary password for a colleague`,
+        ),
+        locale,
+      );
+    case 'app_user.password_reset_refused':
+      return pick(
+        t(
+          `${actor} was refused a temporary password for a colleague`,
+          `${actor} was refused a temporary password for a colleague`,
+        ),
+        locale,
+      );
     case 'client.erase':
       // The act itself, written by app/api/clients/erasure.ts after
       // app.erase_client returns: everything the erasure touched is already
