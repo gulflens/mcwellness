@@ -30,6 +30,8 @@ const OWNER: TeamMember = {
   status: 'active',
   roles: ['lead_practitioner', 'owner'],
   isYou: true,
+  locked: true,
+  jobTitle: 'Founder',
 };
 const ADMIN: TeamMember = {
   id: '00000002-0000-4000-8000-000000000010',
@@ -38,6 +40,8 @@ const ADMIN: TeamMember = {
   status: 'active',
   roles: ['admin'],
   isYou: false,
+  locked: false,
+  jobTitle: null,
 };
 
 function json(body: unknown, status = 200): Response {
@@ -78,6 +82,8 @@ function mount(options: { inviteStatus?: number; members?: TeamMember[] } = {}) 
           status: 'active',
           roles: ['finance'],
           isYou: false,
+          locked: false,
+          jobTitle: null,
         },
       ];
       return json(

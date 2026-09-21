@@ -572,7 +572,7 @@ export type PortalHarness = {
   authHeader: (authId: string) => Promise<Record<string, string>>;
   /** A signed request as the person whose auth id is given. */
   callAs: (
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     path: string,
     authId: string,
     body?: unknown,

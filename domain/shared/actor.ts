@@ -406,10 +406,12 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // class of act as granting a role, and db/policies/portal/access.sql
       // refuses the row underneath this.
       return hasRole(actor, 'owner', 'admin');
-    // Who may add a member of staff, grant a working role or suspend a
-    // sign-in: the owner and an admin, which is what
-    // db/policies/core/role_guard.sql enforces beneath. Ownership itself is the
-    // owner's alone to grant, and no screen offers it (domain/shared/staff.ts).
+    // The team LIST, for the owner and an admin, and nothing else — every act
+    // on a colleague went to staff.access.manage below on 21 September 2026.
+    // It is also the first guard of POST /api/team/:id/password, on purpose:
+    // an admin's attempt has to reach canResetPassword to be refused there and
+    // written down as password_reset_refused, which a bare 403 at this guard
+    // would leave no row for (app/api/team/routes.ts).
     case 'staff.manage':
       return hasRole(actor, 'owner', 'admin');
     // Adding a person, editing a profile, switching a role, suspending and
