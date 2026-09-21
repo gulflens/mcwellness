@@ -47,9 +47,9 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function mount(options: { inviteStatus?: number } = {}) {
+function mount(options: { inviteStatus?: number; members?: TeamMember[] } = {}) {
   const posts: { url: string; body: unknown }[] = [];
-  let members: TeamMember[] = [OWNER, ADMIN];
+  let members: TeamMember[] = options.members ?? [OWNER, ADMIN];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/me') {
@@ -123,6 +123,20 @@ describe('TeamPage', () => {
         name: /^Add (admin|finance|practitioner|lead practitioner)$/,
       }),
     ).toHaveLength(3);
+  });
+
+  // Trunk round 57, 2026-09-22: a temporary password is the sign-in itself, so
+  // an admin is offered none for an owner (domain/shared/staff.ts).
+  it("offers an admin no temporary password on an owner's row", async () => {
+    mount({
+      members: [
+        { ...OWNER, isYou: false },
+        { ...ADMIN, isYou: true },
+      ],
+    });
+    expect(await screen.findByText('Hazel Harbour')).toBeTruthy();
+    // Two active rows, one button: the admin's own.
+    expect(screen.getAllByRole('button', { name: 'New temporary password' })).toHaveLength(1);
   });
 
   it('mints a new temporary password for a colleague and shows it once', async () => {

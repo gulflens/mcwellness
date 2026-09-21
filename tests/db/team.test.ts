@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { IDS } from './helpers';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { IDS, seedUser } from './helpers';
 import { PORTAL, startPortalHarness, type PortalHarness } from '../portal/db/support';
 
 /**
@@ -7,6 +7,9 @@ import { PORTAL, startPortalHarness, type PortalHarness } from '../portal/db/sup
  * with the fake sign-in provider the harness carries (trunk round 39,
  * 2026-09-10). Names from db/seed/names.ts; addresses at example.com.
  */
+
+/** The sign-in the portal harness gives the practice's owner (tests/portal/db/support.ts). */
+const OWNER_AUTH = '00000001-0000-4000-8000-000000000010';
 
 let h: PortalHarness;
 
@@ -198,5 +201,50 @@ describe('who works at the practice', () => {
       (await h.callAs('POST', '/api/team/not-an-id/roles', PORTAL.adminAuth, { role: 'finance' }))
         .status,
     ).toBe(404);
+  });
+
+  // Trunk round 57, 2026-09-22. Suspending the owner is refused by row
+  // security; a password is set at the sign-in service, past row security, so
+  // the route is the only thing that can refuse it.
+  it("never lets an admin mint a password for the owner's sign-in", async () => {
+    const setPassword = vi.spyOn(h.authAdmin, 'setPassword');
+    try {
+      const res = await h.callAs('POST', `/api/team/${IDS.ownerA}/password`, PORTAL.adminAuth);
+      expect(res.status).toBe(403);
+      expect(JSON.stringify(await res.json())).not.toContain('temporaryPassword');
+      expect(setPassword).not.toHaveBeenCalled();
+    } finally {
+      setPassword.mockRestore();
+    }
+    const trail = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'password_reset' and entity_id = $1",
+      [IDS.ownerA],
+    );
+    expect(trail.rows[0]?.n).toBe('0');
+    // The screen offers no such button, so this request was made by hand and
+    // aimed at the owner: the one refusal here worth a row of its own.
+    const refused = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'password_reset_refused' and entity_id = $1 and actor_id = $2",
+      [IDS.ownerA, PORTAL.admin],
+    );
+    expect(refused.rows[0]?.n).toBe('1');
+  });
+
+  it('lets one owner mint a password for another, which is how a locked-out owner gets back in', async () => {
+    const secondOwner = '00000001-0000-4000-8000-0000000000e1';
+    await seedUser(h.owner, {
+      id: secondOwner,
+      tenantId: IDS.tenantA,
+      authId: '00000001-0000-4000-8000-0000000000e2',
+      displayName: 'Hazel Lagoon',
+      roles: ['owner'],
+    });
+    const res = await h.callAs('POST', `/api/team/${secondOwner}/password`, OWNER_AUTH);
+    expect(res.status).toBe(200);
+    const trail = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'password_reset' and entity_id = $1 and actor_id = $2",
+      [secondOwner, IDS.ownerA],
+    );
+    expect(trail.rows[0]?.n).toBe('1');
   });
 });
