@@ -33,7 +33,11 @@ import { AccessResponse, InviteResponse, OfficeRequestsResponse, RevokeResponse 
  * household is signed out of the shell rather than merely losing a link they
  * have already used; every open invitation is closed in the same statement so
  * a second unspent link cannot let them back in. The Supabase sign-in itself
- * is deliberately left standing (section 12): suspension is the boundary.
+ * is deliberately left standing (section 12): suspension is the boundary. And
+ * revoking asks the same question issuing does — is this account a member of
+ * the practice? — because suspending a colleague is not what the button means,
+ * and since trunk round 58 the attempt would change no row and still read as
+ * done.
  *
  * **What is never in an answer here.** A telephone number, an email address or
  * a token hash. The table says whether a contact *has* a number and an
@@ -357,9 +361,16 @@ export function mountPortalAccess(
     if (!params.success) return c.json({ error: 'bad_request', requestId }, 400);
     const db = c.get('db');
 
-    const found = await db.query<{ contact_id: string; client_id: string; user_id: string | null }>(
-      'select id as contact_id, client_id, user_id from contact ' +
-        'where tenant_id = app.current_tenant_id() and id = $1',
+    const found = await db.query<{
+      contact_id: string;
+      client_id: string;
+      user_id: string | null;
+      has_practice_role: boolean;
+    }>(
+      'select ct.id as contact_id, ct.client_id, ct.user_id, ' +
+        'exists (select 1 from user_role ur where ur.tenant_id = ct.tenant_id ' +
+        "  and ur.user_id = ct.user_id and ur.role <> 'client_contact') as has_practice_role " +
+        'from contact ct where ct.tenant_id = app.current_tenant_id() and ct.id = $1',
       [params.data.contactId],
     );
     const row = found.rows[0];
@@ -370,8 +381,38 @@ export function mountPortalAccess(
       // was wanted.
       return c.json(RevokeResponse.parse({ contactId: row.contact_id, state: 'none' }));
     }
+    if (row.has_practice_role) {
+      // The same question the invite path asks above, and
+      // `app.portal_invite_state` asks beneath both (migration 700): does this
+      // contact's account hold any role but `client_contact`?
+      //
+      // Asked here since trunk round 58, which is the round that made it
+      // necessary: `db/policies/core/role_guard.sql` now leaves a member of
+      // staff's `app_user` row to the owners, so this route's own
+      // `update app_user set status = 'suspended'` matches no row for an admin
+      // and raises nothing. Without this, a household contact whose account is
+      // also a member of staff kept portal access while the trail recorded that
+      // it had been revoked — nobody suspended who should not have been, and a
+      // row in the append-only log that is not true.
+      //
+      // Refused before any write, so there is nothing to undo, and nothing is
+      // logged: an attempt that changed nothing is not an act. **What revoking
+      // a member of staff's household access should mean is deliberately not
+      // decided here** — it is round 59's, with the erasure that has the same
+      // shape (docs/CHANGE-REQUESTS/trunk-round-58.md).
+      return c.json({ error: 'staff_account', requestId }, 409);
+    }
 
-    await db.query("update app_user set status = 'suspended' where id = $1", [row.user_id]);
+    const suspended = await db.query("update app_user set status = 'suspended' where id = $1", [
+      row.user_id,
+    ]);
+    if (suspended.rowCount !== 1) {
+      // The floor beneath the check above, and it is needed because row security
+      // answers a forbidden update with silence rather than an error: no row
+      // suspended is not a revocation, whatever the reason, and answering
+      // `revoked` here is what put an untrue row in the trail.
+      throw new Error('A household’s access could not be revoked.');
+    }
     await db.query(
       'update portal_invite set revoked_at = now() where contact_id = $1 ' +
         'and used_at is null and revoked_at is null',

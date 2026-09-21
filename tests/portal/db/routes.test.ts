@@ -60,6 +60,9 @@ const WAIVED_FEE = '00000001-0000-4000-8000-0000000000b9';
 const FEE_FILS = 15_000;
 /** A contact row whose account is the practice's own admin: the founder's case. */
 const OFFICE_CONTACT = '00000001-0000-4000-8000-0000000000c1';
+/** The same shape again, for the revoke: an account that also works here. */
+const STAFF_CONTACT = '00000001-0000-4000-8000-0000000000c2';
+const STAFF_CONTACT_INVITE = '00000001-0000-4000-8000-0000000000c3';
 /** The first child's brain map, a fortnight ago: the review line's milestone. */
 const BRAIN_MAP_A = '00000001-0000-4000-8000-0000000000d1';
 /** The adult's brain map, long enough ago that the line is not offered. */
@@ -963,6 +966,64 @@ describe('the practice’s own Portal screen', () => {
       [PORTAL.motherSecondContact],
     );
     expect(Number(invites.rows[0]?.n)).toBe(0);
+  });
+
+  it('refuses to revoke a contact whose account also works at the practice, and writes nothing', async () => {
+    // The other half of the invite's own check, and a regression trunk round 58
+    // caused: `role_guard.sql` now leaves a member of staff's `app_user` row to
+    // the owners, so an admin's `update app_user set status = 'suspended'`
+    // matches no row and raises nothing. Before the round it suspended the
+    // person; after it, the household kept its access and the trail said the
+    // access had been revoked — a row that is not true, which is worse than
+    // either behaviour. Refused before anything is written.
+    //
+    // What revoking a member of staff's household access should MEAN is round
+    // 59's: this answers the question by declining to, rather than by guessing.
+    await h.owner.query(
+      'insert into contact (id, tenant_id, client_id, user_id, relationship, given_name, ' +
+        'family_name, is_legal_guardian, can_consent, can_receive_reports, can_pay) ' +
+        "values ($1, $2, $3, $4, 'father', 'Cedar', 'Quarry', true, true, true, true)",
+      [STAFF_CONTACT, IDS.tenantA, PORTAL.strangerClient, PORTAL.practitioner],
+    );
+    // An open invitation beside them, so "the invite is not revoked either" is
+    // something this case can actually see.
+    await h.owner.query(
+      'insert into portal_invite (id, tenant_id, client_id, contact_id, user_id, kind, ' +
+        "locale, token_hash, expires_at) values ($1, $2, $3, $4, $5, 'first_sign_in', 'en', " +
+        "sha256('a-token-nobody-uses'::bytea), now() + interval '7 days')",
+      [
+        STAFF_CONTACT_INVITE,
+        IDS.tenantA,
+        PORTAL.strangerClient,
+        STAFF_CONTACT,
+        PORTAL.practitioner,
+      ],
+    );
+
+    const res = await h.callAs(
+      'POST',
+      `/api/portal/access/${STAFF_CONTACT}/revoke`,
+      PORTAL.adminAuth,
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: 'staff_account' });
+
+    const account = await h.owner.query<{ status: string }>(
+      'select status::text as status from app_user where id = $1',
+      [PORTAL.practitioner],
+    );
+    expect(account.rows[0]?.status).toBe('active');
+    const invite = await h.owner.query<{ revoked_at: Date | null }>(
+      'select revoked_at from portal_invite where id = $1',
+      [STAFF_CONTACT_INVITE],
+    );
+    expect(invite.rows[0]?.revoked_at).toBeNull();
+    const trail = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'portal.access.revoked' " +
+        'and entity_id = $1',
+      [PORTAL.practitioner],
+    );
+    expect(trail.rows[0]?.n).toBe('0');
   });
 
   it('revokes the account rather than the link, and closes every open invitation', async () => {
