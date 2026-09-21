@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { IDS, seedUser } from './helpers';
-import { EmailInUseError } from '../../app/api/portal/auth-admin';
+import { AuthAdminUnavailableError, EmailInUseError } from '../../app/api/portal/auth-admin';
 import { PORTAL, startPortalHarness, type PortalHarness } from '../portal/db/support';
 
 /**
@@ -547,15 +547,22 @@ describe('who works at the practice', () => {
     const { userId, authId } = await addColleague('Maple Dune', 'maple.dune@example.com', [
       'practitioner',
     ]);
+    // A constraint that exists for this one case, added and dropped by the
+    // superuser around the call. The failure has to be the DATABASE refusing a
+    // write that reached it, after the address has already moved — not a body
+    // the route could have refused itself, which is what ruling R6 of round
+    // 58's review took out of this test.
+    await h.owner.query(
+      'alter table staff_profile add constraint zz_test_refuses ' +
+        "check (job_title is distinct from 'Refuse this title')",
+    );
     const setEmail = vi.spyOn(h.authAdmin, 'setEmail');
     try {
-      // 31 February passes the body's regex and is refused by Postgres as a
-      // date, so the failure lands after the address has already moved.
       const res = await h.callAs(
         'PATCH',
         `/api/team/${userId}`,
         OWNER_AUTH,
-        profileBody('Maple Dune', 'maple.orchard@example.com', { startedOn: '2026-02-31' }),
+        profileBody('Maple Dune', 'maple.orchard@example.com', { jobTitle: 'Refuse this title' }),
       );
       expect(res.status).toBeGreaterThanOrEqual(500);
       expect(setEmail.mock.calls).toEqual([
@@ -564,6 +571,7 @@ describe('who works at the practice', () => {
       ]);
     } finally {
       setEmail.mockRestore();
+      await h.owner.query('alter table staff_profile drop constraint zz_test_refuses');
     }
     // The request's transaction rolled back, so the row never moved either.
     const { rows } = await h.owner.query<{ email: string | null }>(
@@ -571,6 +579,122 @@ describe('who works at the practice', () => {
       [userId],
     );
     expect(rows[0]?.email).toBe('maple.dune@example.com');
+  });
+
+  it('refuses a start date the calendar does not have, and never reaches the sign-in service', async () => {
+    const { userId } = await addColleague('Amber Ridge', 'amber.ridge@example.com', [
+      'practitioner',
+    ]);
+    const setEmail = vi.spyOn(h.authAdmin, 'setEmail');
+    try {
+      for (const startedOn of ['2026-02-31', '2026-13-01', '2025-02-29']) {
+        const res = await h.callAs(
+          'PATCH',
+          `/api/team/${userId}`,
+          OWNER_AUTH,
+          profileBody('Amber Quarry', 'amber.quarry@example.com', { startedOn }),
+        );
+        expect(res.status, startedOn).toBe(400);
+      }
+      // 2024 is a leap year, so that day exists and is saved. The address is
+      // unchanged here, which is why the spy stays silent for the whole case.
+      const leap = await h.callAs(
+        'PATCH',
+        `/api/team/${userId}`,
+        OWNER_AUTH,
+        profileBody('Amber Ridge', 'amber.ridge@example.com', { startedOn: '2024-02-29' }),
+      );
+      expect(leap.status, await leap.clone().text()).toBe(200);
+      expect(setEmail).not.toHaveBeenCalled();
+    } finally {
+      setEmail.mockRestore();
+    }
+    const { rows } = await h.owner.query<{ display_name: string; email: string | null }>(
+      'select display_name, email from app_user where id = $1',
+      [userId],
+    );
+    expect(rows[0]).toEqual({
+      display_name: 'Amber Ridge',
+      email: 'amber.ridge@example.com',
+    });
+    const held = await h.owner.query<{ started_on: string | null }>(
+      'select started_on::text as started_on from staff_profile where user_id = $1',
+      [userId],
+    );
+    expect(held.rows[0]?.started_on).toBe('2024-02-29');
+  });
+
+  it('refuses a body the profile cannot hold, and writes nothing at all', async () => {
+    const { userId } = await addColleague('Clover Quarry', 'clover.quarry@example.com', [
+      'practitioner',
+    ]);
+    const setEmail = vi.spyOn(h.authAdmin, 'setEmail');
+    try {
+      const bad: [string, Record<string, unknown>][] = [
+        ['a telephone number that is not E.164', { phone: '0500000053' }],
+        ["an emergency contact's number that is not E.164", { emergencyContactPhone: '971' }],
+        ['a note longer than the column holds', { privateNotes: 'x'.repeat(4001) }],
+        ['an address that is not one', { email: 'not an address' }],
+        ['no name at all', { displayName: '   ' }],
+      ];
+      for (const [what, over] of bad) {
+        const res = await h.callAs(
+          'PATCH',
+          `/api/team/${userId}`,
+          OWNER_AUTH,
+          profileBody('Clover Summit', 'clover.summit@example.com', over),
+        );
+        expect(res.status, what).toBe(400);
+      }
+      // Refused before the sign-in service is reached, every time.
+      expect(setEmail).not.toHaveBeenCalled();
+    } finally {
+      setEmail.mockRestore();
+    }
+    const { rows } = await h.owner.query<{ display_name: string; email: string | null }>(
+      'select display_name, email from app_user where id = $1',
+      [userId],
+    );
+    expect(rows[0]).toEqual({
+      display_name: 'Clover Quarry',
+      email: 'clover.quarry@example.com',
+    });
+    const held = await h.owner.query('select 1 from staff_profile where user_id = $1', [userId]);
+    expect(held.rowCount).toBe(0);
+  });
+
+  it('answers sign_ins_unavailable when the sign-in service cannot be reached, and the row does not move', async () => {
+    const { userId } = await addColleague('Pearl Orchard', 'pearl.orchard@example.com', [
+      'finance',
+    ]);
+    const setEmail = vi
+      .spyOn(h.authAdmin, 'setEmail')
+      .mockRejectedValueOnce(
+        new AuthAdminUnavailableError('The sign-in service could not be reached.'),
+      );
+    try {
+      const res = await h.callAs(
+        'PATCH',
+        `/api/team/${userId}`,
+        OWNER_AUTH,
+        profileBody('Pearl Orchard', 'pearl.summit@example.com', { jobTitle: 'Coordinator' }),
+      );
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ error: 'sign_ins_unavailable' });
+    } finally {
+      setEmail.mockRestore();
+    }
+    // An outage refuses before the row is touched, so nothing half-moved.
+    const { rows } = await h.owner.query<{ display_name: string; email: string | null }>(
+      'select display_name, email from app_user where id = $1',
+      [userId],
+    );
+    expect(rows[0]).toEqual({
+      display_name: 'Pearl Orchard',
+      email: 'pearl.orchard@example.com',
+    });
+    const held = await h.owner.query('select 1 from staff_profile where user_id = $1', [userId]);
+    expect(held.rowCount).toBe(0);
   });
 
   it("refuses one owner the other owner's profile, and lets that owner edit their own", async () => {

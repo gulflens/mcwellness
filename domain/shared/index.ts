@@ -15,7 +15,6 @@ export {
   STAFF_ROLE_LABELS,
   STAFF_ROLE_OPENS,
   canEditProfile,
-  canGrantTo,
   canReactivate,
   canResetPassword,
   canSuspend,

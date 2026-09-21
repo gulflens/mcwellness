@@ -1,29 +1,21 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { Context, Hono } from 'hono';
+import type { Hono } from 'hono';
 import { z } from 'zod';
 import {
   canActor,
-  canEditProfile,
   canResetPassword,
   canSuspend,
-  canSwitchRole,
   hasRole,
   isLocked,
   type Role,
 } from '@domain/shared';
 import { logAction, logReads } from '../_middleware/audit';
-import type { ApiEnv, Db } from '../_middleware/request-context';
+import type { ApiEnv } from '../_middleware/request-context';
 import { isAuthAdminUnavailable, isEmailInUse, type AuthAdminProvider } from '../portal/auth-admin';
-import {
-  InviteBody,
-  InviteResponse,
-  ProfileBody,
-  StatusBody,
-  TEAM_REFUSALS,
-  TeamListResponse,
-  TeamProfile,
-  type TeamMember,
-} from './schema';
+import { mountTeamProfile } from './profile';
+import { GRANT_SQL, mountTeamRoles } from './roles';
+import { InviteBody, InviteResponse, StatusBody, TeamListResponse } from './schema';
+import { membersSql, readTargetRoles, toMember, type Row } from './target';
 
 /**
  * Who works at the practice, and what each of them may reach: the team list,
@@ -31,6 +23,13 @@ import {
  * sign-in suspended or reactivated, and a temporary password minted. Trunk
  * round 39, 2026-09-10, opened this file; round 58, 2026-09-21, is what it now
  * says.
+ *
+ * **Where each route lives.** This file holds the list, a new colleague,
+ * suspending and the temporary password, and `mountTeam` mounts the other two
+ * halves: `./profile.ts` (open and save one profile, and the address's two
+ * writes) and `./roles.ts` (one role on or off). `./target.ts` is how all five
+ * read the person they are about, and `./schema.ts` is the wire. The folder was
+ * one file until it passed 550 lines (round 58's review, ruling R7).
  *
  * **Who may.** The list is the owner's and an admin's (`staff.manage`).
  * *Everything else is the owner's alone* (`staff.access.manage`), which is the
@@ -47,9 +46,10 @@ import {
  * says it again as triggers that bind every caller: an ownership row does not
  * change, an owner is not suspended and an owner's name, address and telephone
  * are that owner's own. **A forbidden update is silence there, not an error** —
- * row security matches no row and raises nothing — so every update below reads
- * its row count and none of them answers success on none. The route's own
- * guards make that unreachable; the count is the floor beneath the guard.
+ * row security matches no row and raises nothing — so every update in this
+ * folder reads its row count and none of them answers success on none. The
+ * routes' own guards make that unreachable; the count is the floor beneath the
+ * guard.
  *
  * **The sign-in.** Made through the same seam the portal's door uses
  * (`AuthAdminProvider`), with a temporary password minted here, answered once
@@ -57,12 +57,8 @@ import {
  * decision of 10 September. If the practice's rows cannot be written after the
  * sign-in exists, the sign-in is taken back, so the address is free to try
  * again; and when an existing colleague's address changes, the sign-in moves
- * first and the row second, with the address put back if the row refuses.
- *
- * **A role switched off** is `app.revoke_staff_role`, because the API role
- * holds no delete on `user_role` and gains none. The pure rule `canSwitchRole`
- * is asked first so a person reads a sentence; the function is the boundary
- * and says the same thing again.
+ * first and the row second, with the address put back if the row refuses
+ * (`./profile.ts`).
  *
  * **Nothing is deleted.** A suspended sign-in is refused at the fence
  * (`app.resolve_actor` answers nobody for a status other than active) and can
@@ -78,122 +74,6 @@ import {
  * by hand and is exactly the act the trail exists for (docs/SPEC/audit.md:
  * unauthorised use is demonstrable, not only forbidden).
  */
-
-type Row = {
-  id: string;
-  display_name: string;
-  email: string | null;
-  status: 'active' | 'suspended' | 'archived';
-  roles: string[];
-  job_title: string | null;
-};
-
-/**
- * The list. `job_title` is joined for an owner and is not asked for at all
- * otherwise: row security on `staff_profile` would answer null for an admin
- * anyway, and a query that never asks is the second reason it can never
- * answer.
- */
-function membersSql(forOwner: boolean): string {
-  return (
-    'select u.id, u.display_name, u.email, u.status::text as status, ' +
-    (forOwner ? 'p.job_title, ' : 'null::text as job_title, ') +
-    "coalesce(array_agg(r.role::text order by r.role) filter (where r.role is not null), '{}') as roles " +
-    'from app_user u left join user_role r on r.user_id = u.id and r.tenant_id = u.tenant_id ' +
-    (forOwner
-      ? 'left join staff_profile p on p.user_id = u.id and p.tenant_id = u.tenant_id '
-      : '') +
-    'where u.tenant_id = app.current_tenant_id() ' +
-    'group by u.id' +
-    (forOwner ? ', p.job_title ' : ' ') +
-    // A household contact is not staff, and lives in Settings › Portal.
-    "having bool_or(r.role <> 'client_contact') " +
-    'order by u.display_name, u.id'
-  );
-}
-
-type Target = {
-  id: string;
-  auth_id: string | null;
-  display_name: string;
-  email: string | null;
-  phone: string | null;
-  preferred_locale: 'en' | 'ar';
-  status: Row['status'];
-  roles: Role[];
-};
-
-/** One colleague, read once as the actor, for every route that acts on one. */
-const TARGET_SQL =
-  'select u.id, u.auth_id, u.display_name, u.email, u.phone, u.preferred_locale::text as preferred_locale, ' +
-  'u.status::text as status, ' +
-  '(select array_agg(r.role::text order by r.role) from user_role r where r.user_id = u.id and r.tenant_id = u.tenant_id) as roles ' +
-  'from app_user u where u.id = $1 and u.tenant_id = app.current_tenant_id() ' +
-  "and exists (select 1 from user_role r where r.user_id = u.id and r.role <> 'client_contact')";
-
-type ProfileColumns = {
-  job_title: string | null;
-  started_on: string | null;
-  emergency_contact_name: string | null;
-  emergency_contact_phone: string | null;
-  private_notes: string | null;
-};
-
-const PROFILE_SQL =
-  'select job_title, started_on::text as started_on, emergency_contact_name, ' +
-  'emergency_contact_phone, private_notes from staff_profile ' +
-  'where user_id = $1 and tenant_id = app.current_tenant_id()';
-
-const UPDATE_USER_SQL =
-  'update app_user set display_name = $2, email = $3, phone = $4, preferred_locale = $5::locale ' +
-  'where id = $1 and tenant_id = app.current_tenant_id()';
-
-const UPSERT_PROFILE_SQL =
-  'insert into staff_profile (tenant_id, user_id, job_title, started_on, emergency_contact_name, ' +
-  'emergency_contact_phone, private_notes, created_by) ' +
-  'values ($1, $2, $3, $4, $5, $6, $7, $8) ' +
-  'on conflict (user_id) do update set job_title = excluded.job_title, ' +
-  'started_on = excluded.started_on, ' +
-  'emergency_contact_name = excluded.emergency_contact_name, ' +
-  'emergency_contact_phone = excluded.emergency_contact_phone, ' +
-  'private_notes = excluded.private_notes';
-
-const GRANT_SQL =
-  'insert into user_role (tenant_id, user_id, role, granted_by, created_by) ' +
-  'values ($1, $2, $3::role_kind, $4, $4) on conflict (user_id, role) do nothing';
-
-/** What each refusal is on the wire (design section 7); the screen holds the sentences. */
-const REFUSAL_STATUS: Record<(typeof TEAM_REFUSALS)[number], 400 | 409> = {
-  locked: 409,
-  last_role: 409,
-  not_yourself: 400,
-  not_a_working_role: 400,
-};
-
-/** Postgres: insufficient_privilege. Here, always a refusal raised by a guard. */
-function isRefusedBeneath(error: unknown): boolean {
-  return (
-    typeof error === 'object' && error !== null && (error as { code?: string }).code === '42501'
-  );
-}
-
-async function readTarget(db: Db, id: string): Promise<Target | null> {
-  const { rows } = await db.query<Target>(TARGET_SQL, [id]);
-  return rows[0] ?? null;
-}
-
-function toMember(row: Row, actorUserId: string): TeamMember {
-  return {
-    id: row.id,
-    displayName: row.display_name,
-    email: row.email,
-    status: row.status,
-    roles: row.roles,
-    isYou: row.id === actorUserId,
-    locked: isLocked(row.roles as Role[]),
-    jobTitle: row.job_title,
-  };
-}
 
 /** Sixteen characters from a safe alphabet; long enough, and typed once. */
 function temporaryPassword(): string {
@@ -266,6 +146,9 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
         ],
       );
       for (const role of body.data.roles) {
+        // Through the role switch's own insert since round 58, so a body that
+        // names the same role twice now settles instead of failing on the
+        // second one: `on conflict (user_id, role) do nothing`.
         await db.query(GRANT_SQL, [actor.tenantId, userId, role, actor.userId]);
       }
     } catch (error) {
@@ -279,193 +162,6 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     }
     return c.json(InviteResponse.parse({ userId, temporaryPassword: password }), 201);
   });
-
-  api.get('/api/team/:id', async (c) => {
-    const actor = c.get('actor');
-    const db = c.get('db');
-    const requestId = c.get('requestId');
-    if (!canActor(actor, { type: 'staff.access.manage' }, {}, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const id = z.uuid().safeParse(c.req.param('id'));
-    if (!id.success) return c.json({ error: 'not_found', requestId }, 404);
-    const target = await readTarget(db, id.data);
-    if (!target) return c.json({ error: 'not_found', requestId }, 404);
-    // Opening a profile is a read of a person, as the list already is
-    // (design section 6).
-    await logReads(db, 'app_user', [{ id: target.id, clientId: null }], 'read');
-    const held = (await db.query<ProfileColumns>(PROFILE_SQL, [target.id])).rows[0];
-    const member = toMember(
-      {
-        id: target.id,
-        display_name: target.display_name,
-        email: target.email,
-        status: target.status,
-        roles: target.roles,
-        job_title: held?.job_title ?? null,
-      },
-      actor.userId,
-    );
-    return c.json(
-      TeamProfile.parse({
-        ...member,
-        phone: target.phone,
-        preferredLocale: target.preferred_locale,
-        startedOn: held?.started_on ?? null,
-        emergencyContactName: held?.emergency_contact_name ?? null,
-        emergencyContactPhone: held?.emergency_contact_phone ?? null,
-        privateNotes: held?.private_notes ?? null,
-        editable: canEditProfile({
-          actorUserId: actor.userId,
-          actorRoles: actor.roles,
-          targetUserId: target.id,
-          targetRoles: target.roles,
-        }),
-      }),
-    );
-  });
-
-  api.patch('/api/team/:id', async (c) => {
-    const actor = c.get('actor');
-    const db = c.get('db');
-    const requestId = c.get('requestId');
-    if (!canActor(actor, { type: 'staff.access.manage' }, {}, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const id = z.uuid().safeParse(c.req.param('id'));
-    if (!id.success) return c.json({ error: 'not_found', requestId }, 404);
-    const body = ProfileBody.safeParse(await c.req.json().catch(() => ({})));
-    if (!body.success) return c.json({ error: 'bad_request', requestId }, 400);
-    const target = await readTarget(db, id.data);
-    if (!target) return c.json({ error: 'not_found', requestId }, 404);
-    // Asked before a single write, so an owner reading the other owner's
-    // profile is told why rather than meeting guard_owner_identity's raise as
-    // a 500.
-    if (
-      !canEditProfile({
-        actorUserId: actor.userId,
-        actorRoles: actor.roles,
-        targetUserId: target.id,
-        targetRoles: target.roles,
-      })
-    ) {
-      return c.json({ error: 'locked', requestId }, 409);
-    }
-
-    // An address is the sign-in, so the sign-in service changes first and the
-    // row second (design section 7). Non-null while an address has been moved
-    // and not yet put back.
-    let movedFrom: { authId: string; email: string | null } | null = null;
-    if (target.auth_id !== null && body.data.email !== target.email) {
-      try {
-        await options.authAdmin.setEmail(target.auth_id, body.data.email);
-      } catch (error) {
-        if (isEmailInUse(error)) return c.json({ error: 'email_in_use', requestId }, 409);
-        if (isAuthAdminUnavailable(error)) {
-          return c.json({ error: 'sign_ins_unavailable', requestId }, 503);
-        }
-        throw error;
-      }
-      movedFrom = { authId: target.auth_id, email: target.email };
-    }
-    try {
-      const updated = await db.query(UPDATE_USER_SQL, [
-        target.id,
-        body.data.displayName,
-        body.data.email,
-        body.data.phone,
-        body.data.preferredLocale,
-      ]);
-      // Beneath this route a forbidden update matches no row and raises
-      // nothing, so nothing here answers "saved" on none. The guard above
-      // makes this unreachable; this is the floor beneath the guard.
-      if (updated.rowCount !== 1) {
-        throw new Error('A colleague’s row could not be saved.');
-      }
-      await db.query(UPSERT_PROFILE_SQL, [
-        actor.tenantId,
-        target.id,
-        body.data.jobTitle,
-        body.data.startedOn,
-        body.data.emergencyContactName,
-        body.data.emergencyContactPhone,
-        body.data.privateNotes,
-        actor.userId,
-      ]);
-    } catch (error) {
-      // The address moved and the rows did not: put it back, so the sign-in
-      // and the row say the same thing again. The transaction rolls back on
-      // the rethrow, which is what leaves the row as it was. An address that
-      // was null before cannot be put back — there is no call that unsets one
-      // — and a colleague added here always has one, so that is a row written
-      // by a data step and is left as it is rather than guessed at.
-      if (movedFrom !== null && movedFrom.email !== null) {
-        await options.authAdmin.setEmail(movedFrom.authId, movedFrom.email).catch(() => {
-          // Never the address: this line is read by people, and by a log.
-          console.warn('Team: an address could not be put back after its row failed to write.');
-        });
-      }
-      throw error;
-    }
-    return c.json({ ok: true });
-  });
-
-  /**
-   * One role, on or off, for one colleague. The pure rule answers first — so
-   * the screen has a sentence and the refusal is the same one the switch
-   * itself greys out — and `app.revoke_staff_role` asks every question again
-   * beneath, which is the answer that binds.
-   */
-  async function switchRole(c: Context<ApiEnv>, on: boolean): Promise<Response> {
-    const actor = c.get('actor');
-    const db = c.get('db');
-    const requestId = c.get('requestId');
-    if (!canActor(actor, { type: 'staff.access.manage' }, {}, now())) {
-      return c.json({ error: 'forbidden', requestId }, 403);
-    }
-    const id = z.uuid().safeParse(c.req.param('id'));
-    if (!id.success) return c.json({ error: 'not_found', requestId }, 404);
-    const target = await readTarget(db, id.data);
-    if (!target) return c.json({ error: 'not_found', requestId }, 404);
-    const role = c.req.param('role') ?? '';
-    const refusal = canSwitchRole({
-      actorUserId: actor.userId,
-      targetUserId: target.id,
-      targetRoles: target.roles,
-      role,
-      on,
-    });
-    if (refusal !== null) {
-      return c.json({ error: refusal, requestId }, REFUSAL_STATUS[refusal]);
-    }
-    if (on) {
-      // A role they already hold is not an error: the switch is idempotent, so
-      // two windows agreeing with each other settle rather than argue.
-      await db.query(GRANT_SQL, [actor.tenantId, target.id, role, actor.userId]);
-      return c.json({ ok: true });
-    }
-    // A failed statement poisons the transaction, and the transaction belongs
-    // to the middleware, so the call sits in its own savepoint.
-    await db.query('savepoint switch_role');
-    try {
-      await db.query('select app.revoke_staff_role($1, $2::role_kind)', [target.id, role]);
-    } catch (error) {
-      if (!isRefusedBeneath(error)) throw error;
-      await db.query('rollback to savepoint switch_role');
-      // The rule above already said yes, so the role set moved between the
-      // read and the call — another owner switching something off at the same
-      // moment. Which of its six refusals this is cannot be told apart from
-      // the SQLSTATE, and guessing `last_role` would put a sentence on the
-      // screen that may be untrue. Not retried: the caller reads the profile
-      // again and sees what is actually there.
-      return c.json({ error: 'conflict', requestId }, 409);
-    }
-    await db.query('release savepoint switch_role');
-    return c.json({ ok: true });
-  }
-
-  api.put('/api/team/:id/roles/:role', (c) => switchRole(c, true));
-  api.delete('/api/team/:id/roles/:role', (c) => switchRole(c, false));
 
   api.post('/api/team/:id/status', async (c) => {
     const actor = c.get('actor');
@@ -481,10 +177,13 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     if (!canSuspend(actor.userId, id.data)) {
       return c.json({ error: 'not_yourself', requestId }, 400);
     }
-    const target = await readTarget(db, id.data);
+    // Who they are and what they hold; this route shows nobody a name.
+    const target = await readTargetRoles(db, id.data);
     if (!target) return c.json({ error: 'not_found', requestId }, 404);
     // An owner's door stays open, for every caller (migration 923). Said here
-    // first so the answer is a sentence rather than the trigger's raise.
+    // first so the answer is a sentence rather than the trigger's raise. It is
+    // the whole column that is locked, so `active` is refused too: an owner
+    // suspended by a data step is reactivated by another one, never from here.
     if (isLocked(target.roles)) {
       return c.json({ error: 'locked', requestId }, 409);
     }
@@ -553,4 +252,7 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     await logAction(db, 'password_reset', { type: 'app_user', id: id.data, clientId: null }, {});
     return c.json(InviteResponse.parse({ userId: id.data, temporaryPassword: password }));
   });
+
+  mountTeamProfile(api, { authAdmin: options.authAdmin, now });
+  mountTeamRoles(api, now);
 }

@@ -42,17 +42,6 @@ export function canSuspend(actorUserId: string, targetUserId: string): boolean {
   return actorUserId !== targetUserId;
 }
 
-/**
- * Nobody widens their own access. An admin may grant finance or lead
- * practitioner to a colleague — and finance opens the books, lead
- * practitioner opens erased records — so granting either to oneself would be
- * one click past the two-person shape the roles are drawn in (the security
- * review of trunk round 39, finding G1).
- */
-export function canGrantTo(actorUserId: string, targetUserId: string): boolean {
-  return actorUserId !== targetUserId;
-}
-
 export type RoleSwitchRefusal = 'not_a_working_role' | 'not_yourself' | 'locked' | 'last_role';
 
 /**
@@ -68,6 +57,12 @@ export function canSwitchRole(input: {
   on: boolean;
 }): RoleSwitchRefusal | null {
   if (!isStaffRole(input.role)) return 'not_a_working_role';
+  // Nobody widens their own access: finance opens the books and lead
+  // practitioner opens erased records, so granting either to oneself would be
+  // one click past the two-person shape the roles are drawn in (the security
+  // review of trunk round 39, finding G1). It answers for taking one away too,
+  // which is why `canGrantTo` was removed in round 58 — this one line was all
+  // of it.
   if (input.actorUserId === input.targetUserId) return 'not_yourself';
   if (isLocked(input.targetRoles)) return 'locked';
   if (!input.on) {

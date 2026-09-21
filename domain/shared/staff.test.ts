@@ -3,7 +3,6 @@ import {
   STAFF_ROLES,
   STAFF_ROLE_OPENS,
   canEditProfile,
-  canGrantTo,
   canReactivate,
   canResetPassword,
   canSuspend,
@@ -18,14 +17,6 @@ describe('the roles Settings › Team may grant', () => {
     expect(isStaffRole('owner')).toBe(false);
     expect(isStaffRole('client_contact')).toBe(false);
     expect(isStaffRole('lead_practitioner')).toBe(true);
-  });
-});
-
-describe('widening access', () => {
-  it('is never your own to do', () => {
-    const me = '00000002-0000-4000-8000-000000000010';
-    expect(canGrantTo(me, me)).toBe(false);
-    expect(canGrantTo(me, '00000002-0000-4000-8000-000000000011')).toBe(true);
   });
 });
 
@@ -87,8 +78,14 @@ describe('switching a role', () => {
     expect(canSwitchRole({ ...base, role: 'nonsense', on: true })).toBe('not_a_working_role');
   });
 
-  it('is never your own to do', () => {
+  // Both directions, because this one line replaced canGrantTo in round 58:
+  // widening your own access was what that refused, and narrowing it is the
+  // same act seen from the other side.
+  it('is never your own to do, in either direction', () => {
     expect(canSwitchRole({ ...base, targetUserId: A, role: 'finance', on: false })).toBe(
+      'not_yourself',
+    );
+    expect(canSwitchRole({ ...base, targetUserId: A, role: 'finance', on: true })).toBe(
       'not_yourself',
     );
   });

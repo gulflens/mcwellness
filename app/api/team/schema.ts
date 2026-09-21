@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { STAFF_ROLES } from '@domain/shared';
+import { STAFF_ROLES, isRealDate } from '@domain/shared';
 
 /**
  * What Settings › Team sends and is answered (trunk round 39, 2026-09-10;
@@ -73,6 +73,29 @@ const optionalText = (max: number) =>
     .nullable();
 
 /**
+ * A day the calendar actually has, written YYYY-MM-DD.
+ *
+ * The shape alone is not enough, and the difference is a status code: `31
+ * February` and `29 February 2025` both pass the pattern and are both refused
+ * by Postgres as dates, so without the refinement a mistyped start date is a
+ * 500 instead of the 400 a typo deserves (round 58's review, ruling R6).
+ * `isRealDate` (domain/shared/dates.ts) is this platform's one answer to
+ * whether a day exists, leap years included, and it reads no clock — so this
+ * stays a pure refinement, as every rule in `domain/` is.
+ *
+ * Used on the way out as well as in. A `date` column can hold nothing else, so
+ * the refinement never fires on a response; it is there so the contract reads
+ * the same in both directions.
+ */
+const CalendarDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number);
+    return isRealDate(year ?? 0, month ?? 0, day ?? 0);
+  }, 'That day is not on the calendar.');
+
+/**
  * One colleague, opened. Everything `TeamMember` carries plus what
  * `staff_profile` holds, which is why it is the owners' answer alone
  * (db/policies/core/staff_profile.sql).
@@ -80,10 +103,7 @@ const optionalText = (max: number) =>
 export const TeamProfile = TeamMember.extend({
   phone: z.string().nullable(),
   preferredLocale: z.enum(['en', 'ar']),
-  startedOn: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable(),
+  startedOn: CalendarDate.nullable(),
   emergencyContactName: z.string().nullable(),
   emergencyContactPhone: z.string().nullable(),
   privateNotes: z.string().nullable(),
@@ -103,10 +123,7 @@ export const ProfileBody = z.object({
   phone: z.string().regex(E164).nullable(),
   preferredLocale: z.enum(['en', 'ar']),
   jobTitle: optionalText(120),
-  startedOn: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .nullable(),
+  startedOn: CalendarDate.nullable(),
   emergencyContactName: optionalText(120),
   emergencyContactPhone: z.string().regex(E164).nullable(),
   privateNotes: optionalText(4000),
@@ -115,6 +132,21 @@ export type ProfileBody = z.infer<typeof ProfileBody>;
 
 /**
  * The codes a refusal carries, which the screen turns into a sentence
- * (design section 7). `locked` and `last_role` are 409, the other two 400.
+ * (design section 7). `locked` and `last_role` are 409, `not_yourself` and
+ * `not_a_working_role` 400.
+ *
+ * `conflict` is the fifth and is not a rule but a race: the 409 a role switch
+ * answers when the guard beneath it disagrees with the rule this API asked a
+ * moment earlier, because the role set — or the actor's own roles — moved
+ * between the read and the write, another owner switching something at the same
+ * instant. Which of the guard's own refusals it was cannot be told from the
+ * SQLSTATE, so the screen says the profile changed and to open it again, and
+ * never guesses (round 58's review, item M3).
  */
-export const TEAM_REFUSALS = ['locked', 'last_role', 'not_yourself', 'not_a_working_role'] as const;
+export const TEAM_REFUSALS = [
+  'locked',
+  'last_role',
+  'not_yourself',
+  'not_a_working_role',
+  'conflict',
+] as const;
