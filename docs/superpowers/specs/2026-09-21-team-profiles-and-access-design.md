@@ -1,9 +1,9 @@
 # A profile for each member of staff, and access that can be switched off
 
-**Date:** 21 September 2026. **Status:** design settled with the operator on 22
-September; the spec awaits the operator's reading before a plan is written
-(trunk round 58). Round 57, a fix this design found, goes first and is
-described in section 2.
+**Date:** 21 September 2026. **Status:** design settled with the operator on 21
+September and the spec approved by him the same evening; the plan follows
+(trunk round 58). Round 57, a fix this design found, went first (pull request
+207, merged the same evening) and is described in section 2.
 
 ## Why
 
@@ -25,7 +25,7 @@ not designed here.
 |---|---|---|
 | What a switch controls | a **role**: Admin, Finance, Practitioner, Lead practitioner. Not an area of the app and not a single action | operator, 21 September |
 | The second person with full access | becomes a second **Owner**; both owners are locked, from admins, from each other and from themselves | operator, 21 September |
-| Who manages the team | **owners only**. An admin still sees the list and may mint a temporary password for a colleague who is not an owner, and nothing else | operator, 21 September |
+| Who manages the team | **owners only**. An admin still sees the list, and nothing else: the temporary password is the owners' too (section 5) | operator, 21 September, the second half on reading round 57's review |
 | What the profile holds | name, email, phone, language, status; and job title, start date, an emergency contact and private notes | operator, 21 September |
 | Sequence | this piece (A), then staff documents (B), then pay (C, the books' piece fourteen) | operator, 21 September |
 | The password fault | fixed first, in its own pull request | operator, 21 September |
@@ -120,28 +120,21 @@ Switching a role on is today's insert, now the owner's alone.
 ## 5. Who may do what, at both layers
 
 A new action, `staff.access.manage`, the owner's alone: add a person, open and
-edit a profile, switch a role, suspend and reactivate. `staff.manage` (owner
-or admin) keeps the list and the temporary password, the latter never for an
-owner's row unless the actor is an owner.
+edit a profile, switch a role, suspend and reactivate, and mint a temporary
+password. `staff.manage` (owner or admin) keeps the list and nothing else.
 
-**Open, for the operator's reading: whether an admin keeps the temporary
-password at all.** Round 57's security review pointed out that the fix
-protects ownership and nothing else. A temporary password is a sign-in, so an
-admin who mints one for a colleague holding Finance has the books, and for one
-holding Lead practitioner has the trail and the reports, by one remove; taking
-"manage the team" away from admins closes the front door and leaves this one.
-Three answers, the first recommended:
-
-1. **Owners only.** An admin sees the list and nothing else. With two owners
-   there is always somebody to ask, and the rule is one sentence.
-2. **An admin, only for somebody who holds no role the admin lacks.** Nothing
-   is gained by the reset, so nothing is escalated. Exact, and hard to explain
-   across a desk: whether the button appears depends on both people's roles.
-3. **As decided on 21 September**, with the risk recorded: the act is in the
-   trail under the admin's id, which is detection and not prevention.
-
-Until the operator answers, the table above stands and this section is the
-only place the question lives.
+**Why the temporary password went with the rest.** The operator's first answer
+left it with admins for a colleague who is not an owner. Round 57's security
+review pointed out that its fix protected ownership and nothing else: a
+temporary password is a sign-in, so an admin who mints one for a colleague
+holding Finance has the books, and for one holding Lead practitioner has the
+trail and the reports, by one remove. Taking "manage the team" from admins
+would have closed the front door and left that one. A narrower rule was
+considered — an admin may, for somebody who holds no role the admin lacks — and
+not taken: it is exact and cannot be explained across a desk. With two owners
+there is always somebody to ask, and the rule is one sentence (operator, 21
+September). `canResetPassword` becomes "an owner", and its refusal keeps
+writing `password_reset_refused`.
 
 `db/policies/core/role_guard.sql` changes to match, with one carve-out the
 portal depends on: an admin invites a household, which inserts an `app_user`
@@ -195,7 +188,7 @@ is minimisation done where the typing happens.
 | `PUT /api/team/:id/roles/:role` | owner | switch on; idempotent |
 | `DELETE /api/team/:id/roles/:role` | owner | switch off, through `app.revoke_staff_role` |
 | `POST /api/team/:id/status` | owner | as today; an owner's row answers `locked` |
-| `POST /api/team/:id/password` | owner, admin | as today, within section 2's rule |
+| `POST /api/team/:id/password` | owner | as today; anybody else is refused and the refusal is a row (section 5) |
 
 `POST /api/team/:id/roles` is replaced by the `PUT`; the screen is its only
 caller. Refusals carry a code the screen turns into a sentence: `locked`
@@ -215,8 +208,8 @@ reason it is no, so the route, the screen and the tests quote one source.
 ## 8. The screen
 
 The list keeps name, email, roles and status, gains the job title, and loses
-its row of "Add …" buttons for one **Open**. An admin sees the list and, on a
-row that is not an owner's, **New temporary password**; nothing else.
+its row of "Add …" buttons for one **Open**. An admin sees the list and no
+button on it.
 
 Open is a drawer (`app/shell/components/useDrawer.ts`, the shell's copy, with
 the draggable width) with two tabs. **Profile**: the fields of section 7, the
