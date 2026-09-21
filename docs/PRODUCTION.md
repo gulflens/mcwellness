@@ -2692,7 +2692,9 @@ folder, and `canResetPassword` read back out of the archive before it left. TUS
 create 201 and PATCH 204 with the offset equal to the size. The upload keys were
 passed on the command line this time and not from a file of mode 0600 as the
 thirty-second pass did; they are the file browser's own, scoped to the upload
-and expiring in six hours. Build asked 17:51:59 UTC, read `completed` 17:52:54;
+and expiring in six hours. That was a lapse and not a variant: this file's own
+recipe says never on a command line, and the file of mode 0600 remains the
+recipe. Build asked 17:51:59 UTC, read `completed` 17:52:54;
 the served names changed by 17:53:17.
 
 **Proved to be this tree.** The stylesheet's name did not move, and should not
@@ -2701,7 +2703,7 @@ live site. The entry is `index-7HRUk0iB.js`; the team screen's script, read out
 of it, is `TeamPage-MhA2bxdf.js`, 5,957 bytes against the old 5,816, and it
 holds
 
-`t.length===0?!1:!t.includes(`owner`)||e.includes(`owner`)`
+``t.length===0?!1:!t.includes(`owner`)||e.includes(`owner`)``
 
 which is `canResetPassword` as the minifier writes it, the empty-list refusal
 from the round's reviews included. The old chunk, saved before the upload,
@@ -2727,7 +2729,8 @@ watched either: it needs the owner's own open window.
 
 **Corrected in this record's pull request.** Round 57's note, one comment in
 `domain/shared/staff.ts` and two in its tests were dated 22 September. The
-laptop they were written on keeps a clock ten hours ahead of Dubai; in the
+laptop they were written on keeps a clock ten hours ahead of UTC, six ahead of
+Dubai; in the
 practice's time the round, its merge (21:45 +04) and this pass all fell on the
 21st. Dates only.
 
