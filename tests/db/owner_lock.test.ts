@@ -131,7 +131,7 @@ beforeAll(async () => {
     id: FINANCE,
     tenantId: IDS.tenantA,
     authId: null,
-    displayName: 'Pearl Cove',
+    displayName: 'Pearl Quarry',
     roles: ['finance', 'practitioner'],
   });
   await seedUser(db, {
@@ -228,6 +228,28 @@ describe('an ownership row, and the person who holds it', () => {
       MOVED_SIGN_IN,
       SECOND_OWNER,
     ]);
+  });
+
+  it("refuses to move an owner's row to another practice", async () => {
+    // The identity columns were guarded and the row's own place was not: a row
+    // moved to another tenant takes its ownership with it, because the trigger
+    // that reads "does this row hold ownership" reads user_role by
+    // (user_id, tenant_id) and would then find nothing — so the lock would
+    // unlock itself. Named, because three other rules in this trigger raise the
+    // same SQLSTATE. Found by the round's schema review.
+    await refusesWith(
+      db,
+      "an owner's row does not move",
+      'update app_user set tenant_id = $1 where id = $2',
+      [IDS.tenantB, SECOND_OWNER],
+    );
+    expect(
+      (
+        await db.query<{ tenant_id: string }>('select tenant_id from app_user where id = $1', [
+          SECOND_OWNER,
+        ])
+      ).rows[0]?.tenant_id,
+    ).toBe(IDS.tenantA);
   });
 
   it("lets an owner change their own name and refuses the other owner's", async () => {
@@ -360,6 +382,28 @@ describe('app.revoke_staff_role', () => {
           "select app.revoke_staff_role($1, 'client_contact')",
           [HOUSEHOLD],
         );
+      },
+      'owner',
+    );
+  });
+
+  it('refuses no role at all', async () => {
+    await asApiRole(
+      db,
+      IDS.tenantA,
+      async () => {
+        await setActor(db, IDS.ownerA);
+        // A null role is not a working role. Without the null arm the whitelist
+        // reads as unknown rather than false, every rule below it reads the same
+        // way, and the function reaches its own delete and answers `false` — a
+        // caller told nothing happened by the same word that says a role was
+        // already absent. Found by the round's schema review.
+        await refusesWith(db, 'not a working role', 'select app.revoke_staff_role($1, null)', [
+          FINANCE,
+        ]);
+        expect(
+          (await db.query('select 1 from user_role where user_id = $1', [FINANCE])).rowCount,
+        ).toBe(2);
       },
       'owner',
     );
@@ -583,6 +627,58 @@ describe('who writes to app_user and user_role', () => {
       },
       'owner',
     );
+  });
+
+  it('lets no caller under the API role grant ownership, an owner included', async () => {
+    await asApiRole(
+      db,
+      IDS.tenantA,
+      async () => {
+        // Until the round's security review, `owner_grants_owner` admitted an
+        // ownership row from an owner, and one TypeScript line — `isStaffRole`,
+        // in app/api/team/roles.ts — was the whole barrier between a screen and
+        // a permanent grant of full access. The row it would write can never be
+        // updated or deleted by anybody, so the floor is unconditional now:
+        // ownership is granted by an audited data step and by nothing the API
+        // role can reach.
+        await rejectsWith(
+          db,
+          '42501',
+          "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'owner')",
+          [IDS.tenantA, ADMIN],
+        );
+        // And an existing row is not turned into one, which is the same act from
+        // the other side. `guard_owner_role` says nothing here: it judges OLD,
+        // and OLD is a finance row.
+        await rejectsWith(
+          db,
+          '42501',
+          "update user_role set role = 'owner' where user_id = $1 and role = 'finance'",
+          [FINANCE],
+        );
+      },
+      'owner',
+    );
+  });
+
+  it('leaves the audited data step able to grant it, which is where ownership comes from', async () => {
+    // The runbook's own path (docs/RUNBOOK/second-owner.md): a `do` block at a
+    // psql prompt runs as the connecting role and never `set local role
+    // app_role`, so no policy is in the way. Rolled back, because every case
+    // after this one asks what an admin may do.
+    await db.query('savepoint data_step');
+    try {
+      expect(
+        (
+          await db.query(
+            "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'owner')",
+            [IDS.tenantA, ADMIN],
+          )
+        ).rowCount,
+      ).toBe(1);
+    } finally {
+      await db.query('rollback to savepoint data_step');
+    }
   });
 });
 

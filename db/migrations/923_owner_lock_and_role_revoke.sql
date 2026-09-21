@@ -33,6 +33,28 @@
 -- as this migration itself: they belong to whoever migrates the database, and
 -- that is exactly where the design puts the undo.
 --
+-- Two things qualify that, and both are worth saying here rather than being
+-- found later.
+--
+-- The first is the argument above, pointed the other way: `app_user.id` is held
+-- in place by `user_role.user_id`'s foreign key for exactly as long as the
+-- ownership row stands, which is the reason nothing deletes an owner's
+-- `app_user` row. So the composite check in section 2 is not the only thing
+-- holding the id — but it is the only thing that catches a row whose id is
+-- updated rather than deleted, which no foreign key refuses while the
+-- referencing row is updated to follow it in the same statement.
+--
+-- The second is who "whoever migrates the database" is on the hosted databases,
+-- where it is not one person with a psql prompt. Supabase grants its own
+-- `service_role` TRUNCATE by default privileges and it bypasses row security,
+-- so anything holding the service key is inside that list. This is named and
+-- not fixed: it is the shape of every table in this schema rather than
+-- something about this one, the service key is the key the migrations
+-- themselves are applied with, and a lock that tried to bind the role that
+-- installs it would be a lock nobody could install. What it means in practice
+-- is that the service key is the practice's most dangerous secret and is read
+-- from the host's own secret store and nowhere else (docs/SECURITY.md).
+--
 -- Needs: 000 (app.current_tenant_id), 020 (app_user, user_role, role_kind),
 -- 080 (app.audit_row, which keeps the old values of the row this deletes).
 -- Not 095: app.actor_has_role reads a session setting, and the one question
@@ -73,11 +95,19 @@ alter table public.user_role enable always trigger guard_owner_role;
 --    trigger can see, and a guard that can be blinded by the caller is not a
 --    guard. It reads and never writes.
 --
---    Three refusals, and one thing that is not refused: an owner correcting
+--    Four refusals, and one thing that is not refused: an owner correcting
 --    their own name, email address or telephone number, which is the reason
 --    the actor is read at all. With no actor stamped — a data step at a psql
 --    prompt — v_actor is null and is distinct from every id, so those three
 --    columns are refused there too, which is the safe way round.
+--
+--    The first of the four is the row's own place, and it is first because
+--    everything after it depends on it: this trigger asks user_role whether
+--    OLD holds ownership, by (user_id, tenant_id). A row whose tenant_id moved
+--    would leave its ownership row behind in the practice it came from, so the
+--    NEXT update of that row would find no ownership and refuse nothing — the
+--    lock would have unlocked itself, and quietly. The primary key is held the
+--    same way and for the same reason. Found by the round's schema review.
 ------------------------------------------------------------------------------
 create function app.guard_owner_identity() returns trigger
 language plpgsql security definer
@@ -89,6 +119,9 @@ begin
   if not exists (select 1 from public.user_role r
                   where r.user_id = old.id and r.tenant_id = old.tenant_id and r.role = 'owner') then
     return new;
+  end if;
+  if new.tenant_id is distinct from old.tenant_id or new.id is distinct from old.id then
+    raise exception 'an owner''s row does not move' using errcode = '42501';
   end if;
   if new.status is distinct from old.status and new.status <> 'active' then
     raise exception 'an owner is not suspended or archived' using errcode = '42501';
@@ -154,7 +187,12 @@ begin
                   where r.user_id = v_actor and r.tenant_id = v_tenant and r.role = 'owner') then
     raise exception 'only an owner takes a role away' using errcode = '42501';
   end if;
-  if p_role not in ('admin', 'finance', 'practitioner', 'lead_practitioner') then
+  -- `p_role is null` said out loud, because `null not in (...)` is null and not
+  -- false: without it every rule below reads as unknown too, the function
+  -- reaches its own delete, removes nothing and answers `false` — which is the
+  -- same word it uses for "they did not hold that role". A null role is not a
+  -- working role, and a caller that sent one should be told so.
+  if p_role is null or p_role not in ('admin', 'finance', 'practitioner', 'lead_practitioner') then
     raise exception 'not a working role' using errcode = '42501';
   end if;
   if v_actor = p_user_id then

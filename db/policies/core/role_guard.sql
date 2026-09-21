@@ -63,18 +63,33 @@ create policy admin_updates_only on public.user_role as restrictive for update t
   using (app.actor_has_role('owner'))
   with check (app.actor_has_role('owner'));
 
--- Only the owner hands out or keeps ownership. Said twice on purpose: the two
--- policies above already leave every role row but a household's to the owner,
--- and these two say the narrower thing that must stay true whatever those are
--- later widened to — nobody but an owner turns a row into an owner row, and
--- nobody but an owner touches one.
+-- **Ownership is not written by the API role at all**, whoever is asking. Not an
+-- admin, and not an owner either: these two policies admitted an owner until the
+-- round's security review of 22 September 2026 pointed out what that left
+-- standing. `isStaffRole` — one line of TypeScript in `app/api/team/roles.ts` —
+-- was then the whole barrier between a screen and a permanent grant of full
+-- access to the practice, and the row it would write is permanent in the strict
+-- sense: migration 923's `guard_owner_role` refuses every later update and
+-- delete of it, for every caller, so a mistake here is corrected by a migration
+-- and by nothing smaller.
+--
+-- Ownership is granted where the design puts it: by an audited data step, under
+-- the founder's own id, rehearsed first (docs/RUNBOOK/second-owner.md). Nothing
+-- legitimate loses anything by the narrowing — that step is a `do` block run as
+-- the connecting role and never `set local role app_role`, so no policy is in
+-- its way, and `app.bootstrap_practice` (956) is security definer and writes the
+-- first owner as its own owner.
 drop policy if exists owner_grants_owner on public.user_role;
 create policy owner_grants_owner on public.user_role as restrictive for insert to app_role
-  with check (role <> 'owner' or app.actor_has_role('owner'));
+  with check (role <> 'owner');
+-- And an existing row is not turned into an ownership row, which is the same act
+-- from the other side. `guard_owner_role` says nothing about it: that trigger
+-- judges OLD, so a finance row becoming an owner row is this policy's to refuse
+-- and nothing else's.
 drop policy if exists owner_keeps_owner on public.user_role;
 create policy owner_keeps_owner on public.user_role as restrictive for update to app_role
-  using (role <> 'owner' or app.actor_has_role('owner'))
-  with check (role <> 'owner' or app.actor_has_role('owner'));
+  using (role <> 'owner')
+  with check (role <> 'owner');
 
 -- The row that holds ownership is the owner's alone: no admin may edit it, so
 -- the identity link cannot be moved onto someone else and the owner cannot be
@@ -98,6 +113,7 @@ create policy owner_keeps_identity on public.app_user as restrictive for update 
 -- app_role, and refused there for everybody. Row security answers a refusal as
 -- "nothing to update", which is what a screen should show; the trigger answers
 -- it as an error, which is what a lock must do. Neither layer is enough alone.
--- owner_grants_owner is the one with nothing beneath it, and that is deliberate:
--- ownership is granted by an insert, from an audited data step and never from a
--- screen (design section 3), so there is no trigger to refuse it.
+-- owner_grants_owner is the one with nothing beneath it, and that is why it is
+-- unconditional: ownership is granted by an insert, and an insert is the one act
+-- on an ownership row that migration 923 deliberately says nothing about, so
+-- this policy is the whole of the floor rather than the polite half of it.

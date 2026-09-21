@@ -16,6 +16,10 @@ let db: pg.Client;
 beforeAll(async () => {
   db = await freshDatabase();
   await seedTenant(db, IDS.tenantA, IDS.ownerA, 'Synthetic Studio');
+  // A second practice, so the tenant-scoped key below has a real person of
+  // another practice's to be refused: a cross-tenant id is refused at write
+  // time rather than filtered at read (099_tenant_scoped_keys.sql).
+  await seedTenant(db, IDS.tenantB, IDS.ownerB, 'Other Studio');
   await seedUser(db, {
     id: STAFF,
     tenantId: IDS.tenantA,
@@ -103,10 +107,11 @@ describe('staff_profile', () => {
     ).toBe(0);
   });
 
-  it('says in the trail that the three private columns changed, and never what they said', async () => {
+  it('says in the trail that the five private columns changed, and never what they said', async () => {
     await setAuditContext(db, IDS.ownerA);
     await db.query(
-      "update staff_profile set private_notes = 'Asked about part time.', emergency_contact_phone = '+971500000042' where user_id = $1",
+      "update staff_profile set private_notes = 'Asked about part time.', " +
+        "emergency_contact_phone = '+971500000042', started_on = '2019-11-05' where user_id = $1",
       [STAFF],
     );
     const { rows } = await db.query<{ changed: string[]; text: string }>(
@@ -114,11 +119,41 @@ describe('staff_profile', () => {
         "from audit_log where entity_type = 'staff_profile' and action = 'update' order by id desc limit 1",
     );
     expect(rows[0]?.changed).toEqual(
-      expect.arrayContaining(['private_notes', 'emergency_contact_phone']),
+      expect.arrayContaining(['private_notes', 'emergency_contact_phone', 'started_on']),
     );
-    for (const leaked of ['part time', 'March', '0000042', '0000041', 'Ember']) {
+    // The positive control, and the reason a zero below is redaction rather than
+    // a typo: the row's own `user_id` is in `new_values`, read by the very same
+    // expression that finds none of the five values. It is the control BECAUSE
+    // it is not on migration 967's list — the job title was, until the security
+    // review pointed out that a job title and a start date reach an admin and a
+    // lead practitioner through the activity feed, which contradicts "the
+    // owners and nobody else".
+    expect(rows[0]?.text).toContain(STAFF);
+    for (const leaked of [
+      'part time',
+      'March',
+      '0000042',
+      '0000041',
+      'Ember',
+      'Coordinator',
+      '2019-11-05',
+    ]) {
       expect(rows[0]?.text, leaked).not.toContain(leaked);
     }
+  });
+
+  it('refuses a row whose person belongs to another practice', async () => {
+    // (tenant_id, user_id) names a person and their practice together
+    // (099_tenant_scoped_keys.sql, the shape 700_portal_invite.sql and
+    // 916_enquiry.sql use), so this practice cannot hold a profile about
+    // somebody else's colleague. Run as the superuser, because row security is
+    // the other layer and this is the key underneath it.
+    await rejectsWith(
+      db,
+      '23503',
+      'insert into staff_profile (tenant_id, user_id) values ($1, $2)',
+      [IDS.tenantA, IDS.ownerB],
+    );
   });
 
   it('holds one row for one person and a telephone in E.164', async () => {

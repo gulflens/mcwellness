@@ -523,17 +523,20 @@ describe('who works at the practice', () => {
 
     // app.audit_row writes the whole row into the trail on every insert and
     // update, and the trail is append-only and kept five years: migration 967
-    // is what keeps these three columns out of it for good. `kept` is what
-    // makes this a test rather than a search that finds nothing everywhere —
-    // the job title is in the trail, read by the same expression, so a zero
-    // beside it is redaction and not a typo.
+    // is what keeps these five columns out of it for good — the job title and
+    // the start date joined the three private ones when the round's security
+    // review pointed out that both reach an admin and a lead practitioner
+    // through the activity feed. `kept` is what makes this a test rather than a
+    // search that finds nothing everywhere: the row's own `user_id` is in the
+    // trail, read by the same expression, so a zero beside it is redaction and
+    // not a typo.
     const trail = await h.owner.query<{ n: string; leaked: string; kept: string }>(
       "select count(*)::text as n, count(*) filter (where coalesce(new_values::text, '') || " +
         "coalesce(old_values::text, '') ~ $1)::text as leaked, " +
         "count(*) filter (where coalesce(new_values::text, '') || " +
         "coalesce(old_values::text, '') ~ $2)::text as kept " +
         "from audit_log where entity_type = 'staff_profile'",
-      ['Probation|Amber Orchard|\\+971500000052', 'Lead coordinator'],
+      ['Probation|Amber Orchard|\\+971500000052|Lead coordinator|2026-03-01', userId],
     );
     expect(Number(trail.rows[0]?.n)).toBeGreaterThanOrEqual(2);
     expect(Number(trail.rows[0]?.kept)).toBeGreaterThanOrEqual(1);

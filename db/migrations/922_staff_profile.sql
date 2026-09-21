@@ -40,7 +40,17 @@ create table staff_profile (
   -- Every tenant-scoped table's key (099_tenant_scoped_keys.sql), so a later
   -- composite foreign key into this table is possible; its own index leads
   -- with tenant_id, so no separate tenant-only index is added beside it.
-  unique (tenant_id, id)
+  unique (tenant_id, id),
+  -- And the same rule pointing outwards, which 099 asks of every tenant-scoped
+  -- table and the round's schema review found missing here: bound to a person
+  -- of the SAME practice, so a cross-tenant id is refused at write time rather
+  -- than filtered at read. The shape 700_portal_invite.sql and 916_enquiry.sql
+  -- use. It stands beside the plain `user_id … references app_user (id)`
+  -- above rather than replacing it, because `unique (user_id)` is what
+  -- `on conflict (user_id)` in app/api/team/profile.ts depends on, and that
+  -- column's own reference is what makes one row per person a statement about
+  -- a person and not about a pair.
+  foreign key (tenant_id, user_id) references app_user (tenant_id, id)
 );
 create index staff_profile_created_by_idx on staff_profile (created_by);
 
@@ -73,3 +83,10 @@ $$;
 
 -- rollback:
 --   drop table if exists public.staff_profile;
+--
+--   Two policy files go with the table, because a policy is declarative and the
+--   runner re-applies every one of them after the migrations on each db:migrate
+--   (.claude/rules/data-model.md): delete db/policies/core/staff_profile.sql,
+--   and take `staff_profile` out of the array in
+--   db/policies/core/tenant_isolation.sql. Left in place, the next db:migrate
+--   fails on both — a policy on a table that is no longer there.

@@ -2,8 +2,9 @@
 -- Needs: 922 (staff_profile, whose columns these are), 965 (app.audit_redact,
 --        the version this restates)
 --
--- Three more keys on the list app.audit_redact drops outright: staff_profile's
--- own emergency_contact_name, emergency_contact_phone and private_notes
+-- Five more keys on the list app.audit_redact drops outright: every column
+-- staff_profile holds that is not bookkeeping — job_title, started_on,
+-- emergency_contact_name, emergency_contact_phone and private_notes
 -- (docs/superpowers/specs/2026-09-21-team-profiles-and-access-design.md
 -- section 6). An emergency contact is a third person's name and number, and
 -- the private notes are the owners' own words about a colleague — the row
@@ -13,6 +14,24 @@
 -- and reached by no erasure. Without this migration either value would sit
 -- in the log for the log's whole life however the row itself is later
 -- edited or the person leaves.
+--
+-- **Why the job title and the start date are on the list too**, which the
+-- round's security review is what settled. The row rule says the owners and
+-- nobody else, and it means it; but `audit_log` admits an owner, an admin and
+-- the lead practitioner (db/policies/core/audit_log.sql), and
+-- `app/api/audit/activity.ts` answers the old and the new values for every
+-- entity type it is asked about. Left off this list, a job title and a start
+-- date would reach an admin and a lead practitioner through
+-- `GET /api/audit/activity?entityType=staff_profile` — which contradicts the
+-- promise the table was created to keep. What the trail still says is that
+-- those columns changed, through `changed_fields`, which `app.audit_row`
+-- computes from the raw rows before this function is called.
+--
+-- **The keys are dropped by name, on every table.** No other table has a
+-- column by any of these names (checked against every migration on
+-- 2026-09-22), so nothing else loses a value here. `job_title` and
+-- `started_on` are generic enough to be worth saying twice: whoever adds a
+-- column by either name elsewhere should know it will not reach the trail.
 --
 -- **Why 967 and not the trunk's next free number after 921 (924).** 965
 -- restates `app.audit_redact` in full — `create or replace` resets every
@@ -24,7 +43,7 @@
 -- trail. This file sorts after 965 so its restatement is the one left
 -- standing.
 --
--- 965's body, verbatim and whole, with the three keys added to the end of
+-- 965's body, verbatim and whole, with the five keys added to the end of
 -- the dropped list. Restated in full for the reason 965 itself gives:
 -- `create or replace` resets every attribute — language, volatility,
 -- strictness, search_path — and the revoke alike.
@@ -47,6 +66,7 @@ as $$
                                      'pregnancy', 'pregnancy_note',
                                      'medication', 'medication_note',
                                      'scalp', 'scalp_note',
+                                     'job_title', 'started_on',
                                      'emergency_contact_name', 'emergency_contact_phone',
                                      'private_notes']) as e),
     '{}'::jsonb)
