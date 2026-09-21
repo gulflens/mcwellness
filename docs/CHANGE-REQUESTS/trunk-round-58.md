@@ -81,16 +81,28 @@ table joins the tenant fence in `tenant_isolation.sql`; and it carries the audit
 trigger. **Not the person themselves**, deliberately: a note about somebody
 that they can read is a different thing from the one the operator asked for. It
 also carries `unique (tenant_id, id)`, which `099_tenant_scoped_keys.sql`
-requires of every tenant-scoped table and a database test enforces.
+requires of every tenant-scoped table and a database test enforces, and — added
+on the round's final review — the same rule pointing outwards: `foreign key
+(tenant_id, user_id) references app_user (tenant_id, id)`, so a profile cannot be
+about another practice's colleague. It stands beside the plain `user_id`
+reference rather than replacing it, because `unique (user_id)` is what the save's
+`on conflict (user_id)` depends on and is what makes one row per **person**
+rather than one row per pair.
 
 **Two triggers that bind every caller** (migration `923`).
 `guard_owner_role`, before update or delete on `user_role`, refuses any change
 to a row whose role is already `owner` — judged on `OLD` alone, so granting
 ownership is untouched and everything afterwards is refused.
 `guard_owner_identity`, before update on `app_user`, refuses for a row holding
-ownership: any status other than `active`, any move of a non-null `auth_id`,
-and any change to the name, the email address or the telephone unless the actor
-is that same person. Both are `enable always`, so `session_replication_role`
+ownership four things: any move of the row itself — its `tenant_id` or its `id` —
+any status other than `active`, any move of a non-null `auth_id`, and any change
+to the name, the email address or the telephone unless the actor is that same
+person. The first of the four was added on the round's final review and comes
+first because the rest depend on it: this trigger asks `user_role` whether the
+row holds ownership, by `(user_id, tenant_id)`, so a row whose `tenant_id` had
+moved would leave its ownership row behind in the practice it came from and the
+next update of it would find no ownership and refuse nothing. The lock would have
+unlocked itself, quietly. Both triggers are `enable always`, so `session_replication_role`
 cannot switch them off, and **neither carries a bypass setting**: a setting the
 API role could set is not a lock. Linking a sign-in for the first time, null to
 a value, is allowed, because that is how an owner arrives and how the bootstrap
@@ -111,9 +123,13 @@ where the design puts the undo.
 leaves the table. The API role holds no delete grant on `user_role` and gains
 none, so the function is security definer and therefore states every rule in
 full: the actor must be named; the actor must be an owner; the role must be one
-of the four working roles; not oneself; the target must be in this practice; the
-target must not hold ownership; and the target must be left with at least one
-working role. Each refusal is `42501` with its own sentence. **Deleted, not
+of the four working roles, **and not null** — `null not in (…)` is null rather
+than false, so without saying so the function read every rule below it as unknown
+too, reached its own delete, removed nothing and answered `false`, which is the
+word it uses for "they did not hold that role" (the round's final review); not
+oneself; the target must be in this practice; the target must not hold ownership;
+and the target must be left with at least one working role. Each of the seven
+refusals is `42501` with its own sentence. **Deleted, not
 marked revoked.** A `revoked_at` column was considered and not taken: roles are
 read in several places — `app.resolve_actor`, the team list,
 `owner_keeps_identity`, the portal's own functions — and a reader that forgot
@@ -154,18 +170,46 @@ an admin invites a household, which inserts an `app_user` and a
 `client_contact` row and later suspends it (`app/api/portal/access.ts`).
 `credential` and `service_type` keep the rule they have always had, the owner or
 an admin, because Settings › Practitioners is not this piece.
-`owner_grants_owner`, `owner_keeps_owner` and `owner_keeps_identity` stand as
+`owner_keeps_owner` and `owner_keeps_identity` stand as
 the courtesy above the triggers and agree with them: row security answers a
 refusal as "nothing to update", which is what a screen should show, and the
 trigger answers it as an error, which is what a lock must do.
-`owner_grants_owner` is the one with nothing beneath it, deliberately —
-ownership is granted by an insert, from an audited data step and never from a
-screen.
+
+**And ownership is not written by the API role at all**, an owner's own request
+included. `owner_grants_owner` and `owner_keeps_owner` admitted an ownership row
+from an owner until the round's final security review, which pointed out what
+that left standing: `isStaffRole`, one line of TypeScript in
+`app/api/team/roles.ts`, was then the whole barrier between a screen and a
+permanent grant of full access to the practice — permanent in the strict sense,
+because `guard_owner_role` refuses every later update and delete of that row for
+every caller, so a mistake is corrected by a migration and by nothing smaller.
+Both policies are unconditional now, for insert and for update alike, and the
+insert is the act migration `923` deliberately says nothing about, so this policy
+is the whole of the floor rather than the polite half of it. Nothing legitimate
+loses anything: the runbook's `do` block runs as the connecting role and never
+`set local role app_role`, and `app.bootstrap_practice` is security definer and
+writes the first owner as its own owner. Ownership is granted by an audited data
+step and by nothing else.
 
 **Redaction is migration `967`, not `924`, and the number is the point.**
-`app.audit_redact` gains `emergency_contact_name`, `emergency_contact_phone`
-and `private_notes`, so the trail records that those three changed and never
-what they said. Migration `965` restates the same function in full, because
+`app.audit_redact` gains all five of `staff_profile`'s own columns —
+`job_title`, `started_on`, `emergency_contact_name`, `emergency_contact_phone`
+and `private_notes` — so the trail records that they changed and never what they
+said.
+
+**Five and not three**, which the round's final security review settled. The row
+rule says the owners and nobody else and means it; but `audit_log` admits an
+owner, an admin **and** the lead practitioner, and `app/api/audit/activity.ts`
+answers old and new values for every entity type it is asked about. A job title
+and a start date left off the list therefore reached two of the three people this
+table was created to keep them from, through
+`GET /api/audit/activity?entityType=staff_profile` — a walk around the row rule
+rather than through it. Both are generic column names, so the check 965's header
+makes was made again here: no other table in the schema has a column called
+`job_title` or `started_on` (every migration read on 22 September 2026), and
+whoever adds one elsewhere should know it will not reach the trail.
+
+Migration `965` restates the same function in full, because
 `create or replace` resets every attribute and a migration that adds a key must
 restate the whole of it; the runner applies pending files in numeric order; so
 on a fresh database a file numbered below 965 would run first and then be
@@ -303,11 +347,16 @@ are recorded where they are not the obvious one.
   and each of admin, finance, lead practitioner and practitioner reads nothing;
   an admin's update touches no row and an admin's insert is refused; another
   practice sees nothing; one row per person; a telephone number that is not
-  E.164 is refused. The redaction case proves its own search expression works —
-  the job title **is** found in the trail by the same expression that finds no
-  note, no emergency contact name and no emergency contact number — so a zero is
-  redaction and not a typo.
-- **The lock.** `tests/db/owner_lock.test.ts`, nineteen cases, of which the
+  E.164 is refused; and a row whose person belongs to another practice is refused
+  `23503` by the composite key, which was red as a plain success before that key
+  existed. The redaction case proves its own search expression works — the row's
+  own `user_id` **is** found in the trail by the same expression that finds none
+  of the five values — so a zero is redaction and not a typo. That control was
+  the job title until the final review put the job title on the redaction list;
+  the case then went red on the job title's own text, which is what a control
+  that has become a subject looks like.
+- **The lock.** `tests/db/owner_lock.test.ts`, twenty-three cases — nineteen when
+  the task was built, four more on the final review — of which the
   first sixteen were written before the migration and thirteen of them were red,
   including the one that matters: the ownership row was deleted successfully.
   Afterwards: an ownership row refuses update and delete for every
@@ -316,7 +365,13 @@ are recorded where they are not the obvious one.
   other owner's; a colleague who is not an owner is still editable and
   suspendable; and `app.revoke_staff_role` refuses each of its cases, each
   assertion naming the message as well as the code, because seven refusals share
-  one SQLSTATE and the case has to say which one spoke.
+  one SQLSTATE and the case has to say which one spoke. Four cases were added on
+  the final review, each red first in the shape that matters: moving the second
+  owner's `tenant_id` **succeeded**, which is the lock unlocking itself;
+  `app.revoke_staff_role(…, null)` returned `false` rather than raising; and
+  inserting an ownership row as `app_role` with an owner's roles **succeeded**,
+  as did turning a finance row into one. The same insert as the superuser still
+  works, which is the runbook's path and is asserted beside them.
 - **The race.** The test asserts **which row** the second owner is queued on,
   and that detail is the whole test. Every audited write already queues on one
   row of `app.audit_chain` until the previous writer commits, so with the lock
@@ -331,7 +386,7 @@ are recorded where they are not the obvious one.
   old routes: twelve of twenty red, in the two shapes expected — 404 where a
   route did not exist yet, and 200 or 500 where 403 or 409 is now right. Two of
   those 500s carried SQLSTATE `42501`: the old routes, still letting an admin
-  through, meeting the new floor. The file now holds twenty-three cases and
+  through, meeting the new floor. The file now holds twenty-four cases and
   nothing skipped. The twin cases that drive every act as an admin read the row
   and its roles back in full afterwards, because beneath the route a forbidden
   update is silence and only the read-back tells a missing guard from a working
@@ -347,17 +402,28 @@ are recorded where they are not the obvious one.
   English-in-both-slots version.
 - **The screen.** `TeamPage.test.tsx` and `TeamMemberDrawer.test.tsx` were
   written first: the drawer's file would not resolve and four of the page's
-  cases failed. Twenty-five cases now, and three of them exist because a review
+  cases failed. Twenty-six cases now, and three of them exist because a review
   found that the three guards standing between a typo and a silent save as
   "nothing recorded" had no test at all; they were made red by breaking the
   guard, and they are what turns red the day either shell control moves its `id`
   onto a wrapper.
 - **The whole gate.** `pnpm verify`: prettier, lint, types, the secrets scan and
-  the migration audit clean, and **3,074 tests across 257 files**, with one
+  the migration audit clean, and **3,075 tests across 257 files**, with one
   skip that is not this round's (`tests/security/static.test.ts`, pre-existing).
-  `pnpm test:db`: **1,552 tests across 109 files, none skipped** — the two cases
+  `pnpm test:db`: **1,559 tests across 109 files, none skipped** — the two cases
   parked while the API was being written were un-skipped and rewritten, and the
   suite ends with `app.verify_audit_chain()` answering null.
+- **The final fix wave**, whose own changes were watched failing first wherever
+  they change behaviour. The portal's revoke answered **200** where 409 is now
+  right. The list reload behind an open drawer put the keyboard on the drawer's
+  **close button** — the one fault of this round that a browser found and no test
+  could, now
+  pinned by a case in `TeamPage.test.tsx` that opens the drawer, focuses the
+  Finance switch, flips it, waits for the list to really reload and then asks
+  where the keyboard is; made red once by inlining `onClose` again, which is the
+  one edit that would break it. `staff_profile` narrated in Arabic as
+  "اطّلع على staff profile" — an English table name in the middle of an Arabic
+  sentence. And `GET /api/team/:id` wrote one read where two are owed.
 - **Looked at, twice.** The screen was driven in a browser against a real
   database and a real API at 1440, 1200, 768 and a drawer dragged to its 320px
   floor, and again at 768 after the review's fixes. Six faults were found by
@@ -371,8 +437,21 @@ are recorded where they are not the obvious one.
 
 ### Every file touched outside the trunk's own paths
 
-Five, in two streams, and each for a reason this round could not avoid.
+Seven, in two streams, and each for a reason this round could not avoid.
 
+- **`app/api/portal/access.ts`** and **`tests/portal/db/routes.test.ts`** (the
+  client-portal stream's). The household portal's revoke path, because **this
+  round broke it**. `role_guard.sql` now leaves a member of staff's `app_user`
+  row to the owners, so the revoke's `update app_user set status = 'suspended'`
+  matches no row for an admin and raises nothing: for a household contact whose
+  account is also a member of staff, the household kept its access while the
+  trail recorded that the access had been revoked. A round does not hand another
+  stream a fault it caused, and the fix is the smallest one that removes it —
+  the same question the invite path a few lines above already asks, asked before
+  any write, answered `409 staff_account`, writing nothing and logging nothing;
+  plus the row count on the update, so no row suspended is never answered as
+  `revoked`. **What revoking a member of staff's household access should MEAN is
+  not decided here** and is round 59's, with the erasure of the same shape.
 - **`app/api/portal/auth-admin.ts`** and **`tests/portal/auth-admin.test.ts`**
   (the client-portal stream's). `AuthAdminProvider` gained `setEmail`. The seam
   is shared — trunk round 39 built the team routes on it — and a provider method
@@ -406,7 +485,9 @@ and the documents. `docs/SPEC/OWNERSHIP.md` records both widenings.
 **Three belong to round 59, which the operator approved on 21 September** — the
 first of them before this round's first line of code was written, and the other
 two added to its scope as they were found. They are one subject: an act aimed at
-a household reaching an account that is also a member of staff.
+a household reaching an account that is also a member of staff. The second of
+them had a half this round caused, and that half was fixed here rather than
+handed on.
 
 1. **Client erasure unlinks the sign-in of every contact of the erased client,
    staff included.** `app.erase_client` archives and unlinks the `app_user` row
@@ -422,14 +503,26 @@ a household reaching an account that is also a member of staff.
    notices. Erasure is a large, compliance-critical function in another round's
    care, and a wrong edit there is worse than a loud refusal, which is why this
    round did not touch it.
-2. **The portal's revoke path has no practice-role check.**
-   `app/api/portal/access.ts` suspends an `app_user` row by id when a
-   household's access is revoked. If that contact's account is an owner's, an
-   owner pressing Revoke now gets 500 where the same press used to suspend the
-   owner; and an **admin** pressing it updates no row and the route still
-   answers `revoked` and logs it. Nobody is suspended who should not be, and the
-   trail gains a row that is not true. Round 57's note raised the row count; the
-   check on the roles is the other half.
+2. **The portal's revoke path had no practice-role check — fixed here, because
+   this round is what made it wrong.** `app/api/portal/access.ts` suspends an
+   `app_user` row by id when a household's access is revoked. Under this round's
+   `role_guard.sql` an **admin**'s update of a member of staff's row matches no
+   row and raises nothing, so the route answered `revoked` and logged it while
+   the household kept its access: nobody suspended who should not have been, and
+   a row in the append-only trail that is not true. That is a regression this
+   round caused, so it was not left for the next one. The route now asks, before
+   any write, whether the contact's account holds any role but `client_contact` —
+   the same question the invite path a few lines above asks, and
+   `app.portal_invite_state` asks beneath both — and answers `409 staff_account`,
+   writing nothing and logging nothing; and the update reads its own row count,
+   so none suspended is a thrown error and never `revoked`. An owner pressing
+   Revoke on a contact who is also an owner now meets the same 409 instead of the
+   trigger's 500.
+   **What round 59 still owns is the question this deliberately does not answer:
+   what revoking a member of staff's household access should MEAN.** Ending it
+   without touching their sign-in needs a way to say so that this schema does not
+   have yet, and it is the same decision as item 1's, about the same pair of
+   people, so the two are taken together or neither.
 3. **A revoke and an erasure take two rows in opposite orders.**
    `app.revoke_staff_role` locks the colleague's `app_user` row and then the
    audit chain's; `app.erase_client` writes its first audited row and so takes
@@ -474,10 +567,13 @@ a household reaching an account that is also a member of staff.
    - No test chains `setEmail` and then `deleteUser` on the fake sign-in
      provider; it was traced by hand as correct. The fake's self-address branch
      deletes and re-sets the same key instead of returning early.
-   - `mountTeamRoles` carries a default clock, `() => new Date()`, which nothing
-     uses: the folder's convention is injection only, so the default should go.
-   - `tests/db/team.test.ts` adds its one test-only constraint **outside** the
-     `try` whose `finally` drops it. Move the `alter` inside.
+   - ~~`mountTeamRoles` carries a default clock, `() => new Date()`, which
+     nothing uses.~~ **Done in the final fix wave:** the default is gone and
+     `routes.ts` passes the clock, which was already the folder's convention.
+   - ~~`tests/db/team.test.ts` adds its one test-only constraint **outside** the
+     `try` whose `finally` drops it.~~ **Done in the final fix wave:** the
+     `alter` is inside the `try` now, so a failure between the two statements
+     cannot leave the constraint on the table and take every later case with it.
    - Nothing pins the two clauses of the roles-only target read on the three
      routes that use it: a household contact's id should be asserted as 404 on
      `/status`, `PUT` and `DELETE`.
@@ -487,10 +583,14 @@ a household reaching an account that is also a member of staff.
 
 ### What the practice keeps about its own staff
 
-This belongs in a data inventory under `docs/COMPLIANCE/`, and no such file
-exists yet: the register there is of vendors, not of categories. The entry is
-written here so that whoever writes that inventory takes it from a record and
-not from memory.
+**This is now `docs/COMPLIANCE/data-inventory.md`**, which the round's final fix
+wave created for it: an inventory of the categories of personal data the practice
+holds, begun on 22 September 2026 with this one entry. The register beside it is
+of vendors, not of categories, which is why there was nowhere for this to live
+when the round was written. The inventory is the record; what follows is kept
+here because it is the round's own account of the decision, and the two say the
+same thing. The household categories are owed in that file and are described in
+`docs/SPEC/client-record.md` and `docs/SECURITY.md` until they are moved.
 
 **The category.** What the practice keeps about a member of its own staff
 beyond the sign-in: a **job title**, a **start date**, an **emergency contact** —
@@ -507,11 +607,14 @@ platform.
 practitioner, and not the person themselves. That is the row rule, not only the
 screen's (`db/policies/core/staff_profile.sql`).
 
-**What the trail keeps.** That the emergency contact's name, the emergency
-contact's number and the private notes **changed** — who changed them, when and
-why — and never what they said (migration `967`). The audit log is append-only
-and kept five years, and no erasure reaches it, so a value written there would
-outlive the row it was copied from.
+**What the trail keeps.** That any of the five fields **changed** — who changed
+it, when and why — and never what it said (migration `967`). All five and not
+only the three that read as private: the audit trail admits an owner, an admin
+and the lead practitioner, and the activity feed answers old and new values for
+every kind of row, so a job title and a start date left in it reached two of the
+three people this table exists to keep them from. The log is append-only and kept
+five years, and no erasure reaches it, so a value written there would outlive the
+row it was copied from, and outlive the person leaving.
 
 **Private on the screen is not private in law.** A member of staff has the same
 right of access and correction as anybody else the practice holds data about,
@@ -537,17 +640,47 @@ the API before the screen on purpose, so the screen was built on real shapes;
 that ordering is an ordering of commits and never of deploys.
 
 **Databases before code, and the gap kept short.** The new routes read
-`staff_profile` and call `app.revoke_staff_role`, so the migrations go first.
-The old code is safe on the new schema with one exception, which is the point of
-the round: an admin's write to a staff row meets the new floor and answers 500
-where it used to answer 200. That was watched happening in the round's own red
-run. Between applying the migrations and serving the new build, do not leave an
-admin working on Settings › Team.
+`staff_profile` and call `app.revoke_staff_role`, so the migrations go first. The
+old code is safe on the new schema except where an **admin** writes to a staff
+row, which is the point of the round; and in the window between the policies
+being re-applied and the new build being served, the old screen answers an admin
+in two different ways, both of them wrong and neither of them alarming:
+
+- **Add a person** and **Add a role** answer **5xx**. The old routes insert into
+  `app_user` and `user_role` without asking, so the insert meets
+  `role_guard.sql`'s `with check` and raises `42501` — which the middleware turns
+  into a 500. That was watched happening in the round's own red run: two of the
+  twelve red cases carried that SQLSTATE.
+- **Suspend** answers **404**. The old status route reads its own row count, and
+  an admin's `update app_user` now matches no row rather than raising, so the
+  route correctly concludes there is nothing to suspend and says so. Nothing is
+  suspended, and nothing says why.
+
+So: between applying the migrations and serving the new build, do not leave an
+admin working on Settings › Team. The same silence-instead-of-an-error is what
+broke the portal's revoke path, which is fixed in this pull request and not left
+in the window (see item 2 of "Found beside it").
 
 1. **The hold protocol**, before anything is uploaded: no second session
    deploying at the same moment. Two builds twelve seconds apart cost a pass in
    September, and the loser fails with no logs.
-2. **Three migrations, by hand, staging first and then production**, in this
+2. **One read first, before a single migration, on production.** Does any
+   household contact's account already hold a role at the practice? Because from
+   the moment `923` is applied, an erasure of that household **cannot complete**
+   — `guard_owner_identity` refuses it and the whole erasure rolls back (item 1
+   of "Found beside it") — and that is a thing the operator hears on the day it
+   becomes true and not the day somebody asks for erasure.
+
+   ```sql
+   select ct.id from public.contact ct
+     join public.user_role r on r.user_id = ct.user_id and r.tenant_id = ct.tenant_id
+    where r.role <> 'client_contact';
+   ```
+
+   No rows: nothing to say, and the pass carries on. A row: tell the operator
+   that erasure for that household waits on round 59, before the migrations go
+   on, so the choice to proceed is his and is made knowing it.
+3. **Three migrations, by hand, staging first and then production**, in this
    order and no other: `922_staff_profile.sql`, then
    `923_owner_lock_and_role_revoke.sql`, then
    `967_audit_redact_staff_profile.sql`. Each file's statements whole and in the
@@ -557,8 +690,8 @@ admin working on Settings › Team.
    because it restates `app.audit_redact` over 965's version, which both hosted
    databases already hold; the number matters most on a database the runner
    builds from nothing, where a lower one would be overwritten by 965 and the
-   three keys would become legible in the trail again.
-3. **Three policy files, re-applied by hand.** A changed policy file is not a
+   five keys would become legible in the trail again.
+4. **Three policy files, re-applied by hand.** A changed policy file is not a
    migration, and `schema_migration` will not show whether it was done:
    `db/policies/core/tenant_isolation.sql` (`staff_profile` joins the fence),
    `db/policies/core/role_guard.sql` (rewritten), and
@@ -566,7 +699,7 @@ admin working on Settings › Team.
    re-applied, an admin still writes staff rows beneath the routes; until
    `staff_profile.sql` is, the new table has tenant isolation and no owners-only
    rule. Read the policies' `using` and `with check` text back, not their count.
-4. **Fingerprint the touched tables against a freshly migrated local
+5. **Fingerprint the touched tables against a freshly migrated local
    database.** Two hosted databases agreeing proves only that the same text was
    pasted twice. Reset and migrate a local database from `main`, then hash the
    nine categories over `staff_profile`, `app_user` and `user_role`: columns,
@@ -576,13 +709,24 @@ admin working on Settings › Team.
    grants, indexes, policies, triggers
    (each with **how it is enabled** — both of this round's are `enable always`,
    which a list of trigger names cannot see, so read `tgenabled`), and the whole
-   migration ledger — `schema_migration`'s filenames with their checksums.
+   migration record — `schema_migration`'s filenames with their checksums.
    Staging against local, then production against local.
-5. **The second owner's row, on production only, by the audited data step**,
+
+   **Grants are read per grantee, not as a count**, and the hosted databases are
+   expected to differ from local in exactly one way: Supabase's own
+   `service_role` holds privileges there that no local role holds, including
+   TRUNCATE by default privileges, and it bypasses row security. That is the
+   shape of every table in this schema and not something about this round's — it
+   is why migration `923`'s "where the lock ends" paragraph says the undo belongs
+   to whoever holds the service key — so the expectation is `service_role` on the
+   hosted side and nowhere else. A grantee on a hosted database that is neither
+   `app_role`, `service_role`, the schema owner nor one of Supabase's own is the
+   finding this step exists for.
+6. **The second owner's row, on production only, by the audited data step**,
    and rehearsed first: `docs/RUNBOOK/second-owner.md`. Staging has no second
    owner to write and needs none. The rehearsal is the same block ending in a
    `raise`, so it runs against the real rows and keeps nothing.
-6. **Then the code**: the archive from the merged commit, the stored build
+7. **Then the code**: the archive from the merged commit, the stored build
    settings read back and sent unchanged, the upload, the build, and the proof
    that the bytes being served are this tree — a rule read out of the live
    bundle, not a 200 from a route. Then health, deep health, and the runtime

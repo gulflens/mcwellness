@@ -440,7 +440,7 @@ git -C /Volumes/Storage/McWellness/mcwellness-team commit -m "feat(db): staff_pr
 **Interfaces:**
 - Produces: `app.revoke_staff_role(p_user_id uuid, p_role public.role_kind) returns boolean` (true when a row was removed, false when there was none), raising `42501` for each refusal; triggers `guard_owner_role` on `user_role` and `guard_owner_identity` on `app_user`.
 
-- [ ] **Step 1: Write the failing test.** `tests/db/owner_lock.test.ts` seeds, as the superuser, tenant A with `IDS.ownerA`, a **second owner** (`…00d1`, "Hazel Lagoon", also holding `finance`), an admin (`…00d2`, "Iris Harbour"), a finance colleague (`…00d3`, "Pearl Cove", roles `finance` and `practitioner`), and one household contact (`…00d4`, "Cedar Meadow", `client_contact`). Every case below is one `it`, named as written:
+- [ ] **Step 1: Write the failing test.** `tests/db/owner_lock.test.ts` seeds, as the superuser, tenant A with `IDS.ownerA`, a **second owner** (`…00d1`, "Hazel Lagoon", also holding `finance`), an admin (`…00d2`, "Iris Harbour"), a finance colleague (`…00d3`, "Pearl Quarry", roles `finance` and `practitioner`), and one household contact (`…00d4`, "Cedar Meadow", `client_contact`). Every case below is one `it`, named as written:
 
 ```ts
 // The lock holds for every caller: these run as the SUPERUSER, not as app_role.

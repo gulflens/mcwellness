@@ -83,17 +83,24 @@ select u.id,
  order by u.display_name;
 ```
 
-Read four things off that row before going on.
+Read five things off that row before going on.
 
 1. **Exactly one row came back.** If two did, narrow the fragment. Never pick
    one of two.
 2. **The roles are the ones the operator expects.** They keep every one of them:
    ownership is granted beside what a person already holds, and their existing
    Finance or Lead practitioner row is not replaced or removed.
-3. **`status` is `active`.** An owner cannot afterwards be suspended or
+3. **At least one of those roles is something other than `client_contact`** —
+   that is, this person works at the practice. A household's own contact row is
+   an account too, and one person is often both: the founder is a contact of her
+   own child's record. So a mis-pasted contact id looks exactly like a colleague
+   here, and granting it ownership would hand a household full access to the
+   practice permanently, which is the one grant nothing can undo. The block
+   below refuses it outright; this line is where you see it first.
+4. **`status` is `active`.** An owner cannot afterwards be suspended or
    archived by anybody, so a suspended row must be reactivated *before* this
    step and not after it.
-4. **Whether they have a sign-in.** They do not need one yet — an owner's
+5. **Whether they have a sign-in.** They do not need one yet — an owner's
    `auth_id` may be linked for the first time at any point, because that is how
    an owner arrives — but once it is linked it can never be moved. Section 7 is
    what that means for getting back in.
@@ -136,7 +143,7 @@ begin
   perform set_config('app.request_id', gen_random_uuid()::text, true);
   perform set_config('app.reason',     v_reason,                true);
 
-  -- Three things read back rather than assumed. Each one is a reason to stop,
+  -- Four things read back rather than assumed. Each one is a reason to stop,
   -- and stopping here costs nothing.
   if not exists (select 1 from public.user_role r
                   where r.user_id = v_founder and r.tenant_id = v_tenant
@@ -147,6 +154,15 @@ begin
                   where u.id = v_second_owner and u.tenant_id = v_tenant
                     and u.status = 'active') then
     raise exception 'the person named is not an active member of this practice';
+  end if;
+  -- An active account is not the same thing as a member of staff: a household's
+  -- own contact has one too, and the id of a contact looks exactly like the id
+  -- of a colleague. Without this, a mis-pasted id grants a household permanent
+  -- full access to the practice (the round's security review, S4).
+  if not exists (select 1 from public.user_role r
+                  where r.user_id = v_second_owner and r.tenant_id = v_tenant
+                    and r.role <> 'client_contact') then
+    raise exception 'that id is not a member of staff';
   end if;
   if exists (select 1 from public.user_role r
               where r.user_id = v_second_owner and r.tenant_id = v_tenant
@@ -172,7 +188,7 @@ $$;
 
 What a good rehearsal looks like: the notice lists `owner` beside every role the
 person already held, and then the `rehearsal: nothing is kept` exception. If any
-other exception comes back, read it — each of the three above says exactly what
+other exception comes back, read it — each of the four above says exactly what
 it found — and do not remove the raise until it is understood.
 
 ## 5. The act
@@ -215,11 +231,22 @@ the founder's, carrying the reason typed into the block. One row, not two: the
 rehearsal kept nothing.
 
 **Both owners read as locked on the screen.** Sign in as the founder, open
-Settings › Team, and open each owner's profile in turn. Each shows **"Owner.
-Full access. Cannot be changed."** with the four switches greyed beneath it and
-no sign-in section at all. If only one of the two reads that way, the row was
-written for one of you and not the other, and section 3's first query is where to
-look.
+Settings › Team, and open each owner's profile in turn. Both show **"Owner. Full
+access. Cannot be changed."** with the four switches greyed beneath it. What is
+offered under them is not the same on the two rows, and both are right:
+
+- **On your own row, no button at all.** Settings has a Password screen for your
+  own password, and a reset beside a colleague's controls is a surprise nobody
+  asked for. Suspend is absent because an owner cannot be suspended by anybody,
+  themselves included.
+- **On the other owner's row, one button: New temporary password.** No Suspend
+  there either. That button is section 8's whole recovery path — it is how a
+  locked-out owner gets back in, it revokes nothing, and the trail records who
+  pressed it. Its being there is the system working, not a gap in the lock.
+
+If the lock line and the greyed switches read that way on only one of the two,
+the ownership row was written for one of you and not the other, and section 3's
+first query is where to look.
 
 **The other owner can still get in.** Have them sign in, if they have a sign-in.
 If they do not yet, this is the moment to link one — see section 7 for why the

@@ -76,8 +76,12 @@ is the database's, so that code written later cannot forget it:
   refuses, for a row that holds ownership, any change of `status` away from
   `active` and any change of `auth_id`; and refuses a change to the name, the
   email or the phone unless the actor is that same person.
-  `owner_keeps_identity` (role_guard.sql) is tightened to say the same, so the
-  courtesy and the floor agree.
+  `owner_keeps_identity` (role_guard.sql) already said the same and needed no
+  change, so the courtesy and the floor agree without one. What the round's
+  final review did tighten is the pair beside it: `owner_grants_owner` and
+  `owner_keeps_owner` no longer admit an ownership row from an owner either, so
+  the API role never writes one at all and the audited step below is the only
+  way ownership arrives.
 - **Undoing it is a migration's act**, never a screen's and never the API
   role's: the triggers carry no bypass setting, because a setting the API role
   could set is not a lock.
