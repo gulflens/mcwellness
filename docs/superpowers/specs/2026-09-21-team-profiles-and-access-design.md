@@ -1,6 +1,6 @@
 # A profile for each member of staff, and access that can be switched off
 
-**Date:** 22 September 2026. **Status:** design settled with the operator on 22
+**Date:** 21 September 2026. **Status:** design settled with the operator on 22
 September; the spec awaits the operator's reading before a plan is written
 (trunk round 58). Round 57, a fix this design found, goes first and is
 described in section 2.
@@ -10,7 +10,7 @@ described in section 2.
 Settings › Team (trunk round 39, 10 September) can add a person, add a role,
 mint a temporary password and suspend a sign-in. It cannot take a role away,
 it cannot correct a name or an address, and a row is all a person is: there is
-nothing to open. The operator's request of 22 September is for the row to
+nothing to open. The operator's request of 21 September is for the row to
 become an employee's profile, with access that is switched on and off per
 person, and for two people — the founder and one other — to hold full access
 that nobody can revoke.
@@ -23,12 +23,12 @@ not designed here.
 
 | Decision | Choice | By |
 |---|---|---|
-| What a switch controls | a **role**: Admin, Finance, Practitioner, Lead practitioner. Not an area of the app and not a single action | operator, 22 September |
-| The second person with full access | becomes a second **Owner**; both owners are locked, from admins, from each other and from themselves | operator, 22 September |
-| Who manages the team | **owners only**. An admin still sees the list and may mint a temporary password for a colleague who is not an owner, and nothing else | operator, 22 September |
-| What the profile holds | name, email, phone, language, status; and job title, start date, an emergency contact and private notes | operator, 22 September |
-| Sequence | this piece (A), then staff documents (B), then pay (C, the books' piece fourteen) | operator, 22 September |
-| The password fault | fixed first, in its own pull request | operator, 22 September |
+| What a switch controls | a **role**: Admin, Finance, Practitioner, Lead practitioner. Not an area of the app and not a single action | operator, 21 September |
+| The second person with full access | becomes a second **Owner**; both owners are locked, from admins, from each other and from themselves | operator, 21 September |
+| Who manages the team | **owners only**. An admin still sees the list and may mint a temporary password for a colleague who is not an owner, and nothing else | operator, 21 September |
+| What the profile holds | name, email, phone, language, status; and job title, start date, an emergency contact and private notes | operator, 21 September |
+| Sequence | this piece (A), then staff documents (B), then pay (C, the books' piece fourteen) | operator, 21 September |
+| The password fault | fixed first, in its own pull request | operator, 21 September |
 
 ## 1. Why a switch is a role and nothing finer
 
@@ -59,7 +59,7 @@ only because `owner_keeps_identity` refuses the update underneath; the
 password route has no underneath.
 
 So an admin may mint, and be shown, a working password for the owner's
-sign-in. Found by reading on 22 September, not by an incident. The fix is a
+sign-in. Found by reading on 21 September, not by an incident. The fix is a
 pure rule beside `canSuspend` and `canGrantTo` — an admin never resets an
 owner — asked by the route after it has read the target's roles, a test that
 an admin is refused and the owner's password is untouched, and the button
@@ -137,7 +137,7 @@ Three answers, the first recommended:
 2. **An admin, only for somebody who holds no role the admin lacks.** Nothing
    is gained by the reset, so nothing is escalated. Exact, and hard to explain
    across a desk: whether the button appears depends on both people's roles.
-3. **As decided on 22 September**, with the risk recorded: the act is in the
+3. **As decided on 21 September**, with the risk recorded: the act is in the
    trail under the admin's id, which is detection and not prevention.
 
 Until the operator answers, the table above stands and this section is the
