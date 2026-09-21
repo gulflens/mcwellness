@@ -8,6 +8,7 @@ import {
   seedTenant,
   seedUser,
 } from './helpers';
+import { connect, requireDatabaseUrl } from '../../db/runner/apply';
 import type pg from 'pg';
 
 /**
@@ -33,6 +34,14 @@ const HOUSEHOLD = '00000001-0000-4000-8000-0000000000d4';
 const ELSEWHERE = '00000001-0000-4000-8000-0000000000d5';
 /** The row an admin is allowed to insert: a person with no role yet. */
 const INVITED = '00000001-0000-4000-8000-0000000000d6';
+/**
+ * A member of staff who is also a contact of their own household: one working
+ * role and client_contact beside it. Every refusal but the working-role
+ * whitelist would let a revoke of their client_contact row through.
+ */
+const BOTH = '00000001-0000-4000-8000-0000000000d7';
+/** Two working roles and nothing else touches them: the two-at-once case. */
+const RACER = '00000001-0000-4000-8000-0000000000d8';
 /** The sign-in an owner arrives with, and the one nobody may move it to. */
 const FIRST_SIGN_IN = '00000001-0000-4000-8000-0000000000d9';
 const MOVED_SIGN_IN = '00000001-0000-4000-8000-0000000000da';
@@ -51,6 +60,53 @@ let db: pg.Client;
  */
 async function setActor(client: pg.Client, actorId: string): Promise<void> {
   await client.query("select set_config('app.actor_id', $1, true)", [actorId]);
+}
+
+/**
+ * Expects the statement to fail with 42501 AND with the message of the rule it
+ * is named for, inside a savepoint so the transaction stays usable.
+ *
+ * app.revoke_staff_role raises the same SQLSTATE seven times over, so a case
+ * that asserts the code alone can be refused by a rule it was not written
+ * about and still pass — which is how the working-role whitelist came to be
+ * covered by two assertions that neither of them actually needed it for
+ * (review of this task, finding M2). Where the rule matters, the case says
+ * which one spoke.
+ */
+async function refusesWith(
+  client: pg.Client,
+  phrase: string,
+  sql: string,
+  params: unknown[] = [],
+): Promise<void> {
+  await client.query('savepoint expect_refusal');
+  let seen: { code?: string; message?: string } = {};
+  try {
+    await client.query(sql, params);
+  } catch (error) {
+    seen = error as { code?: string; message?: string };
+  } finally {
+    await client.query('rollback to savepoint expect_refusal');
+  }
+  expect(seen.code, sql).toBe('42501');
+  expect(seen.message, sql).toContain(phrase);
+}
+
+/**
+ * A connection of its own, in a transaction, stamped the way the API stamps
+ * one: the role assumed, and the tenant, actor and roles set transaction-local
+ * (.claude/rules/compliance.md).
+ */
+async function stampedConnection(actorId: string): Promise<pg.Client> {
+  const client = await connect(requireDatabaseUrl());
+  await client.query('begin');
+  await client.query('set local role app_role');
+  await client.query(
+    "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+      "set_config('app.actor_roles', 'owner', true)",
+    [IDS.tenantA, actorId],
+  );
+  return client;
 }
 
 beforeAll(async () => {
@@ -90,6 +146,24 @@ beforeAll(async () => {
     tenantId: IDS.tenantB,
     authId: null,
     displayName: 'Rowan Ridge',
+    roles: ['finance', 'practitioner'],
+  });
+  await seedUser(db, {
+    id: BOTH,
+    tenantId: IDS.tenantA,
+    authId: null,
+    displayName: 'Laurel Summit',
+    roles: ['practitioner', 'client_contact'],
+  });
+  // Seeded here with everything else, and so already committed: the two-at-once
+  // case below runs on its own connections and cannot see this file's
+  // transaction. Nothing else in this file touches this person, because that
+  // case really does delete one of these two rows.
+  await seedUser(db, {
+    id: RACER,
+    tenantId: IDS.tenantA,
+    authId: null,
+    displayName: 'Juniper Creek',
     roles: ['finance', 'practitioner'],
   });
 
@@ -253,9 +327,12 @@ describe('app.revoke_staff_role', () => {
       IDS.tenantA,
       async () => {
         await setActor(db, ADMIN);
-        await rejectsWith(db, '42501', "select app.revoke_staff_role($1, 'practitioner')", [
-          FINANCE,
-        ]);
+        await refusesWith(
+          db,
+          'only an owner takes a role away',
+          "select app.revoke_staff_role($1, 'practitioner')",
+          [FINANCE],
+        );
       },
       'admin',
     );
@@ -274,10 +351,85 @@ describe('app.revoke_staff_role', () => {
       IDS.tenantA,
       async () => {
         await setActor(db, IDS.ownerA);
-        await rejectsWith(db, '42501', "select app.revoke_staff_role($1, 'owner')", [SECOND_OWNER]);
-        await rejectsWith(db, '42501', "select app.revoke_staff_role($1, 'client_contact')", [
-          HOUSEHOLD,
+        await refusesWith(db, 'not a working role', "select app.revoke_staff_role($1, 'owner')", [
+          SECOND_OWNER,
         ]);
+        await refusesWith(
+          db,
+          'not a working role',
+          "select app.revoke_staff_role($1, 'client_contact')",
+          [HOUSEHOLD],
+        );
+      },
+      'owner',
+    );
+  });
+
+  it('refuses a role outside the four even when every other rule would allow it', async () => {
+    await asApiRole(
+      db,
+      IDS.tenantA,
+      async () => {
+        await setActor(db, IDS.ownerA);
+        // Laurel Summit holds practitioner AND client_contact. Not an owner,
+        // not the actor, in this practice, and taking client_contact away
+        // would still leave a working role standing — so the whitelist is the
+        // only rule that can refuse this, and the message proves it is the one
+        // that did. The two assertions in the case above are both caught by
+        // the whitelist first and would be caught by another rule without it,
+        // which is why this third person exists.
+        await refusesWith(
+          db,
+          'not a working role',
+          "select app.revoke_staff_role($1, 'client_contact')",
+          [BOTH],
+        );
+        expect(
+          (
+            await db.query(
+              "select 1 from user_role where user_id = $1 and role = 'client_contact'",
+              [BOTH],
+            )
+          ).rowCount,
+        ).toBe(1);
+      },
+      'owner',
+    );
+  });
+
+  it("takes the database's word for who is an owner, not the session's", async () => {
+    await asApiRole(
+      db,
+      IDS.tenantA,
+      async () => {
+        // app.actor_roles and app.actor_id are stamped separately by the
+        // middleware and can disagree. This caller's roles say owner and their
+        // user_role rows say admin; user_role is what decides, so the colleague
+        // keeps both roles. Without that, the session's own word would be the
+        // whole boundary of the one function that can remove access.
+        await setActor(db, ADMIN);
+        await refusesWith(
+          db,
+          'only an owner takes a role away',
+          "select app.revoke_staff_role($1, 'practitioner')",
+          [FINANCE],
+        );
+        // And nobody at all when the actor is not stamped, which is its own
+        // refusal rather than a fall-through to the line above.
+        await db.query("select set_config('app.actor_id', '', true)");
+        await refusesWith(
+          db,
+          'without being named',
+          "select app.revoke_staff_role($1, 'practitioner')",
+          [FINANCE],
+        );
+        expect(
+          (
+            await db.query("select 1 from user_role where user_id = $1 and role = 'practitioner'", [
+              FINANCE,
+            ])
+          ).rowCount,
+        ).toBe(1);
       },
       'owner',
     );
@@ -309,18 +461,18 @@ describe('app.revoke_staff_role', () => {
       db,
       IDS.tenantA,
       async () => {
-        // The actor is the target, and is deliberately somebody who is not an
-        // owner: the rule about yourself is then the only one that can refuse
-        // this, because 'practitioner' would leave 'finance' standing.
-        await setActor(db, FINANCE);
-        await rejectsWith(db, '42501', "select app.revoke_staff_role($1, 'practitioner')", [
-          FINANCE,
-        ]);
-        // And an owner does not strip their own working role either.
+        // Only an owner reaches this rule at all now, so the actor and the
+        // target are the same real owner taking away her own second role. The
+        // rule about an owner as the target would refuse this too, which is
+        // why the message is asserted: it names the rule that spoke first, and
+        // it would change if the rule about yourself went.
         await setActor(db, SECOND_OWNER);
-        await rejectsWith(db, '42501', "select app.revoke_staff_role($1, 'finance')", [
-          SECOND_OWNER,
-        ]);
+        await refusesWith(
+          db,
+          'nobody changes their own access',
+          "select app.revoke_staff_role($1, 'finance')",
+          [SECOND_OWNER],
+        );
       },
       'owner',
     );
@@ -471,6 +623,98 @@ describe('an erasure that reaches a member of staff', () => {
       [CLIENT],
     );
     expect(household.rows[0]?.status).not.toBe('erased');
+  });
+});
+
+describe('two owners revoking from the same colleague at once', () => {
+  // This case needs data that is really committed and two more connections, so
+  // this file's own transaction is closed for it and reopened afterwards. That
+  // is not tidiness: every audit insert in the database queues on one row of
+  // app.audit_chain until the previous writer commits (070_audit_log.sql), and
+  // this file's transaction has held that row since its first audited write —
+  // so connection A's delete would block on THIS FILE rather than on the row
+  // lock the case is about, and the case would hang instead of proving
+  // anything.
+  beforeAll(async () => {
+    await db.query('rollback');
+  });
+  afterAll(async () => {
+    await db.query('begin');
+  });
+
+  it('lets no two of them leave that colleague with no working role', async () => {
+    const first = await stampedConnection(IDS.ownerA);
+    const second = await stampedConnection(SECOND_OWNER);
+    try {
+      const { rows: pid } = await second.query<{ pid: number }>('select pg_backend_pid() as pid');
+      const secondPid = pid[0]?.pid as number;
+
+      // One owner takes 'practitioner' away and has not committed yet.
+      const taken = await first.query<{ gone: boolean }>(
+        "select app.revoke_staff_role($1, 'practitioner') as gone",
+        [RACER],
+      );
+      expect(taken.rows[0]?.gone).toBe(true);
+
+      // The other starts on 'finance' in the same moment. Not awaited: the
+      // point is that it does not finish.
+      let settled = false;
+      const racing = second
+        .query<{ gone: boolean }>("select app.revoke_staff_role($1, 'finance') as gone", [RACER])
+        .then(
+          (result) => {
+            settled = true;
+            return result;
+          },
+          (error) => {
+            settled = true;
+            throw error;
+          },
+        );
+      racing.catch(() => {
+        // Awaited properly below; this only keeps the rejection from being
+        // reported as unhandled while we wait.
+      });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(settled, 'the second owner finished before the first committed').toBe(false);
+
+      // Blocked on the colleague, specifically. Without the row lock the
+      // second owner would get this far and block on app.audit_chain instead —
+      // which also looks like waiting, and proves nothing about this rule. A
+      // waiter holds a tuple lock on the row it is queued for, so the
+      // catalogue says which row that is.
+      const waiting = await db.query<{ on: string }>(
+        'select l.relation::regclass::text as on from pg_locks l ' +
+          "where l.pid = $1 and l.locktype = 'tuple'",
+        [secondPid],
+      );
+      expect(waiting.rows.map((row) => row.on)).toEqual(['app_user']);
+
+      await first.query('commit');
+
+      // Released, the second owner reads the practitioner row as gone — a new
+      // statement takes a new snapshot — and 'finance' is now the last working
+      // role there is.
+      let refusal: { code?: string; message?: string } = {};
+      try {
+        await racing;
+      } catch (error) {
+        refusal = error as { code?: string; message?: string };
+      }
+      expect(refusal.code).toBe('42501');
+      expect(refusal.message).toContain('a person keeps at least one working role');
+
+      const left = await db.query<{ role: string }>(
+        'select role::text as role from user_role where user_id = $1 order by 1',
+        [RACER],
+      );
+      expect(left.rows.map((row) => row.role)).toEqual(['finance']);
+    } finally {
+      await first.query('rollback').catch(() => undefined);
+      await second.query('rollback').catch(() => undefined);
+      await first.end();
+      await second.end();
+    }
   });
 });
 

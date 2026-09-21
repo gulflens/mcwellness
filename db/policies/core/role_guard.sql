@@ -36,9 +36,18 @@ drop policy if exists admin_inserts_only on public.app_user;
 create policy admin_inserts_only on public.app_user as restrictive for insert to app_role
   with check (app.actor_has_role('owner') or app.actor_has_role('admin'));  -- a row with no role is inert
 
+-- `with check` is spelled out on both policies below with the same expression
+-- Postgres would have reused from `using` anyway, because owner_keeps_identity
+-- further down spells both out and an asymmetry between neighbours reads as a
+-- decision somebody made.
 drop policy if exists admin_updates_only on public.app_user;
 create policy admin_updates_only on public.app_user as restrictive for update to app_role
   using (app.actor_has_role('owner')
+         or (app.actor_has_role('admin')
+             and not exists (select 1 from public.user_role r
+                              where r.user_id = app_user.id and r.tenant_id = app_user.tenant_id
+                                and r.role <> 'client_contact')))
+  with check (app.actor_has_role('owner')
          or (app.actor_has_role('admin')
              and not exists (select 1 from public.user_role r
                               where r.user_id = app_user.id and r.tenant_id = app_user.tenant_id
@@ -51,7 +60,8 @@ create policy admin_inserts_only on public.user_role as restrictive for insert t
 
 drop policy if exists admin_updates_only on public.user_role;
 create policy admin_updates_only on public.user_role as restrictive for update to app_role
-  using (app.actor_has_role('owner'));
+  using (app.actor_has_role('owner'))
+  with check (app.actor_has_role('owner'));
 
 -- Only the owner hands out or keeps ownership. Said twice on purpose: the two
 -- policies above already leave every role row but a household's to the owner,

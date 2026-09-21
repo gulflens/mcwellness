@@ -34,8 +34,10 @@
 -- that is exactly where the design puts the undo.
 --
 -- Needs: 000 (app.current_tenant_id), 020 (app_user, user_role, role_kind),
--- 080 (app.audit_row, which keeps the old values of the row this deletes),
--- 095 (app.actor_has_role).
+-- 080 (app.audit_row, which keeps the old values of the row this deletes).
+-- Not 095: app.actor_has_role reads a session setting, and the one question
+-- this file asks about the caller is answered from user_role instead (section
+-- 3 below says why).
 
 ------------------------------------------------------------------------------
 -- 1. An ownership row does not change.
@@ -121,6 +123,15 @@ alter table public.app_user enable always trigger guard_owner_identity;
 --    the caller. The tenant is named on every row this reads and on the row it
 --    writes, because row security is not underneath it here, and a null tenant
 --    matches nothing: the function fails closed rather than open.
+--
+--    **Who is an owner is read from user_role, not from app.actor_roles.**
+--    Everywhere else in this schema app.actor_has_role is the right question,
+--    because it is asked underneath a policy that the API role cannot reach
+--    around. Here it would be the whole boundary, and it would be asked of a
+--    session setting while the very next line asks a DIFFERENT setting,
+--    app.actor_id, who the caller is. Two settings that can disagree are two
+--    answers to one question, and this one has to have a single answer: the
+--    row that says somebody owns the practice.
 ------------------------------------------------------------------------------
 create function app.revoke_staff_role(p_user_id uuid, p_role public.role_kind) returns boolean
 language plpgsql security definer
@@ -131,18 +142,40 @@ declare
   v_tenant uuid := app.current_tenant_id();
   v_gone   integer;
 begin
-  if not app.actor_has_role('owner') then
+  -- Unnamed first, because everything below is asked about somebody: with no
+  -- actor the owner check would find no row and answer "only an owner", which
+  -- is true but not the reason.
+  if v_actor is null then
+    raise exception 'nobody takes a role away without being named' using errcode = '42501';
+  end if;
+  -- A null tenant matches no row here either, so an unstamped caller is
+  -- refused by this check rather than reaching the practice's rows.
+  if not exists (select 1 from public.user_role r
+                  where r.user_id = v_actor and r.tenant_id = v_tenant and r.role = 'owner') then
     raise exception 'only an owner takes a role away' using errcode = '42501';
   end if;
   if p_role not in ('admin', 'finance', 'practitioner', 'lead_practitioner') then
     raise exception 'not a working role' using errcode = '42501';
   end if;
-  if v_actor is null or v_actor = p_user_id then
+  if v_actor = p_user_id then
     raise exception 'nobody changes their own access' using errcode = '42501';
   end if;
   if not exists (select 1 from public.app_user u where u.id = p_user_id and u.tenant_id = v_tenant) then
     raise exception 'no such colleague' using errcode = '42501';
   end if;
+  -- The colleague's own row is locked before the count below is read, and the
+  -- lock is what makes that count true at the moment it is acted on. Nothing
+  -- in this repository sets an isolation level, so every request runs READ
+  -- COMMITTED: without this line two owners taking two DIFFERENT roles from
+  -- the same person at the same moment would each read the other's role as
+  -- still there, delete different rows, conflict over nothing, and leave that
+  -- person with no working role at all — the one state the rule below exists
+  -- to prevent, and the one the app cannot undo. Locking the person, rather
+  -- than the role rows, serialises every revoke against the same colleague
+  -- and leaves revokes against different colleagues concurrent.
+  perform 1 from public.app_user u
+   where u.id = p_user_id and u.tenant_id = v_tenant
+     for update;
   if exists (select 1 from public.user_role r
               where r.user_id = p_user_id and r.tenant_id = v_tenant and r.role = 'owner') then
     raise exception 'an owner''s access does not change' using errcode = '42501';
