@@ -15,11 +15,19 @@ export function Tabs({
   selected,
   onSelect,
   idPrefix,
+  label = 'Record sections',
 }: {
   tabs: readonly Tab[];
   selected: string;
   onSelect: (id: string) => void;
   idPrefix: string;
+  /**
+   * What a screen reader calls this strip. It defaults to the client record's
+   * own words, which were the only ones when this lived there; a second caller
+   * is a second kind of thing being switched between, and "Record sections" on
+   * a member of staff's profile names the wrong record.
+   */
+  label?: string;
 }) {
   const refs = useRef(new Map<string, HTMLButtonElement>());
 
@@ -55,7 +63,7 @@ export function Tabs({
   }
 
   return (
-    <div className="tabs" role="tablist" aria-label="Record sections">
+    <div className="tabs" role="tablist" aria-label={label}>
       {tabs.map((tab, index) => (
         <button
           key={tab.id}
