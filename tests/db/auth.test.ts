@@ -384,28 +384,43 @@ describe('the request context', () => {
     expect(asOwner.status).toBe(200);
   });
 
-  it('lets only the owner hand out ownership: an admin granting owner is refused', async () => {
+  it('lets only the owner hand out a role at all, ownership included', async () => {
     const asAdmin = await probe.request('/probe/grant/owner', {
       method: 'POST',
       ...bearer(tokens.admin),
     });
     expect(asAdmin.status).toBe(409);
     expect(await asAdmin.json()).toEqual({ code: '42501' });
+    // Until round 58 an admin could grant every role but ownership, and this
+    // second half asserted the 200. Who works at the practice is the owner's to
+    // say now (design section 5, db/policies/core/role_guard.sql), and the one
+    // row an admin may still write is a household's client_contact: the portal
+    // invite depends on it and tests/db/owner_lock.test.ts proves it.
     const asAdminOther = await probe.request('/probe/grant/finance', {
       method: 'POST',
       ...bearer(tokens.admin),
     });
-    expect(asAdminOther.status).toBe(200);
+    expect(asAdminOther.status).toBe(409);
+    expect(await asAdminOther.json()).toEqual({ code: '42501' });
   });
 
   it("lets no admin edit their way into ownership or take the owner's row", async () => {
     const before = await owner.query("select user_id from user_role where role = 'owner'");
     const res = await probe.request('/probe/escalate', { method: 'POST', ...bearer(tokens.admin) });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ promote: '42501', takeover: 0 });
+    // `promote` is absent because nothing was thrown, and until round 58 it was
+    // '42501': updating user_role is the owner's now, so an admin no longer sees
+    // the row to update and is answered with silence instead of a refusal. The
+    // same guarantee — the two assertions below are what it actually is.
+    expect(await res.json()).toEqual({ takeover: 0 });
     const after = await owner.query("select user_id from user_role where role = 'owner'");
     expect(after.rows).toEqual(before.rows);
     expect(after.rows).toHaveLength(1);
+    const admin = await owner.query<{ role: string }>(
+      'select role::text as role from user_role where user_id = $1 order by 1',
+      [MORE_IDS.adminUserA],
+    );
+    expect(admin.rows.map((row) => row.role)).toEqual(['admin']);
   });
 
   it("lets no admin move the owner's sign-in link onto themselves", async () => {
@@ -418,7 +433,11 @@ describe('the request context', () => {
       body: JSON.stringify({ authId: AUTH.adminA }),
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ freed: 1, relinked: 0 });
+    // `freed` was 1 until round 58: an admin could clear their own sign-in link,
+    // which is the first half of moving it somewhere else. A member of staff's
+    // row is the owner's now (design section 5), so the admin cannot even let go
+    // of their own, and the relink was never theirs to make.
+    expect(await res.json()).toEqual({ freed: 0, relinked: 0 });
     const after = await owner.query(
       "select u.auth_id from app_user u join user_role r on r.user_id = u.id where r.role = 'owner'",
     );

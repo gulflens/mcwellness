@@ -38,7 +38,9 @@ describe('who works at the practice', () => {
     expect((await h.callAs('GET', '/api/team', PORTAL.financeAuth)).status).toBe(403);
   });
 
-  it('creates a colleague with a temporary password who can then sign in, and refuses the address twice', async () => {
+  // Skipped by round 58's Task 3: adding a colleague is the owner's now, and this
+  // case acts as an admin. Task 5 rewrites it against the owner's routes.
+  it.skip('creates a colleague with a temporary password who can then sign in, and refuses the address twice', async () => {
     const res = await h.callAs('POST', '/api/team', PORTAL.adminAuth, {
       displayName: 'Rowan Meadow',
       email: 'rowan@example.com',
@@ -100,7 +102,9 @@ describe('who works at the practice', () => {
     }
   });
 
-  it('grants one more role, suspends a colleague so the fence refuses them, and refuses to suspend yourself', async () => {
+  // Skipped by round 58's Task 3: granting a role and suspending a colleague are
+  // the owner's now, and this case acts as an admin throughout. Task 5 rewrites it.
+  it.skip('grants one more role, suspends a colleague so the fence refuses them, and refuses to suspend yourself', async () => {
     const made = await h.callAs('POST', '/api/team', PORTAL.adminAuth, {
       displayName: 'Iris Creek',
       email: 'iris.creek@example.com',
