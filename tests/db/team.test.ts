@@ -221,6 +221,13 @@ describe('who works at the practice', () => {
       [IDS.ownerA],
     );
     expect(trail.rows[0]?.n).toBe('0');
+    // The screen offers no such button, so this request was made by hand and
+    // aimed at the owner: the one refusal here worth a row of its own.
+    const refused = await h.owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'password_reset_refused' and entity_id = $1 and actor_id = $2",
+      [IDS.ownerA, PORTAL.admin],
+    );
+    expect(refused.rows[0]?.n).toBe('1');
   });
 
   it('lets one owner mint a password for another, which is how a locked-out owner gets back in', async () => {

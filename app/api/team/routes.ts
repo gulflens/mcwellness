@@ -244,6 +244,16 @@ export function mountTeam(api: Hono<ApiEnv>, options: TeamOptions): void {
     // the sign-in service, past row security — so the rule is asked here, of
     // the roles just read and never of anything the caller sent.
     if (!canResetPassword(actor.roles, target.rows[0]?.roles ?? [])) {
+      // The screen offers no such button, so this was a request made by hand
+      // and aimed at an owner's sign-in. A 4xx commits, so the row survives
+      // the refusal it records (docs/SPEC/audit.md: unauthorised use is
+      // demonstrable, not only forbidden).
+      await logAction(
+        db,
+        'password_reset_refused',
+        { type: 'app_user', id: id.data, clientId: null },
+        {},
+      );
       return c.json({ error: 'forbidden', requestId }, 403);
     }
     const password = temporaryPassword();

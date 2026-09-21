@@ -51,6 +51,11 @@ describe('minting a temporary password', () => {
     expect(canResetPassword(['owner'], ['owner'])).toBe(true);
   });
 
+  it("is refused when the target's roles could not be read, so a blind check never permits", () => {
+    expect(canResetPassword(['admin'], [])).toBe(false);
+    expect(canResetPassword(['owner'], [])).toBe(false);
+  });
+
   it("is an admin's and an owner's for everybody else", () => {
     expect(canResetPassword(['admin'], ['finance'])).toBe(true);
     expect(canResetPassword(['admin'], ['admin', 'practitioner'])).toBe(true);
