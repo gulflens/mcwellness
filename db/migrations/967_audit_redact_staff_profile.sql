@@ -39,7 +39,7 @@
 -- whole of it, never patch it — and the runner applies pending files in
 -- numeric order. On a fresh database a migration numbered below 965 would
 -- run first and then be silently overwritten by 965's own restatement, and
--- the three columns here would go straight back to being legible in the
+-- the five columns here would go straight back to being legible in the
 -- trail. This file sorts after 965 so its restatement is the one left
 -- standing.
 --

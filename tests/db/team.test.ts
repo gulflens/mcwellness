@@ -621,7 +621,11 @@ describe('who works at the practice', () => {
       ]);
     } finally {
       setEmail.mockRestore();
-      await h.owner.query('alter table staff_profile drop constraint zz_test_refuses');
+      // `if exists`, because the `alter` that adds it is inside this `try` too:
+      // if the ADD is what failed, a bare drop throws "constraint does not
+      // exist" from the `finally` and that throw replaces the real failure on
+      // its way out, leaving nothing to read.
+      await h.owner.query('alter table staff_profile drop constraint if exists zz_test_refuses');
     }
     // The request's transaction rolled back, so the row never moved either.
     const { rows } = await h.owner.query<{ email: string | null }>(

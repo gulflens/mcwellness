@@ -213,7 +213,7 @@ Migration `965` restates the same function in full, because
 `create or replace` resets every attribute and a migration that adds a key must
 restate the whole of it; the runner applies pending files in numeric order; so
 on a fresh database a file numbered below 965 would run first and then be
-silently overwritten by 965's own restatement, and the three columns would go
+silently overwritten by 965's own restatement, and the five columns would go
 straight back to being legible in the log. 967 sorts after 965, so its
 restatement is the one left standing.
 
@@ -518,6 +518,16 @@ handed on.
    so none suspended is a thrown error and never `revoked`. An owner pressing
    Revoke on a contact who is also an owner now meets the same 409 instead of the
    trigger's 500.
+   **The screen's own wording is not fixed here, and that is the one wart left.**
+   `app/admin/portal/PortalAccessPage.tsx` answers this refusal with its generic
+   "That access could not be ended. Try again." — which will never succeed on a
+   retry; the invite half of the same screen has said "That invitation could not
+   be issued. Try again." for `not_a_household` since piece seven, and for the
+   same reason. That screen maps one sentence per action and not one per code, so
+   a sentence for either is a redesign of its wording rather than a line added,
+   and round 59 owns both, because it owns what revoking a member of staff's
+   household access should mean.
+
    **What round 59 still owns is the question this deliberately does not answer:
    what revoking a member of staff's household access should MEAN.** Ending it
    without touching their sign-in needs a way to say so that this schema does not
@@ -665,21 +675,34 @@ in the window (see item 2 of "Found beside it").
    deploying at the same moment. Two builds twelve seconds apart cost a pass in
    September, and the loser fails with no logs.
 2. **One read first, before a single migration, on production.** Does any
-   household contact's account already hold a role at the practice? Because from
-   the moment `923` is applied, an erasure of that household **cannot complete**
-   — `guard_owner_identity` refuses it and the whole erasure rolls back (item 1
-   of "Found beside it") — and that is a thing the operator hears on the day it
-   becomes true and not the day somebody asks for erasure.
+   household contact's account already hold a role at the practice? Read-only,
+   and it asks a deliberately wider question than migration `923` answers, so
+   the role comes back with the row:
 
    ```sql
-   select ct.id from public.contact ct
+   select ct.id, ct.client_id, r.role
+     from public.contact ct
      join public.user_role r on r.user_id = ct.user_id and r.tenant_id = ct.tenant_id
     where r.role <> 'client_contact';
    ```
 
-   No rows: nothing to say, and the pass carries on. A row: tell the operator
-   that erasure for that household waits on round 59, before the migrations go
-   on, so the choice to proceed is his and is made knowing it.
+   **No rows: nothing to say, and the pass carries on.** A row means one of two
+   different things, and the `role` column is which:
+
+   - **`owner`.** From the moment `923` is applied, an erasure of that household
+     **cannot complete**: `guard_owner_identity` refuses the archive with `42501`
+     and the whole erasure rolls back, so nothing is half done and nothing can be
+     finished either, until round 59 teaches erasure to skip an account that works
+     at the practice.
+   - **`admin`, `finance`, `practitioner` or `lead_practitioner`.** Nothing
+     refuses these, then or now. The erasure **will go through** and will
+     silently archive and unlink that member of staff's own sign-in, which is
+     item 1 of "Found beside it" exactly as it stood before this round: the
+     trigger narrowed the damage to ownership and left the rest of it where it
+     was. Round 59 is the round that fixes it.
+
+   Either way the operator hears it that day, before the migrations go on, so
+   the choice to proceed is his and is made knowing which of the two he has.
 3. **Three migrations, by hand, staging first and then production**, in this
    order and no other: `922_staff_profile.sql`, then
    `923_owner_lock_and_role_revoke.sql`, then

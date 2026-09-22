@@ -23,7 +23,9 @@
 -- so it is free to sit here rather than in the second half
 -- (docs/SPEC/OWNERSHIP.md).
 --
--- Needs: 010 (tenant), 020 (app_user), 080 (app.audit_row), 090 (app_role)
+-- Needs: 010 (tenant), 020 (app_user), 080 (app.audit_row), 090 (app_role),
+--        099 (app_user's tenant-scoped key, which the composite foreign key
+--        below references)
 
 create table staff_profile (
   id                       uuid primary key default gen_random_uuid(),

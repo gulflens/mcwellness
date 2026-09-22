@@ -80,8 +80,10 @@ is the database's, so that code written later cannot forget it:
   change, so the courtesy and the floor agree without one. What the round's
   final review did tighten is the pair beside it: `owner_grants_owner` and
   `owner_keeps_owner` no longer admit an ownership row from an owner either, so
-  the API role never writes one at all and the audited step below is the only
-  way ownership arrives.
+  the API role never writes one at all. Ownership arrives when a practice is
+  first made, from `app.bootstrap_practice`, which is security definer and no
+  policy stands in front of; and afterwards only from the audited data step
+  below.
 - **Undoing it is a migration's act**, never a screen's and never the API
   role's: the triggers carry no bypass setting, because a setting the API role
   could set is not a lock.

@@ -271,8 +271,12 @@ unconditional as of 22 September 2026: they admitted an owner until the round's
 security review pointed out that one line of TypeScript was then the whole
 barrier between a screen and a permanent grant of full access to the practice,
 and that the row it would write can never afterwards be updated or deleted by
-anybody. Ownership arrives by an audited data step run as the connecting role
-(`docs/RUNBOOK/second-owner.md`), and by nothing else.
+anybody. Ownership arrives in exactly two ways, and neither is a request the API
+role can make: **when a practice is first made**, by `app.bootstrap_practice`
+(migrations `956` and `958`), which is security definer and writes the founder's
+own ownership row as part of creating the practice; and **afterwards, only by an
+audited data step** run as the connecting role and rehearsed first
+(`docs/RUNBOOK/second-owner.md`).
 
 And every read of personal data is itself logged (layer 7), so this table says
 who may look, not who has.
