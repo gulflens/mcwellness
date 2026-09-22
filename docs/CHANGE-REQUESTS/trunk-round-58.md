@@ -487,7 +487,10 @@ first of them before this round's first line of code was written, and the other
 two added to its scope as they were found. They are one subject: an act aimed at
 a household reaching an account that is also a member of staff. The second of
 them had a half this round caused, and that half was fixed here rather than
-handed on.
+handed on. **All three were answered by round 59 on 22 September**
+(`docs/CHANGE-REQUESTS/trunk-round-59.md`, migration 968): ending a household's
+access ends the link and never the colleague; the third dissolved once an
+erasure stopped touching a colleague's `app_user` row, and a race test holds it.
 
 1. **Client erasure unlinks the sign-in of every contact of the erased client,
    staff included.** `app.erase_client` archives and unlinks the `app_user` row

@@ -52,6 +52,29 @@ const KIND_LABELS: Record<OfficeRequest['kind'], string> = {
   erasure: 'Erase the record',
 };
 
+/**
+ * One sentence per refusal the two buttons can meet, and a retry sentence per
+ * action for anything unnamed. A refusal the route means never succeeds on a
+ * retry, so "Try again" would be a promise the screen cannot keep — the invite
+ * half said exactly that for a colleague from piece seven until trunk round 59.
+ */
+const REFUSALS: Record<string, string> = {
+  not_a_household:
+    'This person works at the practice, so a household link cannot be issued to their sign-in.',
+};
+
+const RETRY: Record<'invite' | 'revoke', string> = {
+  invite: 'That invitation could not be issued. Try again.',
+  revoke: 'That access could not be ended. Try again.',
+};
+
+async function refusalOf(res: Response, action: 'invite' | 'revoke'): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+  const code = typeof body?.error === 'string' ? body.error : '';
+  // Own keys only: a code of `constructor` must find nothing, not Object's.
+  return Object.hasOwn(REFUSALS, code) ? (REFUSALS[code] as string) : RETRY[action];
+}
+
 const dateFormat = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Dubai',
   day: 'numeric',
@@ -155,11 +178,7 @@ export function PortalAccessPage() {
       })
         .then(async (res) => {
           if (!res.ok) {
-            setError(
-              action === 'invite'
-                ? 'That invitation could not be issued. Try again.'
-                : 'That access could not be ended. Try again.',
-            );
+            setError(await refusalOf(res, action));
             return;
           }
           if (action === 'invite') setIssued(InviteResponse.parse(await res.json()));

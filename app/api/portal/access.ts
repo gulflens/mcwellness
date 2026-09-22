@@ -28,16 +28,17 @@ import { AccessResponse, InviteResponse, OfficeRequestsResponse, RevokeResponse 
  * check is on the roles the account holds and not on which contact row it is.
  * `app.redeem_portal_invite` refuses the same case beneath this.
  *
- * **Revoking is the account, not the link.** `app_user.status = 'suspended'`
- * is what `app.resolve_actor` reads on the very next request, so a revoked
- * household is signed out of the shell rather than merely losing a link they
- * have already used; every open invitation is closed in the same statement so
- * a second unspent link cannot let them back in. The Supabase sign-in itself
- * is deliberately left standing (section 12): suspension is the boundary. And
- * revoking asks the same question issuing does — is this account a member of
- * the practice? — because suspending a colleague is not what the button means,
- * and since trunk round 58 the attempt would change no row and still read as
- * done.
+ * **Revoking is the account, not the link — for a household.** `app_user.status
+ * = 'suspended'` is what `app.resolve_actor` reads on the very next request, so
+ * a revoked household is signed out of the shell rather than merely losing a
+ * link they have already used; every open invitation is closed in the same
+ * statement so a second unspent link cannot let them back in. The Supabase
+ * sign-in itself is deliberately left standing (section 12): suspension is the
+ * boundary. **For a colleague it is the link and not the account** (trunk round
+ * 59): revoking asks the same question issuing does — is this account a member
+ * of the practice? — and for one that is, `app.unlink_household_contact` ends
+ * the contact row's link and leaves the person working, because suspending a
+ * colleague is not what the button means.
  *
  * **What is never in an answer here.** A telephone number, an email address or
  * a token hash. The table says whether a contact *has* a number and an
@@ -384,23 +385,41 @@ export function mountPortalAccess(
     if (row.has_practice_role) {
       // The same question the invite path asks above, and
       // `app.portal_invite_state` asks beneath both (migration 700): does this
-      // contact's account hold any role but `client_contact`?
+      // contact's account hold any role but `client_contact`? For a colleague,
+      // revoking is the LINK and not the account (trunk round 59,
+      // docs/CHANGE-REQUESTS/trunk-round-59.md): suspending would sign them out
+      // of the practice's own console, which is not what the button means, and
+      // since round 58 an admin's update of their row would match nothing and
+      // raise nothing anyway. `app.unlink_household_contact` (migration 968)
+      // nulls the contact row's link, drops the account's now-idle
+      // `client_contact` role when no other contact still points at it, and
+      // asks its own owner-or-admin question beneath `canActor`'s, because it
+      // is security definer and a route is not a floor.
       //
-      // Asked here since trunk round 58, which is the round that made it
-      // necessary: `db/policies/core/role_guard.sql` now leaves a member of
-      // staff's `app_user` row to the owners, so this route's own
-      // `update app_user set status = 'suspended'` matches no row for an admin
-      // and raises nothing. Without this, a household contact whose account is
-      // also a member of staff kept portal access while the trail recorded that
-      // it had been revoked — nobody suspended who should not have been, and a
-      // row in the append-only log that is not true.
-      //
-      // Refused before any write, so there is nothing to undo, and nothing is
-      // logged: an attempt that changed nothing is not an act. **What revoking
-      // a member of staff's household access should mean is deliberately not
-      // decided here** — it is round 59's, with the erasure that has the same
-      // shape (docs/CHANGE-REQUESTS/trunk-round-58.md).
-      return c.json({ error: 'staff_account', requestId }, 409);
+      // `false` means an erasure finished a moment ago and already unlinked the
+      // row; the state is then what was wanted, and answered as such.
+      const unlinked = await db.query<{ unlinked: boolean }>(
+        'select app.unlink_household_contact($1) as unlinked',
+        [row.contact_id],
+      );
+      if (!unlinked.rows[0]?.unlinked) {
+        return c.json(RevokeResponse.parse({ contactId: row.contact_id, state: 'none' }));
+      }
+      await db.query(
+        'update portal_invite set revoked_at = now() where contact_id = $1 ' +
+          'and used_at is null and revoked_at is null',
+        [row.contact_id],
+      );
+      await logAction(
+        db,
+        'portal.access.revoked',
+        { type: 'app_user', id: row.user_id, clientId: row.client_id },
+        // Which of the two acts it was, because the same sentence covers both.
+        { contactId: row.contact_id, means: 'unlinked' },
+      );
+      // `none`, not `revoked`: nobody has access through this row any more, and
+      // nobody was suspended — which is what the list shows when it reloads.
+      return c.json(RevokeResponse.parse({ contactId: row.contact_id, state: 'none' }));
     }
 
     const suspended = await db.query("update app_user set status = 'suspended' where id = $1", [
@@ -422,7 +441,7 @@ export function mountPortalAccess(
       db,
       'portal.access.revoked',
       { type: 'app_user', id: row.user_id, clientId: row.client_id },
-      { contactId: row.contact_id },
+      { contactId: row.contact_id, means: 'suspended' },
     );
 
     return c.json(RevokeResponse.parse({ contactId: row.contact_id, state: 'revoked' }));

@@ -156,6 +156,47 @@ describe('Settings › Portal', () => {
     expect(send.getAttribute('href')).toContain('https://wa.me/971500000023');
   });
 
+  it('says why a link cannot be issued to a colleague, rather than asking for a retry', async () => {
+    // The invite route answers 409 `not_a_household` for a contact whose account
+    // also works at the practice (app/api/portal/access.ts). Until trunk round
+    // 59 the screen answered every failed invitation with "Try again", which
+    // this one never rewards: the sentence is per code, not per action.
+    mount({
+      ...BOTH,
+      '/api/portal/access/': () => json({ error: 'not_a_household' }, 409),
+    });
+    await screen.findAllByText('Hazel Meadow');
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+    expect(
+      await screen.findByText(
+        'This person works at the practice, so a household link cannot be issued to their sign-in.',
+      ),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Try again');
+  });
+
+  it('keeps the retry sentence for a failure it cannot name', async () => {
+    mount({
+      ...BOTH,
+      '/api/portal/access/': () => json({ error: 'internal' }, 500),
+    });
+    await screen.findAllByText('Hazel Meadow');
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+    expect(await screen.findByText('That invitation could not be issued. Try again.')).toBeTruthy();
+  });
+
+  it('treats a code that happens to name an object property as unnamed', async () => {
+    // The sentence table is a plain object; a body of `{ error: 'constructor' }`
+    // must not find Object.prototype's own and hand the page a function.
+    mount({
+      ...BOTH,
+      '/api/portal/access/': () => json({ error: 'constructor' }, 500),
+    });
+    await screen.findAllByText('Hazel Meadow');
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+    expect(await screen.findByText('That invitation could not be issued. Try again.')).toBeTruthy();
+  });
+
   it('revokes access and reloads the table', async () => {
     const { calls } = mount(BOTH);
     await screen.findAllByText('Hazel Meadow');
