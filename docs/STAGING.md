@@ -2391,3 +2391,77 @@ it: staging has had no sign-in since the demo went on 9 September, and the
 round's screens were walked signed in on the local database before the pull
 request merged, which its own record describes. This pass is the database's
 half only.
+
+## What was done on 2026-09-22: the staging pass for trunk round 58 — migrations 922, 923 and 967
+
+**00:33 to 00:36 UTC on 22 September, which is 04:33 to 04:36 in Dubai**, on
+the operator's word ("go live", 04:26 +04) to the thirty-fourth live pass. `main`
+at `0339ccc0`, pull request 209, the round whose record is
+`docs/CHANGE-REQUESTS/trunk-round-58.md`; its "Going live" section is the recipe
+this pass followed, and this is the staging leg of step 3, step 4 and step 5.
+
+**Read first.** `schema_migration` held 107 rows and none of the three files;
+`staff_profile` did not exist; none of `app.guard_owner_role`,
+`app.guard_owner_identity` or `app.revoke_staff_role` existed. The three files
+were hashed from `origin/main` after the merge and not from the worktree:
+`922` sha256 `92254747…772b`, `923` `8fd05670…feef`, `967` `e1ccaea7…2e20`. The
+hold protocol found no other session on the laptop.
+
+**Applied** through Supabase's migration tool, one call per file, each call the
+file's statements whole and in the file's order **followed in the same
+transaction by its bookkeeping row** carrying that sha256 — which is what
+`db/runner/apply.ts` does, and closes the gap the thirtieth pass left between a
+migration and its ledger row. Order: `922_staff_profile`, then
+`923_owner_lock_and_role_revoke`, then `967_audit_redact_staff_profile`, 967
+last for the reason its own header gives. Then the three policy files the round
+changed, whole and in one call, as `policies_after_967_round_58`:
+`db/policies/core/tenant_isolation.sql`, `db/policies/core/staff_profile.sql`
+and `db/policies/core/role_guard.sql`. Read back: **110 rows.**
+
+**Fingerprinted against a local database built by the runner from `main`.**
+Nine categories over `staff_profile`, `app_user` and `user_role`, the four
+functions the round writes or restates (`guard_owner_role`,
+`guard_owner_identity`, `revoke_staff_role`, `audit_redact`, each with its
+definer flag, its pinned search path, whether `app_role` may run it and whether
+`public` may), and the whole ledger. **All nine identical, staging against
+local:** columns `baf70afe` (31), comments `368f9b9a` (1), constraints
+`3150c443` (24), functions `b7b9a915` (4), grants `6d8cfa8d` (9, over `app_role`
+and `public` only — see below), indexes `28e9dc1b` (13), policies `558abd28`
+(11), triggers `86f85413` (8, each with how it is enabled), and the ledger
+`8d25b37d` (110 filenames with their checksums). The query is kept beside the
+enquiry one at `Documents/tools/fingerprint-team-58.sql`, outside the
+repository, and is the one run on production in the live pass that followed.
+
+**Grants were read per grantee and not as a count**, because the round's recipe
+says the hosted databases are expected to differ from local in exactly one way.
+They did: on each of the three tables staging holds `app_role` with insert,
+select and update, the schema owner with everything, and Supabase's own
+`service_role` with everything — and no other grantee. Local holds the first
+two and no third. That is the shape of every table in this schema and not a
+finding.
+
+**Two things read by eye rather than by hash.** `guard_owner_role` on
+`user_role` and `guard_owner_identity` on `app_user` both read `tgenabled = A`,
+which is `enable always`; the `audit_row` trigger on the new table reads the
+same. And the policies' own text: `owners_only` on `staff_profile` is
+restrictive, for all, `app.actor_has_role('owner')` both ways;
+`owner_grants_owner` on `user_role` is restrictive, for insert, `role <>
+'owner'` with nothing beneath it; `owner_keeps_owner` restrictive for update,
+`role <> 'owner'` both ways; `admin_inserts_only` on `user_role` admits an admin
+for a `client_contact` row and nobody else. As written.
+
+**One honest note on the local reference.** The recipe says reset and migrate a
+local database from `main`. The reset was refused by the session's classifier,
+which reads `db:reset` as a mass delete, and was not routed around. The
+worktree's database already held all 110 files with `main`'s own checksums —
+the runner records the hash of the text it applied, so those three were
+applied from the texts now on `main` — and `pnpm db:migrate` then applied
+nothing and re-applied the 27 policy files. So the reference was runner-built
+from `main`'s texts, and was not rebuilt from nothing in this pass.
+
+**Not done here.** Nothing was written to any row on staging, no refusal was
+provoked (the round's `tests/db/` hold every one of them on a local database,
+and CI ran them on the merged commit), no bundle was built for staging and
+nothing was walked on it. Staging has no second owner to write and needs none.
+`app.verify_audit_chain()` was not run on staging; it was on production, where
+it mattered.

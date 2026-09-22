@@ -2739,3 +2739,165 @@ screen. Click back into the window and choose any section in the sidebar and it
 brings this version by itself; this is the first pass where that can be seen.
 For an admin, the owner's row on Settings › Team no longer shows **New temporary
 password**.
+
+## What was done on 2026-09-22: the thirty-fourth live pass — a profile for each member of staff, and two owners
+
+Production runs `main` `0339ccc0`, build `01a0c694`. Three migrations and three
+policy files: `main` holds 110 migration files and both databases stand at 110.
+One row was written to production by hand, and it is the one row this round
+was designed so that no screen could write.
+
+**Why it began.** Trunk round 58 (pull request 209,
+`docs/CHANGE-REQUESTS/trunk-round-58.md`): Settings › Team becomes a profile
+for each member of staff with access that switches on and off, the team is the
+owners' to manage and no longer an admin's, and the practice has two owners
+whose access nobody can take away. Merged at 00:15 UTC on the operator's "go",
+which the session that merged it read as the merge alone and said so; the word
+to go live was asked separately, because this pass writes a row that cannot be
+undone and the recipe says the two admins should hear from the practice first.
+
+**The word.** "go live", at 04:26 +04 (00:26 UTC), to a message that had listed
+the recipe's five steps in order, the second owner's step among them. The pass
+began at 00:27. Two more words were asked for and given on the way, and both are
+below where they fell: the word for the ownership row, and the word that cleared
+the upload.
+
+**Before-state, 00:28:29 UTC.** Entry `index-7HRUk0iB.js`, shell stylesheet
+`index-DH9UTXuv.css`, team screen `TeamPage-MhA2bxdf.js` (5,957 bytes, saved,
+holding no `Cannot be changed`), health 200 in 0.48 s, deep 200 in 0.48 s. No
+other session on the laptop, checked at 00:27 and again at 00:47 before the
+build. Both databases at 107, none of the three files, `staff_profile` absent,
+none of the three new functions present.
+
+**One read first, on production, before any migration** — the recipe's step 2,
+which asks whether any household contact's account also holds a role at the
+practice. **No rows.** So neither of the two cases the recipe describes applies
+today: no erasure on production can meet the new refusal, and none can silently
+archive a colleague's sign-in. Round 59 still owes the second of those; it is
+simply not reachable on today's rows.
+
+**Databases, staging then production, 00:33 to 00:39 UTC.** `922_staff_profile`,
+then `923_owner_lock_and_role_revoke`, then `967_audit_redact_staff_profile`,
+each call the file's statements whole and in order **and its ledger row in the
+same transaction**, with the sha256 of the file's text taken from `origin/main`
+after the merge (`92254747…772b`, `8fd05670…feef`, `e1ccaea7…2e20`). Then the
+three policy files whole in one call as `policies_after_967_round_58`. Both
+databases read back **110**. The staging leg is in `docs/STAGING.md` under this
+date; production's calls were the same text in the same order.
+
+**Fingerprint identical across local, staging and production, all nine
+categories:** columns `baf70afe` (31), comments `368f9b9a` (1), constraints
+`3150c443` (24), functions `b7b9a915` (4), grants `6d8cfa8d` (9), indexes
+`28e9dc1b` (13), policies `558abd28` (11), triggers `86f85413` (8), ledger
+`8d25b37d` (110). Grants read per grantee on production: on each of the three
+tables, `app_role` with insert, select and update; the schema owner with
+everything; Supabase's `service_role` with everything; nobody else — the one
+difference from local the recipe said to expect, and no other. `tgenabled = A`
+on `guard_owner_role`, `guard_owner_identity` and the three `audit_row`
+triggers. The policies' `using` and `with check` text read back as written.
+`app.verify_audit_chain()` null. The old build answered health 200 and deep 200
+on the new schema at 00:39:29, so the window the recipe warns of was open from
+here until 00:48 with the app green throughout; whether an admin was on
+Settings › Team at half past four in the morning in Dubai is not something this
+record can know, and the recipe's "before the day" item is the practice's own.
+
+**The local reference, honestly.** The recipe says reset and migrate a local
+database from `main`. The reset was refused by the session's classifier and
+was not routed around; the worktree's database already held all 110 files with
+`main`'s own checksums, and a `db:migrate` applied nothing and re-applied the 27
+policy files. The reference was therefore runner-built from `main`'s texts, not
+rebuilt from nothing in this pass. The staging record says the same.
+
+**The second owner, 00:40 to 00:42 UTC, on production only, by
+`docs/RUNBOOK/second-owner.md`.** The first query answered one practice and one
+owner, the founder, active. The second, by the fragment of the name the operator
+had given, answered **exactly one row**: active, a sign-in linked, holding one
+role and that role a working one (`finance`) — a colleague and not a household's
+contact, which is the check the round's security review added. The rehearsal
+was run first, on the real rows, the whole block ending in a raise: it passed
+all four guards, wrote the row, read back `{owner,finance}`, and rolled back.
+Read afterwards: still one ownership row, the person still `finance` alone, no
+`user_role` row in the trail, the chain intact. One small variation from the
+runbook's text, said here so it is not mistaken for a different block: the
+migration tool surfaces exceptions and not notices, so the roles were folded
+into the rehearsal's own `raise` message to be read; nothing else changed.
+
+Then the operator was asked, plainly and by name, whether to write it, with
+what the row would mean — permanent, beside `finance`, revocable by nobody — and
+two other answers offered (build without it; stop). **The answer was yes.** The
+act was the rehearsed block with the last `raise` removed and nothing else
+changed, run once. It committed at **00:42:14 UTC**. Read afterwards, in the
+runbook's order: two owners, one holding `owner` beside `finance` and one
+holding `owner` beside `lead_practitioner`, nothing replaced;
+`app.verify_audit_chain()` null; the newest `user_role` row in the trail is one
+`insert`, `actor_type` `user`, the founder's id, carrying the reason as a
+sentence naming the date and the word; **one row, not two** — the rehearsal kept
+nothing. The three ids were read out of the live database and are written
+nowhere in this repository.
+
+**The pass.** Archive `mcwellness-0339ccc0.tar.gz` from `origin/main`,
+6,741,180 bytes, sha256 `e413918e…`, with its `mcwellness/` root folder; the
+lock line read back out of `app/admin/settings/TeamAccessTab.tsx` inside the
+archive before it left. Stored build settings read back and sent unchanged
+(Node 24, `hono`, root `mcwellness`, output `.`, `build:production`,
+`app/api/start.mjs`, npm). **The first upload was refused** at 00:45 by the
+session's classifier, which reads a `curl` sending a file to an outside host as
+data leaving the machine — the twenty-fourth and twenty-sixth passes met the
+same gate. It was not routed around: the databases were finished first for
+exactly this reason, and the pass stopped with the old build serving green on
+the new schema. The operator was told, and answered "go manual" at 04:46 +04.
+The same command then went through: TUS create 201, PATCH 204 in 6.9 s with
+`upload-offset` equal to the size, the keys read by `curl` from a file of mode
+0600 deleted in the same command — the recipe, and not the thirty-third pass's
+lapse. The host's own reading of the archive confirmed the `mcwellness` root.
+Build asked 00:47:06 UTC, read `completed` 00:48:08; the served name had changed
+by the 00:48:16 poll, health 200 at every poll across the build.
+
+**Proved to be this tree, three ways.** The shell stylesheet moved,
+`index-DH9UTXuv.css` -> `index-qCiLscI6.css`, and the served file is
+**byte-identical to the local build's** (38,358 bytes, sha256 `91a5d972…`): the
+round added the Tabs to the shell and the drawer, so this pass is one where the
+stylesheet check is live evidence. The team screen's script, read out of the
+new entry `index-BgXEF-Lp.js`, is `TeamPage-C1Y789Hq.js`, 20,802 bytes against
+the old 5,957, and it holds
+
+``re=`Owner. Full access. Cannot be changed.` ``
+
+which the saved old chunk does not. The old entry, the old chunk and the old
+stylesheet all answer 404, and so does a name that never existed. (The entry's
+own size moved 40 bytes, 477,780 to 477,820, across a round that rebuilt a
+whole screen — noise, as every pass since the twenty-first has said.)
+
+**The process is the new one.** The runtime log holds fresh start-up blocks at
+00:48:03, 00:48:11 and 00:48:18, each ending "Serving the built app from dist/"
+and "API listening", the scheduler's line among them, `started_at` 00:48:03
+against `last_deployed_at` 00:48:08, no error line. **No restart — seventeenth
+consecutive.** Health 200 in 0.46 s, deep 200 in 0.55 s.
+
+**Not checked, and why.** The screen was not opened signed in: that takes an
+owner's sign-in, which is the founder's or the second owner's and not this
+session's. The lock was not provoked on production — an update or delete of an
+ownership row is refused with `42501` by a trigger that binds every caller, and
+trying it against the practice's real rows to watch it refuse is not a thing to
+do at a prompt; `tests/db/` hold it on a local database, CI ran them on the
+merged commit, and the fingerprint hashes how the trigger is enabled. The
+refusals the round's screen shows were watched in a browser against a real
+database before the merge (ten screenshots, seeded names only, kept outside the
+repository). Round 56's new-build check needs the owner's own open window.
+
+**Two refusals from the session's own classifier, neither routed around:** the
+local `db:reset` (read as a mass delete) and the TUS upload (read as data
+leaving the machine). The first was answered by reading what the local database
+already held; the second by the operator's word. Both are written above where
+they fell.
+
+**For the owner.** The first thing to do is the runbook's: open Settings › Team,
+open your own row and then the other owner's. Both should read **"Owner. Full
+access. Cannot be changed."** with the four switches greyed beneath it. On your
+own row there is no button; on the other owner's, one — **New temporary
+password** — which is how either of you gets the other back in, and nothing
+else. If the line reads that way on only one of the two rows, say so: the data
+step is where to look, and the record above says exactly what it wrote. Every
+other row now opens as a profile with two tabs, Profile and Access, and a
+switch off is a role taken away on the next click that person makes. For the
+two admins, the list is what they keep; every button on it is gone.
