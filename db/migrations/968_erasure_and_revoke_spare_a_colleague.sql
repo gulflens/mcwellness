@@ -41,10 +41,17 @@
 --   3. The lock order between a revoke and an erasure (round 58's item 3).
 --      `app.revoke_staff_role` locks the colleague's `app_user` row and then
 --      the audit chain's; `app.erase_client` took the chain first and the
---      `app_user` row second. Once an erasure never touches a colleague's
---      `app_user` row there is no second row for the two to disagree about;
---      tests/db/spare_a_colleague_race.test.ts arranges the old geometry and
---      watches both finish.
+--      CONTACT'S `app_user` row second. Once an erasure never touches that
+--      row, the two have no row to disagree about on the person the household
+--      is about; tests/db/spare_a_colleague_race.test.ts arranges the old
+--      geometry and watches both finish. One `app_user` row the erasure does
+--      still touch, and has since 105: its own ACTOR's, through the foreign
+--      key `erasure_request.performed_by`, whose check takes `for key share`
+--      on that row at the end. A revoke aimed at the very person who is
+--      mid-erasure can therefore still meet it in the old order. It is not
+--      this round's, it is rare in a different way — the erasing admin is the
+--      revoke's target — and one side aborts whole; it is recorded in the
+--      round's change request rather than serialised here.
 --
 -- **Where the new function stands in the lock order**, since that is what item
 -- 3 was about: it locks the household's `client` row before it writes — the

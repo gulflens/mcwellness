@@ -64,9 +64,11 @@ range and numbered above 964, the last file that defined the erasure function
 3. **The lock order, dissolved rather than fixed.** Round 58's item 3 was that
    `app.revoke_staff_role` locks the colleague's `app_user` row and then the
    audit chain's, while `app.erase_client` took the chain first and the
-   `app_user` row second — a deadlock on a person who is both. Once an erasure
-   never touches a colleague's `app_user` row there is no second row for the two
-   to disagree about. Not taken on trust: `tests/db/spare_a_colleague_race.test.ts`
+   contact's `app_user` row second — a deadlock on a person who is both. Once an
+   erasure never touches that row, the two have nothing to disagree about on the
+   person the household is about (the one `app_user` row an erasure still
+   locks, its own actor's, is item 3 of "Found beside it"). Not taken on trust:
+   `tests/db/spare_a_colleague_race.test.ts`
    arranges the old geometry on three connections — the chain held by the
    erasure's side, the `app_user` row by the revoke's — and watches both finish.
    Run against 964 before the migration existed, the case took exactly the one
@@ -130,9 +132,45 @@ Tests first, every one watched red before the code that made it green:
 `pnpm verify` and `pnpm test:db` both green on the branch's head; the counts
 are in the pull request.
 
+### The reviews
+
+Three read-only reviews on the branch — schema, security and compliance — all
+**pass**, and every note they raised is taken or recorded here where it fell.
+
+- **Schema.** A mechanical diff of the two erasure bodies, 964 against 968,
+  yields exactly the five intended hunks and nothing else. The lock-order
+  sentence in the migration's header was broader than the round dissolves:
+  `app.erase_client` still touches one `app_user` row — its own **actor's**,
+  through the foreign key `erasure_request.performed_by`, whose check takes
+  `for key share` at the end — so a revoke aimed at the very person who is
+  mid-erasure can still meet it in the old order. Pre-existing since 105, one
+  side aborts whole, the erasing admin being the revoke's target is a
+  different rarity from the one this round closed. The header now says so, and
+  it is item 3 of "Found beside it".
+- **Security.** No path found to unlink a contact, drop a role, or reach a row
+  a caller should not; the owner-or-admin standing is read from `user_role`; a
+  forged `app.actor_id` is no weaker than 923's own function. Three low notes,
+  all taken: the race test now opens its connections inside its `try`, so a
+  failure on the second cannot leak the first; the screen's sentence lookup
+  uses own keys only, so a code of `constructor` finds nothing rather than
+  Object's (a test says so); and the question whether two unlinks through two
+  **different** households on one colleague could each read the other's link as
+  standing under READ COMMITTED and both skip dropping the idle role. They
+  cannot — every audited write queues on one row of `app.audit_chain` until the
+  previous writer commits (070), the function's contact update is audited and
+  precedes its `not exists`, so the second waits there and its delete reads a
+  snapshot in which the first link is gone. That is now the second case of
+  `tests/db/spare_a_colleague_race.test.ts`, as proof rather than argument.
+- **Compliance.** Positioning, fixtures, logging, audit context, erasure and
+  retention all verified against the diff; the six medical-sounding words in
+  968 are verbatim carry-overs from 964 that a restatement must reproduce.
+  One ownership gap, closed: `docs/SPEC/client-portal.md` is the stream's and
+  was edited, so it is named below. One wording point that is the operator's,
+  item 4 of "Found beside it".
+
 ### Every file this round touched outside the trunk's own paths
 
-Four, all the client-portal stream's, riding in this round's pull request by
+Five, all the client-portal stream's, riding in this round's pull request by
 the integrator's widening for one round, as rounds 41, 51, 52 and 58 were
 widened (`docs/SPEC/OWNERSHIP.md`):
 
@@ -141,7 +179,10 @@ widened (`docs/SPEC/OWNERSHIP.md`):
 - `app/admin/portal/PortalAccessPage.tsx` — the sentence table and the one line
   that reads it.
 - `tests/portal/db/routes.test.ts` — one case rewritten.
-- `tests/portal/PortalAccessPage.test.tsx` — two cases added.
+- `tests/portal/PortalAccessPage.test.tsx` — three cases added.
+- `docs/SPEC/client-portal.md` — one sentence block under "Invite issuing"
+  saying what Revoke does for a colleague's contact row, as round 41 edited its
+  section 3.9.
 
 The trunk's own half is migration 968, `tests/db/spare_a_colleague.test.ts`,
 `tests/db/spare_a_colleague_race.test.ts`, `tests/db/owner_lock.test.ts`, and
@@ -164,6 +205,40 @@ function.
    connection, the `setEmail`-then-`deleteUser` chain on the fake provider, the
    three routes' roles-only target read, and the dropped press on a busy switch.
    None of them is this round's subject.
+3. **One `app_user` row an erasure still locks: its own actor's.**
+   `erasure_request.performed_by` references `app_user` (105), so the erasure's
+   closing update takes `for key share` on the row of the person performing
+   it, after the chain. A revoke of a working role aimed at that same person
+   while their erasure is in flight meets it in the old order and one side
+   aborts whole (`40P01`). Pre-existing, harmless to data, and a rarity of a
+   different shape from the one this round closed — the erasing admin would
+   have to be the revoke's target in the same second. Recorded, not
+   serialised. Two smaller notes from the same review, both pre-existing and
+   both the shape of the whole schema rather than of this file: the restated
+   erasure still authorises on the session's `app.actor_has_role` claim while
+   923's family reads `user_role`, and `contact.client_id` is a single-column
+   foreign key, so a data step could point a contact at another practice's
+   client and the new function's client lock would then match nothing (every
+   write predicate still names the tenant, so nothing crosses; only the
+   queueing is lost for a row nothing permits).
+4. **The erasure letter's one sentence about the portal account, for the
+   operator.** `docs/CONSENT/erasure-letter/en.md` (approved `1.0`,
+   14 September) says "the account that opened the client portal has been
+   closed", and the Arabic says the same. For a household that is true as it
+   always was. For the one case this round is about — a contact whose account
+   is a colleague's — the account is not closed; the link is ended and the
+   household's every detail on the contact row is still removed, so the
+   promise to the household holds in substance and overstates in one clause.
+   The letter is approved wording and is not edited here; whether to add "or,
+   where that account belongs to a member of our staff, unlinked from your
+   record" is the operator's, with the lawyer if he wishes. Nothing on
+   production can meet the case today (the pre-pass read of 22 September).
+5. **`docs/SPEC/00-data-model.md` describes the erasure's effect in one clause
+   that is now imprecise** — it "removes contacts and the portal account". The
+   model lists neither function and is the shared zone's, so this is a request
+   and not an edit: the clause should read that the portal account is archived
+   when it is a household's and nothing else, and unlinked when it is a
+   colleague's.
 
 ### Going live
 

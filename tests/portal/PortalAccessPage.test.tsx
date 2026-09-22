@@ -185,6 +185,18 @@ describe('Settings › Portal', () => {
     expect(await screen.findByText('That invitation could not be issued. Try again.')).toBeTruthy();
   });
 
+  it('treats a code that happens to name an object property as unnamed', async () => {
+    // The sentence table is a plain object; a body of `{ error: 'constructor' }`
+    // must not find Object.prototype's own and hand the page a function.
+    mount({
+      ...BOTH,
+      '/api/portal/access/': () => json({ error: 'constructor' }, 500),
+    });
+    await screen.findAllByText('Hazel Meadow');
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+    expect(await screen.findByText('That invitation could not be issued. Try again.')).toBeTruthy();
+  });
+
   it('revokes access and reloads the table', async () => {
     const { calls } = mount(BOTH);
     await screen.findAllByText('Hazel Meadow');

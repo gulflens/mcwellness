@@ -20,7 +20,7 @@ import type pg from 'pg';
  * arranges exactly the old geometry — the chain held by the erasure's side
  * first, the app_user row held by the revoke's side — and asserts both finish.
  *
- * It needs committed data and three connections of its own, so it is a file
+ * It needs committed data and connections of its own, so it is a file
  * of its own rather than a case in spare_a_colleague.test.ts (round 58's
  * review asked for exactly that). Every person is named from db/seed/names.ts
  * and every id is synthetic.
@@ -31,6 +31,12 @@ const RACER = '00000003-0000-4000-8000-0000000000e1';
 const CLIENT = '00000003-0000-4000-8000-0000000000f1';
 const CONTACT = '00000003-0000-4000-8000-0000000000f2';
 const REQUEST = '00000003-0000-4000-8000-0000000000f3';
+/** A colleague who is a contact of TWO households, unlinked from both at once. */
+const TWICE = '00000003-0000-4000-8000-0000000000e2';
+const CLIENT_A = '00000003-0000-4000-8000-0000000000f4';
+const CONTACT_A = '00000003-0000-4000-8000-0000000000f5';
+const CLIENT_B = '00000003-0000-4000-8000-0000000000f6';
+const CONTACT_B = '00000003-0000-4000-8000-0000000000f7';
 
 let db: pg.Client;
 
@@ -91,6 +97,24 @@ beforeAll(async () => {
       IDS.ownerA,
     ],
   );
+  await seedUser(db, {
+    id: TWICE,
+    tenantId: IDS.tenantA,
+    authId: null,
+    displayName: 'Maple Orchard',
+    roles: ['finance', 'client_contact'],
+  });
+  for (const [client, contact] of [
+    [CLIENT_A, CONTACT_A],
+    [CLIENT_B, CONTACT_B],
+  ] as const) {
+    await seedClient(db, IDS.tenantA, client, IDS.ownerA, 'Meadow');
+    await db.query(
+      'insert into contact (id, tenant_id, client_id, relationship, can_consent, user_id) ' +
+        "values ($1, $2, $3, 'mother', true, $4)",
+      [contact, IDS.tenantA, client, TWICE],
+    );
+  }
 });
 
 afterAll(async () => {
@@ -99,9 +123,11 @@ afterAll(async () => {
 
 describe('an erasure and a revoke on the same colleague at once', () => {
   it('both finish: the erasure never asks for the row the revoke is holding', async () => {
-    const erasing = await stamped(IDS.ownerA);
-    const revoking = await stamped(IDS.ownerA);
+    let erasing: pg.Client | undefined;
+    let revoking: pg.Client | undefined;
     try {
+      erasing = await stamped(IDS.ownerA);
+      revoking = await stamped(IDS.ownerA);
       const { rows: pid } = await revoking.query<{ pid: number }>('select pg_backend_pid() as pid');
       const revokingPid = pid[0]?.pid as number;
 
@@ -151,8 +177,73 @@ describe('an erasure and a revoke on the same colleague at once', () => {
       );
       expect(chain[0]?.broken).toBeNull();
     } finally {
-      await erasing.end().catch(() => undefined);
-      await revoking.end().catch(() => undefined);
+      await erasing?.end().catch(() => undefined);
+      await revoking?.end().catch(() => undefined);
+    }
+  });
+});
+
+describe('two households unlinking the same colleague at once', () => {
+  // The security review of this round asked whether two unlinks through two
+  // different households — different client rows, so the client lock does not
+  // serialise them — could each read the other's link as still standing under
+  // READ COMMITTED and both skip dropping the idle portal role. They cannot,
+  // and this case is the proof rather than the argument: every audited write
+  // queues on one row of app.audit_chain until the previous writer commits
+  // (070_audit_log.sql), the function's contact update is audited and comes
+  // before its `not exists`, so whichever transaction writes second waits
+  // there, and its delete then reads a snapshot in which the first link is
+  // already gone.
+  it('drops the idle portal role exactly once, on whichever act finishes second', async () => {
+    let first: pg.Client | undefined;
+    let second: pg.Client | undefined;
+    try {
+      first = await stamped(IDS.ownerA);
+      second = await stamped(IDS.ownerA);
+      const { rows: pid } = await second.query<{ pid: number }>('select pg_backend_pid() as pid');
+      const secondPid = pid[0]?.pid as number;
+
+      const one = await first.query<{ unlinked: boolean }>(
+        'select app.unlink_household_contact($1) as unlinked',
+        [CONTACT_A],
+      );
+      expect(one.rows[0]?.unlinked).toBe(true);
+      // Still uncommitted, and the colleague's other link stands, so the role
+      // must not have gone yet — in this transaction's own view included.
+      const early = await first.query<{ n: string }>(
+        "select count(*)::text as n from user_role where user_id = $1 and role = 'client_contact'",
+        [TWICE],
+      );
+      expect(early.rows[0]?.n).toBe('1');
+
+      const two = second.query<{ unlinked: boolean }>(
+        'select app.unlink_household_contact($1) as unlinked',
+        [CONTACT_B],
+      );
+      two.catch(() => undefined);
+      expect(await waitUntilBlocked(secondPid)).toBe(true);
+
+      await first.query('commit');
+      expect((await two).rows[0]?.unlinked).toBe(true);
+      await second.query('commit');
+
+      const { rows: roles } = await db.query<{ roles: string[] }>(
+        'select array_agg(role::text order by role::text) as roles from user_role where user_id = $1',
+        [TWICE],
+      );
+      expect(roles[0]?.roles).toEqual(['finance']);
+      const { rows: links } = await db.query<{ n: string }>(
+        'select count(*)::text as n from contact where user_id = $1',
+        [TWICE],
+      );
+      expect(links[0]?.n).toBe('0');
+      const { rows: chain } = await db.query<{ broken: string | null }>(
+        'select app.verify_audit_chain()::text as broken',
+      );
+      expect(chain[0]?.broken).toBeNull();
+    } finally {
+      await first?.end().catch(() => undefined);
+      await second?.end().catch(() => undefined);
     }
   });
 });

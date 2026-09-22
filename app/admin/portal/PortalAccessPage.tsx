@@ -71,7 +71,8 @@ const RETRY: Record<'invite' | 'revoke', string> = {
 async function refusalOf(res: Response, action: 'invite' | 'revoke'): Promise<string> {
   const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
   const code = typeof body?.error === 'string' ? body.error : '';
-  return REFUSALS[code] ?? RETRY[action];
+  // Own keys only: a code of `constructor` must find nothing, not Object's.
+  return Object.hasOwn(REFUSALS, code) ? (REFUSALS[code] as string) : RETRY[action];
 }
 
 const dateFormat = new Intl.DateTimeFormat('en-GB', {
