@@ -133,8 +133,8 @@ async function seedHousehold(
   contactId: string,
   requestId: string | null,
   linkedTo: string | null,
-  tenantId = IDS.tenantA,
-  ownerId = IDS.ownerA,
+  tenantId: string = IDS.tenantA,
+  ownerId: string = IDS.ownerA,
 ): Promise<void> {
   await seedClient(db, tenantId, clientId, ownerId, 'Valley');
   await db.query(
