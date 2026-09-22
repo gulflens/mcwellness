@@ -28,12 +28,17 @@
   has something to announce into, and it carries its own gap so the note never
   sits flush against the first heading beneath it. Empty, it collapses to
   nothing: :empty takes the margin away with it.
+
+  The team profile's own save says so the same way, so it shares the rule
+  rather than restating it a hundred lines further down.
 */
-.practice__status {
+.practice__status,
+.team-profile__status {
   margin-block-end: var(--s-6);
 }
 
-.practice__status:empty {
+.practice__status:empty,
+.team-profile__status:empty {
   margin-block-end: 0;
 }
 
@@ -293,4 +298,237 @@
 }
 .team__password {
   letter-spacing: 0.04em;
+}
+
+/*
+  A name with a job title under it: two lines in one cell, the title quiet. The
+  row keeps the console's 44px whether the second line is there or not, because
+  the title is set at the small step.
+*/
+.team__person {
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Settings › Team: one colleague's drawer (round 58, 2026-09-21) --- */
+
+/*
+  A profile that is not the reader's to change, read as facts. Label above
+  value, always: this list lives inside a drawer that starts at 320px, where
+  the practice screen's two-column grid would leave a value 80px of room. The
+  drawer's width is a person's own choice, so there is no width to fold at
+  either — it simply reads down.
+*/
+.team-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.team-facts__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.team-facts dt {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  color: var(--ink-2);
+}
+
+.team-facts dd {
+  margin: 0;
+}
+
+/*
+  The subheadings inside the drawer's two tabs. The h3 step would be 20px in a
+  320px column and would shout over the labels beneath it, so hierarchy comes
+  from weight and the rule under it instead — the same shape .practice__heading
+  takes on the page, restated here because this one carries no bottom margin of
+  its own: the form's flex gap owns the rhythm.
+*/
+.team-profile__heading,
+.team-access__heading {
+  font-size: var(--t-small);
+  line-height: var(--lh-small);
+  font-weight: var(--w-medium);
+  color: var(--ink-2);
+  margin: 0;
+  padding: 0;
+  padding-block-end: var(--s-2);
+  border-block-end: var(--hairline) solid var(--rule);
+}
+
+.team-profile__notes {
+  min-block-size: 6rem;
+  resize: vertical;
+  font: inherit;
+}
+
+.team-access {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+}
+
+.team-access__roles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  padding-block-start: var(--s-4);
+}
+
+/*
+  A switch and the lines under it. Margins rather than a flex gap, because one
+  of those lines is a live region that is in the document from the first render
+  and empty nearly all the time: a gap would keep a hole open under every
+  switch for a sentence that is usually not there, where an empty element with
+  no margin takes no room at all.
+*/
+.team-access__role {
+  display: block;
+}
+
+.team-access__role > p {
+  margin-block: var(--s-2) 0;
+}
+
+.team-access__role > p:empty {
+  margin-block: 0;
+}
+
+/*
+  Why a role will not move, said under the switch it is about — the standing
+  rule (somebody's last role) and the refusal that has just come back from the
+  server, which reads the same way. Ink and medium against the slate regular of
+  the line above it: a rule about this person is a different kind of statement
+  from a description of the role, and the difference is weight rather than
+  colour (docs/DESIGN-BRIEF.md section 2 — hue carries meaning from the data
+  and nothing else).
+*/
+.team-access__refusal {
+  color: var(--ink);
+  font-weight: var(--w-medium);
+}
+
+.team-access__signin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+/*
+  A role's switch. `.access-switch` and not `.switch`, which the practitioner
+  app's check-in screen already owns (app/therapist/session/CheckInPage.css):
+  screens are code-split, so both stylesheets are in the document as soon as
+  one person visits both faces of the app, and two rules of one name leave load
+  order deciding which control gets which. The same reason the VAT and readings
+  switches above carry their own names.
+
+  A real control, not a styled div: a button with role="switch", focusable,
+  answering Space and Enter because it is a button, and reading as on or off to
+  a screen reader whether it is disabled or not. The track is drawn with ::after
+  and the thumb with ::before, so the markup is the label and nothing else.
+*/
+.access-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  inline-size: 100%;
+  min-block-size: var(--row);
+  padding-inline: var(--s-3);
+  border: var(--hairline) solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.access-switch:not([aria-disabled='true']):hover {
+  border-color: var(--brand);
+}
+
+.access-switch:focus-visible {
+  box-shadow: var(--focus);
+}
+
+/* The track. Off is a visible surface with an ink-2 edge, never blank chrome. */
+.access-switch::after {
+  content: '';
+  flex: none;
+  inline-size: var(--s-12);
+  block-size: var(--s-6);
+  border: var(--hairline) solid var(--ink-2);
+  border-radius: calc(var(--s-6) / 2);
+  background: var(--surface);
+}
+
+.access-switch[aria-checked='true']::after {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+/*
+  The thumb, over the track's own end of the button. Positioned from the inline
+  end, which is where the track sits (padding var(--s-3), then var(--s-12) of
+  track), so it mirrors for Arabic with no second rule. The one thing in this
+  screen that moves, and only when somebody presses it: 160ms, and 0ms under
+  prefers-reduced-motion, which the token itself answers.
+*/
+.access-switch::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  inset-inline-end: calc(var(--s-3) + var(--s-12) - var(--s-1) - var(--s-4));
+  inline-size: var(--s-4);
+  block-size: var(--s-4);
+  border-radius: 50%;
+  background: var(--ink-2);
+  transition: inset-inline-end var(--motion) var(--ease);
+}
+
+.access-switch[aria-checked='true']::before {
+  inset-inline-end: calc(var(--s-3) + var(--s-1));
+  background: var(--paper);
+}
+
+/*
+  Greyed: a switch the rule refuses. It is `aria-disabled` rather than
+  `disabled`, so it keeps its place in the tab order and the line beneath it
+  can actually be reached; the press is refused in the handler. Every rule
+  below therefore reads the attribute, not the pseudo-class.
+*/
+.access-switch[aria-disabled='true'] {
+  color: var(--slate);
+  cursor: not-allowed;
+}
+
+/*
+  Greyed off: a white track with a slate thumb at its start. The thumb is slate
+  rather than the rule's own colour, which was all but invisible against the
+  track when this was walked in a browser — a switch nobody may press must
+  still say, at a glance, which way it is set.
+*/
+.access-switch[aria-disabled='true']::after {
+  border-color: var(--rule);
+  background: var(--surface);
+}
+
+.access-switch[aria-disabled='true'][aria-checked='true']::after {
+  border-color: var(--slate);
+  background: var(--slate);
+}
+
+.access-switch[aria-disabled='true']::before {
+  background: var(--slate);
+}
+
+.access-switch[aria-disabled='true'][aria-checked='true']::before {
+  background: var(--paper);
 }

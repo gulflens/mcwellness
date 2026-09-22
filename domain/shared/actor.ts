@@ -100,6 +100,7 @@ export type Action =
   | { type: 'portal.access.manage' }
   | { type: 'kit.manage' }
   | { type: 'staff.manage' }
+  | { type: 'staff.access.manage' }
   | { type: 'kit.read'; assignedToSelf: boolean }
   | { type: 'routing.day.read'; scope: 'own' }
   | { type: 'routing.practiceDay.read' }
@@ -153,11 +154,10 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
     case 'client.write':
       return hasRole(actor, 'owner', 'admin');
     case 'user_role.grant':
-      // Ownership is handed out by the owner alone; RLS says the same.
-      if (action.role === 'owner') {
-        return hasRole(actor, 'owner');
-      }
-      return hasRole(actor, 'owner', 'admin');
+      // A household's contact row is the portal's, and an admin invites a
+      // household. Every other role is the owner's to hand out; RLS says the same.
+      if (action.role === 'client_contact') return hasRole(actor, 'owner', 'admin');
+      return hasRole(actor, 'owner');
     case 'practice.settings.write':
       // The practice's own identity: its legal name, its trade licence and
       // whether it charges VAT. The owner and an admin, and nobody else —
@@ -406,12 +406,19 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
       // class of act as granting a role, and db/policies/portal/access.sql
       // refuses the row underneath this.
       return hasRole(actor, 'owner', 'admin');
-    // Who may add a member of staff, grant a working role or suspend a
-    // sign-in: the owner and an admin, which is what
-    // db/policies/core/role_guard.sql enforces beneath. Ownership itself is the
-    // owner's alone to grant, and no screen offers it (domain/shared/staff.ts).
+    // The team LIST, for the owner and an admin, and nothing else — every act
+    // on a colleague went to staff.access.manage below on 21 September 2026.
+    // It is also the first guard of POST /api/team/:id/password, on purpose:
+    // an admin's attempt has to reach canResetPassword to be refused there and
+    // written down as password_reset_refused, which a bare 403 at this guard
+    // would leave no row for (app/api/team/routes.ts).
     case 'staff.manage':
       return hasRole(actor, 'owner', 'admin');
+    // Adding a person, editing a profile, switching a role, suspending and
+    // minting a temporary password: the owner's alone (operator, 21 September
+    // 2026). `staff.manage` above keeps the list for an admin and nothing else.
+    case 'staff.access.manage':
+      return hasRole(actor, 'owner');
     case 'kit.manage':
       // The equipment register: listing it, adding an item, editing one,
       // assigning it and recording a calibration

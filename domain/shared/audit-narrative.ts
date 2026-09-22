@@ -149,6 +149,14 @@ const ENTITY: Record<string, Text> = {
   fiscal_year: t('financial year', 'السنة المالية'),
   account: t('account', 'الحساب'),
   accounting_setting: t("the books' settings", 'إعدادات الدفاتر'),
+  // Settings › Team (round 58,
+  // docs/superpowers/specs/2026-09-21-team-profiles-and-access-design.md
+  // section 6). It needs a word of its own even though the generic read
+  // sentence is the right sentence: without one, the fallback below is the
+  // table's own name, and "اطّلع على staff profile" is an English word dropped
+  // into the middle of an Arabic sentence. `ملف موظف` is the phrase this file's
+  // five staff sentences already use.
+  staff_profile: t('staff profile', 'ملف موظف'),
 };
 
 /** The two kinds a report can be (docs/SPEC/reports-v1.md section 1). */
@@ -1056,6 +1064,52 @@ function sentenceFor(event: AuditEvent, locale: Locale): string | null {
         locale,
       );
     }
+    // Settings › Team's own trail (round 58,
+    // docs/superpowers/specs/2026-09-21-team-profiles-and-access-design.md):
+    // a working role taken away for the first time
+    // (app.revoke_staff_role, migration 923), a colleague's staff profile
+    // (staff_profile, migration 922), and the two application actions
+    // app/api/team/routes.ts writes with logAction. None of the five names
+    // a role, a field value or a person: the trail's own actor and entity
+    // columns already carry who and whom.
+    case 'user_role.delete':
+      // "Removed X from a person" already has a shape, in the contact
+      // clauses' own is_legal_guardian case: `أزال ... عن ...`.
+      return pick(
+        t(`${actor} took a role away from a colleague`, `${actor} أزال دورًا عن موظف`),
+        locale,
+      );
+    case 'staff_profile.insert':
+      return pick(
+        t(`${actor} recorded a colleague's staff profile`, `${actor} سجّل ملف موظف`),
+        locale,
+      );
+    case 'staff_profile.update':
+      return pick(
+        t(`${actor} changed a colleague's staff profile`, `${actor} غيّر ملف موظف`),
+        locale,
+      );
+    case 'app_user.password_reset':
+      // `أصدر` is the report's own word for "issued" (report.report.issued);
+      // `كلمة مرور` is the portal's own word for "password"
+      // (app/client/i18n/dictionary.ts).
+      return pick(
+        t(
+          `${actor} minted a temporary password for a colleague`,
+          `${actor} أصدر كلمة مرور مؤقتة لموظف`,
+        ),
+        locale,
+      );
+    case 'app_user.password_reset_refused':
+      // `رُفض له` is the report's own shape for a refusal
+      // (report.report.supersede_refused / deliver_refused).
+      return pick(
+        t(
+          `${actor} was refused a temporary password for a colleague`,
+          `${actor} رُفض له إصدار كلمة مرور مؤقتة لموظف`,
+        ),
+        locale,
+      );
     case 'client.erase':
       // The act itself, written by app/api/clients/erasure.ts after
       // app.erase_client returns: everything the erasure touched is already

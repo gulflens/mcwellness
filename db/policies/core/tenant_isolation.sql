@@ -8,7 +8,8 @@ declare
   t text;
 begin
   foreach t in array array['app_user', 'user_role', 'location', 'service_type', 'practitioner',
-                           'credential', 'client', 'contact', 'consent', 'document'] loop
+                           'credential', 'client', 'contact', 'consent', 'document',
+                           'staff_profile'] loop
     execute format('drop policy if exists tenant_isolation on public.%I', t);
     execute format(
       'create policy tenant_isolation on public.%I for all to app_role '

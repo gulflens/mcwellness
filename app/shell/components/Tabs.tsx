@@ -5,19 +5,29 @@ export type Tab = { id: string; label: string };
 /**
  * A real tab strip (task brief item 1): `role="tablist"`, arrow-key
  * movement between tabs (Home/End to the ends), automatic activation on
- * focus — the WAI-ARIA authoring practice, and the shell has no tab
- * component of its own yet to reuse (app/shell/components/Controls.tsx).
+ * focus — the WAI-ARIA authoring practice. Moved here from the client
+ * record (trunk round 58, docs/SPEC/OWNERSHIP.md) because two modules need
+ * it: the client record's own drawer and Settings › Team's new profile
+ * drawer.
  */
 export function Tabs({
   tabs,
   selected,
   onSelect,
   idPrefix,
+  label = 'Record sections',
 }: {
   tabs: readonly Tab[];
   selected: string;
   onSelect: (id: string) => void;
   idPrefix: string;
+  /**
+   * What a screen reader calls this strip. It defaults to the client record's
+   * own words, which were the only ones when this lived there; a second caller
+   * is a second kind of thing being switched between, and "Record sections" on
+   * a member of staff's profile names the wrong record.
+   */
+  label?: string;
 }) {
   const refs = useRef(new Map<string, HTMLButtonElement>());
 
@@ -53,7 +63,7 @@ export function Tabs({
   }
 
   return (
-    <div className="tabs" role="tablist" aria-label="Record sections">
+    <div className="tabs" role="tablist" aria-label={label}>
       {tabs.map((tab, index) => (
         <button
           key={tab.id}

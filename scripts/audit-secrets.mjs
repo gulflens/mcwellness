@@ -19,9 +19,11 @@ const ALLOWED_VALUES = [
   'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJlLXNpZ25hdHVyZQ',
   'postgresql://postgres:postgres@localhost:5432/postgres',
   'postgresql://mcwellness_api:mcwellness_api@localhost:5432/postgres',
-  // Settings › Team's screen test (app/admin/settings/TeamPage.test.tsx): the
-  // temporary password a stubbed API answers, shown once on the screen. A
-  // marked placeholder that signs in nowhere.
+  // Settings › Team's screen tests: the temporary password a stubbed API
+  // answers, shown once on the screen. Marked placeholders that sign in
+  // nowhere. 0001 is a new sign-in in app/admin/settings/TeamPage.test.tsx;
+  // 0002 is a new temporary password, which moved with its button into the
+  // profile drawer in round 58 (app/admin/settings/TeamMemberDrawer.test.tsx).
   '<shown-once-0001>',
   '<shown-once-0002>',
 ];

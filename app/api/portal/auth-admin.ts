@@ -35,6 +35,12 @@ export type AuthAdminProvider = {
    */
   createUser(input: { email: string; password: string }): Promise<{ authId: string }>;
   setPassword(authId: string, password: string): Promise<void>;
+  /**
+   * A colleague's email address is their sign-in, so changing it changes here
+   * first and the database row second. `email_in_use` when another sign-in
+   * already holds the address, the same refusal `createUser` gives.
+   */
+  setEmail(authId: string, email: string): Promise<void>;
   /** Removes a sign-in this API created moments ago and could not finish. */
   deleteUser(authId: string): Promise<void>;
 };
@@ -182,6 +188,17 @@ export function supabaseAuthAdmin(options: SupabaseAuthAdminOptions): AuthAdminP
       if (!response.ok) throw refused(response, 'set that password');
     },
 
+    async setEmail(authId: string, email: string): Promise<void> {
+      const response = await call(`users/${encodeURIComponent(authId)}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        // Confirmed without a message, as createUser is: the practice typed it.
+        body: JSON.stringify({ email, email_confirm: true }),
+      });
+      if (await saysEmailInUse(response)) throw new EmailInUseError();
+      if (!response.ok) throw refused(response, 'change that address');
+    },
+
     async deleteUser(authId: string): Promise<void> {
       const response = await call(`users/${encodeURIComponent(authId)}`, { method: 'DELETE' });
       // Already gone is the state that was wanted.
@@ -225,6 +242,16 @@ export function fakeAuthAdmin(): AuthAdminProvider {
 
     async setPassword(): Promise<void> {
       // Nothing to set: no password is kept, because none is ever checked.
+    },
+
+    async setEmail(authId: string, email: string): Promise<void> {
+      const key = email.trim().toLowerCase();
+      const holder = byEmail.get(key);
+      if (holder !== undefined && holder !== authId) throw new EmailInUseError();
+      const old = byAuthId.get(authId);
+      if (old !== undefined) byEmail.delete(old);
+      byEmail.set(key, authId);
+      byAuthId.set(authId, key);
     },
 
     async deleteUser(authId: string): Promise<void> {

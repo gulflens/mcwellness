@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { TeamMember } from '../../api/team/schema';
+import type { TeamMember, TeamProfile } from '../../api/team/schema';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
 import { TeamPage } from './TeamPage';
@@ -10,6 +10,12 @@ import { TeamPage } from './TeamPage';
 /**
  * Settings › Team. Synthetic throughout (.claude/rules/testing.md): seed
  * names, example.com, reserved ids.
+ *
+ * The list is the owner's and an admin's; everything on it is the owner's alone
+ * (round 58, 2026-09-21), so what an admin sees is a row and no button. The
+ * four "Add …" presses this file used to count are gone: they could only ever
+ * widen somebody's access, and they are switches inside the drawer now, which
+ * can be turned off again.
  */
 
 afterEach(cleanup);
@@ -30,6 +36,8 @@ const OWNER: TeamMember = {
   status: 'active',
   roles: ['lead_practitioner', 'owner'],
   isYou: true,
+  locked: true,
+  jobTitle: 'Founder',
 };
 const ADMIN: TeamMember = {
   id: '00000002-0000-4000-8000-000000000010',
@@ -38,6 +46,20 @@ const ADMIN: TeamMember = {
   status: 'active',
   roles: ['admin'],
   isYou: false,
+  locked: false,
+  jobTitle: null,
+};
+
+/** What `GET /api/team/:id` answers for the admin's row, so Open has something to open. */
+const ADMIN_PROFILE: TeamProfile = {
+  ...ADMIN,
+  phone: '+971500000012',
+  preferredLocale: 'en',
+  startedOn: '2026-03-01',
+  emergencyContactName: null,
+  emergencyContactPhone: null,
+  privateNotes: null,
+  editable: true,
 };
 
 function json(body: unknown, status = 200): Response {
@@ -47,25 +69,30 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function mount(options: { inviteStatus?: number; members?: TeamMember[] } = {}) {
+function mount(
+  options: { inviteStatus?: number; members?: TeamMember[]; myRoles?: string[] } = {},
+) {
   const posts: { url: string; body: unknown }[] = [];
+  const gets: string[] = [];
   let members: TeamMember[] = options.members ?? [OWNER, ADMIN];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (method === 'GET') gets.push(url);
     if (url === '/api/me') {
       return json({
         userId: ME,
         displayName: 'Hazel Harbour',
         tenantId: '00000001-0000-4000-8000-000000000001',
-        roles: ['owner', 'lead_practitioner'],
+        roles: options.myRoles ?? ['owner', 'lead_practitioner'],
         capabilities: [],
       });
     }
-    if (url === '/api/team' && (!init?.method || init.method === 'GET')) {
+    if (url === '/api/team' && method === 'GET') {
       return json({ members });
     }
-    if (url === '/api/team' && init?.method === 'POST') {
-      posts.push({ url, body: JSON.parse(String(init.body)) });
+    if (url === '/api/team' && method === 'POST') {
+      posts.push({ url, body: JSON.parse(String(init?.body)) });
       if (options.inviteStatus && options.inviteStatus !== 201) {
         return json({ error: 'email_in_use' }, options.inviteStatus);
       }
@@ -78,6 +105,8 @@ function mount(options: { inviteStatus?: number; members?: TeamMember[] } = {}) 
           status: 'active',
           roles: ['finance'],
           isYou: false,
+          locked: false,
+          jobTitle: null,
         },
       ];
       return json(
@@ -85,15 +114,13 @@ function mount(options: { inviteStatus?: number; members?: TeamMember[] } = {}) 
         201,
       );
     }
-    if (url.endsWith('/password')) {
-      posts.push({ url, body: null });
-      return json({ userId: ADMIN.id, temporaryPassword: '<shown-once-0002>' });
+    if (url === `/api/team/${ADMIN.id}` && method === 'GET') {
+      return json(ADMIN_PROFILE);
     }
-    if (url.endsWith('/status') || url.endsWith('/roles')) {
+    // A role switched on: the drawer's own request, answered the way the API
+    // answers it, so the list behind the drawer reloads for real.
+    if (url === `/api/team/${ADMIN.id}/roles/finance` && method === 'PUT') {
       posts.push({ url, body: JSON.parse(String(init?.body)) });
-      if (url.endsWith('/status')) {
-        members = members.map((m) => (url.includes(m.id) ? { ...m, status: 'suspended' } : m));
-      }
       return json({ ok: true });
     }
     return json({ error: 'not_found' }, 404);
@@ -105,46 +132,102 @@ function mount(options: { inviteStatus?: number; members?: TeamMember[] } = {}) 
       </AuthProviderBoundary>
     </MemoryRouter>,
   );
-  return { posts };
+  return { posts, gets };
 }
 
 describe('TeamPage', () => {
-  it('lists the staff with their roles, and offers no suspend button on your own row', async () => {
+  it('lists the staff with their roles and job titles, and offers an owner one Open on every row', async () => {
     mount();
     expect(await screen.findByText('Iris Harbour')).toBeTruthy();
     expect(screen.getByText('Lead practitioner')).toBeTruthy();
     expect(screen.getByText('Owner')).toBeTruthy();
-    // Two rows, one suspend button: the owner's own row has none.
-    expect(screen.getAllByRole('button', { name: 'Suspend' })).toHaveLength(1);
-    // And no widening of your own access: the owner's row offers no "Add …",
-    // the admin's offers the three roles they lack.
+    // A job title reads under the name when there is one; the admin has none.
+    expect(screen.getByText('Founder')).toBeTruthy();
+    // One press per row, each named after the person it opens, and no row of
+    // "Add …" buttons anywhere.
+    expect(screen.getAllByRole('button', { name: /^Open / })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Open Iris Harbour' })).toBeTruthy();
     expect(
-      screen.getAllByRole('button', {
+      screen.queryAllByRole('button', {
         name: /^Add (admin|finance|practitioner|lead practitioner)$/,
       }),
-    ).toHaveLength(3);
+    ).toHaveLength(0);
+    // The row's other two presses moved inside the drawer with them.
+    expect(screen.queryAllByRole('button', { name: 'New temporary password' })).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: 'Suspend' })).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Add a person' })).toBeTruthy();
   });
 
-  // Trunk round 57, 2026-09-21: a temporary password is the sign-in itself, so
-  // an admin is offered none for an owner (domain/shared/staff.ts).
-  it("offers an admin no temporary password on an owner's row", async () => {
+  // The operator's decision of 21 September 2026: managing the team is the
+  // owner's alone, so an admin reads the list and presses nothing on it.
+  it('offers an admin the rows and no button at all', async () => {
     mount({
       members: [
-        { ...OWNER, isYou: false },
+        { ...OWNER, isYou: false, jobTitle: null },
         { ...ADMIN, isYou: true },
       ],
+      myRoles: ['admin'],
     });
     expect(await screen.findByText('Hazel Harbour')).toBeTruthy();
-    // Two active rows, one button: the admin's own.
-    expect(screen.getAllByRole('button', { name: 'New temporary password' })).toHaveLength(1);
+    expect(screen.getByText('Iris Harbour')).toBeTruthy();
+    expect(screen.queryAllByRole('button', { name: /^Open / })).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: 'Add a person' })).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: 'New temporary password' })).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: 'Suspend' })).toHaveLength(0);
   });
 
-  it('mints a new temporary password for a colleague and shows it once', async () => {
-    const { posts } = mount();
-    const buttons = await screen.findAllByRole('button', { name: 'New temporary password' });
-    fireEvent.click(buttons[1] as HTMLElement);
-    expect(await screen.findByText('<shown-once-0002>')).toBeTruthy();
-    expect(posts).toEqual([{ url: `/api/team/${ADMIN.id}/password`, body: null }]);
+  it('opens the drawer on the row that was pressed', async () => {
+    const { gets } = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Iris Harbour' }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Iris Harbour' })).toBeTruthy();
+    expect(gets).toContain(`/api/team/${ADMIN.id}`);
+  });
+
+  it('closes the drawer on Escape and puts focus back on the row’s Open button', async () => {
+    mount();
+    const pressed = await screen.findByRole('button', { name: 'Open Iris Harbour' });
+    // A browser focuses a button it is given a click; jsdom does not.
+    pressed.focus();
+    fireEvent.click(pressed);
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.activeElement).toBe(pressed);
+  });
+
+  /*
+   * The one fault of this round that a browser found and no test could: a
+   * successful role switch reloads the list behind the drawer, and that reload
+   * used to throw the keyboard from the switch it had just pressed to the
+   * drawer's close button. It happens because `useDrawer` lists `onClose` among
+   * its effect's dependencies, so a fresh arrow function on every render of this
+   * page tears the effect down and sets it up again — and setting it up again
+   * focuses the drawer's first control. Holding `closeDrawer` and
+   * `drawerChanged` still across renders is the whole fix, and nothing but this
+   * case would go red the day somebody inlines either of them again.
+   */
+  it('leaves focus on the switch that was pressed while the list reloads behind the drawer', async () => {
+    const { gets } = mount();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open Iris Harbour' }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    await screen.findByRole('heading', { name: 'Iris Harbour' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+
+    const finance = screen.getByRole('switch', { name: 'Finance' });
+    // A browser focuses a button it is given a click; jsdom does not.
+    finance.focus();
+    expect(document.activeElement).toBe(finance);
+
+    const listReads = () => gets.filter((url) => url === '/api/team').length;
+    const before = listReads();
+    fireEvent.click(finance);
+    // The list really does reload: that is what this case needs to have happened
+    // before it asks where the keyboard is.
+    await waitFor(() => expect(listReads()).toBeGreaterThan(before));
+    expect(finance.getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(finance);
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
   it('creates a sign-in and shows the temporary password once', async () => {
@@ -176,12 +259,5 @@ describe('TeamPage', () => {
     fireEvent.click(screen.getByLabelText('Admin'));
     fireEvent.click(screen.getByRole('button', { name: 'Create sign-in' }));
     expect(await screen.findByText('That email address already has a sign-in.')).toBeTruthy();
-  });
-
-  it('suspends a colleague and offers to reactivate them', async () => {
-    const { posts } = mount();
-    fireEvent.click(await screen.findByRole('button', { name: 'Suspend' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Reactivate' })).toBeTruthy());
-    expect(posts).toEqual([{ url: `/api/team/${ADMIN.id}/status`, body: { status: 'suspended' } }]);
   });
 });

@@ -13,13 +13,16 @@ export type { Action, ActionContext, Actor, Capability, IsoDate, Role } from './
 export {
   STAFF_ROLES,
   STAFF_ROLE_LABELS,
-  canGrantTo,
+  STAFF_ROLE_OPENS,
+  canEditProfile,
   canReactivate,
   canResetPassword,
   canSuspend,
+  canSwitchRole,
+  isLocked,
   isStaffRole,
 } from './staff';
-export type { StaffRole } from './staff';
+export type { RoleSwitchRefusal, StaffRole } from './staff';
 export { BAND_NAMES, BAND_RGB, BANDS, UNIT_NAMES, UNITS } from './bands';
 export type { Band, Unit } from './bands';
 export {
