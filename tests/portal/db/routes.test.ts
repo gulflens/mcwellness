@@ -968,17 +968,18 @@ describe('the practice’s own Portal screen', () => {
     expect(Number(invites.rows[0]?.n)).toBe(0);
   });
 
-  it('refuses to revoke a contact whose account also works at the practice, and writes nothing', async () => {
-    // The other half of the invite's own check, and a regression trunk round 58
-    // caused: `role_guard.sql` now leaves a member of staff's `app_user` row to
-    // the owners, so an admin's `update app_user set status = 'suspended'`
-    // matches no row and raises nothing. Before the round it suspended the
-    // person; after it, the household kept its access and the trail said the
-    // access had been revoked — a row that is not true, which is worse than
-    // either behaviour. Refused before anything is written.
-    //
-    // What revoking a member of staff's household access should MEAN is round
-    // 59's: this answers the question by declining to, rather than by guessing.
+  it("ends a colleague's household link without touching their sign-in, and closes the invitation", async () => {
+    // The other half of the invite's own check. Trunk round 58 made this case
+    // wrong — `role_guard.sql` leaves a member of staff's `app_user` row to the
+    // owners, so an admin's `update app_user set status = 'suspended'` matched
+    // no row and raised nothing — and answered it by refusing with 409
+    // `staff_account`. Trunk round 59 answered the question the refusal left
+    // open: ending a household's access ends the LINK, and ends the ACCOUNT only
+    // when the account is a household's and nothing else
+    // (docs/CHANGE-REQUESTS/trunk-round-59.md). So the route now unlinks the
+    // contact row through `app.unlink_household_contact` (migration 968),
+    // leaves the colleague active and working, closes the open invitation, and
+    // writes one truthful row to the trail.
     await h.owner.query(
       'insert into contact (id, tenant_id, client_id, user_id, relationship, given_name, ' +
         'family_name, is_legal_guardian, can_consent, can_receive_reports, can_pay) ' +
@@ -1005,25 +1006,47 @@ describe('the practice’s own Portal screen', () => {
       `/api/portal/access/${STAFF_CONTACT}/revoke`,
       PORTAL.adminAuth,
     );
-    expect(res.status).toBe(409);
-    expect((await res.json()) as { error: string }).toMatchObject({ error: 'staff_account' });
+    expect(res.status).toBe(200);
+    // `none` and not `revoked`: nobody has access to the record through this
+    // row any more, and nobody was suspended — which is what the list will show
+    // when the screen reloads it.
+    expect((await res.json()) as { contactId: string; state: string }).toEqual({
+      contactId: STAFF_CONTACT,
+      state: 'none',
+    });
 
-    const account = await h.owner.query<{ status: string }>(
-      'select status::text as status from app_user where id = $1',
+    // The link is gone; the colleague is not.
+    const link = await h.owner.query<{ user_id: string | null }>(
+      'select user_id from contact where id = $1',
+      [STAFF_CONTACT],
+    );
+    expect(link.rows[0]?.user_id).toBeNull();
+    const account = await h.owner.query<{ status: string; auth_id: string | null }>(
+      'select status::text as status, auth_id from app_user where id = $1',
       [PORTAL.practitioner],
     );
-    expect(account.rows[0]?.status).toBe('active');
+    expect(account.rows[0]).toEqual({ status: 'active', auth_id: PORTAL.practitionerAuth });
+    const roles = await h.owner.query<{ roles: string[] }>(
+      'select array_agg(role::text order by role::text) as roles from user_role where user_id = $1',
+      [PORTAL.practitioner],
+    );
+    expect(roles.rows[0]?.roles).toEqual(['practitioner']);
+
+    // The open invitation is closed, as it is for a household.
     const invite = await h.owner.query<{ revoked_at: Date | null }>(
       'select revoked_at from portal_invite where id = $1',
       [STAFF_CONTACT_INVITE],
     );
-    expect(invite.rows[0]?.revoked_at).toBeNull();
-    const trail = await h.owner.query<{ n: string }>(
-      "select count(*)::text as n from audit_log where action = 'portal.access.revoked' " +
+    expect(invite.rows[0]?.revoked_at).not.toBeNull();
+
+    // One row in the trail, on the account, saying which of the two acts it was.
+    const trail = await h.owner.query<{ new_values: Record<string, string> }>(
+      "select new_values from audit_log where action = 'portal.access.revoked' " +
         'and entity_id = $1',
       [PORTAL.practitioner],
     );
-    expect(trail.rows[0]?.n).toBe('0');
+    expect(trail.rows).toHaveLength(1);
+    expect(trail.rows[0]?.new_values).toEqual({ contactId: STAFF_CONTACT, means: 'unlinked' });
   });
 
   it('revokes the account rather than the link, and closes every open invitation', async () => {
