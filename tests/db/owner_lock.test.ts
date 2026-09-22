@@ -683,42 +683,47 @@ describe('who writes to app_user and user_role', () => {
 });
 
 describe('an erasure that reaches a member of staff', () => {
-  // This is a loud refusal where there used to be a silent, terminal archive of
-  // the owner's sign-in: app.erase_client archives and unlinks the app_user of
-  // every contact of the erased household (migration 964), with no check that
-  // the account belongs to a member of staff. The erasure rule learning to skip
-  // staff accounts is its own round (operator approved it on 21 September 2026
-  // as the round after this one).
-  it("refuses an erasure that would archive an owner's sign-in, and changes nothing", async () => {
-    let seen: { code?: string; message?: string } = {};
+  // Until trunk round 59 this was a loud refusal where there used to be a
+  // silent, terminal archive of the owner's sign-in: app.erase_client archived
+  // and unlinked the app_user of every contact of the erased household
+  // (migration 964) with no check that the account belonged to a member of
+  // staff, and the lock above refused that for an owner with 42501. Since
+  // migration 968 the erasure spares a colleague's account and completes; the
+  // full set of cases is tests/db/spare_a_colleague.test.ts. This one stays
+  // here because it is the lock's own file, and the lock is still what makes
+  // the sparing necessary rather than merely polite.
+  it("completes for a household whose contact is an owner, and leaves the owner's sign-in alone", async () => {
     await db.query('savepoint erasure');
     try {
       await db.query(
-        "select set_config('app.tenant_id', $1, true), " +
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
           "set_config('app.actor_roles', 'owner', true)",
-        [IDS.tenantA],
+        [IDS.tenantA, IDS.ownerA],
       );
-      await db.query('select app.erase_client($1, $2)', [CLIENT, ERASURE_REQUEST]);
-    } catch (error) {
-      seen = error as { code?: string; message?: string };
+      const { rows } = await db.query<{ summary: Record<string, unknown> }>(
+        'select app.erase_client($1, $2) as summary',
+        [CLIENT, ERASURE_REQUEST],
+      );
+      expect(rows[0]?.summary).toMatchObject({ portalAccountsArchived: 0, staffAccountsSpared: 1 });
+
+      const owner = await db.query<{ status: string; display_name: string }>(
+        'select status::text as status, display_name from app_user where id = $1',
+        [SECOND_OWNER],
+      );
+      expect(owner.rows[0]).toEqual({ status: 'active', display_name: 'Hazel Lagoon' });
+      const household = await db.query<{ status: string }>(
+        'select status::text as status from client where id = $1',
+        [CLIENT],
+      );
+      expect(household.rows[0]?.status).toBe('erased');
+      const link = await db.query<{ user_id: string | null }>(
+        'select user_id from contact where id = $1',
+        [CLIENT_CONTACT],
+      );
+      expect(link.rows[0]?.user_id).toBeNull();
     } finally {
       await db.query('rollback to savepoint erasure');
     }
-    expect(seen.code).toBe('42501');
-    // Named, so this case cannot pass on some other refusal — the tenant check
-    // inside app.erase_client raises 42501 too.
-    expect(seen.message).toContain('an owner is not suspended or archived');
-
-    const owner = await db.query<{ status: string; display_name: string }>(
-      'select status::text as status, display_name from app_user where id = $1',
-      [SECOND_OWNER],
-    );
-    expect(owner.rows[0]).toEqual({ status: 'active', display_name: 'Hazel Lagoon' });
-    const household = await db.query<{ status: string }>(
-      'select status::text as status from client where id = $1',
-      [CLIENT],
-    );
-    expect(household.rows[0]?.status).not.toBe('erased');
   });
 });
 
