@@ -14,10 +14,10 @@ violet, white, and tints of that violet for cards, and nothing else — and
 
 The 8 September page set every fact in facing English and Arabic rows. The
 new page keeps Arabic where he kept it — the title, the supplier block, the
-section headings, the table's column headings and the summary's rows — and
-drops it where he dropped it: the rows of the payment details card carry
-English labels only, because an account number read against six labels is a
-number a payer misreads.
+section headings, the table's column headings and the total's caption — and
+drops it where he dropped it: the rows of the payment details card and of
+the summary carry English labels only, because an account number read
+against six labels is a number a payer misreads.
 
 ## The design source
 
@@ -79,10 +79,12 @@ second hue, and no page number on any page (his page has none).
    strip inside the card's foot, "Payment reference" / "مرجع الدفع" with the
    invoice's reference in violet bold on the right. The whole card is absent
    when the practice has recorded no account. Right, "Invoice summary" /
-   "ملخص الفاتورة": Subtotal (the list total), "Discount 25%" (the shared
-   percentage when the lines agree, "Discount" alone otherwise) with the
-   amount as "- AED 1,987.50", then for a registered practice Net and "VAT 5%",
-   a hairline, and a solid violet block: "TOTAL DUE" / "الإجمالي المستحق" as
+   "ملخص الفاتورة" on a tinted title band, the body white inside the card's
+   border: Subtotal (the list total), "Discount 25%" (the shared percentage
+   when the lines agree, "Discount" alone otherwise) with the amount as
+   "- AED 1,987.50", then for a registered practice Net and "VAT 5%" — these
+   rows in English only, as his page sets them — a hairline, and a solid
+   violet block: "TOTAL DUE" / "الإجمالي المستحق" as
    small white captions over the figure large in white. When the left card is
    absent the summary keeps its place on the right.
 6. **Tax information card.** Full width, card ground with a violet bar down
