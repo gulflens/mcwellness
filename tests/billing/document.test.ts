@@ -709,8 +709,10 @@ describe('a receipt', () => {
  * specs/2026-09-24-invoice-redesign-design.md): the mark left and the title
  * right, the number card, the billed-to card, the table under a violet band,
  * the payment and summary cards, the tax card, the footer spaced by three.
- * They were re-pinned once, after the rendered page had been read against his
- * own. The receipt did not move: it keeps the page of 8 September until it
+ * They were re-pinned after the rendered page had been read against his own,
+ * and once more the same night, when seven points of his page — the lockup's
+ * width, the number card's bar, the hairline, one-line supplier rows, the
+ * summary's band and English rows, no page number — were matched too. The receipt did not move: it keeps the page of 8 September until it
  * is dressed to match, and its bytes are exactly what they were.
  *
  * They are rendered with no logo, deliberately: the mark is the practice's own
@@ -725,12 +727,12 @@ describe('the bytes of a rendered document', () => {
     [
       'an invoice from an unregistered practice',
       () => renderDocument(invoiceFor(UNREGISTERED), fonts),
-      '8ef5393a74c503b0a70f5337884e42869c1411480266580f3214df0882a59565',
+      'c76a466978cea23f35d7719a91879816ec997df218dda24c6c16ccb2872df647',
     ],
     [
       'an invoice from a registered practice',
       () => renderDocument(invoiceFor(REGISTERED), fonts),
-      'b8bb69b1f6375af69859a1c8810fa3404e9198126f28f4678371732e6661f9f3',
+      '94e934d4b4c53e0e8fff0577b4b3213b90c9a55416109f0807276c445436349d',
     ],
     [
       'a receipt',
