@@ -683,13 +683,19 @@ describe('a receipt', () => {
  * thing a UAE invoice must carry, and it no longer has a second place to
  * appear from.
  *
+ * **The two invoices moved on 24 September 2026**, when the operator's design
+ * of that day replaced the invoice page outright (round 65; docs/superpowers/
+ * specs/2026-09-24-invoice-redesign-design.md): the mark left and the title
+ * right, the number card, the billed-to card, the table under a violet band,
+ * the payment and summary cards, the tax card, the footer spaced by three.
+ * They were re-pinned once, after the rendered page had been read against his
+ * own. The receipt did not move: it keeps the page of 8 September until it
+ * is dressed to match, and its bytes are exactly what they were.
+ *
  * They are rendered with no logo, deliberately: the mark is the practice's own
  * row and not a file in this repository, so a golden that embedded one would
  * be a golden about a picture rather than about the writer.
  */
-const GOLDEN_UNREGISTERED_INVOICE =
-  '0b17f43d3c024d3b61a80cb959f5d5f10a9eca6d12ac39bc952060be402545b1';
-
 describe('the bytes of a rendered document', () => {
   const sha256 = (bytes: Uint8Array): string =>
     createHash('sha256').update(Buffer.from(bytes)).digest('hex');
@@ -698,12 +704,12 @@ describe('the bytes of a rendered document', () => {
     [
       'an invoice from an unregistered practice',
       () => renderDocument(invoiceFor(UNREGISTERED), fonts),
-      GOLDEN_UNREGISTERED_INVOICE,
+      '8ef5393a74c503b0a70f5337884e42869c1411480266580f3214df0882a59565',
     ],
     [
       'an invoice from a registered practice',
       () => renderDocument(invoiceFor(REGISTERED), fonts),
-      'a877c57c1e596fd266509e7381086e831d6e381e414739940a3846d75caab745',
+      'b8bb69b1f6375af69859a1c8810fa3404e9198126f28f4678371732e6661f9f3',
     ],
     [
       'a receipt',
