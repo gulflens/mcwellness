@@ -9,6 +9,7 @@ import { formatDiscount, formatFils } from './money';
 import { PackageDrawer } from './PackageDrawer';
 import { SellPackageDrawer } from './SellPackageDrawer';
 import { SellSessionDrawer } from './SellSessionDrawer';
+import { WithdrawPackageDrawer } from './WithdrawPackageDrawer';
 
 /**
  * What the practice sells as a programme, beside what it sells as a single
@@ -26,6 +27,14 @@ type State =
   | { kind: 'loading' }
   | { kind: 'error' }
   | { kind: 'ready'; packages: readonly PackageRow[]; vatRegistered: boolean };
+
+/**
+ * The reason a reinstatement carries: fixed, because there is no drawer to
+ * ask a person for one, and this act needs the audit trail's own words, not
+ * silence (round 62). Withdrawing asks; bringing a bundle back does not.
+ */
+const REINSTATE_REASON = 'Reinstated from the packages list';
+const REINSTATE_FAILED_MESSAGE = 'This package could not be reinstated. Try again.';
 
 function contentsOf(row: PackageRow): string {
   return row.components
@@ -52,6 +61,8 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   const [addOpen, setAddOpen] = useState(false);
   const [selling, setSelling] = useState<PackageRow | null>(null);
   const [sellingSession, setSellingSession] = useState(false);
+  const [withdrawing, setWithdrawing] = useState<PackageRow | null>(null);
+  const [reinstatingId, setReinstatingId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -71,6 +82,37 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
     load();
   }, [load]);
 
+  /**
+   * Bringing a withdrawn bundle back, from the folded list itself — no
+   * drawer, because there is nothing to ask: the fixed reason above is the
+   * whole of it (round 62). The list refetches on success, exactly as
+   * Withdraw's own drawer does, so the row leaves the fold the moment it is
+   * active again.
+   */
+  const reinstate = useCallback(
+    async (row: PackageRow) => {
+      setNote(null);
+      setReinstatingId(row.id);
+      try {
+        const res = await apiFetch(`/api/billing/packages/${row.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json', 'x-reason': REINSTATE_REASON },
+          body: JSON.stringify({ status: 'active' }),
+        });
+        if (res.ok) {
+          load();
+          return;
+        }
+        setNote(REINSTATE_FAILED_MESSAGE);
+      } catch {
+        setNote(REINSTATE_FAILED_MESSAGE);
+      } finally {
+        setReinstatingId(null);
+      }
+    },
+    [apiFetch, load],
+  );
+
   const columns = useMemo<Column<PackageRow>[]>(() => {
     const base: Column<PackageRow>[] = [
       {
@@ -84,22 +126,32 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           <span className="name">
             <span>{row.name}</span>
             {canWrite ? (
-              row.sellable ? (
+              <span className="row-actions cell-action">
+                {row.sellable ? (
+                  <button
+                    type="button"
+                    className="button button--quiet"
+                    onClick={() => {
+                      setNote(null);
+                      setSelling(row);
+                    }}
+                  >
+                    Sell to a client
+                  </button>
+                ) : (
+                  <span className="small muted">Needs a price for every service</span>
+                )}
                 <button
                   type="button"
-                  className="button button--quiet cell-action"
+                  className="button button--quiet"
                   onClick={() => {
                     setNote(null);
-                    setSelling(row);
+                    setWithdrawing(row);
                   }}
                 >
-                  Sell to a client
+                  Withdraw
                 </button>
-              ) : (
-                <span className="small muted cell-action">
-                  {row.status === 'inactive' ? 'Withdrawn' : 'Needs a price for every service'}
-                </span>
-              )
+              </span>
             ) : null}
           </span>
         ),
@@ -177,6 +229,37 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
     return base;
   }, [canWrite]);
 
+  // The folded group's own two columns: a name with Reinstate beside it, and
+  // the contents — nothing else, because nothing else is sellable or priced
+  // once a bundle is withdrawn (docs/SPEC/billing.md).
+  const withdrawnColumns = useMemo<Column<PackageRow>[]>(() => {
+    const name: Column<PackageRow> = {
+      key: 'name',
+      header: 'Package',
+      render: (row) => (
+        <span className="name">
+          <span>{row.name}</span>
+          {canWrite ? (
+            <button
+              type="button"
+              className="button button--quiet cell-action"
+              disabled={reinstatingId === row.id}
+              onClick={() => void reinstate(row)}
+            >
+              Reinstate
+            </button>
+          ) : null}
+        </span>
+      ),
+    };
+    const contents: Column<PackageRow> = {
+      key: 'contents',
+      header: 'Contents',
+      render: (row) => <Wrapped>{contentsOf(row)}</Wrapped>,
+    };
+    return [name, contents];
+  }, [canWrite, reinstatingId, reinstate]);
+
   const drifted =
     state.kind === 'ready'
       ? state.packages.filter(
@@ -184,6 +267,14 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
             row.componentsTotalFils !== null && row.componentsTotalFils !== row.listPriceFils,
         )
       : [];
+
+  // The main table's own rows: active bundles only, unchanged otherwise. A
+  // withdrawn bundle moves to the folded group below rather than leaving the
+  // table altogether (round 62).
+  const activePackages =
+    state.kind === 'ready' ? state.packages.filter((row) => row.status === 'active') : [];
+  const withdrawnPackages =
+    state.kind === 'ready' ? state.packages.filter((row) => row.status === 'inactive') : [];
 
   return (
     <>
@@ -244,10 +335,22 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         <Table
           caption="Packages"
           columns={columns}
-          rows={state.packages}
+          rows={activePackages}
           rowKey={(row) => row.id}
           empty="No packages are set up yet."
         />
+      ) : null}
+
+      {withdrawnPackages.length > 0 ? (
+        <details className="fold">
+          <summary className="fold__summary">{`Withdrawn (${withdrawnPackages.length})`}</summary>
+          <Table
+            caption="Withdrawn packages"
+            columns={withdrawnColumns}
+            rows={withdrawnPackages}
+            rowKey={(row) => row.id}
+          />
+        </details>
       ) : null}
 
       {addOpen ? (
@@ -281,6 +384,17 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           onSold={(summary) => {
             setSellingSession(false);
             setNote(summary);
+          }}
+        />
+      ) : null}
+
+      {withdrawing ? (
+        <WithdrawPackageDrawer
+          bundle={withdrawing}
+          onClose={() => setWithdrawing(null)}
+          onWithdrawn={() => {
+            setWithdrawing(null);
+            load();
           }}
         />
       ) : null}

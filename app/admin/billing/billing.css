@@ -316,3 +316,22 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/*
+  The withdrawn group, folded shut below the packages table until somebody
+  opens it (round 62). A native disclosure rather than a screen's own
+  open/shut state: the platform already knows how to do this, and the table
+  inside it is the same `Table` the packages one is, so nothing about a row
+  reads differently once it has moved.
+*/
+.fold {
+  margin-block-start: var(--s-6);
+}
+
+.fold__summary {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--row);
+  font-weight: var(--w-medium);
+  cursor: pointer;
+}

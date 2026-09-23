@@ -80,6 +80,15 @@ const SILVER_UNREGISTERED = {
 const NO_VAT_NOTE =
   'The practice is not registered for VAT, so no VAT is charged and the total is the price.';
 
+const GOLD_WITHDRAWN = {
+  ...SILVER,
+  id: '00000004-0000-4000-8000-000000000203',
+  code: 'gold',
+  name: 'Gold',
+  nameAr: null,
+  status: 'inactive' as const,
+};
+
 const UNSELLABLE = {
   ...SILVER,
   id: '00000004-0000-4000-8000-000000000202',
@@ -246,6 +255,74 @@ describe('PackagesSection', () => {
   it('says so when the practice has no packages yet', async () => {
     mount(OWNER, []);
     expect(await screen.findByText('No packages are set up yet.')).toBeTruthy();
+  });
+
+  it('shows Withdraw on an active package for the owner, and not for a lead practitioner', async () => {
+    const owner = mount(OWNER, [SILVER]);
+    expect(await screen.findByRole('button', { name: 'Withdraw' })).toBeTruthy();
+    owner.unmount();
+
+    mount(LEAD_PRACTITIONER, [SILVER]);
+    await screen.findByText('Silver');
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull();
+  });
+
+  it('lists a withdrawn package under a folded "Withdrawn (1)" disclosure, not in the table', async () => {
+    mount(OWNER, [SILVER, GOLD_WITHDRAWN]);
+    await screen.findByText('Silver');
+    const summary = screen.getByText('Withdrawn (1)');
+    const fold = summary.closest('details');
+    expect(fold).toBeTruthy();
+    // Folded shut until somebody opens it.
+    expect(fold?.hasAttribute('open')).toBe(false);
+    expect(fold?.textContent).toContain('Gold');
+    // "Not in the table": every <table> outside the fold carries only the
+    // active row, whether the fold is open or shut.
+    const tables = Array.from(document.querySelectorAll('table'));
+    const mainTable = tables.find((t) => !t.closest('details'));
+    expect(mainTable?.textContent).toContain('Silver');
+    expect(mainTable?.textContent).not.toContain('Gold');
+
+    fireEvent.click(summary);
+    expect(await screen.findByRole('button', { name: 'Reinstate' })).toBeTruthy();
+  });
+
+  it('reinstates from the folded list, sending a fixed reason and JSON content-type', async () => {
+    let packages: unknown[] = [SILVER, GOLD_WITHDRAWN];
+    const { fetchImpl } = mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (url === '/api/billing/packages' && method === 'GET') {
+        return json({ packages, vatRegistered: true });
+      }
+      if (url === `/api/billing/packages/${GOLD_WITHDRAWN.id}` && method === 'PATCH') {
+        const reinstated = { ...GOLD_WITHDRAWN, status: 'active' };
+        packages = packages.map((p) =>
+          (p as { id: string }).id === GOLD_WITHDRAWN.id ? reinstated : p,
+        );
+        return json({ package: reinstated });
+      }
+      return null;
+    });
+
+    await screen.findByText('Silver');
+    fireEvent.click(screen.getByText('Withdrawn (1)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstate' }));
+
+    // The section refetches: the fold empties once Gold is active again.
+    await waitFor(() => expect(screen.queryByText('Withdrawn (1)')).toBeNull());
+    expect(await screen.findByText('Gold')).toBeTruthy();
+
+    const calls = (fetchImpl as unknown as { mock: { calls: [string, RequestInit | undefined][] } })
+      .mock.calls;
+    const patch = calls.find(
+      ([calledUrl, init]) =>
+        calledUrl === `/api/billing/packages/${GOLD_WITHDRAWN.id}` && init?.method === 'PATCH',
+    );
+    expect(patch).toBeTruthy();
+    const [, init] = patch as [string, RequestInit];
+    expect(new Headers(init.headers).get('x-reason')).toBe('Reinstated from the packages list');
+    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+    expect(JSON.parse(String(init.body))).toEqual({ status: 'active' });
   });
 
   it('names the problem when the list fails to load', async () => {
