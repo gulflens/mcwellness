@@ -839,8 +839,17 @@ describe('a receipt asks for no money and claims nothing about tax, whoever issu
  * They were re-pinned after the rendered page had been read against his own,
  * and once more the same night, when seven points of his page — the lockup's
  * width, the number card's bar, the hairline, one-line supplier rows, the
- * summary's band and English rows, no page number — were matched too. The receipt did not move: it keeps the page of 8 September until it
- * is dressed to match, and its bytes are exactly what they were.
+ * summary's band and English rows, no page number — were matched too.
+ *
+ * **The receipt moved on the same day**, once, when it was dressed to match
+ * (round 65, "The receipt"): the invoice's masthead, supplier block and
+ * number card, "RECEIVED FROM", the method as the payment method, "Payment
+ * received" beside a summary whose violet block reads "TOTAL PAID", a Note
+ * card carrying its own sentence, and the invoice's footer. It was re-pinned
+ * after the rendered page had been read against the spec. Its household's
+ * record number moved to the practice's own form, MW-000004, at the same
+ * time. The two invoices did not move: the blocks they now share with the
+ * receipt were lifted out of the invoice page byte for byte.
  *
  * They are rendered with no logo, deliberately: the mark is the practice's own
  * row and not a file in this repository, so a golden that embedded one would
@@ -864,7 +873,7 @@ describe('the bytes of a rendered document', () => {
     [
       'a receipt',
       () => renderDocument(receiptFor(UNREGISTERED), fonts),
-      '2410236d814da3c1564193de03d120b9439cc8b8dc006196c4402693198b988f',
+      '9faa1ddc1d92b7af78a217ee5feef34e6b04691c19b367ca4ed55a7854f6111f',
     ],
   ];
 
