@@ -63,6 +63,8 @@ const PRACTICE = {
     latitude: 25.19,
     longitude: 55.26,
   },
+  // No bank account recorded (migration 924).
+  bank: null,
 };
 
 function json(body: unknown, status = 200): Response {
