@@ -590,7 +590,7 @@ export function PracticeDrawer({
           <Field
             id={FIELD_IDS.bankAddress}
             label="Bank address (optional)"
-            hint="Printed in the row below the IBAN on the invoice."
+            hint="Printed beneath the IBAN on the invoice, after the BIC when there is one."
             type="text"
             maxLength={200}
             value={bankAddress}
