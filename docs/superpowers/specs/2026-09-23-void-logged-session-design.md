@@ -108,6 +108,38 @@ check is restated to admit `voided` beside the five statuses it already admits,
 because a voided row keeps its `closed_at`; and each table gains a check that
 the void columns are set only when the status is `voided`. Nothing else.
 
+_Amended 2026-09-23, as the final reviews found._ The close guard stands aside
+for an OPEN row, there was no insert guard, and `appointment` had none at all,
+so the API role could move an open session to `voided`, insert one already
+`voided`, or void an appointment directly and free its window. 970 therefore
+also carries:
+
+- the "void only when voided" checks made **two-way** on both tables:
+  `check ((status = 'voided') = (voided_at is not null))`;
+- on `session`, `check (status <> 'voided' or (closed_at is not null and
+  recorded_from = 'records'))`;
+- `app.refuse_void_without_marker()`, security definer, `search_path` pinned,
+  execute revoked from `public`, as a `before insert or update` trigger on
+  **both** tables, `enable always`: a row becomes `voided` (on insert always,
+  on update from any other status) only while `app.void_active` names it in
+  this transaction — the session by `session_id = new.id`, the appointment
+  through the session whose `appointment_id` is `new.id` — or it is refused
+  `restrict_violation` `void_needs_the_function`. The function removes its
+  marker only after the appointment's update, so its own two writes pass.
+
+### Migration `971_erasure_reaches_the_void_reason.sql` (trunk, second half)
+
+_Added 2026-09-23, as the final reviews found._
+
+- `app.erase_client`, restated as a diff of 968: on the household's rows,
+  `session.void_reason` and `appointment.void_reason` become "Erased with the
+  record" (the phrase `amendment_reason` takes; the together-checks forbid a
+  null). The credit's `waiver_reason` is not touched: a waiver's reason is a
+  financial record, kept as every waiver's is.
+- A correction bound to one household: `(tenant_id, client_id,
+  supersedes_id)` references `session (tenant_id, client_id, id)` (the unique
+  key `(tenant_id, id, client_id)` already exists).
+
 ### Domain (`domain/session/voidSession.ts`, pure, tested first)
 
 `canVoidRecordedSession({ actorRoles, session: { recordedFrom, status,
@@ -134,7 +166,12 @@ a refusal is a sentence before it is an exception. `session.void` joins
   back: the wrong visit is never gone while the right one is missing. The
   consumption trigger then takes the oldest credit valid on the new date,
   which may be the replacement credit just written. Success 201 adds
-  `voided: { sessionId, appointmentId, creditRestored }`.
+  `voided: { sessionId, appointmentId, creditRestored }`. _Amended
+  2026-09-23, as the final reviews found:_ when the visit it replaces belongs
+  to another household, 409 `different_client`, logged through `logRefusal`
+  before the answer and before the function is called; the correction drawer
+  reads it as "A correction stays with the same household. Void this visit and
+  log the right one instead."
 
 ### Screens (`app/admin/schedule/`)
 
