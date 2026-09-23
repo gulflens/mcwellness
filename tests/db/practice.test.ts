@@ -311,13 +311,14 @@ describe('the practice’s contact details', () => {
 
 /**
  * The practice's bank account (migration 924, round 61): what an invoice's
- * "Pay by bank transfer" block prints. Invented values only — an IBAN in the
- * shape of a UAE one that names no account, and a BIC in the shape of none.
+ * "Pay by bank transfer" block prints. Invented values only — a UAE-shaped
+ * IBAN with an all-zero bank code and a sequential account, its check digits
+ * computed so it passes mod 97, and a BIC in the shape of none.
  */
 describe('the practice’s bank account', () => {
   const BANK = {
     accountHolder: 'Example Practice L.L.C-FZ',
-    iban: 'ae07 0000 0000 0000 0000 001',
+    iban: 'ae36 0000 0000 0000 0000 001',
     bic: 'testaexx',
     bankAddress: '1 Example Street, Abu Dhabi',
   };
@@ -334,19 +335,19 @@ describe('the practice’s bank account', () => {
     expect(res.status).toBe(200);
     expect((await read(authIdOf(0))).bank).toEqual({
       accountHolder: 'Example Practice L.L.C-FZ',
-      iban: 'AE070000000000000000001',
+      iban: 'AE360000000000000000001',
       bic: 'TESTAEXX',
       bankAddress: '1 Example Street, Abu Dhabi',
     });
     const { rows } = await owner.query<{ bank_iban: string }>('select bank_iban from tenant');
-    expect(rows[0]?.bank_iban).toBe('AE070000000000000000001');
+    expect(rows[0]?.bank_iban).toBe('AE360000000000000000001');
 
     // A save that never mentions the bank leaves it exactly as it stands.
     await call('PATCH', authIdOf(0), {
       reason: 'An ordinary save that never mentions the bank.',
       body: await form({ legalNameAr: 'استوديو العافية' }),
     });
-    expect((await read(authIdOf(0))).bank?.iban).toBe('AE070000000000000000001');
+    expect((await read(authIdOf(0))).bank?.iban).toBe('AE360000000000000000001');
   });
 
   it('refuses an IBAN of the wrong shape', async () => {
@@ -356,7 +357,17 @@ describe('the practice’s bank account', () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ code: 'iban_invalid' });
-    expect((await read(authIdOf(0))).bank?.iban).toBe('AE070000000000000000001');
+    expect((await read(authIdOf(0))).bank?.iban).toBe('AE360000000000000000001');
+  });
+
+  it('refuses an IBAN whose check digits do not agree', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Trying a mistyped IBAN.',
+      body: await form({ bank: { ...BANK, iban: 'AE37 0000 0000 0000 0000 001' } }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'iban_invalid' });
+    expect((await read(authIdOf(0))).bank?.iban).toBe('AE360000000000000000001');
   });
 
   it('refuses a BIC of the wrong shape', async () => {
@@ -423,7 +434,7 @@ describe('the practice’s bank account', () => {
     );
     expect(rows[0]?.reason).toBe(reason);
     expect(rows[0]?.changed_fields).toEqual(expect.arrayContaining(['bank_address', 'bank_bic']));
-    expect(rows[0]?.new_values).toMatchObject({ bank_iban: 'AE070000000000000000001' });
+    expect(rows[0]?.new_values).toMatchObject({ bank_iban: 'AE360000000000000000001' });
   });
 
   it('clears the bank account when every field is null', async () => {

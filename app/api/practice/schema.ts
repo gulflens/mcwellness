@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidIban } from '../../../domain/shared';
 import { cleanText } from '../_middleware/text';
 
 /**
@@ -164,19 +165,24 @@ const ReviewUrl = optional(400).refine(
  * "Pay by bank transfer" block prints. Business facts of the practice, not
  * personal data, so the trail records them like any other `tenant` column.
  *
- * The checks are the columns' own. The IBAN is taken as people write it —
- * lower case, grouped in fours — and kept uppercase with the spaces out; the
- * BIC uppercase. The holder's name and the bank's address are refused rather
+ * The checks are the columns' own, and one more: the IBAN's mod-97 check
+ * digits (`domain/shared/iban.ts`), which catch a mistyped digit the shape
+ * cannot and which the database deliberately does not repeat. The IBAN is
+ * taken as people write it — lower case, grouped in fours — and kept
+ * uppercase with the spaces out; the BIC uppercase. The holder's name and the bank's address are refused rather
  * than cut when they run long: a name shortened on its way to an invoice is a
  * name a bank may not recognise.
  */
-export const IBAN_MESSAGE = 'An IBAN is two letters, two digits, then 11 to 30 letters or digits.';
+export const IBAN_MESSAGE =
+  'An IBAN is two letters, two digits, then 11 to 30 letters or digits, exactly as the bank gives it.';
 export const BIC_MESSAGE = 'A BIC is 8 or 11 letters and digits.';
 export const ACCOUNT_HOLDER_MESSAGE = 'The account holder is at most 120 characters.';
 export const BANK_ADDRESS_MESSAGE = "The bank's address is at most 200 characters.";
 export const IBAN_REQUIRED_MESSAGE =
   'An account holder, a BIC or a bank address needs the IBAN too.';
 export const ACCOUNT_HOLDER_REQUIRED_MESSAGE = 'An IBAN needs the name the account is held in.';
+
+const IBAN_SHAPE = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/;
 
 /** A bank code: uppercase, spaces out, blank stored as nothing. */
 function bankCode(pattern: RegExp, message: string) {
@@ -222,7 +228,11 @@ export type Bank = z.infer<typeof Bank>;
 export const BankInput = z
   .object({
     accountHolder: bankText(120, ACCOUNT_HOLDER_MESSAGE),
-    iban: bankCode(/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/, IBAN_MESSAGE),
+    iban: bankCode(IBAN_SHAPE, IBAN_MESSAGE).refine(
+      // Only once the shape holds, so a malformed IBAN is refused once, not twice.
+      (value) => value === null || !IBAN_SHAPE.test(value) || isValidIban(value),
+      IBAN_MESSAGE,
+    ),
     bic: bankCode(/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/, BIC_MESSAGE),
     bankAddress: bankText(200, BANK_ADDRESS_MESSAGE),
   })
