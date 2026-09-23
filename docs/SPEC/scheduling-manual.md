@@ -31,6 +31,7 @@ confirmed ──► rescheduled (new appointment, old linked)
 - `checked_in`/`completed`/`no_show`: set by the session-capture flow; scheduling only reads them.
 - `cancelled_late`: cancelled inside 24 hours → a call-out fee on the household's account unless waived, and **never a session from the package** (FINANCE §4.3, amended 2026-09-06 on the founder's decision of 4 September). Waiver requires reason. A `practice_request` cancellation is recorded here too and carries no fee.
 - Rescheduling creates a new appointment with `rescheduled_from_id`; the old one becomes `rescheduled`. Never edit times on a confirmed appointment in place.
+- `voided` (_amended 2026-09-23, trunk round 60, migrations 969 and 970_): a `completed` visit the office logged from the practice's records in error and withdrew, only ever with its session and only by `app.void_recorded_session` (`session-capture.md` section 4). It no longer holds its window, so the right visit can be logged at the same hour. The day list shows it with the chip "Voided", greyed, and no actions; a `completed` row logged from the records shows **Correct** and **Void** to the owner, an admin and the lead practitioner. The dispatch board does not show a voided visit at all (`dispatch.md` 4.4), and neither does the household's portal.
 
 ## 4. Screens (admin)
 

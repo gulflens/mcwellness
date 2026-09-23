@@ -353,6 +353,25 @@ The rule before the amendment, for anyone reading an old ledger: under 24
 hours consumed the entitlement, and the waiver was addressed to the credit
 (`POST /api/billing/entitlements/:id/waiver`, which still is, for those rows).
 
+**A visit logged from the records in error.** _Amended 2026-09-23 (trunk round
+60, migration 969, `docs/superpowers/specs/2026-09-23-void-logged-session-design.md`)._
+When the office voids a visit it logged from the practice's records by mistake
+(`session-capture.md` section 4), the credit that visit consumed comes back
+**the way a waiver restores one**: the consumed row is marked `waived` with the
+office's reason and a replacement credit is written from the same purchase, for
+the same service, value and expiry, pointing back at it. The books post it as
+"Credit restored" (`credit.waived`), against income they had already
+recognised, and the purchase's credits still total what was paid. A visit
+settled before the app took no credit and gets none back. The reason on the
+waived row is cut to the 200 characters a waiver reason may hold; the session
+and the appointment keep it whole.
+
+This is **not a credit note**, and does not start one. A void withdraws a
+record that should never have been written — the household never had that
+visit — so nothing supplied is being undone. A visit the household actually
+had, closed on the phone, is still unwound only by a credit note, which stays
+unbuilt, as the paragraph on registration above already says.
+
 ### 4.4 Journal entries
 
 ```
