@@ -479,6 +479,109 @@ describe.each([
   });
 });
 
+describe('the head of the page', () => {
+  const pick = (registered: boolean): Laid =>
+    MATRIX.find((each) =>
+      each.name.startsWith(`1 lines, ${registered ? 'registered' : 'unregistered'}`),
+    ) as Laid;
+
+  it.each([false, true])(
+    'sets each supplier row on one line, the Arabic level with the English (registered: %s)',
+    (registered) => {
+      const page = pick(registered).pages[0] as Page;
+      const texts = page.ops.filter((op) => op.kind === 'text');
+      // The rows whose length is fixed by what they carry. A licensing
+      // authority is a name, and one as long as this fixture's sets its Arabic
+      // on the line beneath rather than through the English (the long cases).
+      const labels = ['Licence number', 'Corporate tax registration number'];
+      if (registered) labels.push('VAT registration number');
+      for (const label of labels) {
+        const english = texts.filter((op) => op.kind === 'text' && op.text.startsWith(label));
+        expect(english, label).toHaveLength(1);
+        const [row] = english;
+        if (!row || row.kind !== 'text') throw new Error(label);
+        // The Arabic half of the same row: right-to-left, on the same baseline.
+        const arabic = texts.filter(
+          (op) => op.kind === 'text' && op.rtl === true && Math.abs(op.y - row.y) < 0.01,
+        );
+        expect(arabic, label).toHaveLength(1);
+      }
+    },
+  );
+
+  it('draws a violet bar down the number card’s left edge', () => {
+    const laid = pick(false);
+    const card = blocksNamed(laid.blocks[0] ?? [], 'numberCard')[0] as Block;
+    const bar = (laid.pages[0] as Page).ops.find(
+      (op) =>
+        op.kind === 'rect' &&
+        Math.abs(op.x - card.left) < 0.01 &&
+        Math.abs(op.width - GEOMETRY.BAR_WIDTH) < 0.01,
+    );
+    if (!bar || bar.kind !== 'rect') throw new Error('No bar was drawn.');
+    expect(bar.fill).toEqual({ rgb: GEOMETRY.VIOLET });
+    expect(bar.y).toBeCloseTo(card.bottom, 5);
+    expect(bar.y + bar.height).toBeCloseTo(card.top, 5);
+  });
+
+  it('draws a hairline across the page between the supplier row and the billed-to card', () => {
+    const laid = pick(false);
+    const blocks = laid.blocks[0] ?? [];
+    const above = Math.min(
+      ...['supplier', 'numberCard'].map(
+        (name) => (blocksNamed(blocks, name as BlockName)[0] as Block).bottom,
+      ),
+    );
+    const below = (blocksNamed(blocks, 'billedTo')[0] as Block).top;
+    const rules = (laid.pages[0] as Page).ops.filter(
+      (op) =>
+        op.kind === 'rule' &&
+        op.x === GEOMETRY.LEFT &&
+        Math.abs(op.width - (GEOMETRY.RIGHT - GEOMETRY.LEFT)) < 0.01 &&
+        op.y < above &&
+        op.y > below,
+    );
+    expect(rules).toHaveLength(1);
+  });
+});
+
+describe('the summary card', () => {
+  it('sets its title on a tinted band across the top of the card', () => {
+    // The band is part of the summary card's own block, not a block of its own.
+    for (const laid of [MATRIX[0], MATRIX[MATRIX.length - 1]] as Laid[]) {
+      const index = laid.blocks.findIndex((each) => blocksNamed(each, 'summaryCard').length > 0);
+      const card = blocksNamed(laid.blocks[index] ?? [], 'summaryCard')[0] as Block;
+      const band = (laid.pages[index] as Page).ops.find(
+        (op) =>
+          op.kind === 'rect' &&
+          Math.abs(op.x - card.left) < 0.01 &&
+          Math.abs(op.y + op.height - card.top) < 0.01 &&
+          Math.abs(op.width - (card.right - card.left)) < 0.01 &&
+          op.stroke === undefined,
+      );
+      if (!band || band.kind !== 'rect') throw new Error(`${laid.name}: no title band`);
+      expect(band.height).toBeCloseTo(GEOMETRY.TITLE_BAND, 5);
+      const text = boxesOf(laid.pages[index] as Page).filter(
+        (box) => box.y < card.top && box.y > card.top - GEOMETRY.TITLE_BAND,
+      );
+      expect(text.map((box) => box.text)).toContain('Invoice summary');
+    }
+  });
+});
+
+describe('a page number', () => {
+  it('is on no page of any invoice, however many sheets it takes', () => {
+    for (const laid of MATRIX) {
+      for (const page of laid.pages) {
+        expect(
+          boxesOf(page).some((box) => box.text.startsWith('Page ')),
+          laid.name,
+        ).toBe(false);
+      }
+    }
+  });
+});
+
 describe('the footer’s place', () => {
   it('is the same on every invoice of the same practice, however many lines it has', () => {
     const bottoms = new Set(
@@ -500,9 +603,8 @@ describe.each([
       laid.pages.forEach((page, index) => {
         const blocks = laid.blocks[index] ?? [];
         for (const box of boxesOf(page)) {
-          // The sheet's own running header and page number, outside any block.
+          // The sheet's own running header, outside any block.
           if (index > 0 && box.y >= GEOMETRY.TOP - TOLERANCE) continue;
-          if (box.y <= GEOMETRY.FOLIO + TOLERANCE && box.text.startsWith('Page ')) continue;
           const home = blocks.find(
             (block) =>
               box.y <= block.top + TOLERANCE &&

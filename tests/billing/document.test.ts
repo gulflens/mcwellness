@@ -190,11 +190,12 @@ describe('the invoice in the operator’s design, block by block', () => {
   it('names the practice in both languages with its licence, its authority and its corporate-tax registration', () => {
     expect(page).toContain('Synthetic Wellness Studio');
     expect(page).toContain(asCopied('استوديو العافية التجريبي'));
-    expect(page).toContain('Licence number SYN-000000');
+    // Each row one piece of type, on one line, as his page sets them.
+    expect(lines).toContain('Licence number SYN-000000');
     expect(page).toContain('Licensing authority Synthetic Department of Economy and Tourism');
     // The corporate-tax number under its own long name, never under the
     // phrase the Federal Tax Authority uses for a VAT registration.
-    expect(page).toContain('Corporate tax registration number 000000000000000');
+    expect(lines).toContain('Corporate tax registration number 000000000000000');
     expect(page).not.toContain('VAT registration number');
     for (const label of [WORDS.licenceNumber, WORDS.licensingAuthority, WORDS.corporateTaxNumber]) {
       expect(page, label.en).toContain(asCopied(label.ar));
@@ -291,8 +292,9 @@ describe('the invoice in the operator’s design, block by block', () => {
     expect(page).toContain('Invoice summary');
     expect(page).toContain(asCopied(WORDS.invoiceSummary.ar));
     expect(lines).toContain('Subtotal');
-    expect(page).toContain(asCopied(WORDS.subtotal.ar));
     expect(lines).toContain('Discount 25%');
+    // The summary's rows are English and figure only, as his page sets them.
+    expect(page).not.toContain(asCopied(WORDS.subtotal.ar));
     expect(lines).toContain('- AED 1,987.50');
     expect(lines).toContain('TOTAL DUE');
     expect(page).toContain(asCopied(WORDS.totalDue.ar));
@@ -342,7 +344,7 @@ describe('a registered practice’s invoice', () => {
   });
 
   it('adds the VAT registration number as a fourth supplier row', () => {
-    expect(page).toContain('VAT registration number 100000000000003');
+    expect(lines).toContain('VAT registration number 100000000000003');
     expect(page).toContain(asCopied(WORDS.vatRegistrationNumber.ar));
   });
 
@@ -361,7 +363,8 @@ describe('a registered practice’s invoice', () => {
     expect(lines).toContain('Subtotal');
     expect(lines).toContain('Discount 25%');
     expect(lines).toContain('Net');
-    expect(page).toContain(asCopied(WORDS.net.ar));
+    // No Arabic beside the summary's rows; the Net's Arabic is nowhere else.
+    expect(page).not.toContain(asCopied(WORDS.net.ar));
     expect(lines).toContain('VAT 5%');
     expect(lines).toContain('TOTAL DUE');
     const net = lines.indexOf('Net');
@@ -528,6 +531,24 @@ describe('the footer', () => {
     expect(bare).not.toContain('P: ');
     expect(bare).not.toContain('E: ');
     expect(bare).not.toContain('W: ');
+  });
+});
+
+describe('a page number', () => {
+  it('is on no page, even of an invoice that runs to several', () => {
+    const lines = Array.from({ length: 30 }, (_, index) => ({
+      ...(invoiceFor(UNREGISTERED).lines[0] as InvoiceLine),
+      description: `Neurofeedback session ${index + 1}`,
+    }));
+    const bytes = renderDocument(
+      { ...invoiceFor(UNREGISTERED), lines, netFils: 2_100_000, grossFils: 2_100_000 },
+      fonts,
+    );
+    const text = extractText(bytes);
+    // Several sheets, each carrying the running header's reference …
+    expect(text.filter((line) => line === 'INV-000001').length).toBeGreaterThan(2);
+    // … and none of them numbered.
+    expect(text.some((line) => /^Page \d/.test(line))).toBe(false);
   });
 });
 
