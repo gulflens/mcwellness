@@ -37,14 +37,17 @@ import { formatDay } from './windows';
  * act, so the wrong visit is never gone while the right one is missing.
  */
 
-/** The visit a correction replaces, as the day schedule's row hands it over. */
+/**
+ * The visit a correction replaces, as the day schedule's row hands it over.
+ * No delivery mode: the drawer reads it from the location, as it does for a
+ * fresh log, so carrying the old one would only be a second answer to ignore.
+ */
 export type ReplacedVisit = {
   sessionId: string;
   client: Pick<ClientRow, 'id' | 'givenName' | 'familyName'>;
   serviceTypeId: string;
   locationId: string;
   practitionerId: string;
-  deliveryMode: DeliveryMode;
   on: string;
   startTime: string;
   durationMinutes: number | null;

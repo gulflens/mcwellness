@@ -64,7 +64,6 @@ function replacedVisit(row: AppointmentRow & { sessionId: string }): ReplacedVis
     serviceTypeId: row.serviceType.id,
     locationId: row.location.id,
     practitionerId: row.practitioner.id,
-    deliveryMode: row.deliveryMode,
     on: dayOf(row.windowStart),
     startTime: timeOf(row.windowStart),
     durationMinutes: row.sessionMinutes,

@@ -32,7 +32,8 @@ export const VOID_CONFLICT_MESSAGES: Record<VoidConflictCode, string> = {
   not_a_records_row: 'Only a visit logged from the records can be voided.',
   not_completed: 'This visit is not a completed one.',
   already_voided: 'This visit has already been voided.',
-  session_in_use: 'A measurement or an invoice still names this visit; remove that first.',
+  session_in_use:
+    'A measurement, an invoice or a billing question still names this visit; remove that first.',
 };
 
 const GENERIC = 'The visit could not be voided. Try again.';

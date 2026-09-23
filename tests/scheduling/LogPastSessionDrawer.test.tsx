@@ -210,7 +210,6 @@ describe('LogPastSessionDrawer: correcting a visit logged from the records', () 
     serviceTypeId: serviceType.id,
     locationId: homeLocation.id,
     practitionerId: practitioner.id,
-    deliveryMode: 'home' as const,
     on: '2026-03-04',
     startTime: '15:30',
     durationMinutes: 50,
