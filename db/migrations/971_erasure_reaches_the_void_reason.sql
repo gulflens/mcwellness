@@ -18,8 +18,8 @@
 --      `waiver_reason` are NOT touched: a waiver's reason is part of the
 --      financial record and is kept five years, as every waiver's is.
 --      Neither guard stands in the way: the close guard stands aside inside
---      an erasure (app.erasure_active), and 970's void guard only looks at a
---      row becoming voided, which neither update does.
+--      an erasure (app.erasure_active), and 970's guard admits a change to a
+--      voided appointment only inside an erasure, which this is.
 --
 --   2. A correction bound to one household. `supersedes_id` was held to the
 --      practice only (302's `(tenant_id, supersedes_id)` key), so a version 2
@@ -31,10 +31,12 @@
 --      Postgres matches a foreign key to a unique key by its set of columns.
 --      The route refuses the same case first, as `different_client`.
 --
--- **Why 971.** `create or replace` resets every attribute and the runner
--- applies pending files in numeric order, so a migration that restates
--- `app.erase_client` must sit above the highest file that defines it, 968
--- (964's own rule). Trunk range, second half, for 969's reason.
+-- **Why 971.** `create or replace` replaces the whole body and every SET and
+-- SECURITY clause it does not restate (the owner and the execute grants
+-- survive), and the runner applies pending files in numeric order, so a
+-- migration that restates `app.erase_client` must sit above the highest file
+-- that defines it, 968, or a fresh database would apply this and then let an
+-- older body overwrite it (964's own rule). Trunk range, second half, for 969's reason.
 --
 -- Needs: 302 (session.supersedes_id), 968 (the version of app.erase_client
 --        this replaces), 969 (the void columns), 970.

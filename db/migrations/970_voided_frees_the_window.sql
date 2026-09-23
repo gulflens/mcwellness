@@ -3,7 +3,7 @@
 -- voided row (trunk round 60, docs/superpowers/specs/2026-09-23-void-logged-session-design.md).
 --
 -- Everything here names 'voided' in a constraint, which the transaction that
--- added the value (969) could not do. Three things:
+-- added the value (969) could not do. Four things:
 --
 --   1. 200's two exclusion constraints, dropped and recreated exactly as 200
 --      wrote them with 'voided' beside the four statuses they already ignore.
@@ -20,7 +20,9 @@
 --      the final reviews of round 60 found: 969's close guard fires only on
 --      a CLOSED session, so the API role could move an OPEN session to
 --      voided, insert one already voided, or void an appointment directly
---      and free its window with the visit behind it still completed).
+--      and free its window with the visit behind it still completed). A
+--      voided appointment is also final: no change to it but an erasure's
+--      (the re-review of the same day).
 --
 -- Trunk range, second half, for 969's reason.
 --
@@ -72,8 +74,10 @@ alter table public.session add constraint session_voided_is_a_closed_records_row
 --    appointment through the session that names it) in this transaction.
 --    The function writes its marker, updates the session, then the
 --    appointment, then removes the marker, so its own two writes pass and
---    nothing else does. A row that is already voided and stays voided is not
---    this guard's business: the close guard refuses every change to it.
+--    nothing else does. A voided SESSION that stays voided is the close
+--    guard's business, which refuses every change to it; a voided
+--    APPOINTMENT has no close guard, so this function refuses every change
+--    to one (`voided_appointment_is_final`) outside an erasure.
 --
 --    Security definer, so it may read app.void_active, which no role but the
 --    definer functions can; search_path pinned as 968's family is. `enable
@@ -85,6 +89,22 @@ language plpgsql security definer
 set search_path = pg_catalog, pg_temp
 as $$
 begin
+  -- A voided APPOINTMENT is final. `appointment` has no close guard, so
+  -- without this branch the API role could move one back to completed or
+  -- confirmed with its stamp nulled (re-occupying the window while the
+  -- session behind it stays voided) or rewrite its reason or author: half
+  -- the void undone outside the function. Refused unless the row changes
+  -- nothing (the close guard's own no-op allowance) or an erasure is under
+  -- way (971 replaces the reason with its fixed phrase). A voided SESSION
+  -- needs no such branch: it keeps its closed_at, and the close guard
+  -- (969) already refuses every change to a closed row outside an erasure.
+  if tg_op = 'UPDATE' and tg_table_name = 'appointment' and old.status::text = 'voided' then
+    if (to_jsonb(new) - 'updated_at') is not distinct from (to_jsonb(old) - 'updated_at')
+       or exists (select 1 from app.erasure_active where txid = txid_current()) then
+      return new;
+    end if;
+    raise exception 'voided_appointment_is_final' using errcode = 'restrict_violation';
+  end if;
   if new.status::text <> 'voided'
      or (tg_op = 'UPDATE' and old.status::text = 'voided') then
     return new;

@@ -207,6 +207,28 @@ async function apiRoleFailure(
   return seen;
 }
 
+/** As failureOf, with the message: null when the statement went through. Always rolled back. */
+async function ownerFailure(
+  sql: string,
+  params: unknown[] = [],
+): Promise<{ code: string | undefined; message: string | undefined } | null> {
+  await h.owner.query('begin');
+  try {
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+        "set_config('app.request_id', $3, true)",
+      [tenantId, userId(SEEDED.owner), REQUEST_ID],
+    );
+    await h.owner.query(sql, params);
+    return null;
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
+    return { code: e.code, message: e.message };
+  } finally {
+    await h.owner.query('rollback');
+  }
+}
+
 /** Writes rows as the owner with the request's stamps, committed. */
 async function writeAsOwner(sql: string, params: unknown[] = []): Promise<void> {
   await h.owner.query('begin');
@@ -621,6 +643,48 @@ describe('voiding a visit logged from the records', () => {
         )
       )?.code,
     ).toBe('42501');
+  });
+
+  it('refuses any change to a voided appointment outside an erasure', async () => {
+    // (f) Back to completed or to cancelled with the stamp nulled, which would
+    // re-occupy the window with the session behind it still voided; and (g) a
+    // rewritten reason or author. Even the table's owner.
+    const back = (status: string) =>
+      ownerFailure(
+        `update appointment set status = '${status}', voided_at = null, voided_by = null, ` +
+          'void_reason = null where id = $1',
+        [wrong.appointmentId],
+      );
+    expect(await back('completed')).toEqual({
+      code: '23001',
+      message: 'voided_appointment_is_final',
+    });
+    expect(await back('cancelled')).toEqual({
+      code: '23001',
+      message: 'voided_appointment_is_final',
+    });
+    expect(
+      await ownerFailure("update appointment set void_reason = 'A better reason' where id = $1", [
+        wrong.appointmentId,
+      ]),
+    ).toEqual({ code: '23001', message: 'voided_appointment_is_final' });
+    expect(
+      await ownerFailure('update appointment set voided_by = $2 where id = $1', [
+        wrong.appointmentId,
+        userId(SEEDED.admin),
+      ]),
+    ).toEqual({ code: '23001', message: 'voided_appointment_is_final' });
+    // A write that changes nothing is let through, as the close guard lets it.
+    expect(
+      await ownerFailure('update appointment set status = status where id = $1', [
+        wrong.appointmentId,
+      ]),
+    ).toBeNull();
+    const still = await h.owner.query(
+      'select status::text, void_reason from appointment where id = $1',
+      [wrong.appointmentId],
+    );
+    expect(still.rows[0]).toEqual({ status: 'voided', void_reason: VOID_REASON });
   });
 
   it('answers not_found at the function for a visit of another practice', async () => {

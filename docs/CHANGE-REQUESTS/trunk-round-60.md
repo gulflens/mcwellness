@@ -101,8 +101,12 @@ new value in a constraint, which the transaction that added it cannot.
    this transaction: the session by its id, the appointment through the
    session that points at it. Anything else is `restrict_violation`
    `void_needs_the_function`. The function removes its marker only after the
-   appointment's update, so its own two writes pass. (Added by the final
-   reviews; see below.)
+   appointment's update, so its own two writes pass. And a voided appointment
+   is final: any change to one that is not a no-op is refused
+   `voided_appointment_is_final`, unless an erasure is under way (971 rewrites
+   its reason). A voided session needs no such branch; the close guard already
+   refuses every change to a closed row. (Added by the final reviews and their
+   re-review; see below.)
 
 **Migration `971_erasure_reaches_the_void_reason.sql`** (added by the final
 reviews):
@@ -216,7 +220,14 @@ on the finished branch) converged on three more, all fixed in this round:
   red first — each write went through against the old 970 — and are refused
   now with `void_needs_the_function` (or `23001` for the owner's own
   appointment update); a fourth proves `app_role` can neither read nor write
-  `app.void_active`.
+  `app.void_active`. The re-review found one residual: `appointment` has no
+  close guard, so a voided appointment could be moved back to `completed` or
+  `cancelled` with its stamp nulled, re-occupying the window with the session
+  still voided, or have its reason or author rewritten. The same trigger now
+  refuses any change to a voided appointment outside an erasure
+  (`voided_appointment_is_final`). The move to `cancelled` and both rewrites
+  were watched go through first; the move to `completed` was already stopped,
+  but only by the exclusion constraint of the visit logged in its place.
 - **The erasure missed the void reason** (compliance). `app.erase_client`
   cleared `amendment_reason` but not the new `void_reason` on the session or
   the appointment, free text about the household that would have outlived
@@ -329,8 +340,8 @@ already there.
 Tests first, each watched red before the code that made it green (the task
 reports hold the red runs):
 
-- `tests/session/db/void.test.ts` (new, 21 cases, five of them the final
-  reviews': the voided status refused outside the function on an open row, an
+- `tests/session/db/void.test.ts` (new, 22 cases, six of them the final
+  reviews': a voided appointment is final outside an erasure; the voided status refused outside the function on an open row, an
   insert and an appointment; the marker out of `app_role`'s reach; the
   function's cross-tenant `not_found`; a correction naming another household's
   visit refused by 971's key; and an erasure reaching both void reasons while
@@ -379,7 +390,10 @@ which pass 35 makes live, and the ledger count below assumes both have run.
    `select count(*) from session where recorded_from = 'records';` — how many
    visits logged from the records exist, and so how many rows a void could
    ever reach. Say the number in the pass's record. Nothing is voided by the
-   pass itself.
+   pass itself. And `select count(*) from session where supersedes_id is not
+   null;`, **expect 0**: 971's composite key would fail the pass on a
+   correction that already names another household's visit, and none can
+   exist before this round.
 2. The hold protocol.
 3. `969_void_recorded_session.sql` by hand, **staging first and then
    production**, the file's statements whole and **its ledger row in the same
