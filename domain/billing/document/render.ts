@@ -51,7 +51,8 @@ import {
   WORDS,
   type Phrase,
 } from './strings';
-import { INVOICE_GEOMETRY, invoiceLayout, type Block } from './invoice';
+import { INVOICE_GEOMETRY, invoiceLayout } from './invoice';
+import type { Block } from './page';
 import {
   BAND,
   BOTTOM,
@@ -72,7 +73,7 @@ import {
 } from './sheet';
 
 export { CARD, clampForDocument, EDGE, PILL, Sheet, VIOLET } from './sheet';
-export type { Block, BlockName } from './invoice';
+export type { Block, BlockName } from './page';
 
 /** How wide the receipt sets the practice's mark, centred, whatever the shape of the file. */
 const RECEIPT_LOGO_WIDTH = 150;
