@@ -4,8 +4,12 @@ import {
   GEOMETRY,
   groupIban,
   layout,
+  layoutWithBlocks,
   measure,
+  type Block,
+  type BlockName,
   type InvoiceDocument,
+  type InvoiceLine,
   type Op,
   type Page,
   type ReceiptDocument,
@@ -13,19 +17,27 @@ import {
 } from '../../domain/billing/document';
 
 /**
- * The page as geometry, rather than as a stream of words.
+ * The invoice in the operator's design of 24 September 2026, as geometry
+ * rather than as a stream of words.
  *
  * `tests/billing/document.test.ts` reads the text back through the PDF's own
  * `/ToUnicode` map, which proves what the document *says*. It cannot prove
- * where any of it is — and the design review found that out the hard way: on a
- * document where a reader saw the totals overprinted by the practice's address
- * and a service name running through the figures, every one of those assertions
- * still passed, because every string was in the stream.
+ * where any of it is — and the design review of 8 September found that out
+ * the hard way: on a page where a reader saw the totals overprinted by the
+ * practice's address, every one of those assertions still passed.
  *
- * So this measures the ops `layout` produces, with the same fonts the renderer
- * sets them in, and asserts the three things a reader would check first:
- * nothing outside the margins, nothing off the bottom of the sheet, and no two
- * pieces of type printed on top of each other.
+ * So this reads two things `layout` produces. The **blocks** the page is made
+ * of — the masthead, the supplier block and the number card, the billed-to
+ * card and the payment method, the table's violet header and its rows, the
+ * payment and summary cards, the tax card and the footer — as the boxes the
+ * layout drew them in (`layoutWithBlocks`), for one to forty lines, both
+ * registrations, a discount typed as a percentage, as a sum or none, with and
+ * without a bank account and with and without a waiver: none crosses a
+ * margin, none overlaps another, the header is at the top of every page the
+ * table touches, the two cards and the tax card stay together, the footer is
+ * pinned. And the **type** itself, measured with the fonts the renderer sets
+ * it in: every piece of it inside the block it belongs to, none of it outside
+ * the margins, and no two pieces printed on top of each other.
  */
 
 const fonts = documentFonts();
@@ -37,7 +49,7 @@ const TOLERANCE = 0.34;
 
 type Box = { left: number; right: number; y: number; text: string };
 
-/** Where an op actually sits, measured as the writer will set it. */
+/** Where a text op actually sits, measured as the writer will set it. */
 function boxOf(op: Op): Box | null {
   if (op.kind !== 'text') return null;
   const width = measure(op.text, op.style, fonts, op.rtl === true);
@@ -52,8 +64,8 @@ function boxesOf(page: Page): Box[] {
 
 /** A tiny synthetic PNG's worth of image, so a page can be laid out with a mark on it. */
 const LOGO = {
-  width: 420,
-  height: 205,
+  width: 1024,
+  height: 500,
   colours: 'rgb' as const,
   data: new Uint8Array([0x78, 0x9c]),
 };
@@ -65,16 +77,22 @@ const SUPPLIER: SupplierSnapshot = {
   licenceNumber: 'SYN-000000',
   licensingAuthority: 'Synthetic Department of Economy and Tourism',
   corporateTaxNumber: '000000000000000',
-  vatRegistered: true,
-  vatNumber: '100000000000003',
+  vatRegistered: false,
+  vatNumber: null,
   contactPhone: '+971 50 000 0011',
   contactEmail: 'studio@example.com',
   website: 'https://example.com',
 };
 
-/** Everything a household could plausibly make long, made long. */
-const LONG_SUPPLIER: SupplierSnapshot = {
+const REGISTERED: SupplierSnapshot = {
   ...SUPPLIER,
+  vatRegistered: true,
+  vatNumber: '100000000000003',
+};
+
+/** Everything a practice could plausibly make long, made long. */
+const LONG_SUPPLIER: SupplierSnapshot = {
+  ...REGISTERED,
   legalName: 'Synthetic Wellness Studio for Neurological Performance and Training',
   legalNameAr: 'استوديو العافية التجريبي للأداء العصبي والتدريب',
   address:
@@ -83,53 +101,13 @@ const LONG_SUPPLIER: SupplierSnapshot = {
     'Synthetic Department of Economy and Tourism, Commercial Licensing Sector, Northern Division',
 };
 
-function invoice(over: Partial<InvoiceDocument> = {}): InvoiceDocument {
-  return {
-    kind: 'invoice',
-    supplier: SUPPLIER,
-    recipient: { name: 'Robin Fairweather', recordNumber: 'MW-000007' },
-    reference: 'INV-000001',
-    issuedOn: '2026-09-02',
-    suppliedOn: null,
-    waivedOn: null,
-    lines: [
-      {
-        description: 'Neurofeedback session',
-        descriptionAr: 'جلسة نيوروفيدباك',
-        quantity: 1,
-        unitNetFils: 70_000,
-        discountFils: 0,
-        discountBasisPoints: null,
-        netFils: 70_000,
-        vatRateBasisPoints: 500,
-        vatFils: 3_500,
-        grossFils: 73_500,
-      },
-    ],
-    netFils: 70_000,
-    vatFils: 3_500,
-    grossFils: 73_500,
-    discountFils: 0,
-    discountBasisPoints: null,
-    bank: null,
-    ...over,
-  };
-}
-
-function manyLines(count: number): InvoiceDocument['lines'] {
-  return Array.from({ length: count }, (_, index) => ({
-    description: `Neurofeedback training session ${index + 1}`,
-    descriptionAr: 'جلسة نيوروفيدباك',
-    quantity: 1,
-    unitNetFils: 70_000,
-    discountFils: 0,
-    discountBasisPoints: null,
-    netFils: 70_000,
-    vatRateBasisPoints: 500,
-    vatFils: 3_500,
-    grossFils: 73_500,
-  }));
-}
+/** Invented throughout: no bank, holder or account here is a real one. */
+const BANK: NonNullable<InvoiceDocument['bank']> = {
+  accountHolder: 'Example Practice L.L.C-FZ',
+  iban: 'AE360000000000000000001',
+  bic: 'TESTAEXX',
+  bankAddress: '1 Example Street, Abu Dhabi',
+};
 
 /**
  * The practice's bank account at the longest the columns allow (migration
@@ -146,478 +124,558 @@ const LONG_BANK: NonNullable<InvoiceDocument['bank']> = {
     .slice(0, 200),
 };
 
-const RECEIPT: ReceiptDocument = {
-  kind: 'receipt',
-  supplier: LONG_SUPPLIER,
-  recipient: { name: 'Robin Alexandrina Fairweather-Montgomery', recordNumber: 'MW-000007' },
-  reference: 'RCP-000004',
-  receivedOn: '2026-09-02',
-  method: 'transfer',
-  amountFils: 1_032_500,
-  paymentReference: 'SYN 0001',
-  settles: { reference: 'INV-000001', issuedOn: '2026-09-02' },
+type Discount = 'percentage' | 'sum' | 'none';
+
+type Shape = {
+  count: number;
+  registered: boolean;
+  discount: Discount;
+  bank: boolean;
+  waived: boolean;
 };
 
-/** Every case a page is laid out for, so each assertion runs against all of them. */
-const CASES: [string, Page[]][] = [
-  ['an ordinary invoice', layout(invoice(), fonts)],
-  [
-    'an unregistered practice’s invoice',
-    layout(invoice({ supplier: { ...SUPPLIER, vatRegistered: false, vatNumber: null } }), fonts),
-  ],
-  [
-    'an invoice with every field long',
-    layout(
-      invoice({
-        supplier: LONG_SUPPLIER,
-        recipient: {
-          name: 'Robin Alexandrina Fairweather-Montgomery',
-          recordNumber: 'MW-000007',
-        },
-        suppliedOn: '2026-08-28',
-        lines: [
+/** A line of AED 700.00, discounted as `discount` says, with VAT when registered. */
+function lineOf(index: number, registered: boolean, discount: Discount): InvoiceLine {
+  const off = discount === 'none' ? 0 : 17_500;
+  const net = 70_000 - off;
+  const vat = registered ? Math.round(net * 0.05) : 0;
+  return {
+    description: `Neurofeedback training session ${index + 1}`,
+    descriptionAr: 'جلسة نيوروفيدباك',
+    quantity: 1,
+    unitNetFils: 70_000,
+    discountFils: off,
+    discountBasisPoints: discount === 'percentage' ? 2_500 : null,
+    netFils: net,
+    vatRateBasisPoints: registered ? 500 : 0,
+    vatFils: vat,
+    grossFils: net + vat,
+  };
+}
+
+function invoiceOf(
+  lines: readonly InvoiceLine[],
+  over: Partial<InvoiceDocument> = {},
+): InvoiceDocument {
+  const sum = (pick: (line: InvoiceLine) => number): number =>
+    lines.reduce((total, line) => total + pick(line), 0);
+  const shares = new Set(lines.map((line) => line.discountBasisPoints));
+  const first = lines[0];
+  return {
+    kind: 'invoice',
+    supplier: SUPPLIER,
+    recipient: { name: 'Hazel Dune', recordNumber: 'MW-000099' },
+    reference: 'INV-000099',
+    issuedOn: '2026-09-24',
+    suppliedOn: null,
+    waivedOn: null,
+    lines,
+    netFils: sum((line) => line.netFils),
+    vatFils: sum((line) => line.vatFils),
+    grossFils: sum((line) => line.grossFils),
+    discountFils: sum((line) => line.discountFils),
+    discountBasisPoints:
+      shares.size === 1 && first && first.discountFils > 0 ? first.discountBasisPoints : null,
+    bank: null,
+    ...over,
+  };
+}
+
+function invoiceShaped(shape: Shape): InvoiceDocument {
+  const lines = Array.from({ length: shape.count }, (_, index) =>
+    lineOf(index, shape.registered, shape.discount),
+  );
+  return invoiceOf(lines, {
+    supplier: shape.registered ? REGISTERED : SUPPLIER,
+    bank: shape.bank ? BANK : null,
+    waivedOn: shape.waived ? '2026-09-25' : null,
+  });
+}
+
+const nameOf = (shape: Shape): string =>
+  `${shape.count} lines, ${shape.registered ? 'registered' : 'unregistered'}, ` +
+  `discount ${shape.discount}, ${shape.bank ? 'bank' : 'no bank'}, ` +
+  `${shape.waived ? 'waived' : 'standing'}`;
+
+/** Every shape of the matrix: 1 to 40 lines by every flag. */
+const SHAPES: Shape[] = [];
+for (let count = 1; count <= 40; count += 1) {
+  for (const registered of [false, true]) {
+    for (const discount of ['percentage', 'sum', 'none'] as const) {
+      for (const bank of [false, true]) {
+        for (const waived of [false, true]) {
+          SHAPES.push({ count, registered, discount, bank, waived });
+        }
+      }
+    }
+  }
+}
+
+type Laid = { name: string; pages: Page[]; blocks: Block[][] };
+
+const MATRIX: Laid[] = SHAPES.map((shape) => ({
+  name: nameOf(shape),
+  ...layoutWithBlocks(invoiceShaped(shape), fonts),
+}));
+
+/** A few of the matrix's line counts, for the checks that measure every piece of type. */
+const SAMPLED = MATRIX.filter((laid) => /^(1|2|9|17|40) lines/.test(laid.name));
+
+/** The long cases: every field a practice or a household could make long, made long. */
+const LONG: Laid[] = [
+  {
+    name: 'every field long, with a long bank account',
+    ...layoutWithBlocks(
+      invoiceOf(
+        [
           {
+            ...lineOf(0, true, 'percentage'),
             description:
               'Neurofeedback training session with a full protocol review and a written progress summary',
             descriptionAr: 'جلسة نيوروفيدباك مع مراجعة كاملة للبروتوكول وملخص مكتوب للتقدم',
-            quantity: 1,
-            unitNetFils: 70_000,
-            discountFils: 0,
-            discountBasisPoints: null,
-            netFils: 70_000,
-            vatRateBasisPoints: 500,
-            vatFils: 3_500,
-            grossFils: 73_500,
           },
         ],
+        {
+          supplier: LONG_SUPPLIER,
+          recipient: {
+            name: 'Hazel Juniper Saffron Dune-Harbour-Lagoon',
+            recordNumber: 'MW-000099',
+          },
+          suppliedOn: '2026-09-20',
+          bank: LONG_BANK,
+          waivedOn: '2026-09-25',
+        },
+      ),
+      fonts,
+    ),
+  },
+  {
+    name: 'a 34-character IBAN',
+    ...layoutWithBlocks(
+      invoiceOf([lineOf(0, false, 'sum')], {
+        bank: { ...LONG_BANK, iban: `AB12${'0'.repeat(30)}` },
       }),
       fonts,
     ),
-  ],
-  [
-    'a thirty-line invoice',
-    layout(
-      invoice({ lines: manyLines(30), netFils: 2_100_000, vatFils: 105_000, grossFils: 2_205_000 }),
-      fonts,
-    ),
-  ],
-  ['a receipt', layout(RECEIPT, fonts)],
-  [
-    'an invoice carrying the practice’s bank details, every one of them long',
-    layout(invoice({ supplier: LONG_SUPPLIER, bank: LONG_BANK }), fonts),
-  ],
-  [
-    'a discounted invoice carrying the practice’s bank details',
-    layout(
-      invoice({
-        bank: { ...LONG_BANK, accountHolder: 'Example Practice L.L.C-FZ' },
-        discountFils: 10_000,
-        discountBasisPoints: 1500,
-        netFils: 60_000,
-      }),
-      fonts,
-    ),
-  ],
-  ['an invoice carrying the practice’s mark', layout(invoice(), fonts, LOGO)],
-  [
-    // A figure grows with the money and the totals box does not. "Before
-    // discount" is the tightest row in it — the longest English label, the
-    // widest Arabic beside it — and at a figure in the millions the two reach
-    // each other. What is asserted is the invariant every other case asserts,
-    // that no two pieces of type are printed on top of each other; how the
-    // box keeps them apart is the layout's business.
-    'an invoice for a figure in the millions',
-    layout(
-      invoice({
-        supplier: { ...SUPPLIER, vatRegistered: false, vatNumber: null },
-        lines: Array.from({ length: 2 }, () => ({
+  },
+  {
+    name: 'a figure in the millions, registered, discounted',
+    ...layoutWithBlocks(
+      invoiceOf(
+        Array.from({ length: 2 }, () => ({
           description: 'Neurofeedback programme, ten sessions',
           descriptionAr: 'جلسة نيوروفيدباك',
           quantity: 10,
           unitNetFils: 69_000_000,
           discountFils: 69_000_000,
-          discountBasisPoints: 1000,
+          discountBasisPoints: 1_000,
           netFils: 621_000_000,
-          vatRateBasisPoints: 0,
-          vatFils: 0,
-          grossFils: 621_000_000,
+          vatRateBasisPoints: 500,
+          vatFils: 31_050_000,
+          grossFils: 652_050_000,
         })),
-        netFils: 1_242_000_000,
-        vatFils: 0,
-        grossFils: 1_242_000_000,
-        discountFils: 138_000_000,
-      }),
+        { supplier: REGISTERED, bank: LONG_BANK },
+      ),
       fonts,
     ),
-  ],
+  },
+  // A footer five lines deep rises into the page, and the flow above it
+  // has to stop short of wherever its hairline lands, on every length of table.
+  ...Array.from({ length: 40 }, (_, index) => ({
+    name: `${index + 1} lines above a footer five lines deep`,
+    ...layoutWithBlocks(
+      invoiceOf(
+        Array.from({ length: index + 1 }, (__, line) => lineOf(line, true, 'percentage')),
+        {
+          supplier: {
+            ...LONG_SUPPLIER,
+            address: `${LONG_SUPPLIER.address ?? ''}, `.repeat(5).slice(0, 560),
+          },
+          bank: BANK,
+        },
+      ),
+      fonts,
+    ),
+  })),
+  {
+    name: 'an invoice carrying the practice’s mark',
+    ...layoutWithBlocks(invoiceShaped({ ...SHAPES[0]!, bank: true }), fonts, LOGO),
+  },
 ];
 
-describe.each(CASES)('%s', (_name, pages) => {
-  it('draws nothing outside the left and right margins', () => {
-    for (const page of pages) {
-      for (const box of boxesOf(page)) {
-        expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-        expect(box.right, box.text).toBeLessThanOrEqual(
-          GEOMETRY.PAGE_WIDTH - GEOMETRY.MARGIN + TOLERANCE,
-        );
+const blocksNamed = (blocks: readonly Block[], name: BlockName): Block[] =>
+  blocks.filter((block) => block.name === name);
+
+const where = (laid: Laid, page: number, block?: Block): string =>
+  `${laid.name}, page ${page + 1}${block ? `, ${block.name}` : ''}`;
+
+describe.each([
+  ['the matrix of 1 to 40 lines by every variant', MATRIX],
+  ['the long cases', LONG],
+])('%s', (_title, cases) => {
+  it('draws no block across a margin', () => {
+    for (const laid of cases) {
+      laid.blocks.forEach((blocks, page) => {
+        for (const block of blocks) {
+          const at = where(laid, page, block);
+          expect(block.left, at).toBeGreaterThanOrEqual(GEOMETRY.LEFT - TOLERANCE);
+          expect(block.right, at).toBeLessThanOrEqual(GEOMETRY.RIGHT + TOLERANCE);
+          expect(block.top, at).toBeLessThanOrEqual(GEOMETRY.TOP + TOLERANCE);
+          expect(block.bottom, at).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+          expect(block.top, at).toBeGreaterThan(block.bottom);
+        }
+      });
+    }
+  });
+
+  it('never draws two blocks over each other', () => {
+    for (const laid of cases) {
+      laid.blocks.forEach((blocks, page) => {
+        for (let a = 0; a < blocks.length; a += 1) {
+          for (let b = a + 1; b < blocks.length; b += 1) {
+            const first = blocks[a] as Block;
+            const second = blocks[b] as Block;
+            const across = Math.min(first.right, second.right) - Math.max(first.left, second.left);
+            const down = Math.min(first.top, second.top) - Math.max(first.bottom, second.bottom);
+            expect(
+              across > TOLERANCE && down > TOLERANCE,
+              `${where(laid, page)}: ${first.name} and ${second.name} overlap`,
+            ).toBe(false);
+          }
+        }
+      });
+    }
+  });
+
+  it('sets the masthead, the supplier and number card, and the billed-to card at the top of the first page, in that order', () => {
+    for (const laid of cases) {
+      const first = laid.blocks[0] ?? [];
+      const [masthead] = blocksNamed(first, 'masthead');
+      const [supplier] = blocksNamed(first, 'supplier');
+      const [numberCard] = blocksNamed(first, 'numberCard');
+      const [billedTo] = blocksNamed(first, 'billedTo');
+      if (!masthead || !supplier || !numberCard || !billedTo) {
+        throw new Error(`${laid.name}: a block of the head of the page is missing`);
+      }
+      expect(masthead.top, laid.name).toBeCloseTo(GEOMETRY.TOP, 5);
+      expect(supplier.top, laid.name).toBeLessThan(masthead.bottom);
+      expect(numberCard.top, laid.name).toBeCloseTo(supplier.top, 5);
+      expect(supplier.right, laid.name).toBeLessThan(numberCard.left);
+      expect(billedTo.top, laid.name).toBeLessThan(Math.min(supplier.bottom, numberCard.bottom));
+      // None of these on a later page.
+      for (const later of laid.blocks.slice(1)) {
+        for (const name of ['masthead', 'supplier', 'numberCard', 'billedTo'] as const) {
+          expect(blocksNamed(later, name), `${laid.name}: ${name}`).toHaveLength(0);
+        }
       }
     }
   });
 
-  it('draws nothing above the top or below the bottom of the sheet', () => {
-    for (const page of pages) {
-      for (const box of boxesOf(page)) {
-        expect(box.y, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-        expect(box.y, box.text).toBeLessThanOrEqual(GEOMETRY.TOP + TOLERANCE);
+  it('sets the payment method beside the billed-to card exactly when there is a bank account', () => {
+    for (const laid of cases) {
+      const first = laid.blocks[0] ?? [];
+      const method = blocksNamed(first, 'paymentMethod');
+      const hasBank = laid.blocks.flat().some((block) => block.name === 'paymentCard');
+      expect(method, laid.name).toHaveLength(hasBank ? 1 : 0);
+      const [billedTo] = blocksNamed(first, 'billedTo');
+      if (method[0] && billedTo) {
+        expect(method[0].top, laid.name).toBeCloseTo(billedTo.top, 5);
+        expect(method[0].left, laid.name).toBeGreaterThan(billedTo.right);
       }
-      for (const op of page.ops) {
-        if (op.kind === 'rule') {
-          expect(op.y).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-          expect(op.x + op.width).toBeLessThanOrEqual(
-            GEOMETRY.PAGE_WIDTH - GEOMETRY.MARGIN + TOLERANCE,
-          );
+    }
+  });
+
+  it('puts the violet header at the top of every page the table touches', () => {
+    for (const laid of cases) {
+      const touched = laid.blocks
+        .map((blocks, page) => ({ blocks, page }))
+        .filter(({ blocks }) => blocksNamed(blocks, 'tableRows').length > 0);
+      expect(touched.length, laid.name).toBeGreaterThan(0);
+      touched.forEach(({ blocks, page }, index) => {
+        const headers = blocksNamed(blocks, 'tableHeader');
+        const rows = blocksNamed(blocks, 'tableRows');
+        expect(headers, where(laid, page)).toHaveLength(1);
+        expect(rows, where(laid, page)).toHaveLength(1);
+        const header = headers[0] as Block;
+        const body = rows[0] as Block;
+        // The rows hang straight from the header, across the same width.
+        expect(body.top, where(laid, page)).toBeCloseTo(header.bottom, 5);
+        expect(body.left, where(laid, page)).toBeCloseTo(header.left, 5);
+        expect(body.right, where(laid, page)).toBeCloseTo(header.right, 5);
+        if (index > 0) {
+          // A page taken mid-table: nothing above the header but the running
+          // header the sheet itself draws.
+          for (const block of blocks) {
+            expect(block.top, where(laid, page, block)).toBeLessThanOrEqual(header.top + TOLERANCE);
+          }
         }
+      });
+      // And the pages it touches are consecutive, from the first.
+      touched.forEach(({ page }, index) => {
+        expect(page, laid.name).toBe((touched[0]?.page ?? 0) + index);
+      });
+      expect(touched[0]?.page, laid.name).toBe(0);
+    }
+  });
+
+  it('keeps the payment and summary cards on one page, side by side, with the tax card after them', () => {
+    for (const laid of cases) {
+      const holding = laid.blocks
+        .map((blocks, page) => ({ blocks, page }))
+        .filter(({ blocks }) => blocksNamed(blocks, 'summaryCard').length > 0);
+      expect(holding, laid.name).toHaveLength(1);
+      const { blocks, page } = holding[0] as { blocks: Block[]; page: number };
+      const summary = blocksNamed(blocks, 'summaryCard')[0] as Block;
+      const payment = blocksNamed(blocks, 'paymentCard')[0];
+      const tax = blocksNamed(blocks, 'taxCard');
+      expect(tax, where(laid, page)).toHaveLength(1);
+      // The summary keeps its place on the right whether or not the payment
+      // card is beside it.
+      expect(summary.right, where(laid, page)).toBeCloseTo(GEOMETRY.RIGHT, 5);
+      if (payment) {
+        expect(payment.top, where(laid, page)).toBeCloseTo(summary.top, 5);
+        expect(payment.left, where(laid, page)).toBeCloseTo(GEOMETRY.LEFT, 5);
+        expect(payment.right, where(laid, page)).toBeLessThan(summary.left);
       }
+      const cardsBottom = Math.min(summary.bottom, payment?.bottom ?? Infinity);
+      expect((tax[0] as Block).top, where(laid, page)).toBeLessThan(cardsBottom);
+      expect((tax[0] as Block).left, where(laid, page)).toBeCloseTo(GEOMETRY.LEFT, 5);
+      expect((tax[0] as Block).right, where(laid, page)).toBeCloseTo(GEOMETRY.RIGHT, 5);
+      // After the table, never before it.
+      const lastRows = laid.blocks
+        .map((each, index) => ({ each, index }))
+        .filter(({ each }) => blocksNamed(each, 'tableRows').length > 0)
+        .pop();
+      if (!lastRows) throw new Error(`${laid.name}: no table`);
+      expect(page, laid.name).toBeGreaterThanOrEqual(lastRows.index);
+      if (page === lastRows.index) {
+        const rows = blocksNamed(lastRows.each, 'tableRows')[0] as Block;
+        expect(summary.top, laid.name).toBeLessThan(rows.bottom);
+      }
+      // No payment card anywhere else, and one exactly when there is a bank account.
+      expect(
+        laid.blocks.flat().filter((block) => block.name === 'paymentCard').length,
+        laid.name,
+      ).toBe(payment ? 1 : 0);
+    }
+  });
+
+  it('pins the footer to the foot of the last page, below everything else on it', () => {
+    for (const laid of cases) {
+      const last = laid.blocks.length - 1;
+      laid.blocks.forEach((blocks, page) => {
+        expect(blocksNamed(blocks, 'footer'), where(laid, page)).toHaveLength(
+          page === last ? 1 : 0,
+        );
+      });
+      const blocks = laid.blocks[last] ?? [];
+      const footer = blocksNamed(blocks, 'footer')[0] as Block;
+      expect(footer.bottom, laid.name).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+      for (const block of blocks) {
+        if (block === footer) continue;
+        expect(block.bottom, where(laid, last, block)).toBeGreaterThan(footer.top);
+      }
+    }
+  });
+});
+
+describe('the footer’s place', () => {
+  it('is the same on every invoice of the same practice, however many lines it has', () => {
+    const bottoms = new Set(
+      MATRIX.map((laid) => {
+        const blocks = laid.blocks[laid.blocks.length - 1] ?? [];
+        return blocksNamed(blocks, 'footer')[0]?.bottom.toFixed(3);
+      }),
+    );
+    expect([...bottoms]).toHaveLength(1);
+  });
+});
+
+describe.each([
+  ['a sample of the matrix', SAMPLED],
+  ['the long cases', LONG],
+])('the type on %s', (_title, cases) => {
+  it('sets every piece of type inside the block it belongs to', () => {
+    for (const laid of cases) {
+      laid.pages.forEach((page, index) => {
+        const blocks = laid.blocks[index] ?? [];
+        for (const box of boxesOf(page)) {
+          // The sheet's own running header and page number, outside any block.
+          if (index > 0 && box.y >= GEOMETRY.TOP - TOLERANCE) continue;
+          if (box.y <= GEOMETRY.FOLIO + TOLERANCE && box.text.startsWith('Page ')) continue;
+          const home = blocks.find(
+            (block) =>
+              box.y <= block.top + TOLERANCE &&
+              box.y >= block.bottom - TOLERANCE &&
+              box.left >= block.left - TOLERANCE &&
+              box.right <= block.right + TOLERANCE,
+          );
+          expect(home, `${where(laid, index)}: "${box.text}" is in no block`).toBeDefined();
+        }
+      });
+    }
+  });
+
+  it('draws no type outside the margins', () => {
+    for (const laid of cases) {
+      laid.pages.forEach((page, index) => {
+        for (const box of boxesOf(page)) {
+          const at = `${where(laid, index)}: ${box.text}`;
+          expect(box.left, at).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+          expect(box.right, at).toBeLessThanOrEqual(GEOMETRY.RIGHT + TOLERANCE);
+          expect(box.y, at).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+          expect(box.y, at).toBeLessThanOrEqual(GEOMETRY.TOP + TOLERANCE);
+        }
+      });
     }
   });
 
   it('never prints two pieces of type on top of each other', () => {
-    // The fault this exists to catch: a 137-point label in a 132-point gutter,
-    // overprinted by its own value on every document ever rendered.
-    for (const page of pages) {
-      const boxes = boxesOf(page);
-      for (let a = 0; a < boxes.length; a += 1) {
-        for (let b = a + 1; b < boxes.length; b += 1) {
-          const first = boxes[a];
-          const second = boxes[b];
-          if (!first || !second) continue;
-          if (Math.abs(first.y - second.y) >= BAND) continue;
-          const overlap = Math.min(first.right, second.right) - Math.max(first.left, second.left);
-          expect(
-            overlap,
-            `"${first.text}" and "${second.text}" overlap by ${overlap.toFixed(1)}pt`,
-          ).toBeLessThanOrEqual(TOLERANCE);
+    for (const laid of cases) {
+      laid.pages.forEach((page, index) => {
+        const boxes = boxesOf(page);
+        for (let a = 0; a < boxes.length; a += 1) {
+          for (let b = a + 1; b < boxes.length; b += 1) {
+            const first = boxes[a] as Box;
+            const second = boxes[b] as Box;
+            if (Math.abs(first.y - second.y) >= BAND) continue;
+            const overlap = Math.min(first.right, second.right) - Math.max(first.left, second.left);
+            expect(
+              overlap,
+              `${where(laid, index)}: "${first.text}" and "${second.text}" overlap by ${overlap.toFixed(1)}pt`,
+            ).toBeLessThanOrEqual(TOLERANCE);
+          }
         }
-      }
+      });
     }
   });
 });
 
-describe('a document that outgrows its page', () => {
-  const pages = layout(
-    invoice({ lines: manyLines(30), netFils: 2_100_000, vatFils: 105_000, grossFils: 2_205_000 }),
-    fonts,
-  );
-
-  it('takes another page rather than running off the first', () => {
-    expect(pages.length).toBeGreaterThan(1);
-  });
-
-  it('says which sheet is which, on every one of them', () => {
-    // A page torn off a stack has to be able to say what it is part of.
-    for (const [index, page] of pages.entries()) {
-      const folios = boxesOf(page).filter((box) => box.text.startsWith('Page '));
-      expect(folios.map((box) => box.text)).toEqual([`Page ${index + 1} of ${pages.length}`]);
-    }
-  });
-
-  it('carries the practice and the invoice number onto the later sheets', () => {
-    const later = pages.slice(1);
-    for (const page of later) {
-      const text = boxesOf(page).map((box) => box.text);
-      expect(text).toContain('Synthetic Wellness Studio');
-      expect(text).toContain('INV-000001');
-    }
-  });
-
-  it('repeats the column headings after a break, so the figures are still labelled', () => {
-    const second = pages[1];
-    if (!second) throw new Error('There is no second page.');
-    expect(boxesOf(second).map((box) => box.text)).toContain('Unit price');
-  });
-
-  it('keeps the totals and the footer on the last page', () => {
-    const last = pages[pages.length - 1];
-    if (!last) throw new Error('There is no last page.');
-    const text = boxesOf(last).map((box) => box.text);
-    expect(text).toContain('Total');
-    expect(text).toContain('AED 21,000.00');
-    expect(text.some((line) => line.startsWith('A simplified tax invoice'))).toBe(true);
-  });
-});
-
-describe('a single value long enough to fill the page on its own', () => {
-  it('is cut rather than allowed to wrap for ever', () => {
-    // A description is a string somebody typed, and rendering is on the path
-    // that produces a client's financial record.
-    const pages = layout(
-      invoice({
-        lines: [
-          {
-            description: 'A'.repeat(5_000),
-            descriptionAr: null,
-            quantity: 1,
-            unitNetFils: 70_000,
-            discountFils: 0,
-            discountBasisPoints: null,
-            netFils: 70_000,
-            vatRateBasisPoints: 500,
-            vatFils: 3_500,
-            grossFils: 73_500,
-          },
-        ],
-      }),
-      fonts,
+describe('the payment card', () => {
+  /** The text of the page whose box sits inside the payment card's rows. */
+  function inCard(laid: Laid): { card: Block; boxes: Box[] } {
+    const index = laid.blocks.findIndex((blocks) => blocksNamed(blocks, 'paymentCard').length > 0);
+    const card = blocksNamed(laid.blocks[index] ?? [], 'paymentCard')[0];
+    const page = laid.pages[index];
+    if (!card || !page) throw new Error(`${laid.name}: no payment card`);
+    const boxes = boxesOf(page).filter(
+      (box) =>
+        box.y < card.top && box.y > card.bottom && box.left < card.right && box.right > card.left,
     );
-    expect(pages.length).toBeLessThanOrEqual(4);
-    for (const page of pages) {
-      for (const box of boxesOf(page)) {
-        expect(box.right).toBeLessThanOrEqual(GEOMETRY.PAGE_WIDTH - GEOMETRY.MARGIN + TOLERANCE);
-      }
+    return { card, boxes };
+  }
+
+  it('holds a long holder and a long bank address inside its walls, wrapped and never cut', () => {
+    const laid = LONG.find((each) => each.name.startsWith('every field long')) as Laid;
+    const { card, boxes } = inCard(laid);
+    for (const box of boxes) {
+      expect(box.left, box.text).toBeGreaterThanOrEqual(card.left + GEOMETRY.PAD - TOLERANCE);
+      expect(box.right, box.text).toBeLessThanOrEqual(card.right - GEOMETRY.PAD + TOLERANCE);
     }
-  });
-});
-
-describe('the practice’s mark', () => {
-  it('is centred, 150 points wide, and in the proportions of the file itself', () => {
-    const page = layout(invoice(), fonts, LOGO)[0];
-    if (!page) throw new Error('There is no page.');
-    const drawn = page.ops.filter((op) => op.kind === 'image');
-    expect(drawn).toHaveLength(1);
-    const mark = drawn[0];
-    if (!mark || mark.kind !== 'image') throw new Error('The mark was not drawn.');
-    expect(mark.width).toBe(GEOMETRY.LOGO_WIDTH);
-    // Never stretched: the height follows the bitmap's own aspect ratio.
-    expect(mark.height).toBeCloseTo((GEOMETRY.LOGO_WIDTH * LOGO.height) / LOGO.width, 5);
-    // Centred on the paper, and inside the margins on both sides.
-    expect(mark.x + mark.width / 2).toBeCloseTo(GEOMETRY.PAGE_WIDTH / 2, 5);
-    expect(mark.x).toBeGreaterThanOrEqual(GEOMETRY.MARGIN);
-    expect(mark.y + mark.height).toBeLessThanOrEqual(GEOMETRY.TOP + TOLERANCE);
-  });
-
-  it('gives way to the wordmark set in type when the practice has none', () => {
-    const page = layout(invoice(), fonts)[0];
-    if (!page) throw new Error('There is no page.');
-    expect(page.ops.some((op) => op.kind === 'image')).toBe(false);
-    expect(boxesOf(page).map((box) => box.text)).toContain('McWellness');
-  });
-});
-
-describe('the totals box', () => {
-  it('is four rules that meet at its corners, against the right margin', () => {
-    const pages = layout(invoice(), fonts);
-    const last = pages[pages.length - 1];
-    if (!last) throw new Error('There is no last page.');
-    const left = GEOMETRY.RIGHT - GEOMETRY.TOTALS_WIDTH;
-    const sides = last.ops.filter((op) => op.kind === 'rule' && (op.dy ?? 0) !== 0);
-    expect(sides).toHaveLength(2);
-
-    // The two sides run between the same pair of heights, and each of them has
-    // a horizontal rule of the box's own width at both ends.
-    const [a, b] = sides;
-    if (!a || a.kind !== 'rule' || !b || b.kind !== 'rule') throw new Error('No box was drawn.');
-    expect(a.y).toBe(b.y);
-    expect(a.dy).toBe(b.dy);
-    expect([a.x, b.x].sort((one, two) => one - two)).toEqual([left, GEOMETRY.RIGHT]);
-
-    const bottom = a.y;
-    const top = a.y + (a.dy ?? 0);
-    for (const y of [top, bottom]) {
-      const edge = last.ops.find(
-        (op) => op.kind === 'rule' && !op.dy && Math.abs(op.y - y) < 0.001 && op.x === left,
-      );
-      if (!edge || edge.kind !== 'rule') throw new Error(`No rule closes the box at ${y}.`);
-      expect(edge.width).toBe(GEOMETRY.TOTALS_WIDTH);
-    }
-  });
-
-  it('keeps every figure and label inside its own walls', () => {
-    const pages = layout(invoice({ discountFils: 10_000, netFils: 60_000 }), fonts);
-    const last = pages[pages.length - 1];
-    if (!last) throw new Error('There is no last page.');
-    const sides = last.ops.filter((op) => op.kind === 'rule' && (op.dy ?? 0) !== 0);
-    const first = sides[0];
-    if (!first || first.kind !== 'rule') throw new Error('No box was drawn.');
-    const top = first.y + (first.dy ?? 0);
-    const inside = boxesOf(last).filter((box) => box.y < top && box.y > first.y);
-    expect(inside.length).toBeGreaterThan(0);
-    for (const box of inside) {
-      expect(box.left, box.text).toBeGreaterThanOrEqual(
-        GEOMETRY.RIGHT - GEOMETRY.TOTALS_WIDTH - TOLERANCE,
-      );
-      expect(box.right, box.text).toBeLessThanOrEqual(GEOMETRY.RIGHT + TOLERANCE);
-    }
-  });
-});
-
-describe('the footer band', () => {
-  it('sits above the paper’s edge, on the last sheet, under a hairline of its own', () => {
-    const pages = layout(
-      invoice({ lines: manyLines(30), netFils: 2_100_000, vatFils: 105_000, grossFils: 2_205_000 }),
-      fonts,
-    );
-    const last = pages[pages.length - 1];
-    if (!last) throw new Error('There is no last page.');
-
-    const hairline = last.ops.find((op) => op.kind === 'rule' && op.y === GEOMETRY.BAND);
-    expect(hairline).toBeDefined();
-
-    const band = boxesOf(last).filter((box) => box.y < GEOMETRY.BAND);
-    // Two centred lines and the page number, all of them on the paper.
-    expect(band.length).toBeGreaterThanOrEqual(2);
-    for (const box of band) {
-      expect(box.y, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-      expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-      expect(box.right, box.text).toBeLessThanOrEqual(
-        GEOMETRY.PAGE_WIDTH - GEOMETRY.MARGIN + TOLERANCE,
-      );
-    }
-  });
-
-  it('is on the last sheet and on no other', () => {
-    const pages = layout(
-      invoice({ lines: manyLines(30), netFils: 2_100_000, vatFils: 105_000, grossFils: 2_205_000 }),
-      fonts,
-    );
-    for (const [index, page] of pages.entries()) {
-      const hairlines = page.ops.filter((op) => op.kind === 'rule' && op.y === GEOMETRY.BAND);
-      expect(hairlines).toHaveLength(index === pages.length - 1 ? 1 : 0);
-    }
-  });
-
-  it('leaves the contact line out entirely when the practice has recorded none', () => {
-    const bare = layout(
-      invoice({
-        supplier: { ...SUPPLIER, contactPhone: null, contactEmail: null, website: null },
-      }),
-      fonts,
-    )[0];
-    if (!bare) throw new Error('There is no page.');
-    const band = boxesOf(bare).filter((box) => box.y < GEOMETRY.BAND);
-    expect(band).toHaveLength(1);
-  });
-});
-
-describe('the bank block', () => {
-  const pages = layout(invoice({ bank: LONG_BANK }), fonts);
-  const last = pages[pages.length - 1];
-  if (!last) throw new Error('There is no last page.');
-  const boxes = boxesOf(last);
-  const heading = boxes.find((box) => box.text === 'Pay by bank transfer');
-  if (!heading) throw new Error('The block was not drawn.');
-  const sides = last.ops.filter((op) => op.kind === 'rule' && (op.dy ?? 0) !== 0);
-  const side = sides[0];
-  if (!side || side.kind !== 'rule') throw new Error('No totals box was drawn.');
-  const boxTop = side.y + (side.dy ?? 0);
-  const boxLeft = GEOMETRY.RIGHT - GEOMETRY.TOTALS_WIDTH;
-  // The footer's own rule is the first full-measure rule beneath the heading;
-  // everything between it and the heading, left of the box, is the block.
-  const footerRule = Math.max(
-    ...last.ops
-      .filter(
-        (op) =>
-          op.kind === 'rule' &&
-          !op.dy &&
-          op.width === GEOMETRY.RIGHT - GEOMETRY.LEFT &&
-          op.y < heading.y,
-      )
-      .map((op) => op.y),
-  );
-  const block = boxes.filter(
-    (box) => box.y <= heading.y + TOLERANCE && box.y > footerRule && box.left < boxLeft,
-  );
-
-  it('starts level with the totals box, its heading on the first row’s baseline', () => {
-    const firstRow = boxes
-      .filter((box) => box.y < boxTop && box.left >= boxLeft - TOLERANCE)
-      .reduce((top, box) => (box.y > top ? box.y : top), -Infinity);
-    expect(heading.y).toBeCloseTo(firstRow, 5);
-    expect(heading.left).toBeCloseTo(GEOMETRY.LEFT, 5);
-  });
-
-  it('keeps every line a gutter clear of the totals box and inside the left margin', () => {
-    // Heading, four labels in each language, and the values, wrapped.
-    expect(block.length).toBeGreaterThanOrEqual(1 + 8 + 4);
-    for (const box of block) {
-      expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-      expect(box.right, box.text).toBeLessThanOrEqual(boxLeft - GEOMETRY.GUTTER + TOLERANCE);
-    }
-  });
-
-  it('wraps a long holder and a long bank address rather than cutting them', () => {
-    const text = block.map((box) => box.text).join(' ');
+    const text = boxes.map((box) => box.text).join(' ');
     expect(text).not.toContain('…');
     expect(text.replace(/\s+/g, ' ')).toContain(LONG_BANK.bankAddress?.trim().split(' ').pop());
-    // More lines than the four rows have: the holder and the address each wrapped.
-    expect(new Set(block.map((box) => box.y)).size).toBeGreaterThan(1 + 4);
+    // The holder and the address each took more than one line.
+    const holderLines = boxes.filter((box) => LONG_BANK.accountHolder.includes(box.text.trim()));
+    expect(holderLines.length).toBeGreaterThan(1);
   });
 
-  it('never splits from the totals across a page break', () => {
-    // However many lines push it down the page, the block and the totals land
-    // on the same sheet, with the IBAN and the total side by side.
-    for (let count = 1; count <= 40; count += 1) {
-      const laid = layout(
-        invoice({
-          bank: LONG_BANK,
-          lines: manyLines(count),
-          netFils: 70_000 * count,
-          vatFils: 3_500 * count,
-          grossFils: 73_500 * count,
-        }),
-        fonts,
-      );
-      const holding = laid.filter((page) =>
-        boxesOf(page).some((box) => box.text === 'Pay by bank transfer'),
-      );
-      expect(holding, `${count} lines`).toHaveLength(1);
-      const text = boxesOf(holding[0] as Page).map((box) => box.text);
-      expect(text, `${count} lines`).toContain('AE36 0000 0000 0000 0000 001');
-      expect(text, `${count} lines`).toContain('Total');
-      for (const box of boxesOf(holding[0] as Page)) {
-        expect(box.y, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-      }
-    }
-  });
-
-  it('is not on a receipt', () => {
-    for (const page of layout(RECEIPT, fonts)) {
-      expect(boxesOf(page).map((box) => box.text)).not.toContain('Pay by bank transfer');
-    }
-  });
-
-  it('wraps a long foreign IBAN at a group boundary, still clear of the totals box', () => {
-    // The longest IBAN migration 924 allows: `^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$`,
-    // two letters, two digits, up to thirty more — 34 characters, invented for
-    // geometry only: it need not pass the mod-97 check, which a pure render
-    // test never runs. Grouped in fours that is nine groups, one past what the
-    // value column holds on a single row at this holder's width, so it wraps —
-    // at a group boundary, because `sheet.wrap` only ever breaks on the spaces
-    // `groupIban` put in, never inside one. A UAE IBAN is 23 characters and
-    // five groups, and the case above (`LONG_BANK`) never reaches this width.
-    const iban = `AB12${'0'.repeat(30)}`;
-    const grouped = groupIban(iban);
+  it('wraps a 34-character IBAN at a group boundary, inside its walls', () => {
+    // The longest IBAN migration 924 allows: two letters, two digits, up to
+    // thirty more — 34 characters, invented for geometry only. Grouped in
+    // fours that is nine groups, and `sheet.wrap` breaks only on the spaces
+    // `groupIban` put in, never inside a group.
+    const laid = LONG.find((each) => each.name === 'a 34-character IBAN') as Laid;
+    const grouped = groupIban(`AB12${'0'.repeat(30)}`);
     const tokens = grouped.split(' ');
-    const pages = layout(invoice({ bank: { ...LONG_BANK, iban } }), fonts);
-    const page = pages[pages.length - 1];
-    if (!page) throw new Error('There is no last page.');
-
-    // Every box that is a run of whole groups from the grouped IBAN — never a
-    // group split mid-way — reassembled in reading order, is the printed value.
-    const rowBoxes = boxesOf(page).filter((box) =>
-      box.text.split(' ').every((part) => tokens.includes(part)),
-    );
+    const { card, boxes } = inCard(laid);
+    const iban = boxes.filter((box) => box.text.split(' ').every((part) => tokens.includes(part)));
     expect(
-      rowBoxes
+      iban
         .slice()
         .sort((a, b) => b.y - a.y)
         .map((box) => box.text)
         .join(' '),
     ).toBe(grouped);
-    expect(rowBoxes.length).toBeGreaterThan(1); // it wrapped, rather than overrunning the column
+    expect(iban.length).toBeGreaterThan(1);
+    for (const box of iban) {
+      expect(box.left, box.text).toBeGreaterThanOrEqual(card.left + GEOMETRY.PAD - TOLERANCE);
+      expect(box.right, box.text).toBeLessThanOrEqual(card.right - GEOMETRY.PAD + TOLERANCE);
+    }
+  });
+});
 
-    for (const box of rowBoxes) {
-      expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-      expect(box.right, box.text).toBeLessThanOrEqual(boxLeft - GEOMETRY.GUTTER + TOLERANCE);
+describe('the practice’s mark', () => {
+  it('is set against the left margin at the top, LOGO_WIDTH wide, in the proportions of the file', () => {
+    const laid = LONG.find((each) => each.name.includes('mark')) as Laid;
+    const page = laid.pages[0] as Page;
+    const drawn = page.ops.filter((op) => op.kind === 'image');
+    expect(drawn).toHaveLength(1);
+    const mark = drawn[0];
+    if (!mark || mark.kind !== 'image') throw new Error('The mark was not drawn.');
+    expect(mark.width).toBe(GEOMETRY.LOGO_WIDTH);
+    expect(mark.height).toBeCloseTo((GEOMETRY.LOGO_WIDTH * LOGO.height) / LOGO.width, 5);
+    expect(mark.x).toBeCloseTo(GEOMETRY.LEFT, 5);
+    expect(mark.y + mark.height).toBeCloseTo(GEOMETRY.TOP, 5);
+    const masthead = blocksNamed(laid.blocks[0] ?? [], 'masthead')[0] as Block;
+    expect(mark.y).toBeGreaterThanOrEqual(masthead.bottom - TOLERANCE);
+  });
+
+  it('gives way to the wordmark set in type when the practice has none', () => {
+    const page = (MATRIX[0] as Laid).pages[0] as Page;
+    expect(page.ops.some((op) => op.kind === 'image')).toBe(false);
+    expect(boxesOf(page).map((box) => box.text)).toContain('McWellness');
+  });
+});
+
+describe('a table that outgrows its page', () => {
+  const laid = MATRIX.find((each) => each.name.startsWith('40 lines, registered')) as Laid;
+
+  it('takes another page and carries the practice and the invoice number onto it', () => {
+    expect(laid.pages.length).toBeGreaterThan(1);
+    for (const page of laid.pages.slice(1)) {
+      const text = boxesOf(page).map((box) => box.text);
+      expect(text).toContain('Synthetic Wellness Studio');
+      expect(text).toContain('INV-000099');
+    }
+  });
+
+  it('repeats the column headings on the next page, so the figures are still labelled', () => {
+    const second = laid.pages[1] as Page;
+    expect(boxesOf(second).map((box) => box.text)).toContain('Unit price');
+  });
+});
+
+describe('a receipt, still on the page it had (round 65 redraws it next)', () => {
+  const RECEIPT: ReceiptDocument = {
+    kind: 'receipt',
+    supplier: LONG_SUPPLIER,
+    recipient: { name: 'Hazel Juniper Saffron Dune-Harbour-Lagoon', recordNumber: 'MW-000099' },
+    reference: 'RCP-000004',
+    receivedOn: '2026-09-02',
+    method: 'transfer',
+    amountFils: 1_032_500,
+    paymentReference: 'SYN 0001',
+    settles: { reference: 'INV-000001', issuedOn: '2026-09-02' },
+  };
+  const pages = layout(RECEIPT, fonts);
+
+  it('draws no type outside the margins and none over other type', () => {
+    for (const page of pages) {
+      const boxes = boxesOf(page);
+      for (const box of boxes) {
+        expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+        expect(box.right, box.text).toBeLessThanOrEqual(GEOMETRY.RIGHT + TOLERANCE);
+      }
+      for (let a = 0; a < boxes.length; a += 1) {
+        for (let b = a + 1; b < boxes.length; b += 1) {
+          const first = boxes[a] as Box;
+          const second = boxes[b] as Box;
+          if (Math.abs(first.y - second.y) >= BAND) continue;
+          const overlap = Math.min(first.right, second.right) - Math.max(first.left, second.left);
+          expect(overlap, `"${first.text}" and "${second.text}"`).toBeLessThanOrEqual(TOLERANCE);
+        }
+      }
     }
   });
 });

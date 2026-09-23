@@ -196,7 +196,9 @@ describe('the practice’s bank account on an invoice', () => {
     if (!found) throw new Error('That invoice could not be read as a document.');
     expect(found.document.bank).toBeNull();
     const page = extractAll(renderDocument(found.document, documentFonts()));
-    expect(page).not.toContain('Pay by bank transfer');
+    // No payment details card and no payment method on the page (round 65).
+    expect(page).not.toContain('Payment details');
+    expect(page).not.toContain('PAYMENT METHOD');
   });
 
   it('prints the new details on an issued invoice re-rendered after the bank changes, which is the intended drift', async () => {

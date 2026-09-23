@@ -8,6 +8,7 @@ import {
   NOT_REGISTERED_BASIS,
   renderDocument,
   sharedDiscountBasisPoints,
+  SIMPLIFIED_BASIS,
   toVisualOrder,
   waivedNotice,
   WORDS,
@@ -18,12 +19,18 @@ import {
 } from '../../domain/billing/document';
 
 /**
- * What a rendered invoice says, read back off the page.
+ * What a rendered money document says, read back off the page.
  *
  * The text is extracted through the same `/ToUnicode` map a PDF viewer uses to
  * let a person select and copy it (`domain/shared/document/extract.ts`), so
  * these are assertions about the document a family actually receives, not about
  * the object that produced it.
+ *
+ * The invoice is the operator's design of 24 September 2026
+ * (docs/superpowers/specs/2026-09-24-invoice-redesign-design.md): every caption
+ * and word that spec names is asserted present, block by block, and the words
+ * of the page it replaced — the "List … · less …" sub-line, "Pay by bank
+ * transfer", the Arabic beside the bank rows — asserted absent.
  *
  * The absences matter as much as the presences. An unregistered practice's
  * invoice must not carry the words "Tax Invoice", a VAT registration number, a
@@ -31,7 +38,7 @@ import {
  * than left to a positive test that happens not to look for it.
  *
  * Every figure is synthetic and every person is from `db/seed/names.ts`
- * (.claude/rules/testing.md).
+ * (.claude/rules/testing.md); the bank account is invented.
  */
 
 const fonts = documentFonts();
@@ -45,6 +52,9 @@ const fonts = documentFonts();
  */
 const asCopied = (arabic: string): string =>
   String.fromCodePoint(...toVisualOrder([...arabic].map((c) => c.codePointAt(0) ?? 0)));
+
+/** How many times `needle` is on the page. */
+const count = (page: string, needle: string): number => page.split(needle).length - 1;
 
 const UNREGISTERED: SupplierSnapshot = {
   legalName: 'Synthetic Wellness Studio',
@@ -66,8 +76,21 @@ const REGISTERED: SupplierSnapshot = {
   vatNumber: '100000000000003',
 };
 
+/** The receipt's household, unchanged so the receipt's own golden stays what it was. */
 const RECIPIENT = { name: 'Robin Fairweather', recordNumber: 'MRN-0007' };
 
+/** The invoice's household: a seed name and a record number in the practice's own form. */
+const HOUSEHOLD = { name: 'Hazel Dune', recordNumber: 'MW-000099' };
+
+/** Invented throughout: no bank, holder or account here is a real one. */
+const BANK: NonNullable<InvoiceDocument['bank']> = {
+  accountHolder: 'Example Practice L.L.C-FZ',
+  iban: 'AE360000000000000000001',
+  bic: 'TESTAEXX',
+  bankAddress: '1 Example Street, Abu Dhabi',
+};
+
+/** One undiscounted session at AED 700.00, with VAT on top when the practice is registered. */
 function invoiceFor(supplier: SupplierSnapshot): InvoiceDocument {
   const registered = supplier.vatRegistered === true;
   const rate = registered ? 500 : 0;
@@ -75,7 +98,7 @@ function invoiceFor(supplier: SupplierSnapshot): InvoiceDocument {
   return {
     kind: 'invoice',
     supplier,
-    recipient: RECIPIENT,
+    recipient: HOUSEHOLD,
     reference: 'INV-000001',
     issuedOn: '2026-09-02',
     suppliedOn: null,
@@ -103,114 +126,390 @@ function invoiceFor(supplier: SupplierSnapshot): InvoiceDocument {
   };
 }
 
-describe('an invoice from a practice that is not registered for VAT', () => {
-  const page = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
+/**
+ * The operator's own example, figure for figure: a programme listed at
+ * AED 7,950.00 with 25% off it — AED 1,987.50 — for AED 5,962.50, and on a
+ * registered practice's page five per cent on that net. `basisPoints` null is
+ * the same discount typed as a sum.
+ */
+function programmeInvoice(
+  supplier: SupplierSnapshot,
+  over: Partial<InvoiceDocument> = {},
+  basisPoints: number | null = 2_500,
+): InvoiceDocument {
+  const registered = supplier.vatRegistered === true;
+  const list = 795_000;
+  const discount = 198_750;
+  const net = list - discount;
+  const vat = registered ? 29_813 : 0;
+  return {
+    kind: 'invoice',
+    supplier,
+    recipient: HOUSEHOLD,
+    reference: 'INV-000099',
+    issuedOn: '2026-09-24',
+    suppliedOn: null,
+    waivedOn: null,
+    lines: [
+      {
+        description: 'Neurofeedback programme',
+        descriptionAr: 'برنامج نيوروفيدباك',
+        quantity: 1,
+        unitNetFils: list,
+        discountFils: discount,
+        discountBasisPoints: basisPoints,
+        netFils: net,
+        vatRateBasisPoints: registered ? 500 : 0,
+        vatFils: vat,
+        grossFils: net + vat,
+      },
+    ],
+    netFils: net,
+    vatFils: vat,
+    grossFils: net + vat,
+    discountFils: discount,
+    discountBasisPoints: basisPoints,
+    bank: BANK,
+    ...over,
+  };
+}
 
-  it('is headed "Invoice", and never "Tax Invoice"', () => {
-    expect(page).toContain('Invoice');
+describe('the invoice in the operator’s design, block by block', () => {
+  const bytes = renderDocument(programmeInvoice(UNREGISTERED), fonts);
+  const page = extractAll(bytes);
+  const lines = extractText(bytes);
+
+  it('is headed INVOICE and فاتورة, and never as a tax invoice', () => {
+    expect(lines).toContain('INVOICE');
+    expect(lines).toContain(asCopied(WORDS.invoice.ar));
+    expect(page).not.toContain('TAX INVOICE');
     expect(page).not.toContain('Tax Invoice');
-    expect(page).toContain(asCopied(WORDS.invoice.ar));
     expect(page).not.toContain(asCopied(WORDS.taxInvoice.ar));
   });
 
-  it('carries no VAT registration number, no rate and no VAT line', () => {
+  it('names the practice in both languages with its licence, its authority and its corporate-tax registration', () => {
+    expect(page).toContain('Synthetic Wellness Studio');
+    expect(page).toContain(asCopied('استوديو العافية التجريبي'));
+    expect(page).toContain('Licence number SYN-000000');
+    expect(page).toContain('Licensing authority Synthetic Department of Economy and Tourism');
+    // The corporate-tax number under its own long name, never under the
+    // phrase the Federal Tax Authority uses for a VAT registration.
+    expect(page).toContain('Corporate tax registration number 000000000000000');
     expect(page).not.toContain('VAT registration number');
-    expect(page).not.toContain('100000000000003');
-    expect(page).not.toContain('5%');
-    expect(page).not.toContain('VAT rate');
-    // Neither of the two columns a registration adds. The English heading is
-    // the bare word "VAT", which the basis sentence beneath the table uses
-    // too, so it is the Arabic heading — `الضريبة`, and no other string on
-    // this page — that proves the column itself absent.
-    expect(page).not.toContain(asCopied(WORDS.vatColumn.ar));
-    // The totals box holds one row, so neither of the two a registration adds
-    // is on the page at all.
-    expect(page).not.toContain('Net');
-    expect(page).not.toContain(asCopied(WORDS.net.ar));
+    for (const label of [WORDS.licenceNumber, WORDS.licensingAuthority, WORDS.corporateTaxNumber]) {
+      expect(page, label.en).toContain(asCopied(label.ar));
+    }
   });
 
-  it('shows one amount, and it is the net price to the fils', () => {
-    expect(page).toContain('Total');
-    // The currency is in the cell now, following the operator's design
-    // (docs/SPEC/billing.md section 5.6), so a reader outside the practice
-    // never has to look at a column heading to know what a figure is in.
-    expect(page).toContain('AED 700.00');
+  it('sets the number card: the invoice number over its reference, the issue date over the date', () => {
+    expect(page).toContain('Invoice no.');
+    expect(page).toContain(asCopied(WORDS.invoiceNo.ar));
+    expect(page).toContain('INV-000099');
+    expect(page).toContain('Issue date');
+    expect(page).toContain(asCopied(WORDS.issueDate.ar));
+    expect(lines).toContain('24 September 2026');
+    expect(page).not.toContain('Date of supply');
+  });
+
+  it('sets the billed-to card with the household and its client record', () => {
+    expect(page).toContain('BILLED TO');
+    expect(page).toContain(asCopied(WORDS.billedToCaption.ar));
+    expect(lines).toContain('Hazel Dune');
+    expect(page).toContain('Client record: MW-000099');
+    expect(page).toContain(asCopied(WORDS.clientRecord.ar));
+  });
+
+  it('names the payment method, bank transfer, in both languages', () => {
+    expect(page).toContain('PAYMENT METHOD');
+    expect(page).toContain(asCopied(WORDS.paymentMethodCaption.ar));
+    expect(lines).toContain('Bank transfer');
+    expect(page).toContain(asCopied(WORDS.bankTransferMethod.ar));
+  });
+
+  it('heads the table in both languages, with a discount column because a line is discounted', () => {
+    for (const heading of [
+      WORDS.description,
+      WORDS.qty,
+      WORDS.unitPrice,
+      WORDS.discount,
+      WORDS.total,
+    ]) {
+      expect(lines, heading.en).toContain(heading.en);
+      expect(page, heading.en).toContain(asCopied(heading.ar));
+    }
+    // No VAT column on an unregistered practice's page.
+    expect(page).not.toContain(asCopied(WORDS.vatColumn.ar));
+  });
+
+  it('sets the line: its description in both languages, the list price, the pill once, and the total', () => {
+    expect(lines).toContain('Neurofeedback programme');
+    expect(page).toContain(asCopied('برنامج نيوروفيدباك'));
+    expect(lines).toContain('1');
+    expect(page).toContain('AED 7,950.00');
+    // The pill: the percentage the line was given, set once on the page as
+    // its own piece of type — the summary's "Discount 25%" is another.
+    expect(lines.filter((line) => line === '25%')).toHaveLength(1);
+    expect(page).toContain('AED 5,962.50');
+  });
+
+  it('drops the old page’s sub-line beneath a discounted description', () => {
+    // The column says it now (spec, point 4).
+    expect(page).not.toContain('List ');
+    expect(page).not.toContain('· less');
+    expect(page).not.toContain('·');
+    expect(page).not.toContain('Before discount');
+  });
+
+  it('sets the payment details card with English labels only and the IBAN grouped in fours', () => {
+    expect(page).toContain('Payment details');
+    expect(page).toContain(asCopied(WORDS.paymentDetails.ar));
+    expect(lines).toContain('Account name');
+    expect(lines).toContain('Example Practice L.L.C-FZ');
+    expect(lines).toContain('IBAN');
+    expect(lines).toContain('AE36 0000 0000 0000 0000 001');
+    expect(lines).toContain('SWIFT / BIC');
+    expect(lines).toContain('TESTAEXX');
+    expect(lines).toContain('Bank address');
+    expect(lines).toContain('1 Example Street, Abu Dhabi');
+    // No Arabic beside the account's rows, and none of the old page's labels.
+    for (const old of [WORDS.accountHolder, WORDS.iban, WORDS.bic, WORDS.bankAddress]) {
+      expect(page, old.en).not.toContain(asCopied(old.ar));
+    }
+    expect(page).not.toContain('Account holder');
+    expect(page).not.toContain('Pay by bank transfer');
+  });
+
+  it('closes the payment card with the payment reference: the invoice’s own number', () => {
+    expect(page).toContain('Payment reference');
+    expect(page).toContain(asCopied(WORDS.paymentReference.ar));
+    // Once on the number card and once on the strip; the running header of a
+    // second sheet is the only other place it could be, and this is one page.
+    expect(count(page, 'INV-000099')).toBe(2);
+  });
+
+  it('sums up: the subtotal, "Discount 25%" less AED 1,987.50, and TOTAL DUE', () => {
+    expect(page).toContain('Invoice summary');
+    expect(page).toContain(asCopied(WORDS.invoiceSummary.ar));
+    expect(lines).toContain('Subtotal');
+    expect(page).toContain(asCopied(WORDS.subtotal.ar));
+    expect(lines).toContain('Discount 25%');
+    expect(lines).toContain('- AED 1,987.50');
+    expect(lines).toContain('TOTAL DUE');
+    expect(page).toContain(asCopied(WORDS.totalDue.ar));
+    // The list total twice (unit price and subtotal), the figure due twice
+    // (the line and the violet block).
+    expect(count(page, 'AED 7,950.00')).toBe(2);
+    expect(count(page, 'AED 5,962.50')).toBe(2);
+    expect(page).not.toContain('Net');
+  });
+
+  it('carries the tax information card with the sentence the registration calls for', () => {
+    expect(page).toContain('Tax information');
+    expect(page).toContain(asCopied(WORDS.taxInformation.ar));
+    expect(page).toContain(NOT_REGISTERED_BASIS.en);
+    expect(page).toContain(asCopied('المنشأة غير مسجلة في ضريبة القيمة المضافة'));
+  });
+
+  it('ends on the footer: the name and the address spaced by three, then the contact line', () => {
+    expect(lines).toContain('Synthetic Wellness Studio   Unit 1   Synthetic Tower   Dubai');
+    expect(lines).toContain('P: +971 50 000 0011   E: studio@example.com   W: https://example.com');
+    // The address once, on the footer, and never again elsewhere.
+    expect(count(page, 'Synthetic Tower')).toBe(1);
+  });
+
+  it('is the same bytes every time it is rendered from the same row', () => {
+    // Nothing in the renderer reads a clock or a random source, which is what
+    // lets the sha256 on the document row stay true and a failed upload be
+    // retried with exactly the file that was promised.
+    const again = renderDocument(programmeInvoice(UNREGISTERED), fonts);
+    expect(Buffer.from(bytes).equals(Buffer.from(again))).toBe(true);
+  });
+
+  it('is a PDF a reader will open', () => {
+    expect(Buffer.from(bytes.subarray(0, 8)).toString('latin1')).toBe('%PDF-1.7');
+    expect(Buffer.from(bytes).toString('latin1')).toContain('%%EOF');
+  });
+});
+
+describe('a registered practice’s invoice', () => {
+  const bytes = renderDocument(programmeInvoice(REGISTERED), fonts);
+  const page = extractAll(bytes);
+  const lines = extractText(bytes);
+
+  it('is headed TAX INVOICE and فاتورة ضريبية', () => {
+    expect(lines).toContain('TAX INVOICE');
+    expect(page).toContain(asCopied(WORDS.taxInvoice.ar));
+  });
+
+  it('adds the VAT registration number as a fourth supplier row', () => {
+    expect(page).toContain('VAT registration number 100000000000003');
+    expect(page).toContain(asCopied(WORDS.vatRegistrationNumber.ar));
+  });
+
+  it('inserts a VAT column before Total, and the Total column holds the gross', () => {
+    expect(lines).toContain(WORDS.vatColumn.en);
+    expect(page).toContain(asCopied(WORDS.vatColumn.ar));
+    const vatHeading = lines.indexOf(WORDS.vatColumn.en);
+    const totalHeading = lines.indexOf(WORDS.total.en);
+    expect(vatHeading).toBeGreaterThan(-1);
+    expect(vatHeading).toBeLessThan(totalHeading);
+    expect(lines).toContain('AED 298.13'); // five per cent of 5,962.50, as the row says
+    expect(count(page, 'AED 6,260.63')).toBe(2); // the line's gross and the total due
+  });
+
+  it('sums up with Net and "VAT 5%" before TOTAL DUE', () => {
+    expect(lines).toContain('Subtotal');
+    expect(lines).toContain('Discount 25%');
+    expect(lines).toContain('Net');
+    expect(page).toContain(asCopied(WORDS.net.ar));
+    expect(lines).toContain('VAT 5%');
+    expect(lines).toContain('TOTAL DUE');
+    const net = lines.indexOf('Net');
+    const vat = lines.indexOf('VAT 5%');
+    const due = lines.indexOf('TOTAL DUE');
+    expect(net).toBeLessThan(vat);
+    expect(vat).toBeLessThan(due);
+  });
+
+  it('says it is a simplified tax invoice, in the tax information card', () => {
+    expect(page).toContain('Tax information');
+    expect(page).toContain(SIMPLIFIED_BASIS.en);
+    expect(page).not.toContain(NOT_REGISTERED_BASIS.en);
+  });
+});
+
+describe('an unregistered practice’s invoice', () => {
+  const page = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
+
+  it('carries no VAT registration number, no rate, no VAT column and no Net or VAT rows', () => {
+    expect(page).not.toContain('VAT registration number');
+    expect(page).not.toContain('100000000000003');
+    expect(page).not.toContain('%');
+    expect(page).not.toContain(asCopied(WORDS.vatColumn.ar));
+    expect(page).not.toContain('Net');
+    expect(page).not.toContain(asCopied(WORDS.net.ar));
   });
 
   it('states plainly why there is no VAT on it, in both languages', () => {
     expect(page).toContain('The practice is not registered for VAT');
     expect(page).toContain(asCopied('المنشأة غير مسجلة في ضريبة القيمة المضافة'));
   });
+});
 
-  it('names the corporate-tax registration at length, never as a tax registration number', () => {
-    // "Tax registration number" is the exact phrase the Federal Tax Authority
-    // uses for a VAT TRN, so the corporate-tax number under that label claims a
-    // registration the practice does not hold — the misstatement tenant.trn and
-    // invoice.supplier_trn carry column comments to prevent.
-    expect(page).toContain('Corporate tax registration number');
-    expect(page).toContain('000000000000000');
-    expect(page).not.toContain('VAT registration number');
+describe('an invoice with no discount on it', () => {
+  const bytes = renderDocument(invoiceFor(UNREGISTERED), fonts);
+  const page = extractAll(bytes);
+  const lines = extractText(bytes);
+
+  it('has no discount column, no pill and no discount row', () => {
+    expect(page).not.toContain('Discount');
+    expect(page).not.toContain(asCopied(WORDS.discount.ar));
+    expect(page).not.toContain('- AED');
+  });
+
+  it('still sums up: the subtotal and the total due', () => {
+    expect(lines).toContain('Subtotal');
+    expect(lines).toContain('TOTAL DUE');
+    expect(page).toContain('AED 700.00');
   });
 });
 
-describe('an invoice from a practice that is registered', () => {
-  const page = extractAll(renderDocument(invoiceFor(REGISTERED), fonts));
+describe('an invoice from a practice that has recorded no bank account', () => {
+  const bytes = renderDocument(programmeInvoice(UNREGISTERED, { bank: null }), fonts);
+  const page = extractAll(bytes);
+  const lines = extractText(bytes);
 
-  it('is headed "Tax Invoice", in both languages', () => {
-    expect(page).toContain('Tax Invoice');
-    expect(page).toContain(asCopied(WORDS.taxInvoice.ar));
+  it('has no payment details card and no payment method, caption and all', () => {
+    expect(page).not.toContain('Payment details');
+    expect(page).not.toContain(asCopied(WORDS.paymentDetails.ar));
+    expect(page).not.toContain('PAYMENT METHOD');
+    expect(page).not.toContain(asCopied(WORDS.paymentMethodCaption.ar));
+    expect(page).not.toContain('Bank transfer');
+    expect(page).not.toContain('IBAN');
+    expect(page).not.toContain('Payment reference');
+    expect(count(page, 'INV-000099')).toBe(1);
   });
 
-  it('carries the VAT registration number, the rate and the VAT line', () => {
-    expect(page).toContain('VAT registration number');
-    expect(page).toContain('100000000000003');
-    expect(page).toContain('5%');
-    expect(page).toContain('VAT rate');
-    expect(page).toContain('Net');
-  });
-
-  it('adds VAT on top of the net price, to the fils', () => {
-    expect(page).toContain('AED 700.00'); // net
-    expect(page).toContain('AED 35.00'); // VAT at five per cent
-    expect(page).toContain('AED 735.00'); // total
-  });
-
-  it('says on what basis it is issued to a household', () => {
-    // A household is a private individual and not a registered person, so a
-    // simplified tax invoice is what is due — which is also why no recipient
-    // address is snapshotted (docs/CHANGE-REQUESTS/billing-04.md).
-    expect(page).toContain('A simplified tax invoice');
+  it('keeps the summary, the tax card and the footer', () => {
+    expect(page).toContain('Invoice summary');
+    expect(lines).toContain('TOTAL DUE');
+    expect(page).toContain('Tax information');
+    expect(lines).toContain('Synthetic Wellness Studio   Unit 1   Synthetic Tower   Dubai');
   });
 });
 
-describe('every invoice, whatever the registration', () => {
-  const page = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
+describe('an invoice whose discount was typed as a sum', () => {
+  const bytes = renderDocument(programmeInvoice(UNREGISTERED, {}, null), fonts);
+  const page = extractAll(bytes);
+  const lines = extractText(bytes);
 
-  it('carries the practice, its licence and its address', () => {
-    expect(page).toContain('Synthetic Wellness Studio');
-    expect(page).toContain(asCopied('استوديو العافية التجريبي'));
-    expect(page).toContain('Unit 1, Synthetic Tower, Dubai');
-    expect(page).toContain('SYN-000000');
-    expect(page).toContain('Synthetic Department of Economy and Tourism');
+  it('sets the amount in the pill and "Discount" alone in the summary', () => {
+    // The pill and the summary's row: the one figure, twice, once with its minus.
+    expect(lines).toContain('AED 1,987.50');
+    expect(lines).toContain('- AED 1,987.50');
+    expect(lines).toContain('Discount');
+    expect(page).not.toMatch(/Discount \d/);
+    // Nothing on an unregistered practice's page is a percentage, so no "%"
+    // anywhere is the proof that none was invented.
+    expect(page).not.toContain('%');
+  });
+});
+
+describe('a call-out fee the practice forgave', () => {
+  it('says so first in the tax information card, in both languages, and says nothing is owed', () => {
+    // The invoice is append-only: a waived fee keeps its number, its line and
+    // its figures, and `app.billing_ledger` simply stops counting it
+    // (migration 408). So the document has to say what the ledger knows.
+    const lines = extractText(
+      renderDocument({ ...invoiceFor(UNREGISTERED), waivedOn: '2026-09-06' }, fonts),
+    );
+    const waived = lines.join(' ');
+    const words = waivedNotice('2026-09-06');
+    expect(words.en).toBe('Waived on 6 September 2026. Nothing is owed.');
+    expect(waived).toContain(words.en);
+    // The Arabic in two fragments rather than one sentence: the shaper sets a
+    // space either side of a Western-digit run, so the whole sentence is not a
+    // substring of the page even when every word of it is on it.
+    expect(waived).toContain(asCopied('أُعفي هذا المبلغ بتاريخ'));
+    expect(waived).toContain(asCopied('لا يوجد مبلغ مستحق'));
+    // First in the card: after its title, before the basis sentence — which
+    // is still there, because forgiving a charge says nothing about the
+    // practice's registration.
+    const title = lines.indexOf('Tax information');
+    const notice = lines.indexOf(words.en);
+    const basis = lines.findIndex((line) => NOT_REGISTERED_BASIS.en.startsWith(line));
+    expect(title).toBeGreaterThan(-1);
+    expect(notice).toBeGreaterThan(title);
+    expect(basis).toBeGreaterThan(notice);
   });
 
-  it('states the address once, in the footer, and not again under the practice name', () => {
-    // The operator's instruction of 8 September 2026: the supplier block at the
-    // top of the page no longer repeats what the band at the foot already says.
-    // Once, though — never nought, because a UAE invoice must state it.
-    const address = 'Unit 1, Synthetic Tower, Dubai';
-    expect(page.split(address).length - 1).toBe(1);
-    // And it is the band's line that carries it: the practice's name sits
-    // immediately before it there, which is not how the supplier block set them.
-    expect(page).toContain(`Synthetic Wellness Studio  ${address}`);
+  it('is silent on an invoice that stands', () => {
+    const standing = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
+    expect(standing).not.toContain('Waived');
+    expect(standing).not.toContain('Nothing is owed');
   });
+});
 
-  it('wraps the footer line rather than cutting an address that will not fit', () => {
-    // `fit` would put an ellipsis through it, and the address is the one thing
-    // on that line a reader may actually need.
+describe('the date of supply', () => {
+  it('is a third pair on the number card only when it differs from the issue date', () => {
+    const same = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
+    expect(same).toContain('2 September 2026');
+    expect(same).not.toContain('Date of supply');
+
+    const differs = extractAll(
+      renderDocument({ ...invoiceFor(UNREGISTERED), suppliedOn: '2026-08-28' }, fonts),
+    );
+    expect(differs).toContain('Date of supply');
+    expect(differs).toContain(asCopied(WORDS.dateOfSupply.ar));
+    expect(differs).toContain('28 August 2026');
+  });
+});
+
+describe('the footer', () => {
+  it('wraps a long address rather than cutting it', () => {
     const long =
       'Unit 1, Synthetic Tower, Synthetic Boulevard, Synthetic Business Bay, ' +
-      'Synthetic District, Dubai, United Arab Emirates';
+      'Synthetic District, Synthetic Quarter, Synthetic Emirate, Dubai, United Arab Emirates';
     const wide = extractAll(renderDocument(invoiceFor({ ...UNREGISTERED, address: long }), fonts));
     expect(wide).not.toContain('…');
     for (const piece of ['Synthetic Boulevard', 'Synthetic Business Bay', 'United Arab Emirates']) {
@@ -218,117 +517,31 @@ describe('every invoice, whatever the registration', () => {
     }
   });
 
-  it('carries its sequential number, its date, and who it is for', () => {
-    expect(page).toContain('INV-000001');
-    expect(page).toContain('2 September 2026');
-    expect(page).toContain('Robin Fairweather');
-    expect(page).toContain('MRN-0007');
-  });
-
-  it("carries each line's description in both languages, with its quantity and unit price", () => {
-    expect(page).toContain('Neurofeedback session');
-    expect(page).toContain(asCopied('جلسة نيوروفيدباك'));
-    expect(page).toContain('Quantity');
-    // The headings lost their "(AED)" when every figure gained its own.
-    expect(page).toContain('Unit price');
-    expect(page).not.toContain('Unit price (AED)');
-  });
-
-  it('names who it is for, and how to reach the practice', () => {
-    // The design's own two blocks: "Billed to" against the right margin above
-    // the household's name, and the practice's contact details in the band at
-    // the foot of the page.
-    expect(page).toContain('Billed to');
-    expect(page).toContain('P: +971 50 000 0011');
-    expect(page).toContain('E: studio@example.com');
-    expect(page).toContain('W: https://example.com');
-  });
-
-  it('leaves the footer band a line shorter when the practice has recorded nothing', () => {
+  it('leaves the contact line out when the practice has recorded none', () => {
     const bare = extractAll(
       renderDocument(
-        invoiceFor({
-          ...UNREGISTERED,
-          contactPhone: null,
-          contactEmail: null,
-          website: null,
-        }),
+        invoiceFor({ ...UNREGISTERED, contactPhone: null, contactEmail: null, website: null }),
         fonts,
       ),
     );
-    // The legal name still sits under the hairline at the foot of the page; the
-    // second line is simply not there rather than being a row of empty labels.
-    expect(bare).toContain('Synthetic Wellness Studio');
+    expect(bare).toContain('Synthetic Wellness Studio   Unit 1');
     expect(bare).not.toContain('P: ');
     expect(bare).not.toContain('E: ');
     expect(bare).not.toContain('W: ');
   });
-
-  it('sets both languages on the same page, side by side', () => {
-    const lines = extractText(renderDocument(invoiceFor(UNREGISTERED), fonts));
-    expect(lines.some((line) => /[A-Za-z]/.test(line))).toBe(true);
-    expect(lines.some((line) => /[\u0600-\u06FF\uFB50-\uFEFC]/.test(line))).toBe(true);
-  });
-
-  it('is the same bytes every time it is rendered from the same row', () => {
-    // Nothing in the renderer reads a clock or a random source, which is what
-    // lets the sha256 on the document row stay true and a failed upload be
-    // retried with exactly the file that was promised.
-    const first = renderDocument(invoiceFor(UNREGISTERED), fonts);
-    const second = renderDocument(invoiceFor(UNREGISTERED), fonts);
-    expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
-  });
-
-  it('is a PDF a reader will open', () => {
-    const bytes = renderDocument(invoiceFor(UNREGISTERED), fonts);
-    expect(Buffer.from(bytes.subarray(0, 8)).toString('latin1')).toBe('%PDF-1.7');
-    expect(Buffer.from(bytes).toString('latin1')).toContain('%%EOF');
-  });
 });
 
-describe('the date of supply', () => {
-  it('is shown only when it differs from the date of issue', () => {
-    const same = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
-    expect(same).toContain('Issued 2 September 2026');
-    expect(same).not.toContain('Date of supply');
-
-    const differs = extractAll(
-      renderDocument({ ...invoiceFor(UNREGISTERED), suppliedOn: '2026-08-28' }, fonts),
+describe('the bank account’s optional rows', () => {
+  it('leaves out SWIFT / BIC and the bank address when the practice recorded neither', () => {
+    const page = extractAll(
+      renderDocument(
+        programmeInvoice(UNREGISTERED, { bank: { ...BANK, bic: null, bankAddress: null } }),
+        fonts,
+      ),
     );
-    expect(differs).toContain('Date of supply');
-    expect(differs).toContain('28 August 2026');
-  });
-});
-
-describe('a call-out fee the practice forgave', () => {
-  it('says so on the page, in both languages, and says nothing is owed', () => {
-    // The invoice is append-only: a waived fee keeps its number, its line and
-    // its figures, and `app.billing_ledger` simply stops counting it
-    // (migration 408). So the document has to say what the ledger knows, or a
-    // family reading it is being billed for money it does not owe (compliance
-    // review of this pull request).
-    const waived = extractAll(
-      renderDocument({ ...invoiceFor(UNREGISTERED), waivedOn: '2026-09-06' }, fonts),
-    );
-    const words = waivedNotice('2026-09-06');
-    expect(words.en).toBe('Waived on 6 September 2026. Nothing is owed.');
-    expect(waived).toContain(words.en);
-    // The Arabic in two fragments rather than one sentence, the way the
-    // registration basis is asserted above: the shaper sets a space either
-    // side of a Western-digit run, so the whole sentence is not a substring of
-    // the page even when every word of it is on it.
-    expect(waived).toContain(asCopied('أُعفي هذا المبلغ بتاريخ'));
-    expect(waived).toContain(asCopied('لا يوجد مبلغ مستحق'));
-    expect(words.ar).toContain('6 سبتمبر 2026');
-    // And the basis the page already carried is still on it: forgiving a
-    // charge says nothing about the practice's registration.
-    expect(waived).toContain(NOT_REGISTERED_BASIS.en);
-  });
-
-  it('is silent on an invoice that stands', () => {
-    const standing = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
-    expect(standing).not.toContain('Waived');
-    expect(standing).not.toContain('Nothing is owed');
+    expect(page).toContain('AE36 0000 0000 0000 0000 001');
+    expect(page).not.toContain('SWIFT / BIC');
+    expect(page).not.toContain('Bank address');
   });
 });
 
@@ -504,89 +717,8 @@ describe('the bytes of a rendered document', () => {
   });
 });
 
-/**
- * A discount on the page (docs/SPEC/billing.md section 2.4). The Federal Tax
- * Authority asks a full tax invoice to state "the amount of any discount
- * offered"; a simplified one need not, and this one does anyway, because a
- * family reading a figure below the list price should be able to see why.
- */
-function discountedInvoice(supplier: SupplierSnapshot): InvoiceDocument {
-  const registered = supplier.vatRegistered === true;
-  const vat = registered ? 2_975 : 0;
-  return {
-    ...invoiceFor(supplier),
-    lines: [
-      {
-        description: 'Neurofeedback session',
-        descriptionAr: 'جلسة نيوروفيدباك',
-        quantity: 1,
-        unitNetFils: 70_000,
-        discountFils: 10_500,
-        discountBasisPoints: 1500,
-        netFils: 59_500,
-        vatRateBasisPoints: registered ? 500 : 0,
-        vatFils: vat,
-        grossFils: 59_500 + vat,
-      },
-    ],
-    netFils: 59_500,
-    vatFils: vat,
-    grossFils: 59_500 + vat,
-    discountFils: 10_500,
-    discountBasisPoints: 1500,
-  };
-}
-
-describe('an invoice with a discount on it', () => {
-  const page = extractAll(renderDocument(discountedInvoice(UNREGISTERED), fonts));
-
-  it('prints the discount beneath a discounted line and in the totals, in both languages', () => {
-    // The design's own phrasing: the price that was quoted and what came off
-    // it — and, since the owner's ask of 23 September 2026, the share it was
-    // typed as. This pinned `List AED 700.00 · less AED 105.00` with nothing
-    // after it until then; the line now ends in the percentage, deliberately.
-    expect(page).toContain('List AED 700.00 · less AED 105.00 (15%)');
-    // The Arabic word itself, as a reader copies it off the page. The whole
-    // note is a mixed run — Arabic label, Western figures — and a bidirectional
-    // run is not reversible character for character, so what is pinned here is
-    // the word and the figure beside it rather than the visual order of both.
-    expect(page).toContain(asCopied('الخصم'));
-    expect(page).toContain('Before discount');
-    expect(page).toContain('Discount');
-    // The list figure, what came off it, and what is charged.
-    expect(page).toContain('AED 700.00');
-    expect(page).toContain('AED 105.00');
-    expect(page).toContain('AED 595.00');
-  });
-
-  it('says nothing about a discount when none was given', () => {
-    const plain = extractAll(renderDocument(invoiceFor(UNREGISTERED), fonts));
-    expect(plain).not.toContain('Discount');
-    expect(plain).not.toContain('Before discount');
-  });
-});
-
-describe('a registered practice’s invoice with a discount on it', () => {
-  const page = extractAll(renderDocument(discountedInvoice(REGISTERED), fonts));
-
-  it('charges VAT on the net after the discount, and says both figures', () => {
-    expect(page).toContain('Before discount');
-    expect(page).toContain('Discount');
-    expect(page).toContain('Net');
-    // Five per cent of 595.00, which is what the row says; the renderer
-    // recomputes nothing.
-    expect(page).toContain('AED 29.75');
-    expect(page).toContain('AED 624.75');
-  });
-});
-
 describe('the discount total label', () => {
-  // `discountLine` — the sub-line beneath a discounted description — was
-  // deleted in round 65 (the new page has no sub-line; the text it printed
-  // now lives inlined at its one remaining call site in render.ts, for the
-  // old page alone, until Task 3 replaces that page). Its own tests went
-  // with it; this one is `discountTotalLabel`'s, which stays.
-  it('names the percentage in the totals label only when it is given one', () => {
+  it('names the percentage in the summary’s label only when it is given one', () => {
     expect(discountTotalLabel(2500)).toEqual({ en: 'Discount 25%', ar: 'الخصم 25%' });
     expect(discountTotalLabel(null)).toEqual(WORDS.discount);
   });
@@ -624,43 +756,30 @@ function invoiceOf(lines: InvoiceLine[]): InvoiceDocument {
 
 /**
  * The percentage on the page (the owner's ask of 23 September 2026;
- * docs/SPEC/billing.md section 2.4, "with the percentage when there was one").
- * Each line says its own; the totals say one only when every discounted line
- * agrees on it, because two different shares added together have none.
+ * docs/SPEC/billing.md section 2.4). Each line's pill says its own; the
+ * summary says one only when every discounted line agrees on it, because two
+ * different shares added together have none.
  */
 describe('the discount’s percentage', () => {
-  it('prints the percentage beside a discounted line and in the totals when every line shares it', () => {
-    const page = extractAll(renderDocument(discountedInvoice(UNREGISTERED), fonts));
-    expect(page).toContain('List AED 700.00 · less AED 105.00 (15%)');
-    expect(page).toContain('Discount 15%');
-    expect(page).toContain(asCopied('الخصم'));
-  });
-
-  it('prints no percentage for a discount typed as a sum', () => {
-    const page = extractAll(renderDocument(invoiceOf([discountedLine(null, 10_500)]), fonts));
-    expect(page).toContain('List AED 700.00 · less AED 105.00');
-    expect(page).toContain('Discount');
-    // An unregistered practice's page carries no rate either, so no "%"
-    // anywhere on it is the proof that none was invented.
-    expect(page).not.toContain('%');
-  });
-
-  it("prints each line's own percentage and none in the totals when they differ", () => {
-    const page = extractAll(
+  it("sets each line's own percentage in its pill and none in the summary when they differ", () => {
+    const lines = extractText(
       renderDocument(invoiceOf([discountedLine(1000, 7_000), discountedLine(2000, 14_000)]), fonts),
     );
-    expect(page).toContain('List AED 700.00 · less AED 70.00 (10%)');
-    expect(page).toContain('List AED 700.00 · less AED 140.00 (20%)');
-    expect(page).toContain('Discount');
-    expect(page).not.toMatch(/Discount \d/);
+    expect(lines.filter((line) => line === '10%')).toHaveLength(1);
+    expect(lines.filter((line) => line === '20%')).toHaveLength(1);
+    expect(lines).toContain('Discount');
+    expect(lines.join(' ')).not.toMatch(/Discount \d/);
+    expect(lines).toContain('- AED 210.00');
   });
 
-  it('prints 25% in the totals when one discounted line sits beside an undiscounted one', () => {
+  it('leaves an undiscounted line’s cell empty and names the shared 25% in the summary', () => {
     const lines = [discountedLine(2500, 17_500), discountedLine(null, 0)];
     expect(sharedDiscountBasisPoints(lines)).toBe(2500);
-    const page = extractAll(renderDocument(invoiceOf(lines), fonts));
-    expect(page).toContain('List AED 700.00 · less AED 175.00 (25%)');
-    expect(page).toContain('Discount 25%');
+    const text = extractText(renderDocument(invoiceOf(lines), fonts));
+    // One pill for the one discounted line, nothing in the other's cell.
+    expect(text.filter((line) => line === '25%')).toHaveLength(1);
+    expect(text.filter((line) => line.startsWith('AED 0'))).toHaveLength(0);
+    expect(text).toContain('Discount 25%');
   });
 
   it('shares no percentage when a discounted line was typed as a sum beside one typed as a share', () => {
@@ -672,58 +791,12 @@ describe('the discount’s percentage', () => {
   });
 });
 
-/** Invented throughout: no bank, holder or account here is a real one. */
-const BANK: NonNullable<InvoiceDocument['bank']> = {
-  accountHolder: 'Example Practice L.L.C-FZ',
-  iban: 'AE360000000000000000001',
-  bic: 'TESTAEXX',
-  bankAddress: '1 Example Street, Abu Dhabi',
-};
-
-describe('how to pay, on the invoice', () => {
-  it('prints "Pay by bank transfer" with the account, the IBAN grouped in fours, the BIC and the bank address', () => {
-    const page = extractAll(renderDocument({ ...invoiceFor(UNREGISTERED), bank: BANK }, fonts));
-    expect(page).toContain('Pay by bank transfer');
-    expect(page).toContain(asCopied(WORDS.payByTransfer.ar));
-    expect(page).toContain('Account holder');
-    expect(page).toContain('Example Practice L.L.C-FZ');
-    expect(page).toContain('IBAN');
-    expect(page).toContain('AE36 0000 0000 0000 0000 001');
-    expect(page).toContain('BIC');
-    expect(page).toContain('TESTAEXX');
-    expect(page).toContain('Bank address');
-    expect(page).toContain('1 Example Street, Abu Dhabi');
-  });
-
-  it('leaves out the BIC and the bank address when the practice recorded neither', () => {
-    const page = extractAll(
-      renderDocument(
-        { ...invoiceFor(UNREGISTERED), bank: { ...BANK, bic: null, bankAddress: null } },
-        fonts,
-      ),
-    );
-    expect(page).toContain('AE36 0000 0000 0000 0000 001');
-    expect(page).not.toContain('BIC');
-    expect(page).not.toContain('Bank address');
-  });
-
-  it('prints no bank block when the practice has recorded none, and the bytes are unchanged', () => {
-    const bytes = renderDocument(invoiceFor(UNREGISTERED), fonts);
-    const page = extractAll(bytes);
-    expect(page).not.toContain('Pay by bank transfer');
-    expect(page).not.toContain('IBAN');
-    // The golden below, pinned before the block existed: a practice with no
-    // bank details gets exactly the document it always had.
-    expect(createHash('sha256').update(Buffer.from(bytes)).digest('hex')).toBe(
-      GOLDEN_UNREGISTERED_INVOICE,
-    );
-  });
-
-  it('prints no bank block on a receipt', () => {
+describe('a receipt asks for no money', () => {
+  it('carries no bank account', () => {
     // A receipt says money arrived; it asks for none. `ReceiptDocument` has no
     // `bank` to carry, so this is the page proving the type.
     const page = extractAll(renderDocument(receiptFor(UNREGISTERED), fonts));
-    expect(page).not.toContain('Pay by bank transfer');
+    expect(page).not.toContain('Payment details');
     expect(page).not.toContain('IBAN');
   });
 });
