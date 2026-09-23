@@ -305,6 +305,15 @@ describe('the appointment and price actions', () => {
     ).toBe(false);
   });
 
+  it('lets the calendar roles ask to void a records visit, and refuses a practitioner and finance', () => {
+    for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
+      expect(canActor(actor([role]), { type: 'session.void' }, {}, NOW)).toBe(true);
+    }
+    for (const role of ['practitioner', 'finance', 'client_contact'] as const) {
+      expect(canActor(actor([role]), { type: 'session.void' }, {}, NOW)).toBe(false);
+    }
+  });
+
   it('shows the whole practice to the owner, an admin and the lead practitioner only', () => {
     for (const role of ['owner', 'admin', 'lead_practitioner'] as const) {
       expect(canActor(actor([role]), practice, {}, NOW)).toBe(true);

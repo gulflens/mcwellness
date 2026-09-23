@@ -58,6 +58,17 @@ export type Action =
    * practitioner who held a credential for the service on the visit's date.
    */
   | { type: 'session.record_past'; practitionerId: string; serviceTypeId: string; on: IsoDate }
+  /**
+   * Void a visit logged from the records, or correct one (void plus log
+   * again), when the owner found one entered wrongly
+   * (docs/superpowers/specs/2026-09-23-void-logged-session-design.md, trunk
+   * round 60): the same three roles that may log one. Whether *this* row may
+   * be voided — records-only, completed, not already voided, not named by an
+   * assessment, an invoice or a billing exception — is
+   * `domain/session/voidSession.ts`'s rule, asked again by the database
+   * function that does the stamping; this only says the role may ask.
+   */
+  | { type: 'session.void' }
   | { type: 'report.sign'; serviceTypeId?: string }
   | { type: 'report.list'; clientId: string }
   | { type: 'report.read'; clientId: string }
@@ -305,6 +316,12 @@ export function canActor(actor: Actor, action: Action, ctx: ActionContext, now: 
             isCredentialValidOn(capability, action.on),
         )
       );
+    case 'session.void':
+      // The same office roles as session.record_past, mirroring the rule
+      // rather than reusing its shape: voiding needs no practitioner or
+      // service to check a credential against, only whether this row may be
+      // touched at all, which domain/session/voidSession.ts decides.
+      return hasRole(actor, 'owner', 'admin', 'lead_practitioner');
     case 'appointment.move':
       // Rearranging the diary: the three calendar roles. A practitioner
       // "request[s] a change (Stage 2)" (docs/SPEC/scheduling-manual.md

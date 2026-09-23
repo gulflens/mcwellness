@@ -68,3 +68,9 @@ export {
   type PastSessionInput,
   type PastSessionResult,
 } from './pastSession';
+export {
+  canVoidRecordedSession,
+  type VoidRecordedSessionInput,
+  type VoidRecordedSessionResult,
+  type VoidRefusal,
+} from './voidSession';
