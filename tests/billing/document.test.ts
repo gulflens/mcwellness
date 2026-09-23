@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
-  discountLine,
   discountTotalLabel,
   extractAll,
   extractText,
@@ -581,25 +580,12 @@ describe('a registered practice’s invoice with a discount on it', () => {
   });
 });
 
-describe('the discount line', () => {
-  it('names the price that was quoted and what came off it, with the currency in each', () => {
-    expect(discountLine(1_215_000, 232_500, null).en).toBe(
-      'List AED 12,150.00 · less AED 2,325.00',
-    );
-    expect(discountLine(1_215_000, 232_500, null).ar).toContain('12,150.00');
-    expect(discountLine(1_215_000, 232_500, null).ar).toContain('2,325.00');
-    expect(discountLine(1_215_000, 232_500, null).ar).not.toContain('%');
-  });
-
-  it('ends in the percentage, in Western digits on both sides, when the discount was typed as one', () => {
-    expect(discountLine(795_000, 198_750, 2500).en).toBe(
-      'List AED 7,950.00 · less AED 1,987.50 (25%)',
-    );
-    expect(discountLine(795_000, 198_750, 2500).ar).toBe(
-      'السعر قبل الخصم 7,950.00 درهم · ناقص 1,987.50 درهم (25%)',
-    );
-  });
-
+describe('the discount total label', () => {
+  // `discountLine` — the sub-line beneath a discounted description — was
+  // deleted in round 65 (the new page has no sub-line; the text it printed
+  // now lives inlined at its one remaining call site in render.ts, for the
+  // old page alone, until Task 3 replaces that page). Its own tests went
+  // with it; this one is `discountTotalLabel`'s, which stays.
   it('names the percentage in the totals label only when it is given one', () => {
     expect(discountTotalLabel(2500)).toEqual({ en: 'Discount 25%', ar: 'الخصم 25%' });
     expect(discountTotalLabel(null)).toEqual(WORDS.discount);

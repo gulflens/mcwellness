@@ -61,7 +61,6 @@ export { clampForDocument, GEOMETRY, layout, titleOf } from './render';
 export {
   arabicDocumentDate,
   callOutFeeDescription,
-  discountLine,
   discountTotalLabel,
   formatDocumentDate,
   formatRate,

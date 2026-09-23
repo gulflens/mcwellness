@@ -62,7 +62,6 @@ import {
 } from '../../shared/document';
 import {
   arabicDocumentDate,
-  discountLine,
   discountTotalLabel,
   formatDocumentDate,
   formatRate,
@@ -76,6 +75,7 @@ import {
   WORDS,
   type Phrase,
 } from './strings';
+import { formatFils } from '../../shared/fils';
 
 const MARGIN = 48;
 const LEFT = MARGIN;
@@ -101,6 +101,25 @@ const RULE = 0.78;
  * and the reference — and nothing else on either document does.
  */
 export const VIOLET = [0x38 / 255, 0x04 / 255, 0x73 / 255] as const;
+
+/**
+ * `VIOLET` mixed toward white by `k`: `1 - (1 - v) * k` per channel, so
+ * `k = 0` is white and `k = 1` is `VIOLET` itself. One formula, so `CARD`,
+ * `EDGE` and `PILL` below have the one source the design asks for
+ * (docs/superpowers/specs/2026-09-24-invoice-redesign-design.md, "The page,
+ * top to bottom": "all derived in code from the one brand violet").
+ */
+function tint(k: number): readonly [number, number, number] {
+  const [r, g, b] = VIOLET;
+  return [1 - (1 - r) * k, 1 - (1 - g) * k, 1 - (1 - b) * k];
+}
+
+/** A card's ground: the violet mixed six per cent over white, `#f3f0f7`. */
+export const CARD = tint(0.06);
+/** A card's border: the violet mixed fifteen per cent over white, `#e1d9ea`. */
+export const EDGE = tint(0.15);
+/** The discount pill's ground: the violet mixed twelve per cent over white, `#e7e1ee`. */
+export const PILL = tint(0.12);
 
 const SIZE = { wordmark: 15, title: 20, reference: 13, heading: 12, body: 9, small: 7.5 };
 const LINE = 13;
@@ -147,6 +166,9 @@ type TextOptions = {
   rtl?: boolean;
 };
 
+/** What `Sheet.rect` takes beyond the box itself: the writer's own `rect` op, minus its position. */
+type RectOptions = Omit<Extract<Op, { kind: 'rect' }>, 'kind' | 'x' | 'y' | 'width' | 'height'>;
+
 /**
  * The longest string this will set at all.
  *
@@ -163,8 +185,17 @@ export function clampForDocument(text: string): string {
   return characters.length <= MAX_DRAWN ? text : `${characters.slice(0, MAX_DRAWN - 1).join('')}…`;
 }
 
-/** A document being drawn top-down, across as many pages as it needs. */
-class Sheet {
+/**
+ * A document being drawn top-down, across as many pages as it needs.
+ *
+ * Exported so `domain/billing/document/colours.test.ts` can drive `rect`,
+ * `card` and `bandFill` directly and read back the ops they push, the same
+ * way this file's own docstring asks everything here to be testable — with
+ * no font file, a database or a clock. Nothing outside this module and its
+ * colocated tests constructs one; the barrel (`index.ts`) does not re-export
+ * it.
+ */
+export class Sheet {
   private readonly pages: Op[][] = [[]];
   private y = TOP;
   /** Redrawn at the top of every page after the first: column headings, mostly. */
@@ -262,6 +293,51 @@ class Sheet {
   /** The practice's mark, with its bottom-left corner where it is told. */
   image(x: number, y: number, width: number, height: number): void {
     this.ops.push({ kind: 'image', image: 'logo', x, y, width, height });
+  }
+
+  /**
+   * A filled and/or stroked rectangle, straight to the writer's own `rect`
+   * op — `x`, `y` is its bottom-left corner, exactly as the op takes it
+   * (`domain/shared/document/pdf.ts`). `card` and `bandFill` below are the
+   * page's own two shapes of it, from the top edge; this is the primitive
+   * itself, for whatever the redesign still needs one for.
+   */
+  rect(x: number, y: number, width: number, height: number, options: RectOptions = {}): void {
+    this.ops.push({ kind: 'rect', x, y, width, height, ...options });
+  }
+
+  /**
+   * A card: `CARD` filled, `EDGE` stroked, 6 pt corners unless told
+   * otherwise — the practice's own design (docs/superpowers/specs/2026-09-24-
+   * invoice-redesign-design.md, "Corners: 6 pt on cards").
+   *
+   * Takes the box from its **top** edge, `yTop`, which is how this file lays
+   * a page out — downward from `TOP` — rather than the bottom-left corner
+   * the op itself takes: `y = yTop - height` is the whole of the conversion,
+   * done once here so no caller of `card` works it out for itself.
+   */
+  card(
+    x: number,
+    yTop: number,
+    width: number,
+    height: number,
+    options: { radius?: number } = {},
+  ): void {
+    this.rect(x, yTop - height, width, height, {
+      fill: { rgb: CARD },
+      stroke: { rgb: EDGE },
+      radius: options.radius ?? 6,
+    });
+  }
+
+  /**
+   * A band filled solid `VIOLET` and never stroked: the lines table's
+   * header, the totals' "TOTAL DUE" / "TOTAL PAID" block, the discount pill,
+   * the tax card's left-edge bar. Top-edge coordinates and the same
+   * conversion as `card` — see there.
+   */
+  bandFill(x: number, yTop: number, width: number, height: number, radius = 0): void {
+    this.rect(x, yTop - height, width, height, { fill: { rgb: VIOLET }, radius });
   }
 
   /**
@@ -868,13 +944,22 @@ function invoicePage(
       );
     }
     if (line.discountFils > 0) {
-      // The design's own phrasing: the price that was quoted and what came off
-      // it, which is the pair a family reading a smaller figure wants to see.
-      const note = discountLine(
-        line.netFils + line.discountFils,
-        line.discountFils,
-        line.discountBasisPoints,
-      );
+      // The design's own phrasing, inlined here now that this old page is
+      // its only caller: the new page (Task 3, round 65) has no sub-line, so
+      // the words no longer have a shared home in strings.ts as `discountLine`
+      // — this is that function's own arithmetic, unchanged, kept only long
+      // enough for this page to keep saying what it always said: the price
+      // that was quoted and what came off it, which is the pair a family
+      // reading a smaller figure wants to see.
+      const listFils = line.netFils + line.discountFils;
+      const share =
+        line.discountBasisPoints === null ? '' : ` (${formatRate(line.discountBasisPoints)})`;
+      const note: Phrase = {
+        en: `List ${money(listFils)} · less ${money(line.discountFils)}${share}`,
+        ar:
+          `السعر قبل الخصم ${formatFils(listFils)} درهم · ناقص ` +
+          `${formatFils(line.discountFils)} درهم${share}`,
+      };
       const beneath = y - (englishRows - 1) * LINE - arabicRows * SMALL_LINE;
       sheet.line(beneath - SMALL_LINE, columns.description, note.en, SIZE.small, {
         grey: MUTED,

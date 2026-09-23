@@ -32,8 +32,21 @@ export const WORDS = {
   dateOfSupply: { en: 'Date of supply', ar: 'تاريخ التوريد' },
   dateReceived: { en: 'Date received', ar: 'تاريخ الاستلام' },
 
+  /**
+   * The round 65 redesign's own number card (docs/superpowers/specs/
+   * 2026-09-24-invoice-redesign-design.md, "The page, top to bottom", point
+   * 2, and "The receipt"): abbreviated where `invoiceNumber` / `receiptNumber`
+   * / `dateOfIssue` above spell the word out — those stay as the old page
+   * sets them, and these are additions beside them, not edits to them.
+   */
+  invoiceNo: { en: 'Invoice no.', ar: 'رقم الفاتورة' },
+  receiptNo: { en: 'Receipt no.', ar: 'رقم الإيصال' },
+  issueDate: { en: 'Issue date', ar: 'تاريخ الإصدار' },
+
   client: { en: 'Client', ar: 'العميل' },
   recordNumber: { en: 'Record number', ar: 'رقم السجل' },
+  /** The redesign's own phrasing on the billed-to / received-from card: "Client record: MW-000099" (round 65, point 3). */
+  clientRecord: { en: 'Client record', ar: 'رقم السجل' },
 
   licenceNumber: { en: 'Licence number', ar: 'رقم الرخصة' },
   licensingAuthority: { en: 'Licensing authority', ar: 'جهة الترخيص' },
@@ -55,14 +68,29 @@ export const WORDS = {
   },
 
   /**
+   * The round 65 tax card's own title (point 6); the sentence beneath it is
+   * `SIMPLIFIED_BASIS` or `NOT_REGISTERED_BASIS`, unchanged.
+   */
+  taxInformation: { en: 'Tax information', ar: 'المعلومات الضريبية' },
+
+  /**
    * Who the document is for, above the household's name. A receipt says the
    * other one: money came from a family rather than a charge going to it.
    */
   billedTo: { en: 'Billed to', ar: 'إلى' },
   receivedFrom: { en: 'Received from', ar: 'من' },
+  /**
+   * The same pair as the round 65 card's own small caption: capitalised and
+   * worded as the design itself sets it, not a styling of `billedTo` /
+   * `receivedFrom` above (point 3, and "The receipt").
+   */
+  billedToCaption: { en: 'BILLED TO', ar: 'الفاتورة إلى' },
+  receivedFromCaption: { en: 'RECEIVED FROM', ar: 'مستلم من' },
 
   description: { en: 'Description', ar: 'الوصف' },
   quantity: { en: 'Quantity', ar: 'الكمية' },
+  /** The lines table's own column heading, shorter than `quantity` (round 65, point 4). */
+  qty: { en: 'Qty', ar: 'الكمية' },
   /**
    * **The headings carry no `(AED)` any more**, and every figure beneath them
    * carries its own currency instead (`money` below). That is the operator's
@@ -91,9 +119,30 @@ export const WORDS = {
   total: { en: 'Total', ar: 'الإجمالي' },
   amountReceived: { en: 'Received', ar: 'المبلغ المستلم' },
 
+  /**
+   * The round 65 summary card (point 5, and "The receipt"). `total` and
+   * `discount` above already say what most of the card's own rows need —
+   * this is only what is genuinely new: the card's own title, the list-total
+   * row a discounted invoice starts from, and the violet block's two
+   * captions.
+   */
+  invoiceSummary: { en: 'Invoice summary', ar: 'ملخص الفاتورة' },
+  receiptSummary: { en: 'Receipt summary', ar: 'ملخص الإيصال' },
+  subtotal: { en: 'Subtotal', ar: 'المجموع الفرعي' },
+  totalDue: { en: 'TOTAL DUE', ar: 'الإجمالي المستحق' },
+  totalPaid: { en: 'TOTAL PAID', ar: 'الإجمالي المدفوع' },
+
   paymentMethod: { en: 'Payment method', ar: 'طريقة الدفع' },
   paymentReference: { en: 'Payment reference', ar: 'مرجع الدفع' },
   settlesInvoice: { en: 'Settles invoice', ar: 'سداد الفاتورة' },
+  /**
+   * The round 65 card beside billed-to (point 3): "PAYMENT METHOD" over
+   * "Bank transfer" in violet. English reads the same as `paymentMethod` /
+   * `transfer` above; the Arabic is this card's own, set once here rather
+   * than reused from a pair meant for a different line on the old page.
+   */
+  paymentMethodCaption: { en: 'PAYMENT METHOD', ar: 'طريقة الدفع' },
+  bankTransferMethod: { en: 'Bank transfer', ar: 'تحويل مصرفي' },
 
   /**
    * How to pay, beside the totals on an invoice (round 61, the owner's ask of
@@ -105,6 +154,35 @@ export const WORDS = {
   iban: { en: 'IBAN', ar: 'رقم الآيبان' },
   bic: { en: 'BIC', ar: 'رمز السويفت' },
   bankAddress: { en: 'Bank address', ar: 'عنوان البنك' },
+
+  /**
+   * The round 65 "Payment details" card (point 5). Its own title, and two
+   * relabelled rows — "Account name" stands in for `accountHolder` and
+   * "SWIFT / BIC" for `bic` on this card only; the old page's own labels
+   * above are unchanged. Set **English only**, as the design itself says:
+   * "English labels only, because an account number read against six labels
+   * is a number a payer misreads." `iban` and `bankAddress` above are reused
+   * for their `.en` side on this card; the reference strip in its foot reads
+   * identically to `paymentReference` above and reuses it rather than
+   * duplicating it.
+   */
+  paymentDetails: { en: 'Payment details', ar: 'تفاصيل الدفع' },
+  accountName: { en: 'Account name', ar: '' },
+  swiftBic: { en: 'SWIFT / BIC', ar: '' },
+
+  /**
+   * The receipt's own two lower cards (round 65, "The receipt"). Its title
+   * and its first two rows are what is new — the third, when there is one,
+   * already reads `settlesInvoice` above. `method` and `reference` are set
+   * **English only**, the same rule as the payment-details card's own rows;
+   * the value beside `method` is the payment's own name (`cash` / `transfer`
+   * / `bankTransferMethod` / `link` below).
+   */
+  paymentReceived: { en: 'Payment received', ar: 'الدفعة المستلمة' },
+  method: { en: 'Method', ar: '' },
+  reference: { en: 'Reference', ar: '' },
+  /** The receipt's bottom card, carrying `receiptBasis` (round 65). */
+  note: { en: 'Note', ar: 'ملاحظة' },
 
   cash: { en: 'Cash', ar: 'نقداً' },
   transfer: { en: 'Bank transfer', ar: 'تحويل بنكي' },
@@ -217,46 +295,6 @@ export function waivedNotice(waivedOn: string): Phrase {
   return {
     en: `Waived on ${formatDocumentDate(waivedOn)}. Nothing is owed.`,
     ar: `أُعفي هذا المبلغ بتاريخ ${arabicDocumentDate(waivedOn)}. لا يوجد مبلغ مستحق.`,
-  };
-}
-
-/**
- * What a discounted line says beneath its description, in both languages:
- * the design's own phrasing, `List AED 7,950.00 · less AED 1,987.50`, and —
- * when the discount was typed as a share — that share after it, `(25%)`.
- *
- * **Both figures, and the percentage when there was one.** The operator's
- * design stated the list price and what came off it, the pair a family
- * actually wants: the number they were quoted and the number they are paying.
- * The percentage joined them on the owner's ask of 23 September 2026, and it
- * is what `docs/SPEC/billing.md` section 2.4 had said from the start ("with
- * the percentage when there was one"): a family told "15% off" at the door
- * should find 15% on the paper. It is the line's own `discount_basis_points`,
- * never worked out from the two figures — a discount typed as a sum carries
- * no share, and two discounts added together carry no single one
- * (`domain/billing/discount.ts`, `combineDiscounts`), so such a line prints the
- * two figures alone rather than a percentage somebody had to invent.
- *
- * The Federal Tax Authority asks a full tax invoice to state the amount of any
- * discount offered. A simplified one need not, and this document does anyway:
- * a family looking at a figure below the price they were quoted should be able
- * to see, on the page, why.
- *
- * The middle dot is the design's, and it is a document rather than a screen.
- * `CLAUDE.md`'s rule against middle-dot-joined metadata is a rule about the
- * console's own chrome (`.claude/rules/ui.md` scopes it to `app/**`); here it
- * joins two halves of one sentence a person reads once. The percentage is in
- * Western digits on the Arabic side too, like every other figure on the page.
- */
-export function discountLine(
-  listFils: number,
-  discountFils: number,
-  basisPoints: number | null,
-): Phrase {
-  const share = basisPoints === null ? '' : ` (${formatRate(basisPoints)})`;
-  return {
-    en: `List ${money(listFils)} · less ${money(discountFils)}${share}`,
-    ar: `السعر قبل الخصم ${formatFils(listFils)} درهم · ناقص ${formatFils(discountFils)} درهم${share}`,
   };
 }
 
