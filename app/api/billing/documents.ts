@@ -251,9 +251,10 @@ export function mountDocuments(api: Hono<ApiEnv>, now: () => Date = () => new Da
     //
     // The hash on the row is what decides. A re-render whose fingerprint differs
     // is not a repair: something the document was rendered from has moved since
-    // it was filed — the practice's own mark included, which is drawn as it is
-    // today rather than as it was (docs/SPEC/billing.md section 5.6) — and
-    // writing the new bytes under the old row's key would replace a filed
+    // it was filed — the practice's own mark and its bank account both
+    // included, each drawn as it is today rather than as it was
+    // (docs/SPEC/billing.md section 5.6) — and writing the new bytes under
+    // the old row's key would replace a filed
     // financial document with a different one and leave the row asserting a
     // hash for bytes that no longer match it. So it is refused, and
     // the mismatch is logged with the request id and nothing else — a key and a

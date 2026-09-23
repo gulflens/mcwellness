@@ -38,6 +38,12 @@ ones that were filed, so the recovery path refuses it,
 `409 document_bytes_differ`, rather than put a different document under the
 filed one's hash. This is not a new rule invented for a bank account; it is the
 rule the mark already lives by, applied to the one other live-read field.
+Printing the discount's percentage is a renderer change too, and the same
+refusal reaches further than the bank account alone: any discounted invoice
+filed before this round's deploy whose stored bytes are later lost will
+re-render with the percentage the old bytes never carried, and be refused the
+same `409 document_bytes_differ`, whether or not the practice has ever
+recorded a bank account.
 
 **The percentage prints on the line, and in the totals only when every line
 agrees.** A discounted line already carried the two figures a family actually
@@ -72,6 +78,17 @@ in an append-only, five-year trail; a bank account the practice has recorded
 for itself is not one of them, and an owner or admin reading the audit trail
 should be able to see when the account changed and to what, the same as any
 other setting. Nothing in this round touches `app.audit_redact`.
+
+An owner or admin is not the only reader of that trail: a lead practitioner
+may read it too (`audit_log_readers`, `db/policies/core/audit_log.sql`), but
+only through `GET /api/audit/activity`, which answers `ActivityEvent` rows —
+one composed sentence and the fields listed in `app/api/audit/schema.ts` —
+and never `old_values` or `new_values`. A lead practitioner reading the
+activity feed after the practice changes its bank details would see WHICH
+fields changed (the sentence names them, as it names any other setting), and
+never the account holder, the IBAN, the BIC or the address themselves. That
+is the extent of it, and it is acceptable for the practice's own business
+facts, the same standing this section already gives them.
 
 ### The mod-97 check, and where it runs
 
@@ -136,34 +153,6 @@ as a fault — the same rule that would already apply to a VAT rate column, had
 one existed on the Arabic side. Changing it, if it is ever wanted, is a
 change to the trunk-owned shaper, not to billing.
 
-### Found beside it, and not fixed here
-
-- **`pnpm test:db <file>` runs one file; `pnpm test:db -- <file>` runs the
-  whole suite.** Easy to reach for the wrong one mid-round and read a false
-  green.
-- **Two private helpers are both named `bankCode`.**
-  `app/api/practice/routes.ts` defines one that maps a zod issue to the
-  refusal code the route answers with (`iban_invalid` and the rest);
-  `app/api/practice/schema.ts`
-  defines an unrelated one that builds a zod field for a bank code column
-  (uppercase, spaces out, blank stored as nothing). Nothing collides at
-  runtime — each is module-scoped — but a reader grepping the file for one
-  can land on the other. Worth a rename; not done here.
-- **A long foreign IBAN can wrap at a group boundary.** The bank block's
-  value column already wraps a long account holder and a long bank address
-  rather than cutting them (`sheet.wrap`); the IBAN, grouped in fours by
-  `groupIban` before it reaches that column, wraps the same way when it is
-  long enough — `sheet.wrap` only ever breaks on a space, and `groupIban`'s
-  are the only spaces in the string, so a wrapped IBAN always breaks between
-  whole groups, never inside one. A UAE IBAN is 23 characters, five groups,
-  and never reaches this width; the longest IBAN migration 924's shape check
-  admits is 34 characters (two letters, two digits, thirty more), nine
-  groups, which does. `tests/billing/geometry.test.ts` now pins this with an
-  invented 34-character IBAN — it need not pass the mod-97 check, which a
-  pure render test never runs — asserting every fragment the wrap produces
-  reassembles to the grouped string in order and stays inside the bank
-  block's box, clear of the totals box by the gutter.
-
 ### Two small tidy-ups, on the way through
 
 `groupIban` — `AE360000000000000000001` as `AE36 0000 0000 0000 0000 001` —
@@ -175,8 +164,69 @@ invoice) and once, privately, in `app/admin/settings/PracticePage.tsx` (Task
 both callers import it from there, and `strings.ts` re-exports it so
 `render.ts` and the billing barrel's own callers need not know it moved. Its
 tests moved to `domain/shared/iban.test.ts`, with a foreign IBAN and an empty
-string added to what the document tests already proved indirectly. The
-geometry case above is the round's other tidy-up.
+string added to what the document tests already proved indirectly.
+
+**A long foreign IBAN can wrap at a group boundary, and it is tested and
+pinned, not merely noticed.** The bank block's value column already wraps a
+long account holder and a long bank address rather than cutting them
+(`sheet.wrap`); the IBAN, grouped in fours by `groupIban` before it reaches
+that column, wraps the same way when it is long enough — `sheet.wrap` only
+ever breaks on a space, and `groupIban`'s are the only spaces in the string,
+so a wrapped IBAN always breaks between whole groups, never inside one. A UAE
+IBAN is 23 characters, five groups, and never reaches this width; the longest
+IBAN migration 924's shape check admits is 34 characters (two letters, two
+digits, thirty more), nine groups, which does. `tests/billing/geometry.test.ts`
+pins this (`ea0b7234`) with an invented 34-character IBAN — it need not pass
+the mod-97 check, which a pure render test never runs — asserting every
+fragment the wrap produces reassembles to the grouped string in order and
+stays inside the bank block's box, clear of the totals box by the gutter.
+
+### Found beside it, and not fixed here
+
+- **Two private helpers are both named `bankCode`.**
+  `app/api/practice/routes.ts` defines one that maps a zod issue to the
+  refusal code the route answers with (`iban_invalid` and the rest);
+  `app/api/practice/schema.ts`
+  defines an unrelated one that builds a zod field for a bank code column
+  (uppercase, spaces out, blank stored as nothing). Nothing collides at
+  runtime — each is module-scoped — but a reader grepping the file for one
+  can land on the other. Worth a rename; not done here.
+- **`tests/db/practice.test.ts`'s database assertion matches `/tenant_bank/`
+  loosely.** "holds the same rules in the database, beneath the route" only
+  proves that some constraint whose name starts `tenant_bank` fired, not
+  which of the six migration 924 adds; it should clear the holder too and
+  match `tenant_bank_details_need_iban` by name.
+- **The bank account's `describe` block depends on test order.** "is absent
+  until somebody records it" only holds because it runs before "records the
+  bank account and answers it back" writes one; nothing resets the row
+  between the file's own tests. The file's existing style, not a fault
+  introduced here.
+- **No test types an 11-character BIC.** Every case in the suite uses the
+  8-character shape; the regex's optional three-character branch
+  (`([A-Z0-9]{3})?`) has never been exercised.
+- **`cleanText(…, 64)` caps the IBAN and BIC before the shape check runs.**
+  Harmless today — the shape regex already refuses anything past 34
+  characters, well inside the cap — but it means the "refused rather than
+  cut" promise made of the holder and the address above does not, in fact,
+  extend to these two.
+- **The clear-one-field test clears the bank address, not the BIC.**
+  `PracticePage.test.tsx`'s "clears a bank field by emptying its box" sends
+  `bankAddress: null` with the BIC left as it stands; the two fields are
+  handled identically in code, so this is a gap in what the test proves,
+  not in what the code does.
+- **The IBAN and BIC shape regexes are duplicated between `schema.ts` and
+  the drawer.** `PracticeDrawer.tsx` repeats both patterns literally, ahead
+  of any request, rather than importing them — the file's existing pattern
+  for every other client-side check it runs.
+- **The page-break geometry test's floor is `GEOMETRY.MARGIN`, not
+  `GEOMETRY.BAND`.** "never splits from the totals across a page break"
+  checks every box on the holding page against the page's own top margin,
+  a looser bound than the band the bank block and the totals actually
+  share.
+- **`document-source.ts` maps `lines.rows` twice**: once to build
+  `InvoiceDocument.lines`, and again, narrower, to feed
+  `sharedDiscountBasisPoints`. Duplicated work, not a correctness fault —
+  the second pass reads the same rows the first pass already held.
 
 ### The tests
 
@@ -225,6 +275,20 @@ secrets scan over 1,604 tracked files, the migration audit over 112 files
 against `origin/main`, and `vitest run`: 258 files, 3,117 tests) and
 `pnpm test:db` (111 files, 1,592 tests) all green on the branch's head, no
 skips. Commands and tails are in this task's own report.
+
+### Every file this round touched outside the trunk's own paths
+
+Ten, all the billing stream's, riding in this round's own pull request by the
+integrator's widening for one round, as rounds 41, 51, 52, 58 and 59 were
+widened (`docs/SPEC/OWNERSHIP.md`): `domain/billing/document/index.ts`,
+`model.ts`, `render.ts` and `strings.ts`; `app/api/billing/document-source.ts`;
+`tests/billing/document.test.ts` and `geometry.test.ts`;
+`tests/billing/db/documents.test.ts` and `supplier_contact.test.ts`; and
+`docs/SPEC/billing.md` §2.4 and §5.6. The trunk's own half is migration
+`924_practice_bank_account.sql`, `app/api/practice/**`, `app/admin/settings/**`,
+`domain/shared/iban.ts` with its test, `tests/db/practice.test.ts`, one fixture
+line in `app/shell/App.test.tsx`, and the documents. Nothing in those paths is
+the trunk's beyond this round.
 
 ### Going live
 

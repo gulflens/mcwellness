@@ -560,7 +560,10 @@ export function PracticeDrawer({
             label="IBAN (optional)"
             hint="As the bank gives it. Kept uppercase with the spaces out; the invoice groups it in fours."
             type="text"
-            maxLength={40}
+            // 34 characters, the longest the shape check admits, typed in groups
+            // of four is 42 characters with the spaces between them — 40 was
+            // cutting the last group of a long foreign IBAN silently.
+            maxLength={48}
             value={bankIban}
             onChange={(e) => {
               setBankIban(e.target.value);
@@ -574,7 +577,8 @@ export function PracticeDrawer({
             label="BIC (optional)"
             hint="8 or 11 letters and digits."
             type="text"
-            maxLength={40}
+            // 11 characters, the longest shape the check admits, plus slack.
+            maxLength={16}
             value={bankBic}
             onChange={(e) => {
               setBankBic(e.target.value);
@@ -586,7 +590,7 @@ export function PracticeDrawer({
           <Field
             id={FIELD_IDS.bankAddress}
             label="Bank address (optional)"
-            hint="Printed beside the IBAN on the invoice."
+            hint="Printed in the row below the IBAN on the invoice."
             type="text"
             maxLength={200}
             value={bankAddress}

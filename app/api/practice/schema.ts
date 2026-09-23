@@ -169,9 +169,9 @@ const ReviewUrl = optional(400).refine(
  * digits (`domain/shared/iban.ts`), which catch a mistyped digit the shape
  * cannot and which the database deliberately does not repeat. The IBAN is
  * taken as people write it — lower case, grouped in fours — and kept
- * uppercase with the spaces out; the BIC uppercase. The holder's name and the bank's address are refused rather
- * than cut when they run long: a name shortened on its way to an invoice is a
- * name a bank may not recognise.
+ * uppercase with the spaces out; the BIC uppercase. The holder's name and the
+ * bank's address are refused rather than cut when they run long: a name
+ * shortened on its way to an invoice is a name a bank may not recognise.
  */
 export const IBAN_MESSAGE =
   'An IBAN is two letters, two digits, then 11 to 30 letters or digits, exactly as the bank gives it.';

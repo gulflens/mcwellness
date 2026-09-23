@@ -310,12 +310,14 @@ export async function receiptDocument(
  * document's own snapshot changes: the legal name, the address and the
  * registrations still come off the invoice's own `supplier_*` columns, so the
  * page keeps *saying* what it said. A logo is the practice's mark today, and
- * re-rendering last year's invoice with this year's mark is the one drift a
- * reader will neither notice nor be harmed by (section 5.6). The cost is
- * named where it is paid: a document filed under an older mark can no longer
- * be re-rendered to the bytes its row's sha256 holds, so the recovery path in
- * `documents.ts` refuses to overwrite it and says so, exactly as it does for
- * any other document whose source has moved.
+ * re-rendering last year's invoice with this year's mark is one of two drifts
+ * a reader will neither notice nor be harmed by (section 5.6) — the
+ * practice's bank account, read the same way since round 61
+ * (`practiceBank`, above), is the other. The cost is named where it is paid:
+ * a document filed under an older mark or an older bank account can no
+ * longer be re-rendered to the bytes its row's sha256 holds, so the recovery
+ * path in `documents.ts` refuses to overwrite it and says so, exactly as it
+ * does for any other document whose source has moved.
  *
  * **Null is a real answer, four times over**: no logo filed, a row whose bytes
  * are gone, a JPEG, or a PNG shape `readPng` will not embed (a palette, an

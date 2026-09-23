@@ -639,7 +639,12 @@ describe('a filed document is never replaced by different bytes', () => {
 describe('the practice’s bank account on a filed invoice', () => {
   const IBAN = 'AE360000000000000000001';
 
-  /** The owner records — or clears — the account (905's guard admits only an owner or admin). */
+  /**
+   * The owner records — or clears — the account (905's guard admits only an
+   * owner or admin). Resets the connection back to the practitioner
+   * afterwards, in `finally`, so the owner role this needs does not stay
+   * stamped on `h.owner` for whatever the next query on it turns out to be.
+   */
   async function setBank(holder: string | null, iban: string | null): Promise<void> {
     const user = h.data.users[SEEDED.owner];
     await h.owner.query(
@@ -648,11 +653,15 @@ describe('the practice’s bank account on a filed invoice', () => {
         "set_config('app.request_id', $3, false), set_config('app.reason', '', false)",
       [h.data.tenant.id, user?.id ?? null, REQUEST_ID],
     );
-    await h.owner.query(
-      'update tenant set bank_account_holder = $2, bank_iban = $3, bank_bic = null, ' +
-        'bank_address = null where id = $1',
-      [h.data.tenant.id, holder, iban],
-    );
+    try {
+      await h.owner.query(
+        'update tenant set bank_account_holder = $2, bank_iban = $3, bank_bic = null, ' +
+          'bank_address = null where id = $1',
+        [h.data.tenant.id, holder, iban],
+      );
+    } finally {
+      await asPractitioner();
+    }
   }
 
   async function filedBytes(documentId: string): Promise<{ key: string; bytes: Uint8Array }> {
