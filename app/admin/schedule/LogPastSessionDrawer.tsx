@@ -9,8 +9,10 @@ import {
 } from '../../api/sessions/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note, Select } from '../../shell/components/Controls';
+import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { TimeField } from '../../shell/components/TimeField';
+import { VOID_CONFLICT_MESSAGES, isCorrectionConflictCode } from './VoidSessionDrawer';
 import { formatDay } from './windows';
 
 /**
@@ -26,7 +28,31 @@ import { formatDay } from './windows';
  * The same steps as the booking drawer, in the same order and from the same
  * options door, because a past visit is the same facts as a future one plus
  * a length and a settlement. Never a modal (DESIGN.md "The Beside Rule").
+ *
+ * **Correcting one** (`replaces`, trunk round 60): the same drawer, titled
+ * "Correct a past session", opened from a visit logged from the records and
+ * pre-filled from it — client, service, location, practitioner, day, start,
+ * length and settlement — with a fresh reason to give. It sends `replaces`,
+ * and the route voids the wrong visit and logs this one in its place in one
+ * act, so the wrong visit is never gone while the right one is missing.
  */
+
+/**
+ * The visit a correction replaces, as the day schedule's row hands it over.
+ * No delivery mode: the drawer reads it from the location, as it does for a
+ * fresh log, so carrying the old one would only be a second answer to ignore.
+ */
+export type ReplacedVisit = {
+  sessionId: string;
+  client: Pick<ClientRow, 'id' | 'givenName' | 'familyName'>;
+  serviceTypeId: string;
+  locationId: string;
+  practitionerId: string;
+  on: string;
+  startTime: string;
+  durationMinutes: number | null;
+  billing: PastSessionBilling;
+};
 
 const LOCATION_LABELS: Record<string, string> = {
   home: 'Home',
@@ -98,12 +124,15 @@ type FetchState = 'idle' | 'loading' | 'ready' | 'error';
 const GENERIC = 'The visit could not be logged. Try again.';
 
 export function LogPastSessionDrawer({
-  date,
+  date: scheduleDate,
+  replaces,
   onClose,
   onRecorded,
 }: {
   /** The past day the schedule is showing: the visit is logged on it. */
   date: string;
+  /** A correction: the visit logged from the records that this one replaces. */
+  replaces?: ReplacedVisit;
   onClose: () => void;
   onRecorded: () => void;
 }) {
@@ -113,16 +142,28 @@ export function LogPastSessionDrawer({
   const [clientQuery, setClientQuery] = useState('');
   const [clientResults, setClientResults] = useState<readonly ClientRow[] | null>(null);
   const [clientSearchState, setClientSearchState] = useState<FetchState>('idle');
-  const [selectedClient, setSelectedClient] = useState<ClientRow | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Pick<
+    ClientRow,
+    'id' | 'givenName' | 'familyName'
+  > | null>(replaces?.client ?? null);
 
   const [options, setOptions] = useState<AppointmentOptionsResponse | null>(null);
   const [optionsState, setOptionsState] = useState<FetchState>('idle');
-  const [serviceTypeId, setServiceTypeId] = useState<string | null>(null);
-  const [locationId, setLocationId] = useState<string | null>(null);
-  const [practitionerId, setPractitionerId] = useState<string | null>(null);
-  const [startTime, setStartTime] = useState('');
-  const [minutes, setMinutes] = useState('');
-  const [billing, setBilling] = useState<PastSessionBilling | ''>('');
+  const [serviceTypeId, setServiceTypeId] = useState<string | null>(
+    replaces?.serviceTypeId ?? null,
+  );
+  const [locationId, setLocationId] = useState<string | null>(replaces?.locationId ?? null);
+  const [practitionerId, setPractitionerId] = useState<string | null>(
+    replaces?.practitionerId ?? null,
+  );
+  // A correction may move the visit to the day it really happened on; a
+  // fresh log is written on the day the schedule is showing.
+  const [date, setDate] = useState(replaces?.on ?? scheduleDate);
+  const [startTime, setStartTime] = useState(replaces?.startTime ?? '');
+  const [minutes, setMinutes] = useState(
+    replaces?.durationMinutes == null ? '' : String(replaces.durationMinutes),
+  );
+  const [billing, setBilling] = useState<PastSessionBilling | ''>(replaces?.billing ?? '');
   const [reason, setReason] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -205,7 +246,7 @@ export function LogPastSessionDrawer({
     };
   }, [apiFetch, selectedClient, serviceTypeId, date]);
 
-  function selectClient(client: ClientRow) {
+  function selectClient(client: Pick<ClientRow, 'id' | 'givenName' | 'familyName'>) {
     setSelectedClient(client);
     setClientResults(null);
     setClientQuery('');
@@ -249,6 +290,7 @@ export function LogPastSessionDrawer({
 
   const canSubmit =
     Boolean(
+      date &&
       selectedClient &&
       serviceTypeId &&
       locationId &&
@@ -261,7 +303,7 @@ export function LogPastSessionDrawer({
     ) && !submitting;
 
   async function handleSubmit() {
-    if (!selectedClient || !serviceTypeId || !locationId || !deliveryMode) return;
+    if (!date || !selectedClient || !serviceTypeId || !locationId || !deliveryMode) return;
     if (!practitionerId || !startTime || !billing || !reason.trim() || !minutesValid) return;
     setSubmitting(true);
     setSubmitError(null);
@@ -279,6 +321,7 @@ export function LogPastSessionDrawer({
           startTime,
           ...(minutesNumber === null ? {} : { durationMinutes: minutesNumber }),
           billing,
+          ...(replaces ? { replaces: replaces.sessionId } : {}),
         }),
       });
       if (res.status === 201) {
@@ -300,6 +343,16 @@ export function LogPastSessionDrawer({
           return;
         }
       }
+      // A correction refused because the visit it replaces cannot be voided,
+      // or belongs to another household.
+      if (res.status === 409) {
+        const code = (body as { code?: unknown } | null)?.code;
+        setSubmitError({
+          kind: 'messages',
+          messages: [isCorrectionConflictCode(code) ? VOID_CONFLICT_MESSAGES[code] : GENERIC],
+        });
+        return;
+      }
       if (res.status === 400) {
         const code = (body as { code?: RecordPastBadRequestCode } | null)?.code;
         setSubmitError({
@@ -320,10 +373,13 @@ export function LogPastSessionDrawer({
     <aside className="drawer" role="dialog" aria-labelledby="log-past-session-title">
       <header className="drawer__header">
         <div className="drawer__title">
-          <h2 id="log-past-session-title">Log a past session</h2>
+          <h2 id="log-past-session-title">
+            {replaces ? 'Correct a past session' : 'Log a past session'}
+          </h2>
           <p className="small muted">
-            On {formatDay(date)}, from the practice’s records. It stands in the day’s list as
-            completed.
+            {replaces
+              ? 'The visit as it should have been logged. The wrong one is voided in the same step.'
+              : `On ${formatDay(date)}, from the practice’s records. It stands in the day’s list as completed.`}
           </p>
         </div>
         <button
@@ -466,6 +522,17 @@ export function LogPastSessionDrawer({
           </div>
 
           <div className="stepper__step">
+            {replaces ? (
+              <DateField
+                id="past-day"
+                label="Day"
+                value={date}
+                onChange={(next) => {
+                  setDate(next);
+                  setSubmitError(null);
+                }}
+              />
+            ) : null}
             <TimeField
               id="past-start-time"
               label="Start time"
@@ -540,7 +607,7 @@ export function LogPastSessionDrawer({
 
           <div className="stepper__submit">
             <Button variant="primary" disabled={!canSubmit} onClick={() => void handleSubmit()}>
-              {submitting ? 'Logging…' : 'Log the session'}
+              {submitting ? 'Logging…' : replaces ? 'Log the correction' : 'Log the session'}
             </Button>
           </div>
         </div>

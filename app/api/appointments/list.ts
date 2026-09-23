@@ -79,6 +79,10 @@ type PracticeRow = BaseRow & {
   practitioner_display_name: string;
   moved_to_id: string | null;
   moved_to_window_start: Date | null;
+  session_id: string | null;
+  session_recorded_from: 'device' | 'records' | null;
+  session_settled_outside_app: boolean | null;
+  session_minutes: number | null;
 };
 
 type OwnRow = BaseRow & {
@@ -114,7 +118,9 @@ const PRACTICE_COLUMNS =
   ', c.given_name as client_given_name, c.family_name as client_family_name, ' +
   'c.given_name_ar as client_given_name_ar, c.family_name_ar as client_family_name_ar, ' +
   'p.id as practitioner_id, u.display_name as practitioner_display_name, ' +
-  'n.id as moved_to_id, n.window_start as moved_to_window_start';
+  'n.id as moved_to_id, n.window_start as moved_to_window_start, ' +
+  's.id as session_id, s.recorded_from as session_recorded_from, ' +
+  's.settled_outside_app as session_settled_outside_app, s.minutes as session_minutes';
 
 // st_x/st_y against the geography cast to geometry is the same read
 // app/api/clients/record.ts makes of a location. left(...) is the family
@@ -194,6 +200,30 @@ const MOVED_TO_JOIN =
   'where n.rescheduled_from_id = a.id and n.tenant_id = app.current_tenant_id() ' +
   'order by n.created_at desc limit 1) n on true';
 
+// The visit record behind the appointment, for the practice scope alone
+// (trunk round 60): the day schedule offers Void and Correct on a visit
+// logged from the records, and pre-fills a correction from it.
+//
+// **Which session, when there is more than one.** One appointment normally
+// has one session. Two only when a closed session was amended in place (302's
+// supersedes_id path, a new row on the same appointment); a correction from
+// the records writes its new session against a NEW appointment, so the old
+// appointment keeps its one, voided, session. The newest by created_at is
+// therefore the current one in every case, and is chosen rather than "the one
+// with no successor": the latter would leave a corrected visit's voided
+// appointment with no session at all, because its session's successor lives
+// on the other appointment. The id breaks a tie in the same instant.
+//
+// The length is the session's own, ended minus started, in whole minutes —
+// the appointment's window is always forty-five minutes and says nothing of
+// how long the visit ran. Read under the caller's own row rules; a role that
+// may not read a session gets nulls, never a refusal of the whole day.
+const SESSION_JOIN =
+  ' left join lateral (select s.id, s.recorded_from, s.settled_outside_app, ' +
+  'round(extract(epoch from (s.ended_at - s.started_at)) / 60)::int as minutes ' +
+  'from session s where s.appointment_id = a.id and s.tenant_id = app.current_tenant_id() ' +
+  'order by s.created_at desc, s.id desc limit 1) s on true';
+
 // What counts as a stop on a day sheet: a visit the practitioner is going to,
 // is at, or has been to. Named positively, so a status added to
 // appointment_status later appears on nobody's day until somebody puts it
@@ -221,7 +251,7 @@ const OWN_STATUS_FILTER = "and a.status in ('confirmed', 'checked_in', 'complete
 const PRACTICE_SQL =
   BASE_COLUMNS +
   PRACTICE_COLUMNS +
-  FROM_AND_WHERE.replace(' where ', MOVED_TO_JOIN + ' where ') +
+  FROM_AND_WHERE.replace(' where ', MOVED_TO_JOIN + SESSION_JOIN + ' where ') +
   ORDER;
 const OWN_SQL =
   BASE_COLUMNS +
@@ -266,6 +296,10 @@ function toPracticeRow(r: PracticeRow): AppointmentRow {
       r.moved_to_id && r.moved_to_window_start
         ? { id: r.moved_to_id, windowStart: r.moved_to_window_start.toISOString() }
         : null,
+    sessionId: r.session_id,
+    recordedFrom: r.session_recorded_from,
+    settledOutsideApp: r.session_settled_outside_app,
+    sessionMinutes: r.session_minutes,
   };
 }
 

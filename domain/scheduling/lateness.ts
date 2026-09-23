@@ -176,9 +176,9 @@ export const BOARD_STATES = [
 export type BoardState = (typeof BOARD_STATES)[number];
 
 /**
- * The four statuses in which nothing happened at the door: the visit was
- * called off on either side of the notice period, missed, or moved to an
- * appointment of its own. `completed` is settled too and did take place, so it
+ * The statuses in which nothing happened at the door: the visit was called
+ * off on either side of the notice period, missed, moved to an appointment of
+ * its own, or voided as logged in error. `completed` is settled too and did take place, so it
  * is not one of them.
  */
 const NEVER_TOOK_PLACE: readonly AppointmentStatus[] = [
@@ -186,12 +186,13 @@ const NEVER_TOOK_PLACE: readonly AppointmentStatus[] = [
   'cancelled_late',
   'no_show',
   'rescheduled',
+  'voided',
 ];
 
 /**
  * "The previous visit" as `boardState` below means it (docs/SPEC/dispatch.md
  * 4.4, "the previous visit is closed"): the last stop before this one that
- * still stands on the day — anything but the four above.
+ * still stands on the day — anything but the statuses above.
  *
  * The stop immediately before is the wrong answer whenever the day has a
  * call-off in it. A practitioner who closed the nine o'clock door, had the ten
@@ -227,8 +228,13 @@ export function boardState(
       return 'finished';
     case 'no_show':
       return 'missed';
+    // A visit logged from the records in error and withdrawn (trunk round 60)
+    // never reaches the board — its route leaves `voided` out of the day it
+    // reads — so this arm only keeps the switch total: it holds no window and
+    // nothing happened at the door, as with a cancelled one.
     case 'cancelled':
     case 'cancelled_late':
+    case 'voided':
       return 'called_off';
     case 'rescheduled':
       return 'moved';

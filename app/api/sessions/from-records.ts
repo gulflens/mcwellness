@@ -15,8 +15,17 @@ import {
   RecordPastSessionRequest,
   RecordPastSessionResponse,
   type RecordPastBadRequestCode,
+  type CorrectionConflictCode,
   type RecordPastBlockReason,
+  type VoidSessionResponse,
 } from './schema';
+import {
+  loadVoidTarget,
+  refuseVoid,
+  voidFunctionRefusal,
+  voidRecordedSession,
+  voidRefusalFor,
+} from './void';
 
 /**
  * POST /api/sessions/from-records — a visit that happened before the app,
@@ -47,6 +56,15 @@ import {
  * **`X-Reason` is required**: why this visit is being logged now is part of
  * the record, and the sensitive action `session_recorded_from_records`
  * carries it.
+ *
+ * **A correction** (`replaces`, trunk round 60,
+ * docs/superpowers/specs/2026-09-23-void-logged-session-design.md): the
+ * visit named is voided and this one written as its next version, in one
+ * act under the same savepoint — a refusal of either half leaves both as
+ * they were, so the wrong visit is never gone while the right one is
+ * missing. The old visit is held to `app/api/sessions/void.ts`'s rules and
+ * answers with its codes, and to one more: a correction stays with the same
+ * household (409 `different_client`, logged before the answer).
  *
  * **Who it is for.** A current client — active, or paused — whose
  * practitioner is on the practice's books today; a practitioner who has
@@ -231,6 +249,24 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
       return refuse(gate.reasons, input.clientId);
     }
 
+    // A correction: the visit it replaces must be one a void may withdraw,
+    // asked of the domain first so the refusal is its sentence.
+    const replaces = input.replaces ?? null;
+    const replaced = replaces ? await loadVoidTarget(db, replaces) : null;
+    if (replaces) {
+      if (!replaced) return refuseVoid(c, replaces, null, 'not_found');
+      const refusal = voidRefusalFor(actor.roles, replaced);
+      if (refusal) return refuseVoid(c, replaces, replaced.client_id, refusal);
+      // A correction is the same visit put right, so it stays with the same
+      // household; a visit logged against the wrong one is voided and the
+      // right one logged fresh. 971's composite key says the same underneath.
+      if (replaced.client_id !== input.clientId) {
+        await logRefusal(db, 'session', replaces, replaced.client_id, ['different_client']);
+        const code: CorrectionConflictCode = 'different_client';
+        return c.json({ error: 'conflict', code, requestId }, 409);
+      }
+    }
+
     const { startsAt, endsAt } = pastSessionTimes({
       on: input.on,
       startTime: input.startTime,
@@ -243,7 +279,10 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
     // usable for the refusal's own audit row.
     await db.query('savepoint record_past');
     let appointmentId: string;
+    let voided: VoidSessionResponse | undefined;
     try {
+      // The wrong visit first, which frees its window for the right one.
+      if (replaces) voided = await voidRecordedSession(db, replaces);
       const created = await db.query<{ id: string }>(
         'insert into appointment (tenant_id, client_id, practitioner_id, service_type_id, ' +
           'location_id, delivery_mode, window_start, window_end, status, created_by) values ' +
@@ -265,9 +304,10 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
         'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
           'delivery_mode, location_id, appointment_id, status, checked_in_at, started_at, ' +
           'ended_at, checked_out_at, closed_at, closed_by, created_by, recorded_from, ' +
-          'settled_outside_app) values ' +
+          'settled_outside_app, version, supersedes_id, amendment_reason) values ' +
           "($1, app.current_tenant_id(), $2, $3, $4, $5, $6, $7, 'completed', $8, $8, $9, $9, " +
-          "$10, $11, $11, 'records', $12)",
+          "$10, $11, $11, 'records', $12, $13, $14::uuid, " +
+          "case when $14::uuid is null then null else current_setting('app.reason', true) end)",
         [
           sessionId,
           input.clientId,
@@ -281,6 +321,10 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
           now().toISOString(),
           actor.userId,
           input.billing === 'settled_outside',
+          // A correction is the next version of the visit it replaces, under
+          // the request's reason (302's session_amendment_reason_with_version).
+          replaced ? replaced.version + 1 : 1,
+          replaces,
         ],
       );
       await db.query('release savepoint record_past');
@@ -303,9 +347,17 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
       ) {
         return refuse(['no_credit_available'], input.clientId);
       }
+      // The void refused after all: another request withdrew it first.
+      const voidRefusal = replaces ? voidFunctionRefusal(error) : null;
+      if (replaces && voidRefusal) {
+        return refuseVoid(c, replaces, replaced?.client_id ?? null, voidRefusal);
+      }
       throw error;
     }
 
+    if (replaces && voided) {
+      await logSensitive(db, 'session_voided', 'session', replaces, replaced?.client_id ?? null);
+    }
     await logSensitive(db, 'session_recorded_from_records', 'session', sessionId, input.clientId);
     return c.json(
       RecordPastSessionResponse.parse({
@@ -313,6 +365,7 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
         sessionId,
         appointmentId,
         billed: input.billing,
+        ...(voided ? { voided } : {}),
       }),
       201,
     );

@@ -8,7 +8,9 @@
  * showing it would announce a visit nobody has agreed to; a `rescheduled` row
  * is the record of a visit that moved, and the visit that replaced it is
  * already in the list, so showing both would say a household has twice as many
- * appointments as it has.
+ * appointments as it has. A `voided` row is a third: a visit the office logged
+ * from its records in error and withdrew (trunk round 60). It is not a visit
+ * the household had, so neither list shows it.
  *
  * Pure: "today" is always an argument (.claude/rules/testing.md).
  */
@@ -30,6 +32,7 @@ export const APPOINTMENT_STATUSES = [
   'cancelled_late',
   'no_show',
   'rescheduled',
+  'voided',
 ] as const;
 export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
 

@@ -5,6 +5,8 @@ import {
   type AppointmentRow,
   type DeliveryMode,
 } from '../../api/appointments/schema';
+import { isVoidableRow } from '@domain/session';
+import { canActor } from '@domain/shared';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { canOpenSettings } from '../../shell/adminAccess';
 import { Button, Note, PageHeader } from '../../shell/components/Controls';
@@ -14,11 +16,12 @@ import { Table, type Column } from '../../shell/components/Table';
 import { APPOINTMENT_STATUS_LABELS, APPOINTMENT_STATUS_TONES } from './appointmentStatus';
 import { CancelAppointmentDrawer } from './CancelAppointmentDrawer';
 import { CancellationPolicyDrawer } from './CancellationPolicyDrawer';
-import { LogPastSessionDrawer } from './LogPastSessionDrawer';
+import { LogPastSessionDrawer, type ReplacedVisit } from './LogPastSessionDrawer';
 import { MoveAppointmentDrawer } from './MoveAppointmentDrawer';
 import { NewAppointmentDrawer } from './NewAppointmentDrawer';
 import { ScheduleClientDrawer } from './ScheduleClientDrawer';
-import { dayOf, formatMovedTo, formatWindow, practiceDay } from './windows';
+import { VoidSessionDrawer } from './VoidSessionDrawer';
+import { dayOf, formatMovedTo, formatWindow, practiceDay, timeOf } from './windows';
 import './schedule.css';
 
 /**
@@ -38,6 +41,25 @@ import './schedule.css';
  * offering an action that would be refused.
  */
 const OPEN_STATUSES: readonly AppointmentRow['status'][] = ['proposed', 'confirmed'];
+
+/** The row as the correction drawer pre-fills from it. */
+function replacedVisit(row: AppointmentRow & { sessionId: string }): ReplacedVisit {
+  return {
+    sessionId: row.sessionId,
+    client: {
+      id: row.client.id,
+      givenName: row.client.givenName,
+      familyName: row.client.familyName,
+    },
+    serviceTypeId: row.serviceType.id,
+    locationId: row.location.id,
+    practitionerId: row.practitioner.id,
+    on: dayOf(row.windowStart),
+    startTime: timeOf(row.windowStart),
+    durationMinutes: row.sessionMinutes,
+    billing: row.settledOutsideApp ? 'settled_outside' : 'credit',
+  };
+}
 
 /**
  * What "Confirm" means, and why it is a button rather than an automatic
@@ -83,9 +105,10 @@ export function SchedulePage() {
   const [selectedClient, setSelectedClient] = useState<AppointmentRow['client'] | null>(null);
   // One drawer at a time: the schedule has one inline-end slot, and two
   // drawers stacked in it would be two dialogs fighting over the same focus.
-  const [acting, setActing] = useState<{ kind: 'move' | 'cancel'; row: AppointmentRow } | null>(
-    null,
-  );
+  const [acting, setActing] = useState<{
+    kind: 'move' | 'cancel' | 'void' | 'correct';
+    row: AppointmentRow;
+  } | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
   // A visit that happened before the app, typed up from the records: offered
   // only on a day that has passed, to the same three roles that book
@@ -103,6 +126,11 @@ export function SchedulePage() {
   // one `scheduling_setting_write` admits beneath the route.
   const canEditPolicy =
     session.status === 'signed-in' && canOpenSettings(session.actor, new Date());
+  // Void and Correct: the office's three roles (`session.void`), the same
+  // three the route admits.
+  const canVoid =
+    session.status === 'signed-in' &&
+    canActor(session.actor, { type: 'session.void' }, {}, new Date());
 
   useEffect(() => {
     let live = true;
@@ -139,14 +167,17 @@ export function SchedulePage() {
 
   const reload = useCallback(() => setReloadToken((token) => token + 1), []);
 
-  const openAction = useCallback((kind: 'move' | 'cancel', row: AppointmentRow) => {
-    setDrawerOpen(false);
-    setPastOpen(false);
-    setSelectedClient(null);
-    setPolicyOpen(false);
-    setActionError(null);
-    setActing({ kind, row });
-  }, []);
+  const openAction = useCallback(
+    (kind: NonNullable<typeof acting>['kind'], row: AppointmentRow) => {
+      setDrawerOpen(false);
+      setPastOpen(false);
+      setSelectedClient(null);
+      setPolicyOpen(false);
+      setActionError(null);
+      setActing({ kind, row });
+    },
+    [],
+  );
 
   const confirm = useCallback(
     async (row: AppointmentRow) => {
@@ -247,7 +278,24 @@ export function SchedulePage() {
         header: 'Change',
         align: 'end',
         render: (row) =>
-          OPEN_STATUSES.includes(row.status) ? (
+          canVoid && isVoidableRow(row) ? (
+            <span className="schedule__row-actions">
+              <Button
+                variant="quiet"
+                aria-label={`Correct ${row.client.givenName} ${row.client.familyName}'s visit`}
+                onClick={() => openAction('correct', row)}
+              >
+                Correct
+              </Button>
+              <Button
+                variant="quiet"
+                aria-label={`Void ${row.client.givenName} ${row.client.familyName}'s visit`}
+                onClick={() => openAction('void', row)}
+              >
+                Void
+              </Button>
+            </span>
+          ) : OPEN_STATUSES.includes(row.status) ? (
             <span className="schedule__row-actions">
               {/* The accessible name carries whose visit it is: eight
                   identical "Move" buttons down a column are eight identical
@@ -280,7 +328,7 @@ export function SchedulePage() {
           ) : null,
       },
     ],
-    [confirm, confirming, openAction],
+    [canVoid, confirm, confirming, openAction],
   );
 
   const count = state.kind === 'ready' ? state.appointments.length : null;
@@ -404,6 +452,30 @@ export function SchedulePage() {
           onClose={() => setPastOpen(false)}
           onRecorded={() => {
             setPastOpen(false);
+            reload();
+          }}
+        />
+      ) : null}
+      {acting?.kind === 'void' ? (
+        <VoidSessionDrawer
+          appointment={acting.row}
+          onClose={() => setActing(null)}
+          onVoided={() => {
+            setActing(null);
+            reload();
+          }}
+        />
+      ) : null}
+      {acting?.kind === 'correct' && isVoidableRow(acting.row) ? (
+        <LogPastSessionDrawer
+          // One drawer per visit: a correction opened from another row
+          // starts from that row, not from what was typed into this one.
+          key={acting.row.id}
+          date={date}
+          replaces={replacedVisit(acting.row)}
+          onClose={() => setActing(null)}
+          onRecorded={() => {
+            setActing(null);
             reload();
           }}
         />

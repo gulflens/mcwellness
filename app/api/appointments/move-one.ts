@@ -30,7 +30,8 @@ export const EXCLUSION_VIOLATION = '23P01';
 
 // Every status that still holds a slot, for the conflict read — and the row
 // being moved, excluded by id, because a visit cannot clash with itself.
-export const LIVE_STATUSES_EXCLUDED = "('cancelled', 'cancelled_late', 'no_show', 'rescheduled')";
+export const LIVE_STATUSES_EXCLUDED =
+  "('cancelled', 'cancelled_late', 'no_show', 'rescheduled', 'voided')";
 
 const APPOINTMENT_SQL =
   'select a.id, a.client_id, a.practitioner_id, a.service_type_id, a.location_id, ' +
@@ -366,5 +367,10 @@ export function appointmentRow(
     // rescheduled_from_id at a row that did not exist a moment ago, so it has
     // never itself been superseded.
     movedTo: null,
+    // Nor has anybody been to it: a moved visit is one still to come.
+    sessionId: null,
+    recordedFrom: null,
+    settledOutsideApp: null,
+    sessionMinutes: null,
   };
 }

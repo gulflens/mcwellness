@@ -201,3 +201,92 @@ describe('LogPastSessionDrawer', () => {
     ).toBeTruthy();
   });
 });
+
+describe('LogPastSessionDrawer: correcting a visit logged from the records', () => {
+  /** The visit being corrected, as the day schedule's row hands it over. */
+  const replaces = {
+    sessionId: '00000008-0000-4000-8000-000000000501',
+    client: { id: client.id, givenName: client.givenName, familyName: client.familyName },
+    serviceTypeId: serviceType.id,
+    locationId: homeLocation.id,
+    practitionerId: practitioner.id,
+    on: '2026-03-04',
+    startTime: '15:30',
+    durationMinutes: 50,
+    billing: 'credit' as const,
+  };
+
+  function openCorrection(fetchImpl: typeof fetch) {
+    const onRecorded = vi.fn();
+    render(
+      <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+        <LogPastSessionDrawer
+          date="2026-03-04"
+          replaces={replaces}
+          onClose={vi.fn()}
+          onRecorded={onRecorded}
+        />
+      </AuthProviderBoundary>,
+    );
+    return onRecorded;
+  }
+
+  it('is titled as a correction and pre-filled from the visit, with a fresh reason to give', async () => {
+    const { fetchImpl } = buildFetch(recorded);
+    openCorrection(fetchImpl);
+    expect(screen.getByRole('dialog', { name: 'Correct a past session' })).toBeTruthy();
+    expect(screen.getByText('Iris Cliff')).toBeTruthy();
+    await waitFor(() =>
+      expect((screen.getByLabelText('Location') as HTMLSelectElement).value).toBe(homeLocation.id),
+    );
+    expect((screen.getByLabelText('Service') as HTMLSelectElement).value).toBe(serviceType.id);
+    expect((screen.getByLabelText('Practitioner') as HTMLSelectElement).value).toBe(
+      practitioner.id,
+    );
+    expect((screen.getByLabelText('Day') as HTMLInputElement).value).toBe('04/03/2026');
+    expect((screen.getByLabelText('Start time') as HTMLInputElement).value).toBe('15:30');
+    expect((screen.getByLabelText('Length in minutes (optional)') as HTMLInputElement).value).toBe(
+      '50',
+    );
+    expect((screen.getByLabelText('How was it paid for?') as HTMLSelectElement).value).toBe(
+      'credit',
+    );
+    expect((screen.getByLabelText('Why it is being logged now') as HTMLInputElement).value).toBe(
+      '',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Log the correction' }).hasAttribute('disabled'),
+    ).toBe(true);
+  });
+
+  it('sends the visit it replaces with the corrected one, under the new reason', async () => {
+    const { fetchImpl, posts } = buildFetch(recorded);
+    const onRecorded = openCorrection(fetchImpl);
+    await waitFor(() =>
+      expect((screen.getByLabelText('Location') as HTMLSelectElement).value).toBe(homeLocation.id),
+    );
+    fireEvent.change(screen.getByLabelText('Start time'), { target: { value: '16:00' } });
+    fireEvent.change(screen.getByLabelText('Why it is being logged now'), {
+      target: { value: 'The diary said four, not half past three' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Log the correction' }));
+    await waitFor(() => expect(onRecorded).toHaveBeenCalledTimes(1));
+    expect(posts).toEqual([
+      {
+        reason: 'The diary said four, not half past three',
+        body: {
+          clientId: client.id,
+          practitionerId: practitioner.id,
+          serviceTypeId: serviceType.id,
+          locationId: homeLocation.id,
+          deliveryMode: 'home',
+          on: '2026-03-04',
+          startTime: '16:00',
+          durationMinutes: 50,
+          billing: 'credit',
+          replaces: replaces.sessionId,
+        },
+      },
+    ]);
+  });
+});

@@ -18,13 +18,15 @@ export const APPOINTMENT_STATUSES = [
   'cancelled_late',
   'no_show',
   'rescheduled',
+  'voided',
 ] as const;
 export type AppointmentStatus = (typeof APPOINTMENT_STATUSES)[number];
 
 /**
  * The statuses that mean this visit is over: it was delivered, called off
- * (either side of the notice period), missed, or moved to a new appointment
- * of its own. Everything else — proposed, confirmed, checked_in — is a visit
+ * (either side of the notice period), missed, moved to a new appointment of
+ * its own, or voided — a visit logged from the records in error and withdrawn
+ * (migration 969, trunk round 60). Everything else — proposed, confirmed, checked_in — is a visit
  * the practitioner still owes someone.
  */
 export const SETTLED_STATUSES = [
@@ -33,6 +35,7 @@ export const SETTLED_STATUSES = [
   'cancelled_late',
   'no_show',
   'rescheduled',
+  'voided',
 ] as const;
 
 export function isSettled(status: AppointmentStatus): boolean {

@@ -56,6 +56,17 @@ import { BoardResponse, type BoardPractitioner, type BoardVisit } from './schema
 const Query = z.object({ date: z.iso.date() });
 
 /**
+ * Every status the board draws: all of them but `voided` (trunk round 60). A
+ * visit logged from the records in error and withdrawn is not part of how the
+ * day went — it never happened, and unlike a call-off nobody ever expected it
+ * — so the board leaves it off as it would a visit that never existed. The
+ * schedule's day list still shows it, as "Voided".
+ */
+const BOARD_STATUSES: readonly AppointmentStatus[] = APPOINTMENT_STATUSES.filter(
+  (status) => status !== 'voided',
+);
+
+/**
  * The rows down the side of the board (spec 4.2): the practice's current
  * practitioners, plus anyone who has left with a visit still against their
  * name that day. The second half is not politeness — the render loop is
@@ -146,10 +157,10 @@ export function mountAppointmentBoard(api: Hono<ApiEnv>, now: () => Date = () =>
     const at = now();
 
     // The map's own reads: every stop of the day with its coordinates, and
-    // where each practitioner starts. Every status, not the map's five,
-    // because the board shows the whole day's history — what was called off
-    // and what was moved are part of how the day went (spec 4.4).
-    const stops = await readDay(db, date, APPOINTMENT_STATUSES);
+    // where each practitioner starts. Every status but `voided`, not the
+    // map's five, because the board shows the whole day's history — what was
+    // called off and what was moved are part of how the day went (spec 4.4).
+    const stops = await readDay(db, date, BOARD_STATUSES);
     const facts = await readFacts(db, date);
 
     const byPractitioner = new Map<string, typeof stops>();

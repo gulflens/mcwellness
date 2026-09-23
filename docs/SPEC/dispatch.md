@@ -113,6 +113,14 @@ the service, the emirate. And its state, which is the point of the screen.
 | Called off | `cancelled`, `cancelled_late` |
 | Moved | `rescheduled` — shown greyed in place, so the day's history reads |
 
+_Amended 2026-09-23 (trunk round 60):_ a `voided` visit — logged from the
+practice's records in error and withdrawn — is **not on the board at all**. It
+is not part of how the day went: it never happened and nobody expected it, so
+it is not a call-off. The board's route reads every status but `voided`
+(`app/api/appointments/board.ts`) and writes no list row for it, and "the
+previous visit" of section 4.4 never lands on one. The schedule's day list
+still shows it, as "Voided".
+
 Hue is the practice's three status tones (`--ok`, `--attention`,
 `--critical`) and nothing else: the design brief reserves colour for the EEG
 bands and those three states, and a board that invents a palette per

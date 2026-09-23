@@ -64,6 +64,8 @@ Late edits after close are a new `session` version with `amendment_reason`, auth
 
 *Amended 2026-09-16 (trunk round 51, `docs/superpowers/specs/2026-09-16-past-sessions-design.md`): a visit that happened before the app is a different act from an amendment — an original with no predecessor, logged by the office from the practice's records. `POST /api/sessions/from-records` writes it as one completed appointment for its window and one completed session linked to it, `recorded_from = 'records'` (migration 966), so the day schedule, the household's portal and the report and assessment pickers all see it. It carries no events and no readings: the record is the day, the service, the practitioner and the length. Billing takes the oldest credit valid on the visit's own day, or nothing when the row says `settled_outside_app`, and refuses the insert when neither holds — never an invoice at today's price for a day that has passed. The calendar's three roles may log one, for a practitioner who held a credential for the service on that day, with the household's consents active now and a reason given.*
 
+*Amended 2026-09-23 (trunk round 60, `docs/superpowers/specs/2026-09-23-void-logged-session-design.md`, migrations 969 and 970): a visit logged from the records in error is voided or corrected, never deleted and never edited. `POST /api/sessions/:id/void`, with a reason, calls `app.void_recorded_session`, the one thing that may void a session: the session and its appointment are stamped `voided` with when, by whom and why, every fact they hold stays as logged, the window is freed, and the credit the visit took comes back the way a waiver gives one back — a visit settled before the app took none and gets none. It refuses a `device` row (a visit the household had; unwinding one is a credit note, unbuilt), a row not completed, a row already voided, and a row a measurement, an invoice or a billing question still names, each with its own code. A correction is the same void and a fresh log in one act: `POST /api/sessions/from-records` with `replaces` voids the wrong visit and writes the right one as its version 2 — `supersedes_id` the wrong one, `amendment_reason` the reason — inside one savepoint, so the wrong visit is never gone while the right one is missing. This is the amendment path this section names, for `records` rows only. The same three roles may do either.*
+
 ## 5. Rules (pure functions in `domain/session`, each tested)
 
 1. `canCheckIn(appointment, consents, credential, kit, now)` → `{ ok, reasons[] }`
@@ -95,11 +97,15 @@ Check-in/out, every event replay, every block reason, session close, and any adm
 
 *Amended 2026-09-16 (trunk round 51): a past visit logged from the records is the sensitive action `session_recorded_from_records`, carrying the reason the office gave and the request id, and every refusal on the way to it — the day, the gate's reasons, the ledger's, the calendar's — is logged as `refused` against the visit's own id before the answer.*
 
+*Amended 2026-09-23 (trunk round 60): a void is the sensitive action `session_voided`, carrying the reason, against the visit withdrawn; a correction writes it against the old visit and `session_recorded_from_records` against the new one. Every refusal on the way is `refused` against the visit's id, and the Timeline says why in words, never by its raw code (a code it has no phrase for reads as a refusal with no reason given).*
+
 ## 9. Out of scope
 
 Parsing the vendor's export to recover its figures, live signal streaming, real-time supervision, practitioner editing after close, multi-device, studio booking.
 
 *Amended 2026-09-16 (trunk round 51): "practitioner editing after close" stands. Logging a visit that happened before the app is not that — it is the office recording history, section 4's amendment — and is in scope from this round. Still out: a note or ratings on such a visit, and correcting one, which is the amendment path section 4 names and nothing yet builds.*
+
+*Amended 2026-09-23 (trunk round 60): correcting such a visit is now built — section 4's second amendment. Still out: a note or ratings on one, a void or credit note for a visit closed on the phone, and editing a logged visit's fields in place.*
 
 *Amended 2026-09-13 (trunk round 49): this item was "amplifier file ingest" until the practice's own software took over the readings — see section 3.3's amendment. A session now takes that software's exported result as a file: `PUT /api/sessions/:id/export` (migration 307), attached at the Summary step, idempotent on the digest, and never a gate on check-out. What remains out of scope is reading the figures back out of that file — signal quality, artefact percent and time in reward, recovered from the vendor's own format rather than typed or switched off. That needs real exported files in hand to write fixtures against, and it is exactly what `record_readings` would turn back on if it is ever built.*
 

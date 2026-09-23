@@ -64,6 +64,11 @@ const APPT_ERASED = '00000000-0000-4000-8000-000000007107';
 const APPT_AFTER_DONE = '00000000-0000-4000-8000-000000007108';
 const APPT_AFTER_OFF = '00000000-0000-4000-8000-000000007109';
 const APPT_AFTER_NEXT = '00000000-0000-4000-8000-000000007110';
+/** A day of its own again: one visit that happened, and one logged in error and voided. */
+const APPT_VOID_KEPT = '00000000-0000-4000-8000-000000007111';
+const APPT_VOIDED = '00000000-0000-4000-8000-000000007112';
+/** The session the voided visit was logged as, voided with it. */
+const SESSION_VOIDED = '00000000-0000-4000-8000-000000007113';
 const SESSION_CLOSED = '00000000-0000-4000-8000-000000007201';
 const SESSION_OPEN = '00000000-0000-4000-8000-000000007202';
 
@@ -79,6 +84,8 @@ const NOW = at('10:50');
 const DATE_ERASED = '2026-09-05';
 /** A later day again, for the one case about which visit "on the way" follows. */
 const DATE_AFTER = '2026-09-06';
+/** A later day again, for the one case about a visit voided as logged in error. */
+const DATE_VOIDED = '2026-09-07';
 const on = (date: string, time: string) => new Date(`${date}T${time}:00+04:00`);
 
 let owner: pg.Client;
@@ -307,6 +314,49 @@ beforeAll(async () => {
   await seedAppointment(APPT_AFTER_OFF, on(DATE_AFTER, '10:00'), 'cancelled');
   await seedAppointment(APPT_AFTER_NEXT, on(DATE_AFTER, '11:00'), 'confirmed');
 
+  // A fourth day: a visit that happened, and one the office logged from the
+  // records in error and voided (trunk round 60). The voided one is seeded in
+  // its end state: the only way to reach it through the API is
+  // app.void_recorded_session, which tests/session/db/void.test.ts covers, and
+  // 970 lets a row become voided only while app.void_active names its
+  // session, so the fixture writes that session and the marker as the
+  // function would.
+  await seedAppointment(APPT_VOID_KEPT, on(DATE_VOIDED, '09:00'), 'completed');
+  await seedAppointment(APPT_VOIDED, on(DATE_VOIDED, '11:00'), 'completed');
+  await owner.query('begin');
+  try {
+    const start = on(DATE_VOIDED, '11:00');
+    await owner.query(
+      'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+        'appointment_id, checked_in_at, started_at, ended_at, status, recorded_from, ' +
+        "settled_outside_app) values ($1, $2, $3, $4, $5, $6, $7, $7, $8, 'completed', " +
+        "'records', true)",
+      [
+        SESSION_VOIDED,
+        IDS.tenantA,
+        IDS.clientA,
+        MORE_IDS.practitionerA,
+        MORE_IDS.serviceTypeA,
+        APPT_VOIDED,
+        start,
+        new Date(start.getTime() + 45 * 60_000),
+      ],
+    );
+    await owner.query(
+      'insert into app.void_active (txid, session_id) values (txid_current(), $1)',
+      [SESSION_VOIDED],
+    );
+    const stamp =
+      "status = 'voided', voided_at = now(), voided_by = $2, void_reason = 'Logged in error'";
+    await owner.query(`update session set ${stamp} where id = $1`, [SESSION_VOIDED, IDS.ownerA]);
+    await owner.query(`update appointment set ${stamp} where id = $1`, [APPT_VOIDED, IDS.ownerA]);
+    await owner.query('delete from app.void_active where txid = txid_current()');
+    await owner.query('commit');
+  } catch (error) {
+    await owner.query('rollback');
+    throw error;
+  }
+
   pool = createPool(process.env.API_DATABASE_URL ?? '');
   const verifier = createTokenVerifier({ issuer: ISSUER, secret: SECRET });
   api = createApi({
@@ -464,6 +514,25 @@ describe('GET /api/appointments/board', () => {
       [APPT_AFTER_OFF, 'called_off'],
       [APPT_AFTER_NEXT, 'on_the_way'],
     ]);
+  });
+
+  it('leaves a visit voided as logged in error off the board altogether', async () => {
+    // Trunk round 60: a voided visit never happened and nobody expected it,
+    // so it is not a call-off in the day's history — the board does not draw
+    // it at all, and writes no list row for it.
+    const res = await get(AUTH.ownerA, `/api/appointments/board?date=${DATE_VOIDED}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as BoardResponse;
+    const busy = body.practitioners.find((p) => p.practitionerId === MORE_IDS.practitionerA);
+    expect(busy?.visits.map((v) => [v.appointmentId, v.state])).toEqual([
+      [APPT_VOID_KEPT, 'finished'],
+    ]);
+    const { rows } = await owner.query<{ n: string }>(
+      "select count(*)::text as n from audit_log where action = 'list' " +
+        "and entity_type = 'appointment' and entity_id = $1",
+      [APPT_VOIDED],
+    );
+    expect(Number(rows[0]?.n)).toBe(0);
   });
 
   it("keeps an erased household's home visit off an admin's board and on the owner's", async () => {

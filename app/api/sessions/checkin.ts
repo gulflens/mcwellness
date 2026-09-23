@@ -13,6 +13,7 @@ import { appendEvents } from './events';
 import { mountClose } from './close';
 import { mountSessionExport } from './export';
 import { mountRecordPastSession } from './from-records';
+import { mountVoidSession } from './void';
 import { mountOpenSession } from './open';
 import { CheckInRequest, CheckInResponse, SessionEventsRequest } from './schema';
 import { resolvePractitioner } from './session-row';
@@ -96,6 +97,7 @@ export function mountSessions(api: Hono<ApiEnv>, now: () => Date = () => new Dat
   mountClose(api, now);
   mountSessionExport(api, now);
   mountRecordPastSession(api, now);
+  mountVoidSession(api, now);
 
   api.post('/api/sessions/:id/events', async (c) => {
     const actor = c.get('actor');
