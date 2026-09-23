@@ -339,29 +339,49 @@ export function Rail({
           </button>
         ) : null}
       </div>
-      <ul className="rail__list">
-        {sections.map((section) => (
-          <li key={section.key}>
-            <NavLink
-              to={section.to}
-              title={section.label}
-              onClick={onChoose}
-              reloadDocument={fresh}
-              className={({ isActive }) =>
-                isActive ? 'rail__item rail__item--active' : 'rail__item'
-              }
-            >
-              {section.icon}
-              <span className="rail__label">{section.label}</span>
-            </NavLink>
-            {section.children !== undefined &&
-            section.children.length > 0 &&
-            sectionHolds(section.base ?? section.to, pathname) ? (
-              <Pages section={section} pathname={pathname} hash={hash} onChoose={onChoose} />
-            ) : null}
-          </li>
-        ))}
-      </ul>
+      <div className="rail__list">
+        {[
+          { label: 'Daily work', keys: ['today', 'clients', 'enquiries', 'schedule'] },
+          { label: 'Finance', keys: ['billing', 'books'] },
+          { label: 'Practice', keys: ['kit', 'portal', 'audit', 'settings'] },
+        ].map((group) => {
+          const items = sections.filter((section) => group.keys.includes(section.key));
+          if (items.length === 0) return null;
+          return (
+            <div className="rail__group" key={group.label}>
+              <p className="rail__group-label rail__label micro">{group.label}</p>
+              <ul aria-label={group.label}>
+                {items.map((section) => (
+                  <li key={section.key}>
+                    <NavLink
+                      to={section.to}
+                      title={section.label}
+                      onClick={onChoose}
+                      reloadDocument={fresh}
+                      className={({ isActive }) =>
+                        isActive ? 'rail__item rail__item--active' : 'rail__item'
+                      }
+                    >
+                      {section.icon}
+                      <span className="rail__label">{section.label}</span>
+                    </NavLink>
+                    {section.children !== undefined &&
+                    section.children.length > 0 &&
+                    sectionHolds(section.base ?? section.to, pathname) ? (
+                      <Pages
+                        section={section}
+                        pathname={pathname}
+                        hash={hash}
+                        onChoose={onChoose}
+                      />
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
       <div className="rail__person">
         <div className="rail__name rail__label">{person.name}</div>
         <div className="micro rail__label">{person.roles}</div>

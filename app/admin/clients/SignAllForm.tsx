@@ -288,28 +288,38 @@ export function SignAllForm({
         once. Each is recorded against the wording shown here.
       </p>
 
-      {consenting.length === 0 ? (
-        <Note tone="critical">
-          No contact on this record may give all of these consents. A child needs a legal guardian
-          who may consent; mark one on the Contacts tab first.
-        </Note>
-      ) : (
-        <Select
-          id="sign-all-giver"
-          label="Given by"
-          value={givenByContactId}
-          onChange={(event) => setGivenByContactId(event.target.value)}
-        >
-          {consenting.map((contact) => (
-            <option key={contact.id} value={contact.id}>
-              {contactDisplayName(contact, record)} —{' '}
-              {relationshipLabel(contact.relationship).toLowerCase()}
-              {contact.isLegalGuardian ? ' (legal guardian)' : ''}
-            </option>
-          ))}
-        </Select>
-      )}
-
+      <section className="consent-form__section" aria-labelledby="consent-signer-heading">
+        <h4 id="consent-signer-heading">1. Confirm who is signing</h4>
+        {consenting.length === 0 ? (
+          <Note tone="critical">
+            No contact on this record may give all of these consents. A child needs a legal guardian
+            who may consent; mark one on the Contacts tab first.
+          </Note>
+        ) : (
+          <Select
+            id="sign-all-giver"
+            label="Given by"
+            value={givenByContactId}
+            onChange={(event) => {
+              setGivenByContactId(event.target.value);
+              setTypedName(null);
+              setSignature(null);
+              setScan(null);
+              setScanError(null);
+              setScanWarning(null);
+              setReadToEnd(false);
+            }}
+          >
+            {consenting.map((contact) => (
+              <option key={contact.id} value={contact.id}>
+                {contactDisplayName(contact, record)} —{' '}
+                {relationshipLabel(contact.relationship).toLowerCase()}
+                {contact.isLegalGuardian ? ' (legal guardian)' : ''}
+              </option>
+            ))}
+          </Select>
+        )}
+      </section>
       {state.kind === 'loading' ? <Note>Loading the wordings.</Note> : null}
       {state.kind === 'error' ? (
         <Note tone="critical">The wordings could not be loaded. Try again.</Note>
@@ -324,77 +334,93 @@ export function SignAllForm({
 
       {state.kind === 'ready' ? (
         <>
-          <div
-            className="consent-text"
-            ref={measure}
-            onScroll={onScroll}
-            tabIndex={0}
-            role="region"
-            aria-label="Consent wording"
-            {...(locale === 'ar' ? { lang: 'ar', dir: 'rtl' as const } : {})}
-          >
-            {state.wordings.map((w) => (
-              <section key={w.purpose} className="consent-text__part">
-                {/* Its own class and its own level (h3, not h4): `.consent-text__heading`
+          <section className="consent-form__section" aria-labelledby="consent-read-heading">
+            <h4 id="consent-read-heading">2. Read the agreements</h4>
+            <p className="small muted">The signature will cover the following consents:</p>
+            <ul className="consent-form__purposes small">
+              {state.wordings.map((w) => (
+                <li key={w.purpose}>{PURPOSE_LABELS[w.purpose] ?? w.purpose}</li>
+              ))}
+            </ul>
+            <div
+              key={givenByContactId}
+              className="consent-text"
+              ref={measure}
+              onScroll={onScroll}
+              tabIndex={0}
+              role="region"
+              aria-label="Consent wording"
+              {...(locale === 'ar' ? { lang: 'ar', dir: 'rtl' as const } : {})}
+            >
+              {state.wordings.map((w) => (
+                <section key={w.purpose} className="consent-text__part">
+                  {/* Its own class and its own level (h3, not h4): `.consent-text__heading`
                     below is what a heading *inside* a wording's own markdown renders as
                     (ConsentText.tsx), and a separator rule alone was carrying the whole
                     burden of saying "a new consent starts here". */}
-                <h3 className="consent-text__part-heading">
-                  {PURPOSE_LABELS[w.purpose] ?? w.purpose}
-                </h3>
-                <p className="small muted">
-                  Version <span className="numeric">{w.wording.version}</span>
-                </p>
-                <ConsentText markdown={w.markdown} />
-              </section>
-            ))}
-          </div>
-          {readToEnd ? null : (
-            <p className="small muted">Scroll to the end of the wording before signing.</p>
-          )}
-
-          <Select
-            id="sign-all-method"
-            label="How it is being given"
-            value={method}
-            onChange={(event) => setMethod(event.target.value as Method)}
-          >
-            <option value="app_signature">Signed on screen</option>
-            <option value="paper_scan">Paper form, photographed or scanned</option>
-          </Select>
-
-          {method === 'app_signature' ? (
-            <SignaturePad
-              signedName={signedName}
-              onSignedNameChange={setTypedName}
-              onChange={setSignature}
-              disabled={!readToEnd}
-              today={practiceTodayInWords()}
-              caption={caption}
-            />
-          ) : (
-            <div className="field">
-              <label htmlFor="sign-all-scan" className="field__label">
-                The signed form
-              </label>
-              <input
-                id="sign-all-scan"
-                className="field__input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                disabled={!readToEnd}
-                onChange={(event) => void chooseScan(event.target.files?.[0] ?? null)}
-              />
-              <p className="small muted">
-                A photograph or a PDF. Photographs are made smaller here before they are sent; a PDF
-                is sent as it is. One scan is filed against every consent listed above, so the form
-                itself has to show agreement to all of them, not just one.
-              </p>
-              {scan ? <p className="small muted">Ready to file: {scan.name}</p> : null}
-              {scanWarning ? <Note>{scanWarning}</Note> : null}
-              {scanError ? <Note tone="critical">{scanError}</Note> : null}
+                  <h3 className="consent-text__part-heading">
+                    {PURPOSE_LABELS[w.purpose] ?? w.purpose}
+                  </h3>
+                  <p className="small muted">
+                    Version <span className="numeric">{w.wording.version}</span>
+                  </p>
+                  <ConsentText markdown={w.markdown} />
+                </section>
+              ))}
             </div>
-          )}
+            <p className="small muted" role="status">
+              {readToEnd
+                ? 'You have reached the end. The signature section is ready.'
+                : 'Scroll inside the agreements to the end to unlock signing.'}
+            </p>
+          </section>
+          <section className="consent-form__section" aria-labelledby="consent-sign-heading">
+            <h4 id="consent-sign-heading">3. Add the signature</h4>
+            <Select
+              id="sign-all-method"
+              label="How it is being given"
+              value={method}
+              onChange={(event) => setMethod(event.target.value as Method)}
+            >
+              <option value="app_signature">Signed on screen</option>
+              <option value="paper_scan">Paper form, photographed or scanned</option>
+            </Select>
+
+            {method === 'app_signature' ? (
+              <SignaturePad
+                key={givenByContactId}
+                signedName={signedName}
+                onSignedNameChange={setTypedName}
+                onChange={setSignature}
+                disabled={!readToEnd}
+                today={practiceTodayInWords()}
+                caption={caption}
+              />
+            ) : (
+              <div className="field">
+                <label htmlFor="sign-all-scan" className="field__label">
+                  The signed form
+                </label>
+                <input
+                  key={givenByContactId}
+                  id="sign-all-scan"
+                  className="field__input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  disabled={!readToEnd}
+                  onChange={(event) => void chooseScan(event.target.files?.[0] ?? null)}
+                />
+                <p className="small muted">
+                  A photograph or a PDF. Photographs are made smaller here before they are sent; a
+                  PDF is sent as it is. One scan is filed against every consent listed above, so the
+                  form itself has to show agreement to all of them, not just one.
+                </p>
+                {scan ? <p className="small muted">Ready to file: {scan.name}</p> : null}
+                {scanWarning ? <Note>{scanWarning}</Note> : null}
+                {scanError ? <Note tone="critical">{scanError}</Note> : null}
+              </div>
+            )}
+          </section>
         </>
       ) : null}
 

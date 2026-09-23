@@ -150,6 +150,8 @@
      browser with no stored choice, or storage it refuses to read, still
      gets. */
   --drawer: clamp(320px, 55vw, 480px);
+  --enrolment-width: 920px;
+  --enrolment-progress: 176px;
   --tap: 48px;
   --measure: 68ch;
 

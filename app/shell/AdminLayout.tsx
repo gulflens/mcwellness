@@ -134,6 +134,7 @@ export function AdminLayout({ actorName }: { actorName: string }) {
     const stored = readDrawerWidth(window.innerWidth);
     if (stored !== null) {
       document.documentElement.style.setProperty('--drawer', `${stored}px`);
+      document.documentElement.style.setProperty('--drawer-resized', `${stored}px`);
     }
   }, []);
   // A width chosen on a wide screen can strand the handle off-screen once the
@@ -151,6 +152,7 @@ export function AdminLayout({ actorName }: { actorName: string }) {
       const clamped = clampDrawerWidth(applied, width);
       if (clamped !== applied) {
         document.documentElement.style.setProperty('--drawer', `${clamped}px`);
+        document.documentElement.style.setProperty('--drawer-resized', `${clamped}px`);
       }
     }
   }, [width]);

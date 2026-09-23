@@ -305,6 +305,8 @@ The spacing scale is a 4px step: 4, 8, 12, 16, 20, 24, 32, 48, 64. Twelve is the
 
 Density is set by one number: every row, input, button and rail item is 44px tall. The tap target rises to 48px for the sign-out control, the drawer's close control and, by the brief, on the instrument. Sign-in and the plain landing pages are a single centred column, 24rem wide (28rem on the instrument, the 68ch measure on the record), padded 64px above and 24px at the sides.
 
+Enrolment has a wider task-specific drawer default: `min(920px, 90vw)` (`--enrolment-width`), with a 176px progress column (`--enrolment-progress`). The shared remembered resize choice, exposed as `--drawer-resized`, overrides that default. Its own inline-size container switches to a four-column step grid and single-column fields at 767px or less, even inside a narrow desktop drawer; below the 768px viewport tier the enrolment drawer is full width. See [Enrolment and consent UI](docs/SPEC/enrolment-consent-ui.md) for the bounded refinement and its limits.
+
 ### Tiers
 
 There are three sizes, written compact first, with two boundaries: the tablet tier at 768px and the desk tier at 1200px (`app/shell/shell.css`; `docs/SPEC/responsive-console.md`). The compact tier pads the page 16px at the sides, the tablet tier 24px and the desk tier 32px, and the rail's own padding steps with them. The rail is open with its labels on the desk tier and closed to a strip of icons below it; whichever the person last chose beats the tier and is remembered on that device under `mcwellness.rail`. The rail's sections scroll inside the rail, so the person's name and the way out are never pushed off a short screen. Below the tablet tier a toolbar field takes the whole line and the drawer takes the full width, dropping its edge hairline.
@@ -385,6 +387,8 @@ The rail: the console's fixed inline-start column, icon and label, no collapse t
 - **Arriving:** a section that has not shipped is listed as text in second ink with its icon in slate and the word "Arriving" in micro on the end, `aria-disabled`; never a dead link.
 - **Closed:** below the desk tier, and whenever the person asks, the rail is a 64px strip of icons. The labels stay in the markup and are hidden the visually-hidden way, so every section keeps its accessible name and gains a title for the pointer. The sections scroll inside the rail.
 
+The rail now groups its existing permitted destinations under **Daily work**, **Finance** and **Practice**, with micro labels, 16px between groups and the existing item treatments. Groups preserve the supplied section order and disappear when they have no permitted destinations. The compact rail uses the existing hidden-label treatment; each list retains its accessible group name. This grouping does not change route permissions or child-page navigation.
+
 ### Status Chip
 - **Style:** a word in ink, preceded by a 6px dot with an 8px gap; no background, no border, no pill.
 - **State:** active takes the ok dot, paused the attention dot, erased the critical dot, closed the default slate dot; lead is a hollow ring (transparent fill, 1px inset ring in second ink).
@@ -418,6 +422,12 @@ A record's detail opens beside the ledger, not over a dimmed page.
 - **Entrance:** the one motion in the shell. 160ms on the ease-out (`cubic-bezier(0.2, 0, 0, 1)`), sliding 24px in from its own edge and fading from 0 through `@starting-style`; `:dir(rtl)` mirrors the translate so the Arabic drawer enters from its own side; both properties drop to 0ms under `prefers-reduced-motion`. It leaves instantly; there is no exit animation.
 - **Compact tier:** below 768px it is the full width and drops its edge hairline.
 - **Semantics:** an `aside` with `role="dialog"` labelled by its title. No backdrop, no focus trap.
+
+### Enrolment and consent signing
+
+Enrolment keeps the ledger's typography, violet, hairlines and spacing tokens. A persistent progress area gives the current step a surface fill, brand ink and `--lift-1`; this is a local selected-step treatment. The content starts with the step title, count and a plain-language instruction. Identity fields are grouped separately from the contact fields. Activation requirements sit in an expandable, brand-wash area during the later steps and remain visible on Review. Existing forms retain their save and permission rules.
+
+The combined consent form uses three numbered sections separated by hairlines: confirm the signer, read the agreements, add the signature. The reading section lists the purposes before the versioned wording, uses a brand-wash reading surface and reports whether the end has been reached. Signature and scan inputs retain the reading gate. Changing the signer clears the signature evidence and reading state, resetting the reading region and evidence controls. The consent tab adds a count of currently required consents on file while the combined form is closed. Wording, consent purposes and authorisation remain governed by the existing implementation.
 
 ### The Record Timeline (signature)
 A client's history as sentences on rules: the ledger's vocabulary turned to time.

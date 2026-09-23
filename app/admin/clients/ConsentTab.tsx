@@ -215,6 +215,23 @@ export function ConsentTab({
 
   return (
     <div className="tab-section">
+      {!signingAll ? (
+        <div className="consent-overview">
+          <h3>Consent signing</h3>
+          <p className="small muted">
+            Read the required agreements together and sign once. Individual consents and their
+            history are listed below.
+          </p>
+          <p className="small">
+            {
+              [...required].filter((purpose) =>
+                record.consents.some((consent) => isActiveOn(consent, today, purpose)),
+              ).length
+            }{' '}
+            of {required.size} required consents on file
+          </p>
+        </div>
+      ) : null}
       {isErased ? (
         <Note tone="attention">
           This record has been erased. The consents below are what was agreed; nothing more can be

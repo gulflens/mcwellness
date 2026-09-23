@@ -275,7 +275,9 @@ describe('SignAllForm', () => {
       screen.getByRole('heading', { name: 'Brain-map and neurofeedback information' }),
     ).toBeTruthy();
     expect(screen.queryByRole('heading', { name: "Guardian's consent for a child" })).toBeNull();
-    expect(screen.getByText('Scroll to the end of the wording before signing.')).toBeTruthy();
+    expect(
+      screen.getByText('Scroll inside the agreements to the end to unlock signing.'),
+    ).toBeTruthy();
 
     fireEvent.scroll(screen.getByRole('region', { name: 'Consent wording' }), {
       target: { scrollTop: 1300 },
@@ -283,7 +285,9 @@ describe('SignAllForm', () => {
     await waitFor(() => {
       expect(document.querySelector('canvas')?.getAttribute('aria-disabled')).toBeNull();
     });
-    expect(screen.queryByText('Scroll to the end of the wording before signing.')).toBeNull();
+    expect(
+      screen.queryByText('Scroll inside the agreements to the end to unlock signing.'),
+    ).toBeNull();
 
     draw(document.querySelector('canvas'));
     fireEvent.change(screen.getByLabelText('Name, as the person writes it'), {
@@ -311,6 +315,40 @@ describe('SignAllForm', () => {
     expect(body.method).toBe('app_signature');
     expect(body.evidence.mimeType).toBe('image/png');
     expect(RecordConsentBundleBody.safeParse(body).success).toBe(true);
+  });
+
+  it('requires a fresh signature when the consenting contact changes', async () => {
+    const other = {
+      ...adultRecord.contacts[0]!,
+      id: GUARDIAN_CONTACT_ID,
+      givenName: 'Ember',
+      familyName: 'Dune',
+      relationship: 'mother' as const,
+    };
+    mount(
+      <SignAllForm
+        clientId={ADULT_CLIENT_ID}
+        record={{ ...adultRecord, contacts: [...adultRecord.contacts, other] }}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    await screen.findByRole('heading', { name: 'Participation' });
+    draw(document.querySelector('canvas'));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('button', { name: 'Record all three consents' }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
+    fireEvent.change(screen.getByLabelText('Given by'), { target: { value: GUARDIAN_CONTACT_ID } });
+    expect((screen.getByLabelText('Name, as the person writes it') as HTMLInputElement).value).toBe(
+      'Ember Dune',
+    );
+    expect(
+      (screen.getByRole('button', { name: 'Record all three consents' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   // Round 63: the same inline `ref={(node) => node?.focus()}` bug

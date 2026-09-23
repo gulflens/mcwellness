@@ -271,10 +271,12 @@ describe('ClientsPage search', () => {
     await screen.findByRole('table');
 
     fireEvent.click(screen.getByRole('button', { name: 'Enrol a client' }));
-    expect(screen.getByRole('dialog', { name: 'Enrolment' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Enrol a client' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Enrolment' })).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Enrol a client' })).toBeNull(),
+    );
   });
 
   it('announces an activation on the list', async () => {
