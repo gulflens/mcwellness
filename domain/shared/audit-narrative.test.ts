@@ -497,6 +497,13 @@ describe('the equipment register and the setup photograph', () => {
       'not_completed',
       'already_voided',
       'session_in_use',
+      // The codes the phone's own session routes write (check-in, events,
+      // check-out, close), so the Timeline says no less of those refusals.
+      'already_checked_in',
+      'service_type_not_found',
+      'session_closed',
+      'session_not_open',
+      'not_checked_out',
     ]) {
       const en = refused(code);
       expect(en?.sentence, code).toMatch(new RegExp(`^${OWNER.name} was refused: `));
@@ -508,6 +515,24 @@ describe('the equipment register and the setup photograph', () => {
       expect(/[\u0600-\u06FF]/.test(ar), code).toBe(true);
       expect(ar, code).not.toContain(code);
     }
+  });
+
+  it('says why a session route refused a visit, in words, for each code those routes write', () => {
+    const refused = (reason: string) =>
+      narrate(event({ entityType: 'session', action: 'refused', reason }), 'en')?.sentence;
+    expect(refused('already_checked_in')).toBe(
+      `${OWNER.name} was refused: the visit was already checked in`,
+    );
+    expect(refused('service_type_not_found')).toBe(
+      `${OWNER.name} was refused: the service could not be found`,
+    );
+    expect(refused('session_closed')).toBe(
+      `${OWNER.name} was refused: the visit was already closed`,
+    );
+    expect(refused('session_not_open')).toBe(`${OWNER.name} was refused: the visit was not open`);
+    expect(refused('not_checked_out')).toBe(
+      `${OWNER.name} was refused: the visit had not been checked out`,
+    );
   });
 
   it('says every reason when a gate gave several', () => {

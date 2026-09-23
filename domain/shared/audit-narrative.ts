@@ -557,8 +557,8 @@ function plainInsert(actor: string, entity: string, locale: Locale): string {
  * written by app/api/sessions/audit.ts's `logRefusal`, whose `reason` column
  * carries the refusal's own codes joined with ", " — not anybody's typed
  * reason — so the Timeline printed "Reason: no_credit_available". These are
- * the codes the office's own acts on a visit write: logging one from the
- * records and voiding one.
+ * the codes the office's own acts on a visit write — logging one from the
+ * records and voiding one — and the ones the phone's session routes write.
  */
 const VISIT_REFUSAL: Record<string, Text> = {
   no_credit_available: t(
@@ -597,6 +597,13 @@ const VISIT_REFUSAL: Record<string, Text> = {
     'a measurement, an invoice or a billing question still names the visit',
     'لا يزال قياس أو فاتورة أو مسألة فوترة يشير إلى الزيارة',
   ),
+  // The codes the phone's own session routes write (check-in, the event
+  // stream, check-out and close), so those refusals read as sentences too.
+  already_checked_in: t('the visit was already checked in', 'كانت الزيارة قد سُجّل وصولها من قبل'),
+  service_type_not_found: t('the service could not be found', 'تعذّر العثور على الخدمة'),
+  session_closed: t('the visit was already closed', 'كانت الزيارة مغلقة من قبل'),
+  session_not_open: t('the visit was not open', 'لم تكن الزيارة مفتوحة'),
+  not_checked_out: t('the visit had not been checked out', 'لم يُسجَّل انصراف الزيارة بعد'),
 };
 
 /** One refusal code in words, or null when this catalogue has none for it. */
