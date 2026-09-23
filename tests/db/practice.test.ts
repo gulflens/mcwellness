@@ -254,10 +254,9 @@ describe('PATCH /api/practice', () => {
  * The three facts printed in the footer of every document the practice issues
  * (migration 912, docs/SPEC/billing.md section 5.6).
  *
- * They are the only optional fields on this form, and that shape is the point
- * of these tests: the settings screen cannot edit them yet, so a save it sends
- * must leave them exactly as they are rather than clearing three columns it
- * never showed anybody (docs/CHANGE-REQUESTS/billing-09.md item 6).
+ * They are optional on this form: a save that omits them leaves them exactly
+ * as they are rather than clearing three columns its sender never showed
+ * anybody. One that sends them as null clears them (below).
  */
 describe('the practice’s contact details', () => {
   it('are absent until somebody records them', async () => {
@@ -307,6 +306,183 @@ describe('the practice’s contact details', () => {
       });
       expect(res.status).toBe(400);
     }
+  });
+});
+
+/**
+ * The practice's bank account (migration 924, round 61): what an invoice's
+ * "Pay by bank transfer" block prints. Invented values only — a UAE-shaped
+ * IBAN with an all-zero bank code and a sequential account, its check digits
+ * computed so it passes mod 97, and a BIC in the shape of none.
+ */
+describe('the practice’s bank account', () => {
+  const BANK = {
+    accountHolder: 'Example Practice L.L.C-FZ',
+    iban: 'ae36 0000 0000 0000 0000 001',
+    bic: 'testaexx',
+    bankAddress: '1 Example Street, Abu Dhabi',
+  };
+
+  it('is absent until somebody records it', async () => {
+    expect((await read(authIdOf(0))).bank).toBeNull();
+  });
+
+  it('records the bank account and answers it back, IBAN stored without spaces', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Putting the bank details on the invoice.',
+      body: await form({ bank: BANK }),
+    });
+    expect(res.status).toBe(200);
+    expect((await read(authIdOf(0))).bank).toEqual({
+      accountHolder: 'Example Practice L.L.C-FZ',
+      iban: 'AE360000000000000000001',
+      bic: 'TESTAEXX',
+      bankAddress: '1 Example Street, Abu Dhabi',
+    });
+    const { rows } = await owner.query<{ bank_iban: string }>('select bank_iban from tenant');
+    expect(rows[0]?.bank_iban).toBe('AE360000000000000000001');
+
+    // A save that never mentions the bank leaves it exactly as it stands.
+    await call('PATCH', authIdOf(0), {
+      reason: 'An ordinary save that never mentions the bank.',
+      body: await form({ legalNameAr: 'استوديو العافية' }),
+    });
+    expect((await read(authIdOf(0))).bank?.iban).toBe('AE360000000000000000001');
+  });
+
+  it('refuses an IBAN of the wrong shape', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Trying a value the column would refuse.',
+      body: await form({ bank: { ...BANK, iban: 'AE07 0000' } }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'iban_invalid' });
+    expect((await read(authIdOf(0))).bank?.iban).toBe('AE360000000000000000001');
+  });
+
+  it('refuses an IBAN whose check digits do not agree', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Trying a mistyped IBAN.',
+      body: await form({ bank: { ...BANK, iban: 'AE37 0000 0000 0000 0000 001' } }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'iban_invalid' });
+    expect((await read(authIdOf(0))).bank?.iban).toBe('AE360000000000000000001');
+  });
+
+  it('refuses a BIC of the wrong shape', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Trying a value the column would refuse.',
+      body: await form({ bank: { ...BANK, bic: 'TEST' } }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'bic_invalid' });
+  });
+
+  it('refuses a BIC without an IBAN', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Trying half a bank account.',
+      body: await form({
+        bank: { accountHolder: null, iban: null, bic: 'TESTAEXX', bankAddress: null },
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'iban_required' });
+  });
+
+  it('refuses an IBAN without the name the account is held in', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Trying half a bank account.',
+      body: await form({ bank: { ...BANK, accountHolder: '' } }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'account_holder_required' });
+  });
+
+  it('refuses a holder name longer than the column holds, rather than cutting it', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'Trying a value the column would refuse.',
+      body: await form({ bank: { ...BANK, accountHolder: 'A'.repeat(121) } }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'account_holder_invalid' });
+  });
+
+  it('holds the same rules in the database, beneath the route', async () => {
+    await expect(owner.query("update tenant set bank_iban = 'AE07 0000'")).rejects.toThrow(
+      /tenant_bank_iban_shape/,
+    );
+    await expect(
+      owner.query("update tenant set bank_iban = null, bank_bic = 'TESTAEXX'"),
+    ).rejects.toThrow(/tenant_bank/);
+  });
+
+  it('writes the reason onto the audit row, with the account unredacted', async () => {
+    const reason = 'The practice changed bank.';
+    const res = await call('PATCH', authIdOf(0), {
+      reason,
+      body: await form({ bank: { ...BANK, bic: null, bankAddress: null } }),
+    });
+    expect(res.status).toBe(200);
+    const { rows } = await owner.query<{
+      reason: string | null;
+      changed_fields: string[];
+      new_values: Record<string, unknown>;
+    }>(
+      'select reason, changed_fields, new_values from audit_log ' +
+        "where entity_type = 'tenant' and action = 'update' order by id desc limit 1",
+    );
+    expect(rows[0]?.reason).toBe(reason);
+    expect(rows[0]?.changed_fields).toEqual(expect.arrayContaining(['bank_address', 'bank_bic']));
+    expect(rows[0]?.new_values).toMatchObject({ bank_iban: 'AE360000000000000000001' });
+  });
+
+  it('clears the bank account when every field is null', async () => {
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'The practice no longer takes bank transfers.',
+      body: await form({
+        bank: { accountHolder: null, iban: null, bic: null, bankAddress: null },
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect((await read(authIdOf(0))).bank).toBeNull();
+  });
+});
+
+/**
+ * A contact field sent as null (or blank, which the drawer sends for an empty
+ * box) is cleared; one the body never mentions is left alone. Until round 61
+ * a null was read as "not sent" and the old value kept.
+ */
+describe('clearing the practice’s contact details', () => {
+  it('clears a contact field when it is sent as null', async () => {
+    await call('PATCH', authIdOf(0), {
+      reason: "Putting the practice's own details on its documents.",
+      body: await form({
+        contactPhone: '+971 50 000 0012',
+        contactEmail: 'office@example.com',
+        website: 'https://example.com',
+      }),
+    });
+    expect((await read(authIdOf(0))).contactPhone).toBe('+971 50 000 0012');
+
+    const res = await call('PATCH', authIdOf(0), {
+      reason: 'The practice gave up its landline.',
+      body: await form({ contactPhone: null }),
+    });
+    expect(res.status).toBe(200);
+    expect(await read(authIdOf(0))).toMatchObject({
+      contactPhone: null,
+      contactEmail: 'office@example.com',
+      website: 'https://example.com',
+    });
+
+    // Blank is the drawer's way of saying the same thing.
+    await call('PATCH', authIdOf(0), {
+      reason: 'Taking the email and website off the documents.',
+      body: await form({ contactEmail: '', website: null }),
+    });
+    expect(await read(authIdOf(0))).toMatchObject({ contactEmail: null, website: null });
   });
 });
 
@@ -378,7 +554,7 @@ describe('tenant.record_readings', () => {
     expect((await read(authIdOf(0))).recordReadings).toBe(true);
 
     // And a save that never mentions it leaves the switch exactly as it
-    // stands, the same coalesce shape as the three contact fields above.
+    // stands, as a save that omits a contact field leaves that field.
     await call('PATCH', authIdOf(0), {
       reason: 'An ordinary save from the settings screen.',
       body: await form({ legalNameAr: 'استوديو العافية' }),

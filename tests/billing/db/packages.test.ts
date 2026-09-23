@@ -40,6 +40,30 @@ const SIX_MONTH_CODE = 'bronze-under-test';
  */
 const TERMLESS_CODE = 'copper-under-test';
 
+/** The bundle round 62's withdrawing suite withdraws and reinstates. */
+const WITHDRAW_CODE = 'withdraw-under-test';
+
+/** A second one, sold once and then withdrawn, so a sale's own figures can be read before and after. */
+const WITHDRAW_SOLD_CODE = 'withdraw-sold-under-test';
+
+/**
+ * A second practice, to prove the fence: attempting to withdraw this file's
+ * own package as another practice's admin must find nothing to update
+ * (row security, not merely a courteous refusal).
+ */
+const OTHER_TENANT_ID = '00000000-0000-4000-8000-0000000000e0';
+const OTHER_TENANT_ADMIN_ID = '00000000-0000-4000-8000-0000000000e1';
+const OTHER_TENANT_ADMIN_AUTH = '00000000-0000-4000-8000-0000000000e2';
+
+/**
+ * A lead practitioner, and only that: the one billing role that reads the
+ * catalogue but never amends it (db/policies/billing/ledger.sql's
+ * `catalogue_amenders` — owner, admin and finance only). Withdrawing must
+ * refuse this actor by name, not merely "whoever is not the owner".
+ */
+const LEAD_PRACTITIONER_ID = '00000000-0000-4000-8000-0000000000e3';
+const LEAD_PRACTITIONER_AUTH = '00000000-0000-4000-8000-0000000000e4';
+
 let h: Harness;
 
 beforeAll(async () => {
@@ -660,5 +684,179 @@ describe('taking payment for exactly what the catalogue showed', () => {
     expect(balance.chargedFils).toBe(1_697_500);
     expect(balance.paidFils).toBe(1_697_500);
     expect(balance.outstandingFils).toBe(0);
+  });
+});
+
+/**
+ * `PATCH /api/billing/packages/:id` (round 62): the one route that "deletes"
+ * a bundle the practice no longer offers, by flipping `status` rather than
+ * removing anything — nothing on a purchase, a credit, an invoice or a
+ * balance is reachable through this route at all.
+ */
+describe('withdrawing a package', () => {
+  let packageId: string;
+
+  beforeAll(async () => {
+    const created = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...silverInput(h, SEED_TODAY),
+      code: WITHDRAW_CODE,
+      name: 'Withdraw fixture',
+      nameAr: 'اختبار السحب',
+    });
+    if (created.status !== 201) {
+      throw new Error(`Could not create the withdrawing fixture: ${created.status}`);
+    }
+    packageId = ((await created.json()) as PackageResponse).package.id;
+
+    // A second practice and a lead practitioner in this one, both written
+    // directly because neither is anything `startHarness`'s own seed carries
+    // (tests/billing/db/support.ts's SEEDED holds no lead-practitioner-only
+    // person and no second tenant at all).
+    await h.owner.query(
+      "insert into tenant (id, legal_name) values ($1, 'Synthetic Studio, withdraw round')",
+      [OTHER_TENANT_ID],
+    );
+    await h.owner.query(
+      'insert into app_user (id, tenant_id, auth_id, display_name) values ' +
+        "($1, $2, $3, 'Synthetic Admin, other practice')",
+      [OTHER_TENANT_ADMIN_ID, OTHER_TENANT_ID, OTHER_TENANT_ADMIN_AUTH],
+    );
+    await h.owner.query(
+      "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'admin')",
+      [OTHER_TENANT_ID, OTHER_TENANT_ADMIN_ID],
+    );
+    await h.owner.query(
+      'insert into app_user (id, tenant_id, auth_id, display_name) values ' +
+        "($1, $2, $3, 'Synthetic Lead Practitioner')",
+      [LEAD_PRACTITIONER_ID, h.data.tenant.id, LEAD_PRACTITIONER_AUTH],
+    );
+    await h.owner.query(
+      "insert into user_role (tenant_id, user_id, role) values ($1, $2, 'lead_practitioner')",
+      [h.data.tenant.id, LEAD_PRACTITIONER_ID],
+    );
+  });
+
+  it('withdraws a package with a reason, and the list marks it withdrawn', async () => {
+    const res = await h.call(
+      'PATCH',
+      `/api/billing/packages/${packageId}`,
+      SEEDED.owner,
+      { status: 'inactive' },
+      { 'x-reason': 'no longer offered' },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PackageResponse;
+    expect(body.package).toMatchObject({ id: packageId, status: 'inactive', sellable: false });
+
+    const list = (await (
+      await h.call('GET', '/api/billing/packages', SEEDED.owner)
+    ).json()) as PackagesResponse;
+    expect(list.packages.find((p) => p.id === packageId)?.status).toBe('inactive');
+  });
+
+  it('refuses without a reason', async () => {
+    const res = await h.call('PATCH', `/api/billing/packages/${packageId}`, SEEDED.owner, {
+      status: 'active',
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()) as { code?: string }).toMatchObject({ code: 'reason_required' });
+  });
+
+  it('refuses a lead practitioner', async () => {
+    const res = await h.callAs(
+      'PATCH',
+      `/api/billing/packages/${packageId}`,
+      LEAD_PRACTITIONER_AUTH,
+      { status: 'active' },
+      { 'x-reason': 'trying anyway' },
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("answers 404 for another practice's package", async () => {
+    const res = await h.callAs(
+      'PATCH',
+      `/api/billing/packages/${packageId}`,
+      OTHER_TENANT_ADMIN_AUTH,
+      { status: 'active' },
+      { 'x-reason': "not this practice's bundle" },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('refuses a sale of a withdrawn package', async () => {
+    const res = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId,
+      clientId: h.clientId(10),
+      purchasedOn: SEED_TODAY,
+    });
+    expect(res.status).toBe(422);
+    expect((await res.json()) as { code?: string }).toMatchObject({ code: 'not_sellable' });
+  });
+
+  it("leaves a buyer's credits and balance untouched when a sold package is withdrawn", async () => {
+    const created = await h.call('POST', '/api/billing/packages', SEEDED.owner, {
+      ...silverInput(h, SEED_TODAY),
+      code: WITHDRAW_SOLD_CODE,
+      name: 'Withdraw after sale fixture',
+      nameAr: 'اختبار السحب بعد البيع',
+    });
+    expect(created.status).toBe(201);
+    const bundle = ((await created.json()) as PackageResponse).package;
+
+    const clientId = h.clientId(11);
+    const sold = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId: bundle.id,
+      clientId,
+      purchasedOn: SEED_TODAY,
+    });
+    expect(sold.status).toBe(201);
+
+    const before = (await (
+      await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner)
+    ).json()) as BalanceResponse;
+
+    const withdrawn = await h.call(
+      'PATCH',
+      `/api/billing/packages/${bundle.id}`,
+      SEEDED.owner,
+      { status: 'inactive' },
+      { 'x-reason': 'no longer offered' },
+    );
+    expect(withdrawn.status).toBe(200);
+
+    const after = (await (
+      await h.call('GET', `/api/billing/clients/${clientId}/balance`, SEEDED.owner)
+    ).json()) as BalanceResponse;
+    expect(after).toEqual(before);
+  });
+
+  it('reinstates a withdrawn package and it can be sold again', async () => {
+    const res = await h.call(
+      'PATCH',
+      `/api/billing/packages/${packageId}`,
+      SEEDED.owner,
+      { status: 'active' },
+      { 'x-reason': 'offering it again' },
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as PackageResponse;
+    expect(body.package).toMatchObject({ id: packageId, status: 'active', sellable: true });
+
+    const sold = await h.call('POST', '/api/billing/package-purchases', SEEDED.owner, {
+      packageId,
+      clientId: h.clientId(12),
+      purchasedOn: SEED_TODAY,
+    });
+    expect(sold.status).toBe(201);
+  });
+
+  it('writes the reason onto the audit row', async () => {
+    const { rows } = await h.owner.query<{ reason: string | null }>(
+      "select reason from audit_log where entity_type = 'package' and entity_id = $1 " +
+        "and action = 'update' order by occurred_at desc limit 1",
+      [packageId],
+    );
+    expect(rows[0]?.reason).toBe('offering it again');
   });
 });

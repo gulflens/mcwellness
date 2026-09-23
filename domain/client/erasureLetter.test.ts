@@ -195,4 +195,40 @@ describe('rendering the letter', () => {
       expect(sentence.trim().length).toBeGreaterThan(60);
     }
   });
+
+  it('says what became of the portal account: closed for a household, unlinked for a colleague', () => {
+    // Since migration 968 (trunk round 59) an erasure spares the sign-in of a
+    // member of staff who is also a contact of the household — the link is
+    // ended and the account is left alone — and only a household's own
+    // account is closed. Wording 1.0 said "has been closed" for every account,
+    // which overstated for a colleague's; 1.1 says both halves, in both
+    // languages, says "any account" because a household that never had a
+    // portal account must not be told one was closed (the round's review),
+    // and names the practice with the word the consent texts already use for
+    // its staff. Pinned on the practice's own templates, as the reports
+    // sentence is: a fixture would prove nothing about the words a household
+    // reads.
+    for (const [file, closed, unlinked, staff] of [
+      [
+        'en.md',
+        'any account that opened your record in the client portal has been closed',
+        'its link to your record has been ended',
+        'one of the staff of Synthetic Studio',
+      ],
+      ['ar.md', 'أُغلق أي حساب كان يفتح سجلك', 'أُنهي ارتباطه بسجلك', 'موظفي Synthetic Studio'],
+    ] as const) {
+      const template = parseErasureLetterTemplate(read(file));
+      expect(template.version).toBe('1.1');
+      const letter = flat(
+        renderErasureLetter(template, {
+          erasedOn: '2026-09-23',
+          practiceLegalName: 'Synthetic Studio',
+        }),
+      );
+      expect(letter).toContain(closed);
+      expect(letter).toContain(unlinked);
+      expect(letter).toContain(staff);
+      expect(letter).not.toContain('{{');
+    }
+  });
 });

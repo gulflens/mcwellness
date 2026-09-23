@@ -163,3 +163,81 @@ describe('an invoice numbered while the practice had none', () => {
     expect(page).not.toContain('W: ');
   });
 });
+
+/**
+ * How to pay is the one fact on an invoice that is **not** snapshotted
+ * (round 61; docs/SPEC/billing.md section 5.6). It is read from the practice's
+ * row when the page is rendered, exactly as the mark is, so the account a
+ * re-render prints is the account the practice uses now. Invented values: no
+ * bank, holder or account here is a real one.
+ */
+describe('the practice’s bank account on an invoice', () => {
+  async function setBank(
+    bank: { holder: string; iban: string; bic: string | null; address: string | null } | null,
+  ): Promise<void> {
+    await asOwner();
+    await h.owner.query(
+      'update tenant set bank_account_holder = $2, bank_iban = $3, bank_bic = $4, ' +
+        'bank_address = $5 where id = $1',
+      [
+        h.data.tenant.id,
+        bank?.holder ?? null,
+        bank?.iban ?? null,
+        bank?.bic ?? null,
+        bank?.address ?? null,
+      ],
+    );
+  }
+
+  it('is null when the practice has recorded none, and the page carries no block', async () => {
+    await setBank(null);
+    const invoiceId = await deliverVisit(h.clientId(2));
+    const found = await invoiceDocument(h.owner, invoiceId);
+    if (!found) throw new Error('That invoice could not be read as a document.');
+    expect(found.document.bank).toBeNull();
+    const page = extractAll(renderDocument(found.document, documentFonts()));
+    expect(page).not.toContain('Pay by bank transfer');
+  });
+
+  it('prints the new details on an issued invoice re-rendered after the bank changes, which is the intended drift', async () => {
+    await setBank({
+      holder: 'Example Practice L.L.C-FZ',
+      iban: 'AE360000000000000000001',
+      bic: 'TESTAEXX',
+      address: '1 Example Street, Abu Dhabi',
+    });
+    try {
+      const invoiceId = await deliverVisit(h.clientId(3));
+      const before = await invoiceDocument(h.owner, invoiceId);
+      expect(before?.document.bank).toEqual({
+        accountHolder: 'Example Practice L.L.C-FZ',
+        iban: 'AE360000000000000000001',
+        bic: 'TESTAEXX',
+        bankAddress: '1 Example Street, Abu Dhabi',
+      });
+
+      // The practice moves its account after the invoice was issued. Unlike
+      // the telephone above, the invoice follows: telling a family to pay into
+      // an account the practice has left is the one thing this block must not do.
+      await setBank({
+        holder: 'Example Practice Two L.L.C-FZ',
+        iban: 'AE360000000000000000001',
+        bic: null,
+        address: null,
+      });
+      const after = await invoiceDocument(h.owner, invoiceId);
+      if (!after) throw new Error('That invoice could not be read as a document.');
+      expect(after.document.bank).toEqual({
+        accountHolder: 'Example Practice Two L.L.C-FZ',
+        iban: 'AE360000000000000000001',
+        bic: null,
+        bankAddress: null,
+      });
+      const page = extractAll(renderDocument(after.document, documentFonts()));
+      expect(page).toContain('Example Practice Two L.L.C-FZ');
+      expect(page).not.toContain('TESTAEXX');
+    } finally {
+      await setBank(null);
+    }
+  });
+});

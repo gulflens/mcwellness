@@ -38,6 +38,7 @@ const SELECT_PRACTICE =
   't.vat_registered, t.vat_trn, t.record_readings, ' +
   't.whatsapp_number, t.default_emirate, t.timezone, ' +
   't.contact_phone, t.contact_email, t.website, t.review_url, ' +
+  't.bank_account_holder, t.bank_iban, t.bank_bic, t.bank_address, ' +
   'l.id as location_id, l.display_address, l.emirate, ' +
   'extensions.st_y(l.entrance_point::extensions.geometry) as latitude, ' +
   'extensions.st_x(l.entrance_point::extensions.geometry) as longitude ' +
@@ -59,6 +60,10 @@ type PracticeRow = {
   contact_email: string | null;
   website: string | null;
   review_url: string | null;
+  bank_account_holder: string | null;
+  bank_iban: string | null;
+  bank_bic: string | null;
+  bank_address: string | null;
   default_emirate: string;
   timezone: string;
   location_id: string | null;
@@ -67,6 +72,31 @@ type PracticeRow = {
   latitude: number | null;
   longitude: number | null;
 };
+
+/**
+ * The code a refused bank field answers with: the pairing's own where the
+ * schema named one (`iban_required`, `account_holder_required`), otherwise
+ * the field that failed its shape — `iban_invalid`, `bic_invalid`,
+ * `account_holder_invalid`, `bank_address_invalid`.
+ */
+function bankCode(issue: { path: PropertyKey[]; params?: unknown } | undefined): string {
+  const params = issue?.params as { code?: unknown } | undefined;
+  if (typeof params?.code === 'string') {
+    return params.code;
+  }
+  switch (issue?.path[1]) {
+    case 'iban':
+      return 'iban_invalid';
+    case 'bic':
+      return 'bic_invalid';
+    case 'accountHolder':
+      return 'account_holder_invalid';
+    case 'bankAddress':
+      return 'bank_address_invalid';
+    default:
+      return 'bad_request';
+  }
+}
 
 /** A point as the geography column takes it: longitude first, then latitude. */
 const point = (lng: number, lat: number): string => `SRID=4326;POINT(${lng} ${lat})`;
@@ -124,6 +154,17 @@ function view(row: PracticeRow, supplies: { fils: number; asOf: string }): Pract
             latitude: row.latitude,
             longitude: row.longitude,
           },
+    // The IBAN is what makes an account; without one there is none to show
+    // (the columns' pairings, migration 924, keep the rest null with it).
+    bank:
+      row.bank_iban === null
+        ? null
+        : {
+            accountHolder: row.bank_account_holder,
+            iban: row.bank_iban,
+            bic: row.bank_bic,
+            bankAddress: row.bank_address,
+          },
   });
 }
 
@@ -165,13 +206,16 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
     const body = UpdatePracticeInput.safeParse(bodyJson);
     if (!body.success) {
       // A code, never zod's own message: the screen holds the sentences.
-      const field = body.error.issues[0]?.path[0];
+      const issue = body.error.issues[0];
+      const field = issue?.path[0];
       const code =
         field === 'vatTrn'
           ? 'vat_trn_required'
           : field === 'whatsappNumber'
             ? 'whatsapp_number_invalid'
-            : 'bad_request';
+            : field === 'bank'
+              ? bankCode(issue)
+              : 'bad_request';
       return c.json({ error: 'bad_request', code, requestId }, 400);
     }
     const current = await readPractice(db);
@@ -189,45 +233,55 @@ export function mountPractice(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       return c.json({ error: 'bad_request', code: 'coordinates_required', requestId }, 400);
     }
 
+    // The form's fixed fields are written every time; the rest only when the
+    // body carries them. Present means written, null included — a contact
+    // field or the review link sent as null (or blank) is cleared, and a bank
+    // account sent with every field null is removed — and absent means the
+    // column is left as it stands, so a caller that never saw a field does
+    // not clear it. The column names below are this file's own constants,
+    // never the caller's.
+    const values: unknown[] = [
+      wanted.legalName,
+      wanted.legalNameAr,
+      wanted.taxRegistrationNumber,
+      wanted.licenceNumber,
+      wanted.licensingAuthority,
+      wanted.licenceExpiresOn,
+      wanted.vatRegistered,
+      wanted.vatTrn,
+      wanted.whatsappNumber,
+    ];
+    const assignments = [
+      'legal_name = $1',
+      'legal_name_ar = $2',
+      'trn = $3',
+      'licence_number = $4',
+      'licensing_authority = $5',
+      'licence_expires_on = $6',
+      'vat_registered = $7',
+      'vat_trn = $8',
+      'whatsapp_number = $9',
+    ];
+    const setIfPresent = (column: string, value: unknown): void => {
+      if (value !== undefined) {
+        values.push(value);
+        assignments.push(`${column} = $${values.length}`);
+      }
+    };
+    setIfPresent('contact_phone', wanted.contactPhone);
+    setIfPresent('contact_email', wanted.contactEmail);
+    setIfPresent('website', wanted.website);
+    setIfPresent('record_readings', wanted.recordReadings);
+    setIfPresent('review_url', wanted.reviewUrl);
+    if (wanted.bank !== undefined) {
+      setIfPresent('bank_account_holder', wanted.bank.accountHolder);
+      setIfPresent('bank_iban', wanted.bank.iban);
+      setIfPresent('bank_bic', wanted.bank.bic);
+      setIfPresent('bank_address', wanted.bank.bankAddress);
+    }
     await db.query(
-      'update tenant set legal_name = $1, legal_name_ar = $2, trn = $3, licence_number = $4, ' +
-        'licensing_authority = $5, licence_expires_on = $6, vat_registered = $7, vat_trn = $8, ' +
-        'whatsapp_number = $9, ' +
-        // Coalesced against what is already there rather than overwritten: the
-        // three are optional on this form (schema.ts) because the settings
-        // screen cannot edit them yet, and a body that never mentioned them
-        // must not clear them. `is not distinct from` is not needed — a null
-        // parameter here means "was not sent", and sending null deliberately
-        // is a decision for the round that puts them on the screen.
-        'contact_phone = coalesce($10, contact_phone), ' +
-        'contact_email = coalesce($11, contact_email), ' +
-        'website = coalesce($12, website), ' +
-        // Same reason, same shape: `recordReadings` is optional on this form
-        // too (schema.ts), so a caller that omits it leaves the switch as it
-        // stands rather than switching readings off by silent default.
-        'record_readings = coalesce($13, record_readings), ' +
-        // Written whenever the body carries it, null included: clearing the
-        // review link is how the portal's review line is switched off
-        // (migration 920), so "sent as nothing" has to mean nothing here.
-        'review_url = case when $14::boolean then $15 else review_url end ' +
-        'where id = app.current_tenant_id()',
-      [
-        wanted.legalName,
-        wanted.legalNameAr,
-        wanted.taxRegistrationNumber,
-        wanted.licenceNumber,
-        wanted.licensingAuthority,
-        wanted.licenceExpiresOn,
-        wanted.vatRegistered,
-        wanted.vatTrn,
-        wanted.whatsappNumber,
-        wanted.contactPhone ?? null,
-        wanted.contactEmail ?? null,
-        wanted.website ?? null,
-        wanted.recordReadings ?? null,
-        wanted.reviewUrl !== undefined,
-        wanted.reviewUrl ?? null,
-      ],
+      `update tenant set ${assignments.join(', ')} where id = app.current_tenant_id()`,
+      values,
     );
 
     if (wanted.address !== null) {

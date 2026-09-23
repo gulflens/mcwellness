@@ -3,6 +3,7 @@ import {
   VAT_MANDATORY_THRESHOLD_FILS,
   VAT_VOLUNTARY_THRESHOLD_FILS,
   formatFils,
+  groupIban,
   vatThresholdStand,
 } from '@domain/shared';
 import { PracticeResponse, type Practice } from '../../api/practice/schema';
@@ -246,6 +247,26 @@ export function PracticePage() {
               <Fact label="Coordinates">
                 {coordinates ? <span className="numeric">{coordinates}</span> : null}
               </Fact>
+            </dl>
+          </section>
+
+          {/*
+            What the invoice's "Pay by bank transfer" block prints (migration
+            924, round 61). The IBAN is what makes an account: while none is
+            recorded every fact below reads "Not recorded", the same as any
+            other empty fact on this page.
+          */}
+          <section className="practice__group">
+            <h2 className="practice__heading">Bank account</h2>
+            <dl className="practice__facts">
+              <Fact label="Account holder">{text(practice.bank?.accountHolder ?? null)}</Fact>
+              <Fact label="IBAN">
+                {practice.bank ? (
+                  <span className="numeric">{groupIban(practice.bank.iban)}</span>
+                ) : null}
+              </Fact>
+              <Fact label="BIC">{text(practice.bank?.bic ?? null)}</Fact>
+              <Fact label="Bank address">{text(practice.bank?.bankAddress ?? null)}</Fact>
             </dl>
           </section>
 

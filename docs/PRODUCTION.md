@@ -3000,3 +3000,78 @@ screen today. Click back into the window and choose any section in the
 sidebar and it brings this version by itself. If a member of staff is ever
 linked as a contact of a household, erasing that household or ending its
 portal access now leaves their sign-in alone.
+
+## What was done on 2026-09-23: the thirty-sixth live pass — the erasure letter tells a colleague the truth
+
+Production runs `main` `396a6b7f`, build `01a0cf67`. No migration, no policy
+file and nothing written to either database: `main` holds 111 migration files
+and both databases stand at 111, as the thirty-fifth pass left them. No staging
+leg, because there was nothing to apply to staging.
+
+**Why it began.** Trunk round 64 (pull request 213,
+`docs/CHANGE-REQUESTS/trunk-round-64.md`): the confirmation letter a household
+receives after an erasure said "the account that opened the client portal has
+been closed", which since migration 968 overstates for a member of staff who was
+linked as a contact of the erased household — their link is ended and their
+account is left alone — and, as the round's review found, for a household that
+never had a portal account at all. Both languages moved to wording 1.1, approved
+on the operator's instruction of 23 September, the words having been put to him
+before the merge.
+
+**The word.** "go live", at 21:51 +04 (17:51 UTC), to a message that had shown
+him the final words in both languages and named the two decisions as his. The
+merge waited for CI on the final commit (`verify` and `verify-db` both green on
+`125f6d03`), and went through at 17:53:31 UTC pinned to that commit.
+
+**Before-state, 17:51:42 UTC.** Entry `index-CNBfWus0.js`, shell stylesheet
+`index-qCiLscI6.css`, health 200 in 0.23 s, deep 200 in 0.23 s. One other
+session on the laptop, which answered the hold check at 17:51 with clear —
+building and reviewing in its own worktrees, nothing to be deployed or written
+for an hour. Both databases at 111.
+
+**The pass.** Archive `mcwellness-396a6b7f.tar.gz` from `origin/main` after the
+merge, 6,741,785 bytes, with its `mcwellness/` root folder. **The letter was
+read out of the archive before it left**: `docs/CONSENT/erasure-letter/en.md`
+inside it says `version: 1.1` and carries "any account that opened your record",
+and `ar.md` says `version: 1.1` and carries `أي حساب`. Stored build settings
+read back and sent unchanged (Node 24, `hono`, root `mcwellness`, output `.`,
+`build:production`, `app/api/start.mjs`, npm). The upload-URL call answered
+empty once and was asked again; TUS create 201, PATCH 204 with `upload-offset`
+equal to the size, the keys read by `curl` from a file of mode 0600 deleted in
+the same command. Build asked 17:54:29 UTC, read `completed` 17:55:32.
+
+**Proved to be this tree, as far as the outside can see — and where it cannot,
+said so.** The served bundle did not change and should not have: the round
+touched no file the browser is sent, so the entry is `index-CNBfWus0.js` before
+and after and the stylesheet-hash check is void, as it was on the thirty-third
+pass. The letter is a file the server reads from disk when it sends one, and
+there is no public path to it, so the proof that production now sends 1.1 is
+the chain above — the archive checked before it left, the build consuming that
+archive and completing, and the process starting afresh afterwards — and not a
+read off the live site. Reading the deployed file back through the host's own
+file tool was tried and is not possible: the document root holds the `.htaccess`
+alone, and the host keeps a Node application's built tree outside it. A name
+that never existed answers 404, as before.
+
+**The process is the new one.** The runtime log holds fresh start-up blocks at
+17:55:29 and 17:55:34, each ending "Serving the built app from dist/" and "API
+listening", with `started_at` 17:55:29 against `last_deployed_at` 17:55:32 and
+no error line; a third block at 17:56:16 is the host's own and carries no error
+either. Because the server keeps each letter template in memory for the life of
+the process (`app/api/clients/erasure-letter.ts`), this restart is what switches
+the letter production sends from 1.0 to 1.1. **No restart asked for —
+nineteenth consecutive.** Health answered 200 at every ten-second poll across
+the build, from 17:54:36 to 17:57:02; the index page went unanswered at exactly
+one poll, 17:55:17, while the host switched, with health 200 in the same
+second. After: health 200 in 0.28 s, deep 200 in 0.89 s.
+
+**Not checked, and why.** No letter was sent: sending one takes an erasure, and
+production holds one real client. The words were proved on the practice's own
+templates before merge, watched failing against 1.0, and by CI on the merged
+commit. A letter already filed under 1.0 stays 1.0 and was true when it was
+sent, since no colleague has ever been linked as a contact on production.
+
+**For the owner.** Nothing to do, and nothing looks different on any screen.
+The next confirmation letter the practice sends after an erasure carries
+wording 1.1 in whichever language the household reads, and the office's
+erasure screen names that version beside the filed letter.

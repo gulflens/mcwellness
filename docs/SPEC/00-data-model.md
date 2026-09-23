@@ -224,7 +224,7 @@ Scheduling's cache of the drive between two places (`SPEC/scheduling-manual.md` 
 Summarised here; FINANCE-SPEC is authoritative.
 
 - **`price`** — resolved per `(service_type_id, jurisdiction, recipient_type, valid_from)`, never constants in code. `list_price_fils`, `discount_fils` and `discount_basis_points` (the figure before any discount and what came off it, migration 409), `unit_price_fils` (what a family pays, held to `list − discount` by a check), `vat_treatment` (computed snapshot, billing.md section 5); superseded the way every append-only entity in section 7 is, by `supersedes_id` and `amendment_reason`, so there is no `valid_to` column to keep in step. It also carries the term of the credits it sells — `expiry_amount` and `expiry_unit`, the same optional pair `package` carries (migration 412) — which is what retired the twelve-month constant a session sold ahead of its visit used to take; a new row supersedes the old one carrying its term forward unless the amendment names a different one.
-- **`package`** — a sellable bundle. `code`, `name`, `price_fils`, `components` (service_type × qty), `status`, and the term: `expiry_amount` (a whole number) with `expiry_unit` (`'day'` or `'month'`) beside it, **both nullable and whole or absent** — empty means the credits never expire, and a check constraint on each table refuses a number with no unit (migration 412, which replaced `expiry_months`; billing.md section 4.3). Its `package_price` rows carry the same three discount columns, with `list_price_fils` a snapshot of the bundle's list price at the moment the row was written and `amount_fils` held to `list − discount`.
+- **`package`** — a sellable bundle. `code`, `name`, `price_fils`, `components` (service_type × qty), `status`, and the term: `expiry_amount` (a whole number) with `expiry_unit` (`'day'` or `'month'`) beside it, **both nullable and whole or absent** — empty means the credits never expire, and a check constraint on each table refuses a number with no unit (migration 412, which replaced `expiry_months`; billing.md section 4.3). `status` is also how a bundle is withdrawn: never deleted, since a purchase and an invoice line each name it, flipped to `inactive` so it stops being sellable while its code, its components and its price history stand (round 62, billing.md section 2.5). Its `package_price` rows carry the same three discount columns, with `list_price_fils` a snapshot of the bundle's list price at the moment the row was written and `amount_fils` held to `list − discount`.
 - **`client_package`** — a purchase. `client_id`, `package_id`, `purchased_at`, `paid_by_contact_id`, `invoice_id`, `expires_at` (nullable since 412: a programme sold with no term has no end date), `status`. It also records how a sale's discount was expressed — `discount_basis_points` when both the price list's and the sale's own were percentages — and `discount_reason`, why an extra one was given (409).
 - **`entitlement`** — the ledger; one row per credit. `client_id`, `service_type_id`, `source_type`, `source_id`, `allocated_value_fils`, `vat_treatment` (computed snapshot), `status`, `consumed_by_session_id`, `expires_at`. Completing a session flips exactly one entitlement to `consumed` and recognises its allocated value. Voiding a `records` session (trunk round 60, migration 969) gives it back as a waiver does: the consumed row is marked `waived` with the reason (cut to the 200 characters 403 allows) and a replacement is written with `replaces_entitlement_id` pointing at it.
 - **`invoice`, `invoice_line`, `payment`** — `billing.md` sections 4 to 6.
@@ -238,6 +238,15 @@ Summarised here; FINANCE-SPEC is authoritative.
   every document it issues, and `invoice` snapshots all three at numbering time
   as `supplier_contact_phone`, `supplier_contact_email` and `supplier_website`
   (959), so a document keeps saying what it said (`billing.md` section 5.6).
+- **The practice's bank account** — `tenant` carries `bank_account_holder`,
+  `bank_iban`, `bank_bic` and `bank_address` (924, round 61), all nullable:
+  the account an invoice asks to be paid into. The IBAN is held uppercase
+  without spaces (`^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$`), the BIC uppercase and
+  eight or eleven characters, the holder 1–120 characters and the address
+  1–200; the holder and the IBAN are both set or both null, and a BIC or an
+  address exists only with an IBAN. Business facts of the practice, not
+  personal data: audited with the row and not redacted. Not snapshotted onto
+  the invoice — read at render time, as the logo is.
 - **The books** (`accounting.md`, migrations 450–454): `accounting_setting`
   (one per practice: start day, year end, the lock date, the corporate-tax
   estimate and Small Business Relief settings, the entry counter); `account`

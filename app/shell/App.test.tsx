@@ -86,6 +86,7 @@ const PRACTICE = {
   defaultEmirate: 'DXB',
   timezone: 'Asia/Dubai',
   address: null,
+  bank: null,
 };
 
 const provider: AuthProvider = {

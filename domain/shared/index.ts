@@ -5,6 +5,7 @@
 // and the same walk starts from every other stream barrel too, so the rule is
 // "every domain barrel is browser-safe", not just this one.
 export { addFils, fils, formatFils } from './fils';
+export { groupIban, isValidIban } from './iban';
 export type { Fils } from './fils';
 export { amountCell, escapeCell, filsToDecimal, toCsv } from './csv';
 export type { AmountCell, CsvCell } from './csv';

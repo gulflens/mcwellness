@@ -7,6 +7,7 @@ import {
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
+import { useFocusOnOpen } from '../../shell/components/useFocusOnOpen';
 import { practiceToday } from './activation';
 import { contactDisplayName } from './contactName';
 import { PURPOSE_LABELS } from './consentPurposeLabels';
@@ -50,14 +51,12 @@ const WITHDRAW_ERROR = 'This consent could not be withdrawn. Try again.';
  * than leaving it on a button whose meaning has changed.
  */
 function PanelHeading({ children }: { children: ReactNode }) {
+  // Focused once, when this panel opens (useFocusOnOpen.ts): the button that
+  // opened it does not change, so without this the press reads as having
+  // done nothing at all.
+  const heading = useFocusOnOpen<HTMLHeadingElement>();
   return (
-    <h4
-      className="drawer__section"
-      tabIndex={-1}
-      ref={(node) => {
-        node?.focus();
-      }}
-    >
+    <h4 className="drawer__section" tabIndex={-1} ref={heading}>
       {children}
     </h4>
   );

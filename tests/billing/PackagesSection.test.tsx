@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { PackagesSection } from '../../app/admin/billing/PackagesSection';
 import { json, LEAD_PRACTITIONER, mountWith, OWNER } from './harness';
@@ -79,6 +79,15 @@ const SILVER_UNREGISTERED = {
 
 const NO_VAT_NOTE =
   'The practice is not registered for VAT, so no VAT is charged and the total is the price.';
+
+const GOLD_WITHDRAWN = {
+  ...SILVER,
+  id: '00000004-0000-4000-8000-000000000203',
+  code: 'gold',
+  name: 'Gold',
+  nameAr: null,
+  status: 'inactive' as const,
+};
 
 const UNSELLABLE = {
   ...SILVER,
@@ -193,6 +202,18 @@ describe('PackagesSection', () => {
     ).toBeTruthy();
   });
 
+  it('says nothing about drift for a bundle that is withdrawn, even though its price still differs', async () => {
+    // A withdrawn bundle is not on sale to anyone; whether its old list price
+    // still matches its components is not a fact the practice needs raised.
+    mount(OWNER, [SILVER, { ...GOLD_WITHDRAWN, componentsTotalFils: 1_260_000 }]);
+    await screen.findByText('Silver');
+    expect(
+      screen.queryByText(
+        "Gold's list price no longer matches what its contents cost one at a time.",
+      ),
+    ).toBeNull();
+  });
+
   it('keeps the row\u2019s action in the first column, where a narrow screen can still reach it', async () => {
     // The action used to sit in a column of its own at the far end of a table
     // that needed about 1,600px, so at 1024 — and at 1440 — it was off-screen
@@ -246,6 +267,142 @@ describe('PackagesSection', () => {
   it('says so when the practice has no packages yet', async () => {
     mount(OWNER, []);
     expect(await screen.findByText('No packages are set up yet.')).toBeTruthy();
+  });
+
+  it('says every package is withdrawn, rather than that none are set up, when the fold holds them all', async () => {
+    mount(OWNER, [GOLD_WITHDRAWN]);
+    expect(await screen.findByText('Every package is withdrawn.')).toBeTruthy();
+    expect(screen.queryByText('No packages are set up yet.')).toBeNull();
+    expect(screen.getByText('Withdrawn (1)')).toBeTruthy();
+  });
+
+  it('shows Withdraw on an active package for the owner, and not for a lead practitioner', async () => {
+    const owner = mount(OWNER, [SILVER]);
+    expect(await screen.findByRole('button', { name: 'Withdraw' })).toBeTruthy();
+    owner.unmount();
+
+    mount(LEAD_PRACTITIONER, [SILVER]);
+    await screen.findByText('Silver');
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull();
+  });
+
+  it('confirms once a package is withdrawn, naming it, the same way adding one does', async () => {
+    let packages: unknown[] = [SILVER];
+    mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (url === '/api/billing/packages' && method === 'GET') {
+        return json({ packages, vatRegistered: true });
+      }
+      if (url === `/api/billing/packages/${SILVER.id}` && method === 'PATCH') {
+        const withdrawn = { ...SILVER, status: 'inactive' as const };
+        packages = packages.map((p) => ((p as { id: string }).id === SILVER.id ? withdrawn : p));
+        return json({ package: withdrawn });
+      }
+      return null;
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+    // The drawer's own submit button reads "Withdraw" too, so scope to it
+    // rather than the row's button of the same name.
+    const drawer = await screen.findByRole('dialog');
+    fireEvent.change(within(drawer).getByLabelText('Why is it being withdrawn?'), {
+      target: { value: 'No longer offered.' },
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Withdraw' }));
+
+    // The row leaves into the fold, and a role="status" Note names what just
+    // happened — the same kind PackageDrawer's onCreated sets.
+    expect(await screen.findByText('Withdrawn (1)')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('Silver withdrawn.');
+  });
+
+  it('lists a withdrawn package under a folded "Withdrawn (1)" disclosure, not in the table', async () => {
+    mount(OWNER, [SILVER, GOLD_WITHDRAWN]);
+    await screen.findByText('Silver');
+    const summary = screen.getByText('Withdrawn (1)').closest('summary');
+    const fold = summary?.closest('details');
+    expect(fold).toBeTruthy();
+    // Folded shut until somebody opens it.
+    expect(fold?.hasAttribute('open')).toBe(false);
+    expect(fold?.textContent).toContain('Gold');
+    // The disclosure marker a tablet reader actually sees: the platform's own
+    // triangle is suppressed by CSS (round-62 review), so the summary carries
+    // its own chevron rather than reading as a plain, unopenable line.
+    expect(summary?.querySelector('.fold__chevron')).toBeTruthy();
+    // "Not in the table": every <table> outside the fold carries only the
+    // active row, whether the fold is open or shut.
+    const tables = Array.from(document.querySelectorAll('table'));
+    const mainTable = tables.find((t) => !t.closest('details'));
+    expect(mainTable?.textContent).toContain('Silver');
+    expect(mainTable?.textContent).not.toContain('Gold');
+
+    fireEvent.click(summary as HTMLElement);
+    expect(await screen.findByRole('button', { name: 'Reinstate' })).toBeTruthy();
+    // The `open` attribute is what the disclosure and the chevron's rotation
+    // both key off, so the click must actually have toggled it.
+    expect(fold?.hasAttribute('open')).toBe(true);
+  });
+
+  it('reinstates from the folded list, sending a fixed reason and JSON content-type', async () => {
+    let packages: unknown[] = [SILVER, GOLD_WITHDRAWN];
+    const { fetchImpl } = mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (url === '/api/billing/packages' && method === 'GET') {
+        return json({ packages, vatRegistered: true });
+      }
+      if (url === `/api/billing/packages/${GOLD_WITHDRAWN.id}` && method === 'PATCH') {
+        const reinstated = { ...GOLD_WITHDRAWN, status: 'active' };
+        packages = packages.map((p) =>
+          (p as { id: string }).id === GOLD_WITHDRAWN.id ? reinstated : p,
+        );
+        return json({ package: reinstated });
+      }
+      return null;
+    });
+
+    await screen.findByText('Silver');
+    fireEvent.click(screen.getByText('Withdrawn (1)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstate' }));
+
+    // The section refetches: the fold empties once Gold is active again.
+    await waitFor(() => expect(screen.queryByText('Withdrawn (1)')).toBeNull());
+    expect(await screen.findByText('Gold')).toBeTruthy();
+
+    const calls = (fetchImpl as unknown as { mock: { calls: [string, RequestInit | undefined][] } })
+      .mock.calls;
+    const patch = calls.find(
+      ([calledUrl, init]) =>
+        calledUrl === `/api/billing/packages/${GOLD_WITHDRAWN.id}` && init?.method === 'PATCH',
+    );
+    expect(patch).toBeTruthy();
+    const [, init] = patch as [string, RequestInit];
+    expect(new Headers(init.headers).get('x-reason')).toBe('Reinstated from the packages list');
+    expect(new Headers(init.headers).get('content-type')).toBe('application/json');
+    expect(JSON.parse(String(init.body))).toEqual({ status: 'active' });
+  });
+
+  it('reads a failed Reinstate as critical, the same tone the load failure beside it carries', async () => {
+    mountWith(OWNER, <PackagesSection canWrite />, (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (url === '/api/billing/packages' && method === 'GET') {
+        return json({ packages: [SILVER, GOLD_WITHDRAWN], vatRegistered: true });
+      }
+      if (url === `/api/billing/packages/${GOLD_WITHDRAWN.id}` && method === 'PATCH') {
+        return json({ error: 'server_error' }, 500);
+      }
+      return null;
+    });
+
+    await screen.findByText('Silver');
+    fireEvent.click(screen.getByText('Withdrawn (1)'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reinstate' }));
+
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'This package could not be reinstated. Try again.',
+    );
+    // Gold is still in the fold: the failed PATCH changed nothing.
+    expect(screen.getByText('Withdrawn (1)')).toBeTruthy();
   });
 
   it('names the problem when the list fails to load', async () => {

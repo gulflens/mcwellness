@@ -6,8 +6,9 @@
  * 5.6). Its shape, top to bottom: the practice's logo centred, the title in
  * both languages in the brand violet, the supplier as two facing blocks rather
  * than as labelled rows, the document's own facts, the lines table, the totals
- * in a bordered box against the right margin, and a footer band with the
- * practice's contact details.
+ * in a bordered box against the right margin — with, on an invoice whose
+ * practice has recorded an account, how to pay set beside it (round 61) — and a
+ * footer band with the practice's contact details.
  *
  * **Three things carry hue and nothing else does.** The two title words, the
  * table's column headings and the document's reference, all in `VIOLET`
@@ -62,8 +63,10 @@ import {
 import {
   arabicDocumentDate,
   discountLine,
+  discountTotalLabel,
   formatDocumentDate,
   formatRate,
+  groupIban,
   money,
   NOT_REGISTERED_BASIS,
   receiptBasis,
@@ -563,6 +566,12 @@ function heading(sheet: Sheet, x: number, label: Phrase, align: 'start' | 'end')
 type TotalRow = { label: Phrase; value: string; bold?: boolean };
 
 /**
+ * Something set in the empty band to the left of the totals box, from the same
+ * top: measured first, so the box and it can be kept on one sheet together.
+ */
+type Beside = { height: number; draw: (top: number) => void };
+
+/**
  * The totals, in a bordered box against the right margin.
  *
  * Drawn as four rules that meet at the corners rather than as a filled
@@ -584,9 +593,13 @@ type TotalRow = { label: Phrase; value: string; bold?: boolean };
  * the figure are always set, in both languages' reading of the row: what a
  * reader loses is a translation of a word, never a number.
  */
-function totalsBox(sheet: Sheet, rows: readonly TotalRow[]): void {
+function totalsBox(sheet: Sheet, rows: readonly TotalRow[], beside: Beside | null = null): void {
   const height = TOTALS_TOP_AIR * 2 + (rows.length - 1) * TOTALS_ROW;
-  sheet.room(height + LINE);
+  // The taller of the two decides the break, so a page is taken before both
+  // rather than through either: how to pay never lands a sheet away from what
+  // is owed.
+  const tallest = Math.max(height, beside?.height ?? 0);
+  sheet.room(tallest + LINE);
 
   const top = sheet.baseline;
   const bottom = top - height;
@@ -621,7 +634,71 @@ function totalsBox(sheet: Sheet, rows: readonly TotalRow[]): void {
   sheet.ruleAt(bottom, left, TOTALS_WIDTH);
   sheet.ruleAt(bottom, left, 0, height);
   sheet.ruleAt(bottom, RIGHT, 0, height);
-  sheet.down(height + LINE);
+  beside?.draw(top);
+  sheet.down(tallest + LINE);
+}
+
+/**
+ * How to pay, in the band left of the totals box (round 61; `docs/SPEC/billing.md`
+ * section 5.6).
+ *
+ * A small heading in both languages — muted, never violet: the violet is for
+ * exactly three things and this is not one of them — and then a row for each
+ * fact the practice recorded: the English label, the Arabic beside it, and the
+ * value in a column of its own. The IBAN is grouped in fours; the holder and
+ * the bank address wrap within the column rather than being cut, because a
+ * truncated account name is a transfer that bounces.
+ *
+ * The heading sits on the totals' first baseline, so the two blocks read as
+ * one band. The width is whatever the box leaves: the measure less the box and
+ * the page's gutter, so nothing here can reach the box's left wall.
+ */
+function bankBlock(sheet: Sheet, bank: NonNullable<InvoiceDocument['bank']>): Beside {
+  const right = RIGHT - TOTALS_WIDTH - GUTTER;
+  const rows: { label: Phrase; value: string }[] = [
+    { label: WORDS.accountHolder, value: bank.accountHolder },
+    { label: WORDS.iban, value: groupIban(bank.iban) },
+  ];
+  if (bank.bic) rows.push({ label: WORDS.bic, value: bank.bic });
+  if (bank.bankAddress) rows.push({ label: WORDS.bankAddress, value: bank.bankAddress });
+
+  const labelWidth = (label: Phrase): number =>
+    sheet.width(label.en, SIZE.small) + 6 + sheet.width(label.ar, SIZE.small, { rtl: true });
+  const valueAt = LEFT + Math.max(...rows.map((row) => labelWidth(row.label))) + GUTTER;
+  const laid = rows.map((row) => ({
+    ...row,
+    lines: sheet.wrap(row.value, right - valueAt, SIZE.small),
+  }));
+  const lineCount = laid.reduce((total, row) => total + row.lines.length, 0);
+  // Air above the heading and below the last line, the box's own.
+  const height = TOTALS_TOP_AIR * 2 + SMALL_LINE + 4 + (lineCount - 1) * SMALL_LINE;
+
+  return {
+    height,
+    draw: (top) => {
+      const headingAt = top - TOTALS_TOP_AIR;
+      sheet.line(headingAt, LEFT, WORDS.payByTransfer.en, SIZE.small, { bold: true, grey: MUTED });
+      sheet.line(headingAt, right, WORDS.payByTransfer.ar, SIZE.small, {
+        bold: true,
+        grey: MUTED,
+        align: 'end',
+        rtl: true,
+      });
+      let y = headingAt - SMALL_LINE - 4;
+      for (const row of laid) {
+        sheet.line(y, LEFT, row.label.en, SIZE.small, { grey: MUTED });
+        sheet.line(y, LEFT + sheet.width(row.label.en, SIZE.small) + 6, row.label.ar, SIZE.small, {
+          grey: MUTED,
+          rtl: true,
+          align: 'start',
+        });
+        row.lines.forEach((line, index) => {
+          sheet.line(y - index * SMALL_LINE, valueAt, line, SIZE.small, {});
+        });
+        y -= row.lines.length * SMALL_LINE;
+      }
+    },
+  };
 }
 
 /** A sentence at the foot of the page, in both languages, above the band. */
@@ -793,7 +870,11 @@ function invoicePage(
     if (line.discountFils > 0) {
       // The design's own phrasing: the price that was quoted and what came off
       // it, which is the pair a family reading a smaller figure wants to see.
-      const note = discountLine(line.netFils + line.discountFils, line.discountFils);
+      const note = discountLine(
+        line.netFils + line.discountFils,
+        line.discountFils,
+        line.discountBasisPoints,
+      );
       const beneath = y - (englishRows - 1) * LINE - arabicRows * SMALL_LINE;
       sheet.line(beneath - SMALL_LINE, columns.description, note.en, SIZE.small, {
         grey: MUTED,
@@ -819,7 +900,12 @@ function invoicePage(
       label: WORDS.beforeDiscount,
       value: money(document_.netFils + document_.discountFils),
     });
-    totals.push({ label: WORDS.discount, value: money(document_.discountFils) });
+    // "Discount 25%" when every discounted line shares the one share, and the
+    // word alone when they do not (`sharedDiscountBasisPoints`).
+    totals.push({
+      label: discountTotalLabel(document_.discountBasisPoints),
+      value: money(document_.discountFils),
+    });
   }
   if (registered) {
     totals.push({ label: WORDS.net, value: money(document_.netFils) });
@@ -830,7 +916,9 @@ function invoicePage(
   // no VAT invites the reader to look for a rate that is not there (round 20,
   // request 1c).
   totals.push({ label: WORDS.total, value: money(document_.grossFils), bold: true });
-  totalsBox(sheet, totals);
+  // How to pay, beside what is owed, when the practice has recorded an account.
+  // Without one the page is exactly the page it was before the block existed.
+  totalsBox(sheet, totals, document_.bank ? bankBlock(sheet, document_.bank) : null);
 
   // A charge the practice has forgiven, said on the document rather than left
   // to the ledger. The invoice keeps its number and its figures — it is
