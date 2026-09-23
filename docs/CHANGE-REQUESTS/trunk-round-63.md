@@ -57,7 +57,7 @@ test types key by key, the way a person actually does, with
 
 ### The hook
 
-`app/shell/components/useFocusOnOpen.ts` (commit `4d407c6a`). It returns a
+`app/shell/components/useFocusOnOpen.ts` (commit `34cb8e9a`). It returns a
 stable `RefObject`, not a function, and focuses the element it is attached to
 exactly once, in a `useEffect` with an empty dependency array — after the
 first render, and never again while the component stays mounted:
@@ -76,14 +76,14 @@ A `RefObject` is the same object on every render, so React never tears it
 down and reattaches it, and the effect's empty dependency array means it
 runs only on mount — a keystroke's re-render, or a signature stroke's, does
 not run it again. The four sites now write `ref={heading}` instead of the
-inline callback (commits `1faadbb2`, `b0bd3d40`), and each panel still
+inline callback (commits `d453921d`, `babefed6`), and each panel still
 focuses its heading the moment it opens — closing the panel and opening it
 again focuses it afresh, because the hook re-runs on the fresh mount.
 
 ### The guard
 
-`tests/lint/no-inline-focus-ref.test.ts` (commit `6faf6f47`, widened by
-`f2591f0a`) walks every `.tsx` file under `app/` for the shape that caused
+`tests/lint/no-inline-focus-ref.test.ts` (commit `bc9944e4`, widened by
+`c1c117e8`) walks every `.tsx` file under `app/` for the shape that caused
 this — an inline ref callback whose body calls `.focus()` on the node it is
 handed, however that body is written — and fails the build if it reappears.
 A task review caught that the first pattern missed two ordinary spellings of
