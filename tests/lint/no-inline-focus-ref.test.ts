@@ -43,20 +43,36 @@ const CODE_EXTENSION = '.tsx';
 const MIN_VISITED_FILES = 100;
 
 /**
- * The shape: an inline arrow function passed straight to `ref`, whose body —
- * with or without braces — calls `.focus()` on the node it was handed. Matches
- * across the newline a formatted callback wraps onto, so it catches
+ * The shape: an inline arrow function passed straight to `ref`, whose body
+ * calls `.focus()` on the node it was handed — however that body is
+ * written. The parameter may or may not be parenthesised (`(node) =>` or
+ * `node =>`), and the call may sit behind an opening brace, a guard
+ * expression, or nothing at all:
  *
  *   ref={(node) => {
  *     node?.focus();
  *   }}
  *
- * as well as the one-line form. It does not match `ref={heading}` (no
- * function literal) or a ref callback that only stores the node, such as
- * `Tabs.tsx`'s `ref={(el) => { if (el) refs.current.set(...); ... }}`, which
- * never calls `.focus()` at all.
+ *   ref={(node) => node?.focus()}
+ *
+ *   ref={(el) => el && el.focus()}
+ *
+ *   ref={n => n?.focus()}
+ *
+ * all match. Fix round 1 (task review) widened the gap between `=>` and the
+ * `.focus()` call from "an optional single `{`" to a bounded stretch of up
+ * to 80 characters — long enough for a guard expression or an unbraced
+ * block, short enough that the match stays anchored to one callback instead
+ * of running on to an unrelated `.focus()` call much later in the file.
+ *
+ * It does not match `ref={heading}` (no function literal), a ref callback
+ * that only stores the node and never calls `.focus()` at all — such as
+ * `Tabs.tsx`'s `ref={(el) => { if (el) refs.current.set(...); ... }}` — or
+ * `useFocusOnOpen`'s own `useEffect(() => ref.current?.focus(), [])`: that
+ * `.focus()` follows `ref.current`, not a `ref={` JSX attribute, so the
+ * match never starts.
  */
-const PATTERN = /ref=\{\s*\(\s*\w+\s*\)\s*=>\s*\{?\s*\w+\??\.focus\(\)/;
+const PATTERN = /ref=\{\s*\(?\s*\w+\s*\)?\s*=>[\s\S]{0,80}?\w+\??\.focus\(\)/;
 
 function isTestFile(name: string): boolean {
   return /\.test\.tsx?$/.test(name);
@@ -112,6 +128,10 @@ describe('focus on open', () => {
     expect(PATTERN.test('ref={(node) => {\n        node?.focus();\n      }}')).toBe(true);
     // The same bug, written on one line.
     expect(PATTERN.test('ref={(node) => node?.focus()}')).toBe(true);
+    // The same bug behind a guard expression instead of a brace (fix round 1).
+    expect(PATTERN.test('ref={(el) => el && el.focus()}')).toBe(true);
+    // The same bug with an un-parenthesised single parameter (fix round 1).
+    expect(PATTERN.test('ref={n => n?.focus()}')).toBe(true);
     // useFocusOnOpen's own call sites: a stable ref object, not a function.
     expect(PATTERN.test('ref={heading}')).toBe(false);
     // Tabs.tsx: an inline ref callback that only stores the node — it never
@@ -121,5 +141,9 @@ describe('focus on open', () => {
         'ref={(el) => {\n            if (el) refs.current.set(tab.id, el);\n            else refs.current.delete(tab.id);\n          }}',
       ),
     ).toBe(false);
+    // useFocusOnOpen's own implementation: `.focus()` on `ref.current` inside
+    // a useEffect, not on a JSX `ref={` attribute — one line and blocked form.
+    expect(PATTERN.test('useEffect(() => ref.current?.focus(), [])')).toBe(false);
+    expect(PATTERN.test('useEffect(() => {\n    ref.current?.focus();\n  }, [])')).toBe(false);
   });
 });
