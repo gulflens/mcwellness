@@ -1,10 +1,10 @@
 ---
 purpose: erasure_letter
 locale: en
-version: 1.0
+version: 1.1
 status: approved
-written: 2026-09-06
-approved: 2026-09-14
+written: 2026-09-23
+approved: 2026-09-23
 ---
 
 # Confirmation that your record has been erased
@@ -13,8 +13,11 @@ On {{erased_on}} we erased the record you asked us to erase. Your name, your
 date of birth, the contact details we held, the address we visited and the
 directions to it, the notes kept with your goals and the concerns noted
 beside them, the health answers you gave us, and every document and file on
-your record are gone from our systems, and the account that opened the
-client portal has been closed. The record of your sessions has gone with them:
+your record are gone from our systems, and any account that opened your record
+in the client portal has been closed — or, where that account belongs to one of
+the staff of {{practice_legal_name}}, its link to your record has been ended
+and the account itself is untouched. The record of your sessions has gone with
+them:
 the place we checked in and out, what the practitioner wrote afterwards, the
 files from any brain map or questionnaire we recorded, including the recordings
 the equipment's own software produced, and anything else written in words.

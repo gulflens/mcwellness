@@ -71,6 +71,19 @@ their English twins are still 1.0. That asymmetry is the truth: one text was
 corrected and the other was not, and a version belongs to a document rather
 than to a pair.
 
+## The erasure letter is at 1.1
+
+`erasure-letter/en.md` and `ar.md` moved from 1.0 to 1.1 on 23 September 2026
+(trunk round 64), on the operator's instruction, for one clause: since
+migration 968 an erasure closes only a household's own portal account, and
+spares the sign-in of a member of staff who happened to be linked as a contact
+of that household — the link is ended and the account is left alone. Version
+1.0 said "the account that opened the client portal has been closed" for every
+account, which overstated for a colleague's. Version 1.1 says both halves, in
+both languages, and names the practice so a reader knows whose staff is meant.
+A letter already filed under 1.0 stays what it was, and the office screen names
+the version it came from; a letter sent from now on carries 1.1.
+
 ## One signature can cover several of these
 
 Since 10 September 2026 a household may sign every purpose it needs — participation and brain-map/neurofeedback information always, home visits because every client of this practice trains at home, a guardian's own consent when the client is a child — in one sitting rather than one scroll and one signature per purpose (`POST /api/clients/:id/consents/bundle`, `docs/SPEC/client-record.md` section 7). Nothing here changes for that: the household still reads each purpose's own full text before signing, each consent still names the exact wording document it was read against, and no version of any file above moved. What changes is only the evidence — one signature image, filed once and shared by every row it covers, its own foot naming the purposes — never the words a person reads and agrees to.
