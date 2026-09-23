@@ -18,7 +18,7 @@
 --
 -- **Why two files.** A new enum value cannot be used in the transaction that
 -- adds it, and the runner applies each file in its own. This file adds the
--- two values, the six columns, the guard and the function — function bodies
+-- two values, the six columns, the void's marker, the guard and the function — function bodies
 -- are text until they are first called, so naming 'voided' inside them is
 -- safe here. Everything that must NAME the value in a constraint (the two
 -- exclusion constraints, `session_closed_is_settled`, the two "void only when
@@ -28,7 +28,8 @@
 -- 200-299) and `session` (session-capture, 300-399) and writes `entitlement`
 -- (billing, 400-449), so it sorts after all three, as 966 did.
 --
--- Needs: 020 (app_user, user_role), 200 (appointment, appointment_status),
+-- Needs: 020 (app_user, user_role), 098 (app.erasure_active, the marker's model),
+--        200 (appointment, appointment_status),
 --        300 (session, session_status), 302 (the close columns),
 --        403 (entitlement and its waiver columns), 404 (billing_exception),
 --        500 + 951 (assessment.session_id), 960 (the version of
@@ -74,11 +75,36 @@ comment on column public.appointment.void_reason is
   'A voided appointment no longer holds its window (970).';
 
 ------------------------------------------------------------------------------
--- 2. The close guard, restated as a diff of 960.
+-- 2. The void's marker, in the shape of 098's app.erasure_active.
+--
+--    The API role holds a table-wide update grant on `session` (300), so a
+--    guard that admitted the void transition on the row's shape alone would
+--    admit it from any code path that writes the row: no role read from
+--    user_role, no in-use check, and a consumed credit left standing against a
+--    visit that no longer counts. So the transition is admitted only while
+--    app.void_recorded_session has named this very session in this very
+--    transaction. The function writes the row just before its two updates and
+--    removes it just after them, so the marker never outlives them even inside
+--    a longer transaction. No grant to the API role or to public, and row
+--    security on with no policies: nothing but a definer function reads or
+--    writes it. A bookkeeping marker, not a business row, exempt from the
+--    standard columns on 098's footing.
+------------------------------------------------------------------------------
+create table app.void_active (
+  txid       bigint not null,
+  session_id uuid not null,
+  primary key (txid, session_id)
+);
+revoke all on app.void_active from public;
+alter table app.void_active enable row level security;   -- no policies on purpose
+
+------------------------------------------------------------------------------
+-- 3. The close guard, restated as a diff of 960.
 --
 --    One transition is admitted on a closed row, and only one: `completed` to
 --    `voided`, on a `records` row, with the three void columns filled and
---    every other column standing still. Anything else on a closed row is
+--    every other column standing still, and only inside the function (the
+--    marker above). Anything else on a closed row is
 --    refused as it always was — and a voided row is closed and not
 --    `completed`, so every change to one is refused too.
 --
@@ -106,9 +132,12 @@ begin
     return null;
   end if;
   -- The one change a closed visit admits (969): withdrawn from the record, a
-  -- visit logged from the records by mistake. Compared as text so this body
-  -- never has to cast a literal to the enum value 969 adds.
-  if old.status::text = 'completed'
+  -- visit logged from the records by mistake, by app.void_recorded_session
+  -- and by nothing else. Compared as text so this body never has to cast a
+  -- literal to the enum value 969 adds.
+  if exists (select 1 from app.void_active v
+              where v.txid = txid_current() and v.session_id = old.id)
+     and old.status::text = 'completed'
      and old.recorded_from = 'records'
      and new.status::text = 'voided'
      and new.voided_at is not null
@@ -125,7 +154,7 @@ end
 $$;
 
 ------------------------------------------------------------------------------
--- 3. The door.
+-- 4. The door.
 --
 --    Security definer, because no role may otherwise move a closed session or
 --    touch a consumed credit; so the rules are the boundary and are written
@@ -198,6 +227,8 @@ begin
     raise exception 'session_in_use' using errcode = 'restrict_violation';
   end if;
 
+  -- The marker opens the guard for this one session, for these two writes.
+  insert into app.void_active (txid, session_id) values (txid_current(), p_session_id);
   update public.session
      set status = 'voided', voided_at = now(), voided_by = v_actor, void_reason = v_reason
    where id = p_session_id and tenant_id = v_tenant;
@@ -205,6 +236,7 @@ begin
   update public.appointment
      set status = 'voided', voided_at = now(), voided_by = v_actor, void_reason = v_reason
    where id = v_session.appointment_id and tenant_id = v_tenant;
+  delete from app.void_active where txid = txid_current() and session_id = p_session_id;
 
   select * into v_credit
     from public.entitlement e
@@ -245,6 +277,7 @@ grant execute on function app.void_recorded_session(uuid, text) to app_role;
 --   drop function if exists app.void_recorded_session(uuid, text);
 --   -- re-create app.session_refuse_update_after_close as
 --   -- 960_retire_the_setup_photograph.sql defines it.
+--   drop table if exists app.void_active;
 --   drop index if exists public.appointment_voided_by_idx;
 --   drop index if exists public.session_voided_by_idx;
 --   alter table public.appointment

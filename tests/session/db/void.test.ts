@@ -11,7 +11,7 @@ import {
   startHarness,
   type Harness,
 } from '../../billing/db/support';
-import { seedUser } from '../../db/helpers';
+import { asApiRole, seedUser } from '../../db/helpers';
 
 /**
  * Voiding a visit logged from the records (migrations 969 and 970; trunk round
@@ -465,6 +465,64 @@ describe('voiding a visit logged from the records', () => {
         [standing.appointmentId, userId(SEEDED.owner)],
       ),
     ).toBe('23514');
+  });
+
+  it('refuses the void transition written by the API role outside the function', async () => {
+    const target = await logVisit(WITH_PACKAGE, { on: '2026-03-17' });
+    // The very update the function makes, by a caller the function never saw:
+    // no role read from user_role, no in-use check, no credit given back.
+    let seen: string | undefined;
+    await h.owner.query('begin');
+    try {
+      await asApiRole(h.owner, tenantId, async () => {
+        await h.owner.query(
+          "select set_config('app.actor_id', $1, true), set_config('app.request_id', $2, true)",
+          [userId(SEEDED.owner), REQUEST_ID],
+        );
+        try {
+          await h.owner.query(
+            "update session set status = 'voided', voided_at = now(), voided_by = $2, " +
+              "void_reason = 'by hand' where id = $1",
+            [target.sessionId, userId(SEEDED.owner)],
+          );
+        } catch (error) {
+          seen = (error as { code?: string }).code;
+        }
+      });
+    } finally {
+      await h.owner.query('rollback');
+    }
+    expect(seen).toBe('23001');
+    const still = await h.owner.query<{ status: string }>(
+      'select status::text from session where id = $1',
+      [target.sessionId],
+    );
+    expect(still.rows[0]?.status).toBe('completed');
+  });
+
+  it('leaves no void marker behind once the function returns', async () => {
+    const target = await logVisit(WITH_PACKAGE, { on: '2026-03-18' });
+    await h.owner.query('begin');
+    try {
+      await h.owner.query('set local role app_role');
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.actor_roles', 'owner', true), set_config('app.request_id', $3, true)",
+        [tenantId, userId(SEEDED.owner), REQUEST_ID],
+      );
+      const voided = await h.owner.query<{ result: { sessionId: string } }>(
+        'select app.void_recorded_session($1, $2) as result',
+        [target.sessionId, VOID_REASON],
+      );
+      expect(voided.rows[0]?.result.sessionId).toBe(target.sessionId);
+      await h.owner.query('reset role');
+      const marker = await h.owner.query<{ n: string }>(
+        'select count(*)::text as n from app.void_active where txid = txid_current()',
+      );
+      expect(marker.rows[0]?.n).toBe('0');
+    } finally {
+      await h.owner.query('rollback');
+    }
   });
 
   it('leaves the audit chain intact', async () => {
