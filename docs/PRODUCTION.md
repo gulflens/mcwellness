@@ -3075,3 +3075,103 @@ sent, since no colleague has ever been linked as a contact on production.
 The next confirmation letter the practice sends after an erasure carries
 wording 1.1 in whichever language the household reads, and the office's
 erasure screen names that version beside the filed letter.
+
+## What was done on 2026-09-24: the thirty-seventh live pass — the owner's five requests of 23 September
+
+Production runs `main` `7d64bf9a`, build `01a0cff2`. **Four migrations, no policy
+file**: `main` holds 115 migration files and both databases stand at 115.
+
+**Why it began.** Four rounds from the owner's message of 23 September
+(`docs/CHANGE-REQUESTS/trunk-round-60.md` to `trunk-round-63.md`, pull requests
+218, 217, 216 and 215): a visit logged from the records can be voided or
+corrected, never deleted (migrations 969, 970, 971); the practice's bank account
+on the invoice and the discount's percentage beside the amount (migration 924);
+a package withdrawn, never deleted; and the name typed beneath a signature keeps
+every letter. The fifth request, full access for the owner's family, needed no
+code: the second owner was written on the thirty-fourth pass.
+
+**The word.** "continue with What waits for your word", at 00:04 +04 on
+24 September (20:04 UTC on the 23rd), to a report that had listed the merge,
+the pass and the afterwards items under exactly that heading; read back to him
+as the word for all three before anything moved. The four pull requests were
+merged in the order 215, 216, 217, 218, each only once both checks read
+`pass` and GitHub read `MERGEABLE CLEAN`; 218 conflicted with 217 on one file
+(`docs/SPEC/OWNERSHIP.md`, both rounds adding a widening note at the same
+place), was merged with main in its own worktree keeping both notes, gated
+again (3,177 tests) and merged on the second green. Main moved
+`b733d039` → `2056fbb3` → `6370324f` → `a6303ea8` → `7d64bf9a`.
+
+**Before-state, 20:15 UTC.** Entry `index-CNBfWus0.js`, shell stylesheet
+`index-qCiLscI6.css`, chunks `BillingPage-3Z6u55js.js`,
+`ClientsPage-7E9X32gF.js`, `PracticePage-DALM7_nT.js`,
+`SchedulePage-CMZKlM10.js`; none of the round's markers in any of them and the
+old inline-focus shape in the clients chunk three times; health 200 in 0.30 s,
+deep 0.18 s. Both databases at 111. Pre-pass reads on production: one
+`records` session, no `supersedes_id` set (971's composite key would have
+refused the pass on one), no bank column, no `voided` value. No other session
+on the laptop at the hold check.
+
+**The databases first, staging then production, each file by hand with its
+ledger row in the same call.** 924 (`ef9cb3ab…c3c2`), then 969
+(`92aeaed4…b34f`), 970 (`85e4f37c…3c9e`) and 971 (`a3213280…5986`), each in
+its own call because a value added to an enum cannot be named in the
+transaction that adds it. Staging 20:17–20:21 UTC, production 20:22–20:24.
+Both ledgers 111 → 115. No policy file: `git diff b733d039 7d64bf9a --
+db/policies` is empty. The fingerprint — the columns, constraints, triggers and
+indexes of `tenant`, `session`, `appointment` and `entitlement`; the four
+functions `app.void_recorded_session`, `app.session_refuse_update_after_close`,
+`app.refuse_void_without_marker` and `app.erase_client` with their grants; the
+two enums; `app.void_active`'s grants (none), row security and policies
+(none); and the ledger — reads identically on a freshly migrated local
+database, staging and production: columns `b0ccd3e8` 109 · constraints
+`4f1174d6` 88 · triggers `3fff0eb9` 27 · functions `51559ef7` 4 · enums
+`2d2e959b` 17 · marker `dca98d3b` 1 · indexes `7f25f100` 35 · ledger
+`0d0d3a1c` 115. `app.verify_audit_chain()` null on production afterwards.
+Health stayed 200 on the old code with the new schema (every change is
+additive).
+
+**The pass.** Archive `mcwellness-7d64bf9a.tar.gz` from `origin/main` after the
+fourth merge, 6,905,456 bytes, with its `mcwellness/` root folder and all
+four migration files inside. Stored build settings read back and sent
+unchanged (Node 24, `hono`, root `mcwellness`, output `.`, `build:production`,
+`app/api/start.mjs`, npm). TUS create 201, PATCH 204 with `upload-offset`
+equal to the size, the keys read by `curl` from a file of mode 0600 deleted in
+the same command. Build asked 20:26:17 UTC, served name changed 20:27:57,
+read `completed` 20:28:00.
+
+**Proved to be this tree.** Entry `index-CNBfWus0.js` → `index-BvnLOXh5.js`
+(477,444 bytes — the entry's size is noise, as every pass since the
+twenty-first has found). The shell stylesheet did not move
+(`index-qCiLscI6.css`: no shell CSS in these rounds) and equals the local
+build's; the two screen stylesheets that did move, `BillingPage-BosNwJcF.css`
+and `ClientsPage-x3R6RCMI.css`, are served under exactly the names a local
+`pnpm build` of `7d64bf9a` wrote, which is the proof the host built this tree.
+Markers, each absent before and present after: "Correct a past session" and
+"Voided" in `SchedulePage-Brh3TV7v.js`; "Bank account" in
+`PracticePage-DxqIJMVf.js`; "Reinstate" and "Reinstated from the packages
+list" in `BillingPage-DFERtbaL.js`; and in `ClientsPage-BjJLSiCr.js` the
+minified old shape `tabIndex:-1,ref:…focus()` now matches nothing (three
+before). All five old names 404, and a nonsense name 404s too. Runtime log:
+fresh start-up blocks at 20:27:56 and 20:28:02 UTC, each ending "Serving the
+built app from dist/" and "API listening", `started_at` 20:27:56 against
+`last_deployed_at` 20:28:00, no error line. **No restart — twentieth
+consecutive.** After: health 200 in 0.15 s, deep 200 in 0.26 s.
+
+**Not checked, and why.** No visit was voided, no package withdrawn and no
+bank account recorded on production: each is an act with the owner's name on
+it, and the schedule holds her one real logged visit. Every path was proved
+against the worktree databases by the rounds' own tests (3,177 unit and screen
+tests, 1,606 database tests at the last gate) and by CI on every merged
+commit. The invoice's bank block renders only once the account is recorded,
+which is the owner's.
+
+**For the owner.** In Settings › Practice, record the practice's bank account
+once (account holder, IBAN, BIC, bank address); the next invoice rendered
+carries "Pay by bank transfer" and, on a discounted line, the percentage.
+INV-000001 gains both only if its PDF has not yet been filed; a filed PDF never
+changes. On the schedule, a visit logged from the records now has "Correct"
+and "Void" beside it. On Billing › Packages, "Withdraw" folds a package away
+and "Reinstate" brings it back; households who bought one keep their sessions.
+The name typed beneath a signature now keeps every letter. An installed window
+still on the old build should be reloaded once (the rail's next click does it)
+before voiding anything.
