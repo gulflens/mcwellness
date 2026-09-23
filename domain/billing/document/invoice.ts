@@ -33,7 +33,7 @@
 
 import { chargesVat, type InvoiceDocument, type InvoiceLine } from './model';
 import type { DocumentImage, FontSet, Page } from '../../shared/document';
-import { INK, LEFT, MUTED, PILL, RIGHT, VIOLET } from './sheet';
+import { INK, LEFT, MUTED, PILL, RIGHT, VIOLET, WHITE } from './sheet';
 import {
   BAR_WIDTH,
   DocumentPage,
@@ -292,14 +292,13 @@ class InvoicePage extends DocumentPage {
     this.sheet.bandFill(LEFT, top - HEADER_HEIGHT / 2, WIDTH, HEADER_HEIGHT / 2);
     const english = top - 16;
     const arabic = top - 30;
-    const white = [1, 1, 1] as const;
     this.sheet.line(english, LEFT + PAD, WORDS.description.en, TYPE.heading, {
       bold: true,
-      rgb: white,
+      rgb: WHITE,
     });
     this.sheet.line(arabic, LEFT + PAD, WORDS.description.ar, TYPE.headingAr, {
       bold: true,
-      rgb: white,
+      rgb: WHITE,
       rtl: true,
       align: 'start',
     });
@@ -308,12 +307,12 @@ class InvoicePage extends DocumentPage {
       const centre = x + column.width / 2;
       this.sheet.line(english, centre, column.label.en, TYPE.heading, {
         bold: true,
-        rgb: white,
+        rgb: WHITE,
         align: 'centre',
       });
       this.sheet.line(arabic, centre, column.label.ar, TYPE.headingAr, {
         bold: true,
-        rgb: white,
+        rgb: WHITE,
         align: 'centre',
         rtl: true,
       });

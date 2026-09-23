@@ -273,8 +273,10 @@ describe('the invoice in the operator’s design, block by block', () => {
     expect(lines).toContain('Bank address');
     expect(lines).toContain('1 Example Street, Abu Dhabi');
     // No Arabic beside the account's rows, and none of the old page's labels.
-    for (const old of [WORDS.accountHolder, WORDS.iban, WORDS.bic, WORDS.bankAddress]) {
-      expect(page, old.en).not.toContain(asCopied(old.ar));
+    // The Arabic the round 61 card set beside its account holder and its BIC,
+    // the two labels that card had and this one does not.
+    for (const arabic of [WORDS.iban.ar, WORDS.bankAddress.ar, 'اسم صاحب الحساب', 'رمز السويفت']) {
+      expect(page, arabic).not.toContain(asCopied(arabic));
     }
     expect(page).not.toContain('Account holder');
     expect(page).not.toContain('Pay by bank transfer');

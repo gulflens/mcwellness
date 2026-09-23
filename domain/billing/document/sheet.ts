@@ -3,9 +3,10 @@
  * practice's violet and its three tints, and `Sheet` — the cursor that lays a
  * document out top-down across as many pages as it needs.
  *
- * Split out of `render.ts` in round 65 so the two pages drawn on it — the
- * invoice in the operator's design of 24 September 2026 (`invoice.ts`) and the
- * receipt (`render.ts`) — can each import it without importing the other.
+ * Split out of `render.ts` in round 65 so the pages drawn on it — the invoice
+ * and the receipt in the operator's design of 24 September 2026 (`invoice.ts`,
+ * `receipt.ts`, and the blocks they share in `page.ts`) — can each import it
+ * without importing the other.
  * Pure, like everything beside it: laying out a page is arithmetic.
  */
 
@@ -38,12 +39,18 @@ export const RULE = 0.78;
 
 /**
  * The practice's own violet, `#380473`, sampled from the darkest large area of
- * its mark. The one hue on either document: the invoice in the operator's
- * design of 24 September 2026 fills its bands and accents with it and grounds
- * its cards in the three tints below; the receipt's older page sets its title
- * words, column headings and reference in it.
+ * its mark. The one hue on either document: both pages in the operator's
+ * design of 24 September 2026 fill their bands and accents with it and ground
+ * their cards in the three tints below.
  */
 export const VIOLET = [0x38 / 255, 0x04 / 255, 0x73 / 255] as const;
+
+/**
+ * Type set on violet — the table's headings and the violet block's caption
+ * and figure — and nowhere else: white is his colour only on his violet
+ * (`tests/billing/palette.test.ts` holds every page to that).
+ */
+export const WHITE = [1, 1, 1] as const;
 
 /**
  * `VIOLET` mixed toward white by `k`: `1 - (1 - v) * k` per channel, so
@@ -116,9 +123,6 @@ export class Sheet {
    * before anything is drawn, asks for more room above it (`setFloor`).
    */
   private floorAt = BOTTOM;
-  /** Redrawn at the top of every page after the first: column headings, mostly. */
-  private continuation: (() => void) | null = null;
-
   private readonly fonts: FontSet;
   private readonly running: { practice: string; reference: string };
 
@@ -183,11 +187,6 @@ export class Sheet {
     this.newPage();
   }
 
-  /** What to redraw at the top of a page taken mid-way through something. */
-  setContinuation(draw: (() => void) | null): void {
-    this.continuation = draw;
-  }
-
   private newPage(): void {
     this.pages.push([]);
     this.y = TOP;
@@ -198,7 +197,6 @@ export class Sheet {
     this.down(SMALL_LINE);
     this.rule();
     this.down(LINE);
-    this.continuation?.();
   }
 
   /**

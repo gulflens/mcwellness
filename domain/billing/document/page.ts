@@ -41,6 +41,7 @@ import {
   SMALL_LINE,
   Sheet,
   VIOLET,
+  WHITE,
   type TextOptions,
 } from './sheet';
 import { WORDMARK, WORDS, type Phrase } from './strings';
@@ -576,15 +577,14 @@ export abstract class DocumentPage {
         const bandBottom = top - cardHeight + inset;
         const bandWidth = width - inset * 2;
         this.sheet.bandFill(x + inset, bandTop, bandWidth, bandTop - bandBottom, RADIUS);
-        const white = [1, 1, 1] as const;
         const captionAt = bandTop - 14;
         this.sheet.line(captionAt, x + inset + 10, block.en, TYPE.caption, {
           bold: true,
-          rgb: white,
+          rgb: WHITE,
         });
         this.sheet.line(captionAt, x + width - inset - 10, block.ar, TYPE.caption, {
           bold: true,
-          rgb: white,
+          rgb: WHITE,
           align: 'end',
           rtl: true,
         });
@@ -595,7 +595,7 @@ export abstract class DocumentPage {
         const middle = (captionAt - 6 + bandBottom) / 2;
         this.sheet.line(middle - size * 0.35, x + width / 2, figure, size, {
           bold: true,
-          rgb: white,
+          rgb: WHITE,
           align: 'centre',
         });
       },
