@@ -17,7 +17,7 @@
 - Arabic exactly where the spec places it; the payment details rows carry English labels only.
 - Capitals on "INVOICE", "TAX INVOICE", "RECEIPT", "BILLED TO", "RECEIVED FROM", "PAYMENT METHOD", "TOTAL DUE", "TOTAL PAID" — a document's, not the console's.
 - `pdf.test.ts`'s existing golden content stream must not change (a page with no `rect` op emits the same bytes as before).
-- `tests/billing/document.test.ts`'s three goldens are re-pinned ONCE, after the page has been rendered to `~/Documents/McWellness invoice demo 2026-09-24/` and compared with the operator's PDF by eye, and the commit says so.
+- `tests/billing/document.test.ts`'s three goldens are re-pinned ONCE, after the page has been rendered to the operator's Documents folder and compared with the operator's PDF by eye, and the commit says so.
 - No real bank detail or name in any file or test: `AE36 0000 0000 0000 0000 001`, `TESTAEXX`, `Example Practice L.L.C-FZ`, seed names only.
 - `pnpm -s format` before `pnpm verify`; the DB tests (`pnpm test:db tests/billing/db/documents.test.ts`) still pass: they file and recover documents through the route.
 
@@ -73,7 +73,7 @@ Emitted as `q <fill colour rg / g> <stroke RG / G> <w> <path> <B|f|S> Q` — the
 - Test: `tests/billing/document.test.ts` (text: every caption and word of the spec present; "List AED … · less …" absent; the pill text "25%" once; "Discount 25%" in the summary; "- AED 1,987.50"; TOTAL DUE; the payment card's rows with the grouped IBAN; the strip's reference; the tax sentence; the registered variant's TAX INVOICE, VAT number, VAT column, Net and VAT rows; the no-bank variant; the sum-discount variant; the waived variant; determinism; the three goldens re-pinned once, last, with the commit message saying the page was compared with the operator's PDF)
 - Test: `tests/billing/geometry.test.ts` (rewritten: for 1–40 lines × registered/unregistered × discount/none × bank/none × waived/none, no box crosses a margin, no two boxes overlap, the header band sits at the top of every page the table touches, the two cards share a page, the tax card follows them, the footer is pinned; the long-address and long-holder cases; the IBAN of 34 characters wraps inside the card)
 
-- [ ] **Step 1: Write the text tests red** (the new words), then build the page block by block, rendering to `~/Documents/McWellness invoice demo 2026-09-24/invoice-round-65.pdf` with the demo script's data (a copy of `/private/tmp/claude-501/-Volumes-Storage-McWellness/21c23722-02b9-453b-9b75-396eadded0b3/scratchpad/render-demo.ts` adjusted to the new model — the bank values there are the practice's real ones and stay OUTSIDE the repo) and reading it back with the Read tool against the spec until it matches.
+- [ ] **Step 1: Write the text tests red** (the new words), then build the page block by block, rendering to the operator's Documents folder with the demo script's data (a demo render script kept outside the repository, because it carries the practice's real account) and reading it back with the Read tool against the spec until it matches.
 - [ ] **Step 2: Geometry tests red, then green.**
 - [ ] **Step 3: Re-pin the goldens** as the last change, in their own commit.
 - [ ] **Step 4: Commit(s)** — `feat(billing): the invoice in the operator's design of 24 September` and `test(billing): the goldens of the new page`.

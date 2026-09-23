@@ -66,7 +66,8 @@ over the household and its record; "PAYMENT METHOD" over the method the
 money came by — Cash, Bank transfer or Payment link — in violet; no table;
 "Payment received" on the left with Method, Reference when there is one and
 "Settles invoice" when there is one, English labels only; "Receipt summary"
-on the right with one Total row over the violet "TOTAL PAID" block; and a
+on the right with the violet "TOTAL PAID" block alone — a receipt has one
+figure, printed once; and a
 "Note" card in the tax card's shape carrying the receipt's own sentence, that
 it is a receipt for money received and not a tax invoice. No bank details
 anywhere on it and no corporate-tax number in its supplier block, as before.
@@ -106,7 +107,9 @@ goldens moved twice in this round — once when the new page landed
 as the last commit of its task and each time after the render had been read
 against the operator's PDF. The receipt's moved when its page landed
 (`2295ba46`) and once more when the two Arabic spellings of "Bank transfer"
-on one receipt were made one (`93243c6f`), each time the same way. Between those commits every refactor of the shared blocks was proven by
+on one receipt were made one (`93243c6f`), and a third time in the final
+reviews' fix wave, when its summary's Total row went and its fixture's record
+number became MW-000099 (`6d99a1f8`), each time the same way. Between those commits every refactor of the shared blocks was proven by
 the goldens staying put: lifting the blocks both pages share out of the
 invoice page (`7ec4e3d0`) changed no invoice byte. A third invoice golden, with the account and a discount, was pinned at the end of the round so the payment card's bytes are held in the repository and not only by the demo file outside it.
 
@@ -118,6 +121,13 @@ hash — the rule the mark and the bank account already live by since round
 page. Nothing about what a document claims changed: the title word, the VAT
 row, the VAT column and the Net and VAT rows still appear only under a
 registration, and the tax card still says which of the two the document is.
+
+A discounted line prints its percentage in the pill and the amount once, in
+the summary; a registered invoice carries the VAT amount per line and the
+rate in the summary when every line shares it. That is enough for the
+simplified tax invoice the practice issues to households, and it is the
+thing to revisit if the practice ever issues full tax invoices to registered
+buyers.
 
 ### The Arabic
 
@@ -151,9 +161,12 @@ reason round 61 gave.
   covers it.
 - The masthead, supplier and billed-to blocks do not call `room()`; harmless
   because they always open page one, but a departure from the convention.
-- `pdf.ts`'s header still says the writer draws "no images"; it has since
-  round 20's logo. No test drives `rect` with a negative radius or a zero
-  width.
+- No test drives `rect` with a negative radius or a zero width.
+- `tests/reports/document.test.ts`, the reports stream's, still carries the
+  record number `MW-000004` in a fixture — the number production's real
+  client held before 19 September, beside a synthetic name. This round
+  changed billing's own fixture to `MW-000099`; the reports stream's is its
+  own to change.
 - Two commits in the middle of the receipt's task (`a5f32f92`, `77ebd312`)
   are red on the receipt's golden by design — it is re-pinned last, after
   the render was read — and the first of them is red on eslint for the old
@@ -162,10 +175,10 @@ reason round 61 gave.
 
 ### The tests
 
-- `domain/shared/document/pdf.test.ts` — 38: the `rect` op square and
+- `domain/shared/document/pdf.test.ts` — 39: the `rect` op square and
   rounded (eight Bézier segments closed before the paint operator), filled,
-  stroked and both, a text op after a rect still setting its own fill, and
-  the greyscale golden of 8 September unchanged byte for byte.
+  stroked and both, a text op after a rect still setting its own fill, a
+  number that is not finite written as nought, and the greyscale golden of 8 September unchanged byte for byte.
 - `domain/billing/document/colours.test.ts` — 9: the three tints as
   arithmetic on `VIOLET`, and `card`, `bandFill`, `outline` and `hairline`
   as the ops they push, with a font that has nothing in it.
@@ -177,10 +190,10 @@ reason round 61 gave.
   VAT column, Net and VAT rows; the no-bank, sum-discount and waived
   variants; the receipt's eighteen — "RECEIPT", its number card, "RECEIVED
   FROM", each method's name, the Payment received rows present and absent
-  with their facts, "TOTAL PAID", the Note's sentence, and no bank, tax or
+  with their facts, "TOTAL PAID" and no Total row above it, the Note's sentence, and no bank, tax or
   invoice word anywhere on it, registered or not; determinism as byte
   equality; the four goldens — two invoices without an account, a third with the account and a discount, and the receipt.
-- `tests/billing/geometry.test.ts` — 42: for one to forty lines, both
+- `tests/billing/geometry.test.ts` — 49: for one to forty lines, both
   registrations, with and without a discount, a bank account and a waiver
   (960 layouts), no block crosses a margin or another block, the violet
   header sits at the top of every page the table touches, the two cards
@@ -189,9 +202,14 @@ reason round 61 gave.
   wrapping inside the payment card; the 34-character IBAN wrapping at a
   group boundary; and the receipt across three methods, with and without a
   settled invoice and a reference, both registrations and the long names —
-  one page, the same assertions.
+  one page, the same assertions; the six inputs the final review tried (a
+  400-character description, an Arabic-only one, a quantity of 100, a
+  120-character name with no spaces, a sum discount in the millions, a line
+  of nothing), each also rendered twice to the same bytes; and a long legal
+  name cut to fit a later sheet's running header.
 - `tests/billing/palette.test.ts` — 2: every colour on every op of both
-  documents across a matrix is one of the five and the three greys, and
+  documents across a matrix — a waived invoice and one with a date of supply
+  among them — is one of the five and the three greys, and
   every white line of type lies inside a violet rectangle on its page.
 - `tests/billing/db/documents.test.ts` — 22 and
   `tests/billing/db/supplier_contact.test.ts` — 6, run with `pnpm test:db`:
@@ -201,7 +219,7 @@ reason round 61 gave.
 
 `pnpm -s format`, `pnpm verify` (prettier, eslint, `tsc --noEmit`, the
 secrets scan over 1,638 tracked files, the migration audit over 116 files
-against `origin/main`, and `vitest run`: 266 files, 3,210 tests) and
+against `origin/main`, and `vitest run`: 266 files, 3,218 tests) and
 `pnpm test:db` for the two billing database files (2 files, 28 tests) green
 on the branch's head, no skips.
 
@@ -215,7 +233,12 @@ were widened (`docs/SPEC/OWNERSHIP.md`): under `domain/billing/document/`,
 and `GEOMETRY`), `strings.ts`, `index.ts` and `colours.test.ts`;
 `tests/billing/document.test.ts`, `geometry.test.ts` and `palette.test.ts`
 (new); two strings in `tests/billing/db/documents.test.ts` and
-`supplier_contact.test.ts`; and `docs/SPEC/billing.md` §5.6, replaced. The
+`supplier_contact.test.ts`; and `docs/SPEC/billing.md` §5.6, replaced. Five
+comment-only edits ride with it, each renaming the old 'Pay by bank transfer'
+block to the 'Payment details' card in a docstring:
+`app/admin/settings/PracticeDrawer.tsx` and `PracticePage.tsx`,
+`app/api/practice/schema.ts`, `domain/shared/iban.ts` and
+`tests/db/practice.test.ts` — all trunk paths under round 61's note. The
 trunk's own half is `domain/shared/document/pdf.ts` with its test, the spec
 and plan under `docs/superpowers/`, and the documents. No migration, no
 policy file. Nothing in those paths is the trunk's beyond this round.
@@ -236,12 +259,19 @@ not served to a browser at all. The proof is two other things: the runtime
 log after the restart showing the new build's start, and an invoice rendered
 from the live site after the pass actually carrying the violet header band,
 the "Payment details" card and "TOTAL DUE" — read off the file, the way the
-goldens are read in the tests, not off a claim about the code. The one real
-invoice on production, `INV-000001`, is already filed and keeps its 8
-September page; every document rendered from now on is the new one.
+goldens are read in the tests, not off a claim about the code. Production
+holds two invoices. `INV-000001` is filed and keeps the page it was filed
+with, the 8 September design; nothing re-renders a filed document.
+`INV-000002` has not been filed: the first time it is opened it files with
+whatever page the server renders that day — opened before the pass it keeps
+round 61's page for good, opened after it carries this one. Every document
+rendered after the pass is the new page.
 
 **For the operator.** A continuation sheet — an invoice with more lines than
 one page holds — carries a small running header, the practice's name and the
 reference, so a loose second sheet says what it belongs to; his page is one
 sheet and could not show this, and it is the one thing on the page his
 design does not draw. It is a line to remove if he would rather not have it.
+And a long invoice takes one sheet more than before — forty lines take five
+sheets where the old page took four — because his rows are taller; the spec
+sets no page budget and none was taken.

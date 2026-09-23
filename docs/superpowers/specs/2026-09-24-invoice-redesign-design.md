@@ -30,7 +30,7 @@ render the round produces is compared with it by eye before the review.
 A4, the margins the writer has. Type: the platform's own three faces
 (regular, bold, Arabic); his mock's typeface is not adopted. Colours, all
 derived in code from the one brand violet `#380473` (`VIOLET` in
-`render.ts`) so there is one source: **violet** for fills and accents;
+`sheet.ts`) so there is one source: **violet** for fills and accents;
 **white** for text on violet; **card** = the violet mixed six per cent over
 white (`#f3f0f7`) for card grounds; **edge** = fifteen per cent (`#e1d9ea`)
 for card borders; **pill** = twelve per cent (`#e7e1ee`) for the discount
@@ -100,8 +100,8 @@ second hue, and no page number on any page (his page has none).
 ## The receipt
 
 The same dress, because a receipt that looked like last week's design beside
-this invoice would look like a different practice's: "RECEIPT" / "إيصال";
-the number card reads "Receipt no." / "رقم الإيصال" and "Date received" /
+this invoice would look like a different practice's: "RECEIPT" /
+"إيصال استلام"; the number card reads "Receipt no." / "رقم الإيصال" and "Date received" /
 "تاريخ الاستلام"; the left card is "RECEIVED FROM" / "مستلم من"; the payment
 method names the method the money came by (Cash, Bank transfer, Payment
 link); no table; the left lower card is "Payment received" / "الدفعة
