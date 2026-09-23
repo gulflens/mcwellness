@@ -155,6 +155,49 @@ given against list price" as a figure is piece thirteen's
 (`docs/SPEC/accounting.md` section 14), reading the invoice lines this section
 records; no contra-revenue account is opened for it now.
 
+### 2.5 Withdrawing a package (round 62, the owner's ask of 23 September 2026)
+
+The owner asked to "delete a particular package after we're finished with it"
+and, in the same breath, to "limit the number of different packages we offer" —
+a catalogue that only ever grows makes both harder. A package is never
+deleted. A purchase names it (`client_package.package_id`), an invoice line
+prices it, and every `package_price` row it has ever carried is append-only
+(section 2.3); financial records keep five years regardless of anything a
+client asks for (CLAUDE.md rule 8). Deleting a bundle would either leave those
+rows pointing at nothing or have to be refused the moment the first household
+bought it, and the practice cannot know which bundles that is true of without
+trying.
+
+**A package is withdrawn by its `status`**, the same column and the same
+`active` / `inactive` pair `readPackages` already uses to decide whether a
+bundle is `sellable` — `PATCH /api/billing/packages/:id` with `{ "status":
+"inactive" }` and an `X-Reason` header is the whole of it, mirroring kit's own
+PATCH. Nothing else about the bundle moves: its code, its name, its
+components and its entire price history are exactly as they were, and every
+household who already bought it keeps every session the purchase carries —
+withdrawing reaches no `client_package`, no `entitlement`, no invoice and no
+balance. A withdrawn package simply cannot be sold: `POST
+/api/billing/package-purchases` answers `422 not_sellable` for it, the same
+refusal an unpriced or half-priced bundle already gets, because `sellable`
+folds `status = 'active'` in with the pricing checks it already made.
+
+**Reinstating is the same act the other way** — the same route, `{ "status":
+"active" }`, its own reason — and a reinstated bundle is sellable again the
+moment its status flips, with nothing to redo: its prices were never touched.
+
+**Who may do it.** Owner, admin or finance — `mayWriteCatalogue`, the same
+gate the rest of the catalogue's writes already use — and a lead practitioner,
+who reads the catalogue but never amends it, is refused by name. The reason
+is not decoration: the request-context middleware lands the `X-Reason` header
+on the audit row the update writes, so withdrawing and reinstating each leave
+one line on the trail saying why.
+
+**The list.** Packages › the practice's screen folds a withdrawn bundle out of
+the table it sells from into a collapsed "Withdrawn (n)" group below it —
+name, contents, and a Reinstate action — rather than hiding it outright, so
+the catalogue a household is shown stays short without the practice losing
+track of what it used to sell.
+
 ---
 
 ## 3. Payment methods
