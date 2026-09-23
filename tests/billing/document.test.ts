@@ -3,14 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
   discountLine,
+  discountTotalLabel,
   extractAll,
   extractText,
   NOT_REGISTERED_BASIS,
   renderDocument,
+  sharedDiscountBasisPoints,
   toVisualOrder,
   waivedNotice,
   WORDS,
   type InvoiceDocument,
+  type InvoiceLine,
   type ReceiptDocument,
   type SupplierSnapshot,
 } from '../../domain/billing/document';
@@ -93,9 +96,11 @@ function invoiceFor(supplier: SupplierSnapshot): InvoiceDocument {
       },
     ],
     discountFils: 0,
+    discountBasisPoints: null,
     netFils: 70_000,
     vatFils: vat,
     grossFils: 70_000 + vat,
+    bank: null,
   };
 }
 
@@ -470,6 +475,9 @@ describe('a receipt', () => {
  * row and not a file in this repository, so a golden that embedded one would
  * be a golden about a picture rather than about the writer.
  */
+const GOLDEN_UNREGISTERED_INVOICE =
+  '0b17f43d3c024d3b61a80cb959f5d5f10a9eca6d12ac39bc952060be402545b1';
+
 describe('the bytes of a rendered document', () => {
   const sha256 = (bytes: Uint8Array): string =>
     createHash('sha256').update(Buffer.from(bytes)).digest('hex');
@@ -478,7 +486,7 @@ describe('the bytes of a rendered document', () => {
     [
       'an invoice from an unregistered practice',
       () => renderDocument(invoiceFor(UNREGISTERED), fonts),
-      '0b17f43d3c024d3b61a80cb959f5d5f10a9eca6d12ac39bc952060be402545b1',
+      GOLDEN_UNREGISTERED_INVOICE,
     ],
     [
       'an invoice from a registered practice',
@@ -526,6 +534,7 @@ function discountedInvoice(supplier: SupplierSnapshot): InvoiceDocument {
     vatFils: vat,
     grossFils: 59_500 + vat,
     discountFils: 10_500,
+    discountBasisPoints: 1500,
   };
 }
 
@@ -534,8 +543,10 @@ describe('an invoice with a discount on it', () => {
 
   it('prints the discount beneath a discounted line and in the totals, in both languages', () => {
     // The design's own phrasing: the price that was quoted and what came off
-    // it, rather than a percentage a reader has to apply for themselves.
-    expect(page).toContain('List AED 700.00 · less AED 105.00');
+    // it — and, since the owner's ask of 23 September 2026, the share it was
+    // typed as. This pinned `List AED 700.00 · less AED 105.00` with nothing
+    // after it until then; the line now ends in the percentage, deliberately.
+    expect(page).toContain('List AED 700.00 · less AED 105.00 (15%)');
     // The Arabic word itself, as a reader copies it off the page. The whole
     // note is a mixed run — Arabic label, Western figures — and a bidirectional
     // run is not reversible character for character, so what is pinned here is
@@ -572,8 +583,161 @@ describe('a registered practice’s invoice with a discount on it', () => {
 
 describe('the discount line', () => {
   it('names the price that was quoted and what came off it, with the currency in each', () => {
-    expect(discountLine(1_215_000, 232_500).en).toBe('List AED 12,150.00 · less AED 2,325.00');
-    expect(discountLine(1_215_000, 232_500).ar).toContain('12,150.00');
-    expect(discountLine(1_215_000, 232_500).ar).toContain('2,325.00');
+    expect(discountLine(1_215_000, 232_500, null).en).toBe(
+      'List AED 12,150.00 · less AED 2,325.00',
+    );
+    expect(discountLine(1_215_000, 232_500, null).ar).toContain('12,150.00');
+    expect(discountLine(1_215_000, 232_500, null).ar).toContain('2,325.00');
+    expect(discountLine(1_215_000, 232_500, null).ar).not.toContain('%');
+  });
+
+  it('ends in the percentage, in Western digits on both sides, when the discount was typed as one', () => {
+    expect(discountLine(795_000, 198_750, 2500).en).toBe(
+      'List AED 7,950.00 · less AED 1,987.50 (25%)',
+    );
+    expect(discountLine(795_000, 198_750, 2500).ar).toBe(
+      'السعر قبل الخصم 7,950.00 درهم · ناقص 1,987.50 درهم (25%)',
+    );
+  });
+
+  it('names the percentage in the totals label only when it is given one', () => {
+    expect(discountTotalLabel(2500)).toEqual({ en: 'Discount 25%', ar: 'الخصم 25%' });
+    expect(discountTotalLabel(null)).toEqual(WORDS.discount);
+  });
+});
+
+/** A line discounted by `basisPoints` of a 700.00 list price, unregistered. */
+function discountedLine(basisPoints: number | null, discountFils: number): InvoiceLine {
+  return {
+    description: 'Neurofeedback session',
+    descriptionAr: 'جلسة نيوروفيدباك',
+    quantity: 1,
+    unitNetFils: 70_000,
+    discountFils,
+    discountBasisPoints: basisPoints,
+    netFils: 70_000 - discountFils,
+    vatRateBasisPoints: 0,
+    vatFils: 0,
+    grossFils: 70_000 - discountFils,
+  };
+}
+
+/** An unregistered practice's invoice of these lines, its totals summed from them. */
+function invoiceOf(lines: InvoiceLine[]): InvoiceDocument {
+  const net = lines.reduce((total, line) => total + line.netFils, 0);
+  return {
+    ...invoiceFor(UNREGISTERED),
+    lines,
+    netFils: net,
+    vatFils: 0,
+    grossFils: net,
+    discountFils: lines.reduce((total, line) => total + line.discountFils, 0),
+    discountBasisPoints: sharedDiscountBasisPoints(lines),
+  };
+}
+
+/**
+ * The percentage on the page (the owner's ask of 23 September 2026;
+ * docs/SPEC/billing.md section 2.4, "with the percentage when there was one").
+ * Each line says its own; the totals say one only when every discounted line
+ * agrees on it, because two different shares added together have none.
+ */
+describe('the discount’s percentage', () => {
+  it('prints the percentage beside a discounted line and in the totals when every line shares it', () => {
+    const page = extractAll(renderDocument(discountedInvoice(UNREGISTERED), fonts));
+    expect(page).toContain('List AED 700.00 · less AED 105.00 (15%)');
+    expect(page).toContain('Discount 15%');
+    expect(page).toContain(asCopied('الخصم'));
+  });
+
+  it('prints no percentage for a discount typed as a sum', () => {
+    const page = extractAll(renderDocument(invoiceOf([discountedLine(null, 10_500)]), fonts));
+    expect(page).toContain('List AED 700.00 · less AED 105.00');
+    expect(page).toContain('Discount');
+    // An unregistered practice's page carries no rate either, so no "%"
+    // anywhere on it is the proof that none was invented.
+    expect(page).not.toContain('%');
+  });
+
+  it("prints each line's own percentage and none in the totals when they differ", () => {
+    const page = extractAll(
+      renderDocument(invoiceOf([discountedLine(1000, 7_000), discountedLine(2000, 14_000)]), fonts),
+    );
+    expect(page).toContain('List AED 700.00 · less AED 70.00 (10%)');
+    expect(page).toContain('List AED 700.00 · less AED 140.00 (20%)');
+    expect(page).toContain('Discount');
+    expect(page).not.toMatch(/Discount \d/);
+  });
+
+  it('prints 25% in the totals when one discounted line sits beside an undiscounted one', () => {
+    const lines = [discountedLine(2500, 17_500), discountedLine(null, 0)];
+    expect(sharedDiscountBasisPoints(lines)).toBe(2500);
+    const page = extractAll(renderDocument(invoiceOf(lines), fonts));
+    expect(page).toContain('List AED 700.00 · less AED 175.00 (25%)');
+    expect(page).toContain('Discount 25%');
+  });
+
+  it('shares no percentage when a discounted line was typed as a sum beside one typed as a share', () => {
+    expect(
+      sharedDiscountBasisPoints([discountedLine(2500, 17_500), discountedLine(null, 500)]),
+    ).toBe(null);
+    expect(sharedDiscountBasisPoints([discountedLine(null, 0)])).toBe(null);
+    expect(sharedDiscountBasisPoints([])).toBe(null);
+  });
+});
+
+/** Invented throughout: no bank, holder or account here is a real one. */
+const BANK: NonNullable<InvoiceDocument['bank']> = {
+  accountHolder: 'Example Practice L.L.C-FZ',
+  iban: 'AE360000000000000000001',
+  bic: 'TESTAEXX',
+  bankAddress: '1 Example Street, Abu Dhabi',
+};
+
+describe('how to pay, on the invoice', () => {
+  it('prints "Pay by bank transfer" with the account, the IBAN grouped in fours, the BIC and the bank address', () => {
+    const page = extractAll(renderDocument({ ...invoiceFor(UNREGISTERED), bank: BANK }, fonts));
+    expect(page).toContain('Pay by bank transfer');
+    expect(page).toContain(asCopied(WORDS.payByTransfer.ar));
+    expect(page).toContain('Account holder');
+    expect(page).toContain('Example Practice L.L.C-FZ');
+    expect(page).toContain('IBAN');
+    expect(page).toContain('AE36 0000 0000 0000 0000 001');
+    expect(page).toContain('BIC');
+    expect(page).toContain('TESTAEXX');
+    expect(page).toContain('Bank address');
+    expect(page).toContain('1 Example Street, Abu Dhabi');
+  });
+
+  it('leaves out the BIC and the bank address when the practice recorded neither', () => {
+    const page = extractAll(
+      renderDocument(
+        { ...invoiceFor(UNREGISTERED), bank: { ...BANK, bic: null, bankAddress: null } },
+        fonts,
+      ),
+    );
+    expect(page).toContain('AE36 0000 0000 0000 0000 001');
+    expect(page).not.toContain('BIC');
+    expect(page).not.toContain('Bank address');
+  });
+
+  it('prints no bank block when the practice has recorded none, and the bytes are unchanged', () => {
+    const bytes = renderDocument(invoiceFor(UNREGISTERED), fonts);
+    const page = extractAll(bytes);
+    expect(page).not.toContain('Pay by bank transfer');
+    expect(page).not.toContain('IBAN');
+    // The golden below, pinned before the block existed: a practice with no
+    // bank details gets exactly the document it always had.
+    expect(createHash('sha256').update(Buffer.from(bytes)).digest('hex')).toBe(
+      GOLDEN_UNREGISTERED_INVOICE,
+    );
+  });
+
+  it('prints no bank block on a receipt', () => {
+    // A receipt says money arrived; it asks for none. `ReceiptDocument` has no
+    // `bank` to carry, so this is the page proving the type.
+    const page = extractAll(renderDocument(receiptFor(UNREGISTERED), fonts));
+    expect(page).not.toContain('Pay by bank transfer');
+    expect(page).not.toContain('IBAN');
   });
 });

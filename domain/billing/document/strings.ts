@@ -94,6 +94,17 @@ export const WORDS = {
   paymentReference: { en: 'Payment reference', ar: 'مرجع الدفع' },
   settlesInvoice: { en: 'Settles invoice', ar: 'سداد الفاتورة' },
 
+  /**
+   * How to pay, beside the totals on an invoice (round 61, the owner's ask of
+   * 23 September 2026). A heading and four labels; the values are the
+   * practice's own, and the IBAN is printed grouped in fours (`groupIban`).
+   */
+  payByTransfer: { en: 'Pay by bank transfer', ar: 'الدفع بالتحويل المصرفي' },
+  accountHolder: { en: 'Account holder', ar: 'اسم صاحب الحساب' },
+  iban: { en: 'IBAN', ar: 'رقم الآيبان' },
+  bic: { en: 'BIC', ar: 'رمز السويفت' },
+  bankAddress: { en: 'Bank address', ar: 'عنوان البنك' },
+
   cash: { en: 'Cash', ar: 'نقداً' },
   transfer: { en: 'Bank transfer', ar: 'تحويل بنكي' },
   link: { en: 'Payment link', ar: 'رابط دفع' },
@@ -210,14 +221,20 @@ export function waivedNotice(waivedOn: string): Phrase {
 
 /**
  * What a discounted line says beneath its description, in both languages:
- * the design's own phrasing, `List AED 12,150.00 · less AED 2,325.00`.
+ * the design's own phrasing, `List AED 7,950.00 · less AED 1,987.50`, and —
+ * when the discount was typed as a share — that share after it, `(25%)`.
  *
- * **Both figures, and no percentage.** The operator's design states the list
- * price and what came off it, which is the pair a family actually wants: the
- * number they were quoted and the number they are paying. A share can always
- * be worked out from the two, while two discounts added together carry no
- * single percentage at all (`domain/billing/discount.ts`, `combineDiscounts`)
- * — so a line that named one would have to invent it.
+ * **Both figures, and the percentage when there was one.** The operator's
+ * design stated the list price and what came off it, the pair a family
+ * actually wants: the number they were quoted and the number they are paying.
+ * The percentage joined them on the owner's ask of 23 September 2026, and it
+ * is what `docs/SPEC/billing.md` section 2.4 had said from the start ("with
+ * the percentage when there was one"): a family told "15% off" at the door
+ * should find 15% on the paper. It is the line's own `discount_basis_points`,
+ * never worked out from the two figures — a discount typed as a sum carries
+ * no share, and two discounts added together carry no single one
+ * (`domain/billing/discount.ts`, `combineDiscounts`), so such a line prints the
+ * two figures alone rather than a percentage somebody had to invent.
  *
  * The Federal Tax Authority asks a full tax invoice to state the amount of any
  * discount offered. A simplified one need not, and this document does anyway:
@@ -227,13 +244,40 @@ export function waivedNotice(waivedOn: string): Phrase {
  * The middle dot is the design's, and it is a document rather than a screen.
  * `CLAUDE.md`'s rule against middle-dot-joined metadata is a rule about the
  * console's own chrome (`.claude/rules/ui.md` scopes it to `app/**`); here it
- * joins two halves of one sentence a person reads once.
+ * joins two halves of one sentence a person reads once. The percentage is in
+ * Western digits on the Arabic side too, like every other figure on the page.
  */
-export function discountLine(listFils: number, discountFils: number): Phrase {
+export function discountLine(
+  listFils: number,
+  discountFils: number,
+  basisPoints: number | null,
+): Phrase {
+  const share = basisPoints === null ? '' : ` (${formatRate(basisPoints)})`;
   return {
-    en: `List ${money(listFils)} · less ${money(discountFils)}`,
-    ar: `السعر قبل الخصم ${formatFils(listFils)} درهم · ناقص ${formatFils(discountFils)} درهم`,
+    en: `List ${money(listFils)} · less ${money(discountFils)}${share}`,
+    ar: `السعر قبل الخصم ${formatFils(listFils)} درهم · ناقص ${formatFils(discountFils)} درهم${share}`,
   };
+}
+
+/**
+ * The totals row's label: `Discount 25%` when every discounted line shares
+ * one percentage (`sharedDiscountBasisPoints`), and the plain word when they
+ * do not — a total of different shares has no share of its own to print.
+ */
+export function discountTotalLabel(basisPoints: number | null): Phrase {
+  if (basisPoints === null) return WORDS.discount;
+  const share = formatRate(basisPoints);
+  return { en: `${WORDS.discount.en} ${share}`, ar: `${WORDS.discount.ar} ${share}` };
+}
+
+/**
+ * `AE360000000000000000001` as `AE36 0000 0000 0000 0000 001`: the IBAN as a
+ * person reads it off paper and types it into their bank, grouped in fours.
+ * The column holds it uppercase with no spaces (migration 924), so this only
+ * puts the spaces back.
+ */
+export function groupIban(iban: string): string {
+  return (iban.match(/.{1,4}/g) ?? [iban]).join(' ');
 }
 
 /**

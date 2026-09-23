@@ -47,7 +47,7 @@ export type {
   Page,
   Style,
 } from '../../shared/document';
-export { chargesVat } from './model';
+export { chargesVat, sharedDiscountBasisPoints } from './model';
 export type {
   InvoiceDocument,
   InvoiceLine,
@@ -62,8 +62,10 @@ export {
   arabicDocumentDate,
   callOutFeeDescription,
   discountLine,
+  discountTotalLabel,
   formatDocumentDate,
   formatRate,
+  groupIban,
   money,
   NOT_REGISTERED_BASIS,
   SIMPLIFIED_BASIS,

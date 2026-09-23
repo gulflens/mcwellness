@@ -1,5 +1,6 @@
 import {
   readPng,
+  sharedDiscountBasisPoints,
   type DocumentImage,
   type InvoiceDocument,
   type ReceiptDocument,
@@ -12,11 +13,20 @@ import type { Db } from '../_middleware/request-context';
  * Reading a money document out of the rows it was written from.
  *
  * **Every supplier fact comes off the invoice's own `supplier_*` columns**, and
- * the queries below name no `tenant` at all. That is the point of the snapshot
- * (402 and 905, and docs/CHANGE-REQUESTS/trunk-notes.md round 20 request 1c):
+ * no query below reads a supplier fact from `tenant`. That is the point of the
+ * snapshot (402 and 905, and docs/CHANGE-REQUESTS/trunk-notes.md round 20
+ * request 1c):
  * reading the practice at render time would make an invoice issued last year
  * re-render with this year's registration, this year's legal name and this
  * year's address. A document must keep saying what it said.
+ *
+ * **Two things are read live, deliberately, and neither is a supplier fact**:
+ * the practice's mark (`practiceLogo`, below) and, on an invoice, how to pay it
+ * (`BANK_SQL`, round 61). Both are drawn as the practice has them today
+ * (`docs/SPEC/billing.md` section 5.6) and both carry the same price: a filed
+ * invoice whose bytes are lost after either has changed re-renders to
+ * different bytes, and the recovery path in `documents.ts` refuses it with 409
+ * rather than put a different document under the filed one's hash.
  *
  * A **receipt** has no supplier columns of its own — a payment is not an
  * invoice and does not carry a snapshot — so it takes the practice from **the
@@ -83,6 +93,37 @@ const NEAREST_SUPPLIER_SQL =
   `select ${SUPPLIER_COLUMNS} from invoice ` +
   'where tenant_id = app.current_tenant_id() and client_id = $1 and issued_on <= $2::date ' +
   'order by issued_on desc, number desc limit 1';
+
+/**
+ * How to pay, from the practice's own row as it stands at render time
+ * (migration 924). Not snapshotted: an account the practice has moved away
+ * from is the one place a family must not be sent money, so a re-render prints
+ * the account the practice uses now. Row security keeps it to the practice's
+ * own row (`tenant_isolation` on `tenant`).
+ */
+const BANK_SQL =
+  'select bank_account_holder, bank_iban, bank_bic, bank_address from tenant ' +
+  'where id = app.current_tenant_id()';
+
+type BankRow = {
+  bank_account_holder: string | null;
+  bank_iban: string | null;
+  bank_bic: string | null;
+  bank_address: string | null;
+};
+
+/** The block, or null — which leaves the page exactly as it was — without a holder and an IBAN. */
+async function practiceBank(db: Db): Promise<InvoiceDocument['bank']> {
+  const found = await db.query<BankRow>(BANK_SQL);
+  const row = found.rows[0];
+  if (!row || row.bank_account_holder === null || row.bank_iban === null) return null;
+  return {
+    accountHolder: row.bank_account_holder,
+    iban: row.bank_iban,
+    bic: row.bank_bic,
+    bankAddress: row.bank_address,
+  };
+}
 
 type SupplierColumns = {
   supplier_legal_name: string;
@@ -155,6 +196,7 @@ export async function invoiceDocument(
   const row = found.rows[0];
   if (!row) return null;
   const lines = await db.query<LineRow>(LINES_SQL, [invoiceId]);
+  const bank = await practiceBank(db);
 
   return {
     clientId: row.client_id,
@@ -184,6 +226,15 @@ export async function invoiceDocument(
       // Summed from the lines, which is where a discount is given; the invoice
       // keeps no second copy of the figure (migration 409).
       discountFils: lines.rows.reduce((total, line) => total + line.discount_fils, 0),
+      // The one share every discounted line agrees on, or null (domain/billing,
+      // `sharedDiscountBasisPoints`): what the totals print beside "Discount".
+      discountBasisPoints: sharedDiscountBasisPoints(
+        lines.rows.map((line) => ({
+          discountFils: line.discount_fils,
+          discountBasisPoints: line.discount_basis_points,
+        })),
+      ),
+      bank,
     },
   };
 }
