@@ -780,6 +780,94 @@ describe('voiding a visit logged from the records', () => {
     expect(foreign.rows).toEqual([{ tenant_id: OTHER_PRACTICE, client_id: null }]);
   });
 
+  it("refuses a correction that names another household's visit as its first version", async () => {
+    // 971: a version 2 belongs to the household its version 1 was logged for.
+    let seen: { code?: string; constraint?: string } = {};
+    await h.owner.query('begin');
+    try {
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.request_id', $3, true)",
+        [tenantId, userId(SEEDED.owner), REQUEST_ID],
+      );
+      await h.owner.query(
+        'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+          'checked_in_at, status, recorded_from, version, supersedes_id, amendment_reason) ' +
+          "values (gen_random_uuid(), $1, $2, $3, $4, '2026-03-27T10:00:00Z', 'scheduled', " +
+          "'records', 2, $5, 'Corrected')",
+        [tenantId, h.clientId(WITHOUT_PACKAGE), practitionerId, nfSession, wrong.sessionId],
+      );
+    } catch (error) {
+      seen = error as { code?: string; constraint?: string };
+    } finally {
+      await h.owner.query('rollback');
+    }
+    expect({ code: seen.code, constraint: seen.constraint }).toEqual({
+      code: '23503',
+      constraint: 'session_supersedes_same_client_fk',
+    });
+  });
+
+  it('erases the reason a visit was voided with the household, and keeps the waiver whole', async () => {
+    // 971: the household whose wrong visit the first case voided asks to be
+    // forgotten. Why it was voided is free text about them and goes; why its
+    // credit was given back is the financial record and stays.
+    await writeAsOwner(
+      'insert into erasure_request (tenant_id, client_id, reason) values ($1, $2, $3)',
+      [tenantId, h.clientId(WITH_PACKAGE), 'Household asked to be forgotten'],
+    );
+    const request = await h.owner.query<{ id: string }>(
+      'select id from erasure_request where client_id = $1',
+      [h.clientId(WITH_PACKAGE)],
+    );
+    await h.owner.query('begin');
+    try {
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.actor_roles', 'owner', true), set_config('app.request_id', $3, true), " +
+          "set_config('app.reason', 'Household asked to be forgotten', true)",
+        [tenantId, userId(SEEDED.owner), REQUEST_ID],
+      );
+      await h.owner.query('select app.erase_client($1, $2)', [
+        h.clientId(WITH_PACKAGE),
+        request.rows[0]!.id,
+      ]);
+      await h.owner.query('commit');
+    } catch (error) {
+      await h.owner.query('rollback');
+      throw error;
+    }
+    const session = await h.owner.query(
+      'select status::text, void_reason from session where id = $1',
+      [wrong.sessionId],
+    );
+    expect(session.rows[0]).toEqual({ status: 'voided', void_reason: 'Erased with the record' });
+    const appointment = await h.owner.query(
+      'select status::text, void_reason from appointment where id = $1',
+      [wrong.appointmentId],
+    );
+    expect(appointment.rows[0]).toEqual({
+      status: 'voided',
+      void_reason: 'Erased with the record',
+    });
+    // No voided row of that household still carries a reason of its own.
+    const left = await h.owner.query<{ n: string }>(
+      "select (select count(*) from session where client_id = $1 and void_reason <> 'Erased with the record') + " +
+        "(select count(*) from appointment where client_id = $1 and void_reason <> 'Erased with the record') as n",
+      [h.clientId(WITH_PACKAGE)],
+    );
+    expect(Number(left.rows[0]?.n)).toBe(0);
+    const credit = await h.owner.query<{ waiver_reason: string }>(
+      'select waiver_reason from entitlement where id = $1',
+      [wrongCredit.id],
+    );
+    expect(credit.rows[0]?.waiver_reason).toBe(VOID_REASON);
+    const { rows } = await h.owner.query<{ broken: string | null }>(
+      'select app.verify_audit_chain()::text as broken',
+    );
+    expect(rows[0]?.broken).toBeNull();
+  });
+
   it('leaves the audit chain intact', async () => {
     const { rows } = await h.owner.query<{ broken: string | null }>(
       'select app.verify_audit_chain()::text as broken',
