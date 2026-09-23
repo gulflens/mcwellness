@@ -36,9 +36,9 @@ white (`#f3f0f7`) for card grounds; **edge** = fifteen per cent (`#e1d9ea`)
 for card borders; **pill** = twelve per cent (`#e7e1ee`) for the discount
 pill's ground. Text stays the ink and the two greys the documents already use.
 Corners: 6 pt on cards, the pill fully rounded. No shadows, no gradients, no
-second hue.
+second hue, and no page number on any page (his page has none).
 
-1. **Masthead.** The practice's mark, left, about 250 pt wide as his page sets
+1. **Masthead.** The practice's mark, left, about 165 pt wide as his page sets
    the lockup (the wordmark in type when the practice has none). Right, in
    violet: "INVOICE" bold and large, and beneath it "فاتورة". A registered
    practice reads "TAX INVOICE" and "فاتورة ضريبية". Capitals are his; they
@@ -48,9 +48,12 @@ second hue.
    registration number — each English label and value on the left and the
    Arabic value and label on the right of the same half, as his page sets
    them. A registered practice adds a fourth row for the VAT registration
-   number. **Number card, right.** A card with "Invoice no." / "رقم الفاتورة"
-   over the reference in violet bold, and "Issue date" / "تاريخ الإصدار" over
-   the date in bold; the date of supply, when it differs, as a third pair.
+   number; each row set small enough to sit on one line. **Number card,
+   right.** A card with a violet bar down its left edge, "Invoice no." /
+   "رقم الفاتورة" over the reference in violet bold, and "Issue date" /
+   "تاريخ الإصدار" over the date in bold; the date of supply, when it
+   differs, as a third pair. A hairline runs across the page beneath this
+   row, as his page draws one.
 3. **Billed-to card, left half.** "BILLED TO" / "الفاتورة إلى" as a small
    caption, the household's name bold and large, then "Client record:
    MW-000099" with "رقم السجل" and the number on the right. **Payment method,
