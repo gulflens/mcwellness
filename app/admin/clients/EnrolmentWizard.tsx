@@ -51,7 +51,17 @@ const STEP_LABELS: Record<Step, string> = {
   goals: 'Goals',
   consent: 'Consent',
   health: 'Health',
-  summary: 'Summary',
+  summary: 'Review',
+};
+
+const STEP_GUIDANCE: Record<Step, string> = {
+  identity: 'Start with the client’s details and the person we should contact.',
+  contacts: 'Check who we can contact and who may give consent for this client.',
+  location: 'Add the home visit address and check the entrance pin.',
+  goals: 'Record what the client would like support with.',
+  consent: 'Help the client or their guardian read and sign the required consents.',
+  health: 'Record health information after health-data consent is in place.',
+  summary: 'Check what is on file and complete anything needed to activate the client.',
 };
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -344,11 +354,20 @@ export function EnrolmentWizard({
   const canGoNext = step !== 'identity' && step !== 'summary' && stepIndex < STEPS.length - 1;
 
   return (
-    <aside className="drawer" role="dialog" aria-labelledby="enrolment-title">
+    <aside className="drawer enrolment" role="dialog" aria-labelledby="enrolment-title">
       <header className="drawer__header">
         <div className="drawer__title">
-          <h2 id="enrolment-title">Enrolment</h2>
-          {created ? <p className="small muted numeric">{created.mrn}</p> : null}
+          <h2 id="enrolment-title">Enrol a client</h2>
+          <p className="small muted">
+            {created ? (
+              <>
+                {record?.givenName ?? givenName} {record?.familyName ?? familyName}
+                <span className="numeric enrolment__record-number">{created.mrn}</span>
+              </>
+            ) : (
+              'Create a record, then complete it one step at a time.'
+            )}
+          </p>
         </div>
         <button
           ref={closeRef}
@@ -360,258 +379,289 @@ export function EnrolmentWizard({
           <CloseIcon />
         </button>
       </header>
-      <div className="drawer__body">
-        <ol className="wizard__steps small">
-          {STEPS.map((s, index) => {
-            const reachable = created !== null && index <= furthest;
-            return (
-              <li
-                key={s}
-                aria-current={s === step ? 'step' : undefined}
-                className={[
-                  'wizard__step-name',
-                  s === step ? 'wizard__step-name--current' : null,
-                  index > furthest ? 'wizard__step-name--locked' : null,
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              >
-                {reachable ? (
-                  <button type="button" className="link" onClick={() => goTo(s)}>
-                    {STEP_LABELS[s]}
-                  </button>
-                ) : (
-                  STEP_LABELS[s]
-                )}
-              </li>
-            );
-          })}
-        </ol>
+      <div className="enrolment__layout">
+        <nav className="enrolment__progress" aria-label="Enrolment steps">
+          <ol className="wizard__steps small">
+            {STEPS.map((s, index) => {
+              const reachable = created !== null && index <= furthest;
+              return (
+                <li
+                  key={s}
+                  aria-current={s === step ? 'step' : undefined}
+                  className={[
+                    'wizard__step-name',
+                    s === step ? 'wizard__step-name--current' : null,
+                    index > furthest ? 'wizard__step-name--locked' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  {reachable ? (
+                    <button type="button" className="link" onClick={() => goTo(s)}>
+                      <span className="wizard__number" aria-hidden="true">
+                        {index + 1}
+                      </span>
+                      {STEP_LABELS[s]}
+                    </button>
+                  ) : (
+                    <span className="wizard__step-label">
+                      <span className="wizard__number" aria-hidden="true">
+                        {index + 1}
+                      </span>
+                      {STEP_LABELS[s]}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
+        <div className="drawer__body enrolment__content">
+          <div className="enrolment__intro" key={step}>
+            <h3>{STEP_LABELS[step]}</h3>
+            <p className="small muted">
+              Step {stepIndex + 1} of {STEPS.length}
+            </p>
+            <p>{STEP_GUIDANCE[step]}</p>
+          </div>
 
-        {step === 'identity' && !created ? (
-          <form className="drawer__form" onSubmit={(e) => void submitIdentity(e)}>
-            <Field
-              id="wizard-given-name"
-              label="Given name"
-              value={givenName}
-              onChange={(e) => {
-                setGivenName(e.target.value);
-                clearIdentityError('givenName');
-              }}
-              error={identityErrors.givenName}
-            />
-            <Field
-              id="wizard-family-name"
-              label="Family name"
-              value={familyName}
-              onChange={(e) => {
-                setFamilyName(e.target.value);
-                clearIdentityError('familyName');
-              }}
-              error={identityErrors.familyName}
-            />
-            <DateField
-              id="wizard-dob"
-              label="Date of birth (optional)"
-              value={dateOfBirth}
-              onChange={(next) => {
-                setDateOfBirth(next);
-                clearIdentityError('dateOfBirth');
-              }}
-              hint="Needed to activate."
-              error={identityErrors.dateOfBirth}
-            />
-            <Field
-              id="wizard-referral"
-              label="Referral (optional)"
-              value={referralSource}
-              onChange={(e) => setReferralSource(e.target.value)}
-            />
+          {step === 'identity' && !created ? (
+            <form className="drawer__form" onSubmit={(e) => void submitIdentity(e)}>
+              <div className="enrolment__fields">
+                <Field
+                  id="wizard-given-name"
+                  label="Given name"
+                  value={givenName}
+                  onChange={(e) => {
+                    setGivenName(e.target.value);
+                    clearIdentityError('givenName');
+                  }}
+                  error={identityErrors.givenName}
+                />
+                <Field
+                  id="wizard-family-name"
+                  label="Family name"
+                  value={familyName}
+                  onChange={(e) => {
+                    setFamilyName(e.target.value);
+                    clearIdentityError('familyName');
+                  }}
+                  error={identityErrors.familyName}
+                />
+                <DateField
+                  id="wizard-dob"
+                  label="Date of birth (optional)"
+                  value={dateOfBirth}
+                  onChange={(next) => {
+                    setDateOfBirth(next);
+                    clearIdentityError('dateOfBirth');
+                  }}
+                  hint="Needed to activate."
+                  error={identityErrors.dateOfBirth}
+                />
+                <Field
+                  id="wizard-referral"
+                  label="Referral (optional)"
+                  value={referralSource}
+                  onChange={(e) => setReferralSource(e.target.value)}
+                />
+              </div>
+              <section className="enrolment__contact" aria-labelledby="enrolment-contact-title">
+                <h4 id="enrolment-contact-title">Primary contact</h4>
+                <p className="small muted">
+                  For a child, choose their parent or guardian. Confirm who may give consent.
+                </p>
+                <Select
+                  id="wizard-relationship"
+                  label="Relationship to the client"
+                  value={relationship}
+                  onChange={(e) => {
+                    setRelationship(e.target.value);
+                    clearIdentityError('relationship');
+                  }}
+                  error={identityErrors.relationship}
+                >
+                  <option value="">Choose a relationship</option>
+                  {RELATIONSHIPS.map((r) => (
+                    <option key={r} value={r}>
+                      {RELATIONSHIP_LABELS[r]}
+                    </option>
+                  ))}
+                </Select>
+                <PhoneField
+                  id="wizard-phone"
+                  label="Phone"
+                  value={phone}
+                  onChange={(next) => {
+                    setPhone(next);
+                    clearIdentityError('phone');
+                  }}
+                  error={identityErrors.phone}
+                />
+                <Field
+                  id="wizard-email"
+                  label="Email (optional)"
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    clearIdentityError('email');
+                  }}
+                  error={identityErrors.email}
+                />
+                <EmiratesIdField
+                  id="wizard-emirates-id"
+                  label="Emirates ID (optional)"
+                  value={emiratesId}
+                  onChange={(next) => {
+                    setEmiratesId(next);
+                    clearIdentityError('emiratesId');
+                  }}
+                  error={identityErrors.emiratesId}
+                />
+                <Checkbox
+                  id="wizard-legal-guardian"
+                  label="Legal guardian"
+                  checked={isLegalGuardian}
+                  onChange={setIsLegalGuardian}
+                />
+                <Checkbox
+                  id="wizard-can-consent"
+                  label="May give consent"
+                  checked={canConsent}
+                  onChange={setCanConsent}
+                />
+              </section>
+              {identityFormError ? <Note tone="critical">{identityFormError}</Note> : null}
+              <div className="drawer__actions">
+                <Button type="button" variant="secondary" onClick={onDone} disabled={busy}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={busy}>
+                  {busy ? 'Saving…' : 'Save and continue'}
+                </Button>
+              </div>
+            </form>
+          ) : null}
 
-            <h3 className="drawer__section">Primary contact</h3>
-            <Select
-              id="wizard-relationship"
-              label="Relationship to the client"
-              value={relationship}
-              onChange={(e) => {
-                setRelationship(e.target.value);
-                clearIdentityError('relationship');
-              }}
-              error={identityErrors.relationship}
-            >
-              <option value="">Choose a relationship</option>
-              {RELATIONSHIPS.map((r) => (
-                <option key={r} value={r}>
-                  {RELATIONSHIP_LABELS[r]}
-                </option>
-              ))}
-            </Select>
-            <PhoneField
-              id="wizard-phone"
-              label="Phone"
-              value={phone}
-              onChange={(next) => {
-                setPhone(next);
-                clearIdentityError('phone');
-              }}
-              error={identityErrors.phone}
-            />
-            <Field
-              id="wizard-email"
-              label="Email (optional)"
-              type="email"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                clearIdentityError('email');
-              }}
-              error={identityErrors.email}
-            />
-            <EmiratesIdField
-              id="wizard-emirates-id"
-              label="Emirates ID (optional)"
-              value={emiratesId}
-              onChange={(next) => {
-                setEmiratesId(next);
-                clearIdentityError('emiratesId');
-              }}
-              error={identityErrors.emiratesId}
-            />
-            <Checkbox
-              id="wizard-legal-guardian"
-              label="Legal guardian"
-              checked={isLegalGuardian}
-              onChange={setIsLegalGuardian}
-            />
-            <Checkbox
-              id="wizard-can-consent"
-              label="May give consent"
-              checked={canConsent}
-              onChange={setCanConsent}
-            />
-
-            {identityFormError ? <Note tone="critical">{identityFormError}</Note> : null}
-            <div className="drawer__actions">
-              <Button type="button" variant="secondary" onClick={onDone} disabled={busy}>
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" disabled={busy}>
-                {busy ? 'Saving…' : 'Save and continue'}
-              </Button>
-            </div>
-          </form>
-        ) : null}
-
-        {step !== 'identity' && created ? (
-          <div className="wizard__step-body">
-            {state.kind === 'loading' ? <Note>Loading the record.</Note> : null}
-            {state.kind === 'error' ? (
-              <Note tone="critical">The record could not be loaded. Try again.</Note>
-            ) : null}
-            {record ? (
-              <>
-                {step === 'contacts' ? (
-                  <ContactsTab
-                    clientId={created.id}
-                    record={record}
-                    onChanged={() => void refetch()}
-                    mayWrite
-                  />
-                ) : null}
-                {step === 'location' ? (
-                  <LocationsTab
-                    clientId={created.id}
-                    record={record}
-                    onChanged={() => void refetch()}
-                    mayWrite
-                  />
-                ) : null}
-                {step === 'goals' ? (
-                  <GoalsTab
-                    clientId={created.id}
-                    record={record}
-                    onChanged={() => void refetch()}
-                    mayWrite={mayWriteGoals}
-                    mayWriteConcerns={mayWriteConcerns}
-                  />
-                ) : null}
-                {step === 'consent' ? (
-                  <ConsentTab
-                    clientId={created.id}
-                    record={record}
-                    onChanged={() => void refetch()}
-                    mayWrite
-                  />
-                ) : null}
-                {step === 'health' ? (
-                  <HealthTab
-                    clientId={created.id}
-                    record={record}
-                    onChanged={() => void refetch()}
-                    mayWrite={mayWriteHealth}
-                  />
-                ) : null}
-                {step === 'summary' && gate ? (
-                  <div className="tab-section">
-                    <h3 className="drawer__section">
-                      {gate.ok ? 'Ready to activate' : 'Still to complete'}
-                    </h3>
-                    <ActivationSummary missing={gate.missing} heading="Still needed" />
-                    {activationError ? <Note tone="critical">{activationError}</Note> : null}
-                    {gate.ok ? (
-                      <div className="drawer__actions">
-                        <Button variant="primary" disabled={busy} onClick={() => void activate()}>
-                          {busy ? 'Activating…' : 'Activate'}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {/* Every step, not only the last, says what is still missing: the person
+          {step !== 'identity' && created ? (
+            <div className="wizard__step-body">
+              {state.kind === 'loading' ? <Note>Loading the record.</Note> : null}
+              {state.kind === 'error' ? (
+                <Note tone="critical">The record could not be loaded. Try again.</Note>
+              ) : null}
+              {record ? (
+                <>
+                  {step === 'contacts' ? (
+                    <ContactsTab
+                      clientId={created.id}
+                      record={record}
+                      onChanged={() => void refetch()}
+                      mayWrite
+                    />
+                  ) : null}
+                  {step === 'location' ? (
+                    <LocationsTab
+                      clientId={created.id}
+                      record={record}
+                      onChanged={() => void refetch()}
+                      mayWrite
+                    />
+                  ) : null}
+                  {step === 'goals' ? (
+                    <GoalsTab
+                      clientId={created.id}
+                      record={record}
+                      onChanged={() => void refetch()}
+                      mayWrite={mayWriteGoals}
+                      mayWriteConcerns={mayWriteConcerns}
+                    />
+                  ) : null}
+                  {step === 'consent' ? (
+                    <ConsentTab
+                      clientId={created.id}
+                      record={record}
+                      onChanged={() => void refetch()}
+                      mayWrite
+                    />
+                  ) : null}
+                  {step === 'health' ? (
+                    <HealthTab
+                      clientId={created.id}
+                      record={record}
+                      onChanged={() => void refetch()}
+                      mayWrite={mayWriteHealth}
+                    />
+                  ) : null}
+                  {step === 'summary' && gate ? (
+                    <div className="tab-section">
+                      <h3 className="drawer__section">
+                        {gate.ok ? 'Ready to activate' : 'Still to complete'}
+                      </h3>
+                      <ActivationSummary missing={gate.missing} heading="Still needed" />
+                      {activationError ? <Note tone="critical">{activationError}</Note> : null}
+                      {gate.ok ? (
+                        <div className="drawer__actions">
+                          <Button variant="primary" disabled={busy} onClick={() => void activate()}>
+                            {busy ? 'Activating…' : 'Activate'}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {/* Every step, not only the last, says what is still missing: the person
                     filling this in should never have to reach the end to learn that a
                     date of birth was the thing standing in the way (task brief item 2). */}
-                {step !== 'summary' && gate ? <ActivationSummary missing={gate.missing} /> : null}
-              </>
-            ) : null}
-
-            <p className="small muted">
-              Saved as a lead. Everything entered so far is on the record, and you can close this
-              and come back to it.
-            </p>
-            <div className="wizard__nav">
-              <Button variant="quiet" onClick={onDone}>
-                {step === 'summary' ? 'Close' : 'Finish later'}
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={!canGoBack}
-                onClick={() => goTo(STEPS[stepIndex - 1] ?? 'identity')}
-              >
-                Back
-              </Button>
-              {canGoNext ? (
-                <Button variant="primary" onClick={() => goTo(STEPS[stepIndex + 1] ?? 'summary')}>
-                  Next
-                </Button>
+                  {step !== 'summary' && gate ? (
+                    <details className="enrolment__requirements">
+                      <summary>
+                        {gate.ok ? 'Ready to activate' : 'View what is still needed to activate'}
+                      </summary>
+                      <ActivationSummary missing={gate.missing} />
+                    </details>
+                  ) : null}
+                </>
               ) : null}
-            </div>
-          </div>
-        ) : null}
 
-        {step === 'identity' && created && record ? (
-          <div className="wizard__step-body">
-            <IdentityForm
-              clientId={created.id}
-              record={record}
-              onSaved={() => {
-                void refetch();
-                goTo('contacts');
-              }}
-              onCancel={() => goTo('contacts')}
-            />
-            {gate ? <ActivationSummary missing={gate.missing} /> : null}
-          </div>
-        ) : null}
+              <p className="small muted">
+                Saved as a lead. Save each form before moving on. Saved changes stay on the record
+                when you finish later.
+              </p>
+              <div className="wizard__nav">
+                <Button variant="quiet" onClick={onDone}>
+                  {step === 'summary' ? 'Close' : 'Finish later'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={!canGoBack}
+                  onClick={() => goTo(STEPS[stepIndex - 1] ?? 'identity')}
+                >
+                  Back
+                </Button>
+                {canGoNext ? (
+                  <Button variant="primary" onClick={() => goTo(STEPS[stepIndex + 1] ?? 'summary')}>
+                    Next: {STEP_LABELS[STEPS[stepIndex + 1] ?? 'summary']}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {step === 'identity' && created && record ? (
+            <div className="wizard__step-body">
+              <IdentityForm
+                clientId={created.id}
+                record={record}
+                onSaved={() => {
+                  void refetch();
+                  goTo('contacts');
+                }}
+                onCancel={() => goTo('contacts')}
+              />
+              {gate ? <ActivationSummary missing={gate.missing} /> : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     </aside>
   );

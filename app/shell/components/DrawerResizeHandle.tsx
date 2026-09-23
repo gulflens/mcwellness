@@ -46,6 +46,7 @@ function currentWidth(): number {
 function applyDrawerWidth(width: number): number {
   const clamped = clampDrawerWidth(width, window.innerWidth);
   document.documentElement.style.setProperty('--drawer', `${clamped}px`);
+  document.documentElement.style.setProperty('--drawer-resized', `${clamped}px`);
   return clamped;
 }
 
