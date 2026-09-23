@@ -42,6 +42,15 @@ function formatDate(isoDate: string): string {
   return dateFormat.format(new Date(`${isoDate}T00:00:00+04:00`));
 }
 
+/**
+ * AE36 0000 0000 0000 0000 001: the IBAN as the page prints it, grouped in
+ * fours (migration 924, round 61). The value is already uppercase with the
+ * spaces out (`app/api/practice/schema.ts`), so this only groups it back.
+ */
+function groupIban(iban: string): string {
+  return (iban.match(/.{1,4}/g) ?? [iban]).join(' ');
+}
+
 type State =
   | { kind: 'loading' }
   | { kind: 'error' }
@@ -246,6 +255,26 @@ export function PracticePage() {
               <Fact label="Coordinates">
                 {coordinates ? <span className="numeric">{coordinates}</span> : null}
               </Fact>
+            </dl>
+          </section>
+
+          {/*
+            What the invoice's "Pay by bank transfer" block prints (migration
+            924, round 61). The IBAN is what makes an account: while none is
+            recorded every fact below reads "Not recorded", the same as any
+            other empty fact on this page.
+          */}
+          <section className="practice__group">
+            <h2 className="practice__heading">Bank account</h2>
+            <dl className="practice__facts">
+              <Fact label="Account holder">{text(practice.bank?.accountHolder ?? null)}</Fact>
+              <Fact label="IBAN">
+                {practice.bank ? (
+                  <span className="numeric">{groupIban(practice.bank.iban)}</span>
+                ) : null}
+              </Fact>
+              <Fact label="BIC">{text(practice.bank?.bic ?? null)}</Fact>
+              <Fact label="Bank address">{text(practice.bank?.bankAddress ?? null)}</Fact>
             </dl>
           </section>
 

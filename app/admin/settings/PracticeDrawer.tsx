@@ -1,9 +1,16 @@
 import { useRef, useState, type FormEvent } from 'react';
+import { isValidIban } from '../../../domain/shared';
 import {
+  ACCOUNT_HOLDER_MESSAGE,
+  ACCOUNT_HOLDER_REQUIRED_MESSAGE,
+  BANK_ADDRESS_MESSAGE,
+  BIC_MESSAGE,
   CONTACT_EMAIL_MESSAGE,
   CONTACT_PHONE_MESSAGE,
   type Emirate,
   EMIRATES,
+  IBAN_MESSAGE,
+  IBAN_REQUIRED_MESSAGE,
   type Practice,
   PracticeResponse,
   REVIEW_URL_MESSAGE,
@@ -50,6 +57,10 @@ type FieldErrors = {
   contactPhone?: string;
   contactEmail?: string;
   website?: string;
+  bankAccountHolder?: string;
+  bankIban?: string;
+  bankBic?: string;
+  bankAddress?: string;
   reviewUrl?: string;
   displayAddress?: string;
   latitude?: string;
@@ -65,11 +76,31 @@ const FIELD_IDS: Record<keyof FieldErrors, string> = {
   contactPhone: 'practice-contact-phone',
   contactEmail: 'practice-contact-email',
   website: 'practice-website',
+  bankAccountHolder: 'practice-bank-account-holder',
+  bankIban: 'practice-bank-iban',
+  bankBic: 'practice-bank-bic',
+  bankAddress: 'practice-bank-address',
   reviewUrl: 'practice-review-url',
   displayAddress: 'practice-address',
   latitude: 'practice-latitude',
   longitude: 'practice-longitude',
   reason: 'practice-reason',
+};
+
+/**
+ * The code a refused bank field answers with (`bankCode()` in
+ * app/api/practice/routes.ts), mapped back to the field it belongs to and the
+ * sentence this drawer already shows for that shape. The pairing codes are
+ * mapped too, even though the checks below refuse the same pairing first: a
+ * belt the schema itself wears.
+ */
+const BANK_REFUSAL: Record<string, { field: keyof FieldErrors; message: string }> = {
+  iban_invalid: { field: 'bankIban', message: IBAN_MESSAGE },
+  bic_invalid: { field: 'bankBic', message: BIC_MESSAGE },
+  account_holder_invalid: { field: 'bankAccountHolder', message: ACCOUNT_HOLDER_MESSAGE },
+  bank_address_invalid: { field: 'bankAddress', message: BANK_ADDRESS_MESSAGE },
+  iban_required: { field: 'bankIban', message: IBAN_REQUIRED_MESSAGE },
+  account_holder_required: { field: 'bankAccountHolder', message: ACCOUNT_HOLDER_REQUIRED_MESSAGE },
 };
 
 /** Moves focus to the first field that is wrong, so a refusal is heard as well as seen. */
@@ -139,6 +170,14 @@ export function PracticeDrawer({
   const [contactPhone, setContactPhone] = useState(practice.contactPhone ?? '');
   const [contactEmail, setContactEmail] = useState(practice.contactEmail ?? '');
   const [website, setWebsite] = useState(practice.website ?? '');
+  // The bank account an invoice's "Pay by bank transfer" block prints
+  // (migration 924, round 61). The IBAN is what makes an account: all four
+  // start empty together and are refused unless the holder and the IBAN
+  // travel together too.
+  const [bankAccountHolder, setBankAccountHolder] = useState(practice.bank?.accountHolder ?? '');
+  const [bankIban, setBankIban] = useState(practice.bank?.iban ?? '');
+  const [bankBic, setBankBic] = useState(practice.bank?.bic ?? '');
+  const [bankAddress, setBankAddress] = useState(practice.bank?.bankAddress ?? '');
   // The page the portal's review line opens (migration 920). Empty means no
   // line is shown to any household.
   const [reviewUrl, setReviewUrl] = useState(practice.reviewUrl ?? '');
@@ -220,6 +259,46 @@ export function PracticeDrawer({
     if (typedReviewUrl.length > 0 && !/^https?:\/\/\S+$/.test(typedReviewUrl)) {
       errors.reviewUrl = REVIEW_URL_MESSAGE;
     }
+    // The same shapes app/api/practice/schema.ts checks, plus the mod-97
+    // checksum (domain/shared/iban.ts) the schema also runs, so a mistyped
+    // digit is caught here rather than after a round trip.
+    const typedBankAccountHolder = bankAccountHolder.trim();
+    const typedBankIban = bankIban.replace(/\s/g, '').toUpperCase();
+    const typedBankBic = bankBic.replace(/\s/g, '').toUpperCase();
+    const typedBankAddress = bankAddress.trim();
+    if (typedBankAccountHolder.length > 120) {
+      errors.bankAccountHolder = ACCOUNT_HOLDER_MESSAGE;
+    }
+    if (
+      typedBankIban.length > 0 &&
+      !(/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/.test(typedBankIban) && isValidIban(typedBankIban))
+    ) {
+      errors.bankIban = IBAN_MESSAGE;
+    }
+    if (typedBankBic.length > 0 && !/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(typedBankBic)) {
+      errors.bankBic = BIC_MESSAGE;
+    }
+    if (typedBankAddress.length > 200) {
+      errors.bankAddress = BANK_ADDRESS_MESSAGE;
+    }
+    // The two pairings the columns hold (migration 924): an account holder, a
+    // BIC or a bank address needs the IBAN too, and an IBAN needs the name it
+    // is held in. Checked only once the IBAN's own shape holds, so a
+    // malformed IBAN is refused once, in its own words, not twice.
+    if (errors.bankIban === undefined) {
+      const hasBankIban = typedBankIban.length > 0;
+      const hasOtherBankField =
+        typedBankAccountHolder.length > 0 || typedBankBic.length > 0 || typedBankAddress.length > 0;
+      if (!hasBankIban && hasOtherBankField) {
+        errors.bankIban = IBAN_REQUIRED_MESSAGE;
+      } else if (
+        hasBankIban &&
+        errors.bankAccountHolder === undefined &&
+        typedBankAccountHolder.length === 0
+      ) {
+        errors.bankAccountHolder = ACCOUNT_HOLDER_REQUIRED_MESSAGE;
+      }
+    }
     const typedAddress = displayAddress.trim();
     if (hasAddressOnRecord && typedAddress.length === 0) {
       errors.displayAddress = 'Give the address as it should appear on an invoice.';
@@ -286,6 +365,15 @@ export function PracticeDrawer({
           website: typedWebsite,
           // Sent as null when cleared, so the server clears it too.
           reviewUrl: typedReviewUrl.length === 0 ? null : typedReviewUrl,
+          // All four together, every save (migration 924, round 61): an
+          // empty box is null, and the IBAN and BIC travel as typed — the
+          // server uppercases and strips the spaces, not the drawer.
+          bank: {
+            accountHolder: typedBankAccountHolder.length === 0 ? null : typedBankAccountHolder,
+            iban: bankIban.trim().length === 0 ? null : bankIban.trim(),
+            bic: bankBic.trim().length === 0 ? null : bankBic.trim(),
+            bankAddress: typedBankAddress.length === 0 ? null : typedBankAddress,
+          },
           address,
         }),
       });
@@ -309,6 +397,12 @@ export function PracticeDrawer({
         if (body?.code === 'vat_trn_required') {
           setFieldErrors((prev) => ({ ...prev, vatTrn: VAT_TRN_REQUIRED_MESSAGE }));
           setFormError(VAT_TRN_REQUIRED_MESSAGE);
+          return;
+        }
+        const bankRefusal = body?.code ? BANK_REFUSAL[body.code] : undefined;
+        if (bankRefusal) {
+          setFieldErrors((prev) => ({ ...prev, [bankRefusal.field]: bankRefusal.message }));
+          setFormError(bankRefusal.message);
           return;
         }
         setFormError(body?.code === 'coordinates_required' ? COORDINATES_MESSAGE : CHECK_MESSAGE);
@@ -439,6 +533,68 @@ export function PracticeDrawer({
               clearFieldError('website');
             }}
             error={fieldErrors.website}
+          />
+
+          {/*
+            The bank account an invoice's "Pay by bank transfer" block prints
+            (migration 924, round 61). The holder and the IBAN are required
+            together; the BIC and the address need the IBAN too — the error
+            sentences below say so, so there is no separate paragraph here.
+          */}
+          <Field
+            id={FIELD_IDS.bankAccountHolder}
+            label="Account holder (optional)"
+            hint="The name the bank holds the account in, exactly as the bank gives it."
+            type="text"
+            maxLength={120}
+            value={bankAccountHolder}
+            onChange={(e) => {
+              setBankAccountHolder(e.target.value);
+              clearFieldError('bankAccountHolder');
+            }}
+            error={fieldErrors.bankAccountHolder}
+          />
+
+          <Field
+            id={FIELD_IDS.bankIban}
+            label="IBAN (optional)"
+            hint="As the bank gives it. Kept uppercase with the spaces out; the invoice groups it in fours."
+            type="text"
+            maxLength={40}
+            value={bankIban}
+            onChange={(e) => {
+              setBankIban(e.target.value);
+              clearFieldError('bankIban');
+            }}
+            error={fieldErrors.bankIban}
+          />
+
+          <Field
+            id={FIELD_IDS.bankBic}
+            label="BIC (optional)"
+            hint="8 or 11 letters and digits."
+            type="text"
+            maxLength={40}
+            value={bankBic}
+            onChange={(e) => {
+              setBankBic(e.target.value);
+              clearFieldError('bankBic');
+            }}
+            error={fieldErrors.bankBic}
+          />
+
+          <Field
+            id={FIELD_IDS.bankAddress}
+            label="Bank address (optional)"
+            hint="Printed beside the IBAN on the invoice."
+            type="text"
+            maxLength={200}
+            value={bankAddress}
+            onChange={(e) => {
+              setBankAddress(e.target.value);
+              clearFieldError('bankAddress');
+            }}
+            error={fieldErrors.bankAddress}
           />
 
           <Field
