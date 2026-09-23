@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
   GEOMETRY,
+  groupIban,
   layout,
   measure,
   type InvoiceDocument,
@@ -109,6 +110,8 @@ function invoice(over: Partial<InvoiceDocument> = {}): InvoiceDocument {
     vatFils: 3_500,
     grossFils: 73_500,
     discountFils: 0,
+    discountBasisPoints: null,
+    bank: null,
     ...over,
   };
 }
@@ -127,6 +130,21 @@ function manyLines(count: number): InvoiceDocument['lines'] {
     grossFils: 73_500,
   }));
 }
+
+/**
+ * The practice's bank account at the longest the columns allow (migration
+ * 924: a holder of 120 characters, a bank address of 200). Invented throughout.
+ */
+const LONG_BANK: NonNullable<InvoiceDocument['bank']> = {
+  accountHolder: 'Example Practice L.L.C-FZ, Trading as the Example Wellness Studio '
+    .repeat(2)
+    .slice(0, 120),
+  iban: 'AE360000000000000000001',
+  bic: 'TESTAEXX',
+  bankAddress: 'Unit 1, 1 Example Street, Example Business Quarter, Example District, Abu Dhabi '
+    .repeat(3)
+    .slice(0, 200),
+};
 
 const RECEIPT: ReceiptDocument = {
   kind: 'receipt',
@@ -184,6 +202,22 @@ const CASES: [string, Page[]][] = [
     ),
   ],
   ['a receipt', layout(RECEIPT, fonts)],
+  [
+    'an invoice carrying the practice’s bank details, every one of them long',
+    layout(invoice({ supplier: LONG_SUPPLIER, bank: LONG_BANK }), fonts),
+  ],
+  [
+    'a discounted invoice carrying the practice’s bank details',
+    layout(
+      invoice({
+        bank: { ...LONG_BANK, accountHolder: 'Example Practice L.L.C-FZ' },
+        discountFils: 10_000,
+        discountBasisPoints: 1500,
+        netFils: 60_000,
+      }),
+      fonts,
+    ),
+  ],
   ['an invoice carrying the practice’s mark', layout(invoice(), fonts, LOGO)],
   [
     // A figure grows with the money and the totals box does not. "Before
@@ -461,5 +495,129 @@ describe('the footer band', () => {
     if (!bare) throw new Error('There is no page.');
     const band = boxesOf(bare).filter((box) => box.y < GEOMETRY.BAND);
     expect(band).toHaveLength(1);
+  });
+});
+
+describe('the bank block', () => {
+  const pages = layout(invoice({ bank: LONG_BANK }), fonts);
+  const last = pages[pages.length - 1];
+  if (!last) throw new Error('There is no last page.');
+  const boxes = boxesOf(last);
+  const heading = boxes.find((box) => box.text === 'Pay by bank transfer');
+  if (!heading) throw new Error('The block was not drawn.');
+  const sides = last.ops.filter((op) => op.kind === 'rule' && (op.dy ?? 0) !== 0);
+  const side = sides[0];
+  if (!side || side.kind !== 'rule') throw new Error('No totals box was drawn.');
+  const boxTop = side.y + (side.dy ?? 0);
+  const boxLeft = GEOMETRY.RIGHT - GEOMETRY.TOTALS_WIDTH;
+  // The footer's own rule is the first full-measure rule beneath the heading;
+  // everything between it and the heading, left of the box, is the block.
+  const footerRule = Math.max(
+    ...last.ops
+      .filter(
+        (op) =>
+          op.kind === 'rule' &&
+          !op.dy &&
+          op.width === GEOMETRY.RIGHT - GEOMETRY.LEFT &&
+          op.y < heading.y,
+      )
+      .map((op) => op.y),
+  );
+  const block = boxes.filter(
+    (box) => box.y <= heading.y + TOLERANCE && box.y > footerRule && box.left < boxLeft,
+  );
+
+  it('starts level with the totals box, its heading on the first row’s baseline', () => {
+    const firstRow = boxes
+      .filter((box) => box.y < boxTop && box.left >= boxLeft - TOLERANCE)
+      .reduce((top, box) => (box.y > top ? box.y : top), -Infinity);
+    expect(heading.y).toBeCloseTo(firstRow, 5);
+    expect(heading.left).toBeCloseTo(GEOMETRY.LEFT, 5);
+  });
+
+  it('keeps every line a gutter clear of the totals box and inside the left margin', () => {
+    // Heading, four labels in each language, and the values, wrapped.
+    expect(block.length).toBeGreaterThanOrEqual(1 + 8 + 4);
+    for (const box of block) {
+      expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+      expect(box.right, box.text).toBeLessThanOrEqual(boxLeft - GEOMETRY.GUTTER + TOLERANCE);
+    }
+  });
+
+  it('wraps a long holder and a long bank address rather than cutting them', () => {
+    const text = block.map((box) => box.text).join(' ');
+    expect(text).not.toContain('…');
+    expect(text.replace(/\s+/g, ' ')).toContain(LONG_BANK.bankAddress?.trim().split(' ').pop());
+    // More lines than the four rows have: the holder and the address each wrapped.
+    expect(new Set(block.map((box) => box.y)).size).toBeGreaterThan(1 + 4);
+  });
+
+  it('never splits from the totals across a page break', () => {
+    // However many lines push it down the page, the block and the totals land
+    // on the same sheet, with the IBAN and the total side by side.
+    for (let count = 1; count <= 40; count += 1) {
+      const laid = layout(
+        invoice({
+          bank: LONG_BANK,
+          lines: manyLines(count),
+          netFils: 70_000 * count,
+          vatFils: 3_500 * count,
+          grossFils: 73_500 * count,
+        }),
+        fonts,
+      );
+      const holding = laid.filter((page) =>
+        boxesOf(page).some((box) => box.text === 'Pay by bank transfer'),
+      );
+      expect(holding, `${count} lines`).toHaveLength(1);
+      const text = boxesOf(holding[0] as Page).map((box) => box.text);
+      expect(text, `${count} lines`).toContain('AE36 0000 0000 0000 0000 001');
+      expect(text, `${count} lines`).toContain('Total');
+      for (const box of boxesOf(holding[0] as Page)) {
+        expect(box.y, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+      }
+    }
+  });
+
+  it('is not on a receipt', () => {
+    for (const page of layout(RECEIPT, fonts)) {
+      expect(boxesOf(page).map((box) => box.text)).not.toContain('Pay by bank transfer');
+    }
+  });
+
+  it('wraps a long foreign IBAN at a group boundary, still clear of the totals box', () => {
+    // The longest IBAN migration 924 allows: `^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$`,
+    // two letters, two digits, up to thirty more — 34 characters, invented for
+    // geometry only: it need not pass the mod-97 check, which a pure render
+    // test never runs. Grouped in fours that is nine groups, one past what the
+    // value column holds on a single row at this holder's width, so it wraps —
+    // at a group boundary, because `sheet.wrap` only ever breaks on the spaces
+    // `groupIban` put in, never inside one. A UAE IBAN is 23 characters and
+    // five groups, and the case above (`LONG_BANK`) never reaches this width.
+    const iban = `AB12${'0'.repeat(30)}`;
+    const grouped = groupIban(iban);
+    const tokens = grouped.split(' ');
+    const pages = layout(invoice({ bank: { ...LONG_BANK, iban } }), fonts);
+    const page = pages[pages.length - 1];
+    if (!page) throw new Error('There is no last page.');
+
+    // Every box that is a run of whole groups from the grouped IBAN — never a
+    // group split mid-way — reassembled in reading order, is the printed value.
+    const rowBoxes = boxesOf(page).filter((box) =>
+      box.text.split(' ').every((part) => tokens.includes(part)),
+    );
+    expect(
+      rowBoxes
+        .slice()
+        .sort((a, b) => b.y - a.y)
+        .map((box) => box.text)
+        .join(' '),
+    ).toBe(grouped);
+    expect(rowBoxes.length).toBeGreaterThan(1); // it wrapped, rather than overrunning the column
+
+    for (const box of rowBoxes) {
+      expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+      expect(box.right, box.text).toBeLessThanOrEqual(boxLeft - GEOMETRY.GUTTER + TOLERANCE);
+    }
   });
 });

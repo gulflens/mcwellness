@@ -149,6 +149,19 @@ rows already there, only when a discount was given. The Federal Tax Authority
 asks a full tax invoice to state "the amount of any discount offered"; a
 simplified one need not, and this does anyway.
 
+_The percentage, printed (the owner's ask of 23 September 2026)._ Until then the
+page stated the two figures and no share; it now states the share too, as this
+section always said it would. A discounted line reads `List AED 7,950.00 · less
+AED 1,987.50 (25%)` when the discount was typed as a percentage, and the two
+figures alone when it was typed as a sum — the share is the line's own
+`discount_basis_points`, never worked out from the figures. The totals row reads
+"Discount 25%" only when every discounted line shares that one percentage; lines
+with no discount do not break the agreement, and a line typed as a sum, or two
+lines at different shares, leave the row saying "Discount" and the figure
+alone, because a total of different shares has no share of its own. The
+percentage is in Western digits on the Arabic side too, like every figure on
+the page.
+
 **In the books, nothing changes.** Revenue is recorded net of discount, which
 is the standard treatment of a discount given at the point of sale. "Discounts
 given against list price" as a figure is piece thirteen's
@@ -518,10 +531,11 @@ description, quantity, unit price, and, while the practice is registered, the
 VAT rate and the VAT amount — rather than the design example's date column,
 which repeats an invoice's single date on every row. Beneath a line's
 description sit its Arabic name and, when a discount was given, the design's own
-phrasing for it: `List AED 12,150.00 · less AED 2,325.00`. Money is written with
-its currency in the cell, `AED 1,650.00`, following the design; the console's
-"name the currency once per table" rule is a rule for screens and does not reach
-a client-facing document.
+phrasing for it: `List AED 12,150.00 · less AED 2,325.00`, followed since 23
+September 2026 by the share, `(15%)`, when it was typed as one (section 2.4).
+Money is written with its currency in the cell, `AED 1,650.00`, following the
+design; the console's "name the currency once per table" rule is a rule for
+screens and does not reach a client-facing document.
 
 **The receipt is the same page with two deliberate departures.** It carries
 **no Date / Method / Amount table**: a receipt records one payment, and the four
@@ -549,6 +563,23 @@ one drift a reader will neither notice nor be harmed by.
 for the document, an email address and a website. They join `tenant` and are
 snapshotted onto the invoice like every other supplier fact, so a document keeps
 saying what it said.
+
+**How to pay, beside the totals** (round 61, the owner's ask of 23 September
+2026). When the practice has recorded an account holder and an IBAN (migration
+924, Settings › Practice), an invoice sets a small block in the empty band to
+the left of the totals box, from the same top: a heading, "Pay by bank transfer"
+in both languages, muted and not violet, then the account holder, the IBAN
+grouped in fours, and — when recorded — the BIC and the bank address, each with
+its label in both languages. The holder and the address wrap within the block;
+the block and the box are kept on one sheet, so a page break falls before both.
+A practice with no account recorded gets exactly the page it had before.
+**The account is read live, like the mark, and not snapshotted**: an account the
+practice has left is the one place a family must not be sent money, so a
+re-render prints the account in use today. The price is the mark's: a filed
+invoice whose bytes are lost after the account changes re-renders to different
+bytes, and the recovery path refuses it (409) rather than put a different file
+under the filed one's hash. **A receipt carries no block**: it acknowledges
+money that arrived and asks for none.
 
 **Nothing about what the document claims changes.** The heading is still
 "Invoice" and not "Tax Invoice" while the practice is unregistered, the

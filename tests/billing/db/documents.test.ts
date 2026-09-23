@@ -628,3 +628,95 @@ describe('a filed document is never replaced by different bytes', () => {
     expect(await h.storage.exists(key)).toBe(false);
   });
 });
+
+/**
+ * How to pay, on the invoice (round 61; docs/SPEC/billing.md section 5.6).
+ *
+ * The practice's bank account is read from its own row when the page is
+ * rendered, like its mark, and never snapshotted. Invented values throughout:
+ * no bank, holder or account here is a real one.
+ */
+describe('the practice’s bank account on a filed invoice', () => {
+  const IBAN = 'AE360000000000000000001';
+
+  /**
+   * The owner records — or clears — the account (905's guard admits only an
+   * owner or admin). Resets the connection back to the practitioner
+   * afterwards, in `finally`, so the owner role this needs does not stay
+   * stamped on `h.owner` for whatever the next query on it turns out to be.
+   */
+  async function setBank(holder: string | null, iban: string | null): Promise<void> {
+    const user = h.data.users[SEEDED.owner];
+    await h.owner.query(
+      "select set_config('app.tenant_id', $1, false), set_config('app.actor_id', $2, false), " +
+        "set_config('app.actor_roles', 'owner', false), " +
+        "set_config('app.request_id', $3, false), set_config('app.reason', '', false)",
+      [h.data.tenant.id, user?.id ?? null, REQUEST_ID],
+    );
+    try {
+      await h.owner.query(
+        'update tenant set bank_account_holder = $2, bank_iban = $3, bank_bic = null, ' +
+          'bank_address = null where id = $1',
+        [h.data.tenant.id, holder, iban],
+      );
+    } finally {
+      await asPractitioner();
+    }
+  }
+
+  async function filedBytes(documentId: string): Promise<{ key: string; bytes: Uint8Array }> {
+    const { rows } = await h.owner.query<{ storage_key: string }>(
+      'select storage_key from document where id = $1',
+      [documentId],
+    );
+    const key = rows[0]?.storage_key ?? '';
+    const bytes = await h.storage.get?.(key);
+    if (!bytes) throw new Error('The store holds nothing at that key.');
+    return { key, bytes };
+  }
+
+  it('files the invoice with how to pay on it, the IBAN grouped in fours', async () => {
+    await setBank('Example Practice L.L.C-FZ', IBAN);
+    try {
+      const invoiceId = await deliverVisit(h.clientId(17));
+      const res = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as CreateDocumentResponse;
+      const page = extractAll(new Uint8Array((await filedBytes(body.document.id)).bytes));
+      expect(page).toContain('Pay by bank transfer');
+      expect(page).toContain('Example Practice L.L.C-FZ');
+      expect(page).toContain('AE36 0000 0000 0000 0000 001');
+    } finally {
+      await setBank(null, null);
+    }
+  });
+
+  it('refuses to restore an invoice filed before the bank changed, because the live read is the intended drift', async () => {
+    // The account is read as the practice has it now, never snapshotted, so a
+    // filed invoice whose bytes are lost after the account changed re-renders
+    // to a different file. That is the rule the practice's mark already lives
+    // by (section 5.6): the recovery refuses rather than put different bytes
+    // under the filed document's hash.
+    await setBank('Example Practice L.L.C-FZ', IBAN);
+    try {
+      const invoiceId = await deliverVisit(h.clientId(18));
+      const created = await h.call('POST', '/api/billing/documents', SEEDED.owner, { invoiceId });
+      const body = (await created.json()) as CreateDocumentResponse;
+      const { key } = await filedBytes(body.document.id);
+      await h.storage.delete(key);
+
+      await setBank('Example Practice Two L.L.C-FZ', IBAN);
+
+      const res = await h.call(
+        'GET',
+        `/api/billing/documents/${body.document.id}/link`,
+        SEEDED.owner,
+      );
+      expect(res.status).toBe(409);
+      expect(((await res.json()) as { code?: string }).code).toBe('document_bytes_differ');
+      expect(await h.storage.exists(key)).toBe(false);
+    } finally {
+      await setBank(null, null);
+    }
+  });
+});

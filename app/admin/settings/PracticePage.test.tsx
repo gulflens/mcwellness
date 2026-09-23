@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { IBAN_MESSAGE } from '../../api/practice/schema';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { AuthProvider } from '../../shell/auth/types';
 import { PracticePage } from './PracticePage';
@@ -63,6 +64,8 @@ const PRACTICE = {
     latitude: 25.19,
     longitude: 55.26,
   },
+  // No bank account recorded (migration 924).
+  bank: null,
 };
 
 function json(body: unknown, status = 200): Response {
@@ -594,5 +597,139 @@ describe('Practice settings — recording readings', () => {
     expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({
       recordReadings: true,
     });
+  });
+});
+
+describe('Practice settings — the bank account', () => {
+  // Invented (migration 924, round 61): the IBAN passes the mod-97 check
+  // (domain/shared/iban.test.ts carries the same value as INVENTED_AE).
+  const BANK = {
+    accountHolder: 'Example Practice L.L.C-FZ',
+    iban: 'AE360000000000000000001',
+    bic: 'TESTAEXX',
+    bankAddress: '1 Example Street, Abu Dhabi',
+  };
+
+  function mountWithMe(answer: (call: Call) => Response) {
+    const calls: Call[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const call = { url: String(input), init };
+      calls.push(call);
+      if (call.url === '/api/me') {
+        return json({
+          userId: '00000002-0000-4000-8000-000000000010',
+          displayName: 'Hazel Harbour',
+          tenantId: '00000001-0000-4000-8000-000000000001',
+          roles: ['admin'],
+          capabilities: [],
+        });
+      }
+      if (call.url === '/api/practice/logo') return NO_LOGO();
+      return answer(call);
+    }) as unknown as typeof fetch;
+    render(
+      <MemoryRouter>
+        <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+          <PracticePage />
+        </AuthProviderBoundary>
+      </MemoryRouter>,
+    );
+    return { calls };
+  }
+
+  it('reads the bank account back, the IBAN grouped in fours', async () => {
+    mountWithMe(() => json({ practice: { ...PRACTICE, bank: BANK } }));
+    expect(await screen.findByText('Example Practice L.L.C-FZ')).toBeTruthy();
+    expect(screen.getByText('AE36 0000 0000 0000 0000 001')).toBeTruthy();
+    expect(screen.getByText('TESTAEXX')).toBeTruthy();
+    expect(screen.getByText('1 Example Street, Abu Dhabi')).toBeTruthy();
+  });
+
+  it('shows "Not recorded" for each bank fact when no account is on record', async () => {
+    mount();
+    expect(await screen.findByText('Synthetic Wellness Studio')).toBeTruthy();
+    for (const label of ['Account holder', 'IBAN', 'BIC', 'Bank address']) {
+      const dt = screen.getByText(label);
+      expect(dt.nextElementSibling?.textContent).toBe('Not recorded');
+    }
+  });
+
+  it('saves the bank account, sending the IBAN as typed for the server to normalise', async () => {
+    const { calls } = mountWithMe((call) => {
+      if (call.url === '/api/practice' && (call.init?.method ?? 'GET') === 'GET') {
+        return json({ practice: PRACTICE });
+      }
+      return json({ practice: { ...PRACTICE, bank: BANK } });
+    });
+    await openTheDrawer();
+    type('Account holder (optional)', 'Example Practice L.L.C-FZ');
+    // Lower case and spaced, the way a person copies it off a bank letter —
+    // the server uppercases and strips the spaces, not the drawer.
+    type('IBAN (optional)', 'ae36 0000 0000 0000 0000 001');
+    type('BIC (optional)', 'TESTAEXX');
+    type('Bank address (optional)', '1 Example Street, Abu Dhabi');
+    type('Why this changes', 'Recording the bank account for the invoice.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({
+      bank: {
+        accountHolder: 'Example Practice L.L.C-FZ',
+        iban: 'ae36 0000 0000 0000 0000 001',
+        bic: 'TESTAEXX',
+        bankAddress: '1 Example Street, Abu Dhabi',
+      },
+    });
+    expect(await screen.findByText('AE36 0000 0000 0000 0000 001')).toBeTruthy();
+  });
+
+  it('clears a bank field by emptying its box, sending null for it and the rest as they stand', async () => {
+    const { calls } = mountWithMe((call) => {
+      if (call.url === '/api/practice' && (call.init?.method ?? 'GET') === 'GET') {
+        return json({ practice: { ...PRACTICE, bank: BANK } });
+      }
+      return json({ practice: { ...PRACTICE, bank: { ...BANK, bankAddress: null } } });
+    });
+    await openTheDrawer();
+    expect((screen.getByLabelText('IBAN (optional)') as HTMLInputElement).value).toBe(BANK.iban);
+    type('Bank address (optional)', '');
+    type('Why this changes', 'The bank stopped giving a branch address.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    expect(JSON.parse(String(saves(calls)[0]?.init?.body))).toMatchObject({
+      bank: {
+        accountHolder: BANK.accountHolder,
+        iban: BANK.iban,
+        bic: BANK.bic,
+        bankAddress: null,
+      },
+    });
+  });
+
+  it('refuses a malformed IBAN before any request reaches the server', async () => {
+    const { calls } = mount();
+    await openTheDrawer();
+    type('IBAN (optional)', 'AE1234');
+    type('Why this changes', 'Recording the bank account.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    expect(await screen.findByText(IBAN_MESSAGE)).toBeTruthy();
+    expect(saves(calls)).toHaveLength(0);
+  });
+
+  it('lands a server iban_invalid refusal on the IBAN field', async () => {
+    const { calls } = mount(() =>
+      json({ error: 'bad_request', code: 'iban_invalid', requestId: null }, 400),
+    );
+    await openTheDrawer();
+    type('Account holder (optional)', 'Example Practice L.L.C-FZ');
+    type('IBAN (optional)', BANK.iban);
+    type('Why this changes', 'Recording the bank account.');
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+    // Said twice — as the form's own note and, since it lands on the field,
+    // beside the IBAN box too — so it is read off the field itself.
+    await waitFor(() => expect(saves(calls)).toHaveLength(1));
+    const ibanBox = screen.getByLabelText('IBAN (optional)');
+    const describedBy = ibanBox.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy ?? '')?.textContent).toBe(IBAN_MESSAGE);
   });
 });

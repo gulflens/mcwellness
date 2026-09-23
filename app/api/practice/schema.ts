@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidIban } from '../../../domain/shared';
 import { cleanText } from '../_middleware/text';
 
 /**
@@ -159,6 +160,106 @@ const ReviewUrl = optional(400).refine(
   REVIEW_URL_MESSAGE,
 );
 
+/**
+ * The practice's bank account (migration 924, round 61): what the invoice's
+ * "Pay by bank transfer" block prints. Business facts of the practice, not
+ * personal data, so the trail records them like any other `tenant` column.
+ *
+ * The checks are the columns' own, and one more: the IBAN's mod-97 check
+ * digits (`domain/shared/iban.ts`), which catch a mistyped digit the shape
+ * cannot and which the database deliberately does not repeat. The IBAN is
+ * taken as people write it — lower case, grouped in fours — and kept
+ * uppercase with the spaces out; the BIC uppercase. The holder's name and the
+ * bank's address are refused rather than cut when they run long: a name
+ * shortened on its way to an invoice is a name a bank may not recognise.
+ */
+export const IBAN_MESSAGE =
+  'An IBAN is two letters, two digits, then 11 to 30 letters or digits, exactly as the bank gives it.';
+export const BIC_MESSAGE = 'A BIC is 8 or 11 letters and digits.';
+export const ACCOUNT_HOLDER_MESSAGE = 'The account holder is at most 120 characters.';
+export const BANK_ADDRESS_MESSAGE = "The bank's address is at most 200 characters.";
+export const IBAN_REQUIRED_MESSAGE =
+  'An account holder, a BIC or a bank address needs the IBAN too.';
+export const ACCOUNT_HOLDER_REQUIRED_MESSAGE = 'An IBAN needs the name the account is held in.';
+
+const IBAN_SHAPE = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/;
+
+/** A bank code: uppercase, spaces out, blank stored as nothing. */
+function bankCode(pattern: RegExp, message: string) {
+  return z
+    .string()
+    .nullable()
+    .transform((value) => {
+      const cleaned = cleanText(value ?? '', 64)
+        .replace(/\s/g, '')
+        .toUpperCase();
+      return cleaned.length === 0 ? null : cleaned;
+    })
+    .refine((value) => value === null || pattern.test(value), message);
+}
+
+/** Bank text: cleaned, blank stored as nothing, refused rather than cut past `max`. */
+function bankText(max: number, message: string) {
+  return z
+    .string()
+    .nullable()
+    .transform((value) => {
+      const cleaned = cleanText(value ?? '', max + 1);
+      return cleaned.length === 0 ? null : cleaned;
+    })
+    .refine((value) => value === null || Array.from(value).length <= max, message);
+}
+
+export const Bank = z.object({
+  accountHolder: z.string(),
+  /** Uppercase, no spaces; the invoice groups it in fours. */
+  iban: z.string(),
+  bic: z.string().nullable(),
+  bankAddress: z.string().nullable(),
+});
+export type Bank = z.infer<typeof Bank>;
+
+/**
+ * The four as a save sends them: each one `string | null`, null (or blank)
+ * clearing it. All four travel together, so the pairings the columns hold
+ * (`tenant_bank_holder_with_iban`, `tenant_bank_details_need_iban`) can be
+ * checked here before a row moves.
+ */
+export const BankInput = z
+  .object({
+    accountHolder: bankText(120, ACCOUNT_HOLDER_MESSAGE),
+    iban: bankCode(IBAN_SHAPE, IBAN_MESSAGE).refine(
+      // Only once the shape holds, so a malformed IBAN is refused once, not twice.
+      (value) => value === null || !IBAN_SHAPE.test(value) || isValidIban(value),
+      IBAN_MESSAGE,
+    ),
+    bic: bankCode(/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/, BIC_MESSAGE),
+    bankAddress: bankText(200, BANK_ADDRESS_MESSAGE),
+  })
+  // The code rides in `params` so the route can answer with it rather than
+  // with the sentence.
+  .superRefine((value, ctx) => {
+    if (
+      value.iban === null &&
+      (value.accountHolder !== null || value.bic !== null || value.bankAddress !== null)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['iban'],
+        message: IBAN_REQUIRED_MESSAGE,
+        params: { code: 'iban_required' },
+      });
+    } else if (value.iban !== null && value.accountHolder === null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['accountHolder'],
+        message: ACCOUNT_HOLDER_REQUIRED_MESSAGE,
+        params: { code: 'account_holder_required' },
+      });
+    }
+  });
+export type BankInput = z.infer<typeof BankInput>;
+
 export const Practice = z.object({
   legalName: z.string(),
   legalNameAr: z.string().nullable(),
@@ -206,6 +307,11 @@ export const Practice = z.object({
   timezone: z.string(),
   /** The registered address, or null while the practice has recorded none. */
   address: PracticeAddress.nullable(),
+  /**
+   * The bank account an invoice asks to be paid into (migration 924), or
+   * null while the practice has recorded no IBAN.
+   */
+  bank: Bank.nullable(),
 });
 export type Practice = z.infer<typeof Practice>;
 
@@ -246,13 +352,10 @@ export const UpdatePracticeInput = z
     recordReadings: z.boolean().optional(),
     whatsappNumber: WhatsappNumber,
     /**
-     * Optional, and the three are the only optional fields on this form.
-     *
-     * The rest of it is saved at once because a settings screen sends the
-     * whole thing; these arrived with the documents round and the screen
-     * cannot edit them yet (`docs/CHANGE-REQUESTS/billing-09.md` item 6), so a
-     * body that omits them leaves the row as it is rather than clearing three
-     * columns the sender never saw.
+     * Optional: a body that omits one leaves the column as it is, and one
+     * that sends it as null or blank clears it (round 61; until then a null
+     * was read as "not sent"). The Practice drawer sends all three on every
+     * save; a caller that never saw them need not restate them.
      */
     contactPhone: ContactPhone.optional(),
     contactEmail: ContactEmail.optional(),
@@ -264,6 +367,11 @@ export const UpdatePracticeInput = z
      * it leaves it alone, as the three above.
      */
     reviewUrl: ReviewUrl.optional(),
+    /**
+     * The bank account (migration 924), all four at once. Absent leaves the
+     * row's four as they stand; every field null clears the account.
+     */
+    bank: BankInput.optional(),
     address: AddressInput.nullable(),
   })
   .refine((value) => !value.vatRegistered || value.vatTrn !== null, {

@@ -232,6 +232,15 @@ Summarised here; FINANCE-SPEC is authoritative.
   every document it issues, and `invoice` snapshots all three at numbering time
   as `supplier_contact_phone`, `supplier_contact_email` and `supplier_website`
   (959), so a document keeps saying what it said (`billing.md` section 5.6).
+- **The practice's bank account** — `tenant` carries `bank_account_holder`,
+  `bank_iban`, `bank_bic` and `bank_address` (924, round 61), all nullable:
+  the account an invoice asks to be paid into. The IBAN is held uppercase
+  without spaces (`^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$`), the BIC uppercase and
+  eight or eleven characters, the holder 1–120 characters and the address
+  1–200; the holder and the IBAN are both set or both null, and a BIC or an
+  address exists only with an IBAN. Business facts of the practice, not
+  personal data: audited with the row and not redacted. Not snapshotted onto
+  the invoice — read at render time, as the logo is.
 - **The books** (`accounting.md`, migrations 450–454): `accounting_setting`
   (one per practice: start day, year end, the lock date, the corporate-tax
   estimate and Small Business Relief settings, the entry counter); `account`

@@ -10,6 +10,13 @@
  * year's legal name (docs/CHANGE-REQUESTS/trunk-notes.md round 20, request 1c).
  * The type is the enforcement — there is no tenant in it to read.
  *
+ * **One deliberate exception, and it is not on the supplier.** An invoice's
+ * `bank` — how to pay it — is read from the practice as it is when the page is
+ * rendered, exactly as its mark is (`docs/SPEC/billing.md` section 5.6), and so
+ * it sits on `InvoiceDocument` rather than in the snapshot, where it would
+ * claim to be something the row stamped. It says where money should go today;
+ * it states nothing about who the practice was when the invoice was numbered.
+ *
  * `vatRegistered` is deliberately nullable. Null is an invoice issued before
  * migration 905, which says nothing about the registration rather than claiming
  * false; the renderer treats it exactly as it treats false, because an invoice
@@ -100,6 +107,26 @@ export type InvoiceDocument = {
   grossFils: number;
   /** What came off the list figures across every line; nought when nothing did. */
   discountFils: number;
+  /**
+   * The one share every discounted line was given (`sharedDiscountBasisPoints`),
+   * printed beside "Discount" in the totals; null when there was no discount,
+   * when any of it was typed as a sum, or when the lines disagree.
+   */
+  discountBasisPoints: number | null;
+  /**
+   * How to pay: the practice's bank account, read **live** at render time like
+   * its mark and never snapshotted (section 5.6). Null when the practice has
+   * recorded no account holder and IBAN, and then the page is exactly the page
+   * it was before the block existed. A receipt has no such field: it asks for
+   * nothing.
+   */
+  bank: {
+    accountHolder: string;
+    /** Uppercase with no spaces, as migration 924 stores it; grouped in fours when printed. */
+    iban: string;
+    bic: string | null;
+    bankAddress: string | null;
+  } | null;
 };
 
 export type PaymentMethod = 'cash' | 'transfer' | 'link';
@@ -131,4 +158,27 @@ export type MoneyDocument = InvoiceDocument | ReceiptDocument;
  */
 export function chargesVat(supplier: SupplierSnapshot): boolean {
   return supplier.vatRegistered === true;
+}
+
+/**
+ * The percentage a whole invoice's discount can honestly be named by: the one
+ * `discountBasisPoints` every discounted line shares.
+ *
+ * Lines with nothing off them do not break the agreement — a discounted session
+ * beside a full-price call-out fee is still "25% off" where it was off at all.
+ * But one discounted line typed as a sum, or two typed as different shares,
+ * leave no single percentage to print, and the totals then say "Discount" and
+ * the figure alone rather than invent one (`domain/billing/discount.ts`).
+ */
+export function sharedDiscountBasisPoints(
+  lines: readonly Pick<InvoiceLine, 'discountFils' | 'discountBasisPoints'>[],
+): number | null {
+  let shared: number | null = null;
+  for (const line of lines) {
+    if (line.discountFils <= 0) continue;
+    if (line.discountBasisPoints === null) return null;
+    if (shared !== null && shared !== line.discountBasisPoints) return null;
+    shared = line.discountBasisPoints;
+  }
+  return shared;
 }
