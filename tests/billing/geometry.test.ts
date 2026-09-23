@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { documentFonts } from '../../app/api/billing/fonts';
 import {
   GEOMETRY,
+  groupIban,
   layout,
   measure,
   type InvoiceDocument,
@@ -581,6 +582,42 @@ describe('the bank block', () => {
   it('is not on a receipt', () => {
     for (const page of layout(RECEIPT, fonts)) {
       expect(boxesOf(page).map((box) => box.text)).not.toContain('Pay by bank transfer');
+    }
+  });
+
+  it('wraps a long foreign IBAN at a group boundary, still clear of the totals box', () => {
+    // The longest IBAN migration 924 allows: `^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$`,
+    // two letters, two digits, up to thirty more — 34 characters, invented for
+    // geometry only: it need not pass the mod-97 check, which a pure render
+    // test never runs. Grouped in fours that is nine groups, one past what the
+    // value column holds on a single row at this holder's width, so it wraps —
+    // at a group boundary, because `sheet.wrap` only ever breaks on the spaces
+    // `groupIban` put in, never inside one. A UAE IBAN is 23 characters and
+    // five groups, and the case above (`LONG_BANK`) never reaches this width.
+    const iban = `AB12${'0'.repeat(30)}`;
+    const grouped = groupIban(iban);
+    const tokens = grouped.split(' ');
+    const pages = layout(invoice({ bank: { ...LONG_BANK, iban } }), fonts);
+    const page = pages[pages.length - 1];
+    if (!page) throw new Error('There is no last page.');
+
+    // Every box that is a run of whole groups from the grouped IBAN — never a
+    // group split mid-way — reassembled in reading order, is the printed value.
+    const rowBoxes = boxesOf(page).filter((box) =>
+      box.text.split(' ').every((part) => tokens.includes(part)),
+    );
+    expect(
+      rowBoxes
+        .slice()
+        .sort((a, b) => b.y - a.y)
+        .map((box) => box.text)
+        .join(' '),
+    ).toBe(grouped);
+    expect(rowBoxes.length).toBeGreaterThan(1); // it wrapped, rather than overrunning the column
+
+    for (const box of rowBoxes) {
+      expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+      expect(box.right, box.text).toBeLessThanOrEqual(boxLeft - GEOMETRY.GUTTER + TOLERANCE);
     }
   });
 });
