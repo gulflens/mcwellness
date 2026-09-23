@@ -1,15 +1,18 @@
 /**
- * A very small PDF writer: enough to set bilingual type, rule a line, embed
- * the two faces the app already uses, and set one hue.
+ * A very small PDF writer: enough to set bilingual type, rule a line, draw
+ * an image and a filled or stroked rectangle, and embed the two faces the app
+ * already uses.
  *
  * **Why this exists rather than a library.** An invoice is a document the
  * practice hands to a family and a tax authority may read, so it has to carry
  * its own type and be byte-identical every time it is rendered from the same
  * row. What that needs from a PDF is narrow: pages, text in an embedded
- * TrueType font, horizontal rules, and — since round 34 — a flat red-green-blue
- * fill and stroke for the one figure the design brief admits a hue on
- * (`docs/DESIGN-BRIEF.md` section 5, the session ribbon). No images, no colour
- * spaces beyond that one operator, no forms, no transparency, no compression.
+ * TrueType font, rules, the practice's mark as an image (since round 20), a
+ * flat red-green-blue fill and stroke (since round 34, first for the session
+ * ribbon of `docs/DESIGN-BRIEF.md` section 5), and — since round 65 — the
+ * filled and stroked rectangle, square or rounded, the operator's invoice
+ * design is drawn with. No colour spaces beyond that one operator, no forms,
+ * no transparency, no compression.
  * `package.json` is the shared zone
  * (docs/SPEC/OWNERSHIP.md), so a dependency here is a change request and a
  * standing supply-chain surface on the one path that renders a client's
@@ -270,6 +273,12 @@ function clamp01(value: number): number {
 
 /** A number as PDF writes one: no exponent, no trailing noise. */
 function num(value: number): string {
+  // A NaN, an infinity or a number past 1e21 would be written as "NaN",
+  // "Infinity" or "1e+21" — not a number a PDF reader can parse, and a page
+  // that will not open is a document the practice cannot send. Nought is at
+  // least a page; the geometry tests are what keep a real layout from ever
+  // asking for one.
+  if (!Number.isFinite(value) || Math.abs(value) >= 1e21) return '0';
   const rounded = Math.round(value * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }

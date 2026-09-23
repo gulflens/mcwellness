@@ -683,6 +683,46 @@ describe('a rectangle', () => {
     expect(streamOf(renderPdf([GREY_PAGE], fonts, 'Synthetic'))).toBe(GREY_STREAM_BEFORE_COLOUR);
   });
 
+  it('writes nought for a number that is not finite, so the stream still parses', () => {
+    // A NaN or an infinity written as itself is "NaN" or "Infinity" in the
+    // content stream — not a number, and a page a reader refuses to open.
+    const square: Page = {
+      ops: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 30,
+          width: Number.POSITIVE_INFINITY,
+          height: 1e21,
+          fill: { grey: 0.9 },
+        },
+      ],
+    };
+    expect(streamOf(renderPdf([square], fonts, 'Synthetic'))).toBe('q 0.90 g 20 30 0 0 re f Q');
+
+    const rounded: Page = {
+      ops: [
+        {
+          kind: 'rect',
+          x: 20,
+          y: 30,
+          width: Number.NaN,
+          height: 40,
+          radius: Number.POSITIVE_INFINITY,
+          fill: { grey: 0.9 },
+        },
+      ],
+    };
+    const stream = streamOf(renderPdf([rounded], fonts, 'Synthetic'));
+    expect(stream).not.toMatch(/NaN|Infinity|e\+/);
+    // Every token is a number or one of the operators a rectangle uses.
+    for (const token of stream.split(' ')) {
+      expect(token, stream).toMatch(/^(-?\d+(\.\d+)?|q|Q|g|m|l|c|h|f)$/);
+    }
+    expect(stream.startsWith('q 0.90 g ')).toBe(true);
+    expect(stream.endsWith(' h f Q')).toBe(true);
+  });
+
   it('draws nothing for a rectangle with neither a fill nor a stroke', () => {
     const page: Page = { ops: [{ kind: 'rect', x: 0, y: 0, width: 10, height: 10 }] };
     expect(streamOf(renderPdf([page], fonts, 'Synthetic'))).toBe('');
