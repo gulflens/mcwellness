@@ -192,7 +192,11 @@ export class Sheet {
     this.y = TOP;
     // A running header, so a loose second sheet still says which document it
     // belongs to and whose practice issued it.
-    this.text(LEFT, this.running.practice, SIZE.small, { grey: MUTED });
+    // Cut to half the measure, so a long legal name never runs under the
+    // reference against the right margin.
+    this.text(LEFT, this.fit(this.running.practice, (RIGHT - LEFT) / 2, SIZE.small), SIZE.small, {
+      grey: MUTED,
+    });
     this.text(RIGHT, this.running.reference, SIZE.small, { grey: MUTED, align: 'end' });
     this.down(SMALL_LINE);
     this.rule();

@@ -527,7 +527,9 @@ export abstract class DocumentPage {
    * The summary, under its title on a tinted band: rows of English labels
    * and figures and no Arabic, as his page sets them; a hairline; and the
    * violet block, its caption small in white in both languages over the
-   * figure large in white.
+   * figure large in white. Given no rows — a receipt, whose one figure is the
+   * block's — it draws no hairline either, and the block starts under the
+   * band.
    */
   protected summaryCard(
     title: Phrase,
@@ -542,7 +544,7 @@ export abstract class DocumentPage {
     const firstRow = TITLE_BAND + 17;
     const lastRow = firstRow + (rows.length - 1) * 16;
     const ruleAt = lastRow + 9;
-    const blockTop = ruleAt + 10;
+    const blockTop = rows.length > 0 ? ruleAt + 10 : TITLE_BAND + 10;
     const least = 60;
     const height = blockTop + least + 8;
 
@@ -569,7 +571,7 @@ export abstract class DocumentPage {
           this.sheet.line(y, x + PAD, row.label, TYPE.value, { grey: MUTED });
           this.sheet.line(y, x + width - PAD, row.value, TYPE.value, valueOptions);
         });
-        this.sheet.hairline(x + PAD, top - ruleAt, width - PAD * 2);
+        if (rows.length > 0) this.sheet.hairline(x + PAD, top - ruleAt, width - PAD * 2);
 
         // The violet block fills the card to its foot.
         const inset = 8;

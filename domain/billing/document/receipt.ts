@@ -76,12 +76,8 @@ class ReceiptPage extends DocumentPage {
         laid: this.rowsCard(WORDS.paymentReceived, this.receivedRows(method), null),
         block: 'receivedCard',
       },
-      this.summaryCard(
-        WORDS.receiptSummary,
-        [{ label: WORDS.total.en, value: money(document_.amountFils) }],
-        WORDS.totalPaid,
-        money(document_.amountFils),
-      ),
+      // No rows: a receipt has one figure, and the violet block prints it.
+      this.summaryCard(WORDS.receiptSummary, [], WORDS.totalPaid, money(document_.amountFils)),
       {
         laid: this.barCard(WORDS.note, [
           {

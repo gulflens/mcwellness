@@ -789,6 +789,30 @@ describe('the practice’s mark', () => {
   });
 });
 
+describe('the running header on a later sheet', () => {
+  it('cuts a long legal name to half the measure, so it never runs under the reference', () => {
+    const legalName =
+      `Synthetic Wellness Studio ${'for Performance and Training '.repeat(4)}`.trim();
+    const laid = layoutWithBlocks(
+      invoiceOf(
+        Array.from({ length: 30 }, (_, index) => lineOf(index, false, 'none')),
+        { supplier: { ...SUPPLIER, legalName } },
+      ),
+      fonts,
+    );
+    expect(laid.pages.length).toBeGreaterThan(1);
+    for (const page of laid.pages.slice(1)) {
+      const header = boxesOf(page).filter((box) => box.y >= GEOMETRY.TOP - TOLERANCE);
+      const practice = header.find((box) => box.text.startsWith('Synthetic Wellness Studio'));
+      if (!practice) throw new Error('No running header on a later sheet.');
+      expect(practice.text.endsWith('…')).toBe(true);
+      expect(practice.right).toBeLessThanOrEqual(
+        GEOMETRY.LEFT + (GEOMETRY.RIGHT - GEOMETRY.LEFT) / 2 + TOLERANCE,
+      );
+    }
+  });
+});
+
 describe('a table that outgrows its page', () => {
   const laid = MATRIX.find((each) => each.name.startsWith('40 lines, registered')) as Laid;
 

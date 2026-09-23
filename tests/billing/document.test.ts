@@ -77,7 +77,7 @@ const REGISTERED: SupplierSnapshot = {
 };
 
 /** The receipt's household: a seed name and a record number in the practice's own form. */
-const RECIPIENT = { name: 'Robin Fairweather', recordNumber: 'MW-000004' };
+const RECIPIENT = { name: 'Robin Fairweather', recordNumber: 'MW-000099' };
 
 /** The invoice's household: a seed name and a record number in the practice's own form. */
 const HOUSEHOLD = { name: 'Hazel Dune', recordNumber: 'MW-000099' };
@@ -661,7 +661,7 @@ describe('the receipt in the operator’s design, block by block', () => {
     expect(page).toContain('RECEIVED FROM');
     expect(page).toContain(asCopied(WORDS.receivedFromCaption.ar));
     expect(lines).toContain('Robin Fairweather');
-    expect(page).toContain('Client record: MW-000004');
+    expect(page).toContain('Client record: MW-000099');
     expect(page).toContain(asCopied(WORDS.clientRecord.ar));
   });
 
@@ -686,14 +686,14 @@ describe('the receipt in the operator’s design, block by block', () => {
     expect(lines.filter((line) => line === 'Bank transfer')).toHaveLength(2);
   });
 
-  it('sums up: the total, and TOTAL PAID over the figure in the violet block', () => {
+  it('sums up with TOTAL PAID over the figure in the violet block, and nothing else', () => {
     expect(page).toContain('Receipt summary');
     expect(page).toContain(asCopied(WORDS.receiptSummary.ar));
-    expect(lines).toContain('Total');
     expect(lines).toContain('TOTAL PAID');
     expect(page).toContain(asCopied(WORDS.totalPaid.ar));
-    // The figure twice: the summary's row and the violet block.
-    expect(count(page, 'AED 700.00')).toBe(2);
+    // A receipt has one figure, and prints it once: no Total row above the block.
+    expect(lines).not.toContain('Total');
+    expect(count(page, 'AED 700.00')).toBe(1);
   });
 
   it('carries the Note card with the receipt’s own sentence, in both languages', () => {
@@ -847,12 +847,15 @@ describe('a receipt asks for no money and claims nothing about tax, whoever issu
  * received" beside a summary whose violet block reads "TOTAL PAID", a Note
  * card carrying its own sentence, and the invoice's footer. It was re-pinned
  * after the rendered page had been read against the spec. Its household's
- * record number moved to the practice's own form, MW-000004, at the same
- * time. The two invoices did not move: the blocks they now share with the
+ * record number moved to the practice's own form at the same time. The two invoices did not move: the blocks they now share with the
  * receipt were lifted out of the invoice page byte for byte.
  * It moved once more that night, when its Note sentence took the invoice's
  * spelling of "Bank transfer" (تحويل مصرفي), so the practice spells it one
  * way on both documents; the invoices, which already printed it, did not.
+ * And once more before the round closed: its summary lost the Total row, so
+ * the one figure a receipt has prints once, in the violet block; its
+ * household's record number became MW-000099, a number no real client has
+ * carried.
  *
  * **A third invoice was pinned at the end of round 65**: the unregistered
  * invoice with the practice's bank account and a 25% discount, so the
@@ -890,7 +893,7 @@ describe('the bytes of a rendered document', () => {
     [
       'a receipt',
       () => renderDocument(receiptFor(UNREGISTERED), fonts),
-      'b3dc8e9e24072067cea41989e7f90cb50a19cbf71d311367e9cef01b6854298e',
+      'bde17737f2bc560a8351f8377d39f068a55ec53bc9eb3494b3ed0adb800c6207',
     ],
   ];
 
