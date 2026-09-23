@@ -668,6 +668,26 @@ describe('where a panel opens, and what it says', () => {
     expect(document.activeElement).toBe(heading);
   });
 
+  // Round 63: PanelHeading focused itself the same way RecordConsentForm's own
+  // heading did, with an inline `ref={(node) => node?.focus()}` — a fresh
+  // function identity on every render, so the controlled reason field beneath
+  // it re-rendered ConsentTab on every keystroke and the heading stole focus
+  // (and the caret) back after the first letter.
+  it('keeps every letter typed into the withdrawal reason', async () => {
+    const user = userEvent.setup();
+    const signed: ClientRecordResponse = {
+      ...record,
+      consents: [consentOn('participation', '00000008-0000-4000-8000-00000000020c')],
+    };
+    mount(<ConsentTab clientId={CLIENT_ID} record={signed} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+
+    const reason = await screen.findByLabelText('Reason');
+    await user.type(reason, 'typed by hand for the record');
+    expect((reason as HTMLInputElement).value).toBe('typed by hand for the record');
+    expect(document.activeElement).toBe(reason);
+  });
+
   it('shows back the reason a consent was withdrawn', async () => {
     const withdrawn: ClientRecordResponse = {
       ...record,
