@@ -224,7 +224,7 @@ describe('the invoice in the operator’s design, block by block', () => {
     expect(page).toContain('PAYMENT METHOD');
     expect(page).toContain(asCopied(WORDS.paymentMethodCaption.ar));
     expect(lines).toContain('Bank transfer');
-    expect(page).toContain(asCopied(WORDS.bankTransferMethod.ar));
+    expect(page).toContain(asCopied(WORDS.transfer.ar));
   });
 
   it('heads the table in both languages, with a discount column because a line is discounted', () => {
@@ -669,7 +669,7 @@ describe('the receipt in the operator’s design, block by block', () => {
     expect(page).toContain('PAYMENT METHOD');
     expect(page).toContain(asCopied(WORDS.paymentMethodCaption.ar));
     expect(lines).toContain('Bank transfer');
-    expect(page).toContain(asCopied(WORDS.bankTransferMethod.ar));
+    expect(page).toContain(asCopied(WORDS.transfer.ar));
   });
 
   it('sets the Payment received card: the method, the reference and the invoice it settles, English labels only', () => {
@@ -720,7 +720,7 @@ describe('the receipt in the operator’s design, block by block', () => {
 describe('a receipt, by the method the money came by', () => {
   const METHODS = [
     ['cash', WORDS.cash],
-    ['transfer', WORDS.bankTransferMethod],
+    ['transfer', WORDS.transfer],
     ['link', WORDS.link],
   ] as const;
 
@@ -850,6 +850,9 @@ describe('a receipt asks for no money and claims nothing about tax, whoever issu
  * record number moved to the practice's own form, MW-000004, at the same
  * time. The two invoices did not move: the blocks they now share with the
  * receipt were lifted out of the invoice page byte for byte.
+ * It moved once more that night, when its Note sentence took the invoice's
+ * spelling of "Bank transfer" (تحويل مصرفي), so the practice spells it one
+ * way on both documents; the invoices, which already printed it, did not.
  *
  * They are rendered with no logo, deliberately: the mark is the practice's own
  * row and not a file in this repository, so a golden that embedded one would
@@ -873,7 +876,7 @@ describe('the bytes of a rendered document', () => {
     [
       'a receipt',
       () => renderDocument(receiptFor(UNREGISTERED), fonts),
-      '9faa1ddc1d92b7af78a217ee5feef34e6b04691c19b367ca4ed55a7854f6111f',
+      'b3dc8e9e24072067cea41989e7f90cb50a19cbf71d311367e9cef01b6854298e',
     ],
   ];
 

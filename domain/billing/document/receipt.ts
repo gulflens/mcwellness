@@ -21,7 +21,7 @@
  * draw, as the invoice's do.
  */
 
-import type { PaymentMethod, ReceiptDocument } from './model';
+import type { ReceiptDocument } from './model';
 import type { DocumentImage, FontSet, Page } from '../../shared/document';
 import { MUTED, VIOLET } from './sheet';
 import { DocumentPage, GAP, TYPE, type Block, type CardRow, type NumberPair } from './page';
@@ -45,17 +45,6 @@ export function receiptLayout(
   return page.laidOut();
 }
 
-/**
- * The method's own name, as the payment method and on its row. A transfer
- * reads "Bank transfer" / "تحويل مصرفي", the phrase the invoice prints, so
- * the practice spells it one way on both documents.
- */
-const METHOD: Record<PaymentMethod, Phrase> = {
-  cash: WORDS.cash,
-  transfer: WORDS.bankTransferMethod,
-  link: WORDS.link,
-};
-
 class ReceiptPage extends DocumentPage {
   private readonly document_: ReceiptDocument;
 
@@ -66,7 +55,8 @@ class ReceiptPage extends DocumentPage {
 
   draw(logo: DocumentImage | null): void {
     const document_ = this.document_;
-    const method = METHOD[document_.method];
+    // The method's own name, spelt as the invoice spells it.
+    const method = WORDS[document_.method];
 
     const footer = this.footer();
     this.sheet.setFloor(footer.top + GAP);

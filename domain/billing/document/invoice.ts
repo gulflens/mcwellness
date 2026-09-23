@@ -130,7 +130,7 @@ class InvoicePage extends DocumentPage {
       { caption: WORDS.billedToCaption, block: 'billedTo', ...this.document_.recipient },
       // Absent, caption and all, when the practice has recorded no account:
       // a bank transfer is the one way the page can say to pay.
-      this.document_.bank ? WORDS.bankTransferMethod : null,
+      this.document_.bank ? WORDS.transfer : null,
     );
     this.sheet.down(18);
     this.table();

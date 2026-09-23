@@ -48,7 +48,7 @@ export const VIOLET = [0x38 / 255, 0x04 / 255, 0x73 / 255] as const;
 /**
  * Type set on violet — the table's headings and the violet block's caption
  * and figure — and nowhere else: white is his colour only on his violet
- * (`tests/billing/palette.test.ts` holds every page to that).
+ * (which `tests/billing/palette.test.ts` pins on every page).
  */
 export const WHITE = [1, 1, 1] as const;
 

@@ -115,13 +115,11 @@ export const WORDS = {
   paymentReference: { en: 'Payment reference', ar: 'مرجع الدفع' },
   settlesInvoice: { en: 'Settles invoice', ar: 'سداد الفاتورة' },
   /**
-   * The round 65 card beside billed-to (point 3): "PAYMENT METHOD" over
-   * "Bank transfer" in violet — on a receipt, over whichever method the money
-   * came by. `bankTransferMethod`'s English reads as `transfer` below, which
-   * stays for `receiptBasis`'s sentence; its Arabic is this card's own.
+   * The round 65 card beside billed-to (point 3): "PAYMENT METHOD" over the
+   * method's own name in violet (`cash` / `transfer` / `link` below) — on an
+   * invoice always "Bank transfer", on a receipt whichever way the money came.
    */
   paymentMethodCaption: { en: 'PAYMENT METHOD', ar: 'طريقة الدفع' },
-  bankTransferMethod: { en: 'Bank transfer', ar: 'تحويل مصرفي' },
 
   /**
    * How to pay, on an invoice's "Payment details" card (round 61, the owner's
@@ -145,7 +143,7 @@ export const WORDS = {
    * already reads `settlesInvoice` above. `method` and `reference` are set
    * **English only**, the same rule as the payment-details card's own rows;
    * the value beside `method` is the payment's own name (`cash` /
-   * `bankTransferMethod` / `link`).
+   * `transfer` / `link` below).
    */
   paymentReceived: { en: 'Payment received', ar: 'الدفعة المستلمة' },
   method: { en: 'Method', ar: '' },
@@ -153,8 +151,13 @@ export const WORDS = {
   /** The receipt's bottom card, carrying `receiptBasis` (round 65). */
   note: { en: 'Note', ar: 'ملاحظة' },
 
+  /**
+   * The ways money arrives, as the payment method, on a receipt's row and in
+   * `receiptBasis`'s sentence. One spelling of each on both documents: a
+   * transfer is "تحويل مصرفي" wherever the practice's paper names it.
+   */
   cash: { en: 'Cash', ar: 'نقداً' },
-  transfer: { en: 'Bank transfer', ar: 'تحويل بنكي' },
+  transfer: { en: 'Bank transfer', ar: 'تحويل مصرفي' },
   link: { en: 'Payment link', ar: 'رابط دفع' },
 } as const satisfies Record<string, Phrase>;
 
