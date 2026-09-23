@@ -132,14 +132,6 @@ export function ConsentTab({
   const [busy, setBusy] = useState(false);
   const { apiFetch } = useAuth();
   const isErased = erased || record.status === 'erased';
-  // At least one required purpose has no active consent: "Sign everything at
-  // once" is offered only then, the same rule that gives it a reason to
-  // exist — a record that already holds everything it needs has nothing left
-  // for one signature to cover.
-  const missingAny = [...required].some(
-    (purpose) => !record.consents.some((consent) => isActiveOn(consent, today, purpose)),
-  );
-
   function nameOf(contactId: string): string {
     const contact = record.contacts.find((candidate) => candidate.id === contactId);
     if (!contact) return 'A contact no longer on this record';
@@ -248,11 +240,10 @@ export function ConsentTab({
         </Note>
       ) : null}
 
-      {/* Offered only while something required is still missing: a record
-          that already holds every consent it needs has nothing left for one
-          signature to cover (docs/SPEC/client-record.md section 7). */}
-      {mayWrite && !isErased && missingAny && !signingAll ? (
-        <div className="drawer__actions">
+      {mayWrite && !isErased && !signingAll ? (
+        <div className="consent-start">
+          <h3>One signature. All your consents.</h3>
+          <p>Choose the agreements, read them together, then sign once.</p>
           <Button
             variant="primary"
             onClick={() => {
@@ -261,10 +252,10 @@ export function ConsentTab({
               setSigningAll(true);
             }}
           >
-            Sign everything at once
+            Select consents and sign once
           </Button>
           <p className="small muted">
-            One reading, one signature, every consent this client needs.
+            Each agreement keeps its own record and a copy of the shared signature.
           </p>
         </div>
       ) : null}
@@ -286,13 +277,13 @@ export function ConsentTab({
       ) : null}
 
       {signingAll ? null : (
-        <ul className="record-rows">
+        <ul className="record-rows consent-records">
           {purposes.map((purpose) => {
             const history = record.consents.filter((consent) => consent.purpose === purpose);
             const active = history.find((consent) => isActiveOn(consent, today, purpose));
             const isRequired = required.has(purpose);
             return (
-              <li key={purpose} className="record-row">
+              <li key={purpose} className="record-row consent-record">
                 <div className="record-row__main">
                   <p>{PURPOSE_LABELS[purpose] ?? purpose}</p>
                   <p className="small muted">

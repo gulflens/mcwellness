@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   canGiveConsent,
   requiredConsentsFor,
@@ -106,13 +106,15 @@ export function SignAllForm({
     () => requiredConsentsFor({ dateOfBirth: record.dateOfBirth }, ['home'], today),
     [record.dateOfBirth, today],
   );
+  const [selectedPurposes, setSelectedPurposes] = useState<RequiredConsentPurpose[]>(purposes);
+  const selectionKey = selectedPurposes.join(',');
   // A giver who may give every one of these; a guardian's purpose in the
   // stack narrows the list to guardians, which is the rule the route holds
   // (`canGiveConsent`, domain/client).
   const consenting = useMemo(
     () =>
       record.contacts.filter((contact) =>
-        purposes.every(
+        selectedPurposes.every(
           (purpose) =>
             canGiveConsent(
               { dateOfBirth: record.dateOfBirth },
@@ -126,7 +128,7 @@ export function SignAllForm({
             ).ok,
         ),
       ),
-    [record.contacts, record.dateOfBirth, purposes, today],
+    [record.contacts, record.dateOfBirth, selectedPurposes, today],
   );
   const locale = record.preferredLocale;
   const [givenByContactId, setGivenByContactId] = useState(consenting[0]?.id ?? '');
@@ -134,6 +136,7 @@ export function SignAllForm({
   const [state, setState] = useState<WordingsState>({ kind: 'loading' });
   const [readToEnd, setReadToEnd] = useState(false);
   const [signature, setSignature] = useState<SignatureResult | null>(null);
+  const scanRequest = useRef(0);
   const [scan, setScan] = useState<UploadFile | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanWarning, setScanWarning] = useState<string | null>(null);
@@ -147,6 +150,22 @@ export function SignAllForm({
   // a relationship label standing in for a person's signature.
   const [typedName, setTypedName] = useState<string | null>(null);
   const signedName = typedName ?? (giver ? signatureName(giver, record) : '');
+
+  function changeSelection(next: RequiredConsentPurpose[]): void {
+    scanRequest.current += 1;
+    setSelectedPurposes(next);
+    setReadToEnd(false);
+    setSignature(null);
+    setScan(null);
+    setScanError(null);
+    setScanWarning(null);
+    setFormError(null);
+  }
+
+  const selectedWordings =
+    state.kind === 'ready'
+      ? state.wordings.filter((wording) => selectedPurposes.includes(wording.purpose))
+      : [];
 
   const loadWordings = useCallback(async (): Promise<WordingsState> => {
     const loaded: Loaded[] = [];
@@ -195,11 +214,13 @@ export function SignAllForm({
   }, []);
 
   async function chooseScan(file: File | null): Promise<void> {
+    const request = ++scanRequest.current;
     setScanError(null);
     setScanWarning(null);
     setScan(null);
     if (!file) return;
     const prepared = await compressToFit(file, MAX_DOCUMENT_BYTES);
+    if (request !== scanRequest.current) return;
     if (!prepared.ok) {
       setScanError(prepared.message);
       return;
@@ -220,11 +241,11 @@ export function SignAllForm({
   // branch below.
   const caption =
     state.kind === 'ready'
-      ? `Signed for: ${state.wordings.map((w) => PURPOSE_LABELS[w.purpose] ?? w.purpose).join(', ')}`
+      ? `Signed for: ${selectedWordings.map((w) => PURPOSE_LABELS[w.purpose] ?? w.purpose).join(', ')}`
       : '';
 
   async function submit(): Promise<void> {
-    if (state.kind !== 'ready') return;
+    if (!canSubmit || state.kind !== 'ready') return;
     const evidence =
       method === 'app_signature'
         ? signature
@@ -234,7 +255,10 @@ export function SignAllForm({
     setFormError(null);
     try {
       const body = RecordConsentBundleBody.parse({
-        purposes: state.wordings.map((w) => ({ purpose: w.purpose, textDocumentId: w.wording.id })),
+        purposes: selectedWordings.map((w) => ({
+          purpose: w.purpose,
+          textDocumentId: w.wording.id,
+        })),
         givenByContactId,
         method,
         evidence,
@@ -245,7 +269,7 @@ export function SignAllForm({
         body: JSON.stringify(body),
       });
       if (res.status === 201) {
-        onSaved(purposes);
+        onSaved(selectedWordings.map((wording) => wording.purpose));
         return;
       }
       if (res.status === 403) {
@@ -271,7 +295,12 @@ export function SignAllForm({
   const evidenceReady =
     method === 'app_signature' ? signature !== null && signedName.trim() !== '' : scan !== null;
   const canSubmit =
-    !busy && state.kind === 'ready' && readToEnd && givenByContactId !== '' && evidenceReady;
+    !busy &&
+    state.kind === 'ready' &&
+    selectedWordings.length > 0 &&
+    readToEnd &&
+    giver !== null &&
+    evidenceReady;
 
   const heading = useFocusOnOpen<HTMLHeadingElement>();
 
@@ -281,13 +310,58 @@ export function SignAllForm({
           reason every panel this tab opens takes focus (ConsentTab.tsx's
           PanelHeading): the button that opened this is unchanged above it. */}
       <h3 className="drawer__section" tabIndex={-1} ref={heading}>
-        Sign everything at once
+        One signature for your consents
       </h3>
       <p className="small muted">
         {sentenceCase(countInWords(purposes.length))} consents, read one after another and signed
         once. Each is recorded against the wording shown here.
       </p>
 
+      <section className="consent-choice" aria-labelledby="consent-choice-heading">
+        <h4 id="consent-choice-heading">Choose the agreements to sign</h4>
+        <p className="small muted">
+          Select all {countInWords(purposes.length)} to cover them with one signature, or choose
+          individual agreements.
+        </p>
+        <label className="consent-choice__all">
+          <input
+            type="checkbox"
+            disabled={busy}
+            checked={selectedPurposes.length === purposes.length}
+            ref={(node) => {
+              if (node)
+                node.indeterminate =
+                  selectedPurposes.length > 0 && selectedPurposes.length < purposes.length;
+            }}
+            onChange={(event) => changeSelection(event.target.checked ? purposes : [])}
+          />
+          <span>Select all {countInWords(purposes.length)} consents</span>
+        </label>
+        <div className="consent-choice__list">
+          {purposes.map((purpose) => (
+            <label key={purpose} className="consent-choice__item">
+              <input
+                type="checkbox"
+                disabled={busy}
+                checked={selectedPurposes.includes(purpose)}
+                onChange={(event) =>
+                  changeSelection(
+                    purposes.filter((candidate) =>
+                      candidate === purpose
+                        ? event.target.checked
+                        : selectedPurposes.includes(candidate),
+                    ),
+                  )
+                }
+              />
+              <span>{PURPOSE_LABELS[purpose]}</span>
+            </label>
+          ))}
+        </div>
+        <p className="small" role="status">
+          {selectedPurposes.length} of {purposes.length} selected. One signature.
+        </p>
+      </section>
       <section className="consent-form__section" aria-labelledby="consent-signer-heading">
         <h4 id="consent-signer-heading">1. Confirm who is signing</h4>
         {consenting.length === 0 ? (
@@ -299,8 +373,10 @@ export function SignAllForm({
           <Select
             id="sign-all-giver"
             label="Given by"
-            value={givenByContactId}
+            disabled={busy}
+            value={giver ? givenByContactId : ''}
             onChange={(event) => {
+              scanRequest.current += 1;
               setGivenByContactId(event.target.value);
               setTypedName(null);
               setSignature(null);
@@ -310,6 +386,11 @@ export function SignAllForm({
               setReadToEnd(false);
             }}
           >
+            {!giver ? (
+              <option value="" disabled>
+                Choose who is signing
+              </option>
+            ) : null}
             {consenting.map((contact) => (
               <option key={contact.id} value={contact.id}>
                 {contactDisplayName(contact, record)} —{' '}
@@ -338,12 +419,12 @@ export function SignAllForm({
             <h4 id="consent-read-heading">2. Read the agreements</h4>
             <p className="small muted">The signature will cover the following consents:</p>
             <ul className="consent-form__purposes small">
-              {state.wordings.map((w) => (
+              {selectedWordings.map((w) => (
                 <li key={w.purpose}>{PURPOSE_LABELS[w.purpose] ?? w.purpose}</li>
               ))}
             </ul>
             <div
-              key={givenByContactId}
+              key={`${givenByContactId}:${selectionKey}`}
               className="consent-text"
               ref={measure}
               onScroll={onScroll}
@@ -352,7 +433,7 @@ export function SignAllForm({
               aria-label="Consent wording"
               {...(locale === 'ar' ? { lang: 'ar', dir: 'rtl' as const } : {})}
             >
-              {state.wordings.map((w) => (
+              {selectedWordings.map((w) => (
                 <section key={w.purpose} className="consent-text__part">
                   {/* Its own class and its own level (h3, not h4): `.consent-text__heading`
                     below is what a heading *inside* a wording's own markdown renders as
@@ -375,10 +456,16 @@ export function SignAllForm({
             </p>
           </section>
           <section className="consent-form__section" aria-labelledby="consent-sign-heading">
-            <h4 id="consent-sign-heading">3. Add the signature</h4>
+            <h4 id="consent-sign-heading">3. Sign once for the selected agreements</h4>
+            <p className="small">
+              This signature covers {countInWords(selectedPurposes.length)} selected{' '}
+              {selectedPurposes.length === 1 ? 'agreement' : 'agreements'}. Each consent is saved
+              separately with the same signature.
+            </p>
             <Select
               id="sign-all-method"
               label="How it is being given"
+              disabled={busy}
               value={method}
               onChange={(event) => setMethod(event.target.value as Method)}
             >
@@ -388,11 +475,11 @@ export function SignAllForm({
 
             {method === 'app_signature' ? (
               <SignaturePad
-                key={givenByContactId}
+                key={`${givenByContactId}:${selectionKey}`}
                 signedName={signedName}
                 onSignedNameChange={setTypedName}
                 onChange={setSignature}
-                disabled={!readToEnd}
+                disabled={busy || !readToEnd || selectedPurposes.length === 0}
                 today={practiceTodayInWords()}
                 caption={caption}
               />
@@ -402,12 +489,12 @@ export function SignAllForm({
                   The signed form
                 </label>
                 <input
-                  key={givenByContactId}
+                  key={`${givenByContactId}:${selectionKey}`}
                   id="sign-all-scan"
                   className="field__input"
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf"
-                  disabled={!readToEnd}
+                  disabled={busy || !readToEnd || selectedPurposes.length === 0}
                   onChange={(event) => void chooseScan(event.target.files?.[0] ?? null)}
                 />
                 <p className="small muted">
@@ -427,15 +514,17 @@ export function SignAllForm({
       {formError ? <Note tone="critical">{formError}</Note> : null}
       {!canSubmit && !busy && state.kind === 'ready' ? (
         <p className="small muted">
-          {!readToEnd
-            ? 'Scroll to the end of the wording before recording this.'
-            : givenByContactId === ''
-              ? 'Choose who is giving this consent.'
-              : method === 'paper_scan'
-                ? 'Add a photograph or a PDF of the signed form.'
-                : signature === null
-                  ? 'A signature has to be drawn on the pad.'
-                  : 'Type the name as the person writes it: it is printed into the image that is filed.'}
+          {selectedPurposes.length === 0
+            ? 'Select at least one agreement to continue.'
+            : !readToEnd
+              ? 'Scroll to the end of the wording before recording this.'
+              : givenByContactId === ''
+                ? 'Choose who is giving this consent.'
+                : method === 'paper_scan'
+                  ? 'Add a photograph or a PDF of the signed form.'
+                  : signature === null
+                    ? 'A signature has to be drawn on the pad.'
+                    : 'Type the name as the person writes it: it is printed into the image that is filed.'}
         </p>
       ) : null}
       <div className="drawer__actions">
@@ -443,7 +532,9 @@ export function SignAllForm({
           Cancel
         </Button>
         <Button variant="primary" disabled={!canSubmit} onClick={() => void submit()}>
-          {busy ? 'Recording…' : `Record all ${countInWords(purposes.length)} consents`}
+          {busy
+            ? 'Recording…'
+            : `Record ${selectedPurposes.length === purposes.length ? 'all ' : ''}${countInWords(selectedPurposes.length)} ${selectedPurposes.length === 1 ? 'consent' : 'consents'}`}
         </Button>
       </div>
     </section>

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
@@ -7,6 +7,7 @@ import {
   RecordConsentBundleBody,
   type ClientRecordResponse,
 } from '../../api/clients/record-schema';
+import * as fileUpload from './fileUpload';
 import { SignAllForm } from './SignAllForm';
 import { ADMIN, signedInProvider } from './testActors';
 
@@ -317,6 +318,122 @@ describe('SignAllForm', () => {
     expect(RecordConsentBundleBody.safeParse(body).success).toBe(true);
   });
 
+  it('selects all four for a child and files one signature for all four agreements', async () => {
+    const onSaved = vi.fn();
+    const calls = mount(
+      <SignAllForm
+        clientId={CHILD_CLIENT_ID}
+        record={childRecord}
+        onSaved={onSaved}
+        onCancel={vi.fn()}
+      />,
+    );
+    await screen.findByRole('heading', { name: 'Participation' });
+    expect((screen.getByLabelText('Select all four consents') as HTMLInputElement).checked).toBe(
+      true,
+    );
+    draw(document.querySelector('canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Record all four consents' }));
+    await waitFor(() =>
+      expect(onSaved).toHaveBeenCalledWith([
+        'health_data',
+        'home_visit',
+        'minor_participation',
+        'participation',
+      ]),
+    );
+    const posts = calls.filter((call) => call.url.endsWith('/consents/bundle'));
+    expect(posts).toHaveLength(1);
+    const body = RecordConsentBundleBody.parse(JSON.parse(String(posts[0]?.init?.body)));
+    expect(body.purposes).toHaveLength(4);
+    expect(body.evidence.mimeType).toBe('image/png');
+  });
+
+  it('clears evidence when selection changes and only submits the selected agreements', async () => {
+    const onSaved = vi.fn();
+    const calls = mount(
+      <SignAllForm
+        clientId={ADULT_CLIENT_ID}
+        record={adultRecord}
+        onSaved={onSaved}
+        onCancel={vi.fn()}
+      />,
+    );
+    await screen.findByRole('heading', { name: 'Participation' });
+    draw(document.querySelector('canvas'));
+    fireEvent.click(screen.getByLabelText('Visits at home'));
+    expect(
+      (screen.getByRole('button', { name: 'Record two consents' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.queryByRole('heading', { name: 'Visits at home' })).toBeNull();
+    draw(document.querySelector('canvas'));
+    fireEvent.click(screen.getByRole('button', { name: 'Record two consents' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(['health_data', 'participation']));
+    const post = calls.find((call) => call.url.endsWith('/consents/bundle'));
+    expect(
+      JSON.parse(String(post?.init?.body)).purposes.map((p: { purpose: string }) => p.purpose),
+    ).toEqual(['health_data', 'participation']);
+  });
+
+  it('discards a scan that finishes processing after the agreement selection changes', async () => {
+    let finish!: (value: fileUpload.PreparedFile) => void;
+    const preparation = new Promise<fileUpload.PreparedFile>((resolve) => {
+      finish = resolve;
+    });
+    vi.spyOn(fileUpload, 'compressToFit').mockReturnValue(preparation);
+    mount(
+      <SignAllForm
+        clientId={ADULT_CLIENT_ID}
+        record={adultRecord}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    await screen.findByRole('heading', { name: 'Participation' });
+    fireEvent.change(screen.getByLabelText('How it is being given'), {
+      target: { value: 'paper_scan' },
+    });
+    fireEvent.change(screen.getByLabelText('The signed form'), {
+      target: { files: [new File(['scan'], 'old.pdf', { type: 'application/pdf' })] },
+    });
+    fireEvent.click(screen.getByLabelText('Visits at home'));
+    await act(async () => {
+      finish({
+        ok: true,
+        file: {
+          name: 'old.pdf',
+          mimeType: 'application/pdf',
+          bytesBase64: 'c2Nhbg==',
+          sizeBytes: 4,
+        },
+      });
+      await preparation;
+    });
+    expect(screen.queryByText('Ready to file: old.pdf')).toBeNull();
+    expect(
+      (screen.getByRole('button', { name: 'Record two consents' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it('prevents signing an empty selection and can select everything again', async () => {
+    mount(
+      <SignAllForm
+        clientId={CHILD_CLIENT_ID}
+        record={childRecord}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    await screen.findByRole('heading', { name: 'Participation' });
+    fireEvent.click(screen.getByLabelText('Select all four consents'));
+    expect(
+      (screen.getByRole('button', { name: 'Record no consents' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByText('Select at least one agreement to continue.')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Select all four consents'));
+    expect(screen.getByRole('heading', { name: "Guardian's consent for a child" })).toBeTruthy();
+  });
+
   it('requires a fresh signature when the consenting contact changes', async () => {
     const other = {
       ...adultRecord.contacts[0]!,
@@ -368,7 +485,7 @@ describe('SignAllForm', () => {
     // The form's own heading takes focus once, on open (useFocusOnOpen.ts) —
     // asserted here, before typing, so this test also proves the heading is
     // not what is left focused once the name field has been typed into.
-    const heading = await screen.findByRole('heading', { name: 'Sign everything at once' });
+    const heading = await screen.findByRole('heading', { name: 'One signature for your consents' });
     expect(document.activeElement).toBe(heading);
 
     const name = await screen.findByLabelText('Name, as the person writes it');

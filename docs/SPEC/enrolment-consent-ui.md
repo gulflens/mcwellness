@@ -30,19 +30,21 @@ After a lead exists, the later non-review steps expose the existing activation s
 
 ## Consent signing
 
-When the combined signing form is closed, the Consent tab introduces the task and shows how many required purposes have an active consent on file. The count uses the existing required-purpose set and active-consent check.
+When the combined signing form is closed, the Consent tab shows how many required purposes have an active consent on file. A lavender (`--brand-wash`) introduction offers “Select consents and sign once” to permitted writers on non-erased records. The action remains available when all required consents are already active, so staff can record renewals. Each agreement retains its own history.
 
-The combined form presents three sections:
+The combined form starts with a prominent “Select all” checkbox and an individual agreement checklist on the same lavender surface. All eligible purposes are selected initially: four for a child, three for an adult, using the existing required-purpose rules. The select-all checkbox shows a mixed state for a partial selection. A live count reports how many agreements are selected; an empty selection cannot be recorded. Checkbox labels provide at least 44px-high targets, use violet controls and visible keyboard focus, and adapt to one column in narrow space. IBM Plex typography and existing spacing and shape tokens are retained.
 
-1. Confirm who is signing using the existing eligible-contact list.
-2. Read the agreements, with the purpose list before the versioned wording and a status line describing the reading gate.
-3. Add the signature, using the existing on-screen or photographed/scanned paper method.
+The form then presents three numbered sections:
 
-The wording remains in a keyboard-focusable scroll region. Existing Arabic language and direction attributes are retained. Signature and upload controls remain disabled until the existing reading check passes. Reaching the end is a UI prerequisite, not proof of comprehension.
+1. Confirm who is signing, using contacts eligible to give every selected consent.
+2. Read the selected agreements, with the selected purpose list before the versioned wording and a status line describing the reading gate.
+3. Sign once for the selected agreements, using the existing on-screen or photographed/scanned paper method.
 
-Changing the signer clears the typed-name override, signature, selected scan, scan messages and reading state. The reading region, signature pad and file input are keyed to the signer, so the previous signer's scroll position and visible evidence do not carry over. Existing name derivation then applies to the newly selected signer.
+The wording remains in a keyboard-focusable scroll region. Existing Arabic language and direction attributes are retained. Signature and upload controls remain disabled until the reading check passes and at least one agreement is selected. Reaching the end is a UI prerequisite, not proof of comprehension. Selection, signer and evidence-method controls are disabled while recording.
 
-The actual consent text, version handling, signature submission, scan processing, purpose-specific eligibility and backend checks are unchanged. This work does not add remote signing or a new consent policy.
+Changing the selection or signer clears the signature, selected scan, scan messages and reading state. The reading region, signature pad and file input are keyed to both signer and selection, so previous scroll position and visible evidence do not carry over. Either change invalidates pending scan preparation: a late compression result cannot restore evidence for the previous signer or selection. Changing the signer also clears the typed-name override, allowing existing name derivation to apply to the newly selected signer. The signer must remain eligible for the current selection before submission.
+
+The existing bundle endpoint receives only the selected purposes and their displayed wording version IDs, with one shared signature or scan. Each consent is saved separately with the same evidence; the confirmation and record action reflect the selected count. Actual consent text, version handling, scan processing, purpose-specific eligibility and backend checks remain unchanged. This work does not add remote signing or a new consent policy.
 
 ## Implementation and evidence
 
@@ -57,3 +59,5 @@ Review captures are stored at:
 The bounded review addressed narrow-container enrolment layout and signer-change evidence/reading reset. Screenshots record the captured states; they do not establish that every role, validation outcome, locale or device has been exercised. Existing domain and API behaviour remains the source of truth. This note does not imply user approval of the implementation.
 
 Verification for this refinement passed: 265 test files and 3,196 tests, production build, format check, lint, TypeScript, secret audit and migration audit. The 633px viewport capture was inspected without visible horizontal overflow.
+
+The subsequent consent-selection refinement was independently reviewed at 1100px desktop and 390px phone widths and visually passed. The full suite passed with 3,181 tests before the additional deferred-scan regression test; the focused form suite then passed all 10 tests, including pending scan invalidation. Production build, TypeScript and lint also passed. These checks cover this bounded change and do not imply exhaustive device or locale coverage.
