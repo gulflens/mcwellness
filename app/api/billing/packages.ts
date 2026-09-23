@@ -18,6 +18,7 @@ import {
   CreatePackageInput,
   PackageResponse,
   PackagesResponse,
+  SetPackageStatusInput,
   type PackageRow,
 } from './ledger-schema';
 
@@ -520,5 +521,53 @@ export function mountPackages(api: Hono<ApiEnv>, now: () => Date = () => new Dat
       throw new Error('The package just priced could not be read back.');
     }
     return c.json(PackageResponse.parse({ package: updated }), 201);
+  });
+
+  // "Deleting" a bundle the practice no longer offers (docs/SPEC/billing.md):
+  // nothing is ever removed — a purchase and an invoice line both name the
+  // package, and package grants no delete at all
+  // (tests/billing/db/ledger_rls.test.ts). Withdrawing flips `status`, which
+  // is what `readPackages`'s own `sellable` already keys off, so a withdrawn
+  // bundle keeps its code, its prices and every purchase exactly as they
+  // were and simply stops being offered.
+  api.patch('/api/billing/packages/:id', async (c) => {
+    const actor = c.get('actor');
+    const requestId = c.get('requestId');
+    if (!mayWriteCatalogue(actor, now())) {
+      return c.json({ error: 'forbidden', requestId }, 403);
+    }
+    const packageId = c.req.param('id');
+    if (!isUuid(packageId)) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    // A reason is required, exactly as kit's own PATCH requires one
+    // (app/api/kit/routes.ts): the request-context middleware has already
+    // copied this same header into `app.reason` for the row the update below
+    // writes, so nothing further is needed to land it on the audit trail —
+    // this check only refuses the request when there is nothing to land.
+    const reason = (c.req.header('x-reason') ?? '').trim();
+    if (!reason) {
+      return c.json({ error: 'bad_request', code: 'reason_required', requestId }, 400);
+    }
+    const body = SetPackageStatusInput.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) {
+      return c.json({ error: 'bad_request', code: 'invalid_request', requestId }, 400);
+    }
+    const db = c.get('db');
+    const updated = await db.query<{ id: string }>(
+      'update package set status = $2::active_status where id = $1 ' +
+        'and tenant_id = app.current_tenant_id() returning id',
+      [packageId, body.data.status],
+    );
+    if (updated.rowCount === 0) {
+      return c.json({ error: 'not_found', requestId }, 404);
+    }
+    const today = isoDateIn(now(), PRACTICE_TIME_ZONE);
+    const packages = await readPackages(db, today, await readVatRegistered(db));
+    const row = packages.find((p) => p.id === packageId);
+    if (!row) {
+      throw new Error('The package just updated could not be read back.');
+    }
+    return c.json(PackageResponse.parse({ package: row }), 200);
   });
 }
