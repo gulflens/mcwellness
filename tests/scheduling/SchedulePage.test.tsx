@@ -34,6 +34,10 @@ const appointment = {
   serviceType: { id: '00000008-0000-4000-8000-000000000003', name: 'Standard session' },
   location: { id: '00000008-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
   movedTo: null,
+  sessionId: null,
+  recordedFrom: null,
+  settledOutsideApp: null,
+  sessionMinutes: null,
 };
 
 /**
@@ -68,12 +72,61 @@ const rescheduled = {
   },
 };
 
+/**
+ * A visit logged from the practice's records (trunk round 51) on a day gone
+ * by: the one kind of row Void and Correct are offered on (trunk round 60).
+ * Wed 4 March 15:30 Dubai time is 11:30 UTC; the window is always 45 minutes,
+ * the visit itself ran 50.
+ */
+const fromRecords = {
+  ...appointment,
+  id: '00000008-0000-4000-8000-000000000108',
+  windowStart: '2026-03-04T11:30:00.000Z',
+  windowEnd: '2026-03-04T12:15:00.000Z',
+  status: 'completed' as const,
+  sessionId: '00000008-0000-4000-8000-000000000501',
+  recordedFrom: 'records' as const,
+  settledOutsideApp: false,
+  sessionMinutes: 50,
+};
+
+/** The same visit closed on the phone: what the household really had. */
+const fromDevice = {
+  ...fromRecords,
+  id: '00000008-0000-4000-8000-000000000109',
+  sessionId: '00000008-0000-4000-8000-000000000502',
+  recordedFrom: 'device' as const,
+  client: proposed.client,
+};
+
+/** A visit logged in error and withdrawn: greyed, and nothing left to change. */
+const voided = {
+  ...fromRecords,
+  id: '00000008-0000-4000-8000-000000000110',
+  status: 'voided' as const,
+  sessionId: '00000008-0000-4000-8000-000000000503',
+  client: proposed.client,
+};
+
+const signedIn = { getAccessToken: async () => 'token' };
+
+/** Signed in as someone holding these roles. Synthetic, in the reserved ranges. */
+function me(roles: string[]) {
+  return {
+    userId: '00000008-0000-4000-8000-000000000901',
+    displayName: 'Rowan Meadow',
+    tenantId: '00000008-0000-4000-8000-000000000902',
+    roles,
+    capabilities: [],
+  };
+}
+
 /** The day the screen opens on lives in the address, so the week view can
  * hand a day back; a router is what supplies that, and the two links out of
  * the toolbar need one anyway. */
-function renderPage(fetchImpl: typeof fetch, date = '2026-09-10') {
+function renderPage(fetchImpl: typeof fetch, date = '2026-09-10', auth: AuthProvider = provider) {
   return render(
-    <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
+    <AuthProviderBoundary provider={auth} fetchImpl={fetchImpl}>
       <MemoryRouter initialEntries={[`/admin/schedule?date=${date}`]}>
         <SchedulePage />
       </MemoryRouter>
@@ -298,5 +351,71 @@ describe('SchedulePage', () => {
         screen.getByText("The day's appointments could not be loaded. Try again."),
       ).toBeTruthy(),
     );
+  });
+});
+
+describe('SchedulePage: a visit logged from the records', () => {
+  /** The day of 4 March, as the given roles see it; every POST is recorded. */
+  function dayOf(roles: string[], rows: unknown[]) {
+    const posts: { url: string; init: RequestInit | undefined }[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith('/api/me')) {
+        return new Response(JSON.stringify(me(roles)), { status: 200 });
+      }
+      if (url.startsWith('/api/appointments?')) {
+        return new Response(JSON.stringify({ appointments: rows }), { status: 200 });
+      }
+      if (init?.method === 'POST') posts.push({ url, init });
+      return new Response('not found', { status: 404 });
+    }) as unknown as typeof fetch;
+    renderPage(fetchImpl, '2026-03-04', { ...provider, ...signedIn });
+    return posts;
+  }
+
+  it('offers Correct and Void on a visit logged from the records, to the owner', async () => {
+    dayOf(['owner'], [fromRecords]);
+    expect(await screen.findByRole('button', { name: "Void Iris Cliff's visit" })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Correct Iris Cliff's visit" })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "Void Iris Cliff's visit" }).textContent).toBe(
+      'Void',
+    );
+  });
+
+  it('offers neither on a visit closed on the phone', async () => {
+    dayOf(['owner'], [fromDevice, fromRecords]);
+    await screen.findByRole('button', { name: "Void Iris Cliff's visit" });
+    expect(screen.queryByRole('button', { name: "Void Juniper Valley's visit" })).toBeNull();
+    expect(screen.queryByRole('button', { name: "Correct Juniper Valley's visit" })).toBeNull();
+  });
+
+  it('offers neither to finance, whose role cannot void a visit', async () => {
+    dayOf(['finance'], [fromRecords]);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());
+    // The signed-in answer lands after the day: wait for it, then look.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole('button', { name: "Void Iris Cliff's visit" })).toBeNull();
+    expect(screen.queryByRole('button', { name: "Correct Iris Cliff's visit" })).toBeNull();
+  });
+
+  it('shows a voided visit as Voided, with nothing left to change', async () => {
+    dayOf(['owner'], [voided]);
+    await waitFor(() => expect(screen.getByText('Voided')).toBeTruthy());
+    const row = screen.getByRole('button', { name: 'Juniper Valley' }).closest('tr')!;
+    expect(
+      within(row)
+        .queryAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Juniper Valley']);
+  });
+
+  it('opens the void drawer beside the day, and the correct drawer pre-filled from the row', async () => {
+    dayOf(['owner'], [fromRecords]);
+    fireEvent.click(await screen.findByRole('button', { name: "Void Iris Cliff's visit" }));
+    expect(screen.getByRole('dialog', { name: 'Void this visit' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: "Correct Iris Cliff's visit" }));
+    expect(screen.queryByRole('dialog', { name: 'Void this visit' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Correct a past session' })).toBeTruthy();
+    expect((screen.getByLabelText('Start time') as HTMLInputElement).value).toBe('15:30');
   });
 });

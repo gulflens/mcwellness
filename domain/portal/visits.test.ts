@@ -32,7 +32,13 @@ describe('visitOutcome', () => {
   });
 
   it('gives nothing for a visit that has not happened yet', () => {
-    for (const status of ['proposed', 'confirmed', 'checked_in', 'rescheduled'] as const) {
+    for (const status of [
+      'proposed',
+      'confirmed',
+      'checked_in',
+      'rescheduled',
+      'voided',
+    ] as const) {
       expect(visitOutcome(status)).toBeNull();
     }
   });
@@ -83,6 +89,15 @@ describe('visitsFor', () => {
     );
     expect(split.upcoming.map((v) => v.id)).toEqual(['is']);
     expect(split.past).toEqual([]);
+  });
+
+  it('never lists a voided visit: it is not a visit the household had', () => {
+    const split = visitsFor(
+      [visit('wrong', '2026-09-01', 'voided'), visit('right', '2026-09-02', 'completed')],
+      TODAY,
+    );
+    expect(split.past.map((v) => v.id)).toEqual(['right']);
+    expect(split.upcoming).toEqual([]);
   });
 
   it('leaves a confirmed visit whose day has gone by out of both lists', () => {

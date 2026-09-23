@@ -236,7 +236,13 @@ describe('previousStop', () => {
   });
 
   it('walks back past a visit that never took place', () => {
-    for (const status of ['cancelled', 'cancelled_late', 'no_show', 'rescheduled'] as const) {
+    for (const status of [
+      'cancelled',
+      'cancelled_late',
+      'no_show',
+      'rescheduled',
+      'voided',
+    ] as const) {
       const stops = day([{ status: 'completed', closedAt: at('09:40') }, { status }]);
       expect(previousStop(stops, 2)?.stopId).toBe('s1');
     }
@@ -270,6 +276,8 @@ describe('boardState', () => {
       'called_off',
     );
     expect(boardState({ ...stop, status: 'rescheduled' }, null, false, at('12:00'))).toBe('moved');
+    // A visit logged from the records in error is treated as a cancelled one.
+    expect(boardState({ ...stop, status: 'voided' }, null, false, at('12:00'))).toBe('called_off');
   });
 
   it('says on the way once the previous visit is closed and this window has not opened', () => {

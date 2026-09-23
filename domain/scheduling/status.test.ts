@@ -14,6 +14,11 @@ describe('isSettled', () => {
     }
   });
 
+  it('calls a voided visit settled: it was logged in error and is over', () => {
+    expect(APPOINTMENT_STATUSES).toContain('voided');
+    expect(isSettled('voided')).toBe(true);
+  });
+
   it('leaves a visit still owed open', () => {
     expect(isSettled('proposed')).toBe(false);
     expect(isSettled('confirmed')).toBe(false);

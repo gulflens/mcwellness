@@ -49,6 +49,10 @@ function appointmentOn(date: string, id: string): AppointmentRow {
     serviceType: { id: '0000000b-0000-4000-8000-000000000003', name: 'Standard session' },
     location: { id: '0000000b-0000-4000-8000-000000000004', label: 'home', emirate: 'DXB' },
     movedTo: null,
+    sessionId: null,
+    recordedFrom: null,
+    settledOutsideApp: null,
+    sessionMinutes: null,
   };
 }
 

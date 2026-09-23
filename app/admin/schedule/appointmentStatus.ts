@@ -19,7 +19,8 @@ import type { AppointmentStatus } from '../../api/appointments/schema';
  * slate dot, which this module cannot reuse — `StatusChip`'s tones are ok,
  * attention, critical and neutral, nothing else); `cancelled_late` and
  * `no_show` cost the practice something and want a look, so they take
- * critical.
+ * critical. A `voided` visit — logged from the records in error and withdrawn
+ * (trunk round 60) — is closed without fault too, and greys like `cancelled`.
  */
 export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
   proposed: 'Proposed',
@@ -30,6 +31,7 @@ export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
   cancelled_late: 'Cancelled late',
   no_show: 'No-show',
   rescheduled: 'Rescheduled',
+  voided: 'Voided',
 };
 
 export const APPOINTMENT_STATUS_TONES: Record<AppointmentStatus, StatusTone> = {
@@ -41,4 +43,5 @@ export const APPOINTMENT_STATUS_TONES: Record<AppointmentStatus, StatusTone> = {
   cancelled_late: 'critical',
   no_show: 'critical',
   rescheduled: 'neutral',
+  voided: 'neutral',
 };

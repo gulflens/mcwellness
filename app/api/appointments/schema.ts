@@ -78,6 +78,18 @@ export const AppointmentRow = z.object({
    * moved, never where to (the walk of 10 September).
    */
   movedTo: z.object({ id: z.uuid(), windowStart: z.iso.datetime() }).nullable(),
+  /**
+   * The visit record behind this appointment, when there is one (trunk round
+   * 60): its id, whether it was closed on the phone (`device`) or logged
+   * from the practice's records (`records`), whether it was settled before
+   * the app, and how long it ran in whole minutes. What the day schedule
+   * needs to offer Void and Correct on a visit logged from the records, and
+   * to pre-fill a correction. All four null for a booking nobody has been to.
+   */
+  sessionId: z.uuid().nullable(),
+  recordedFrom: z.enum(['device', 'records']).nullable(),
+  settledOutsideApp: z.boolean().nullable(),
+  sessionMinutes: z.number().int().nullable(),
 });
 export type AppointmentRow = z.infer<typeof AppointmentRow>;
 

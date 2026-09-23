@@ -38,7 +38,8 @@ import {
  */
 
 const PRACTICE_TIME_ZONE = 'Asia/Dubai';
-const LIVE_STATUSES_EXCLUDED = "('cancelled', 'cancelled_late', 'no_show', 'rescheduled')";
+const LIVE_STATUSES_EXCLUDED =
+  "('cancelled', 'cancelled_late', 'no_show', 'rescheduled', 'voided')";
 const EXCLUSION_VIOLATION = '23P01';
 
 type CredentialRow = {
@@ -356,6 +357,11 @@ export function mountAppointmentCreate(
         location: { id: locationId, label: location.label, emirate: location.emirate },
         // A row just booked has nothing pointing rescheduled_from_id at it yet.
         movedTo: null,
+        // Nor any visit record: nobody has been to it yet.
+        sessionId: null,
+        recordedFrom: null,
+        settledOutsideApp: null,
+        sessionMinutes: null,
       }),
       201,
     );
