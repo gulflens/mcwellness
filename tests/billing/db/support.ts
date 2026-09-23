@@ -49,7 +49,7 @@ export type Harness = {
   storage: ReturnType<typeof localDiskStorage>;
   data: SeedData;
   call: (
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     seededUser: number,
     body?: unknown,
@@ -58,7 +58,7 @@ export type Harness = {
   ) => Promise<Response>;
   /** The same call, as any auth id at all: a fixture's own user, not a seeded one. */
   callAs: (
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     authId: string,
     body?: unknown,
@@ -121,7 +121,7 @@ export async function startHarness(
   }
 
   async function callAs(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PATCH',
     path: string,
     authId: string,
     body?: unknown,

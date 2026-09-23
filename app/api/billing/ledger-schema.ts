@@ -181,6 +181,16 @@ export type CreatePackageInput = z.infer<typeof CreatePackageInput>;
 export const AddPackagePriceInput = PackagePriceBody;
 export type AddPackagePriceInput = z.infer<typeof AddPackagePriceInput>;
 
+/**
+ * Withdrawing a bundle the practice no longer offers, or reinstating one
+ * (round 62): the one column this touches. Nothing here deletes — a bundle's
+ * code, its prices and every purchase against it are untouched either way,
+ * and `sellable` on the row this writes back follows from `status` exactly
+ * as `readPackages` already computes it for every other bundle.
+ */
+export const SetPackageStatusInput = z.object({ status: z.enum(['active', 'inactive']) }).strict();
+export type SetPackageStatusInput = z.infer<typeof SetPackageStatusInput>;
+
 export const PackageResponse = z.object({ package: PackageRow });
 export type PackageResponse = z.infer<typeof PackageResponse>;
 
