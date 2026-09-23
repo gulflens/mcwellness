@@ -25,21 +25,28 @@ One clause in each language, version **1.1**, `status: approved`, `approved:
 2026-09-23`. The words were put to the operator in the same message that
 carried them, and a different wording is one edit before the pass.
 
-English: "and the account that opened your record in the client portal has
-been closed — or, where that account belongs to somebody who works at
+English: "and any account that opened your record in the client portal has
+been closed — or, where that account belongs to one of the staff of
 {{practice_legal_name}}, its link to your record has been ended and the account
 itself is untouched."
 
-Arabic: "وأُغلق الحساب الذي كان يفتح سجلك في بوابة العملاء — أو، إن كان ذلك
-الحساب لشخص يعمل في {{practice_legal_name}}، فقد أُنهي ارتباطه بسجلك ولم يُمسّ
-الحساب نفسه."
+Arabic: "وأُغلق أي حساب كان يفتح سجلك في بوابة العملاء — أو، إن كان ذلك الحساب
+لأحد موظفي {{practice_legal_name}}، فقد أُنهي ارتباطه بسجلك ولم يُمسّ الحساب
+نفسه."
 
-The practice is named in the clause on purpose: "somebody who works at" needs a
-who, and the letter already fills `{{practice_legal_name}}` from the tenant row
-in its last paragraph. The Arabic reuses the letter's own words — `بوابة
-العملاء`, `سجلك`, and `في {{practice_legal_name}}` as the last paragraph already
-has it — rather than new ones. Both files' `written` and `approved` dates are
-this round's, because the words are.
+Two things the round's review changed before this was merged. **"Any
+account"**, not "the account": a household that never had a portal account
+still receives this letter, and 1.0 told it that an account had been closed —
+the same kind of overstatement this round exists to remove, from the other
+side. And **"one of the staff of"** rather than "somebody who works at",
+because the practice's Arabic consent texts already call its staff `موظفو
+المركز` (`health-data.ar.md`, `notices/your-information.ar.md`), so the letter
+now uses the household's own word for them. The practice is named in the clause
+on purpose: "the staff of" needs a whose, and the letter already fills
+`{{practice_legal_name}}` from the tenant row in its last paragraph. The Arabic
+otherwise reuses the letter's own words — `بوابة العملاء`, `سجلك` — rather than
+new ones. Both files' `written` and `approved` dates are this round's, because
+the words are.
 
 ### Why a version and not an edit
 

@@ -202,17 +202,20 @@ describe('rendering the letter', () => {
     // ended and the account is left alone — and only a household's own
     // account is closed. Wording 1.0 said "has been closed" for every account,
     // which overstated for a colleague's; 1.1 says both halves, in both
-    // languages, and names the practice so a reader knows whose staff is
-    // meant. Pinned on the practice's own templates, as the reports sentence
-    // is: a fixture would prove nothing about the words a household reads.
+    // languages, says "any account" because a household that never had a
+    // portal account must not be told one was closed (the round's review),
+    // and names the practice with the word the consent texts already use for
+    // its staff. Pinned on the practice's own templates, as the reports
+    // sentence is: a fixture would prove nothing about the words a household
+    // reads.
     for (const [file, closed, unlinked, staff] of [
       [
         'en.md',
-        'has been closed',
+        'any account that opened your record in the client portal has been closed',
         'its link to your record has been ended',
-        'works at Synthetic Studio',
+        'one of the staff of Synthetic Studio',
       ],
-      ['ar.md', 'أُغلق الحساب', 'أُنهي ارتباطه بسجلك', 'يعمل في Synthetic Studio'],
+      ['ar.md', 'أُغلق أي حساب كان يفتح سجلك', 'أُنهي ارتباطه بسجلك', 'موظفي Synthetic Studio'],
     ] as const) {
       const template = parseErasureLetterTemplate(read(file));
       expect(template.version).toBe('1.1');
