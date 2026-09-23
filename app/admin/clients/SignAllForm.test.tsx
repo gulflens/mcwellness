@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import {
@@ -310,6 +311,30 @@ describe('SignAllForm', () => {
     expect(body.method).toBe('app_signature');
     expect(body.evidence.mimeType).toBe('image/png');
     expect(RecordConsentBundleBody.safeParse(body).success).toBe(true);
+  });
+
+  // Round 63: the same inline `ref={(node) => node?.focus()}` bug
+  // RecordConsentForm.tsx had on its own heading (ConsentCapture.test.tsx
+  // covers that one) — every keystroke into the name field re-rendered this
+  // form and refocused the heading above it after the first letter.
+  it('keeps every letter typed into the name beneath the signature', async () => {
+    const user = userEvent.setup();
+    mount(
+      <SignAllForm
+        clientId={ADULT_CLIENT_ID}
+        record={adultRecord}
+        onSaved={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    const name = await screen.findByLabelText('Name, as the person writes it');
+    // Pre-filled with the self contact's own name (signatureName,
+    // contactName.tsx): cleared first so the assertion is about what was
+    // typed, not what was appended to it.
+    await user.clear(name);
+    await user.type(name, 'Basil Cliff');
+    expect((name as HTMLInputElement).value).toBe('Basil Cliff');
+    expect(document.activeElement).toBe(name);
   });
 
   it('asks for the guardian’s consent too when the client is a child, and only a guardian may sign', async () => {
