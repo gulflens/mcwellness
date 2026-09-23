@@ -251,7 +251,7 @@ export function PracticePage() {
           </section>
 
           {/*
-            What the invoice's "Pay by bank transfer" block prints (migration
+            What the invoice's "Payment details" card prints (migration
             924, round 61). The IBAN is what makes an account: while none is
             recorded every fact below reads "Not recorded", the same as any
             other empty fact on this page.
