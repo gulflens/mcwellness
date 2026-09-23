@@ -3,7 +3,6 @@ import { documentFonts } from '../../app/api/billing/fonts';
 import {
   GEOMETRY,
   groupIban,
-  layout,
   layoutWithBlocks,
   measure,
   type Block,
@@ -303,6 +302,61 @@ const LONG: Laid[] = [
   },
 ];
 
+/**
+ * The receipt in the same dress (the spec's "The receipt"): no table, so one
+ * page, the same blocks as the invoice under the receipt's own names, for
+ * every method, with and without a settled invoice and a payment reference,
+ * both registrations, and the long supplier and the long household.
+ */
+type ReceiptShape = {
+  method: ReceiptDocument['method'];
+  settles: boolean;
+  reference: boolean;
+  registered: boolean;
+  long: boolean;
+};
+
+const RECEIPT_SHAPES: ReceiptShape[] = [];
+for (const method of ['cash', 'transfer', 'link'] as const) {
+  for (const settles of [false, true]) {
+    for (const reference of [false, true]) {
+      for (const registered of [false, true]) {
+        for (const long of [false, true]) {
+          RECEIPT_SHAPES.push({ method, settles, reference, registered, long });
+        }
+      }
+    }
+  }
+}
+
+function receiptShaped(shape: ReceiptShape): ReceiptDocument {
+  const registration = shape.registered
+    ? { vatRegistered: true, vatNumber: '100000000000003' }
+    : { vatRegistered: false, vatNumber: null };
+  return {
+    kind: 'receipt',
+    supplier: { ...(shape.long ? LONG_SUPPLIER : SUPPLIER), ...registration },
+    recipient: {
+      name: shape.long ? 'Hazel Juniper Saffron Dune-Harbour-Lagoon' : 'Hazel Dune',
+      recordNumber: 'MW-000099',
+    },
+    reference: 'RCP-000099',
+    receivedOn: '2026-09-24',
+    method: shape.method,
+    amountFils: shape.long ? 652_050_000 : 596_250,
+    paymentReference: shape.reference ? 'SYN 0001' : null,
+    settles: shape.settles ? { reference: 'INV-000099', issuedOn: '2026-09-24' } : null,
+  };
+}
+
+const RECEIPTS: Laid[] = RECEIPT_SHAPES.map((shape) => ({
+  name:
+    `receipt by ${shape.method}, ${shape.settles ? 'settling' : 'on account'}, ` +
+    `${shape.reference ? 'referenced' : 'no reference'}, ` +
+    `${shape.registered ? 'registered' : 'unregistered'}, ${shape.long ? 'long' : 'short'}`,
+  ...layoutWithBlocks(receiptShaped(shape), fonts),
+}));
+
 const blocksNamed = (blocks: readonly Block[], name: BlockName): Block[] =>
   blocks.filter((block) => block.name === name);
 
@@ -597,6 +651,7 @@ describe('the footer’s place', () => {
 describe.each([
   ['a sample of the matrix', SAMPLED],
   ['the long cases', LONG],
+  ['every receipt', RECEIPTS],
 ])('the type on %s', (_title, cases) => {
   it('sets every piece of type inside the block it belongs to', () => {
     for (const laid of cases) {
@@ -748,35 +803,112 @@ describe('a table that outgrows its page', () => {
   });
 });
 
-describe('a receipt, still on the page it had (round 65 redraws it next)', () => {
-  const RECEIPT: ReceiptDocument = {
-    kind: 'receipt',
-    supplier: LONG_SUPPLIER,
-    recipient: { name: 'Hazel Juniper Saffron Dune-Harbour-Lagoon', recordNumber: 'MW-000099' },
-    reference: 'RCP-000004',
-    receivedOn: '2026-09-02',
-    method: 'transfer',
-    amountFils: 1_032_500,
-    paymentReference: 'SYN 0001',
-    settles: { reference: 'INV-000001', issuedOn: '2026-09-02' },
-  };
-  const pages = layout(RECEIPT, fonts);
+describe('the receipt', () => {
+  const RECEIPT_BLOCKS: BlockName[] = [
+    'masthead',
+    'supplier',
+    'numberCard',
+    'receivedFrom',
+    'paymentMethod',
+    'receivedCard',
+    'summaryCard',
+    'noteCard',
+    'footer',
+  ];
 
-  it('draws no type outside the margins and none over other type', () => {
-    for (const page of pages) {
-      const boxes = boxesOf(page);
-      for (const box of boxes) {
-        expect(box.left, box.text).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-        expect(box.right, box.text).toBeLessThanOrEqual(GEOMETRY.RIGHT + TOLERANCE);
+  it('is one page, made of exactly its nine blocks, once each', () => {
+    for (const laid of RECEIPTS) {
+      expect(laid.pages, laid.name).toHaveLength(1);
+      const names = (laid.blocks[0] ?? []).map((block) => block.name);
+      expect([...names].sort(), laid.name).toEqual([...RECEIPT_BLOCKS].sort());
+    }
+  });
+
+  it('draws no block across a margin', () => {
+    for (const laid of RECEIPTS) {
+      for (const block of laid.blocks[0] ?? []) {
+        const at = where(laid, 0, block);
+        expect(block.left, at).toBeGreaterThanOrEqual(GEOMETRY.LEFT - TOLERANCE);
+        expect(block.right, at).toBeLessThanOrEqual(GEOMETRY.RIGHT + TOLERANCE);
+        expect(block.top, at).toBeLessThanOrEqual(GEOMETRY.TOP + TOLERANCE);
+        expect(block.bottom, at).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+        expect(block.top, at).toBeGreaterThan(block.bottom);
       }
-      for (let a = 0; a < boxes.length; a += 1) {
-        for (let b = a + 1; b < boxes.length; b += 1) {
-          const first = boxes[a] as Box;
-          const second = boxes[b] as Box;
-          if (Math.abs(first.y - second.y) >= BAND) continue;
-          const overlap = Math.min(first.right, second.right) - Math.max(first.left, second.left);
-          expect(overlap, `"${first.text}" and "${second.text}"`).toBeLessThanOrEqual(TOLERANCE);
+    }
+  });
+
+  it('never draws two blocks over each other', () => {
+    for (const laid of RECEIPTS) {
+      const blocks = laid.blocks[0] ?? [];
+      for (let a = 0; a < blocks.length; a += 1) {
+        for (let b = a + 1; b < blocks.length; b += 1) {
+          const first = blocks[a] as Block;
+          const second = blocks[b] as Block;
+          const across = Math.min(first.right, second.right) - Math.max(first.left, second.left);
+          const down = Math.min(first.top, second.top) - Math.max(first.bottom, second.bottom);
+          expect(
+            across > TOLERANCE && down > TOLERANCE,
+            `${laid.name}: ${first.name} and ${second.name} overlap`,
+          ).toBe(false);
         }
+      }
+    }
+  });
+
+  it('sets the head of the page as the invoice does: masthead, supplier and number card, then the received-from card with the method beside it', () => {
+    for (const laid of RECEIPTS) {
+      const blocks = laid.blocks[0] ?? [];
+      const one = (name: BlockName): Block => blocksNamed(blocks, name)[0] as Block;
+      const masthead = one('masthead');
+      const supplier = one('supplier');
+      const numberCard = one('numberCard');
+      const party = one('receivedFrom');
+      const method = one('paymentMethod');
+      expect(masthead.top, laid.name).toBeCloseTo(GEOMETRY.TOP, 5);
+      expect(supplier.top, laid.name).toBeLessThan(masthead.bottom);
+      expect(numberCard.top, laid.name).toBeCloseTo(supplier.top, 5);
+      expect(supplier.right, laid.name).toBeLessThan(numberCard.left);
+      expect(party.top, laid.name).toBeLessThan(Math.min(supplier.bottom, numberCard.bottom));
+      expect(party.left, laid.name).toBeCloseTo(GEOMETRY.LEFT, 5);
+      expect(method.top, laid.name).toBeCloseTo(party.top, 5);
+      expect(method.left, laid.name).toBeGreaterThan(party.right);
+    }
+  });
+
+  it('sets the two lower cards side by side on one top edge, and the note card full width below both', () => {
+    for (const laid of RECEIPTS) {
+      const blocks = laid.blocks[0] ?? [];
+      const one = (name: BlockName): Block => blocksNamed(blocks, name)[0] as Block;
+      const received = one('receivedCard');
+      const summary = one('summaryCard');
+      const note = one('noteCard');
+      const party = one('receivedFrom');
+      const method = one('paymentMethod');
+      expect(received.top, laid.name).toBeCloseTo(summary.top, 5);
+      expect(received.top, laid.name).toBeLessThan(Math.min(party.bottom, method.bottom));
+      expect(received.left, laid.name).toBeCloseTo(GEOMETRY.LEFT, 5);
+      expect(summary.right, laid.name).toBeCloseTo(GEOMETRY.RIGHT, 5);
+      expect(received.right, laid.name).toBeLessThan(summary.left);
+      expect(note.top, laid.name).toBeLessThan(Math.min(received.bottom, summary.bottom));
+      expect(note.left, laid.name).toBeCloseTo(GEOMETRY.LEFT, 5);
+      expect(note.right, laid.name).toBeCloseTo(GEOMETRY.RIGHT, 5);
+    }
+  });
+
+  it('pins the footer to the foot of the page, below everything else, where the invoice pins it', () => {
+    // The invoice's footer for the same practice, from the matrix above.
+    const invoiceFooter = blocksNamed((MATRIX[0] as Laid).blocks[0] ?? [], 'footer')[0] as Block;
+    for (const laid of RECEIPTS) {
+      const blocks = laid.blocks[0] ?? [];
+      const footer = blocksNamed(blocks, 'footer')[0] as Block;
+      expect(footer.bottom, laid.name).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
+      if (!laid.name.endsWith('long')) {
+        expect(footer.bottom, laid.name).toBeCloseTo(invoiceFooter.bottom, 5);
+        expect(footer.top, laid.name).toBeCloseTo(invoiceFooter.top, 5);
+      }
+      for (const block of blocks) {
+        if (block === footer) continue;
+        expect(block.bottom, where(laid, 0, block)).toBeGreaterThan(footer.top);
       }
     }
   });

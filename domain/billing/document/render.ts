@@ -52,6 +52,7 @@ import {
   type Phrase,
 } from './strings';
 import { INVOICE_GEOMETRY, invoiceLayout } from './invoice';
+import { receiptLayout } from './receipt';
 import type { Block } from './page';
 import {
   BAND,
@@ -492,23 +493,23 @@ export function layout(
   fonts: FontSet,
   logo: DocumentImage | null = null,
 ): Page[] {
-  return document_.kind === 'invoice'
-    ? invoiceLayout(document_, fonts, logo).pages
-    : receiptPage(document_, fonts, logo);
+  return layoutWithBlocks(document_, fonts, logo).pages;
 }
 
 /**
- * An invoice laid out, with the boxes its blocks were drawn in, page by page —
+ * A document laid out, with the boxes its blocks were drawn in, page by page —
  * the masthead, the supplier block, the number card and the rest
- * (`invoice.ts`, `Block`) — for `tests/billing/geometry.test.ts` to assert the
+ * (`page.ts`, `Block`) — for `tests/billing/geometry.test.ts` to assert the
  * page against as boxes rather than as loose pieces of type.
  */
 export function layoutWithBlocks(
-  document_: InvoiceDocument,
+  document_: MoneyDocument,
   fonts: FontSet,
   logo: DocumentImage | null = null,
 ): { pages: Page[]; blocks: Block[][] } {
-  return invoiceLayout(document_, fonts, logo);
+  return document_.kind === 'invoice'
+    ? invoiceLayout(document_, fonts, logo)
+    : receiptLayout(document_, fonts, logo);
 }
 
 /** The document's title, which is what a reader's browser tab and file manager show. */

@@ -76,8 +76,8 @@ const REGISTERED: SupplierSnapshot = {
   vatNumber: '100000000000003',
 };
 
-/** The receipt's household, unchanged so the receipt's own golden stays what it was. */
-const RECIPIENT = { name: 'Robin Fairweather', recordNumber: 'MRN-0007' };
+/** The receipt's household: a seed name and a record number in the practice's own form. */
+const RECIPIENT = { name: 'Robin Fairweather', recordNumber: 'MW-000004' };
 
 /** The invoice's household: a seed name and a record number in the practice's own form. */
 const HOUSEHOLD = { name: 'Hazel Dune', recordNumber: 'MW-000099' };
@@ -566,7 +566,10 @@ describe('the bank account’s optional rows', () => {
   });
 });
 
-function receiptFor(supplier: SupplierSnapshot): ReceiptDocument {
+function receiptFor(
+  supplier: SupplierSnapshot,
+  over: Partial<ReceiptDocument> = {},
+): ReceiptDocument {
   return {
     kind: 'receipt',
     supplier,
@@ -577,6 +580,7 @@ function receiptFor(supplier: SupplierSnapshot): ReceiptDocument {
     amountFils: 70_000,
     paymentReference: 'SYN 0001',
     settles: { reference: 'INV-000001', issuedOn: '2026-09-02' },
+    ...over,
   };
 }
 
@@ -617,50 +621,171 @@ describe('a receipt makes no tax statement, whoever issued it', () => {
   });
 });
 
-describe('a receipt', () => {
-  const receipt: ReceiptDocument = {
-    kind: 'receipt',
-    supplier: UNREGISTERED,
-    recipient: RECIPIENT,
-    reference: 'RCP-000004',
-    receivedOn: '2026-09-02',
-    method: 'transfer',
-    amountFils: 70_000,
-    paymentReference: 'Bank transfer',
-    settles: { reference: 'INV-000001', issuedOn: '2026-09-02' },
-  };
-  const page = extractAll(renderDocument(receipt, fonts));
+/**
+ * The receipt in the same dress as the invoice (the spec's "The receipt"):
+ * a receipt that looked like last week's design beside this invoice would
+ * look like a different practice's.
+ */
+describe('the receipt in the operator’s design, block by block', () => {
+  const bytes = renderDocument(receiptFor(UNREGISTERED), fonts);
+  const page = extractAll(bytes);
+  const lines = extractText(bytes);
 
-  it('is headed "Receipt" and never "Invoice"', () => {
-    expect(page).toContain('Receipt');
-    expect(page).not.toContain('Tax Invoice');
+  it('is headed RECEIPT once and إيصال استلام beneath it, and never as an invoice', () => {
+    expect(lines.filter((line) => line === 'RECEIPT')).toHaveLength(1);
     expect(page).toContain(asCopied(WORDS.receipt.ar));
+    expect(page).not.toContain('INVOICE');
   });
 
-  it('carries its own number, from its own book', () => {
-    // RCP, not INV: a payment settles a tax invoice, it is not one, and the
-    // Federal Tax Authority sequence stays a sequence of invoices
-    // (405_billing_receipt.sql). The design sets it large and in violet with
-    // no label, where an invoice sets its own.
-    expect(page).toContain('RCP-000004');
-    expect(page).toContain('Date received 2 September 2026');
+  it('names the practice in both languages with its licence and its authority, and no tax registration', () => {
+    expect(page).toContain('Synthetic Wellness Studio');
+    expect(page).toContain(asCopied('استوديو العافية التجريبي'));
+    expect(lines).toContain('Licence number SYN-000000');
+    expect(page).toContain('Licensing authority Synthetic Department of Economy and Tourism');
+    expect(page).not.toContain('Corporate tax');
+    expect(page).not.toContain('000000000000000');
   });
 
-  it('says who the money came from, and not who it is billed to', () => {
-    expect(page).toContain('Received from');
-    expect(page).not.toContain('Billed to');
-    expect(page).toContain('Robin Fairweather');
+  it('sets the number card: the receipt number over its reference, the date received over the date', () => {
+    expect(page).toContain('Receipt no.');
+    expect(page).toContain(asCopied(WORDS.receiptNo.ar));
+    expect(lines).toContain('RCP-000004');
+    expect(page).toContain('Date received');
+    expect(page).toContain(asCopied(WORDS.dateReceived.ar));
+    expect(lines).toContain('2 September 2026');
   });
 
-  it('says how the money arrived and which invoice it settles', () => {
-    expect(page).toContain('Bank transfer');
-    expect(page).toContain('Settles invoice');
-    expect(page).toContain('INV-000001');
+  it('sets the received-from card with the household and its client record', () => {
+    expect(page).toContain('RECEIVED FROM');
+    expect(page).toContain(asCopied(WORDS.receivedFromCaption.ar));
+    expect(lines).toContain('Robin Fairweather');
+    expect(page).toContain('Client record: MW-000004');
+    expect(page).toContain(asCopied(WORDS.clientRecord.ar));
   });
 
-  it('shows the amount received, to the fils', () => {
-    expect(page).toContain('Received');
-    expect(page).toContain('AED 700.00');
+  it('names the method the money came by as the payment method, in both languages', () => {
+    expect(page).toContain('PAYMENT METHOD');
+    expect(page).toContain(asCopied(WORDS.paymentMethodCaption.ar));
+    expect(lines).toContain('Bank transfer');
+    expect(page).toContain(asCopied(WORDS.bankTransferMethod.ar));
+  });
+
+  it('sets the Payment received card: the method, the reference and the invoice it settles, English labels only', () => {
+    expect(page).toContain('Payment received');
+    expect(page).toContain(asCopied(WORDS.paymentReceived.ar));
+    expect(lines).toContain('Method');
+    expect(lines).toContain('Reference');
+    expect(lines).toContain('SYN 0001');
+    expect(lines).toContain('Settles invoice');
+    expect(lines).toContain('INV-000001');
+    // The rows' labels carry no Arabic, as the payment details card's do not.
+    expect(page).not.toContain(asCopied(WORDS.settlesInvoice.ar));
+    // The method twice: once as the payment method, once on its row.
+    expect(lines.filter((line) => line === 'Bank transfer')).toHaveLength(2);
+  });
+
+  it('sums up: the total, and TOTAL PAID over the figure in the violet block', () => {
+    expect(page).toContain('Receipt summary');
+    expect(page).toContain(asCopied(WORDS.receiptSummary.ar));
+    expect(lines).toContain('Total');
+    expect(lines).toContain('TOTAL PAID');
+    expect(page).toContain(asCopied(WORDS.totalPaid.ar));
+    // The figure twice: the summary's row and the violet block.
+    expect(count(page, 'AED 700.00')).toBe(2);
+  });
+
+  it('carries the Note card with the receipt’s own sentence, in both languages', () => {
+    expect(lines).toContain('Note');
+    expect(page).toContain(asCopied(WORDS.note.ar));
+    expect(page).toContain(
+      'Received by bank transfer on 2 September 2026, against invoice INV-000001.',
+    );
+    expect(page).toContain('This is a receipt for money received, not a tax invoice.');
+    expect(page).toContain(asCopied('هذا إيصال باستلام مبلغ وليس فاتورة ضريبية'));
+  });
+
+  it('ends on the invoice’s footer: the name and the address spaced by three, then the contact line', () => {
+    expect(lines).toContain('Synthetic Wellness Studio   Unit 1   Synthetic Tower   Dubai');
+    expect(lines).toContain('P: +971 50 000 0011   E: studio@example.com   W: https://example.com');
+  });
+
+  it('is the same bytes every time it is rendered from the same row', () => {
+    const again = renderDocument(receiptFor(UNREGISTERED), fonts);
+    expect(Buffer.from(bytes).equals(Buffer.from(again))).toBe(true);
+  });
+});
+
+describe('a receipt, by the method the money came by', () => {
+  const METHODS = [
+    ['cash', WORDS.cash],
+    ['transfer', WORDS.bankTransferMethod],
+    ['link', WORDS.link],
+  ] as const;
+
+  it.each(METHODS)(
+    '%s: names it as the payment method and on the Payment received card, and no other',
+    (method, phrase) => {
+      const bytes = renderDocument(receiptFor(UNREGISTERED, { method }), fonts);
+      const lines = extractText(bytes);
+      const page = extractAll(bytes);
+      expect(lines.filter((line) => line === phrase.en)).toHaveLength(2);
+      expect(page).toContain(asCopied(phrase.ar));
+      for (const [other, otherPhrase] of METHODS) {
+        if (other === method) continue;
+        expect(lines, other).not.toContain(otherPhrase.en);
+      }
+    },
+  );
+});
+
+describe('a receipt’s optional rows', () => {
+  it('leaves Reference out when no payment reference was recorded', () => {
+    const with_ = extractText(renderDocument(receiptFor(UNREGISTERED), fonts));
+    expect(with_).toContain('Reference');
+    const without = extractText(
+      renderDocument(receiptFor(UNREGISTERED, { paymentReference: null }), fonts),
+    );
+    expect(without).not.toContain('Reference');
+    expect(without).not.toContain('SYN 0001');
+    expect(without).toContain('Method');
+  });
+
+  it('leaves Settles invoice out when it settles no invoice, and says it was taken on account', () => {
+    const page = extractAll(renderDocument(receiptFor(UNREGISTERED, { settles: null }), fonts));
+    expect(page).not.toContain('Settles invoice');
+    expect(page).not.toContain('INV-000001');
+    expect(page).toContain('Received by bank transfer on 2 September 2026, on account.');
+  });
+});
+
+describe('a receipt asks for no money and claims nothing about tax, whoever issued it', () => {
+  const registered = renderDocument(receiptFor(REGISTERED), fonts);
+  const unregistered = renderDocument(receiptFor(UNREGISTERED), fonts);
+
+  it.each([
+    ['registered', registered],
+    ['unregistered', unregistered],
+  ] as const)('carries no bank account, no invoice words and no tax words (%s)', (_name, bytes) => {
+    // A receipt says money arrived; it asks for none. `ReceiptDocument` has no
+    // `bank` to carry, so this is the page proving the type.
+    const page = extractAll(bytes);
+    for (const absent of [
+      'IBAN',
+      'SWIFT',
+      'Payment details',
+      'Payment reference',
+      'BILLED TO',
+      'TOTAL DUE',
+      'Corporate tax',
+      'TRN',
+      'VAT',
+    ]) {
+      expect(page, absent).not.toContain(absent);
+    }
+  });
+
+  it('reads the same from a registered practice as from an unregistered one', () => {
+    expect(extractText(registered)).toEqual(extractText(unregistered));
   });
 });
 
@@ -817,15 +942,5 @@ describe('the discount’s percentage', () => {
     ).toBe(null);
     expect(sharedDiscountBasisPoints([discountedLine(null, 0)])).toBe(null);
     expect(sharedDiscountBasisPoints([])).toBe(null);
-  });
-});
-
-describe('a receipt asks for no money', () => {
-  it('carries no bank account', () => {
-    // A receipt says money arrived; it asks for none. `ReceiptDocument` has no
-    // `bank` to carry, so this is the page proving the type.
-    const page = extractAll(renderDocument(receiptFor(UNREGISTERED), fonts));
-    expect(page).not.toContain('Payment details');
-    expect(page).not.toContain('IBAN');
   });
 });
