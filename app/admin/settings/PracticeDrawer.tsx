@@ -170,7 +170,7 @@ export function PracticeDrawer({
   const [contactPhone, setContactPhone] = useState(practice.contactPhone ?? '');
   const [contactEmail, setContactEmail] = useState(practice.contactEmail ?? '');
   const [website, setWebsite] = useState(practice.website ?? '');
-  // The bank account an invoice's "Pay by bank transfer" block prints
+  // The bank account an invoice's "Payment details" card prints
   // (migration 924, round 61). The IBAN is what makes an account: all four
   // start empty together and are refused unless the holder and the IBAN
   // travel together too.
@@ -536,7 +536,7 @@ export function PracticeDrawer({
           />
 
           {/*
-            The bank account an invoice's "Pay by bank transfer" block prints
+            The bank account an invoice's "Payment details" card prints
             (migration 924, round 61). The holder and the IBAN are required
             together; the BIC and the address need the IBAN too — the error
             sentences below say so, so there is no separate paragraph here.

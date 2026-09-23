@@ -1,15 +1,18 @@
 /**
- * A very small PDF writer: enough to set bilingual type, rule a line, embed
- * the two faces the app already uses, and set one hue.
+ * A very small PDF writer: enough to set bilingual type, rule a line, draw
+ * an image and a filled or stroked rectangle, and embed the two faces the app
+ * already uses.
  *
  * **Why this exists rather than a library.** An invoice is a document the
  * practice hands to a family and a tax authority may read, so it has to carry
  * its own type and be byte-identical every time it is rendered from the same
  * row. What that needs from a PDF is narrow: pages, text in an embedded
- * TrueType font, horizontal rules, and — since round 34 — a flat red-green-blue
- * fill and stroke for the one figure the design brief admits a hue on
- * (`docs/DESIGN-BRIEF.md` section 5, the session ribbon). No images, no colour
- * spaces beyond that one operator, no forms, no transparency, no compression.
+ * TrueType font, rules, the practice's mark as an image (since round 20), a
+ * flat red-green-blue fill and stroke (since round 34, first for the session
+ * ribbon of `docs/DESIGN-BRIEF.md` section 5), and — since round 65 — the
+ * filled and stroked rectangle, square or rounded, the operator's invoice
+ * design is drawn with. No colour spaces beyond that one operator, no forms,
+ * no transparency, no compression.
  * `package.json` is the shared zone
  * (docs/SPEC/OWNERSHIP.md), so a dependency here is a change request and a
  * standing supply-chain surface on the one path that renders a client's
@@ -144,6 +147,26 @@ export type Op =
       y: number;
       width: number;
       height: number;
+    }
+  | {
+      /**
+       * A filled and/or stroked rectangle, square or rounded: the bands, cards
+       * and pill of the practice's own invoice design
+       * (docs/superpowers/specs/2026-09-24-invoice-redesign-design.md).
+       *
+       * `x`, `y` is the **bottom-left** corner, as for an image. A rectangle
+       * given neither a fill nor a stroke draws nothing.
+       */
+      kind: 'rect';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      fill?: { rgb: readonly [number, number, number] } | { grey: number };
+      /** As a rule's stroke: grey 0.8 and half a point when nothing else is said. */
+      stroke?: { rgb?: readonly [number, number, number]; grey?: number; thickness?: number };
+      /** Corner radius in points, at most half the shorter side. Absent is square. */
+      radius?: number;
     };
 
 export type Page = { ops: Op[] };
@@ -250,6 +273,12 @@ function clamp01(value: number): number {
 
 /** A number as PDF writes one: no exponent, no trailing noise. */
 function num(value: number): string {
+  // A NaN, an infinity or a number past 1e21 would be written as "NaN",
+  // "Infinity" or "1e+21" — not a number a PDF reader can parse, and a page
+  // that will not open is a document the practice cannot send. Nought is at
+  // least a page; the geometry tests are what keep a real layout from ever
+  // asking for one.
+  if (!Number.isFinite(value) || Math.abs(value) >= 1e21) return '0';
   const rounded = Math.round(value * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
 }
@@ -353,6 +382,59 @@ function contentOf(
       out.push(
         `q ${num(op.width)} 0 0 ${num(op.height)} ${num(op.x)} ${num(op.y)} cm /${resource} Do Q`,
       );
+      continue;
+    }
+
+    if (op.kind === 'rect') {
+      if (!op.fill && !op.stroke) continue;
+      // Like a rule, the whole rectangle lives inside its own q/Q: the colour
+      // it paints with is discarded at the Q, so `fill` still describes what
+      // the reader was last told for text and is neither consulted nor changed
+      // here. A page that draws no rectangle is therefore the page it was.
+      const parts: string[] = ['q'];
+      if (op.fill) {
+        parts.push(
+          'rgb' in op.fill
+            ? `${num(clamp01(op.fill.rgb[0]))} ${num(clamp01(op.fill.rgb[1]))} ${num(clamp01(op.fill.rgb[2]))} rg`
+            : `${num(clamp01(op.fill.grey))} g`,
+        );
+      }
+      if (op.stroke) {
+        parts.push(
+          op.stroke.rgb
+            ? `${num(clamp01(op.stroke.rgb[0]))} ${num(clamp01(op.stroke.rgb[1]))} ${num(clamp01(op.stroke.rgb[2]))} RG`
+            : `${num(clamp01(op.stroke.grey ?? 0.8))} G`,
+        );
+        parts.push(`${num(op.stroke.thickness ?? 0.5)} w`);
+      }
+      const { x, y, width: w, height: h } = op;
+      // A radius larger than half the shorter side would make the arcs cross,
+      // so it is held there: that is also what turns a short, wide box into a
+      // pill without the caller working out its height.
+      const r = Math.max(0, Math.min(op.radius ?? 0, w / 2, h / 2));
+      if (r === 0) {
+        parts.push(`${num(x)} ${num(y)} ${num(w)} ${num(h)} re`);
+      } else {
+        // Each corner is a quarter circle drawn as one cubic Bézier, whose
+        // control points sit κ·r along the tangents; κ = 0.5523 is the
+        // standard constant that keeps the arc within a hair of a true circle.
+        const k = 0.5523 * r;
+        const p = (px: number, py: number): string => `${num(px)} ${num(py)}`;
+        parts.push(
+          `${p(x + r, y)} m`,
+          `${p(x + w - r, y)} l`,
+          `${p(x + w - r + k, y)} ${p(x + w, y + r - k)} ${p(x + w, y + r)} c`,
+          `${p(x + w, y + h - r)} l`,
+          `${p(x + w, y + h - r + k)} ${p(x + w - r + k, y + h)} ${p(x + w - r, y + h)} c`,
+          `${p(x + r, y + h)} l`,
+          `${p(x + r - k, y + h)} ${p(x, y + h - r + k)} ${p(x, y + h - r)} c`,
+          `${p(x, y + r)} l`,
+          `${p(x, y + r - k)} ${p(x + r - k, y)} ${p(x + r, y)} c`,
+          'h',
+        );
+      }
+      parts.push(op.fill && op.stroke ? 'B' : op.fill ? 'f' : 'S', 'Q');
+      out.push(parts.join(' '));
       continue;
     }
 

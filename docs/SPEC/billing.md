@@ -508,103 +508,123 @@ tax point on prepaid packages, and record the answer here.
 
 Structure invoices as PINT AE (UBL/XML) objects from day one. Your wave: appoint an Accredited Service Provider by **31 March 2027**, live by **1 July 2027**. Building the invoice as a structured object now costs nothing; retrofitting it in 2027 costs a sprint.
 
-### 5.6 What a money document looks like (the operator's design, 8 September 2026)
+### 5.6 What a money document looks like (the operator's design, 24 September 2026)
 
-_The operator supplied a designed tax invoice and receipt on 8 September 2026 and
-asked the platform's own documents to match them. Three questions were answered
-in the same message: the fifteen-digit number on the design is the **corporate-tax**
-registration and not a VAT one, so documents stay honest until the practice
-registers; the **look** is what is being matched, not the period-statement content
-the design's example happens to show, which remains piece thirteen's; and the
-numbering stays as it is, `INV-000001` and `RCP-000001`._
+_The operator designed the invoice again on 24 September 2026 and asked that
+the platform's own documents look exactly like his page, with two
+instructions that bind every choice below: "respect my colors and simplicity".
+His colours are the practice's violet, white on it, and tints of that violet
+for cards — nothing else. His simplicity is what his page shows and nothing it
+does not. This section replaces the design of 8 September 2026, which set
+every fact in facing English and Arabic rows with a bordered totals box and,
+since round 61, a bank block beside it; that page's three answers of 8
+September still hold — the fifteen-digit number is the corporate-tax
+registration and not a VAT one, the look is what is matched and not a period
+statement's content, and the numbering stays `INV-000001` and `RCP-000001`._
 
-**The page, top to bottom.** The practice's logo, centred, about 150 points wide.
-The document's title, English against the left margin and Arabic against the
-right, both large and in the brand violet. The supplier as a block rather than
-as labelled rows: legal name in bold, then the licence, the licensing authority
-and the corporate-tax registration, each on its own line, with the Arabic
-mirror right-aligned opposite. **The address is not in this block** (the
-operator's instruction of 8 September 2026): the footer band states it once,
-and a page that prints the practice's address twice spends its best space
-repeating itself. The band's own line therefore wraps rather than being cut,
-because a UAE invoice must state the supplier's address and that line is now
-its only home; the band grows upward into the page so its last line stays
-where it was and the page number is never crowded. A hairline. The
-document's own facts: its reference large and bold on the left with the date
-beneath it, and on the right "Billed to" with the household's name and record
-number. A hairline. The lines table. The totals in a bordered box against the
-right margin. The footer band: a hairline, then the practice's legal name and
-address on one centred line and its telephone, email and website on the next,
-both small and grey.
+**The colours.** One brand violet, `#380473`, sampled from the practice's own
+mark, and every other colour on the page derived from it in code
+(`domain/billing/document/sheet.ts`: `VIOLET`, and `tint(k)` mixing it over
+white): a **card** ground at six per cent, a card **edge** at fifteen, the
+discount **pill**'s ground at twelve. Text is white on violet and otherwise the
+ink and the two greys the documents have always used. No second hue, no
+shadow, no gradient, no icon, and no page number — his page has none; a later
+sheet says what it belongs to through a small running header instead. The
+console's own rule that hue is reserved for band data and three status states
+is untouched: this is a document's page, not a screen's.
 
-**The brand violet is `#380473`**, sampled from the practice's own mark, and it
-is used for exactly three things: the two title words, the table's column
-headings, and the reference. Everything else stays the ink and two greys the
-documents already use. This is the first place the inherited McWellness violet
-becomes an accent; `PRODUCT.md`'s open question is answered for **documents
-only**, and the console's own rule that hue is reserved for band data and three
-status states is untouched.
+**The page, top to bottom.** The practice's mark against the left margin,
+about 165 points wide as his page sets the lockup (the wordmark in type when
+the practice has none), and the title against the right in violet: "INVOICE"
+large and bold with "فاتورة" beneath it, or "TAX INVOICE" and "فاتورة ضريبية"
+under a registration. Capitals are his — a document's, not the console's.
+Then the supplier block on the left, its legal name bold with the Arabic name
+beside it and, one line each, the licence number, the licensing authority and
+the corporate-tax registration (a registered practice adds the VAT
+registration), English left and Arabic right; and against the right margin a
+**number card** with a violet bar down its left edge: "Invoice no." over the
+reference in violet bold, "Issue date" over the date, the date of supply as a
+third pair when it differs. A hairline across the page. Then the **billed-to
+card**, "BILLED TO" small over the household's name and "Client record:
+MW-000001" with the Arabic beside it, and to its right, with no card, "PAYMENT
+METHOD" over "Bank transfer" bold in violet — absent altogether when the
+practice has recorded no bank account. **The address is still not in the
+supplier block** (8 September's instruction, kept): the footer states it once.
 
-**The lines table** keeps the columns the platform's invoices actually have —
-description, quantity, unit price, and, while the practice is registered, the
-VAT rate and the VAT amount — rather than the design example's date column,
-which repeats an invoice's single date on every row. Beneath a line's
-description sit its Arabic name and, when a discount was given, the design's own
-phrasing for it: `List AED 12,150.00 · less AED 2,325.00`, followed since 23
-September 2026 by the share, `(15%)`, when it was typed as one (section 2.4).
-Money is written with its currency in the cell, `AED 1,650.00`, following the
-design; the console's "name the currency once per table" rule is a rule for
-screens and does not reach a client-facing document.
+**The lines table** sits in a card whose header is a solid violet band with
+white headings, each English over Arabic: Description, Qty, Unit price,
+Discount, Total — a registered practice inserts VAT before Total and the
+Total column holds the gross. The Discount column exists only when the
+invoice carries a discount; on a discounted line it holds a **pill** — the
+percentage when the line was typed as a share, the amount when it was typed
+as a sum — and an undiscounted line's cell is empty. A row is the
+description bold with the service's Arabic name beneath it in small grey, the
+quantity, the unit price at list, the pill and the total, hairlines between
+cells and under each row. The old page's "List … · less …" sub-line is gone:
+the column says it. On a page taken mid-table the violet header is drawn
+again at the top.
 
-**The receipt is the same page with two deliberate departures.** It carries
-**no Date / Method / Amount table**: a receipt records one payment, and the four
-facts it has — the date received, the method, the payment reference and the
-invoice settled — stack as small grey lines under its own reference, where the
-invoice puts its dates. A table of three headings above a single row would be
-furniture around one fact. And it leaves the **corporate-tax registration** off
-the supplier block, as the operator's design does: an invoice is a tax document
-and names the registrations the practice holds, while a receipt acknowledges
-that money arrived and makes no tax claim in either direction, so the number has
-no work to do on it. Everything else — the mark, the title in both languages,
-the supplier block, the totals box, the basis sentence and the footer band — is
-the invoice's.
+**Two cards below the table, side by side.** Left, **"Payment details"** —
+Account name, IBAN (violet bold, grouped in fours), SWIFT / BIC and Bank
+address, **with English labels only**: the operator found the facing Arabic of
+round 61's block distracting beside an account number, and an account number
+read against six labels is a number a payer misreads. A strip inside the
+card's foot carries "Payment reference" and the invoice's reference in violet
+bold. The whole card is absent when the practice has recorded no account, and
+the account is still **read live at render time, never snapshotted**, for the
+reason round 61 gave: an account the practice has left is the one place a
+family must not be sent money. Right, **"Invoice summary"** on a tinted title
+band over a white body: Subtotal (the list total), "Discount 25%" when every
+discounted line shares the percentage and "Discount" alone otherwise, with
+the amount as "- AED 1,987.50", then Net and "VAT 5%" under a registration —
+these rows in English only, as his page sets them — a hairline, and a solid
+violet block, "TOTAL DUE" / "الإجمالي المستحق" small in white over the figure
+large in white. With no payment card the summary keeps its place on the
+right.
 
-**The logo is the practice's own row, not a file in this repository** (migration
-909, and the decision of 3 September 2026). The renderer draws it when the
-practice has one and falls back to the wordmark set in type when it does not, so
-a practice with no logo still gets a document that looks deliberate. The bytes
-are read from the practice's `practice_logo` document and embedded; nothing
-about the document's own snapshot changes, because a logo is the practice's
-mark today and re-rendering last year's invoice with this year's mark is the
-one drift a reader will neither notice nor be harmed by.
+**The tax information card**, full width on a card ground with a violet bar
+down its left edge: "Tax information" bold, then the sentence the practice's
+registration calls for in English and beneath it in Arabic — the simplified
+tax invoice sentence under a registration, the not-registered sentence
+otherwise, both unchanged from 8 September. A waived call-out fee puts its
+waived sentence first, in ink. **The footer**: a hairline, the legal name and
+address on one centred line and the telephone, email and website on the next,
+small and grey, pinned to the foot of the page and wrapping upward when long.
 
-**The footer needs three facts the practice did not record**: a telephone number
-for the document, an email address and a website. They join `tenant` and are
-snapshotted onto the invoice like every other supplier fact, so a document keeps
-saying what it said.
+**The receipt is the same dress**, because a receipt in last week's design
+beside this invoice would look like another practice's: "RECEIPT" / "إيصال
+استلام"; the number card reads "Receipt no." and "Date received"; the party
+card is "RECEIVED FROM"; the payment method names the method the money came
+by (Cash, Bank transfer, Payment link); no table; the left lower card,
+"Payment received", carries Method, Reference when there is one and "Settles
+invoice" when there is one, English labels only; the right card's violet block
+reads "TOTAL PAID" / "الإجمالي المدفوع"; the bottom card, "Note", carries the
+receipt's own sentence — that it is a receipt for money received and not a
+tax invoice. **No bank details anywhere on it**, and no corporate-tax number
+in its supplier block, as before: a receipt acknowledges money that arrived
+and claims nothing about tax in either direction.
 
-**How to pay, beside the totals** (round 61, the owner's ask of 23 September
-2026). When the practice has recorded an account holder and an IBAN (migration
-924, Settings › Practice), an invoice sets a small block in the empty band to
-the left of the totals box, from the same top: a heading, "Pay by bank transfer"
-in both languages, muted and not violet, then the account holder, the IBAN
-grouped in fours, and — when recorded — the BIC and the bank address, each with
-its label in both languages. The holder and the address wrap within the block;
-the block and the box are kept on one sheet, so a page break falls before both.
-A practice with no account recorded gets exactly the page it had before.
-**The account is read live, like the mark, and not snapshotted**: an account the
-practice has left is the one place a family must not be sent money, so a
-re-render prints the account in use today. The price is the mark's: a filed
-invoice whose bytes are lost after the account changes re-renders to different
-bytes, and the recovery path refuses it (409) rather than put a different file
-under the filed one's hash. **A receipt carries no block**: it acknowledges
-money that arrived and asks for none.
+**The registration decides only what a registration adds**: the title word,
+the VAT registration row, the VAT column, the Net and VAT rows. Everything
+else on the registered and unregistered pages is the same.
+
+**Filed PDFs never change.** Every document rendered after this round is the
+new page; a document filed before it keeps its bytes, read back from storage
+by hash, and a storage-loss recovery of one refuses (`409
+document_bytes_differ`) exactly as the mark and the bank account already make
+it refuse — the rule of round 61, not a new one.
+
+**The logo and the footer's three facts** are as 8 September left them: the
+mark is the practice's own row (migration 909) drawn at render time, and the
+telephone, email and website are snapshotted onto the invoice like every
+other supplier fact.
 
 **Nothing about what the document claims changes.** The heading is still
 "Invoice" and not "Tax Invoice" while the practice is unregistered, the
-corporate-tax number is still labelled as itself and never as a VAT number, the
-VAT column and the VAT line still appear only under a registration, and the
-footer still says which of the two the document is. The design is a design.
+corporate-tax number is still labelled as itself and never as a VAT number,
+the VAT column and the VAT rows still appear only under a registration, and
+the tax card still says which of the two the document is. The design is a
+design.
 
 ---
 
