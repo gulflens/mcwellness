@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { isEmiratesIdShaped, wholeEmiratesIdDigits } from '../../api/clients/emirates-id-shape';
 import {
   canSeeFullRecord,
@@ -126,8 +127,16 @@ export function ClientsPage() {
   const [emirate, setEmirate] = useState<string>('');
   const [query, setQuery] = useState('');
   const [state, setState] = useState<State>({ kind: 'loading' });
-  const [selected, setSelected] = useState<ClientRow | null>(null);
-  const [enrolling, setEnrolling] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const clientId = params.get('client');
+  const enrolling = params.get('enrol') === 'new' && mayEnrol;
+  const inWorkspace = Boolean(clientId) || enrolling;
+  const listPosition = useRef(0);
+  const previousWorkspace = useRef(false);
+  const listFocus = useRef<HTMLElement | null>(null);
+  const selected =
+    state.kind === 'ready' ? state.response.clients.find((row) => row.id === clientId) : undefined;
+
   // Bumped after the enrolment wizard closes, so the table picks up the lead it just
   // created (or any later step's write) without duplicating the fetch effect below.
   const [reloadToken, setReloadToken] = useState(0);
@@ -138,21 +147,34 @@ export function ClientsPage() {
   // Closing the drawer reloads the table: a status changed on Overview (a lead
   // activated) must not leave the row behind it still saying what it said before.
   const closeDrawer = useCallback(() => {
-    setSelected(null);
-    setReloadToken((t) => t + 1);
-  }, []);
-  const selectClient = useCallback((row: ClientRow) => {
-    setEnrolling(false);
-    setSelected(row);
-  }, []);
+    setParams({}, { replace: true });
+  }, [setParams]);
+  const selectClient = useCallback(
+    (row: ClientRow) => {
+      listPosition.current = window.scrollY;
+      listFocus.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setParams({ client: row.id, section: 'overview' });
+    },
+    [setParams],
+  );
   const openWizard = useCallback(() => {
-    setSelected(null);
-    setEnrolling(true);
-  }, []);
-  const closeWizard = useCallback(() => {
-    setEnrolling(false);
-    setReloadToken((t) => t + 1);
-  }, []);
+    listPosition.current = window.scrollY;
+    listFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setParams({ enrol: 'new' });
+  }, [setParams]);
+  const closeWizard = closeDrawer;
+  useEffect(() => {
+    if (inWorkspace) {
+      window.scrollTo?.(0, 0);
+    } else if (previousWorkspace.current) {
+      setReloadToken((value) => value + 1);
+      listFocus.current?.focus({ preventScroll: true });
+      window.scrollTo?.(0, listPosition.current);
+    }
+    previousWorkspace.current = inWorkspace;
+  }, [inWorkspace]);
   const wizardCreatedLead = useCallback(() => {
     setReloadToken((t) => t + 1);
   }, []);
@@ -242,103 +264,114 @@ export function ClientsPage() {
   const partialEmiratesId = isPartialEmiratesId(query.trim());
 
   return (
-    <section className="page">
-      <PageHeader
-        title="Clients"
-        aside={
-          count === null ? null : (
-            <span className="numeric">{count === 1 ? '1 client' : `${count} clients`}</span>
-          )
-        }
-        action={
-          mayEnrol ? (
-            <Button variant="primary" onClick={openWizard}>
-              Enrol a client
-            </Button>
-          ) : undefined
-        }
-      />
-      {notice ? (
-        <div role="status">
-          <Note>{notice}</Note>
-        </div>
-      ) : null}
-      <div className="toolbar">
-        <Field
-          id="client-search"
-          className="field--search"
-          label="Search"
-          type="search"
-          // The tablet tier and above, the shell's own boundary
-          // (docs/SPEC/responsive-console.md section 4). Below it a focused
-          // field raises the keyboard over the list the person came to read.
-          autoFocus={
-            typeof window.matchMedia === 'function' &&
-            window.matchMedia('(min-width: 768px)').matches
+    <section className="page clients-page">
+      <div hidden={inWorkspace}>
+        <PageHeader
+          title="Clients"
+          aside={
+            count === null ? null : (
+              <span className="numeric">{count === 1 ? '1 client' : `${count} clients`}</span>
+            )
           }
-          placeholder="Name, record number or Emirates ID"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setNotice(null);
-          }}
-          hint={partialEmiratesId ? PARTIAL_EMIRATES_ID_HINT : undefined}
+          action={
+            mayEnrol ? (
+              <Button variant="primary" onClick={openWizard}>
+                Enrol a client
+              </Button>
+            ) : undefined
+          }
         />
-        <Select
-          id="client-status"
-          label="Status"
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setNotice(null);
-          }}
-        >
-          <option value="">Any status</option>
-          {CLIENT_STATUSES.filter((s) => s !== 'erased').map((s) => (
-            <option key={s} value={s}>
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-            </option>
-          ))}
-        </Select>
-        {/* By the primary address, the one the Emirate column shows
-            (app/api/clients/list.ts): the filter and the column never disagree. */}
-        {mayFilterByEmirate ? (
-          <Select
-            id="client-emirate"
-            label="Emirate"
-            value={emirate}
+        {notice ? (
+          <div role="status">
+            <Note>{notice}</Note>
+          </div>
+        ) : null}
+        <div className="toolbar">
+          <Field
+            id="client-search"
+            className="field--search"
+            label="Search"
+            type="search"
+            // The tablet tier and above, the shell's own boundary
+            // (docs/SPEC/responsive-console.md section 4). Below it a focused
+            // field raises the keyboard over the list the person came to read.
+            autoFocus={
+              typeof window.matchMedia === 'function' &&
+              window.matchMedia('(min-width: 768px)').matches
+            }
+            placeholder="Name, record number or Emirates ID"
+            value={query}
             onChange={(e) => {
-              setEmirate(e.target.value);
+              setQuery(e.target.value);
+              setNotice(null);
+            }}
+            hint={partialEmiratesId ? PARTIAL_EMIRATES_ID_HINT : undefined}
+          />
+          <Select
+            id="client-status"
+            label="Status"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
               setNotice(null);
             }}
           >
-            <option value="">Any emirate</option>
-            {Object.entries(EMIRATES).map(([code, name]) => (
-              <option key={code} value={code}>
-                {name}
+            <option value="">Any status</option>
+            {CLIENT_STATUSES.filter((s) => s !== 'erased').map((s) => (
+              <option key={s} value={s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
               </option>
             ))}
           </Select>
+          {/* By the primary address, the one the Emirate column shows
+            (app/api/clients/list.ts): the filter and the column never disagree. */}
+          {mayFilterByEmirate ? (
+            <Select
+              id="client-emirate"
+              label="Emirate"
+              value={emirate}
+              onChange={(e) => {
+                setEmirate(e.target.value);
+                setNotice(null);
+              }}
+            >
+              <option value="">Any emirate</option>
+              {Object.entries(EMIRATES).map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          ) : null}
+        </div>
+        {state.kind === 'loading' ? <Note>Loading the client list.</Note> : null}
+        {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
+        {state.kind === 'ready' ? (
+          <Table
+            caption="Clients of the practice"
+            columns={columns}
+            rows={state.response.clients}
+            rowKey={(row) => row.id}
+            empty={
+              // "No visits booked" is only true of the whole list. With a filter or
+              // a search on, an empty table means nobody matched it, booked or not.
+              state.response.note === 'schedule' && !status && !emirate && !query.trim()
+                ? 'This list shows the clients you are booked with. You have no visits booked.'
+                : 'No clients match.'
+            }
+          />
         ) : null}
       </div>
-      {state.kind === 'loading' ? <Note>Loading the client list.</Note> : null}
-      {state.kind === 'error' ? <Note tone="critical">{state.message}</Note> : null}
-      {state.kind === 'ready' ? (
-        <Table
-          caption="Clients of the practice"
-          columns={columns}
-          rows={state.response.clients}
-          rowKey={(row) => row.id}
-          empty={
-            // "No visits booked" is only true of the whole list. With a filter or
-            // a search on, an empty table means nobody matched it, booked or not.
-            state.response.note === 'schedule' && !status && !emirate && !query.trim()
-              ? 'This list shows the clients you are booked with. You have no visits booked.'
-              : 'No clients match.'
-          }
+      {clientId ? (
+        <ClientDrawer
+          key={clientId}
+          clientId={clientId}
+          client={selected}
+          section={params.get('section') ?? 'overview'}
+          onSectionChange={(section) => setParams({ client: clientId, section }, { replace: true })}
+          onClose={closeDrawer}
         />
       ) : null}
-      {selected ? <ClientDrawer key={selected.id} client={selected} onClose={closeDrawer} /> : null}
       {enrolling ? (
         <EnrolmentWizard
           onDone={closeWizard}

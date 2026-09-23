@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
@@ -18,7 +19,13 @@ vi.mock('./EnrolmentWizard', async (importOriginal) => {
     ...actual,
     EnrolmentWizard: (props: Parameters<typeof RealWizard>[0]) =>
       useStubWizard ? (
-        <button type="button" onClick={() => props.onActivated?.('Alpha Synthetic')}>
+        <button
+          type="button"
+          onClick={() => {
+            props.onActivated?.('Alpha Synthetic');
+            props.onDone();
+          }}
+        >
           activate-stub
         </button>
       ) : (
@@ -57,6 +64,17 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function NavigationProbe() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <span data-testid="location">{location.search}</span>
+      <button onClick={() => navigate(-1)}>Browser back</button>
+    </>
+  );
+}
+
 function mount(matches: (typeof row)[] = [], lookupStatus = 200, me: unknown = ADMIN) {
   const calls: { url: string; init?: RequestInit }[] = [];
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -76,7 +94,10 @@ function mount(matches: (typeof row)[] = [], lookupStatus = 200, me: unknown = A
   }) as unknown as typeof fetch;
   render(
     <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-      <ClientsPage />
+      <MemoryRouter>
+        <ClientsPage />
+        <NavigationProbe />
+      </MemoryRouter>
     </AuthProviderBoundary>,
   );
   return calls;
@@ -88,6 +109,24 @@ function mount(matches: (typeof row)[] = [], lookupStatus = 200, me: unknown = A
  * request: asserting on the decision itself, rather than on what a burst of
  * synthetic keystrokes happens to coalesce into, is what actually pins this.
  */
+describe('client workspace navigation', () => {
+  it('hides the list, keeps search and filters, and supports browser Back', async () => {
+    mount([row]);
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Juniper' } });
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'active' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Juniper Quarry' }));
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Juniper Quarry' })).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toContain(`client=${row.id}`);
+    fireEvent.click(screen.getByRole('tab', { name: 'Consent' }));
+    expect(screen.getByTestId('location').textContent).toContain('section=consent');
+    fireEvent.click(screen.getByRole('button', { name: 'Browser back' }));
+    expect((screen.getByLabelText('Search') as HTMLInputElement).value).toBe('Juniper');
+    expect((screen.getByLabelText('Status') as HTMLSelectElement).value).toBe('active');
+    expect(screen.queryByRole('button', { name: 'Back to clients' })).toBeNull();
+  });
+});
+
 describe('searchRequest', () => {
   it('asks for nothing at all until an Emirates ID is whole', () => {
     for (let i = 1; i < EMIRATES_ID.length; i += 1) {
@@ -210,7 +249,10 @@ describe('ClientsPage search', () => {
     }) as unknown as typeof fetch;
     render(
       <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <ClientsPage />
+        <MemoryRouter>
+          <ClientsPage />
+          <NavigationProbe />
+        </MemoryRouter>
       </AuthProviderBoundary>,
     );
     expect(
@@ -271,11 +313,11 @@ describe('ClientsPage search', () => {
     await screen.findByRole('table');
 
     fireEvent.click(screen.getByRole('button', { name: 'Enrol a client' }));
-    expect(screen.getByRole('dialog', { name: 'Enrol a client' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Enrol a client' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Enrol a client' })).toBeNull(),
+      expect(screen.queryByRole('region', { name: 'Enrol a client' })).toBeNull(),
     );
   });
 

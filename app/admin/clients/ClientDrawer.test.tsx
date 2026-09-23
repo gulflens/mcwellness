@@ -69,7 +69,11 @@ const record = {
 };
 
 /** Mounts the drawer with `fetchImpl` answering GET /api/clients/:id with `record` (or 500 if omitted). */
-function mount(recordBody: unknown = record, me: unknown = ADMIN) {
+function mount(
+  recordBody: unknown = record,
+  me: unknown = ADMIN,
+  options: { direct?: boolean; section?: string } = {},
+) {
   const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url === '/api/me') return json(me);
@@ -92,14 +96,26 @@ function mount(recordBody: unknown = record, me: unknown = ADMIN) {
     // round 34, so the drawer needs a router above it.
     <MemoryRouter initialEntries={['/admin/clients']}>
       <AuthProviderBoundary provider={provider} fetchImpl={fetchImpl}>
-        <ClientDrawer client={client} onClose={vi.fn()} />
+        <ClientDrawer
+          client={options.direct ? undefined : client}
+          clientId={client.id}
+          section={options.section}
+          onClose={vi.fn()}
+        />
       </AuthProviderBoundary>
     </MemoryRouter>,
   );
 }
 
 describe('ClientDrawer', () => {
-  it('names the client, takes focus, and closes on the button and on Escape', () => {
+  it('opens a directly addressed section without a client-list row', async () => {
+    mount(record, ADMIN, { direct: true, section: 'consent' });
+    expect(await screen.findByRole('heading', { name: 'Dahlia Bay', level: 1 })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Consent' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel', { name: 'Consent' })).toBeTruthy();
+  });
+
+  it('names the client, takes focus, and returns to clients without treating Escape as navigation', () => {
     const onClose = vi.fn();
     render(
       // The Timeline tab carries a link to the access report since the trunk's
@@ -115,13 +131,13 @@ describe('ClientDrawer', () => {
         </AuthProviderBoundary>
       </MemoryRouter>,
     );
-    expect(screen.getByRole('dialog', { name: 'Dahlia Bay' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Dahlia Bay' })).toBeTruthy();
     expect(screen.getByText('MW-000005')).toBeTruthy();
-    const close = screen.getByRole('button', { name: 'Close' });
+    const close = screen.getByRole('button', { name: 'Back to clients' });
     expect(document.activeElement).toBe(close);
     fireEvent.click(close);
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('renders a real tablist, starts on Overview, and switches to Contacts on click', async () => {
