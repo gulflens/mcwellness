@@ -88,8 +88,38 @@ new value in a constraint, which the transaction that added it cannot.
 2. 302's `session_closed_is_settled`, restated with `voided` among the statuses
    a closed row may hold, because a voided row keeps its `closed_at` — which is
    what keeps the guard in front of it.
-3. `session_void_only_when_voided` and `appointment_void_only_when_voided`: the
-   stamp sits only on a `voided` row.
+3. `session_void_only_when_voided` and `appointment_void_only_when_voided`:
+   the stamp and the status go together **both ways** — the stamp only on a
+   `voided` row, and a `voided` row only with its stamp. On `session`, also
+   `session_voided_is_a_closed_records_row`: `voided` only on a closed row
+   logged from the records.
+4. **`app.refuse_void_without_marker()`**, a `before insert or update` trigger
+   on `session` and on `appointment` alike, `enable always`, security definer
+   with `search_path` pinned as 968's family is and execute revoked from
+   `public`. A row becomes `voided` — inserted so, or updated to it from any
+   other status, open or closed — only while `app.void_active` names it in
+   this transaction: the session by its id, the appointment through the
+   session that points at it. Anything else is `restrict_violation`
+   `void_needs_the_function`. The function removes its marker only after the
+   appointment's update, so its own two writes pass. (Added by the final
+   reviews; see below.)
+
+**Migration `971_erasure_reaches_the_void_reason.sql`** (added by the final
+reviews):
+
+1. `app.erase_client`, restated as a diff of 968 (it must sit above the highest
+   file that defines the function, 964's rule): step 4c's session statement
+   also replaces `void_reason` with the fixed phrase `amendment_reason` already
+   takes, "Erased with the record", and a new step 4c' does the same for the
+   voided appointments' `void_reason`. A phrase and not a null, because the
+   together-checks forbid a voided row without a reason. The credit's
+   `waiver_reason` is **not** touched: a waiver's reason is part of the
+   financial record and is kept five years, as every waiver's is.
+2. `session_supersedes_same_client_fk`: `(tenant_id, client_id,
+   supersedes_id)` references `session (tenant_id, client_id, id)`, so a
+   correction's version 2 belongs to the household its version 1 was logged
+   for. The unique key it needs was already there (`session_tenant_id_client_key`,
+   the one assessment's composite key relies on).
 
 **The rule and the routes.** `domain/session/voidSession.ts` is the pure rule
 (`canVoidRecordedSession`, reasons `wrong_role`, `not_a_records_row`,
@@ -112,7 +142,12 @@ function asks again under its lock.
   `amendment_reason` the reason. A refusal of either half rolls back both, so
   the wrong visit is never gone while the right one is missing. The 201 answer
   gains `voided`. This is the first real use of `supersedes_id` and
-  `amendment_reason` on `session`.
+  `amendment_reason` on `session`. **A correction stays with the same
+  household**: when the visit it replaces was logged for another household,
+  the route refuses 409 `conflict` with `different_client`, logged before the
+  answer and before the function is called, and the correction drawer says "A
+  correction stays with the same household. Void this visit and log the right
+  one instead." (971's composite key refuses the same underneath.)
 
 **The screens** (`app/admin/schedule/`). The day list's rows carry the visit's
 `sessionId`, `recordedFrom`, `settledOutsideApp` and `sessionMinutes`, from the
@@ -166,6 +201,45 @@ itself had written in.
   `not_checked_out`), where the Timeline had at least printed them. They have
   phrases now, in both languages, so the Timeline says no less than it did.
 
+**The final reviews** (whole-branch, security, schema and compliance, read-only
+on the finished branch) converged on three more, all fixed in this round:
+
+- **The voided status could be written outside the function** (security,
+  must close). The marker opened the close guard, but the close guard returns
+  early on an OPEN row, there was no insert guard, and `appointment` had no
+  guard at all. So the API role could move an open session straight to
+  `voided` (a practitioner on their own rows included), insert a session
+  already `voided`, or `update appointment set status = 'voided'` and free a
+  window with the visit behind it still completed. Fixed in 970: the two-way
+  checks, the closed-records check on `session`, and
+  `app.refuse_void_without_marker` on both tables. Three cases were watched
+  red first — each write went through against the old 970 — and are refused
+  now with `void_needs_the_function` (or `23001` for the owner's own
+  appointment update); a fourth proves `app_role` can neither read nor write
+  `app.void_active`.
+- **The erasure missed the void reason** (compliance). `app.erase_client`
+  cleared `amendment_reason` but not the new `void_reason` on the session or
+  the appointment, free text about the household that would have outlived
+  the erasure. Fixed by 971; a case erases a household with a voided visit and
+  finds both reasons read "Erased with the record", the waiver's reason
+  untouched, and the audit chain intact.
+- **A correction could cross households** (compliance and schema).
+  `supersedes_id` was bound to the practice only, so a version 2 for one
+  household could name another's visit as its version 1. Fixed by the route's
+  `different_client` refusal and 971's composite key, each with a case.
+
+The same pass took the small ones: 969's credit update names its tenant
+(`and tenant_id = v_tenant`); 969's `-- Needs:` header lists 951 so the
+runner's parser counts it; the void drawer's `session_in_use` sentence no
+longer tells anyone to remove a measurement ("A measurement or a billing
+record still names this visit, so it cannot be voided." — a measurement is
+versioned, never removed); the schedule's `isCorrectable` moved into the
+domain as `isVoidableRow` (`domain/session/voidSession.ts`, CLAUDE.md rule 4)
+with its own cases; the office's three roles are named once, `OFFICE_ROLES` in
+`domain/shared/actor.ts`, and used by `session.record_past`, `session.void` and
+`voidSession.ts`; a cross-tenant `not_found` case at the function; and a unit
+test for `voidFunctionRefusal` (`app/api/sessions/void.test.ts`).
+
 ### Found beside it, and not fixed here
 
 1. **The credit's reason is cut to 200 characters.** 403 caps
@@ -188,37 +262,29 @@ itself had written in.
    this round.
 5. **Small things the reviews deferred**, none a fault in what ships:
    - no test isolates `already_voided` from `not_a_records_row` on a voided
-     `device` row (a row real data cannot produce);
-   - the role list is a literal in both `domain/shared/actor.ts` and
-     `domain/session/voidSession.ts`; only the tests keep them in step;
-   - no cross-tenant `not_found` case at the database (the route has one);
+     `device` row (a row real data cannot produce, and 970 now forbids);
    - only the session's audit row asserts the actor; the appointment's and the
      credit's rows are covered by the chain check alone;
    - the database cases depend on each other's order;
-   - no test asserts `app_role` cannot read or write `app.void_active` directly
-     (its grants match 098's);
-   - the route's mapping of a refusal the function raises in a race
-     (`voidFunctionRefusal`) has no test of its own;
    - `logged` is shadowed in one from-records case;
    - the "logs before answering" case checks that the row is there, not that it
      came first;
    - no database case for two sessions on one appointment;
-   - a fresh log follows the day the drawer opened on, not the page's current
-     date;
-   - no test for the correction drawer's 409 path or for the page reloading
-     after one;
    - `sessionMinutes` is read from the session's start and end, so a visit
      logged with no length pre-fills the service's default length as if the
      office had typed it;
    - the table of 409 sentences lives in a component file
-     (`VoidSessionDrawer.tsx`), shared with the correction drawer from there.
+     (`VoidSessionDrawer.tsx`), shared with the correction drawer from there;
+   - a fresh log follows the day the drawer opened on, not the page's current
+     date;
+   - no test for the correction drawer's 409 path or for the page reloading
+     after one.
 
 Two further minors from the fourth task's review were taken in this round
-rather than deferred: the void drawer's `session_in_use` sentence now names a
-billing question beside a measurement and an invoice, as the Timeline already
-did; and `ReplacedVisit.deliveryMode`, which nothing read, is removed with its
-fill on the schedule — the correction drawer reads the delivery mode from the
-chosen place, as a fresh log does.
+rather than deferred: the void drawer's `session_in_use` sentence (since
+reworded again by the final reviews, above); and `ReplacedVisit.deliveryMode`,
+which nothing read, is removed with its fill on the schedule — the correction
+drawer reads the delivery mode from the chosen place, as a fresh log does.
 
 ### Every file this round touched outside the trunk's own paths
 
@@ -229,8 +295,8 @@ integrator's widening for one round, as rounds 41, 51, 52, 58 and 59 were
 widened (`docs/SPEC/OWNERSHIP.md`):
 
 - `session-capture`: `domain/session/voidSession.ts` (new) with its test and
-  the barrel; `app/api/sessions/void.ts` (new), `from-records.ts`, `schema.ts`
-  and `checkin.ts` (the mount); `tests/session/db/void.test.ts` (new) and
+  the barrel; `app/api/sessions/void.ts` (new) with `void.test.ts` (new),
+  `from-records.ts`, `schema.ts` and `checkin.ts` (the mount); `tests/session/db/void.test.ts` (new) and
   `from_records.test.ts`.
 - `scheduling`: `domain/scheduling/status.ts` with its test;
   `app/admin/schedule/SchedulePage.tsx`, `LogPastSessionDrawer.tsx`,
@@ -249,7 +315,8 @@ widened (`docs/SPEC/OWNERSHIP.md`):
   `docs/SPEC/scheduling-manual.md` section 3, `docs/SPEC/dispatch.md` 4.4 and
   `docs/SPEC/billing.md` 4.3.
 
-The trunk's own half is migrations 969 and 970, `domain/shared/actor.ts` and
+The trunk's own half is migrations 969, 970 and 971, `domain/shared/actor.ts`
+(with `OFFICE_ROLES`) and
 `audit-narrative.ts` with their tests, `.claude/rules/data-model.md`,
 `docs/SPEC/00-data-model.md` (`session`, `appointment`, `entitlement`),
 `docs/SPEC/OWNERSHIP.md` and this record. **No policy file**: `git diff
@@ -262,7 +329,12 @@ already there.
 Tests first, each watched red before the code that made it green (the task
 reports hold the red runs):
 
-- `tests/session/db/void.test.ts` (new, 16 cases): a void frees the window and
+- `tests/session/db/void.test.ts` (new, 21 cases, five of them the final
+  reviews': the voided status refused outside the function on an open row, an
+  insert and an appointment; the marker out of `app_role`'s reach; the
+  function's cross-tenant `not_found`; a correction naming another household's
+  visit refused by 971's key; and an erasure reaching both void reasons while
+  the waiver's stays): a void frees the window and
   the right visit can be logged at the same hour; the credit comes back as a
   replacement matching the original on every copied column, the purchase's
   credits still total what was paid, and the books' event is `credit.waived`
@@ -273,16 +345,20 @@ reports hold the red runs):
   update outside the function is refused; no marker outlives the call; the
   route's 200, 400s, 403s, 404s and four 409s, every refusal logged; and
   `app.verify_audit_chain()` is null at the end.
-- `tests/session/db/from_records.test.ts` (3 cases added): a correction is
+- `tests/session/db/from_records.test.ts` (4 cases added): a correction is
   version 2 superseding the old with the reason and both trail rows; a second
-  correction of the same visit is `already_voided` and an unknown one 404; an
-  overlap on the new visit rolls the void back too.
+  correction of the same visit is `already_voided` and an unknown one 404; a
+  correction for another household is 409 `different_client`, logged, nothing
+  voided; an overlap on the new visit rolls the void back too.
 - `tests/scheduling/db/list_sessions.test.ts` (new, 3 cases): the day list
   carries the visit's session fields.
 - `tests/dispatch/db/board.test.ts` (1 case added): a voided visit is not on the
   board and writes no list row; shown to fail with the board reading every
   status.
-- `domain/session/voidSession.test.ts` (new, 9 cases): every reason, in order.
+- `domain/session/voidSession.test.ts` (new, 12 cases): every reason, in
+  order; `isVoidableRow`; the office roles named once.
+- `app/api/sessions/void.test.ts` (new, 3 cases): `voidFunctionRefusal` reads a
+  known code, answers null for an unknown message and for another SQLSTATE.
 - `domain/shared/actor.test.ts` (1), `audit-narrative.test.ts` (5),
   `domain/portal/visits.test.ts` (1), `domain/scheduling/status.test.ts` (1),
   and `lateness.test.ts` (voided never taken for the previous visit).
@@ -295,7 +371,9 @@ are in the pull request.
 
 ### Going live
 
-**Merged is not live.** Two migrations and no policy file.
+**Merged is not live.** Three migrations and no policy file. **This pass comes
+after passes 34 and 35**: 971 restates `app.erase_client` as a diff of 968,
+which pass 35 makes live, and the ledger count below assumes both have run.
 
 1. **The pre-pass read**, on production:
    `select count(*) from session where recorded_from = 'records';` — how many
@@ -308,7 +386,8 @@ are in the pull request.
    call**, with the sha256 of the file's text taken from `main` after the
    merge. Then `970_voided_frees_the_window.sql` the same way, in its own call:
    970 names the value 969 adds, and a new enum value cannot be used in the
-   transaction that added it. Both ledgers then read **113**. Never
+   transaction that added it. Then `971_erasure_reaches_the_void_reason.sql`
+   the same way, in its own call. The ledgers go from **111 to 114**. Never
    `pnpm db:reset` and never the runner against a hosted database.
 4. **No policy file is expected**: confirm on `main` after the merge with `git
    diff <the live commit> -- db/policies` — empty on the branch against
@@ -316,9 +395,12 @@ are in the pull request.
 5. **Fingerprint** against a runner-built local database, on both hosted ones:
    the columns, constraints and triggers of `appointment`, `session` and
    `entitlement`; the values of `appointment_status` and `session_status`;
-   `app.void_recorded_session` and `app.session_refuse_update_after_close`,
+   `app.void_recorded_session`, `app.session_refuse_update_after_close`,
+   `app.refuse_void_without_marker` (its trigger on both tables, `enable
+   always`) and `app.erase_client`,
    each with its definer flag, its pinned search path and who may execute it
-   (`app_role` the first, `public` neither); `app.void_active`'s grants —
+   (`app_role` for the void and the erasure, nobody for the two trigger
+   functions, `public` for none); `app.void_active`'s grants —
    **none to `app_role` or `public`**, row security on and no policy; and the
    ledger.
 6. Then the code, by the recipe. The proof is read out of the served bytes:
@@ -332,6 +414,26 @@ list would show a voided row's raw status only if one existed, and none can
 until the new code is live to call the function. So the window between the
 migrations and the build is the safe direction.
 
+**Rollback, and the stale window.** An installed window still on the OLD
+build parses an appointment's `status` with a zod enum that lacks `voided`.
+Once anything is voided, the schedule day, or the board for that date, fails
+on that window until it reloads. The shell's newer-build check from round 56
+picks this up; if the owner reports a day that will not open, say Cmd+R first.
+The same holds after a rollback of the code with voided rows left standing.
+
+**Why a void may waive a session-consumed credit.** `app/api/billing/waivers.ts`
+says unwinding a delivered session is a credit note, not a waiver. That
+applies to a visit the household had. A void is for a visit that never
+happened (logged in error), so nothing was delivered, and giving the credit
+back as a waiver is correct. That is why the books post "Credit restored" and
+no credit note is raised.
+
+**The erasure letter is unchanged.** The approved wording (version 1.1) is the
+operator's, and this round does not reword it. 971 makes the erasure reach the
+void reason; whether the letter should say so in as many words is the
+operator's call, not this round's.
+
 **Nothing to run on production's rows.** The migrations change no data: no row
-is voided, no credit moves, and the constraints recreated in 970 accept every
-row they accepted before.
+is voided, no credit moves, the constraints recreated in 970 accept every row
+they accepted before, and 971's composite key holds for every correction that
+exists, because none does before this round.
