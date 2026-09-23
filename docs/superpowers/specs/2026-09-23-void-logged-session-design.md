@@ -58,12 +58,22 @@ refused as it always was, including any change to a voided row.
   table: the three are all null or all set, and set only when `status =
   'voided'`; `void_reason` is non-empty after trimming, the same rule the
   `X-Reason` header already has on every session route.
-- `app.session_refuse_update_after_close`, restated in full as a diff of 302:
-  before the existing comparison, allow the row through when `old.status =
-  'completed'`, `old.recorded_from = 'records'`, `new.status = 'voided'`, the
-  three void columns are set on `new`, and `to_jsonb(new)` with the keys
-  `status`, `voided_at`, `voided_by`, `void_reason` and `updated_at` removed
-  equals `to_jsonb(old)` with the same keys removed. The erasure branch stays.
+- `app.void_active (txid bigint, session_id uuid)`, a bookkeeping table in the
+  shape of `app.erasure_active` (098): no grant to `app_role` or `public`;
+  written and cleared only by the function below, so that the one door is the
+  only door. _Added in the build (task review, 23 September): without it the
+  API role's table-wide update grant let a plain `update session set status =
+  'voided' …` pass the guard, skipping the role check, the in-use refusal and
+  the credit restoration._ It is exempt from the standard columns as
+  `app.erasure_active` is (`.claude/rules/data-model.md`).
+- `app.session_refuse_update_after_close`, restated in full as a diff of its
+  latest text (960): before the existing comparison, allow the row through
+  when `old.status = 'completed'`, `old.recorded_from = 'records'`, `new.status
+  = 'voided'`, the three void columns are set on `new`, `to_jsonb(new)` with
+  the keys `status`, `voided_at`, `voided_by`, `void_reason` and `updated_at`
+  removed equals `to_jsonb(old)` with the same keys removed, **and
+  `app.void_active` names this session in this transaction**. The erasure
+  branch stays.
 - `app.void_recorded_session(p_session_id uuid, p_reason text) returns jsonb`,
   security definer, `search_path` pinned, execute granted to `app_role` and
   revoked from `public`, in the family 968 set. It:
@@ -75,12 +85,15 @@ refused as it always was, including any change to a voided row.
      `voided`, and a row an `assessment`, an `invoice` or a
      `billing_exception` still names (`session_in_use`); every refusal is
      `restrict_violation` told apart by its message, the family's shape;
-  3. stamps the session `voided` with `now()`, the actor and the reason;
+  3. writes its marker into `app.void_active`, stamps the session `voided`
+     with `now()`, the actor and the reason;
   4. stamps the appointment it fulfils `voided` the same way, which is what
-     frees the window;
+     frees the window, and removes its marker;
   5. finds the credit with `consumed_by_session_id = p_session_id` and
-     `status = 'consumed'`, marks it `waived` with `waiver_reason = p_reason`,
-     `waived_at`, `waived_by`, and inserts the replacement credit exactly as
+     `status = 'consumed'`, marks it `waived` with `waiver_reason = p_reason`
+     (cut to the 200 characters migration 403 allows a waiver reason; the
+     session and the appointment keep the whole reason), `waived_at`,
+     `waived_by`, and inserts the replacement credit exactly as
      `app/api/billing/waivers.ts` does (same purchase, service, value and
      expiry, `replaces_entitlement_id` pointing back). A settled-outside row
      has no such credit and this step writes nothing;
@@ -90,7 +103,10 @@ refused as it always was, including any change to a voided row.
 
 The two exclusion constraints on `appointment` (migration 200) are dropped and
 recreated with `voided` added to the statuses they ignore, beside `cancelled`,
-`cancelled_late`, `no_show` and `rescheduled`. Nothing else.
+`cancelled_late`, `no_show` and `rescheduled`; 302's `session_closed_is_settled`
+check is restated to admit `voided` beside the five statuses it already admits,
+because a voided row keeps its `closed_at`; and each table gains a check that
+the void columns are set only when the status is `voided`. Nothing else.
 
 ### Domain (`domain/session/voidSession.ts`, pure, tested first)
 
