@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isValidIban } from './iban';
+import { groupIban, isValidIban } from './iban';
 
 // The IBAN standard's own documentation examples (ISO 13616 / the SWIFT IBAN
 // registry), which name no real account, and one invented UAE-shaped IBAN
@@ -35,5 +35,22 @@ describe('isValidIban', () => {
   it('refuses characters an IBAN never holds, and an empty string', () => {
     expect(isValidIban('AE36-0000-0000-0000-0000-001')).toBe(false);
     expect(isValidIban('')).toBe(false);
+  });
+});
+
+// Moved here from a private copy in app/admin/settings/PracticePage.tsx
+// (round 61, Task 4): the invoice's bank block and the Settings page print
+// the same grouping, so the one function lives beside isValidIban.
+describe('groupIban', () => {
+  it('groups the stored UAE IBAN in fours', () => {
+    expect(groupIban(INVENTED_AE)).toBe('AE36 0000 0000 0000 0000 001');
+  });
+
+  it('groups a longer foreign IBAN in fours, the last group short', () => {
+    expect(groupIban('GB82WEST12345698765432')).toBe('GB82 WEST 1234 5698 7654 32');
+  });
+
+  it('leaves an empty string empty', () => {
+    expect(groupIban('')).toBe('');
   });
 });

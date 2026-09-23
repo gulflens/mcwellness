@@ -1,4 +1,5 @@
 import { formatFils } from '../../shared/fils';
+import { groupIban } from '../../shared/iban';
 
 /**
  * Every word on a rendered money document, in both languages.
@@ -270,15 +271,11 @@ export function discountTotalLabel(basisPoints: number | null): Phrase {
   return { en: `${WORDS.discount.en} ${share}`, ar: `${WORDS.discount.ar} ${share}` };
 }
 
-/**
- * `AE360000000000000000001` as `AE36 0000 0000 0000 0000 001`: the IBAN as a
- * person reads it off paper and types it into their bank, grouped in fours.
- * The column holds it uppercase with no spaces (migration 924), so this only
- * puts the spaces back.
- */
-export function groupIban(iban: string): string {
-  return (iban.match(/.{1,4}/g) ?? [iban]).join(' ');
-}
+// `groupIban` moved to `domain/shared/iban.ts` (round 61, Task 4), beside
+// `isValidIban`: Settings › Practice prints the same grouping and had its own
+// copy of this one line. Re-exported here so `render.ts` and this barrel's
+// callers need not know it moved.
+export { groupIban };
 
 /**
  * A figure as it is written on a money document: `AED 1,650.00`.

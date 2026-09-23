@@ -3,6 +3,7 @@ import {
   VAT_MANDATORY_THRESHOLD_FILS,
   VAT_VOLUNTARY_THRESHOLD_FILS,
   formatFils,
+  groupIban,
   vatThresholdStand,
 } from '@domain/shared';
 import { PracticeResponse, type Practice } from '../../api/practice/schema';
@@ -40,15 +41,6 @@ const dateFormat = new Intl.DateTimeFormat('en-GB', {
 /** A date-only value is read at the practice's own midnight, not UTC's. */
 function formatDate(isoDate: string): string {
   return dateFormat.format(new Date(`${isoDate}T00:00:00+04:00`));
-}
-
-/**
- * AE36 0000 0000 0000 0000 001: the IBAN as the page prints it, grouped in
- * fours (migration 924, round 61). The value is already uppercase with the
- * spaces out (`app/api/practice/schema.ts`), so this only groups it back.
- */
-function groupIban(iban: string): string {
-  return (iban.match(/.{1,4}/g) ?? [iban]).join(' ');
 }
 
 type State =
