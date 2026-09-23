@@ -231,6 +231,16 @@ describe('typing a reason, letter by letter', () => {
     mount(<ErasureSection record={record} mayAsk mayErase />, { requests: [] });
     fireEvent.click(await screen.findByRole('button', { name: 'Record erasure request' }));
 
+    // The step's own heading (StepHeading, useFocusOnOpen.ts) takes focus
+    // once, when the step opens — asserted here, before typing, so this test
+    // also proves the heading is not what is left focused once the reason
+    // field has been typed into. StepHeading renders `role="status"`, which
+    // (unlike `heading`) takes its accessible name only from an explicit
+    // `aria-label`, never from its own text — so its own text is what finds
+    // the node here, the same text the panel is opened by.
+    const heading = await screen.findByText('Record that this household has asked to be forgotten');
+    expect(document.activeElement).toBe(heading);
+
     const reason = await screen.findByLabelText('Why the household has asked');
     await user.type(reason, 'typed by hand for the record');
     expect((reason as HTMLTextAreaElement).value).toBe('typed by hand for the record');

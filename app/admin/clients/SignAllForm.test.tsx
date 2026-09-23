@@ -327,6 +327,12 @@ describe('SignAllForm', () => {
         onCancel={vi.fn()}
       />,
     );
+    // The form's own heading takes focus once, on open (useFocusOnOpen.ts) —
+    // asserted here, before typing, so this test also proves the heading is
+    // not what is left focused once the name field has been typed into.
+    const heading = await screen.findByRole('heading', { name: 'Sign everything at once' });
+    expect(document.activeElement).toBe(heading);
+
     const name = await screen.findByLabelText('Name, as the person writes it');
     // Pre-filled with the self contact's own name (signatureName,
     // contactName.tsx): cleared first so the assertion is about what was
