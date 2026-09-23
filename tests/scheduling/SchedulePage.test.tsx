@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { plainText } from './support';
@@ -358,10 +358,24 @@ describe('SchedulePage: a visit logged from the records', () => {
   /** The day of 4 March, as the given roles see it; every POST is recorded. */
   function dayOf(roles: string[], rows: unknown[]) {
     const posts: { url: string; init: RequestInit | undefined }[] = [];
+    // Settles once the page has read the signed-in answer: the screen's own
+    // marker that it knows who is looking, and the thing a role test waits
+    // on rather than on the clock.
+    let meRead!: () => void;
+    const signedInAnswered = new Promise<void>((resolve) => {
+      meRead = resolve;
+    });
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.startsWith('/api/me')) {
-        return new Response(JSON.stringify(me(roles)), { status: 200 });
+        const res = new Response(JSON.stringify(me(roles)), { status: 200 });
+        const read = res.json.bind(res);
+        res.json = async () => {
+          const body: unknown = await read();
+          meRead();
+          return body;
+        };
+        return res;
       }
       if (url.startsWith('/api/appointments?')) {
         return new Response(JSON.stringify({ appointments: rows }), { status: 200 });
@@ -370,7 +384,13 @@ describe('SchedulePage: a visit logged from the records', () => {
       return new Response('not found', { status: 404 });
     }) as unknown as typeof fetch;
     renderPage(fetchImpl, '2026-03-04', { ...provider, ...signedIn });
-    return posts;
+    /** The day on screen and the signed-in answer applied, in that order. */
+    async function ready() {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());
+      await signedInAnswered;
+      await act(async () => {});
+    }
+    return Object.assign(posts, { ready });
   }
 
   it('offers Correct and Void on a visit logged from the records, to the owner', async () => {
@@ -390,10 +410,14 @@ describe('SchedulePage: a visit logged from the records', () => {
   });
 
   it('offers neither to finance, whose role cannot void a visit', async () => {
-    dayOf(['finance'], [fromRecords]);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Iris Cliff' })).toBeTruthy());
-    // The signed-in answer lands after the day: wait for it, then look.
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The control: the same wait, as the owner, already shows both actions,
+    // so the wait reaches the signed-in page and the absence below is the
+    // role gate's answer, not an actor not yet known.
+    await dayOf(['owner'], [fromRecords]).ready();
+    expect(screen.getByRole('button', { name: "Void Iris Cliff's visit" })).toBeTruthy();
+    cleanup();
+
+    await dayOf(['finance'], [fromRecords]).ready();
     expect(screen.queryByRole('button', { name: "Void Iris Cliff's visit" })).toBeNull();
     expect(screen.queryByRole('button', { name: "Correct Iris Cliff's visit" })).toBeNull();
   });
