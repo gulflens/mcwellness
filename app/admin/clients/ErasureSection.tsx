@@ -7,6 +7,7 @@ import {
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
+import { useFocusOnOpen } from '../../shell/components/useFocusOnOpen';
 import { Textarea } from './FormAtoms';
 import { contactName } from './contactName';
 import { DocumentLink } from './DocumentLink';
@@ -113,15 +114,12 @@ function letterFileName(record: ClientRecordResponse): string {
  * that opened it is a button that appears to do nothing.
  */
 function StepHeading({ children }: { children: ReactNode }) {
+  // Focused once, when this step opens (useFocusOnOpen.ts): the button that
+  // opened it does not change, so without this the press reads as having
+  // done nothing at all.
+  const heading = useFocusOnOpen<HTMLHeadingElement>();
   return (
-    <h4
-      className="drawer__section"
-      tabIndex={-1}
-      role="status"
-      ref={(node) => {
-        node?.focus();
-      }}
-    >
+    <h4 className="drawer__section" tabIndex={-1} role="status" ref={heading}>
       {children}
     </h4>
   );

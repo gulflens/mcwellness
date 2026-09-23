@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { ClientRecordResponse } from '../../api/clients/record-schema';
@@ -548,6 +549,61 @@ describe('recording a consent', () => {
       await screen.findByText(/A child’s consent has to come from a legal guardian/),
     ).toBeTruthy();
   });
+
+  // Round 63: the name field is controlled, so every keystroke re-renders
+  // RecordConsentForm. An inline `ref={(node) => node?.focus()}` on the
+  // heading above ran again on that re-render — its identity is new every
+  // time — and moved focus (and the caret) back onto the heading after the
+  // very first letter.
+  it('keeps every letter typed into the name beneath the signature', async () => {
+    const user = userEvent.setup();
+    mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[0] as Element);
+    await screen.findByText('Agreement to take part');
+
+    const name = await screen.findByLabelText('Name, as the person writes it');
+    await user.clear(name);
+    await user.type(name, 'Basil Cliff');
+    expect((name as HTMLInputElement).value).toBe('Basil Cliff');
+    expect(document.activeElement).toBe(name);
+  });
+
+  it('lands on the heading when the form opens, and again when it is opened again', async () => {
+    mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[0] as Element);
+    const heading = await screen.findByRole('heading', { name: 'Record participation' });
+    expect(document.activeElement).toBe(heading);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[0] as Element);
+    const headingAgain = await screen.findByRole('heading', { name: 'Record participation' });
+    expect(document.activeElement).toBe(headingAgain);
+  });
+
+  // A stroke drawn on the pad sets `hasInk`, which re-renders this form too
+  // (the signature travels up to `submit`'s own state) — proving the fix is
+  // that the heading is focused once on open, not on every re-render this
+  // form happens to have, whatever causes it.
+  it('a stroke on the pad does not swallow the rest of the name', async () => {
+    const user = userEvent.setup();
+    mount(<ConsentTab clientId={CLIENT_ID} record={record} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Record' }))[0] as Element);
+    await screen.findByText('Agreement to take part');
+
+    const name = await screen.findByLabelText('Name, as the person writes it');
+    await user.clear(name);
+    await user.type(name, 'Bas');
+
+    // The same one-stroke sequence SignaturePad.test.tsx draws with.
+    const pad = document.querySelector('canvas');
+    fireEvent.pointerDown(pad as Element, { clientX: 40, clientY: 60, pointerId: 1 });
+    fireEvent.pointerMove(pad as Element, { clientX: 120, clientY: 80, pointerId: 1 });
+    fireEvent.pointerUp(pad as Element, { clientX: 120, clientY: 80, pointerId: 1 });
+
+    await user.type(name, 'il Cliff');
+    expect((name as HTMLInputElement).value).toBe('Basil Cliff');
+    expect(document.activeElement).toBe(name);
+  });
 });
 
 describe('the read-to-the-end gate', () => {
@@ -610,6 +666,26 @@ describe('where a panel opens, and what it says', () => {
       name: 'Withdraw consent: participation',
     });
     expect(document.activeElement).toBe(heading);
+  });
+
+  // Round 63: PanelHeading focused itself the same way RecordConsentForm's own
+  // heading did, with an inline `ref={(node) => node?.focus()}` — a fresh
+  // function identity on every render, so the controlled reason field beneath
+  // it re-rendered ConsentTab on every keystroke and the heading stole focus
+  // (and the caret) back after the first letter.
+  it('keeps every letter typed into the withdrawal reason', async () => {
+    const user = userEvent.setup();
+    const signed: ClientRecordResponse = {
+      ...record,
+      consents: [consentOn('participation', '00000008-0000-4000-8000-00000000020c')],
+    };
+    mount(<ConsentTab clientId={CLIENT_ID} record={signed} onChanged={vi.fn()} mayWrite />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+
+    const reason = await screen.findByLabelText('Reason');
+    await user.type(reason, 'typed by hand for the record');
+    expect((reason as HTMLInputElement).value).toBe('typed by hand for the record');
+    expect(document.activeElement).toBe(reason);
   });
 
   it('shows back the reason a consent was withdrawn', async () => {

@@ -13,6 +13,7 @@ import {
 } from '../../api/clients/record-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note, Select } from '../../shell/components/Controls';
+import { useFocusOnOpen } from '../../shell/components/useFocusOnOpen';
 import { ConsentText } from './ConsentText';
 import { PURPOSE_LABELS } from './consentPurposeLabels';
 import { SignaturePad, type SignatureResult } from './SignaturePad';
@@ -272,18 +273,14 @@ export function SignAllForm({
   const canSubmit =
     !busy && state.kind === 'ready' && readToEnd && givenByContactId !== '' && evidenceReady;
 
+  const heading = useFocusOnOpen<HTMLHeadingElement>();
+
   return (
     <section className="tab-section consent-form">
-      {/* Focused as it appears, the same reason every panel this tab opens
-          takes focus (ConsentTab.tsx's PanelHeading): the button that opened
-          this is unchanged above it. */}
-      <h3
-        className="drawer__section"
-        tabIndex={-1}
-        ref={(node) => {
-          node?.focus();
-        }}
-      >
+      {/* Focused once, when this form opens (useFocusOnOpen.ts), the same
+          reason every panel this tab opens takes focus (ConsentTab.tsx's
+          PanelHeading): the button that opened this is unchanged above it. */}
+      <h3 className="drawer__section" tabIndex={-1} ref={heading}>
         Sign everything at once
       </h3>
       <p className="small muted">

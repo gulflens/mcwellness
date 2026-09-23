@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthProviderBoundary } from '../../shell/auth/AuthContext';
 import type { ClientRecordResponse } from '../../api/clients/record-schema';
@@ -205,6 +206,45 @@ describe('a recorded request, not yet carried out', () => {
       await screen.findByText('Only the owner or an admin may carry out an erasure.'),
     ).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Erase this client' })).toBeNull();
+  });
+});
+
+describe('typing a reason, letter by letter', () => {
+  // Round 63: StepHeading focused itself with an inline
+  // `ref={(node) => node?.focus()}`, a fresh function identity on every
+  // render. Both reason boxes below it are controlled, so every keystroke
+  // re-rendered ErasureSection and the heading stole focus (and the caret)
+  // back after the first letter.
+  it('keeps every letter typed into the erasure reason', async () => {
+    const user = userEvent.setup();
+    mount(<ErasureSection record={record} mayAsk mayErase />, { requests: [openRequest] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Erase this client' }));
+
+    const reason = await screen.findByLabelText('Reason');
+    await user.type(reason, 'typed by hand for the record');
+    expect((reason as HTMLTextAreaElement).value).toBe('typed by hand for the record');
+    expect(document.activeElement).toBe(reason);
+  });
+
+  it('keeps every letter typed into the reason a household asked with', async () => {
+    const user = userEvent.setup();
+    mount(<ErasureSection record={record} mayAsk mayErase />, { requests: [] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Record erasure request' }));
+
+    // The step's own heading (StepHeading, useFocusOnOpen.ts) takes focus
+    // once, when the step opens — asserted here, before typing, so this test
+    // also proves the heading is not what is left focused once the reason
+    // field has been typed into. StepHeading renders `role="status"`, which
+    // (unlike `heading`) takes its accessible name only from an explicit
+    // `aria-label`, never from its own text — so its own text is what finds
+    // the node here, the same text the panel is opened by.
+    const heading = await screen.findByText('Record that this household has asked to be forgotten');
+    expect(document.activeElement).toBe(heading);
+
+    const reason = await screen.findByLabelText('Why the household has asked');
+    await user.type(reason, 'typed by hand for the record');
+    expect((reason as HTMLTextAreaElement).value).toBe('typed by hand for the record');
+    expect(document.activeElement).toBe(reason);
   });
 });
 
