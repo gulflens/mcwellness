@@ -12,7 +12,7 @@ import { Button, Field, Note, Select } from '../../shell/components/Controls';
 import { DateField } from '../../shell/components/DateField';
 import { CloseIcon } from '../../shell/components/Icons';
 import { TimeField } from '../../shell/components/TimeField';
-import { VOID_CONFLICT_MESSAGES, isVoidConflictCode } from './VoidSessionDrawer';
+import { VOID_CONFLICT_MESSAGES, isCorrectionConflictCode } from './VoidSessionDrawer';
 import { formatDay } from './windows';
 
 /**
@@ -343,12 +343,13 @@ export function LogPastSessionDrawer({
           return;
         }
       }
-      // A correction refused because the visit it replaces cannot be voided.
+      // A correction refused because the visit it replaces cannot be voided,
+      // or belongs to another household.
       if (res.status === 409) {
         const code = (body as { code?: unknown } | null)?.code;
         setSubmitError({
           kind: 'messages',
-          messages: [isVoidConflictCode(code) ? VOID_CONFLICT_MESSAGES[code] : GENERIC],
+          messages: [isCorrectionConflictCode(code) ? VOID_CONFLICT_MESSAGES[code] : GENERIC],
         });
         return;
       }

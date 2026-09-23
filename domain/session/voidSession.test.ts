@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { canVoidRecordedSession, type VoidRecordedSessionInput } from './voidSession';
+import { OFFICE_ROLES } from '@domain/shared';
+import {
+  canVoidRecordedSession,
+  isVoidableRow,
+  type VoidRecordedSessionInput,
+} from './voidSession';
 
 function input(overrides: Partial<VoidRecordedSessionInput> = {}): VoidRecordedSessionInput {
   return {
@@ -88,5 +93,35 @@ describe('canVoidRecordedSession', () => {
         }),
       ),
     ).toEqual({ ok: false, reason: 'wrong_role' });
+  });
+});
+
+describe('isVoidableRow', () => {
+  const row = {
+    status: 'completed',
+    recordedFrom: 'records' as 'device' | 'records' | null,
+    sessionId: '00000000-0000-4000-8000-000000000001' as string | null,
+  };
+
+  it('offers a void on a completed visit logged from the records', () => {
+    expect(isVoidableRow(row)).toBe(true);
+  });
+
+  it('offers none on a visit closed on the phone, one with no session, or one not completed', () => {
+    expect(isVoidableRow({ ...row, recordedFrom: 'device' })).toBe(false);
+    expect(isVoidableRow({ ...row, recordedFrom: null })).toBe(false);
+    expect(isVoidableRow({ ...row, sessionId: null })).toBe(false);
+    for (const status of ['voided', 'confirmed', 'proposed', 'no_show', 'cancelled']) {
+      expect(isVoidableRow({ ...row, status })).toBe(false);
+    }
+  });
+});
+
+describe('the office roles', () => {
+  it('are the three the void admits, named once in domain/shared', () => {
+    for (const role of OFFICE_ROLES) {
+      expect(canVoidRecordedSession(input({ actorRoles: [role] }))).toEqual({ ok: true });
+    }
+    expect([...OFFICE_ROLES]).toEqual(['owner', 'admin', 'lead_practitioner']);
   });
 });

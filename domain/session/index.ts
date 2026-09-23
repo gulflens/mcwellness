@@ -70,6 +70,7 @@ export {
 } from './pastSession';
 export {
   canVoidRecordedSession,
+  isVoidableRow,
   type VoidRecordedSessionInput,
   type VoidRecordedSessionResult,
   type VoidRefusal,

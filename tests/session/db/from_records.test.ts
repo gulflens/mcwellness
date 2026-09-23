@@ -422,6 +422,42 @@ describe('correcting a visit logged from the records', () => {
     expect(day.rows[0]?.n).toBe('0');
   });
 
+  it('refuses a correction for another household, before voiding anything, and logs it', async () => {
+    const old = await logged(WITH_PACKAGE, { on: '2026-03-11', startTime: '10:00' });
+    const res = await h.call(
+      'POST',
+      '/api/sessions/from-records',
+      SEEDED.owner,
+      visit(WITHOUT_PACKAGE, {
+        on: '2026-03-11',
+        startTime: '14:00',
+        billing: 'settled_outside',
+        replaces: old.sessionId,
+      }),
+      CORRECTION,
+    );
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'conflict', code: 'different_client' });
+    // The visit it named stands as it was, and nothing was written for the other household.
+    const still = await h.owner.query<{ status: string }>(
+      'select status::text from session where id = $1',
+      [old.sessionId],
+    );
+    expect(still.rows[0]?.status).toBe('completed');
+    const other = await h.owner.query<{ n: string }>(
+      'select count(*)::text as n from session where client_id = $1 and supersedes_id = $2',
+      [h.clientId(WITHOUT_PACKAGE), old.sessionId],
+    );
+    expect(other.rows[0]?.n).toBe('0');
+    const refusals = await h.owner.query<{ reason: string; client_id: string }>(
+      "select reason, client_id from audit_log where action = 'refused' and entity_id = $1",
+      [old.sessionId],
+    );
+    expect(refusals.rows).toEqual([
+      { reason: 'different_client', client_id: h.clientId(WITH_PACKAGE) },
+    ]);
+  });
+
   it('rolls the void back when the new visit is refused', async () => {
     const old = await logged(WITH_PACKAGE, { on: '2026-03-10', startTime: '10:00' });
     // A third visit, the same practitioner's, at the hour the correction names.

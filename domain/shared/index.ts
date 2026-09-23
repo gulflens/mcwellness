@@ -8,7 +8,7 @@ export { addFils, fils, formatFils } from './fils';
 export type { Fils } from './fils';
 export { amountCell, escapeCell, filsToDecimal, toCsv } from './csv';
 export type { AmountCell, CsvCell } from './csv';
-export { ROLES, canActor, hasRole, isCredentialValidOn, isoDateIn } from './actor';
+export { OFFICE_ROLES, ROLES, canActor, hasRole, isCredentialValidOn, isoDateIn } from './actor';
 export type { Action, ActionContext, Actor, Capability, IsoDate, Role } from './actor';
 export {
   STAFF_ROLES,

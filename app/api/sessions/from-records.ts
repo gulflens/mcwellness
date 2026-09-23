@@ -15,6 +15,7 @@ import {
   RecordPastSessionRequest,
   RecordPastSessionResponse,
   type RecordPastBadRequestCode,
+  type CorrectionConflictCode,
   type RecordPastBlockReason,
   type VoidSessionResponse,
 } from './schema';
@@ -62,7 +63,8 @@ import {
  * act under the same savepoint — a refusal of either half leaves both as
  * they were, so the wrong visit is never gone while the right one is
  * missing. The old visit is held to `app/api/sessions/void.ts`'s rules and
- * answers with its codes.
+ * answers with its codes, and to one more: a correction stays with the same
+ * household (409 `different_client`, logged before the answer).
  *
  * **Who it is for.** A current client — active, or paused — whose
  * practitioner is on the practice's books today; a practitioner who has
@@ -255,6 +257,14 @@ export function mountRecordPastSession(api: Hono<ApiEnv>, now: () => Date): void
       if (!replaced) return refuseVoid(c, replaces, null, 'not_found');
       const refusal = voidRefusalFor(actor.roles, replaced);
       if (refusal) return refuseVoid(c, replaces, replaced.client_id, refusal);
+      // A correction is the same visit put right, so it stays with the same
+      // household; a visit logged against the wrong one is voided and the
+      // right one logged fresh. 971's composite key says the same underneath.
+      if (replaced.client_id !== input.clientId) {
+        await logRefusal(db, 'session', replaces, replaced.client_id, ['different_client']);
+        const code: CorrectionConflictCode = 'different_client';
+        return c.json({ error: 'conflict', code, requestId }, 409);
+      }
     }
 
     const { startsAt, endsAt } = pastSessionTimes({

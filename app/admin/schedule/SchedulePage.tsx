@@ -5,6 +5,7 @@ import {
   type AppointmentRow,
   type DeliveryMode,
 } from '../../api/appointments/schema';
+import { isVoidableRow } from '@domain/session';
 import { canActor } from '@domain/shared';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { canOpenSettings } from '../../shell/adminAccess';
@@ -40,17 +41,6 @@ import './schedule.css';
  * offering an action that would be refused.
  */
 const OPEN_STATUSES: readonly AppointmentRow['status'][] = ['proposed', 'confirmed'];
-
-/**
- * A visit logged from the practice's records (trunk round 51) that can still
- * be voided or corrected (trunk round 60): completed, and typed up by the
- * office rather than closed on the phone. A visit closed on the phone carries
- * what the household really had and is not unwound from here; a voided one
- * has nothing left to change. The route and the database hold the same line.
- */
-function isCorrectable(row: AppointmentRow): row is AppointmentRow & { sessionId: string } {
-  return row.status === 'completed' && row.recordedFrom === 'records' && row.sessionId !== null;
-}
 
 /** The row as the correction drawer pre-fills from it. */
 function replacedVisit(row: AppointmentRow & { sessionId: string }): ReplacedVisit {
@@ -288,7 +278,7 @@ export function SchedulePage() {
         header: 'Change',
         align: 'end',
         render: (row) =>
-          canVoid && isCorrectable(row) ? (
+          canVoid && isVoidableRow(row) ? (
             <span className="schedule__row-actions">
               <Button
                 variant="quiet"
@@ -476,7 +466,7 @@ export function SchedulePage() {
           }}
         />
       ) : null}
-      {acting?.kind === 'correct' && isCorrectable(acting.row) ? (
+      {acting?.kind === 'correct' && isVoidableRow(acting.row) ? (
         <LogPastSessionDrawer
           // One drawer per visit: a correction opened from another row
           // starts from that row, not from what was typed into this one.

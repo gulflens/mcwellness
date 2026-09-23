@@ -483,6 +483,14 @@ export const VOID_CONFLICT_CODES = [
 ] as const;
 export type VoidConflictCode = (typeof VOID_CONFLICT_CODES)[number];
 
+/**
+ * Why a correction (`POST /api/sessions/from-records` with `replaces`) was
+ * refused as a conflict: the visit it replaces may not be voided, or it
+ * belongs to another household (trunk round 60, the final reviews).
+ */
+export const CORRECTION_CONFLICT_CODES = [...VOID_CONFLICT_CODES, 'different_client'] as const;
+export type CorrectionConflictCode = (typeof CORRECTION_CONFLICT_CODES)[number];
+
 export const RecordPastSessionResponse = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('recorded'),

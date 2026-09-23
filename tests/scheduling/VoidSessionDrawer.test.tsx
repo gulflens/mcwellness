@@ -129,7 +129,7 @@ describe('VoidSessionDrawer', () => {
       ['already_voided', 'This visit has already been voided.'],
       [
         'session_in_use',
-        'A measurement, an invoice or a billing question still names this visit; remove that first.',
+        'A measurement or a billing record still names this visit, so it cannot be voided.',
       ],
     ] as const) {
       const { onVoided } = open(

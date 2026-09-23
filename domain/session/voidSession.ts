@@ -1,3 +1,5 @@
+import { OFFICE_ROLES } from '@domain/shared';
+
 /**
  * Whether a visit logged from the practice's records may be voided
  * (docs/superpowers/specs/2026-09-23-void-logged-session-design.md, trunk
@@ -39,9 +41,6 @@ export type VoidRecordedSessionInput = {
 
 export type VoidRecordedSessionResult = { ok: true } | { ok: false; reason: VoidRefusal };
 
-/** The three roles that may log a visit from the records may also void one. */
-const VOID_ROLES = ['owner', 'admin', 'lead_practitioner'];
-
 /**
  * The gate for voiding a session logged from the records. Check order: role,
  * then already voided, then whether it is a records row at all, then whether
@@ -52,7 +51,8 @@ const VOID_ROLES = ['owner', 'admin', 'lead_practitioner'];
  * refusal a stale status might otherwise produce.
  */
 export function canVoidRecordedSession(input: VoidRecordedSessionInput): VoidRecordedSessionResult {
-  if (!input.actorRoles.some((role) => VOID_ROLES.includes(role))) {
+  // The three roles that may log a visit from the records may also void one.
+  if (!input.actorRoles.some((role) => (OFFICE_ROLES as readonly string[]).includes(role))) {
     return { ok: false, reason: 'wrong_role' };
   }
   if (input.session.voidedAt !== null) {
@@ -68,4 +68,19 @@ export function canVoidRecordedSession(input: VoidRecordedSessionInput): VoidRec
     return { ok: false, reason: 'session_in_use' };
   }
   return { ok: true };
+}
+
+/**
+ * Whether a row on the day's schedule is one a void or a correction may be
+ * offered on: completed, typed up by the office from the records rather than
+ * closed on the phone, and with its session known. A visit closed on the
+ * phone carries what the household really had and is not unwound from the
+ * screen; a voided one has nothing left to change. The screen asks this; the
+ * route and the database hold the same line (`canVoidRecordedSession`,
+ * `app.void_recorded_session`).
+ */
+export function isVoidableRow<
+  T extends { status: string; recordedFrom: 'device' | 'records' | null; sessionId: string | null },
+>(row: T): row is T & { sessionId: string } {
+  return row.status === 'completed' && row.recordedFrom === 'records' && row.sessionId !== null;
 }

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppointmentRow } from '../../api/appointments/schema';
-import { VOID_CONFLICT_CODES, type VoidConflictCode } from '../../api/sessions/schema';
+import {
+  CORRECTION_CONFLICT_CODES,
+  VOID_CONFLICT_CODES,
+  type CorrectionConflictCode,
+  type VoidConflictCode,
+} from '../../api/sessions/schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Field, Note } from '../../shell/components/Controls';
 import { CloseIcon } from '../../shell/components/Icons';
@@ -28,18 +33,25 @@ import { dayOf, formatDay, formatWindow } from './windows';
  * correction (LogPastSessionDrawer), whose route refuses with the same codes
  * when the visit it replaces cannot be voided.
  */
-export const VOID_CONFLICT_MESSAGES: Record<VoidConflictCode, string> = {
+export const VOID_CONFLICT_MESSAGES: Record<CorrectionConflictCode, string> = {
   not_a_records_row: 'Only a visit logged from the records can be voided.',
   not_completed: 'This visit is not a completed one.',
   already_voided: 'This visit has already been voided.',
   session_in_use:
-    'A measurement, an invoice or a billing question still names this visit; remove that first.',
+    'A measurement or a billing record still names this visit, so it cannot be voided.',
+  different_client:
+    'A correction stays with the same household. Void this visit and log the right one instead.',
 };
 
 const GENERIC = 'The visit could not be voided. Try again.';
 
 export function isVoidConflictCode(code: unknown): code is VoidConflictCode {
   return (VOID_CONFLICT_CODES as readonly unknown[]).includes(code);
+}
+
+/** A correction's 409: a void's codes, and `different_client`. */
+export function isCorrectionConflictCode(code: unknown): code is CorrectionConflictCode {
+  return (CORRECTION_CONFLICT_CODES as readonly unknown[]).includes(code);
 }
 
 export function VoidSessionDrawer({
