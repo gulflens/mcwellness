@@ -23,7 +23,7 @@ export const LEFT = MARGIN;
 export const RIGHT = PAGE_WIDTH - MARGIN;
 /** The first baseline. */
 export const TOP = PAGE_HEIGHT - MARGIN;
-/** Where a page number sits: below the content floor, above the paper's edge. */
+/** The paper's foot, above its edge: the footer band hangs thirty points above it. */
 export const FOLIO = MARGIN + 8;
 /** The hairline the footer band hangs from, pinned to the bottom of the page. */
 export const BAND = FOLIO + 30;
@@ -350,10 +350,10 @@ export class Sheet {
   /**
    * The same string, cut to one line that fits.
    *
-   * For the footer band alone, which is pinned to the bottom of the page and
-   * so cannot grow downward into the page number. The address is set in full
-   * in the supplier block at the top of the same sheet, so what is lost here
-   * is a repetition and not a fact.
+   * For the footer's contact line alone, which is pinned to the bottom of the
+   * page and so cannot grow downward off the paper. The address line above it
+   * wraps upward instead of being cut, because it states a fact nothing else
+   * on the page repeats.
    */
   fit(text: string, maxWidth: number, size: number, options: TextOptions = {}): string {
     if (this.width(text, size, options) <= maxWidth) return text;
@@ -392,22 +392,12 @@ export class Sheet {
   }
 
   /**
-   * The finished pages. A document that took more than one says so on every
-   * sheet: a page torn off a stack has to be able to say what it is part of.
+   * The finished pages, and nothing added to them: no page number, because
+   * the operator's page has none (docs/superpowers/specs/2026-09-24-invoice-
+   * redesign-design.md). A later sheet still says what it belongs to — the
+   * running header `newPage` draws carries the practice and the reference.
    */
   finish(): Page[] {
-    if (this.pages.length > 1) {
-      this.pages.forEach((ops, index) => {
-        ops.push({
-          kind: 'text',
-          x: RIGHT,
-          y: FOLIO,
-          text: `Page ${index + 1} of ${this.pages.length}`,
-          style: { font: 'regular', size: SIZE.small, grey: MUTED },
-          align: 'end',
-        });
-      });
-    }
     return this.pages.map((ops) => ({ ops }));
   }
 }

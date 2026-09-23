@@ -9,9 +9,10 @@
  * grounds, borders and the discount pill — text otherwise in the ink and the
  * two greys the documents already use, and no other hue. And simplicity: what
  * his page shows and nothing it does not. No shadows, no gradients, no icons,
- * no rows his page leaves out, and Arabic only where the spec keeps it — the
- * title, the supplier block, the captions and headings, the summary's rows —
- * and never beside the bank account's rows.
+ * no rows his page leaves out, no page number, and Arabic only where his
+ * page keeps it — the title, the supplier block, the captions, the card
+ * titles and the table's headings — never beside the bank account's rows or
+ * the summary's.
  *
  * Seven blocks, top to bottom: the masthead (the mark left, the title right);
  * the supplier block and the number card; the billed-to card and the payment
@@ -66,13 +67,23 @@ const WIDTH = RIGHT - LEFT;
 const GAP = 14;
 /** The air inside a card, on every side. */
 const PAD = 12;
-/** The number card and the summary card take the right 40% of the measure. */
+/** The summary card takes the right 40% of the measure. */
 const RIGHT_WIDTH = WIDTH * 0.4;
 const RIGHT_X = RIGHT - RIGHT_WIDTH;
-/** The supplier block, the billed-to card and the payment card take the rest. */
+/** The billed-to card and the payment card take the rest. */
 const LEFT_WIDTH = WIDTH - RIGHT_WIDTH - GAP;
+/**
+ * The number card is narrower than the summary, as his page draws it, which
+ * leaves the supplier block the room to set each of its rows — the English
+ * label and value, the Arabic value and label — on one line.
+ */
+const NUMBER_WIDTH = 150;
+const NUMBER_X = RIGHT - NUMBER_WIDTH;
+const SUPPLIER_WIDTH = WIDTH - NUMBER_WIDTH - GAP;
 /** The practice's lockup, set against the left margin as his page sets it. */
-const LOGO_WIDTH = 250;
+const LOGO_WIDTH = 165;
+/** The summary card's title band, tinted, above its white body. */
+const TITLE_BAND = 32;
 /** Corners on every card. */
 const RADIUS = 6;
 /** The table's violet header band, English over Arabic. */
@@ -98,7 +109,7 @@ const TYPE = {
   titleAr: 18,
   wordmark: 15,
   name: 11,
-  row: 8,
+  row: 7,
   caption: 7,
   reference: 14,
   date: 9,
@@ -127,6 +138,9 @@ export const INVOICE_GEOMETRY = {
   GAP,
   RIGHT_WIDTH,
   LEFT_WIDTH,
+  NUMBER_WIDTH,
+  SUPPLIER_WIDTH,
+  TITLE_BAND,
   HEADER_HEIGHT,
   ROW_HEIGHT,
   PILL_HEIGHT,
@@ -189,7 +203,10 @@ class InvoicePage {
     this.masthead(logo);
     this.sheet.down(18);
     this.supplierAndNumber();
-    this.sheet.down(16);
+    // A hairline across the page beneath the supplier row, as his page draws.
+    this.sheet.down(14);
+    this.sheet.ruleAt(this.sheet.baseline, LEFT, WIDTH);
+    this.sheet.down(14);
     this.billedToAndMethod();
     this.sheet.down(18);
     this.table();
@@ -214,7 +231,7 @@ class InvoicePage {
   // ------------------------------------------------------------------------
 
   /**
-   * The mark left, about 250 points wide as his page sets the lockup, its
+   * The mark left, about 165 points wide as his page sets the lockup, its
    * height from the file's own proportions so it is never stretched — or the
    * wordmark in type when the practice has none. The title right, in violet:
    * "INVOICE" bold and large and "فاتورة" beneath it; a registered practice's
@@ -269,7 +286,7 @@ class InvoicePage {
       en: `${label.en} ${value}`,
       ar: `${label.ar} ${value}`,
       size: TYPE.row,
-      step: 12,
+      step: 11,
       bold,
       grey: bold ? INK : MUTED,
     });
@@ -297,7 +314,7 @@ class InvoicePage {
     }
 
     const top = this.sheet.baseline;
-    const facing = this.facing(rows, LEFT_WIDTH);
+    const facing = this.facing(rows, SUPPLIER_WIDTH);
     const firstBaseline = top - 9;
     const supplierBottom = firstBaseline - facing.depth - 4;
 
@@ -341,19 +358,22 @@ class InvoicePage {
     const lastValue = placed[placed.length - 1]?.baseline ?? top;
     const cardHeight = top - (lastValue - PAD + 2);
 
-    this.sheet.card(RIGHT_X, top, RIGHT_WIDTH, cardHeight, { radius: RADIUS });
+    // The card, and a violet bar down its left edge like the tax card's.
+    this.sheet.card(NUMBER_X, top, NUMBER_WIDTH, cardHeight, { radius: RADIUS });
+    this.sheet.bandFill(NUMBER_X, top, BAR_WIDTH, cardHeight);
+    const inside = NUMBER_X + BAR_WIDTH + PAD;
     for (const each of placed) {
-      this.caption(each.caption, RIGHT_X + PAD, RIGHT - PAD, each.label, TYPE.caption, {
+      this.caption(each.caption, inside, RIGHT - PAD, each.label, TYPE.caption, {
         grey: MUTED,
       });
-      this.sheet.line(each.baseline, RIGHT_X + PAD, each.value.text, each.value.size, {
+      this.sheet.line(each.baseline, inside, each.value.text, each.value.size, {
         ...each.value.options,
       });
     }
-    this.drawFacing(facing, LEFT, LEFT_WIDTH, firstBaseline);
+    this.drawFacing(facing, LEFT, SUPPLIER_WIDTH, firstBaseline);
 
-    this.record('supplier', LEFT, LEFT + LEFT_WIDTH, top, supplierBottom);
-    this.record('numberCard', RIGHT_X, RIGHT, top, top - cardHeight);
+    this.record('supplier', LEFT, LEFT + SUPPLIER_WIDTH, top, supplierBottom);
+    this.record('numberCard', NUMBER_X, RIGHT, top, top - cardHeight);
     this.sheet.down(top - Math.min(supplierBottom, top - cardHeight));
   }
 
@@ -771,33 +791,36 @@ class InvoicePage {
   }
 
   /**
-   * What is owed: the subtotal (the list total), the discount when there was
-   * one — "Discount 25%" when the lines share one percentage — with its
-   * amount as "- AED …", a registered practice's Net and VAT, a hairline, and
-   * the violet block: "TOTAL DUE" / "الإجمالي المستحق" small in white over the
-   * figure large in white.
+   * What is owed, under the title on a tinted band: the subtotal (the list
+   * total), the discount when there was one — "Discount 25%" when the lines
+   * share one percentage — with its amount as "- AED …", a registered
+   * practice's Net and VAT, all in English with their figures and no Arabic,
+   * as his page sets them; a hairline; and the violet block, "TOTAL DUE" /
+   * "الإجمالي المستحق" small in white over the figure large in white.
    */
   private summaryCard(): Laid {
     const document_ = this.document_;
     const x = RIGHT_X;
     const width = RIGHT_WIDTH;
-    const rows: { label: Phrase; value: string; accent?: boolean }[] = [
-      { label: WORDS.subtotal, value: money(document_.netFils + document_.discountFils) },
+    // English labels and figures only, as his page sets them; the violet
+    // block's caption is the one Arabic below the title.
+    const rows: { label: string; value: string; accent?: boolean }[] = [
+      { label: WORDS.subtotal.en, value: money(document_.netFils + document_.discountFils) },
     ];
     if (document_.discountFils > 0) {
       rows.push({
-        label: discountTotalLabel(document_.discountBasisPoints),
+        label: discountTotalLabel(document_.discountBasisPoints).en,
         value: `- ${money(document_.discountFils)}`,
         accent: true,
       });
     }
     if (this.registered) {
-      rows.push({ label: WORDS.net, value: money(document_.netFils) });
+      rows.push({ label: WORDS.net.en, value: money(document_.netFils) });
       rows.push({ label: this.vatLabel(), value: money(document_.vatFils) });
     }
 
     const titleAt = PAD + 8;
-    const firstRow = titleAt + 8 + 17;
+    const firstRow = TITLE_BAND + 17;
     const lastRow = firstRow + (rows.length - 1) * 16;
     const ruleAt = lastRow + 9;
     const blockTop = ruleAt + 10;
@@ -807,28 +830,31 @@ class InvoicePage {
     return {
       height,
       draw: (top, cardHeight) => {
+        // The title on a tinted band, rounded at the top as the card is and
+        // square where the white body meets it; the border drawn over both.
+        this.sheet.rect(x, top - TITLE_BAND, width, TITLE_BAND, {
+          fill: { rgb: CARD },
+          radius: RADIUS,
+        });
+        this.sheet.rect(x, top - TITLE_BAND, width, TITLE_BAND / 2, { fill: { rgb: CARD } });
         this.sheet.outline(x, top, width, cardHeight, RADIUS);
-        this.cardTitle(top - titleAt, x, width, WORDS.invoiceSummary);
+        this.caption(
+          top - titleAt,
+          x + PAD,
+          x + width - PAD,
+          WORDS.invoiceSummary,
+          TYPE.cardTitle,
+          {
+            bold: true,
+            rgb: VIOLET,
+          },
+        );
         rows.forEach((row, index) => {
           const y = top - firstRow - index * 16;
           const valueOptions: TextOptions = row.accent
             ? { bold: true, rgb: VIOLET, align: 'end' }
             : { bold: true, align: 'end' };
-          this.sheet.line(y, x + PAD, row.label.en, TYPE.value, { grey: MUTED });
-          // The Arabic label beside the English, and left off only when a
-          // figure grown into the millions would come within a gutter of it:
-          // a reader loses a translation of a word, never a number.
-          const arabicAt = x + PAD + this.sheet.width(row.label.en, TYPE.value) + 6;
-          const arabicWidth = this.sheet.width(row.label.ar, TYPE.label, { rtl: true });
-          const figureAt =
-            x + width - PAD - this.sheet.width(row.value, TYPE.value, { bold: true });
-          if (arabicAt + arabicWidth + GUTTER <= figureAt) {
-            this.sheet.line(y, arabicAt, row.label.ar, TYPE.label, {
-              grey: MUTED,
-              rtl: true,
-              align: 'start',
-            });
-          }
+          this.sheet.line(y, x + PAD, row.label, TYPE.value, { grey: MUTED });
           this.sheet.line(y, x + width - PAD, row.value, TYPE.value, valueOptions);
         });
         this.sheet.hairline(x + PAD, top - ruleAt, width - PAD * 2);
@@ -867,14 +893,11 @@ class InvoicePage {
   }
 
   /** "VAT 5%" when every line carries the one rate, which in the UAE they do; "VAT" otherwise. */
-  private vatLabel(): Phrase {
+  private vatLabel(): string {
     const rates = new Set(this.document_.lines.map((line) => line.vatRateBasisPoints));
     const [rate] = [...rates];
-    if (rates.size !== 1 || rate === undefined) return WORDS.vatColumn;
-    return {
-      en: `${WORDS.vatColumn.en} ${formatRate(rate)}`,
-      ar: `${WORDS.vatColumn.ar} ${formatRate(rate)}`,
-    };
+    if (rates.size !== 1 || rate === undefined) return WORDS.vatColumn.en;
+    return `${WORDS.vatColumn.en} ${formatRate(rate)}`;
   }
 
   /**
