@@ -352,10 +352,12 @@ export class Sheet {
   /**
    * The same string, cut to one line that fits.
    *
-   * For the footer's contact line alone, which is pinned to the bottom of the
-   * page and so cannot grow downward off the paper. The address line above it
-   * wraps upward instead of being cut, because it states a fact nothing else
-   * on the page repeats.
+   * For the two lines that have nowhere to grow: the footer's contact line,
+   * pinned to the bottom of the page and so unable to run downward off the
+   * paper, and the running header's practice name on a later sheet, which
+   * shares its line with the reference. The footer's address line wraps
+   * upward instead of being cut, because it states a fact nothing else on the
+   * page repeats.
    */
   fit(text: string, maxWidth: number, size: number, options: TextOptions = {}): string {
     if (this.width(text, size, options) <= maxWidth) return text;
