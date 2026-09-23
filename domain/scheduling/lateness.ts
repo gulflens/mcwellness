@@ -229,8 +229,9 @@ export function boardState(
     case 'no_show':
       return 'missed';
     // A visit logged from the records in error and withdrawn (trunk round 60)
-    // is treated as a cancelled one is: it holds no window and nothing
-    // happened at the door.
+    // never reaches the board — its route leaves `voided` out of the day it
+    // reads — so this arm only keeps the switch total: it holds no window and
+    // nothing happened at the door, as with a cancelled one.
     case 'cancelled':
     case 'cancelled_late':
     case 'voided':
