@@ -1,47 +1,31 @@
 /**
  * The look of a money document: the practice's own design, on paper.
  *
- * The operator supplied a designed invoice and receipt on 8 September 2026 and
- * asked the platform's documents to match them (`docs/SPEC/billing.md` section
- * 5.6). Its shape, top to bottom: the practice's logo centred, the title in
- * both languages in the brand violet, the supplier as two facing blocks rather
- * than as labelled rows, the document's own facts, the lines table, the totals
- * in a bordered box against the right margin — with, on an invoice whose
- * practice has recorded an account, how to pay set beside it (round 61) — and a
- * footer band with the practice's contact details.
+ * **Two pages live here and next door.** The invoice is the operator's design
+ * of 24 September 2026 (docs/superpowers/specs/2026-09-24-invoice-redesign-
+ * design.md), laid out block by block in `invoice.ts`. The receipt is still
+ * the page of 8 September (`docs/SPEC/billing.md` section 5.6) — the mark
+ * centred, the title in both languages in violet, the supplier as two facing
+ * blocks, the document's own facts, the amount in a bordered box and a
+ * footer band — whose blocks are the ones below; round 65 dresses it like the
+ * invoice next. Both are drawn on the `Sheet` in `sheet.ts`.
  *
- * **Three things carry hue and nothing else does.** The two title words, the
- * table's column headings and the document's reference, all in `VIOLET`
- * sampled from the practice's own mark. `docs/DESIGN-BRIEF.md`'s rule that hue
- * is reserved for band data and three status states is a rule for the console;
- * section 5.6 answers `PRODUCT.md`'s open question for **documents only**.
- * Everything else is the ink and two greys these documents already used.
+ * **Bilingual, side by side.** English against the left margin and Arabic
+ * against the right, which is how a bilingual document is read in the Gulf.
+ * Figures are set once, in Latin digits, because they are the same figures
+ * read by both readers — and because a number typeset twice has two chances
+ * to be wrong.
  *
- * **Bilingual, side by side.** The title, the supplier block, the column
- * headings, the totals labels and the basis sentence are set twice, English
- * against the left margin and Arabic against the right, which is how a
- * bilingual invoice is read in the Gulf. Figures are set once, in Latin
- * digits, because they are the same figures read by both readers — and because
- * a number typeset twice has two chances to be wrong.
- *
- * **The registration decides the page.** An invoice from an unregistered
- * practice is headed "Invoice", carries no VAT number, no rate, no VAT column
- * and no VAT line in the totals, and shows one figure. All of that comes from
- * the document's own snapshot (`model.ts`), never from the practice's live
- * row, and `chargesVat` is the one place it is asked.
- *
- * **Everything is measured before it is drawn**, which was the design review's
- * finding and is the difference between a layout and a set of guesses. Every
- * string is measured against the room it actually has: it wraps onto further
- * lines, the description is clamped to its column, and nothing is drawn past
- * the right margin. When a document runs out of page it gets another one, with
- * a running header, and the totals stay with the last of it.
+ * **Everything is measured before it is drawn.** Every string is measured
+ * against the room it actually has: it wraps onto further lines and nothing
+ * is drawn past the right margin. When a document runs out of page it gets
+ * another one, with a running header.
  *
  * Pure: laying out a page is arithmetic, so this is testable without a font
- * file, a database or a clock — and `tests/billing/geometry.test.ts` tests it as
- * geometry, by measuring the ops this produces rather than by reading the text
- * back out of a stream. The practice's mark arrives as bytes, exactly as the
- * fonts do; nothing here opens anything.
+ * file, a database or a clock — and `tests/billing/geometry.test.ts` tests it
+ * as geometry, by measuring the ops and the blocks this produces rather than
+ * by reading the text back out of a stream. The practice's mark arrives as
+ * bytes, exactly as the fonts do; nothing here opens anything.
  */
 
 import {
@@ -52,82 +36,47 @@ import {
   type SupplierSnapshot,
 } from './model';
 import {
-  measure,
   PAGE_HEIGHT,
   PAGE_WIDTH,
   type DocumentImage,
   type FontSet,
-  type Op,
   type Page,
 } from '../../shared/document';
 import {
   arabicDocumentDate,
-  discountTotalLabel,
   formatDocumentDate,
-  formatRate,
-  groupIban,
   money,
-  NOT_REGISTERED_BASIS,
   receiptBasis,
-  SIMPLIFIED_BASIS,
-  waivedNotice,
   WORDMARK,
   WORDS,
   type Phrase,
 } from './strings';
-import { formatFils } from '../../shared/fils';
+import { INVOICE_GEOMETRY, invoiceLayout, type Block } from './invoice';
+import {
+  BAND,
+  BOTTOM,
+  FOLIO,
+  GUTTER,
+  INK,
+  LEFT,
+  LINE,
+  MARGIN,
+  MUTED,
+  RIGHT,
+  SIZE,
+  SMALL_LINE,
+  Sheet,
+  TOP,
+  VIOLET,
+  type TextOptions,
+} from './sheet';
 
-const MARGIN = 48;
-const LEFT = MARGIN;
-const RIGHT = PAGE_WIDTH - MARGIN;
-/** The first baseline. */
-const TOP = PAGE_HEIGHT - MARGIN;
-/** Where a page number sits: below the content floor, above the paper's edge. */
-const FOLIO = MARGIN + 8;
-/** The hairline the footer band hangs from, pinned to the bottom of the page. */
-const BAND = FOLIO + 30;
-/** The floor the flow may not go below: far enough above the band to clear it. */
-const BOTTOM = BAND + 18;
-/** The smallest gap two pieces of type may have between them. */
-const GUTTER = 10;
+export { CARD, clampForDocument, EDGE, PILL, Sheet, VIOLET } from './sheet';
+export type { Block, BlockName } from './invoice';
 
-const INK = 0;
-const MUTED = 0.42;
-const RULE = 0.78;
-
-/**
- * The practice's own violet, `#380473`, sampled from the darkest large area of
- * its mark. Three things wear it — the two title words, the column headings
- * and the reference — and nothing else on either document does.
- */
-export const VIOLET = [0x38 / 255, 0x04 / 255, 0x73 / 255] as const;
-
-/**
- * `VIOLET` mixed toward white by `k`: `1 - (1 - v) * k` per channel, so
- * `k = 0` is white and `k = 1` is `VIOLET` itself. One formula, so `CARD`,
- * `EDGE` and `PILL` below have the one source the design asks for
- * (docs/superpowers/specs/2026-09-24-invoice-redesign-design.md, "The page,
- * top to bottom": "all derived in code from the one brand violet").
- */
-function tint(k: number): readonly [number, number, number] {
-  const [r, g, b] = VIOLET;
-  return [1 - (1 - r) * k, 1 - (1 - g) * k, 1 - (1 - b) * k];
-}
-
-/** A card's ground: the violet mixed six per cent over white, `#f3f0f7`. */
-export const CARD = tint(0.06);
-/** A card's border: the violet mixed fifteen per cent over white, `#e1d9ea`. */
-export const EDGE = tint(0.15);
-/** The discount pill's ground: the violet mixed twelve per cent over white, `#e7e1ee`. */
-export const PILL = tint(0.12);
-
-const SIZE = { wordmark: 15, title: 20, reference: 13, heading: 12, body: 9, small: 7.5 };
-const LINE = 13;
-const SMALL_LINE = 9.5;
-
-/** How wide the practice's mark is set, whatever the shape of the file. */
-const LOGO_WIDTH = 150;
-/** The totals box against the right margin, and the air inside it. */
+/** How wide the receipt sets the practice's mark, centred, whatever the shape of the file. */
+const RECEIPT_LOGO_WIDTH = 150;
+/** The receipt's amount box against the right margin, and the air inside it. */
 const TOTALS_WIDTH = 200;
 const TOTALS_PAD = 10;
 const TOTALS_ROW = 15;
@@ -135,8 +84,8 @@ const TOTALS_ROW = 15;
 const TOTALS_TOP_AIR = 14;
 
 /**
- * The page's own measurements, exported so the geometry tests assert against
- * the same numbers the layout uses rather than against copies of them.
+ * The invoice page's own measurements, exported so the geometry tests assert
+ * against the same numbers the layout uses rather than against copies of them.
  */
 export const GEOMETRY = {
   PAGE_WIDTH,
@@ -153,303 +102,8 @@ export const GEOMETRY = {
   SMALL_LINE,
   SIZE,
   VIOLET,
-  LOGO_WIDTH,
-  TOTALS_WIDTH,
-  TOTALS_PAD,
+  ...INVOICE_GEOMETRY,
 } as const;
-
-type TextOptions = {
-  bold?: boolean;
-  grey?: number;
-  rgb?: readonly [number, number, number];
-  align?: 'start' | 'end' | 'centre';
-  rtl?: boolean;
-};
-
-/** What `Sheet.rect` takes beyond the box itself: the writer's own `rect` op, minus its position. */
-type RectOptions = Omit<Extract<Op, { kind: 'rect' }>, 'kind' | 'x' | 'y' | 'width' | 'height'>;
-
-/**
- * The longest string this will set at all.
- *
- * Not a layout rule but a floor under one: a description or an address is a
- * string somebody typed, and rendering is on the path that produces a client's
- * financial record. Wrapping an unbounded string is unbounded work, so it is cut
- * — visibly, with an ellipsis, because a document that quietly drops half a line
- * is worse than one that shows it was too long.
- */
-const MAX_DRAWN = 400;
-
-export function clampForDocument(text: string): string {
-  const characters = [...text];
-  return characters.length <= MAX_DRAWN ? text : `${characters.slice(0, MAX_DRAWN - 1).join('')}…`;
-}
-
-/**
- * A document being drawn top-down, across as many pages as it needs.
- *
- * Exported so `domain/billing/document/colours.test.ts` can drive `rect`,
- * `card` and `bandFill` directly and read back the ops they push, the same
- * way this file's own docstring asks everything here to be testable — with
- * no font file, a database or a clock. Nothing outside this module and its
- * colocated tests constructs one; the barrel (`index.ts`) does not re-export
- * it.
- */
-export class Sheet {
-  private readonly pages: Op[][] = [[]];
-  private y = TOP;
-  /** Redrawn at the top of every page after the first: column headings, mostly. */
-  private continuation: (() => void) | null = null;
-
-  private readonly fonts: FontSet;
-  private readonly running: { practice: string; reference: string };
-
-  constructor(fonts: FontSet, running: { practice: string; reference: string }) {
-    this.fonts = fonts;
-    this.running = running;
-  }
-
-  private get ops(): Op[] {
-    const page = this.pages[this.pages.length - 1];
-    if (!page) throw new Error('A sheet always has a page.');
-    return page;
-  }
-
-  get baseline(): number {
-    return this.y;
-  }
-
-  down(by: number): void {
-    this.y -= by;
-  }
-
-  /** How wide a string is, set as it will be set. */
-  width(text: string, size: number, options: TextOptions = {}): number {
-    if (text.length === 0) return 0;
-    return measure(
-      text,
-      { font: options.bold ? 'bold' : 'regular', size },
-      this.fonts,
-      options.rtl === true,
-    );
-  }
-
-  /** Makes room for `space` points of content, taking another page if there is none. */
-  room(space: number): void {
-    if (this.y - space >= BOTTOM) return;
-    this.newPage();
-  }
-
-  /** What to redraw at the top of a page taken mid-way through something. */
-  setContinuation(draw: (() => void) | null): void {
-    this.continuation = draw;
-  }
-
-  private newPage(): void {
-    this.pages.push([]);
-    this.y = TOP;
-    // A running header, so a loose second sheet still says which document it
-    // belongs to and whose practice issued it.
-    this.text(LEFT, this.running.practice, SIZE.small, { grey: MUTED });
-    this.text(RIGHT, this.running.reference, SIZE.small, { grey: MUTED, align: 'end' });
-    this.down(SMALL_LINE);
-    this.rule();
-    this.down(LINE);
-    this.continuation?.();
-  }
-
-  /**
-   * One line, on the baseline it is given. Nothing here moves the cursor.
-   *
-   * That is the whole discipline: a first version had the drawing helpers
-   * advance the cursor themselves and the callers correct it afterwards with
-   * arithmetic, and every block on the page printed on top of the last. A
-   * primitive draws where it is told; the caller advances once, by an amount it
-   * worked out before it drew anything.
-   */
-  line(y: number, x: number, text: string, size: number, options: TextOptions = {}): void {
-    if (text.length === 0) return;
-    this.ops.push({
-      kind: 'text',
-      x,
-      y,
-      text,
-      style: {
-        font: options.bold ? 'bold' : 'regular',
-        size,
-        grey: options.grey ?? INK,
-        ...(options.rgb ? { rgb: options.rgb } : {}),
-      },
-      ...(options.align ? { align: options.align } : {}),
-      ...(options.rtl ? { rtl: true } : {}),
-    });
-  }
-
-  /** The same, on the current baseline. */
-  text(x: number, text: string, size: number, options: TextOptions = {}): void {
-    this.line(this.y, x, text, size, options);
-  }
-
-  /** The practice's mark, with its bottom-left corner where it is told. */
-  image(x: number, y: number, width: number, height: number): void {
-    this.ops.push({ kind: 'image', image: 'logo', x, y, width, height });
-  }
-
-  /**
-   * A filled and/or stroked rectangle, straight to the writer's own `rect`
-   * op — `x`, `y` is its bottom-left corner, exactly as the op takes it
-   * (`domain/shared/document/pdf.ts`). `card` and `bandFill` below are the
-   * page's own two shapes of it, from the top edge; this is the primitive
-   * itself, for whatever the redesign still needs one for.
-   */
-  rect(x: number, y: number, width: number, height: number, options: RectOptions = {}): void {
-    this.ops.push({ kind: 'rect', x, y, width, height, ...options });
-  }
-
-  /**
-   * A card: `CARD` filled, `EDGE` stroked, 6 pt corners unless told
-   * otherwise — the practice's own design (docs/superpowers/specs/2026-09-24-
-   * invoice-redesign-design.md, "Corners: 6 pt on cards").
-   *
-   * Takes the box from its **top** edge, `yTop`, which is how this file lays
-   * a page out — downward from `TOP` — rather than the bottom-left corner
-   * the op itself takes: `y = yTop - height` is the whole of the conversion,
-   * done once here so no caller of `card` works it out for itself.
-   */
-  card(
-    x: number,
-    yTop: number,
-    width: number,
-    height: number,
-    options: { radius?: number } = {},
-  ): void {
-    this.rect(x, yTop - height, width, height, {
-      fill: { rgb: CARD },
-      stroke: { rgb: EDGE },
-      radius: options.radius ?? 6,
-    });
-  }
-
-  /**
-   * A band filled solid `VIOLET` and never stroked: the lines table's
-   * header, the totals' "TOTAL DUE" / "TOTAL PAID" block, the discount pill,
-   * the tax card's left-edge bar. Top-edge coordinates and the same
-   * conversion as `card` — see there.
-   */
-  bandFill(x: number, yTop: number, width: number, height: number, radius = 0): void {
-    this.rect(x, yTop - height, width, height, { fill: { rgb: VIOLET }, radius });
-  }
-
-  /**
-   * Breaks a string into the lines that fit `maxWidth`.
-   *
-   * On spaces where it can, and inside a word where it cannot — a forty-point
-   * column and a fifty-point word have no polite answer, and running off the
-   * page is not one.
-   */
-  wrap(text: string, maxWidth: number, size: number, options: TextOptions = {}): string[] {
-    const clamped = clampForDocument(text);
-    if (maxWidth <= 0) return [clamped];
-    if (this.width(clamped, size, options) <= maxWidth) return [clamped];
-
-    const lines: string[] = [];
-    let line = '';
-    const flush = (): void => {
-      if (line.length > 0) lines.push(line);
-      line = '';
-    };
-    for (const word of clamped.split(' ')) {
-      const candidate = line.length === 0 ? word : `${line} ${word}`;
-      if (this.width(candidate, size, options) <= maxWidth) {
-        line = candidate;
-        continue;
-      }
-      flush();
-      if (this.width(word, size, options) <= maxWidth) {
-        line = word;
-        continue;
-      }
-      // A single word wider than the column: broken by character, which is what
-      // a long reference or an unspaced name needs.
-      let piece = '';
-      for (const character of word) {
-        if (this.width(piece + character, size, options) > maxWidth && piece.length > 0) {
-          lines.push(piece);
-          piece = character;
-        } else {
-          piece += character;
-        }
-      }
-      line = piece;
-    }
-    flush();
-    return lines.length > 0 ? lines : [''];
-  }
-
-  /**
-   * The same string, cut to one line that fits.
-   *
-   * For the footer band alone, which is pinned to the bottom of the page and
-   * so cannot grow downward into the page number. The address is set in full
-   * in the supplier block at the top of the same sheet, so what is lost here
-   * is a repetition and not a fact.
-   */
-  fit(text: string, maxWidth: number, size: number, options: TextOptions = {}): string {
-    if (this.width(text, size, options) <= maxWidth) return text;
-    // Eight points of room kept back for the ellipsis, so the cut line is
-    // still inside the measure once it is added.
-    return `${this.wrap(text, maxWidth - 8, size, options)[0] ?? ''}…`;
-  }
-
-  /**
-   * A wrapped block starting on baseline `y`, drawn downward. Answers how many
-   * lines it took; the cursor is the caller's to move.
-   */
-  paragraph(
-    y: number,
-    x: number,
-    text: string,
-    maxWidth: number,
-    size: number,
-    options: TextOptions = {},
-    step = LINE,
-  ): number {
-    const lines = this.wrap(text, maxWidth, size, options);
-    lines.forEach((each, index) => {
-      this.line(y - index * step, x, each, size, options);
-    });
-    return lines.length;
-  }
-
-  rule(grey = RULE, thickness = 0.5): void {
-    this.ops.push({ kind: 'rule', x: LEFT, y: this.y, width: RIGHT - LEFT, thickness, grey });
-  }
-
-  /** A rule where it is told, and — with a rise — down the side of a box. */
-  ruleAt(y: number, x: number, width: number, dy = 0, grey = RULE, thickness = 0.5): void {
-    this.ops.push({ kind: 'rule', x, y, width, ...(dy ? { dy } : {}), thickness, grey });
-  }
-
-  /**
-   * The finished pages. A document that took more than one says so on every
-   * sheet: a page torn off a stack has to be able to say what it is part of.
-   */
-  finish(): Page[] {
-    if (this.pages.length > 1) {
-      this.pages.forEach((ops, index) => {
-        ops.push({
-          kind: 'text',
-          x: RIGHT,
-          y: FOLIO,
-          text: `Page ${index + 1} of ${this.pages.length}`,
-          style: { font: 'regular', size: SIZE.small, grey: MUTED },
-          align: 'end',
-        });
-      });
-    }
-    return this.pages.map((ops) => ({ ops }));
-  }
-}
 
 // --------------------------------------------------------------------------
 // The blocks of the page
@@ -466,8 +120,13 @@ export class Sheet {
  */
 function masthead(sheet: Sheet, title: Phrase, logo: DocumentImage | null): void {
   if (logo && logo.width > 0) {
-    const height = (LOGO_WIDTH * logo.height) / logo.width;
-    sheet.image((PAGE_WIDTH - LOGO_WIDTH) / 2, sheet.baseline - height, LOGO_WIDTH, height);
+    const height = (RECEIPT_LOGO_WIDTH * logo.height) / logo.width;
+    sheet.image(
+      (PAGE_WIDTH - RECEIPT_LOGO_WIDTH) / 2,
+      sheet.baseline - height,
+      RECEIPT_LOGO_WIDTH,
+      height,
+    );
     sheet.down(height + 22);
   } else {
     sheet.text(LEFT, WORDMARK, SIZE.wordmark, { bold: true });
@@ -631,21 +290,8 @@ function facts(
   sheet.down(height);
 }
 
-/** A column heading: English on the line in violet, its Arabic beneath it, smaller. */
-function heading(sheet: Sheet, x: number, label: Phrase, align: 'start' | 'end'): void {
-  const y = sheet.baseline;
-  sheet.line(y, x, label.en, SIZE.body, { bold: true, align, rgb: VIOLET });
-  sheet.line(y - SMALL_LINE, x, label.ar, SIZE.small, { align, rtl: true, rgb: VIOLET });
-}
-
 /** A row of the totals box: its two labels on the left of the box, its figure on the right. */
 type TotalRow = { label: Phrase; value: string; bold?: boolean };
-
-/**
- * Something set in the empty band to the left of the totals box, from the same
- * top: measured first, so the box and it can be kept on one sheet together.
- */
-type Beside = { height: number; draw: (top: number) => void };
 
 /**
  * The totals, in a bordered box against the right margin.
@@ -669,13 +315,9 @@ type Beside = { height: number; draw: (top: number) => void };
  * the figure are always set, in both languages' reading of the row: what a
  * reader loses is a translation of a word, never a number.
  */
-function totalsBox(sheet: Sheet, rows: readonly TotalRow[], beside: Beside | null = null): void {
+function totalsBox(sheet: Sheet, rows: readonly TotalRow[]): void {
   const height = TOTALS_TOP_AIR * 2 + (rows.length - 1) * TOTALS_ROW;
-  // The taller of the two decides the break, so a page is taken before both
-  // rather than through either: how to pay never lands a sheet away from what
-  // is owed.
-  const tallest = Math.max(height, beside?.height ?? 0);
-  sheet.room(tallest + LINE);
+  sheet.room(height + LINE);
 
   const top = sheet.baseline;
   const bottom = top - height;
@@ -710,71 +352,7 @@ function totalsBox(sheet: Sheet, rows: readonly TotalRow[], beside: Beside | nul
   sheet.ruleAt(bottom, left, TOTALS_WIDTH);
   sheet.ruleAt(bottom, left, 0, height);
   sheet.ruleAt(bottom, RIGHT, 0, height);
-  beside?.draw(top);
-  sheet.down(tallest + LINE);
-}
-
-/**
- * How to pay, in the band left of the totals box (round 61; `docs/SPEC/billing.md`
- * section 5.6).
- *
- * A small heading in both languages — muted, never violet: the violet is for
- * exactly three things and this is not one of them — and then a row for each
- * fact the practice recorded: the English label, the Arabic beside it, and the
- * value in a column of its own. The IBAN is grouped in fours; the holder and
- * the bank address wrap within the column rather than being cut, because a
- * truncated account name is a transfer that bounces.
- *
- * The heading sits on the totals' first baseline, so the two blocks read as
- * one band. The width is whatever the box leaves: the measure less the box and
- * the page's gutter, so nothing here can reach the box's left wall.
- */
-function bankBlock(sheet: Sheet, bank: NonNullable<InvoiceDocument['bank']>): Beside {
-  const right = RIGHT - TOTALS_WIDTH - GUTTER;
-  const rows: { label: Phrase; value: string }[] = [
-    { label: WORDS.accountHolder, value: bank.accountHolder },
-    { label: WORDS.iban, value: groupIban(bank.iban) },
-  ];
-  if (bank.bic) rows.push({ label: WORDS.bic, value: bank.bic });
-  if (bank.bankAddress) rows.push({ label: WORDS.bankAddress, value: bank.bankAddress });
-
-  const labelWidth = (label: Phrase): number =>
-    sheet.width(label.en, SIZE.small) + 6 + sheet.width(label.ar, SIZE.small, { rtl: true });
-  const valueAt = LEFT + Math.max(...rows.map((row) => labelWidth(row.label))) + GUTTER;
-  const laid = rows.map((row) => ({
-    ...row,
-    lines: sheet.wrap(row.value, right - valueAt, SIZE.small),
-  }));
-  const lineCount = laid.reduce((total, row) => total + row.lines.length, 0);
-  // Air above the heading and below the last line, the box's own.
-  const height = TOTALS_TOP_AIR * 2 + SMALL_LINE + 4 + (lineCount - 1) * SMALL_LINE;
-
-  return {
-    height,
-    draw: (top) => {
-      const headingAt = top - TOTALS_TOP_AIR;
-      sheet.line(headingAt, LEFT, WORDS.payByTransfer.en, SIZE.small, { bold: true, grey: MUTED });
-      sheet.line(headingAt, right, WORDS.payByTransfer.ar, SIZE.small, {
-        bold: true,
-        grey: MUTED,
-        align: 'end',
-        rtl: true,
-      });
-      let y = headingAt - SMALL_LINE - 4;
-      for (const row of laid) {
-        sheet.line(y, LEFT, row.label.en, SIZE.small, { grey: MUTED });
-        sheet.line(y, LEFT + sheet.width(row.label.en, SIZE.small) + 6, row.label.ar, SIZE.small, {
-          grey: MUTED,
-          rtl: true,
-          align: 'start',
-        });
-        row.lines.forEach((line, index) => {
-          sheet.line(y - index * SMALL_LINE, valueAt, line, SIZE.small, {});
-        });
-        y -= row.lines.length * SMALL_LINE;
-      }
-    },
-  };
+  sheet.down(height + LINE);
 }
 
 /** A sentence at the foot of the page, in both languages, above the band. */
@@ -849,177 +427,6 @@ function band(sheet: Sheet, supplier: SupplierSnapshot): void {
 // The two documents
 // --------------------------------------------------------------------------
 
-function invoicePage(
-  document_: InvoiceDocument,
-  fonts: FontSet,
-  logo: DocumentImage | null,
-): Page[] {
-  const registered = chargesVat(document_.supplier);
-  const sheet = new Sheet(fonts, {
-    practice: document_.supplier.legalName,
-    reference: document_.reference,
-  });
-  const columns = registered ? COLUMN : COLUMN_PLAIN;
-  const descriptionWidth = registered ? DESCRIPTION_WIDTH : DESCRIPTION_WIDTH_PLAIN;
-
-  masthead(sheet, registered ? WORDS.taxInvoice : WORDS.invoice, logo);
-  supplierBlock(sheet, document_.supplier);
-
-  sheet.down(4);
-  sheet.rule();
-  sheet.down(16);
-
-  const dates = [`${WORDS.issued.en} ${formatDocumentDate(document_.issuedOn)}`];
-  // Only when it differs: a null here means the supply and the issue were the
-  // same day, which is what the column's own constraint guarantees.
-  if (document_.suppliedOn) {
-    dates.push(`${WORDS.dateOfSupply.en} ${formatDocumentDate(document_.suppliedOn)}`);
-  }
-  facts(sheet, document_.reference, dates, {
-    label: WORDS.billedTo,
-    name: document_.recipient.name,
-    recordNumber: document_.recipient.recordNumber,
-  });
-
-  sheet.down(4);
-  sheet.rule();
-  sheet.down(16);
-
-  /** The column headings, drawn again at the top of a page taken mid-table. */
-  const headings = (): void => {
-    heading(sheet, columns.description, WORDS.description, 'start');
-    heading(sheet, columns.quantity, WORDS.quantity, 'end');
-    heading(sheet, columns.unitPrice, WORDS.unitPrice, 'end');
-    if (registered) {
-      heading(sheet, COLUMN.vatRate, WORDS.vatRate, 'end');
-      heading(sheet, COLUMN.vatAmount, WORDS.vatColumn, 'end');
-    }
-    heading(sheet, columns.amount, WORDS.amount, 'end');
-    sheet.down(SMALL_LINE + LINE - 4);
-    sheet.rule();
-    sheet.down(LINE + 2);
-  };
-  headings();
-  sheet.setContinuation(headings);
-
-  for (const line of document_.lines) {
-    const englishRows = sheet.wrap(line.description, descriptionWidth, SIZE.body, {}).length;
-    const arabicRows = line.descriptionAr
-      ? sheet.wrap(line.descriptionAr, descriptionWidth, SIZE.small, { rtl: true }).length
-      : 0;
-    // A discounted line says what came off it beneath its description, once in
-    // each language: two more small rows, counted into the height before
-    // anything is drawn so the break still happens between rows.
-    const noteRows = line.discountFils > 0 ? 2 : 0;
-    const height = (englishRows - 1) * LINE + (arabicRows + noteRows) * SMALL_LINE + LINE;
-    sheet.room(height);
-
-    const y = sheet.baseline;
-    sheet.line(y, columns.quantity, String(line.quantity), SIZE.body, { align: 'end' });
-    sheet.line(y, columns.unitPrice, money(line.unitNetFils), SIZE.body, { align: 'end' });
-    if (registered) {
-      sheet.line(y, COLUMN.vatRate, formatRate(line.vatRateBasisPoints), SIZE.body, {
-        align: 'end',
-      });
-      sheet.line(y, COLUMN.vatAmount, money(line.vatFils), SIZE.body, { align: 'end' });
-    }
-    sheet.line(y, columns.amount, money(registered ? line.grossFils : line.netFils), SIZE.body, {
-      align: 'end',
-    });
-    sheet.paragraph(y, columns.description, line.description, descriptionWidth, SIZE.body, {});
-    if (line.descriptionAr) {
-      // The service's own Arabic name, beneath its English, in the small grey
-      // the price list uses for exactly the same pair.
-      sheet.paragraph(
-        y - (englishRows - 1) * LINE - SMALL_LINE,
-        columns.description,
-        line.descriptionAr,
-        descriptionWidth,
-        SIZE.small,
-        // Right-to-left text, but in a column that is aligned from the left:
-        // without saying so it defaults to ending at `x`, which put every
-        // Arabic service name off the left edge of the paper.
-        { grey: MUTED, rtl: true, align: 'start' },
-        SMALL_LINE,
-      );
-    }
-    if (line.discountFils > 0) {
-      // The design's own phrasing, inlined here now that this old page is
-      // its only caller: the new page (Task 3, round 65) has no sub-line, so
-      // the words no longer have a shared home in strings.ts as `discountLine`
-      // — this is that function's own arithmetic, unchanged, kept only long
-      // enough for this page to keep saying what it always said: the price
-      // that was quoted and what came off it, which is the pair a family
-      // reading a smaller figure wants to see.
-      const listFils = line.netFils + line.discountFils;
-      const share =
-        line.discountBasisPoints === null ? '' : ` (${formatRate(line.discountBasisPoints)})`;
-      const note: Phrase = {
-        en: `List ${money(listFils)} · less ${money(line.discountFils)}${share}`,
-        ar:
-          `السعر قبل الخصم ${formatFils(listFils)} درهم · ناقص ` +
-          `${formatFils(line.discountFils)} درهم${share}`,
-      };
-      const beneath = y - (englishRows - 1) * LINE - arabicRows * SMALL_LINE;
-      sheet.line(beneath - SMALL_LINE, columns.description, note.en, SIZE.small, {
-        grey: MUTED,
-        align: 'start',
-      });
-      sheet.line(beneath - SMALL_LINE * 2, columns.description, note.ar, SIZE.small, {
-        grey: MUTED,
-        rtl: true,
-        align: 'start',
-      });
-    }
-    sheet.down(height);
-  }
-  sheet.setContinuation(null);
-  sheet.down(4);
-
-  const totals: TotalRow[] = [];
-  // What was taken off, above whatever the totals say next. Only when there was
-  // a discount: a "Discount 0.00" row on every other invoice would be a figure
-  // a reader has to decide to ignore.
-  if (document_.discountFils > 0) {
-    totals.push({
-      label: WORDS.beforeDiscount,
-      value: money(document_.netFils + document_.discountFils),
-    });
-    // "Discount 25%" when every discounted line shares the one share, and the
-    // word alone when they do not (`sharedDiscountBasisPoints`).
-    totals.push({
-      label: discountTotalLabel(document_.discountBasisPoints),
-      value: money(document_.discountFils),
-    });
-  }
-  if (registered) {
-    totals.push({ label: WORDS.net, value: money(document_.netFils) });
-    totals.push({ label: WORDS.vatAmount, value: money(document_.vatFils) });
-  }
-  // One figure at the foot of it, and on an unregistered practice's invoice one
-  // figure in all: a net-and-VAT-and-gross breakdown on a document that charges
-  // no VAT invites the reader to look for a rate that is not there (round 20,
-  // request 1c).
-  totals.push({ label: WORDS.total, value: money(document_.grossFils), bold: true });
-  // How to pay, beside what is owed, when the practice has recorded an account.
-  // Without one the page is exactly the page it was before the block existed.
-  totalsBox(sheet, totals, document_.bank ? bankBlock(sheet, document_.bank) : null);
-
-  // A charge the practice has forgiven, said on the document rather than left
-  // to the ledger. The invoice keeps its number and its figures — it is
-  // append-only, and what happened is never rewritten — so a page that said
-  // nothing would go on billing a family for money it does not owe (migration
-  // 408, and the compliance review of this pull request). In ink rather than
-  // in the footer's grey: it is the first thing a reader of this page needs.
-  if (document_.waivedOn) {
-    footer(sheet, waivedNotice(document_.waivedOn), INK);
-  }
-
-  footer(sheet, registered ? SIMPLIFIED_BASIS : NOT_REGISTERED_BASIS);
-  band(sheet, document_.supplier);
-  return sheet.finish();
-}
-
 function receiptPage(
   document_: ReceiptDocument,
   fonts: FontSet,
@@ -1085,8 +492,22 @@ export function layout(
   logo: DocumentImage | null = null,
 ): Page[] {
   return document_.kind === 'invoice'
-    ? invoicePage(document_, fonts, logo)
+    ? invoiceLayout(document_, fonts, logo).pages
     : receiptPage(document_, fonts, logo);
+}
+
+/**
+ * An invoice laid out, with the boxes its blocks were drawn in, page by page —
+ * the masthead, the supplier block, the number card and the rest
+ * (`invoice.ts`, `Block`) — for `tests/billing/geometry.test.ts` to assert the
+ * page against as boxes rather than as loose pieces of type.
+ */
+export function layoutWithBlocks(
+  document_: InvoiceDocument,
+  fonts: FontSet,
+  logo: DocumentImage | null = null,
+): { pages: Page[]; blocks: Block[][] } {
+  return invoiceLayout(document_, fonts, logo);
 }
 
 /** The document's title, which is what a reader's browser tab and file manager show. */
@@ -1097,33 +518,3 @@ export function titleOf(document_: MoneyDocument): string {
   const words = chargesVat(document_.supplier) ? WORDS.taxInvoice : WORDS.invoice;
   return `${words.en} ${document_.reference}`;
 }
-
-/**
- * Columns of the lines table, by the x each column's text ends at (they are all
- * right-aligned except the description).
- *
- * Wider than they were, and for one reason: every figure now carries its own
- * currency, so `AED 12,150.00` stands where `12,150.00` did and the columns
- * were spaced for the shorter one. The gaps are measured against the widest
- * figure a line can hold rather than against the headings, which are shorter
- * now that they have lost their `(AED)`.
- */
-const COLUMN = {
-  description: LEFT,
-  quantity: LEFT + 220,
-  unitPrice: LEFT + 297,
-  vatRate: LEFT + 347,
-  vatAmount: LEFT + 422,
-  amount: RIGHT,
-};
-/** Where a description stops, clear of the quantity heading beside it. */
-const DESCRIPTION_WIDTH = 170;
-
-/** Without VAT there are three columns of figures, not five, so they spread out. */
-const COLUMN_PLAIN = {
-  description: LEFT,
-  quantity: LEFT + 347,
-  unitPrice: LEFT + 422,
-  amount: RIGHT,
-};
-const DESCRIPTION_WIDTH_PLAIN = 290;
