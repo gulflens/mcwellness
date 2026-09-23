@@ -5,6 +5,7 @@ import {
   groupIban,
   layoutWithBlocks,
   measure,
+  renderDocument,
   type Block,
   type BlockName,
   type InvoiceDocument,
@@ -221,6 +222,89 @@ const MATRIX: Laid[] = SHAPES.map((shape) => ({
 const SAMPLED = MATRIX.filter((laid) => /^(1|2|9|17|40) lines/.test(laid.name));
 
 /** The long cases: every field a practice or a household could make long, made long. */
+/**
+ * The inputs the final review tried against the page, kept: each is a string
+ * or a figure somebody could type, and each must still lay out inside its
+ * blocks. Every one also joins `LONG` below, so it meets every block and type
+ * check the long cases do.
+ */
+const HARD: ReadonlyArray<readonly [string, InvoiceDocument]> = [
+  [
+    'a 400-character description',
+    invoiceOf(
+      [
+        {
+          ...lineOf(0, false, 'percentage'),
+          description: 'Neurofeedback training session with a written summary '
+            .repeat(8)
+            .slice(0, 400),
+        },
+      ],
+      { bank: BANK },
+    ),
+  ],
+  [
+    'an Arabic-only description',
+    invoiceOf([
+      {
+        ...lineOf(0, false, 'none'),
+        description: 'جلسة نيوروفيدباك مع ملخص مكتوب',
+        descriptionAr: null,
+      },
+    ]),
+  ],
+  [
+    'a quantity of 100',
+    invoiceOf(
+      [
+        {
+          ...lineOf(0, true, 'none'),
+          quantity: 100,
+          netFils: 7_000_000,
+          vatFils: 350_000,
+          grossFils: 7_350_000,
+        },
+      ],
+      { supplier: REGISTERED },
+    ),
+  ],
+  [
+    'a 120-character household name with no spaces',
+    invoiceOf([lineOf(0, false, 'none')], {
+      recipient: { name: 'HazelDune'.repeat(14).slice(0, 120), recordNumber: 'MW-000099' },
+      bank: BANK,
+    }),
+  ],
+  [
+    'a discount typed as a sum in the millions on a unit price of AED 9,999,999.99',
+    invoiceOf(
+      [
+        {
+          ...lineOf(0, false, 'sum'),
+          unitNetFils: 999_999_999,
+          discountFils: 250_000_000,
+          discountBasisPoints: null,
+          netFils: 749_999_999,
+          vatFils: 0,
+          grossFils: 749_999_999,
+        },
+      ],
+      { bank: BANK },
+    ),
+  ],
+  [
+    'a line of nothing',
+    invoiceOf([
+      {
+        ...lineOf(0, false, 'none'),
+        unitNetFils: 0,
+        netFils: 0,
+        grossFils: 0,
+      },
+    ]),
+  ],
+];
+
 const LONG: Laid[] = [
   {
     name: 'every field long, with a long bank account',
@@ -300,6 +384,7 @@ const LONG: Laid[] = [
     name: 'an invoice carrying the practice’s mark',
     ...layoutWithBlocks(invoiceShaped({ ...SHAPES[0]!, bank: true }), fonts, LOGO),
   },
+  ...HARD.map(([name, document_]) => ({ name, ...layoutWithBlocks(document_, fonts) })),
 ];
 
 /**
@@ -763,6 +848,14 @@ describe('the payment card', () => {
       expect(box.left, box.text).toBeGreaterThanOrEqual(card.left + GEOMETRY.PAD - TOLERANCE);
       expect(box.right, box.text).toBeLessThanOrEqual(card.right - GEOMETRY.PAD + TOLERANCE);
     }
+  });
+});
+
+describe('the inputs the final review tried', () => {
+  it.each(HARD)('%s renders to the same bytes every time', (_name, document_) => {
+    const first = renderDocument(document_, fonts);
+    const second = renderDocument(document_, fonts);
+    expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
   });
 });
 

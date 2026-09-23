@@ -191,6 +191,16 @@ for (const registered of [false, true]) {
     }
   }
 }
+// The two sentences and the pair only some invoices carry: a waived fee's
+// notice in the tax card, and the date of supply on the number card.
+CASES.push({
+  name: 'invoice, unregistered, waived',
+  pages: layout({ ...invoice(false, false, true, 1), waivedOn: '2026-09-25' }, fonts),
+});
+CASES.push({
+  name: 'invoice, registered, with a date of supply',
+  pages: layout({ ...invoice(true, true, true, 1), suppliedOn: '2026-09-20' }, fonts),
+});
 for (const method of ['cash', 'transfer', 'link'] as const) {
   for (const settles of [false, true]) {
     CASES.push({
