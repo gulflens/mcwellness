@@ -99,7 +99,7 @@ export function WithdrawPackageDrawer({
           <p>Households who bought it keep their sessions; nobody can buy it after this.</p>
           <Field
             id="withdraw-reason"
-            label="Why"
+            label="Why is it being withdrawn?"
             type="text"
             maxLength={200}
             value={reason}

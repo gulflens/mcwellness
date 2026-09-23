@@ -75,7 +75,7 @@ describe('WithdrawPackageDrawer', () => {
 
   it('sends x-reason and JSON content-type, and asks for status inactive', async () => {
     const { fetchImpl, onWithdrawn } = mount(json({ package: { ...SILVER, status: 'inactive' } }));
-    fireEvent.change(screen.getByLabelText('Why'), {
+    fireEvent.change(screen.getByLabelText('Why is it being withdrawn?'), {
       target: { value: 'No longer offered.' },
     });
     expect((screen.getByRole('button', { name: 'Withdraw' }) as HTMLButtonElement).disabled).toBe(
@@ -93,7 +93,9 @@ describe('WithdrawPackageDrawer', () => {
 
   it("shows the server's error sentence on a non-200", async () => {
     mount(json({ error: 'forbidden' }, 403));
-    fireEvent.change(screen.getByLabelText('Why'), { target: { value: 'No longer offered.' } });
+    fireEvent.change(screen.getByLabelText('Why is it being withdrawn?'), {
+      target: { value: 'No longer offered.' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }));
     expect(await screen.findByRole('alert')).toHaveProperty(
       'textContent',

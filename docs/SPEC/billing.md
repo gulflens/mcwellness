@@ -192,7 +192,7 @@ is not decoration: the request-context middleware lands the `X-Reason` header
 on the audit row the update writes, so withdrawing and reinstating each leave
 one line on the trail saying why.
 
-**The list.** Packages › the practice's screen folds a withdrawn bundle out of
+**The list.** Billing › Packages folds a withdrawn bundle out of
 the table it sells from into a collapsed "Withdrawn (n)" group below it —
 name, contents, and a Reinstate action — rather than hiding it outright, so
 the catalogue a household is shown stays short without the practice losing

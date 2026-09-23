@@ -331,7 +331,29 @@
 .fold__summary {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
   min-block-size: var(--row);
   font-weight: var(--w-medium);
   cursor: pointer;
+  /* The platform marker is replaced by the shell's own chevron below, the
+     same substitution `TodayPage`'s `.stop__fold` makes (app/therapist/today),
+     so a tablet reader sees a disclosure to open rather than a plain line of
+     text — Chrome and Firefox both drop the default triangle once `display`
+     is set to anything but `list-item`. */
+  list-style: none;
+}
+
+.fold__summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold__chevron {
+  flex: none;
+  color: var(--slate);
+  transition: rotate var(--motion) var(--ease);
+}
+
+.fold[open] .fold__chevron {
+  rotate: 180deg;
 }

@@ -127,10 +127,17 @@ each is in this round's pull request.
 **Merged is not live.** No migration, no policy file, and both databases are
 otherwise unchanged: `package.status` has existed since the table itself
 (migration `401_billing_package.sql`) and this round adds no column, no
-constraint and no new grant. Every file is the billing stream's own
+constraint and no new grant. Every file but one is the billing stream's own
 (`docs/SPEC/OWNERSHIP.md`: `app/admin/billing/**`, `app/api/billing/**`,
-`tests/billing/**`). A build and a restart is the whole of it.
+`tests/billing/**`); the exception is the paragraph this round adds to
+`docs/SPEC/00-data-model.md`, which is the trunk's (`OWNERSHIP.md` line 41) —
+filed as a trunk round for that reason, the way round 53's enquiry work and
+round 55's shared `.ledger` rule each were. A build and a restart is the
+whole of it.
 
-Proof once served: "Withdraw", "Withdrawn" and "Reinstate" read out of the
-served `BillingPage`/`PackagesSection` chunk, and the chunk that was served
-before this build 404s.
+Proof once served: "Reinstate" and "Reinstated from the packages list" read
+out of the served `BillingPage`/`PackagesSection` chunk — the words that
+actually tell this build from the last one, since the old chunk already
+printed "Withdraw" and "Withdrawn" before this round (`PackagesSection.tsx`)
+— and two 404s: the chunk that was served before this build, and a nonsense
+path.

@@ -3,6 +3,7 @@ import { termWords } from '@domain/billing';
 import { PackagesResponse, type PackageRow } from '../../api/billing/ledger-schema';
 import { useAuth } from '../../shell/auth/AuthContext';
 import { Button, Note } from '../../shell/components/Controls';
+import { ChevronIcon } from '../../shell/components/Icons';
 import { Table, type Column } from '../../shell/components/Table';
 import { formatDate } from './BillingPage';
 import { formatDiscount, formatFils } from './money';
@@ -63,7 +64,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
   const [sellingSession, setSellingSession] = useState(false);
   const [withdrawing, setWithdrawing] = useState<PackageRow | null>(null);
   const [reinstatingId, setReinstatingId] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; tone?: 'critical' } | null>(null);
 
   const load = useCallback(() => {
     void apiFetch('/api/billing/packages')
@@ -103,9 +104,9 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           load();
           return;
         }
-        setNote(REINSTATE_FAILED_MESSAGE);
+        setNote({ text: REINSTATE_FAILED_MESSAGE, tone: 'critical' });
       } catch {
-        setNote(REINSTATE_FAILED_MESSAGE);
+        setNote({ text: REINSTATE_FAILED_MESSAGE, tone: 'critical' });
       } finally {
         setReinstatingId(null);
       }
@@ -260,14 +261,6 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
     return [name, contents];
   }, [canWrite, reinstatingId, reinstate]);
 
-  const drifted =
-    state.kind === 'ready'
-      ? state.packages.filter(
-          (row) =>
-            row.componentsTotalFils !== null && row.componentsTotalFils !== row.listPriceFils,
-        )
-      : [];
-
   // The main table's own rows: active bundles only, unchanged otherwise. A
   // withdrawn bundle moves to the folded group below rather than leaving the
   // table altogether (round 62).
@@ -275,6 +268,12 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
     state.kind === 'ready' ? state.packages.filter((row) => row.status === 'active') : [];
   const withdrawnPackages =
     state.kind === 'ready' ? state.packages.filter((row) => row.status === 'inactive') : [];
+
+  // Drift is a fact about what the practice is still selling, so a withdrawn
+  // bundle — priced or not, on sale or not — never raises it (round 62).
+  const drifted = activePackages.filter(
+    (row) => row.componentsTotalFils !== null && row.componentsTotalFils !== row.listPriceFils,
+  );
 
   return (
     <>
@@ -305,7 +304,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
 
       {note ? (
         <div role="status">
-          <Note>{note}</Note>
+          <Note tone={note.tone}>{note.text}</Note>
         </div>
       ) : null}
       {state.kind === 'loading' ? <Note>Loading the packages.</Note> : null}
@@ -337,13 +336,20 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           columns={columns}
           rows={activePackages}
           rowKey={(row) => row.id}
-          empty="No packages are set up yet."
+          empty={
+            withdrawnPackages.length > 0
+              ? 'Every package is withdrawn.'
+              : 'No packages are set up yet.'
+          }
         />
       ) : null}
 
       {withdrawnPackages.length > 0 ? (
         <details className="fold">
-          <summary className="fold__summary">{`Withdrawn (${withdrawnPackages.length})`}</summary>
+          <summary className="fold__summary">
+            <span>{`Withdrawn (${withdrawnPackages.length})`}</span>
+            <ChevronIcon className="fold__chevron" />
+          </summary>
           <Table
             caption="Withdrawn packages"
             columns={withdrawnColumns}
@@ -358,9 +364,9 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           onClose={() => setAddOpen(false)}
           onCreated={(created) => {
             setAddOpen(false);
-            setNote(
-              `${created.name} is on sale at AED ${formatFils(created.currentPrice?.amountFils ?? 0)}.`,
-            );
+            setNote({
+              text: `${created.name} is on sale at AED ${formatFils(created.currentPrice?.amountFils ?? 0)}.`,
+            });
             load();
           }}
         />
@@ -372,7 +378,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           onClose={() => setSelling(null)}
           onSold={(summary) => {
             setSelling(null);
-            setNote(summary);
+            setNote({ text: summary });
             load();
           }}
         />
@@ -383,7 +389,7 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
           onClose={() => setSellingSession(false)}
           onSold={(summary) => {
             setSellingSession(false);
-            setNote(summary);
+            setNote({ text: summary });
           }}
         />
       ) : null}
@@ -392,8 +398,9 @@ export function PackagesSection({ canWrite }: { canWrite: boolean }) {
         <WithdrawPackageDrawer
           bundle={withdrawing}
           onClose={() => setWithdrawing(null)}
-          onWithdrawn={() => {
+          onWithdrawn={(updated) => {
             setWithdrawing(null);
+            setNote({ text: `${updated.name} withdrawn.` });
             load();
           }}
         />
