@@ -32,7 +32,7 @@
 --        200 (appointment, appointment_status),
 --        300 (session, session_status), 302 (the close columns),
 --        403 (entitlement and its waiver columns), 404 (billing_exception),
---        500 + 951 (assessment.session_id), 960 (the version of
+--        500, 951 (assessment.session_id), 960 (the version of
 --        app.session_refuse_update_after_close this replaces),
 --        966 (session.recorded_from), 968.
 
@@ -247,7 +247,7 @@ begin
     update public.entitlement
        set status = 'waived', waiver_reason = left(v_reason, 200),
            waived_at = now(), waived_by = v_actor
-     where id = v_credit.id;
+     where id = v_credit.id and tenant_id = v_tenant;
     insert into public.entitlement (
       tenant_id, client_id, service_type_id, source_type, package_purchase_id, invoice_id,
       allocated_net_fils, vat_rate_basis_points, vat_setting_version, expires_on,

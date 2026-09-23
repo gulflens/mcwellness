@@ -177,6 +177,36 @@ async function failureOf(sql: string, params: unknown[] = []): Promise<string | 
   }
 }
 
+/**
+ * Runs `sql` as the API role, with this practice's owner stamped, and returns
+ * the SQLSTATE and message it failed with, or null when it went through.
+ * Always rolled back.
+ */
+async function apiRoleFailure(
+  sql: string,
+  params: unknown[] = [],
+): Promise<{ code: string | undefined; message: string | undefined } | null> {
+  let seen: { code: string | undefined; message: string | undefined } | null = null;
+  await h.owner.query('begin');
+  try {
+    await asApiRole(h.owner, tenantId, async () => {
+      await h.owner.query(
+        "select set_config('app.actor_id', $1, true), set_config('app.request_id', $2, true)",
+        [userId(SEEDED.owner), REQUEST_ID],
+      );
+      try {
+        await h.owner.query(sql, params);
+      } catch (error) {
+        const e = error as { code?: string; message?: string };
+        seen = { code: e.code, message: e.message };
+      }
+    });
+  } finally {
+    await h.owner.query('rollback');
+  }
+  return seen;
+}
+
 /** Writes rows as the owner with the request's stamps, committed. */
 async function writeAsOwner(sql: string, params: unknown[] = []): Promise<void> {
   await h.owner.query('begin');
@@ -536,6 +566,85 @@ describe('voiding a visit logged from the records', () => {
     const still = await h.owner.query<{ status: string }>(
       'select status::text from session where id = $1',
       [target.sessionId],
+    );
+    expect(still.rows[0]?.status).toBe('completed');
+  });
+
+  it('refuses the voided status written outside the function, open row, insert or appointment', async () => {
+    // (a) An open session moved straight to voided by the API role: the close
+    // guard stands aside for an open row, so this is the insert-or-update
+    // guard's alone (970, the final reviews of round 60).
+    expect(
+      await apiRoleFailure(
+        "update session set status = 'voided', voided_at = now(), voided_by = $2, " +
+          "void_reason = 'by hand' where id = $1",
+        [UNFINISHED_SESSION, userId(SEEDED.owner)],
+      ),
+    ).toEqual({ code: '23001', message: 'void_needs_the_function' });
+    // (b) A session inserted already voided.
+    expect(
+      await apiRoleFailure(
+        'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+          'checked_in_at, started_at, ended_at, closed_at, status, recorded_from, ' +
+          'voided_at, voided_by, void_reason) values (gen_random_uuid(), app.current_tenant_id(), ' +
+          '$1, $2, $3, ' +
+          "'2026-03-24T10:00:00Z', '2026-03-24T10:05:00Z', '2026-03-24T11:00:00Z', " +
+          "'2026-03-24T11:00:00Z', 'voided', 'records', now(), $4, 'by hand')",
+        [h.clientId(WITH_PACKAGE), practitionerId, nfSession, userId(SEEDED.owner)],
+      ),
+    ).toEqual({ code: '23001', message: 'void_needs_the_function' });
+    // (c) An appointment voided directly, which would free its window with
+    // the session behind it still completed. Even the table's owner.
+    const standing = await logVisit(WITH_PACKAGE, { on: '2026-03-25' });
+    expect(
+      await failureOf(
+        "update appointment set status = 'voided', voided_at = now(), voided_by = $2, " +
+          "void_reason = 'by hand' where id = $1",
+        [standing.appointmentId, userId(SEEDED.owner)],
+      ),
+    ).toBe('23001');
+    const still = await h.owner.query<{ status: string }>(
+      'select status::text from appointment where id = $1',
+      [standing.appointmentId],
+    );
+    expect(still.rows[0]?.status).toBe('completed');
+  });
+
+  it("keeps the void marker out of the API role's reach", async () => {
+    // (e) Neither read nor written by anything but the definer function.
+    expect((await apiRoleFailure('select count(*) from app.void_active'))?.code).toBe('42501');
+    expect(
+      (
+        await apiRoleFailure(
+          'insert into app.void_active (txid, session_id) values (txid_current(), $1)',
+          [UNFINISHED_SESSION],
+        )
+      )?.code,
+    ).toBe('42501');
+  });
+
+  it('answers not_found at the function for a visit of another practice', async () => {
+    // This practice's visit, asked about by the other practice's owner under
+    // that practice's stamp: the function names its tenant on every read, so
+    // the visit does not exist for them, and nothing is written.
+    const mine = await logVisit(WITH_PACKAGE, { on: '2026-03-26' });
+    await h.owner.query('begin');
+    try {
+      await h.owner.query('set local role app_role');
+      await h.owner.query(
+        "select set_config('app.tenant_id', $1, true), set_config('app.actor_id', $2, true), " +
+          "set_config('app.actor_roles', 'owner', true), set_config('app.request_id', $3, true)",
+        [OTHER_PRACTICE, OTHER_OWNER, REQUEST_ID],
+      );
+      await expect(
+        h.owner.query('select app.void_recorded_session($1, $2)', [mine.sessionId, VOID_REASON]),
+      ).rejects.toMatchObject({ code: '23001', message: 'not_found' });
+    } finally {
+      await h.owner.query('rollback');
+    }
+    const still = await h.owner.query<{ status: string }>(
+      'select status::text from session where id = $1',
+      [mine.sessionId],
     );
     expect(still.rows[0]?.status).toBe('completed');
   });

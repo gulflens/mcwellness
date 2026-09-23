@@ -67,6 +67,8 @@ const APPT_AFTER_NEXT = '00000000-0000-4000-8000-000000007110';
 /** A day of its own again: one visit that happened, and one logged in error and voided. */
 const APPT_VOID_KEPT = '00000000-0000-4000-8000-000000007111';
 const APPT_VOIDED = '00000000-0000-4000-8000-000000007112';
+/** The session the voided visit was logged as, voided with it. */
+const SESSION_VOIDED = '00000000-0000-4000-8000-000000007113';
 const SESSION_CLOSED = '00000000-0000-4000-8000-000000007201';
 const SESSION_OPEN = '00000000-0000-4000-8000-000000007202';
 
@@ -314,10 +316,46 @@ beforeAll(async () => {
 
   // A fourth day: a visit that happened, and one the office logged from the
   // records in error and voided (trunk round 60). The voided one is seeded in
-  // its end state because the only way to reach it through the API is
-  // app.void_recorded_session, which tests/session/db/void.test.ts covers.
+  // its end state: the only way to reach it through the API is
+  // app.void_recorded_session, which tests/session/db/void.test.ts covers, and
+  // 970 lets a row become voided only while app.void_active names its
+  // session, so the fixture writes that session and the marker as the
+  // function would.
   await seedAppointment(APPT_VOID_KEPT, on(DATE_VOIDED, '09:00'), 'completed');
-  await seedAppointment(APPT_VOIDED, on(DATE_VOIDED, '11:00'), 'voided');
+  await seedAppointment(APPT_VOIDED, on(DATE_VOIDED, '11:00'), 'completed');
+  await owner.query('begin');
+  try {
+    const start = on(DATE_VOIDED, '11:00');
+    await owner.query(
+      'insert into session (id, tenant_id, client_id, practitioner_id, service_type_id, ' +
+        'appointment_id, checked_in_at, started_at, ended_at, status, recorded_from, ' +
+        "settled_outside_app) values ($1, $2, $3, $4, $5, $6, $7, $7, $8, 'completed', " +
+        "'records', true)",
+      [
+        SESSION_VOIDED,
+        IDS.tenantA,
+        IDS.clientA,
+        MORE_IDS.practitionerA,
+        MORE_IDS.serviceTypeA,
+        APPT_VOIDED,
+        start,
+        new Date(start.getTime() + 45 * 60_000),
+      ],
+    );
+    await owner.query(
+      'insert into app.void_active (txid, session_id) values (txid_current(), $1)',
+      [SESSION_VOIDED],
+    );
+    const stamp =
+      "status = 'voided', voided_at = now(), voided_by = $2, void_reason = 'Logged in error'";
+    await owner.query(`update session set ${stamp} where id = $1`, [SESSION_VOIDED, IDS.ownerA]);
+    await owner.query(`update appointment set ${stamp} where id = $1`, [APPT_VOIDED, IDS.ownerA]);
+    await owner.query('delete from app.void_active where txid = txid_current()');
+    await owner.query('commit');
+  } catch (error) {
+    await owner.query('rollback');
+    throw error;
+  }
 
   pool = createPool(process.env.API_DATABASE_URL ?? '');
   const verifier = createTokenVerifier({ issuer: ISSUER, secret: SECRET });
