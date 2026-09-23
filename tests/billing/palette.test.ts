@@ -73,7 +73,9 @@ function coloursOf(op: Op): { rgb: Rgb[]; grey: number[] } {
         grey: op.style.grey === undefined ? [] : [op.style.grey],
       };
     case 'rule':
-      return { rgb: op.rgb ? [op.rgb] : [], grey: op.grey === undefined ? [] : [op.grey] };
+      // As a rect's stroke: a rule that names neither is stroked at the
+      // writer's own default grey.
+      return { rgb: op.rgb ? [op.rgb] : [], grey: op.rgb ? [] : [op.grey ?? 0.8] };
     case 'rect': {
       const rgb: Rgb[] = [];
       const grey: number[] = [];
@@ -237,7 +239,8 @@ describe('the palette both money documents may use', () => {
               left >= band.x - TOLERANCE &&
               right <= band.x + band.width + TOLERANCE &&
               op.y >= band.y - TOLERANCE &&
-              op.y <= band.y + band.height + TOLERANCE,
+              // The capital's rise, and not only the baseline, inside the band.
+              op.y + op.style.size * 0.75 <= band.y + band.height + TOLERANCE,
           );
           expect(inside, `${name}, page ${index + 1}: "${op.text}" is white off the violet`).toBe(
             true,

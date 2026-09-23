@@ -17,7 +17,7 @@
  * is a fact about the invoice it settles, not about the act of paying — so a
  * registered practice's receipt reads word for word as an unregistered one's.
  *
- * No table, so one page: the blocks still ask the sheet for room before they
+ * No table, so one page: the lower cards ask the sheet for room before they
  * draw, as the invoice's do.
  */
 

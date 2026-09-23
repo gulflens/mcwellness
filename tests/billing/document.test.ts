@@ -796,9 +796,9 @@ describe('a receipt asks for no money and claims nothing about tax, whoever issu
  *
  * The test above proves the writer is deterministic — the same row rendered
  * twice is the same file — but determinism says nothing about *which* file, so
- * a refactor that quietly moved a byte would pass it. These three hashes are
- * the missing half: they say that the invoice, the registered invoice and the
- * receipt are the documents they were when this was written, so any change to
+ * a refactor that quietly moved a byte would pass it. These hashes are
+ * the missing half: they say that the invoices and the receipt are the
+ * documents they were when this was written, so any change to
  * the writer has to declare itself here.
  *
  * **When one of these fails.** It is a fact to explain, not a number to
@@ -808,7 +808,7 @@ describe('a receipt asks for no money and claims nothing about tax, whoever issu
  *
  * These depend on the version of the font package the faces are read from
  * (`app/api/billing/fonts.ts` embeds the programs verbatim), so upgrading it
- * moves all three at once — which is itself worth seeing rather than not.
+ * moves every one of them at once — which is itself worth seeing rather than not.
  *
  * **All three moved on 8 September 2026**, when the practice's own design
  * replaced the layout these documents had carried since round 20
@@ -854,6 +854,13 @@ describe('a receipt asks for no money and claims nothing about tax, whoever issu
  * spelling of "Bank transfer" (تحويل مصرفي), so the practice spells it one
  * way on both documents; the invoices, which already printed it, did not.
  *
+ * **A third invoice was pinned at the end of round 65**: the unregistered
+ * invoice with the practice's bank account and a 25% discount, so the
+ * payment method, the payment details card with its reference strip, and
+ * the discount's pill and row are held here byte for byte — not only by the
+ * demo file the operator compared his page with, which lives outside the
+ * repository.
+ *
  * They are rendered with no logo, deliberately: the mark is the practice's own
  * row and not a file in this repository, so a golden that embedded one would
  * be a golden about a picture rather than about the writer.
@@ -872,6 +879,13 @@ describe('the bytes of a rendered document', () => {
       'an invoice from a registered practice',
       () => renderDocument(invoiceFor(REGISTERED), fonts),
       '94e934d4b4c53e0e8fff0577b4b3213b90c9a55416109f0807276c445436349d',
+    ],
+    [
+      // The case the operator's demo covers: the payment method, the payment
+      // details card and its reference strip, and a discount's pill and row.
+      'an unregistered invoice with a bank account and a 25% discount',
+      () => renderDocument(programmeInvoice(UNREGISTERED), fonts),
+      'b1327bc962370153551e6f30a8ad1452d024407c9c81f800a43acaf9c81f4ddf',
     ],
     [
       'a receipt',

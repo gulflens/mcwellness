@@ -349,7 +349,11 @@ function receiptShaped(shape: ReceiptShape): ReceiptDocument {
   };
 }
 
-const RECEIPTS: Laid[] = RECEIPT_SHAPES.map((shape) => ({
+/** A receipt laid out, with whether its supplier and household are the long ones. */
+type ReceiptLaid = Laid & { long: boolean };
+
+const RECEIPTS: ReceiptLaid[] = RECEIPT_SHAPES.map((shape) => ({
+  long: shape.long,
   name:
     `receipt by ${shape.method}, ${shape.settles ? 'settling' : 'on account'}, ` +
     `${shape.reference ? 'referenced' : 'no reference'}, ` +
@@ -902,7 +906,7 @@ describe('the receipt', () => {
       const blocks = laid.blocks[0] ?? [];
       const footer = blocksNamed(blocks, 'footer')[0] as Block;
       expect(footer.bottom, laid.name).toBeGreaterThanOrEqual(GEOMETRY.MARGIN - TOLERANCE);
-      if (!laid.name.endsWith('long')) {
+      if (!laid.long) {
         expect(footer.bottom, laid.name).toBeCloseTo(invoiceFooter.bottom, 5);
         expect(footer.top, laid.name).toBeCloseTo(invoiceFooter.top, 5);
       }
